@@ -35,11 +35,12 @@ namespace TarkovVR
                 // transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
                 //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
             }
-            //else
-            //{
-            //    transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
-            //    transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
-            //}
+            else
+            {
+                //transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
+                //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
+                transform.rotation = Quaternion.Euler(rx, ry, rz);
+            }
         }
 
         private void LateUpdate() {
@@ -54,10 +55,13 @@ namespace TarkovVR
                 target.rotation = transform.rotation;
 
             }
-            //else {
-            //    transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
-            //    transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
-            //}
+            else
+            {
+                //transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
+                //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
+                transform.rotation = Quaternion.Euler(rx, ry, rz);
+
+            }
 
             //transform.localPosition = new Vector3(x, y, z);
             //transform.localRotation = Quaternion.Euler(x,y,z);
