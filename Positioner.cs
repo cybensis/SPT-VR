@@ -26,41 +26,35 @@ namespace TarkovVR
 
         private void Update()
         {
-            if (target) {
-                 //transform.position = target.position + new Vector3(x, y, z);
-                //transform.rotation = target.rotation * Quaternion.Euler(rx, ry, rz);
+            //if (target) {
+            //     //transform.position = target.position + new Vector3(x, y, z);
+            //    //transform.rotation = target.rotation * Quaternion.Euler(rx, ry, rz);
 
-                target.position = transform.position;
-                target.rotation = transform.rotation;
-                // transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
-                //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
-            }
-            else
+            //    target.position = transform.position;
+            //    target.rotation = transform.rotation;
+            //    // transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
+            //    //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
+            //}
+            //else
+            //{
+            //    //transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
+            //    //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
+            //    transform.rotation = Quaternion.Euler(rx, ry, rz);
+            //}\
+            if (CamPatches.VRCam != null)
             {
-                //transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
-                //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
-                transform.rotation = Quaternion.Euler(rx, ry, rz);
+                transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0) + (CamPatches.VRCam.transform.up * -0.04f) + (CamPatches.VRCam.transform.forward * -0.06f);
+                //transform.localPosition += (transform.right * x) + (transform.up * y) + (transform.forward * z);
+                transform.rotation = CamPatches.VRCam.transform.rotation * Quaternion.Euler(180, 90, 90);
             }
         }
 
         private void LateUpdate() {
-            //transform.position = CamPatches.rightHandIK.transform.position;
-            //transform.rotation = CamPatches.rightHandIK.transform.rotation;
 
-            if (target)
-            {
-                //transform.position = target.position + new Vector3(x, y, z);
-                //transform.rotation = target.rotation * Quaternion.Euler(rx, ry, rz);
-                target.position = transform.position;
-                target.rotation = transform.rotation;
-
-            }
-            else
-            {
-                //transform.position = CameraManager.RightHand.transform.position + new Vector3(x, y, z);
-                //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
-                transform.rotation = Quaternion.Euler(rx, ry, rz);
-
+            if (CamPatches.VRCam != null) {
+                transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0) + (CamPatches.VRCam.transform.up * -0.04f) + (CamPatches.VRCam.transform.forward * -0.06f);
+                //transform.localPosition += (transform.right * x) + (transform.up * y) + (transform.forward * z);
+                transform.rotation = CamPatches.VRCam.transform.rotation * Quaternion.Euler(180,90,90);
             }
 
             //transform.localPosition = new Vector3(x, y, z);

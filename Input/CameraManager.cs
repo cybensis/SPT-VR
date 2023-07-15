@@ -9,7 +9,7 @@ namespace TarkovVR.Input
         private float x, y, z;
         private float rx, ry, rz;
 
-        private Vector3 initPos;
+        public Vector3 initPos;
 
         private Vector3 rightHandOffset = new Vector3(0.05f, -0.1f, -0.2f);
         private Vector3 leftHandOffset = new Vector3(-0.04f, -0.05f, -0.1f);
@@ -21,19 +21,20 @@ namespace TarkovVR.Input
             //z = rightHandOffset.z;
             SpawnHands();
             if (RightHand)
-                RightHand.transform.parent = CamPatches.camHolder.transform.parent;
+                RightHand.transform.parent = CamPatches.vrOffsetter.transform;
             if (LeftHand)
-                LeftHand.transform.parent = CamPatches.camHolder.transform.parent;
-
-            initPos = CamPatches.VRCam.transform.localPosition;
+                LeftHand.transform.parent = CamPatches.vrOffsetter.transform;
 
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.Any, UpdateRightHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.Any, UpdateLeftHand);
         }
 
         private void Update() {
-            CamPatches.vrOffsetter.transform.localPosition = CamPatches.VRCam.transform.localPosition * -1;
-            
+            if (initPos.y != 0)
+                CamPatches.vrOffsetter.transform.localPosition = initPos * -1;
+            else if (Camera.main != null)
+                CamPatches.vrOffsetter.transform.localPosition = Camera.main.transform.localPosition * -1;
+
         }
 
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
