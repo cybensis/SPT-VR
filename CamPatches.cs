@@ -11,6 +11,15 @@ using EFT.InputSystem;
 using static EFT.ClientPlayer;
 using System.Collections.Generic;
 using UnityEngine.Rendering.PostProcessing;
+using System.Diagnostics;
+using System;
+using UnityStandardAssets.ImageEffects;
+using EFT.CameraControl;
+using EFT.PostEffects;
+using EFT.AssetsManager;
+using UnityEngine.UIElements;
+using EFT.Animations;
+using static GClass603;
 
 namespace TarkovVR
 {
@@ -41,6 +50,7 @@ namespace TarkovVR
 
         private static float MIN_JOYSTICK_AXIS_FOR_MOVEMENT = 0.5f;
         private static bool isAiming = false;
+        private static bool isHoldingBreath = false;
         private static bool isSprinting = false;
         private static bool isShooting = false;
 
@@ -50,18 +60,19 @@ namespace TarkovVR
         [HarmonyPatch(typeof(CharacterControllerSpawner), "Spawn")]
         private static void AddVR(CharacterControllerSpawner __instance)
         {
-            if (__instance.name != "PlayerSuperior(Clone)")
+            if (__instance.transform.root.name != "PlayerSuperior(Clone)")
                 return;
-            if (VRCam == null) {
+            if (camRoot == null) {
+                Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");
                 camHolder = new GameObject("camHolder");
                 vrOffsetter = new GameObject("vrOffsetter");
                 camRoot = new GameObject("camRoot");
                 camHolder.transform.parent = vrOffsetter.transform;
                 //Camera.main.transform.parent = vrOffsetter.transform;
-               //Camera.main.gameObject.AddComponent<SteamVR_TrackedObject>();
+                //Camera.main.gameObject.AddComponent<SteamVR_TrackedObject>();
                 vrOffsetter.transform.parent = camRoot.transform;
-                VRCam = camHolder.AddComponent<Camera>();
-                VRCam.nearClipPlane = 0.001f;
+                // VRCam = camHolder.AddComponent<Camera>();
+                // VRCam.nearClipPlane = 0.001f;
                 //camRoot.AddComponent<TarkovVR.Input.Test>();
                 camHolder.AddComponent<SteamVR_TrackedObject>();
                 cameraManager = camHolder.AddComponent<CameraManager>();
@@ -71,17 +82,55 @@ namespace TarkovVR
             }
         }
 
+        static bool leftArmSet = false;
+        static bool rightArmSet = false;
+        static int loadedIn = 0;
 
 
 
+        /// <summary>
+        /// ////////////////////////////////////////////////////IDEA: Check the call stack, it seems like its actually impossible to check if this is a player or AI so check up the callstack cos we can probs check somewhere there
+        /// </summary>
+        /// <param name="__instance"></param>
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void AddVRHands(LimbIK __instance)
         {
+            //if (__instance.transform.root.name != "PlayerSuperior(Clone)")
+            //    return;
             if (__instance.transform.root.name != "PlayerSuperior(Clone)")
                 return;
+
+            StackTrace stackTrace = new StackTrace();
+            bool isBotPlayer = false;
+            foreach (var frame in stackTrace.GetFrames())
+            {
+                var method = frame.GetMethod();
+                var declaringType = method.DeclaringType.FullName;
+                var methodName = method.Name;
+
+                // Check for bot-specific methods
+                if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("GClass732") && methodName.Contains("ActivateBot"))
+                {
+                    isBotPlayer = true;
+                    break;
+                }
+            }
+
+            if (isBotPlayer)
+            {
+                // This is a bot player, so do not execute the rest of the code
+                return;
+            }
+            //if (loadedIn != 0 && loadedIn != __instance.transform.root.GetInstanceID())
+            //   return;
+
             if (__instance.name == LEFT_ARM_OBJECT_NAME)
             {
+                //PrintAllComponentsAndChildren(__instance.transform.root);
+                //Plugin.MyLog.LogError("\n\n\n" + stackTrace.ToString());
+                Plugin.MyLog.LogWarning("\n\n Solver OnDisable LEFT ARM : " + __instance.transform.root + " " + loadedIn + " \n");
+                loadedIn = __instance.transform.root.GetInstanceID();
                 __instance.enabled = true;
                 __instance.solver.target = CameraManager.LeftHand.transform;
                 leftArmIk = __instance;
@@ -90,6 +139,11 @@ namespace TarkovVR
             }
             else if (__instance.name == RIGHT_ARM_OBJECT_NAME)
             {
+                //PrintAllComponentsAndChildren(__instance.transform.root);
+                //Plugin.MyLog.LogError("\n\n\n" + stackTrace.ToString());
+                Plugin.MyLog.LogWarning("\n\n Solver OnDisable RIGHT ARM : " + __instance.transform.root + " " + loadedIn + " \n");
+                loadedIn = __instance.transform.root.GetInstanceID();
+
                 __instance.enabled = true;
                 rightArmIk = __instance;
                 __instance.solver.target = CameraManager.RightHand.transform;
@@ -105,13 +159,35 @@ namespace TarkovVR
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Spawn")]
         private static void ResetWeaponOnEquipHands(EFT.Player.EmptyHandsController __instance)
         {
-            if (__instance.GetComponent<BotOwner>() != null)
+            if (__instance._player.IsAI)
                 return;
-            Plugin.MyLog.LogWarning("\n\nAAAAAAAAAAA\n");
+
+            StackTrace stackTrace = new StackTrace();
+            bool isBotPlayer = false;
+
+            foreach (var frame in stackTrace.GetFrames())
+            {
+                var method = frame.GetMethod();
+                var declaringType = method.DeclaringType.FullName;
+                var methodName = method.Name;
+
+                // Check for bot-specific methods
+                if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("GClass732") && methodName.Contains("ActivateBot"))
+                {
+                    isBotPlayer = true;
+                    break;
+                }
+            }
+
+            if (isBotPlayer)
+            {
+                // This is a bot player, so do not execute the rest of the code
+                return;
+            }
             if (oldWeaponHolder && weaponHolder.transform.childCount > 0)
             {
+                Plugin.MyLog.LogWarning("\n\nAAAAAAAAAAA : " + __instance._player.gameObject + " \n");
                 rightArmIk.solver.target = CameraManager.RightHand.transform;
-                Plugin.MyLog.LogWarning("\n\nBBBBBBBBBB\n");
                 Transform weaponRoot = weaponHolder.transform.GetChild(0);
                 weaponRoot.parent = oldWeaponHolder.transform;
                 weaponRoot.localPosition = Vector3.zero;
@@ -123,10 +199,15 @@ namespace TarkovVR
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
         private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
         {
-            if (__instance.GetType() is AIFirearmController)
+            if (__instance._player.IsAI)
                 return;
-            // print root
-            if (oldWeaponHolder && weaponHolder.transform.childCount > 0) {
+
+            Plugin.MyLog.LogError("\n\n" + oldWeaponHolder + "\n\n");
+            scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform;
+            // Check if a weapon is currently equipped, if that weapon is the same as the one trying to be equipped and that the weaponHolder actually has something there
+            if (oldWeaponHolder && oldWeaponHolder != __instance.WeaponRoot.parent.gameObject && weaponHolder.transform.childCount > 0)
+            {
+                Plugin.MyLog.LogWarning("\n\n Init ball calc 1 \n\n");
                 rightArmIk.solver.target = CameraManager.RightHand.transform;
                 Transform weaponRoot = weaponHolder.transform.GetChild(0);
                 weaponRoot.parent = oldWeaponHolder.transform;
@@ -134,12 +215,14 @@ namespace TarkovVR
                 oldWeaponHolder = null;
             }
 
-            if (rightHandIK) {
-
+            if (rightArmIk && oldWeaponHolder == null)
+            {
+                Plugin.MyLog.LogWarning("\n\n Init ball calc 2 SET RIGHT HAND \n\n");
                 // Weapon_root goes in weapon holder, holder goes in VR right hand, set rot of holder to 15,270,90
                 // pos to 0.141 0.0204 -0.1003
                 // Pistols rot: 7.8225 278.6073 88.9711  pos: 0.3398 -0.0976 -0.1754
-                Transform weaponRightHandIKPositioner = __instance.HandsHierarchy.Transforms[8];
+                Transform weaponRightHandIKPositioner = __instance.HandsHierarchy.Transforms[9];
+                CameraManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[11];
                 //weaponRightHandIKPositioner.gameObject.active = false;
                 //Positioner positioner = weaponRightHandIKPositioner.gameObject.AddComponent<Positioner>();
                 rightArmIk.solver.target = weaponRightHandIKPositioner;
@@ -148,39 +231,26 @@ namespace TarkovVR
 
                 oldWeaponHolder = __instance.WeaponRoot.parent.gameObject;
                 __instance.WeaponRoot.transform.parent = weaponHolder.transform;
-                __instance.WeaponRoot.localPosition = Vector3.zero;
+                //__instance.WeaponRoot.localPosition = Vector3.zero;
                 weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
-                weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1003f);
-                Plugin.MyLog.LogWarning("SET RIGHT HAND");
+                if (!__instance.WeaponRoot.gameObject.GetComponent<Test>())
+                    __instance.WeaponRoot.gameObject.AddComponent<Test>();
+                if (__instance.Weapon.WeapClass == "pistol")
+                    weaponHolder.transform.localPosition = new Vector3(0.541f, 0.0904f, -0.1003f);
+                else if (__instance.Weapon.WeapClass == "assaultRifle" || __instance.Weapon.WeapClass == "assaultCarbine")
+                    weaponHolder.transform.localPosition = new Vector3(0.241f, 0.0204f, -0.1003f);
+                else if (__instance.Weapon.WeapClass == "smg" || __instance.Weapon.WeapClass == "sniperRifle" || __instance.Weapon.WeapClass == "marksmanRifle")
+                    weaponHolder.transform.localPosition = new Vector3(0.321f, 0.0204f, -0.1003f);
+                else
+                    weaponHolder.transform.localPosition = new Vector3(0.241f, 0.0204f, -0.1003f);
             }
-            Plugin.MyLog.LogWarning(__instance.WeaponRoot.transform.root);
-
-            //if (!weaponHolder)
-            //{
-            //    weaponOffsetter = new GameObject("WeaponOffsetter");
-            //    weaponHolder = new GameObject("WeaponHolder");
-            //    weaponOffsetter.transform.parent = weaponHolder.transform;
-            //    weaponHolder.AddComponent<Positioner>();
-            //}
-            //if (rightHandIK)
-            //{
-
-            //    // Weapon_root goes in weapon holder, holder goes in VR right hand, set rot of holder to 15,270,90
-            //    // pos to 0.141 0.0204 -0.1003
-
-            //    // Pistols rot: 7.8225 278.6073 88.9711  pos: 0.3398 -0.0976 -0.1754
-
-            //    __instance.WeaponRoot.transform.parent = weaponOffsetter.transform;
-            //    __instance.WeaponRoot.localPosition = Vector3.zero;
-            //    weaponOffsetter.transform.rotation = Quaternion.Euler(15, 275, 90);
-            //    weaponOffsetter.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1003f);
-            //}
-
         }
 
+
+        private static Transform scope;
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass1805), "UpdateInput")]
-        private static bool BlockLookAxis(GClass1805 __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
+        [HarmonyPatch(typeof(GClass1765), "UpdateInput")]
+        private static bool BlockLookAxis(GClass1765 __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
         {
             // 14: Shoot/F
             // 28: Open Inv/Tab
@@ -198,37 +268,36 @@ namespace TarkovVR
             // 64: Right/D
             // 65: Left/A
 
-
-            if (__instance.ginterface143_0 != null)
+            if (__instance.ginterface141_0 != null)
             {
-                for (int i = 0; i < __instance.ginterface143_0.Length; i++)
+                for (int i = 0; i < __instance.ginterface141_0.Length; i++)
                 {
-                    __instance.ginterface143_0[i].Update();
-                    //if (__instance.ginterface143_0[i].GetValue() != 0)
-                        //Plugin.MyLog.LogWarning(i + ": " + __instance.ginterface143_0[i].GetValue() + "\n");
-                    
+                    __instance.ginterface141_0[i].Update();
+                    //if (__instance.ginterface141_0 [i].GetValue() != 0)
+                    //Plugin.MyLog.LogWarning(i + ": " + __instance.ginterface141_0 [i].GetValue() + "\n");
+
                 }
             }
 
-            // ginterface143_1 Has two elements, scroll up and down
-            if (__instance.ginterface143_1 != null)
+            // ginterface141_1 Has two elements, scroll up and down
+            if (__instance.ginterface141_1 != null)
             {
-                for (int j = 0; j < __instance.ginterface143_1.Length; j++)
+                for (int j = 0; j < __instance.ginterface141_1.Length; j++)
                 {
-                    __instance.ginterface143_1[j].Update();
-                    //if (__instance.ginterface143_1[j].GetValue() != 0)
-                        //Plugin.MyLog.LogError(j + ": " + __instance.ginterface143_1[j].GetValue() + "\n");
+                    __instance.ginterface141_1[j].Update();
+                    //if (__instance.ginterface141_1[j].GetValue() != 0)
+                    //Plugin.MyLog.LogError(j + ": " + __instance.ginterface141_1[j].GetValue() + "\n");
                 }
             }
-            if (__instance.gclass1800_0 != null)
+            if (__instance.gclass1760_0 != null)
             {
                 if (commands.Count > 0)
                 {
                     commands.Clear();
                 }
-                for (int k = 0; k < __instance.gclass1800_0.Length; k++)
+                for (int k = 0; k < __instance.gclass1760_0.Length; k++)
                 {
-                    __instance.ecommand_0 = __instance.gclass1800_0[k].UpdateCommand(deltaTime);
+                    __instance.ecommand_0 = __instance.gclass1760_0[k].UpdateCommand(deltaTime);
                     // 50: Interact
                     if (k == 50)
                     {
@@ -246,7 +315,7 @@ namespace TarkovVR
                     // 57: Sprint
                     else if (k == 57)
                     {
-                        if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any)) { 
+                        if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any)) {
                             if (!isSprinting)
                                 __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleSprinting;
                             else
@@ -262,16 +331,34 @@ namespace TarkovVR
                     // 39: Aim
                     else if (k == 39)
                     {
-                        if (!isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
+                        float angle = 100f;
+                        if (scope != null && camHolder != null)
+                        {
+                            Vector3 directionToScope = scope.transform.position - camHolder.transform.position;
+                            directionToScope = directionToScope.normalized;
+                            angle = Vector3.Angle(camHolder.transform.forward, directionToScope);
+                        }
+                        if (!isAiming && angle <= 20f)
                         {
                             __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleAlternativeShooting;
                             isAiming = true;
                         }
-                        else if (isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
+                        else if (isAiming && angle > 20f)
                         {
                             __instance.ecommand_0 = EFT.InputSystem.ECommand.EndAlternativeShooting;
                             isAiming = false;
+                            CameraManager.smoothingFactor = 20f;
                         }
+                        //if (!isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
+                        //{
+                        //    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleAlternativeShooting;
+                        //    isAiming = true;
+                        //}
+                        //else if (isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
+                        //{
+                        //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndAlternativeShooting;
+                        //    isAiming = false;
+                        //}
                     }
                     // 38: Shooting
                     else if (k == 38)
@@ -288,13 +375,26 @@ namespace TarkovVR
                         }
                     }
                     // 78: breathing
-                    else if (k == 78) { 
-                        if (SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.Any))
+                    else if (k == 78) {
+                        if (!isHoldingBreath && isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
+                        {
                             __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
-                        else if (SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
+                            isHoldingBreath = true;
+                            CameraManager.smoothingFactor = scopeSensitivity * 75f;
+                        }
+                        else if (isHoldingBreath && (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f || !isAiming) )
+                        {
                             __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
+                            isHoldingBreath = false;
+                            CameraManager.smoothingFactor = 20f;
+                        }
+
+                        //if (SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.Any))
+                        //    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
+                        //else if (SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
+                        //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
                     }
-                    
+
                     // 0: ChangeAimScope
                     // 1: ChangeAimScopeMagnification
                     // 5: CheckAmmo??
@@ -321,10 +421,10 @@ namespace TarkovVR
                     if (__instance.ecommand_0 != 0)
                     {
                         commands.Add(__instance.ecommand_0);
-                        //Plugin.MyLog.LogError(k + ": " + (__instance.gclass1800_0[k] as GClass1802).GameKey + "\n");
+                        //Plugin.MyLog.LogError(k + ": " + (__instance.gclass1760_0[k] as GClass1802).GameKey + "\n");
                     }
-                    //if (__instance.gclass1800_0[k].GetInputCount() != 0)
-                    //    Plugin.MyLog.LogWarning(i + ": " + __instance.ginterface143_0[i].GetValue() + "\n");
+                    //if (__instance.gclass1760_0[k].GetInputCount() != 0)
+                    //    Plugin.MyLog.LogWarning(i + ": " + __instance.ginterface141_0 [i].GetValue() + "\n");
                 }
             }
 
@@ -333,83 +433,351 @@ namespace TarkovVR
                 axis[l] = 0f;
             }
 
-            if (__instance.gclass1801_1 == null)
+            if (__instance.gclass1761_1 == null)
             {
                 return false;
             }
-            for (int m = 0; m < __instance.gclass1801_1.Length; m++)
+            for (int m = 0; m < __instance.gclass1761_1.Length; m++)
             {
-                if (Mathf.Abs(axis[__instance.gclass1801_1[m].IntAxis]) < 0.0001f)
+                if (Mathf.Abs(axis[__instance.gclass1761_1[m].IntAxis]) < 0.0001f)
                 {
 
-                    axis[__instance.gclass1801_1[m].IntAxis] = __instance.gclass1801_1[m].GetValue();
+                    axis[__instance.gclass1761_1[m].IntAxis] = __instance.gclass1761_1[m].GetValue();
                 }
                 if (m == 3)
-                    axis[__instance.gclass1801_1[m].IntAxis] = 0;
-                else if (m == 2) { 
-                    axis[__instance.gclass1801_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 35;
+                    axis[__instance.gclass1761_1[m].IntAxis] = 0;
+                else if (m == 2) {
+                    axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
                     if (camRoot != null)
-                        camRoot.transform.Rotate(0, axis[__instance.gclass1801_1[m].IntAxis],0);
+                        camRoot.transform.Rotate(0, axis[__instance.gclass1761_1[m].IntAxis], 0);
                 }
                 else if (m == 0 && Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
-                    axis[__instance.gclass1801_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.x;
+                    axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.x;
                 else if (m == 1 && Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
-                    axis[__instance.gclass1801_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.y;
+                    axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.y;
             }
             //Plugin.MyLog.LogWarning("\n");
             return false;
-            //if (__instance.gclass1801_1 == null)
+            //if (__instance.gclass1761_1 == null)
             //{
             //    return;
             //}
-            //for (int m = 0; m < __instance.gclass1801_1.Length; m++)
+            //for (int m = 0; m < __instance.gclass1761_1.Length; m++)
             //{
-            //    if (Mathf.Abs(axis[__instance.gclass1801_1[m].IntAxis]) < 0.0001f)
+            //    if (Mathf.Abs(axis[__instance.gclass1761_1[m].IntAxis]) < 0.0001f)
             //    {
-            //        axis[__instance.gclass1801_1[m].IntAxis] = 0;
+            //        axis[__instance.gclass1761_1[m].IntAxis] = 0;
             //    }
             //}
 
         }
+        
+        // NOTE: Currently arm stamina lasts way too long, turn it down maybe, or maybe not since the account I'm using has maxed stats
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GClass601), "Process")]
+        private static bool OnlyConsumeArmStamOnHoldBreath(GClass601 __instance)
+        {
+            if (isHoldingBreath) return true;
+            return false;
+        }
+
+        private static float scopeSensitivity = 0;
+
+        //NOTE:::::::::::::: Height over bore is the reason why close distances shots aren't hitting, but further distance shots SHOULD be fine - test this
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
-        private static void SetOpticCamFoV(EFT.CameraControl.OpticComponentUpdater __instance)
+        private static void SetOpticCamFoV(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)
         {
-            //1x 27 FoV
-            //3x 12 FoV
-            //4x 6  FoV
-            //12x 1.9 FoV
-            //16x 1 FoV
-            //7x 1.6 FoV
+            // NOTE::: I don't think FOV matters at all really for 1x if its not a scope, e.g. collimators or the thermal sights, so all fovs can probs default to 26/27
 
-            __instance.camera_0.fieldOfView = 7;
 
+            //1x    27 FoV  parent/parent/scope_30mm_s&b_pm_ii_1_8x24(Clone)
+            //1x    15 fov parent/parent/scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone) parent/scope_all_torrey_pines_logic_t12_w_30hz(Clone)
+            //1x    26 FOV for PARENT/PARENT/scope_30mm_eotech_vudu_1_6x24(Clone)
+            //1.5x  18 FOV  parent/scope_g36_hensoldt_hkv_single_optic_carry_handle_1,5x(Clone)
+            //1.5x  14 FOV parent/scope_aug_steyr_rail_optic_1,5x(Clone)
+            //1.5x  15 FOV parent/scope_aug_steyr_stg77_optic_1,5x
+            //2x    4 fov   parent/parent/scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)
+            //2x    11 FOV parent/scope_all_monstrum_compact_prism_scope_2x32(Clone)
+            //3x    7.5 FOV  parent/scope_g36_hensoldt_hkv_carry_handle_3x(Clone) parent/3
+            //3x    7.6 FoV parent/parent/scope_base_kmz_1p59_3_10x(Clone) parent/parent/scope_all_ncstar_advance_dual_optic_3_9x_42(Clone)
+            //3x    9 FOV parent/scope_base_npz_1p78_1_2,8x24(Clone)
+            //3x    12 FOV parent/parent/scope_34mm_s&b_pm_ii_3_12x50(Clone)
+            //3.5x  6   FOV parent/scope_base_progress_pu_3,5x(Clone)
+            //3.5x  6.5 FOV parent/scope_dovetail_npz_nspum_3,5x(Clone)
+            //3.5x  7.5 FOV parent/scope_all_swampfox_trihawk_prism_scope_3x30(Clone)
+            //3.5x  7 FOV parent/scope_base_trijicon_acog_ta11_3,5x35(Clone)
+            //16x   1.2 FoV
+            //16x   1 FOV parent/parent/scope_34mm_nightforce_atacr_7_35x56(Clone)
+
+
+            /////2.5x  10 FOV parent/scope_base_primary_arms_compact_prism_scope_2,5x(Clone)
+            //////6x    3.2 FOV 
+            ///////10x   2.5 FOV parent/parent/scope_base_kmz_1p59_3_10x(Clone)
+            //////20x   1.5 fov PARENT/scope_30mm_leupold_mark4_lr_6,5_20x50(Clone)
+            /////9x    2.9 FOV parent/parent/scope_all_ncstar_advance_dual_optic_3_9x_42(Clone)
+            /////8x    3   FOV parent/parent/scope_30mm_s&b_pm_ii_1_8x24(Clone)
+            //////5x    3.6 FOV parent/parent/scope_34mm_s&b_pm_ii_5_25x56(Clone)
+            ////////25x   1.9 FOV parent/parent/scope_34mm_s&b_pm_ii_5_25x56(Clone)
+
+
+
+            //////4x    6  FoV parent/scope_25_4mm_vomz_pilad_4x32m(Clone) parent/scope_all_leupold_mark4_hamr(Clone) parent/scope_all_sig_bravo4_4x30(Clone)
+            /////12x   1.9 FoV parent/parent/scope_34mm_s&b_pm_ii_3_12x50(Clone)
+            ///////7x    1.6 FoV parent/parent/scope_34mm_nightforce_atacr_7_35x56(Clone)
+
+
+            SightModVisualControllers visualController = opticSight.GetComponent<SightModVisualControllers>();
+            if (!visualController)
+                visualController = opticSight.transform.parent.GetComponent<SightModVisualControllers>();
+            float fov = 27;
+            if (visualController ) {
+                float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
+                scopeSensitivity = visualController.sightComponent_0.GetCurrentSensitivity;
+                string scopeName = opticSight.name;
+                // For scopes that have multiple levels of zoom of different zoom effects (e.g. changing sight lines from black to red), opticSight will be stored in 
+                // mode_000, mode_001, etc, and that will be stored in the scope game object, so we need to get parent name for scopes with multiple settings
+                string parentName = opticSight.transform.parent.name;
+                if (zoomLevel == 7)
+                    fov = 1.6f;
+                else if (zoomLevel == 12 || zoomLevel == 25)
+                    fov = 1.9f;
+                else if (zoomLevel == 4)
+                    fov = 6f;
+                else if (zoomLevel == 5)
+                    fov = 3.6f;
+                else if (zoomLevel == 8)
+                    fov = 3f;
+                else if (zoomLevel == 9)
+                    fov = 2.9f;
+                else if (zoomLevel == 20)
+                    fov = 1.5f;
+                else if (zoomLevel == 10)
+                    fov = 2.5f;
+                else if (zoomLevel == 6)
+                    fov = 3.2f;
+                else if (zoomLevel == 2.5)
+                    fov = 10f;
+                else if (zoomLevel == 10)
+                    fov = 2.5f;
+                else if (zoomLevel == 10)
+                    fov = 2.5f;
+                else if (zoomLevel == 1)
+                {
+                    if (parentName == "scope_30mm_s&b_pm_ii_1_8x24(Clone)")
+                        fov = 27;
+                    else if (parentName == "scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)" || scopeName == "scope_all_torrey_pines_logic_t12_w_30hz(Clone)")
+                        fov = 15;
+                    else 
+                        fov = 26; //scope_30mm_eotech_vudu_1_6x24(Clone)
+                }
+                else if (zoomLevel == 1.5)
+                {
+                    if (scopeName == "scope_g36_hensoldt_hkv_single_optic_carry_handle_1,5x(Clone)")
+                        fov = 18;
+                    else if (scopeName == "scope_aug_steyr_rail_optic_1,5x(Clone)")
+                        fov = 14;
+                    else
+                        fov = 15; // scope_aug_steyr_stg77_optic_1,5x
+                }
+                else if (zoomLevel == 2)
+                {
+                    if (parentName == "scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)")
+                        fov = 4;
+                    else
+                        fov = 11; // scope_all_monstrum_compact_prism_scope_2x32(Clone)
+                }
+                else if (zoomLevel == 3)
+                {
+                    if (scopeName == "scope_g36_hensoldt_hkv_carry_handle_3x(Clone)" || scopeName == "3")
+                        fov = 7.5f;
+                    else if (parentName == "scope_base_kmz_1p59_3_10x(Clone)" || parentName == "scope_all_ncstar_advance_dual_optic_3_9x_42(Clone)")
+                        fov = 7.6f;
+                    else if (scopeName == "scope_base_npz_1p78_1_2,8x24(Clone)")
+                        fov = 9f;
+                    else
+                        fov = 12f; // scope_34mm_s&b_pm_ii_3_12x50(Clone)
+                }
+                else if (zoomLevel == 3.5)
+                {
+                    if (scopeName == "scope_base_progress_pu_3,5x(Clone)")
+                        fov = 6;
+                    else if (scopeName == "scope_dovetail_npz_nspum_3,5x(Clone)")
+                        fov = 6.5f;
+                    else if (scopeName == "scope_all_swampfox_trihawk_prism_scope_3x30(Clone)")
+                        fov = 7.5f;
+                    else 
+                        fov = 7; // scope_base_trijicon_acog_ta11_3,5x35(Clone)
+                }
+                else if (zoomLevel == 16)
+                {
+                    if (parentName == "scope_34mm_nightforce_atacr_7_35x56(Clone)")
+                        fov = 1;
+                    else
+                        fov = 1.2f; // Unknown scope
+                }
+
+                }
+
+            __instance.camera_0.fieldOfView = fov;
+
+
+            // The SightModeVisualControllers on the scopes contains sightComponent_0 which has a function GetCurrentOpticZoom which returns the zoom
+
+        }
+        
+       
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(PrismEffects), "OnRenderImage")]
+        private static bool DisablePrismEffects(PrismEffects __instance)
+        {
+            if (__instance.gameObject.name != "FPS Camera")
+                return true;
+
+            __instance.enabled = false;
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BloomAndFlares), "OnRenderImage")]
+        private static bool DisableBloomAndFlares(BloomAndFlares __instance)
+        {
+            if (__instance.gameObject.name != "FPS Camera")
+                return true;
+
+            __instance.enabled = false;
+            return false;
         }
 
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ChromaticAberration), "OnRenderImage")]
+        private static bool DisableChromaticAberration(ChromaticAberration __instance)
+        {
+            if (__instance.gameObject.name != "FPS Camera")
+                return true;
+
+            __instance.enabled = false;
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(UltimateBloom), "OnRenderImage")]
+        private static bool DisableUltimateBloom(UltimateBloom __instance)
+        {
+            if (__instance.gameObject.name != "FPS Camera")
+                return true;
+
+            __instance.enabled = false;
+            return false;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BloodOnScreen), "Start")]
-        private static void SetMainCamParent(EffectsController __instance)
+        private static void SetMainCamParent(BloodOnScreen __instance)
         {
-
             Camera mainCam = __instance.GetComponent<Camera>();
             if (mainCam.name == "FPS Camera") {
+                Plugin.MyLog.LogWarning("\n\nSetting camera \n\n");
                 mainCam.transform.parent = vrOffsetter.transform;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
                 mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
-                cameraManager.initPos = VRCam.transform.localPosition;
+                //cameraManager.initPos = VRCam.transform.localPosition;
             }
 
         }
 
 
 
-
-        // Gclass1946 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
+        // Collimators try to do some stupid shit which stops them from displaying so disable it here
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass1946), "ManualLateUpdate")]
-        private static bool StopCamXRotation(GClass1946 __instance)
+        [HarmonyPatch(typeof(CameraClass), "method_12")]
+        private static bool FixCollimatorSights(CameraClass __instance)
+        {
+            return false;
+        }
+
+
+        // Not sure if needed
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(CameraClass), "method_10")]
+        private static bool FixSomeAimShit(CameraClass __instance)
+        {
+            __instance.ReflexController.RefreshReflexCmdBuffers();
+            Renderer renderer = __instance.OpticCameraManager.CurrentOpticSight?.LensRenderer;
+            __instance.method_11();
+            if (__instance.OpticCameraManager.CurrentOpticSight != null)
+            {
+                //LODGroup[] componentsInChildren = __instance.OpticCameraManager.CurrentOpticSight.gameObject.GetComponentInParent<WeaponPrefab>().gameObject.GetComponentsInChildren<LODGroup>();
+               
+                ////////////// Since the weapons are moved around to the right controller object, this needs to be redone here
+                LODGroup[] componentsInChildren = oldWeaponHolder.GetComponentsInChildren<LODGroup>();
+                if (__instance.renderer_0 != null)
+                {
+                    Array.Clear(__instance.renderer_0, 0, __instance.renderer_0.Length);
+                }
+                int instanceID = renderer.GetInstanceID();
+                int num = 0;
+                int num2 = 0;
+                while (componentsInChildren != null && num2 < componentsInChildren.Length)
+                {
+                    if (!(componentsInChildren[num2] == null))
+                    {
+                        LOD[] lODs = componentsInChildren[num2].GetLODs();
+                        if (lODs.Length != 0)
+                        {
+                            Renderer[] renderers = lODs[0].renderers;
+                            foreach (Renderer renderer2 in renderers)
+                            {
+                                if (!(renderer2 == null) && renderer2.GetInstanceID() != instanceID && !__instance.method_9(renderer2.GetInstanceID()))
+                                {
+                                    num++;
+                                }
+                            }
+                        }
+                    }
+                    num2++;
+                }
+                if (num > 0 && (__instance.renderer_0 == null || __instance.renderer_0.Length < num))
+                {
+                    __instance.renderer_0 = new Renderer[num];
+                }
+                num = 0;
+                int num3 = 0;
+                while (componentsInChildren != null && num3 < componentsInChildren.Length)
+                {
+                    if (!(componentsInChildren[num3] == null))
+                    {
+                        LOD[] lODs2 = componentsInChildren[num3].GetLODs();
+                        if (lODs2.Length != 0)
+                        {
+                            Renderer[] renderers = lODs2[0].renderers;
+                            foreach (Renderer renderer3 in renderers)
+                            {
+                                if (!(renderer3 == null) && renderer3.GetInstanceID() != instanceID && !__instance.method_9(renderer3.GetInstanceID()))
+                                {
+                                    __instance.renderer_0[num++] = renderer3;
+                                }
+                            }
+                        }
+                    }
+                    num3++;
+                }
+            }
+            __instance.SSAA.SetLensRenderer(__instance.OpticCameraManager.CurrentOpticSight?.LensRenderer, __instance.renderer_1, __instance.renderer_0);
+            __instance.SSAA.UnityTAAJitterSamplesRepeatCount = 2;
+            return false;
+        }
+
+
+
+
+        // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GClass1916), "ManualLateUpdate")]
+        private static bool StopCamXRotation(GClass1916 __instance)
         {
             if (__instance.player_0.IsAI)
                 return true;
@@ -421,13 +789,13 @@ namespace TarkovVR
                 //Camera.main.transform.Rotate(0, Camera.main.transform.rotation.y * -1, 0);
                 //__instance.transform_0.parent.localRotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
             }
-                //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
-                //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
-                //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, __instance.transform_0.eulerAngles.z);
+            //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
+            //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
+            //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, __instance.transform_0.eulerAngles.z);
 
 
 
-            camRoot.transform.position = __instance.method_1(camRoot.transform.position, camRoot.transform.rotation, __instance.transform_0.position) + new Vector3(Test.ex, Test.ey, Test.ez);
+            camRoot.transform.position = __instance.method_1(camRoot.transform.position, camRoot.transform.rotation, __instance.transform_0.position);
             //camHolder.transform.position = __instance.transform_0.position + new Vector3(Test.ex, Test.ey, Test.ez);
             return false;
         }
@@ -454,7 +822,8 @@ namespace TarkovVR
         }
 
 
-        // Found in Player object under CurrentState variable, and is inherited by Gclass1615 
+        // Found in Player object under CurrentState variable, and is inherited by Gclass1573
+        // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementState), "Rotate")]
         private static bool SetPlayerRotate(MovementState __instance, ref Vector2 deltaRotation)
@@ -462,17 +831,52 @@ namespace TarkovVR
             if (__instance.MovementContext.IsAI)
                 return true;
 
+
             if (SteamVR_Actions._default.LeftJoystick.axis.x != 0 || SteamVR_Actions._default.LeftJoystick.axis.y != 0)
                 deltaRotation = new Vector2(deltaRotation.x + Camera.main.transform.eulerAngles.y, 0);
+            else
+                deltaRotation = new Vector2(deltaRotation.x + camRoot.transform.eulerAngles.y, 0);
+            // If difference between cam and body exceed something when using the right joystick, then turn the body.
+            // Keep it a very tight amount before the body starts to rotate since the arms will become fucky otherwise
 
             deltaRotation = new Vector2(deltaRotation.x, 0);
+            //------- MovementContext has some interesting variables like trunk rotation limit, worth looking at maybe
+
+            // ------- When body 45 degrees in either direction thats when it moves and it goes to the other extreme, e.g. exceeding 45 goes to 315
+
             //camRoot.transform.Rotate(0, __instance.MovementContext.Rotation.x - deltaRotation.x,0);
 
             __instance.MovementContext.Rotation = deltaRotation;
-
+            //if (rightHandIK && CameraManager.RightHand)
+            //    Plugin.MyLog.LogMessage(Vector3.Distance(rightHandIK.transform.position, CameraManager.RightHand.transform.position));
 
             return false;
         }
+
+        // GClass1854 inherits MovementState and its version of ProcessUpperbodyRotation is ran when the player is moving, this ensures 
+        // the rotation when not moving is similar to that when moving otherwise the player can rotate their camera faster than the body
+        // can rotate
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MovementState), "ProcessUpperbodyRotation")]
+        private static bool FixBodyRotation(MovementState __instance, float deltaTime)
+        {
+            //float y = Mathf.Abs(__instance.MovementContext.TransformRotation.eulerAngles.y - camRoot.transform.eulerAngles.y);
+            //if (y > 20)
+            //    __instance.MovementContext.ApplyRotation(Quaternion.Lerp(__instance.MovementContext.TransformRotation, __instance.MovementContext.TransformRotation * Quaternion.Euler(0f, y, 0f), 30f * deltaTime));
+
+            if (__instance.MovementContext._player.IsAI) 
+                return true;
+
+            __instance.UpdateRotationSpeed(deltaTime);
+            float float_3 = __instance.MovementContext.TransformRotation.eulerAngles.y;
+            float f = Mathf.DeltaAngle(__instance.MovementContext.Yaw, float_3);
+            float num = Mathf.InverseLerp(10f, 45f, Mathf.Abs(f)) + 1f;
+            float_3 = Mathf.LerpAngle(float_3, __instance.MovementContext.Yaw, EFTHardSettings.Instance.TRANSFORM_ROTATION_LERP_SPEED * deltaTime * num);
+            __instance.MovementContext.ApplyRotation(Quaternion.AngleAxis(float_3, Vector3.up) * __instance.MovementContext.AnimatorDeltaRotation);
+            return false;
+        }
+
+
 
 
         [HarmonyPostfix]
@@ -486,7 +890,14 @@ namespace TarkovVR
             __instance._elbowBends[0] = __instance.PlayerBones.BendGoals[0];
         }
 
-
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "smethod_7")]
+        //private static void ddd(EFT.Player.EmptyHandsController __instance)
+        //{
+        //    if (__instance._player.IsAI)
+        //        return;
+        //    Plugin.MyLog.LogWarning("SMETHOD_7");
+        //}
         //[HarmonyPrefix]
         //[HarmonyPatch(typeof(TwistRelax), "Relax")]
         //private static bool PreventArmIKStretching(EFT.CameraControl.OpticComponentUpdater __instance)
@@ -505,3 +916,15 @@ namespace TarkovVR
     // CHANGE WEAPON:
     // Player class, method smethod_7 takes in a ItemHandsController type as an argument and seems to swap weapons
 }
+
+
+// anti aliasing is off or on FXAA
+// Resampling x1 OFF 
+// DLSS and FSR OFF
+// HBAO doesn't really matter
+// SSR doesn't matter
+// Anistrophic filtering - per texture or on maybe cos it looks bettter, or just off
+// Sharpness at 1-1.5 I think it the gain falls off after around 1.5+
+// Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
+// Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
+

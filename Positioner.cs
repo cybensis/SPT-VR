@@ -15,16 +15,14 @@ namespace TarkovVR
         private float rx, ry, rz;
         public Transform target;
         private void Awake() {
-            //x = 0.141f;
-            //y = 0.0204f;
-            //z = -0.1003f;
+            x = 90f;
 
             //rx = 15;
             //ry = 275;
             //rz = 90f;
         }
 
-        private void Update()
+        private void LateUpdate()
         {
             //if (target) {
             //     //transform.position = target.position + new Vector3(x, y, z);
@@ -41,20 +39,24 @@ namespace TarkovVR
             //    //transform.rotation = CameraManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
             //    transform.rotation = Quaternion.Euler(rx, ry, rz);
             //}\
+            transform.localRotation = Quaternion.Euler(x, y, z);
+            //if (CamPatches.VRCam != null)
+            //{
+            //    //transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0) + (CamPatches.VRCam.transform.up * -0.04f) + (CamPatches.VRCam.transform.forward * -0.06f);
+            //    transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0.025f) + (CamPatches.VRCam.transform.up * 0.3f) + (CamPatches.VRCam.transform.forward * -0.06f);
+            //    //transform.localPosition += (transform.right * x) + (transform.up * y) + (transform.forward * z);
+            //    transform.rotation = CamPatches.VRCam.transform.rotation * Quaternion.Euler(180, 90, 90);
+            //}
+        }
+
+/*        private void LateUpdate()
+        {
+
             if (CamPatches.VRCam != null)
             {
                 transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0) + (CamPatches.VRCam.transform.up * -0.04f) + (CamPatches.VRCam.transform.forward * -0.06f);
                 //transform.localPosition += (transform.right * x) + (transform.up * y) + (transform.forward * z);
                 transform.rotation = CamPatches.VRCam.transform.rotation * Quaternion.Euler(180, 90, 90);
-            }
-        }
-
-        private void LateUpdate() {
-
-            if (CamPatches.VRCam != null) {
-                transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0) + (CamPatches.VRCam.transform.up * -0.04f) + (CamPatches.VRCam.transform.forward * -0.06f);
-                //transform.localPosition += (transform.right * x) + (transform.up * y) + (transform.forward * z);
-                transform.rotation = CamPatches.VRCam.transform.rotation * Quaternion.Euler(180,90,90);
             }
 
             //transform.localPosition = new Vector3(x, y, z);
@@ -71,6 +73,6 @@ namespace TarkovVR
 
 
             // 28.8354 295.806 90
-        }
+        }*/
     }
 }
