@@ -16,6 +16,7 @@ namespace TarkovVR.Input
         public Vector3 initPos;
 
         private Vector3 rightHandOffset = new Vector3(0.05f, -0.1f, -0.2f);
+        private Vector3 headOffset = new Vector3(0f, 0.075f, 0.1f);
         private Vector3 supportRightHandOffset = new Vector3(0.1f, -0.05f,-0.05f);
         private Vector3 leftHandOffset = new Vector3(-0.04f, -0.05f, -0.1f);
         private Vector3 supportLeftHandOffset = new Vector3(-0.05f,0,0);
@@ -33,6 +34,7 @@ namespace TarkovVR.Input
         public static GameObject LeftHand = null;
         public static GameObject RightHand = null;
         private bool isSupporting = false;
+        private float timeHeld = 0;
 
         public void Awake()
         {
@@ -58,11 +60,25 @@ namespace TarkovVR.Input
         }
 
         private void Update() {
+            if (initPos.y == 0 && Camera.main != null)
+                initPos = Camera.main.transform.localPosition;
+    
             if (initPos.y != 0)
-                CamPatches.vrOffsetter.transform.localPosition = initPos * -1;
-            else if (Camera.main != null)
-                CamPatches.vrOffsetter.transform.localPosition = (Camera.main.transform.localPosition * -1) + new Vector3(Test.ex, Test.ey, Test.ez);
-
+                CamPatches.vrOffsetter.transform.localPosition = (initPos * -1) + headOffset;
+            else
+                CamPatches.vrOffsetter.transform.localPosition = (Camera.main.transform.localPosition * -1) + headOffset;
+           
+            if (SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.Any))
+            {
+                timeHeld += Time.deltaTime;
+                if (Camera.main != null && timeHeld > 0.75f)
+                {
+                    initPos = Camera.main.transform.localPosition;
+                }
+            }
+            else if (timeHeld != 0) { 
+                timeHeld = 0;
+            }
         }
         private bool wasAimingPreviously = false;
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)

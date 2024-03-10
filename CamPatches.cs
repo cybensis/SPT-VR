@@ -20,6 +20,7 @@ using EFT.AssetsManager;
 using UnityEngine.UIElements;
 using EFT.Animations;
 using static GClass603;
+using static Val;
 
 namespace TarkovVR
 {
@@ -248,6 +249,7 @@ namespace TarkovVR
 
 
         private static Transform scope;
+        private static bool changedMagnification = false;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass1765), "UpdateInput")]
         private static bool BlockLookAxis(GClass1765 __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
@@ -418,7 +420,18 @@ namespace TarkovVR
                     // 93-94: Enter
                     // 95: Escape
                     //__instance.ecommand_0 = SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
-                    if (__instance.ecommand_0 != 0)
+                    if (isAiming) { 
+                        if (!changedMagnification && SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.Any)) {
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ChangeScopeMagnification;
+                            changedMagnification = true;
+                        }
+                        if (changedMagnification && SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
+                        {
+                            changedMagnification = false;
+                        }
+                    }
+
+                        if (__instance.ecommand_0 != 0)
                     {
                         commands.Add(__instance.ecommand_0);
                         //Plugin.MyLog.LogError(k + ": " + (__instance.gclass1760_0[k] as GClass1802).GameKey + "\n");
@@ -626,8 +639,24 @@ namespace TarkovVR
             // The SightModeVisualControllers on the scopes contains sightComponent_0 which has a function GetCurrentOpticZoom which returns the zoom
 
         }
-        
-       
+
+
+
+
+
+
+        // SSAA causes a bunch of issues like thermal/nightvision rendering all fucky, and the scopes also render in 
+        // with 2 other lenses on either side of the main lense, Although SSAA is nice for fixing the jagged edges, it 
+        // also adds a strong layer of blur over everything so it's definitely best to keep it disabled. Might look into
+        // keeping it around later on if I can figure a way to get it to look nice without messing with everything else
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SSAAPropagator), "Init")]
+        private static void DisableSSAA(SSAAPropagator __instance)
+        {
+            Plugin.MyLog.LogWarning("SSAA Init\n");
+            __instance._postProcessLayer = null;
+
+        }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PrismEffects), "OnRenderImage")]
@@ -674,6 +703,31 @@ namespace TarkovVR
             return false;
         }
 
+        private static Camera postProcessingStoogeCamera; 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PostProcessLayer), "InitLegacy")]
+        private static void FixPostProcessing(PostProcessLayer __instance) { 
+            if (camHolder && camHolder.GetComponent<Camera>() == null)
+            {
+                postProcessingStoogeCamera = camHolder.AddComponent<Camera>();
+            }
+            if (postProcessingStoogeCamera)
+                __instance.m_Camera = postProcessingStoogeCamera;
+        }
+
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(CC_Base), "Start")]
+        //private static void ClearUpSharpen(CC_Base __instance)
+        //{
+        //    if (__instance is CC_Sharpen) { 
+        //        Plugin.MyLog.LogWarning("OnRenderImage\n");
+        //        ((CC_Sharpen)__instance).strength = 2;
+        //        ((CC_Sharpen)__instance).clamp = 5;
+
+            
+        //    }
+        //}
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BloodOnScreen), "Start")]
         private static void SetMainCamParent(BloodOnScreen __instance)
@@ -683,7 +737,7 @@ namespace TarkovVR
                 Plugin.MyLog.LogWarning("\n\nSetting camera \n\n");
                 mainCam.transform.parent = vrOffsetter.transform;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
-                mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
+                //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
                 //cameraManager.initPos = VRCam.transform.localPosition;
             }
 
@@ -789,6 +843,7 @@ namespace TarkovVR
                 //Camera.main.transform.Rotate(0, Camera.main.transform.rotation.y * -1, 0);
                 //__instance.transform_0.parent.localRotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
             }
+
             //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
             //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
             //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, __instance.transform_0.eulerAngles.z);
@@ -822,6 +877,7 @@ namespace TarkovVR
         }
 
 
+        private static float lastYRot = 0f;
         // Found in Player object under CurrentState variable, and is inherited by Gclass1573
         // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
         [HarmonyPrefix]
@@ -833,13 +889,18 @@ namespace TarkovVR
 
 
             if (SteamVR_Actions._default.LeftJoystick.axis.x != 0 || SteamVR_Actions._default.LeftJoystick.axis.y != 0)
-                deltaRotation = new Vector2(deltaRotation.x + Camera.main.transform.eulerAngles.y, 0);
-            else
-                deltaRotation = new Vector2(deltaRotation.x + camRoot.transform.eulerAngles.y, 0);
+            {
+                lastYRot = Camera.main.transform.eulerAngles.y;
+            }
+            else if (SteamVR_Actions._default.RightJoystick.axis.x != 0)
+            {
+                lastYRot = camRoot.transform.eulerAngles.y;
+            }
+                deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
+
             // If difference between cam and body exceed something when using the right joystick, then turn the body.
             // Keep it a very tight amount before the body starts to rotate since the arms will become fucky otherwise
 
-            deltaRotation = new Vector2(deltaRotation.x, 0);
             //------- MovementContext has some interesting variables like trunk rotation limit, worth looking at maybe
 
             // ------- When body 45 degrees in either direction thats when it moves and it goes to the other extreme, e.g. exceeding 45 goes to 315
@@ -918,12 +979,14 @@ namespace TarkovVR
 }
 
 
-// anti aliasing is off or on FXAA
+// In hideout, don't notice any real fps difference when changing object LOD quality and overall visibility
+
+// anti aliasing is off or on FXAA - no FPS difference noticed - seems like scopes won't work without it
 // Resampling x1 OFF 
 // DLSS and FSR OFF
-// HBAO doesn't really matter
-// SSR doesn't matter
-// Anistrophic filtering - per texture or on maybe cos it looks bettter, or just off
+// HBAO - Looks better but takes a massive hit on performance - off gets about around 10-20 fps increase
+// SSR - turning low to off raises FPS by about 2-5, turning ultra to off raises fps by about 5ish. I don't know if it looks better but it seems like if you have it on, you may as well go to ultra
+// Anistrophic filtering - per texture or on maybe cos it looks bettter, or just off - No real FPS difference
 // Sharpness at 1-1.5 I think it the gain falls off after around 1.5+
 // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
 // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
