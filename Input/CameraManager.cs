@@ -16,7 +16,9 @@ namespace TarkovVR.Input
         public Vector3 initPos;
 
         private Vector3 rightHandOffset = new Vector3(0.05f, -0.1f, -0.2f);
-        private Vector3 headOffset = new Vector3(0f, 0.075f, 0.1f);
+        //private Vector3 headOffset = new Vector3(0f, 0.12f, 0.1f);
+        //private Vector3 headOffset = new Vector3(-0.07f, 0.12f, 0.09f);
+        private Vector3 headOffset = new Vector3(0.07f, 0.14f, 0.07f);
         private Vector3 supportRightHandOffset = new Vector3(0.1f, -0.05f,-0.05f);
         private Vector3 leftHandOffset = new Vector3(-0.04f, -0.05f, -0.1f);
         private Vector3 supportLeftHandOffset = new Vector3(-0.05f,0,0);

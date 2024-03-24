@@ -22,6 +22,7 @@ using EFT.Animations;
 using static GClass603;
 using static Val;
 
+
 namespace TarkovVR
 {
     [HarmonyPatch]
@@ -123,6 +124,12 @@ namespace TarkovVR
                 // This is a bot player, so do not execute the rest of the code
                 return;
             }
+
+            if (__instance.transform.parent.parent.GetComponent<Test>() == null)
+            {
+                __instance.transform.parent.parent.gameObject.AddComponent<Test>();
+            }
+
             //if (loadedIn != 0 && loadedIn != __instance.transform.root.GetInstanceID())
             //   return;
 
@@ -154,6 +161,7 @@ namespace TarkovVR
             }
 
         }
+        private static Transform emptyHands;
 
 
         [HarmonyPostfix]
@@ -162,7 +170,7 @@ namespace TarkovVR
         {
             if (__instance._player.IsAI)
                 return;
-
+            emptyHands = __instance.ControllerGameObject.transform;
             StackTrace stackTrace = new StackTrace();
             bool isBotPlayer = false;
 
@@ -202,7 +210,7 @@ namespace TarkovVR
         {
             if (__instance._player.IsAI)
                 return;
-
+            emptyHands = __instance.ControllerGameObject.transform;
             Plugin.MyLog.LogError("\n\n" + oldWeaponHolder + "\n\n");
             scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform;
             // Check if a weapon is currently equipped, if that weapon is the same as the one trying to be equipped and that the weaponHolder actually has something there
@@ -493,6 +501,16 @@ namespace TarkovVR
             if (isHoldingBreath) return true;
             return false;
         }
+
+
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(BodyPartCollider), "Awake")]
+        //private static void OnlyConsumeArmStamOwdanHoldBreath(BodyPartCollider __instance)
+        //{
+        //    if (__instance.name == "Base HumanSpine3")
+        //        __instance.gameObject.AddComponent<Test>();
+        //}
+
 
         private static float scopeSensitivity = 0;
 
@@ -848,9 +866,10 @@ namespace TarkovVR
             //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
             //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, __instance.transform_0.eulerAngles.z);
 
-
-
-            camRoot.transform.position = __instance.method_1(camRoot.transform.position, camRoot.transform.rotation, __instance.transform_0.position);
+            if (emptyHands) 
+                camRoot.transform.position = emptyHands.position;
+            else
+                camRoot.transform.position = __instance.method_1(camRoot.transform.position, camRoot.transform.rotation, __instance.transform_0.position);
             //camHolder.transform.position = __instance.transform_0.position + new Vector3(Test.ex, Test.ey, Test.ez);
             return false;
         }
@@ -887,8 +906,9 @@ namespace TarkovVR
             if (__instance.MovementContext.IsAI)
                 return true;
 
-
-            if (SteamVR_Actions._default.LeftJoystick.axis.x != 0 || SteamVR_Actions._default.LeftJoystick.axis.y != 0)
+            bool leftJoystickUsed = (SteamVR_Actions._default.LeftJoystick.axis.x > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || SteamVR_Actions._default.LeftJoystick.axis.y > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
+            bool leftJoystickLastUsed = (SteamVR_Actions._default.LeftJoystick.lastAxis.x > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || SteamVR_Actions._default.LeftJoystick.lastAxis.y > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
+            if (leftJoystickUsed)
             {
                 lastYRot = Camera.main.transform.eulerAngles.y;
             }
@@ -896,7 +916,10 @@ namespace TarkovVR
             {
                 lastYRot = camRoot.transform.eulerAngles.y;
             }
-                deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
+            if (!leftJoystickUsed && leftJoystickLastUsed)
+                lastYRot -= 40;
+            deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
+
 
             // If difference between cam and body exceed something when using the right joystick, then turn the body.
             // Keep it a very tight amount before the body starts to rotate since the arms will become fucky otherwise
@@ -934,6 +957,7 @@ namespace TarkovVR
             float num = Mathf.InverseLerp(10f, 45f, Mathf.Abs(f)) + 1f;
             float_3 = Mathf.LerpAngle(float_3, __instance.MovementContext.Yaw, EFTHardSettings.Instance.TRANSFORM_ROTATION_LERP_SPEED * deltaTime * num);
             __instance.MovementContext.ApplyRotation(Quaternion.AngleAxis(float_3, Vector3.up) * __instance.MovementContext.AnimatorDeltaRotation);
+            //Plugin.MyLog.LogError("Process upper " + (Quaternion.AngleAxis(float_3, Vector3.up) * __instance.MovementContext.AnimatorDeltaRotation).eulerAngles);
             return false;
         }
 
@@ -951,22 +975,6 @@ namespace TarkovVR
             __instance._elbowBends[0] = __instance.PlayerBones.BendGoals[0];
         }
 
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "smethod_7")]
-        //private static void ddd(EFT.Player.EmptyHandsController __instance)
-        //{
-        //    if (__instance._player.IsAI)
-        //        return;
-        //    Plugin.MyLog.LogWarning("SMETHOD_7");
-        //}
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(TwistRelax), "Relax")]
-        //private static bool PreventArmIKStretching(EFT.CameraControl.OpticComponentUpdater __instance)
-        //{
-
-        //    return false;
-
-        //}
     }
     
 
