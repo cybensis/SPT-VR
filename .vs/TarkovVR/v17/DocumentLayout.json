@@ -7,12 +7,16 @@
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:campatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|c:\\users\\guy\\desktop\\gamedev\\r\\tarkov\\tarkovvr\\input\\test.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:input\\test.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|c:\\users\\guy\\desktop\\gamedev\\r\\tarkov\\tarkovvr\\input\\cameramanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:input\\cameramanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|c:\\users\\guy\\desktop\\gamedev\\r\\tarkov\\tarkovvr\\input\\test.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:input\\test.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|c:\\users\\guy\\desktop\\gamedev\\r\\tarkov\\tarkovvr\\menupatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:menupatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|c:\\users\\guy\\desktop\\gamedev\\r\\tarkov\\tarkovvr\\positioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -21,6 +25,10 @@
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|c:\\users\\guy\\desktop\\gamedev\\r\\tarkov\\tarkovvr\\cam\\bodyrotationfixer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:cam\\bodyrotationfixer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|c:\\users\\guy\\desktop\\gamedev\\r\\tarkov\\tarkovvr\\libs\\managed\\assembly-csharp.dll||{177559E0-D141-11D0-92DF-00A0C9138C45}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:libs\\managed\\assembly-csharp.dll||{177559E0-D141-11D0-92DF-00A0C9138C45}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|c:\\users\\guy\\desktop\\gamedev\\r\\tarkov\\tarkovvr\\vrbody\\armik.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -38,35 +46,52 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 3,
+          "SelectedChildIndex": 5,
           "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "MenuPatches.cs",
+              "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\MenuPatches.cs",
+              "RelativeDocumentMoniker": "MenuPatches.cs",
+              "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\MenuPatches.cs",
+              "RelativeToolTip": "MenuPatches.cs",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAAAgAAAB1AAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-04-07T04:06:47.889Z",
+              "EditorCaption": ""
+            },
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{269a02dc-6af8-11d3-bdc4-00c04f688e50}"
             },
             {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
+            },
+            {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 6,
+              "Title": "Assembly-CSharp.dll",
+              "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\libs\\Managed\\Assembly-CSharp.dll",
+              "RelativeDocumentMoniker": "libs\\Managed\\Assembly-CSharp.dll",
+              "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\libs\\Managed\\Assembly-CSharp.dll",
+              "RelativeToolTip": "libs\\Managed\\Assembly-CSharp.dll",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001697|",
+              "WhenOpened": "2024-03-24T01:26:10.67Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
               "Title": "BodyRotationFixer.cs",
               "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\cam\\BodyRotationFixer.cs",
               "RelativeDocumentMoniker": "cam\\BodyRotationFixer.cs",
               "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\cam\\BodyRotationFixer.cs",
               "RelativeToolTip": "cam\\BodyRotationFixer.cs",
-              "ViewState": "AQIAAB8AAAAAAAAAAAAgwE8AAAAUAAAA",
+              "ViewState": "AQIAABYAAAAAAAAAAAAgwE8AAAAUAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2023-07-09T06:24:57.114Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "Positioner.cs",
-              "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Positioner.cs",
-              "RelativeDocumentMoniker": "Positioner.cs",
-              "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Positioner.cs",
-              "RelativeToolTip": "Positioner.cs",
-              "ViewState": "AQIAAB4AAAAAAAAAAAAowDAAAAANAAAA",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2023-07-04T08:58:34.937Z"
+              "WhenOpened": "2023-07-09T06:24:57.114Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
@@ -76,64 +101,75 @@
               "RelativeDocumentMoniker": "CamPatches.cs",
               "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\CamPatches.cs",
               "RelativeToolTip": "CamPatches.cs",
-              "ViewState": "AQIAAJwBAAAAAAAAAAAQwK0BAAA5AAAA",
+              "ViewState": "AQIAAFkEAAAAAAAAAAAIwHMEAAAAAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2023-07-04T06:09:08.902Z",
               "EditorCaption": ""
             },
             {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
-            },
-            {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "Test.cs",
-              "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Input\\Test.cs",
-              "RelativeDocumentMoniker": "Input\\Test.cs",
-              "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Input\\Test.cs",
-              "RelativeToolTip": "Input\\Test.cs",
-              "ViewState": "AQIAABwAAAAAAAAAAAAgwAoAAAAoAAAA",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2023-07-03T09:27:14.484Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
               "Title": "CameraManager.cs",
               "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Input\\CameraManager.cs",
               "RelativeDocumentMoniker": "Input\\CameraManager.cs",
               "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Input\\CameraManager.cs",
               "RelativeToolTip": "Input\\CameraManager.cs",
-              "ViewState": "AQIAAC0AAAAAAAAAAAAqwD8AAAATAAAA",
+              "ViewState": "AQIAAEEAAAAAAAAAAAAgwD0AAAAZAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2023-07-03T08:49:19.737Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 1,
+              "Title": "Test.cs",
+              "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Input\\Test.cs",
+              "RelativeDocumentMoniker": "Input\\Test.cs",
+              "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Input\\Test.cs",
+              "RelativeToolTip": "Input\\Test.cs",
+              "ViewState": "AQIAAFMAAAAAAAAAAAAAAF8AAAA5AAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2023-07-03T09:27:14.484Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Positioner.cs",
+              "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Positioner.cs",
+              "RelativeDocumentMoniker": "Positioner.cs",
+              "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Positioner.cs",
+              "RelativeToolTip": "Positioner.cs",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAADAAAAANAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2023-07-04T08:58:34.937Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
               "Title": "ArmIK.cs",
               "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\VRBody\\ArmIK.cs",
               "RelativeDocumentMoniker": "VRBody\\ArmIK.cs",
               "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\VRBody\\ArmIK.cs",
               "RelativeToolTip": "VRBody\\ArmIK.cs",
-              "ViewState": "AQIAAAAAAAAAAAAAAAAAADQAAAA+AAAA",
+              "ViewState": "AQIAAD4AAAAAAAAAAAAQwDQAAAA+AAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2023-07-03T08:42:57.486Z"
+              "WhenOpened": "2023-07-03T08:42:57.486Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 8,
               "Title": "Plugin.cs",
               "DocumentMoniker": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Plugin.cs",
               "RelativeDocumentMoniker": "Plugin.cs",
               "ToolTip": "C:\\Users\\Guy\\Desktop\\gamedev\\r\\tarkov\\TarkovVR\\Plugin.cs",
               "RelativeToolTip": "Plugin.cs",
-              "ViewState": "AQIAAAkAAAAAAAAAAAAqwCoAAAAAAAAA",
+              "ViewState": "AQIAAAwAAAAAAAAAAAAqwCoAAAAAAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2023-07-01T09:20:21.867Z"
+              "WhenOpened": "2023-07-01T09:20:21.867Z",
+              "EditorCaption": ""
             }
           ]
         }

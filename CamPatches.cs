@@ -21,6 +21,8 @@ using UnityEngine.UIElements;
 using EFT.Animations;
 using static GClass603;
 using static Val;
+using UnityEngine.Rendering;
+
 
 
 namespace TarkovVR
@@ -48,6 +50,8 @@ namespace TarkovVR
 
         public static GameObject weaponHolder;
         public static GameObject oldWeaponHolder;
+
+        public static Player player;
 
 
         private static float MIN_JOYSTICK_AXIS_FOR_MOVEMENT = 0.5f;
@@ -78,22 +82,16 @@ namespace TarkovVR
                 //camRoot.AddComponent<TarkovVR.Input.Test>();
                 camHolder.AddComponent<SteamVR_TrackedObject>();
                 cameraManager = camHolder.AddComponent<CameraManager>();
-
                 weaponHolder = new GameObject("weaponHolder");
                 weaponHolder.transform.parent = CameraManager.RightHand.transform;
             }
         }
 
-        static bool leftArmSet = false;
-        static bool rightArmSet = false;
-        static int loadedIn = 0;
 
 
 
-        /// <summary>
-        /// ////////////////////////////////////////////////////IDEA: Check the call stack, it seems like its actually impossible to check if this is a player or AI so check up the callstack cos we can probs check somewhere there
-        /// </summary>
-        /// <param name="__instance"></param>
+
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void AddVRHands(LimbIK __instance)
@@ -119,9 +117,9 @@ namespace TarkovVR
                 }
             }
 
+            // This is a bot player, so do not execute the rest of the code
             if (isBotPlayer)
             {
-                // This is a bot player, so do not execute the rest of the code
                 return;
             }
 
@@ -130,33 +128,27 @@ namespace TarkovVR
                 __instance.transform.parent.parent.gameObject.AddComponent<Test>();
             }
 
-            //if (loadedIn != 0 && loadedIn != __instance.transform.root.GetInstanceID())
-            //   return;
 
             if (__instance.name == LEFT_ARM_OBJECT_NAME)
             {
-                //PrintAllComponentsAndChildren(__instance.transform.root);
-                //Plugin.MyLog.LogError("\n\n\n" + stackTrace.ToString());
-                Plugin.MyLog.LogWarning("\n\n Solver OnDisable LEFT ARM : " + __instance.transform.root + " " + loadedIn + " \n");
-                loadedIn = __instance.transform.root.GetInstanceID();
+
+
                 __instance.enabled = true;
-                __instance.solver.target = CameraManager.LeftHand.transform;
                 leftArmIk = __instance;
+                __instance.solver.target = CameraManager.LeftHand.transform;
                 // Set the weight to 2.5 so when rotating the hand, the wrist rotates as well, showing the watch time
                 __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetComponent<TwistRelax>().weight = 2.5f;
             }
             else if (__instance.name == RIGHT_ARM_OBJECT_NAME)
             {
-                //PrintAllComponentsAndChildren(__instance.transform.root);
-                //Plugin.MyLog.LogError("\n\n\n" + stackTrace.ToString());
-                Plugin.MyLog.LogWarning("\n\n Solver OnDisable RIGHT ARM : " + __instance.transform.root + " " + loadedIn + " \n");
-                loadedIn = __instance.transform.root.GetInstanceID();
 
                 __instance.enabled = true;
                 rightArmIk = __instance;
-                __instance.solver.target = CameraManager.RightHand.transform;
                 if (rightHandIK == null)
                     rightHandIK = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(0).gameObject;
+                __instance.solver.target = CameraManager.RightHand.transform;
+
+
 
             }
 
@@ -170,7 +162,6 @@ namespace TarkovVR
         {
             if (__instance._player.IsAI)
                 return;
-            emptyHands = __instance.ControllerGameObject.transform;
             StackTrace stackTrace = new StackTrace();
             bool isBotPlayer = false;
 
@@ -187,12 +178,14 @@ namespace TarkovVR
                     break;
                 }
             }
-
             if (isBotPlayer)
             {
                 // This is a bot player, so do not execute the rest of the code
                 return;
             }
+
+            emptyHands = __instance.ControllerGameObject.transform;
+            player = __instance._player;
             if (oldWeaponHolder && weaponHolder.transform.childCount > 0)
             {
                 Plugin.MyLog.LogWarning("\n\nAAAAAAAAAAA : " + __instance._player.gameObject + " \n");
@@ -210,10 +203,12 @@ namespace TarkovVR
         {
             if (__instance._player.IsAI)
                 return;
+
+            player = __instance._player;
             emptyHands = __instance.ControllerGameObject.transform;
             Plugin.MyLog.LogError("\n\n" + oldWeaponHolder + "\n\n");
             scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform;
-            // Check if a weapon is currently equipped, if that weapon is the same as the one trying to be equipped and that the weaponHolder actually has something there
+            // Check if a weapon is currently equipped, if that weapon isn't the same as the one trying to be equipped, and that the weaponHolder actually has something there
             if (oldWeaponHolder && oldWeaponHolder != __instance.WeaponRoot.parent.gameObject && weaponHolder.transform.childCount > 0)
             {
                 Plugin.MyLog.LogWarning("\n\n Init ball calc 1 \n\n");
@@ -245,19 +240,27 @@ namespace TarkovVR
                 if (!__instance.WeaponRoot.gameObject.GetComponent<Test>())
                     __instance.WeaponRoot.gameObject.AddComponent<Test>();
                 if (__instance.Weapon.WeapClass == "pistol")
-                    weaponHolder.transform.localPosition = new Vector3(0.541f, 0.0904f, -0.1003f);
-                else if (__instance.Weapon.WeapClass == "assaultRifle" || __instance.Weapon.WeapClass == "assaultCarbine")
-                    weaponHolder.transform.localPosition = new Vector3(0.241f, 0.0204f, -0.1003f);
-                else if (__instance.Weapon.WeapClass == "smg" || __instance.Weapon.WeapClass == "sniperRifle" || __instance.Weapon.WeapClass == "marksmanRifle")
-                    weaponHolder.transform.localPosition = new Vector3(0.321f, 0.0204f, -0.1003f);
+                    weaponHolder.transform.localPosition = new Vector3(0.341f, 0.0904f, -0.0803f);
                 else
-                    weaponHolder.transform.localPosition = new Vector3(0.241f, 0.0204f, -0.1003f);
+                    weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1303f);
+                //else if (__instance.Weapon.WeapClass == "assaultRifle" || __instance.Weapon.WeapClass == "assaultCarbine" || __instance.Weapon.WeapClass == "smg" || __instance.Weapon.WeapClass == "sniperRifle" || __instance.Weapon.WeapClass == "marksmanRifle")
+                //    weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1303f);
+                //    //weaponHolder.transform.localPosition = new Vector3(0.111f, 0.0204f, -0.1003f);
+                //else if (__instance.Weapon.WeapClass == "smg" || __instance.Weapon.WeapClass == "sniperRifle" || __instance.Weapon.WeapClass == "marksmanRifle")
+                //    weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1303f);
+                //else
+                //    weaponHolder.transform.localPosition = new Vector3(0.241f, 0.0204f, -0.1003f);
             }
+
+
+            // 26.0009 320.911 103.7912
+            // -0.089 -0.0796 -0.1970 
         }
 
 
         private static Transform scope;
         private static bool changedMagnification = false;
+        private static bool matchingHeadToBody = false;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass1765), "UpdateInput")]
         private static bool BlockLookAxis(GClass1765 __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
@@ -277,6 +280,7 @@ namespace TarkovVR
             // 25: Backwards/S
             // 64: Right/D
             // 65: Left/A
+
 
             if (__instance.ginterface141_0 != null)
             {
@@ -320,7 +324,7 @@ namespace TarkovVR
                     else if (k == 61 && SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any))
                         __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleInventory;
                     // 62: Jump
-                    else if (k == 62 && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.8f)
+                    else if (k == 62 && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
                         __instance.ecommand_0 = EFT.InputSystem.ECommand.Jump;
                     // 57: Sprint
                     else if (k == 57)
@@ -467,7 +471,8 @@ namespace TarkovVR
                 }
                 if (m == 3)
                     axis[__instance.gclass1761_1[m].IntAxis] = 0;
-                else if (m == 2) {
+                else if (m == 2)
+                {
                     axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
                     if (camRoot != null)
                         camRoot.transform.Rotate(0, axis[__instance.gclass1761_1[m].IntAxis], 0);
@@ -476,8 +481,61 @@ namespace TarkovVR
                     axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.x;
                 else if (m == 1 && Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
                     axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.y;
+                //else if (leftArmIk)
+                //{
+                //    Vector3 headsetPos = Camera.main.transform.position;
+                //    Vector3 playerBodyPos = leftArmIk.transform.root.position + CameraManager.headOffset;
+                //    headsetPos.y = 0;
+                //    playerBodyPos.y = 0;
+                //    float distanceBetweenBodyAndHead = Vector3.Distance(playerBodyPos, headsetPos);
+                //    if (distanceBetweenBodyAndHead >= 0.325 || (matchingHeadToBody && distanceBetweenBodyAndHead > 0.05))
+                //    {
+                //        // Add code for headset to body difference
+                //        matchingHeadToBody = true;
+                //        float moveSpeed = 0.5f;
+                //        Vector3 newPosition = Vector3.MoveTowards(leftArmIk.transform.root.position, headsetPos, moveSpeed * Time.deltaTime);
+                //        Vector3 movementDelta = newPosition - leftArmIk.transform.root.position; // The actual movement vector
+                //        leftArmIk.transform.root.position = newPosition;
+                //        // Now, counteract this movement for vrOffsetter to keep the camera stable in world space
+                //        if (vrOffsetter != null && oldWeaponHolder) // Ensure vrOffsetter is assigned
+                //        {
+                //            Vector3 localMovementDelta = vrOffsetter.transform.parent.InverseTransformVector(movementDelta);
+                //            cameraManager.initPos += localMovementDelta; // Apply inverse local movement to vrOffsetter
+                //        }
+                //    }
+                //    else
+                //        matchingHeadToBody = false;
+                //}
             }
             //Plugin.MyLog.LogWarning("\n");
+
+            if (player)
+            {
+                // Base Height - the height at which crouching begins.
+                float baseHeight = cameraManager.initPos.y * 0.90f; // 90% of init height
+                                                                   // Floor Height - the height at which full prone is achieved.
+                float floorHeight = cameraManager.initPos.y * 0.40f; // Significant crouch/prone
+
+                // Current height position normalized between baseHeight and floorHeight.
+                float normalizedHeightPosition = (Camera.main.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
+
+                // Ensure the normalized height is within 0 (full crouch/prone) and 1 (full stand).
+                float crouchLevel = Mathf.Clamp(normalizedHeightPosition, 0, 1);
+
+
+
+                // Handling prone based on crouchLevel instead of raw height differences.
+                if (normalizedHeightPosition < -0.2 && player.MovementContext.CanProne) // Example threshold for prone
+                    player.MovementContext.IsInPronePose = true;
+                else
+                    player.MovementContext.IsInPronePose = false;
+
+                // Debug or apply the crouch level
+                //Plugin.MyLog.LogError("Crouch Level: " + crouchLevel + " " + normalizedHeightPosition);
+                player.MovementContext._poseLevel = crouchLevel;
+
+                //player.MovementContext._poseLevel = crouchLevel;
+            }
             return false;
             //if (__instance.gclass1761_1 == null)
             //{
@@ -492,7 +550,9 @@ namespace TarkovVR
             //}
 
         }
-        
+        public static float crouchThreshold = 0.2f; // Height difference before crouching starts
+        public static float maxCrouchDifference = 0.1f; // Maximum height difference representing full crouch
+
         // NOTE: Currently arm stamina lasts way too long, turn it down maybe, or maybe not since the account I'm using has maxed stats
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass601), "Process")]
@@ -503,13 +563,36 @@ namespace TarkovVR
         }
 
 
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(BodyPartCollider), "Awake")]
-        //private static void OnlyConsumeArmStamOwdanHoldBreath(BodyPartCollider __instance)
-        //{
-        //    if (__instance.name == "Base HumanSpine3")
-        //        __instance.gameObject.AddComponent<Test>();
-        //}
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(VolumetricLightRenderer), "OnPreRender")]
+        private static bool PatchVolumetricLightingToVR(VolumetricLightRenderer __instance)
+        {
+            if (UnityEngine.XR.XRSettings.enabled && __instance.camera_0 != null)
+            {
+                __instance.method_3();
+
+                Camera.StereoscopicEye eye = (Camera.StereoscopicEye)Camera.current.stereoActiveEye;
+
+                Matrix4x4 viewMatrix = __instance.camera_0.GetStereoViewMatrix(eye);
+                Matrix4x4 projMatrix = __instance.camera_0.GetStereoProjectionMatrix(eye);
+                projMatrix = GL.GetGPUProjectionMatrix(projMatrix, renderIntoTexture: true);
+                Matrix4x4 combinedMatrix = projMatrix * viewMatrix;
+                __instance.matrix4x4_0 = combinedMatrix;
+                __instance.method_4();
+                __instance.method_6();
+                
+                for (int i = 0; i < VolumetricLightRenderer.list_0.Count; i++)
+                {
+                    VolumetricLightRenderer.list_0[i].VolumetricLightPreRender(__instance, __instance.matrix4x4_0);
+                }
+                __instance.commandBuffer_0.SetRenderTarget(BuiltinRenderTextureType.CameraTarget, BuiltinRenderTextureType.CameraTarget);
+                __instance.method_5();
+
+                return false;
+            }
+            return true; 
+        }
+
 
 
         private static float scopeSensitivity = 0;
@@ -728,23 +811,13 @@ namespace TarkovVR
             if (camHolder && camHolder.GetComponent<Camera>() == null)
             {
                 postProcessingStoogeCamera = camHolder.AddComponent<Camera>();
+                postProcessingStoogeCamera.enabled = false;
             }
             if (postProcessingStoogeCamera)
                 __instance.m_Camera = postProcessingStoogeCamera;
         }
 
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(CC_Base), "Start")]
-        //private static void ClearUpSharpen(CC_Base __instance)
-        //{
-        //    if (__instance is CC_Sharpen) { 
-        //        Plugin.MyLog.LogWarning("OnRenderImage\n");
-        //        ((CC_Sharpen)__instance).strength = 2;
-        //        ((CC_Sharpen)__instance).clamp = 5;
 
-            
-        //    }
-        //}
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BloodOnScreen), "Start")]
@@ -771,6 +844,74 @@ namespace TarkovVR
             return false;
         }
 
+      
+        // These two functions would return the screen resolution setting and would result in the game
+        // being very blurry
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "GetOutputWidth")]
+        private static bool ReturnVROutputWidth(SSAAImpl __instance, ref int __result)
+        {
+            __result = __instance.GetInputWidth();
+            return false;
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "GetOutputHeight")]
+        private static bool ReturnVROutputHeight(SSAAImpl __instance, ref int __result)
+        {
+            __result = __instance.GetInputWidth();
+            return false;
+        }
+
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(SSAAImpl), "Awake")]
+        //private static bool RemoveBadCameraEffects(SSAAImpl __instance)
+        //{
+        //    // All the SSAA stuff makes everything very blurry and bad quality, all while lowering framerate
+        //    if (__instance.GetComponent<SSAAPropagatorOpaque>() != null)
+        //    {
+        //        UnityEngine.Object.Destroy(__instance.GetComponent<SSAAPropagatorOpaque>());
+        //        Plugin.MyLog.LogWarning("SSAAPropagatorOpaque component removed successfully.");
+        //    }
+        //    if (__instance.GetComponent<SSAAPropagator>() != null)
+        //    {
+        //        UnityEngine.Object.Destroy(__instance.GetComponent<SSAAPropagator>());
+        //        Plugin.MyLog.LogWarning("SSAAPropagator component removed successfully.");
+        //    }
+        //    if (__instance != null)
+        //    {
+        //        UnityEngine.Object.Destroy(__instance);
+        //        Plugin.MyLog.LogWarning("SSAAImpl component removed successfully.");
+        //    }
+        //    if (__instance.GetComponent<SSAA>() != null)
+        //    {
+        //        UnityEngine.Object.Destroy(__instance.GetComponent<SSAA>());
+        //        Plugin.MyLog.LogWarning("SSAA component removed successfully.");
+        //    }
+        //    // The EnableDistantShadowKeywords is responsible for rendering distant shadows (who woulda thunk) but it works
+        //    // poorly with VR so it needs to be removed and should ideally be suplemented with high or ultra shadow settings
+        //    CommandBuffer[] commandBuffers = Camera.main.GetCommandBuffers(CameraEvent.BeforeGBuffer);
+        //    for (int i = 0; i < commandBuffers.Length; i++)
+        //    {
+        //        if (commandBuffers[i].name == "EnableDistantShadowKeywords")
+        //            Camera.main.RemoveCommandBuffer(CameraEvent.BeforeGBuffer, commandBuffers[i]);
+        //    }
+
+        //    return false;
+        //}
+
+
+        //NOTEEEEEEEEEEEE: Removing the SSAApropagator (i think) from the PostProcessingLayer/Volume will restore some visual fidelity but still not as good as no ssaa
+
+        //ANOTHER NOTE: I'm pretty sure if you delete or disable the SSAA shit you still get all the nice visual effects from the post processing without the blur,
+        // its just the night vision doessn't work, so maybe only enable SSAA when enabling night/thermal vision
+
+        // FIGURED IT OUT Delete the SSAAPropagator, SSAA, and SSAAImpl and it just works
+
+        // Also remove the distant shadows command buffer from the camera
+        // MotionVectorsPASS is whats causing the annoying [Error  : Unity Log] Dimensions of color surface does not match dimensions of depth surface    error to occur 
+        // but its also needed for grass and maybe other stuff
+
+        //VolumetricLightRenderer is whats rendering the lights in different eyes, look into that
 
         // Not sure if needed
         [HarmonyPrefix]
@@ -866,10 +1007,14 @@ namespace TarkovVR
             //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
             //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, __instance.transform_0.eulerAngles.z);
 
-            if (emptyHands) 
+            //camRoot.transform.position = __instance.player_0.gameObject.transform.position + (new Vector3(-0.0728f, 1.5057f, -0.0578f) + new Vector3(-0.0381f, -0.1104f, -0.2739f));
+            //camRoot.transform.position = __instance.player_0.gameObject.transform.position + new Vector3(0.0509f, 1.5057f, 0.1496f);
+
+            if (emptyHands)
                 camRoot.transform.position = emptyHands.position;
             else
                 camRoot.transform.position = __instance.method_1(camRoot.transform.position, camRoot.transform.rotation, __instance.transform_0.position);
+            camRoot.transform.position = new Vector3(camRoot.transform.position.x, __instance.player_0.Transform.position.y + 1.5f, camRoot.transform.position.z);
             //camHolder.transform.position = __instance.transform_0.position + new Vector3(Test.ex, Test.ey, Test.ez);
             return false;
         }
@@ -881,22 +1026,14 @@ namespace TarkovVR
         {
             if (__instance.IsAI)
                 return;
-            // If this isn't set to one, then the hands start to stretch or squish when rotating them around
+            // If this isn't set to 1, then the hands start to stretch or squish when rotating them around
             __instance.RibcageScaleCurrentTarget = 1f;
             __instance.RibcageScaleCurrent = 1f;
-            //playerCam = __instance.CameraPosition;
-            //Transform[] spine = __instance._fbbik.references.spine;
-            //if (spine[0].GetComponent<BodyRotationFixer>() == false) { 
-            //    spine[0].gameObject.AddComponent<BodyRotationFixer>();
-            //    spine[1].gameObject.AddComponent<BodyRotationFixer>();
-            //    spine[2].gameObject.AddComponent<BodyRotationFixer>();
-            //    __instance.CameraContainer.AddComponent<BodyRotationFixer>();
-
-            //}
         }
 
 
         private static float lastYRot = 0f;
+        private static float timeSinceLastLookRot = 0f;
         // Found in Player object under CurrentState variable, and is inherited by Gclass1573
         // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
         [HarmonyPrefix]
@@ -906,8 +1043,14 @@ namespace TarkovVR
             if (__instance.MovementContext.IsAI)
                 return true;
 
-            bool leftJoystickUsed = (SteamVR_Actions._default.LeftJoystick.axis.x > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || SteamVR_Actions._default.LeftJoystick.axis.y > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
-            bool leftJoystickLastUsed = (SteamVR_Actions._default.LeftJoystick.lastAxis.x > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || SteamVR_Actions._default.LeftJoystick.lastAxis.y > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
+            bool leftJoystickUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
+            bool leftJoystickLastUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.lastAxis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.lastAxis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
+            
+            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
+            Vector3 cameraForward = Camera.main.transform.forward;
+            float rotDiff = Vector3.SignedAngle(bodyForward, cameraForward, Vector3.up);
+
+
             if (leftJoystickUsed)
             {
                 lastYRot = Camera.main.transform.eulerAngles.y;
@@ -916,11 +1059,17 @@ namespace TarkovVR
             {
                 lastYRot = camRoot.transform.eulerAngles.y;
             }
+            else if (Mathf.Abs(rotDiff) > 80 && timeSinceLastLookRot > 0.25)
+            {
+                lastYRot += rotDiff;
+                timeSinceLastLookRot = 0;
+            }
+            timeSinceLastLookRot += Time.deltaTime;
             if (!leftJoystickUsed && leftJoystickLastUsed)
                 lastYRot -= 40;
             deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
 
-
+          
             // If difference between cam and body exceed something when using the right joystick, then turn the body.
             // Keep it a very tight amount before the body starts to rotate since the arms will become fucky otherwise
 
@@ -931,8 +1080,8 @@ namespace TarkovVR
             //camRoot.transform.Rotate(0, __instance.MovementContext.Rotation.x - deltaRotation.x,0);
 
             __instance.MovementContext.Rotation = deltaRotation;
-            //if (rightHandIK && CameraManager.RightHand)
-            //    Plugin.MyLog.LogMessage(Vector3.Distance(rightHandIK.transform.position, CameraManager.RightHand.transform.position));
+            //__instance.MovementContext._player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y-40, 0);
+
 
             return false;
         }
@@ -974,6 +1123,20 @@ namespace TarkovVR
             // still attached to the gun even when its not
             __instance._elbowBends[0] = __instance.PlayerBones.BendGoals[0];
         }
+
+
+
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(HideoutPlayer), "SetPatrol")]
+        private static bool PreventGunBlockInHideout(HideoutPlayer __instance, ref bool patrol)
+        {
+            if (oldWeaponHolder != null)
+                patrol = false;
+
+            return true;
+        }
+
 
     }
     

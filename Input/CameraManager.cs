@@ -3,6 +3,7 @@ using Valve.VR.Extras;
 using Valve.VR;
 using System.Collections.Generic;
 using UnityEngine.UIElements;
+using System.Diagnostics;
 
 namespace TarkovVR.Input
 {
@@ -15,13 +16,17 @@ namespace TarkovVR.Input
 
         public Vector3 initPos;
 
-        private Vector3 rightHandOffset = new Vector3(0.05f, -0.1f, -0.2f);
+        public Vector3 rightHandOffset = new Vector3(0f, 0f, 0f);
+        //public Vector3 rightHandOffset = new Vector3(0.05f, -0.1f, -0.2f);
         //private Vector3 headOffset = new Vector3(0f, 0.12f, 0.1f);
         //private Vector3 headOffset = new Vector3(-0.07f, 0.12f, 0.09f);
-        private Vector3 headOffset = new Vector3(0.07f, 0.14f, 0.07f);
-        private Vector3 supportRightHandOffset = new Vector3(0.1f, -0.05f,-0.05f);
-        private Vector3 leftHandOffset = new Vector3(-0.04f, -0.05f, -0.1f);
-        private Vector3 supportLeftHandOffset = new Vector3(-0.05f,0,0);
+        public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
+        private Vector3 supportRightHandOffset = new Vector3(-0.05f, -0.05f,-0.15f);
+        //private Vector3 supportRightHandOffset = new Vector3(0.1f, -0.05f,-0.05f);
+        //private Vector3 leftHandOffset = new Vector3(0f, -0.05f, -0.2f);
+        private Vector3 leftHandOffset = new Vector3(0f, 0f, 0f);
+        //private Vector3 supportLeftHandOffset = new Vector3(-0.05f,0,0);
+        private Vector3 supportLeftHandOffset = new Vector3(-0.1f, -0.05f,0);
 
         public Transform gunTransform;
         public static Transform leftHandGunIK;
@@ -48,7 +53,10 @@ namespace TarkovVR.Input
             rotx = 50;
             ry = 90;
             supportRotX = 330;
-            
+
+            x = -20;
+            y = 0;
+            z = 70;
             //supportRotY = 135;
 
             SpawnHands();
@@ -57,8 +65,10 @@ namespace TarkovVR.Input
             if (LeftHand)
                 LeftHand.transform.parent = CamPatches.vrOffsetter.transform;
 
-            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.Any, UpdateRightHand);
-            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.Any, UpdateLeftHand);
+            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+
+
         }
 
         private void Update() {
@@ -83,6 +93,7 @@ namespace TarkovVR.Input
             }
         }
         private bool wasAimingPreviously = false;
+        private float controllerLength = 0.175f;
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
             if (RightHand)
@@ -134,7 +145,9 @@ namespace TarkovVR.Input
                 else
                 {
                     // Directly update transform without smoothing
-                    RightHand.transform.localPosition = fromAction.localPosition + rightHandOffset;
+                    Vector3 virtualBasePosition = fromAction.localPosition - (fromAction.localRotation * Vector3.forward * controllerLength);
+                    RightHand.transform.localPosition = virtualBasePosition + rightHandOffset;
+                    //RightHand.transform.localPosition = fromAction.localPosition + rightHandOffset;
                     RightHand.transform.localRotation = fromAction.localRotation;
                     RightHand.transform.Rotate(70, 170, 50);
                 }
@@ -160,13 +173,43 @@ namespace TarkovVR.Input
                 else {
                     isSupporting = false;
                     CamPatches.leftArmIk.solver.target = LeftHand.transform;
-                    LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
+                    Vector3 virtualBasePosition = fromAction.localPosition - (fromAction.localRotation * Vector3.forward * controllerLength);
+                    LeftHand.transform.localPosition = virtualBasePosition + leftHandOffset;
+                    //LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
                 }
-                    LeftHand.transform.localRotation = fromAction.localRotation;
-                    LeftHand.transform.Rotate(-20, 0, 70);
+                LeftHand.transform.localRotation = fromAction.localRotation;
+                LeftHand.transform.Rotate(-60,0,70);
 
             }
         }
+
+        void OnDrawGizmos()
+        {
+            if (LeftHand != null)
+            {
+                Gizmos.color = Color.red;
+                Gizmos.DrawRay(LeftHand.transform.position, LeftHand.transform.forward * 0.1f); // Visualize controller orientation
+            }
+
+            if (LeftHand != null)
+            {
+                Gizmos.color = Color.blue;
+                Gizmos.DrawSphere(LeftHand.transform.position, 0.01f); // Visualize IK target position
+            }
+
+            if (RightHand != null)
+            {
+                Gizmos.color = Color.red;
+                Gizmos.DrawRay(RightHand.transform.position, RightHand.transform.forward * 0.1f); // Visualize controller orientation
+            }
+
+            if (LeftHand != null)
+            {
+                Gizmos.color = Color.blue;
+                Gizmos.DrawSphere(RightHand.transform.position, 0.01f); // Visualize IK target position
+            }
+        }
+
 
         public void SpawnHands()
         {
