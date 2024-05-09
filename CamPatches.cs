@@ -22,6 +22,7 @@ using EFT.Animations;
 using static GClass603;
 using static Val;
 using UnityEngine.Rendering;
+using EFT.UI;
 
 
 
@@ -53,6 +54,7 @@ namespace TarkovVR
 
         public static Player player;
 
+        public static Transform leftWrist;
 
         private static float MIN_JOYSTICK_AXIS_FOR_MOVEMENT = 0.5f;
         private static bool isAiming = false;
@@ -77,22 +79,63 @@ namespace TarkovVR
                 //Camera.main.transform.parent = vrOffsetter.transform;
                 //Camera.main.gameObject.AddComponent<SteamVR_TrackedObject>();
                 vrOffsetter.transform.parent = camRoot.transform;
+
                 // VRCam = camHolder.AddComponent<Camera>();
                 // VRCam.nearClipPlane = 0.001f;
                 //camRoot.AddComponent<TarkovVR.Input.Test>();
+            }
+            if (!cameraManager) { 
                 camHolder.AddComponent<SteamVR_TrackedObject>();
                 cameraManager = camHolder.AddComponent<CameraManager>();
                 weaponHolder = new GameObject("weaponHolder");
                 weaponHolder.transform.parent = CameraManager.RightHand.transform;
             }
+            if (backHolster == null) { 
+                backHolster = new GameObject("backHolsterCollider").transform;
+                backHolster.parent = camHolder.transform;
+                backCollider = backHolster.gameObject.AddComponent<BoxCollider>();
+                backHolster.localScale = new Vector3(0.2f, 0.2f, 0.2f);
+                backHolster.localPosition = new Vector3(0.2f, -0.1f, -0.2f);
+                backCollider.isTrigger = true;
+                backHolster.gameObject.layer = 3;
+            }
         }
 
-
-
-
-
-
+        public static BattleStancePanel stancePanel;
+        public static CharacterHealthPanel healthPanel;
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameUI), "Awake")]
+        private static void SetGameUI(GameUI __instance)
+        {
+            __instance.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+            stancePanel = __instance.BattleUiScreen._battleStancePanel;
+            stancePanel.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
+            stancePanel._battleStances[0].StanceObject.transform.parent.gameObject.active = false;
+
+            healthPanel = __instance.BattleUiScreen._characterHealthPanel;
+            healthPanel.transform.localScale = new Vector3(0.20f, 0.20f, 0.20f);
+        }
+
+        public static Transform backHolster;
+        public static BoxCollider backCollider;
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(PlayerBones), "Awake")]
+        //private static void SetupBackHolsterCollision(PlayerBones __instance) {
+        //    backHolster = new GameObject("backHolsterCollider").transform;
+        //    backHolster.parent = __instance.;
+        //    backCollider = backHolster.gameObject.AddComponent<BoxCollider>();
+        //    backHolster.localScale = new Vector3(0.2f, 0.2f, 0.2f);
+        //    backHolster.localPosition = new Vector3(-0.1f,-0.2f,0);
+        //    backCollider.isTrigger = true;
+        //    backHolster.gameObject.layer = LayerMask.NameToLayer("Interactive");
+        //    backHolster.parent.gameObject.layer = LayerMask.NameToLayer("Interactive");
+        //    backHolster.gameObject.tag = "handCollider";
+
+        //}
+
+
+            [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void AddVRHands(LimbIK __instance)
         {
@@ -137,7 +180,8 @@ namespace TarkovVR
                 leftArmIk = __instance;
                 __instance.solver.target = CameraManager.LeftHand.transform;
                 // Set the weight to 2.5 so when rotating the hand, the wrist rotates as well, showing the watch time
-                __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetComponent<TwistRelax>().weight = 2.5f;
+                leftWrist = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0);
+                leftWrist.GetComponent<TwistRelax>().weight = 2.5f;
             }
             else if (__instance.name == RIGHT_ARM_OBJECT_NAME)
             {
@@ -257,10 +301,18 @@ namespace TarkovVR
             // -0.089 -0.0796 -0.1970 
         }
 
-
+        private static bool stillSwapping = false;
+        private static bool selectSecondary = true;
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PlayerOwner), "method_0", new Type[] { typeof(GInterface109) })]
+        private static void BlockLookwAxis(GamePlayerOwner __instance)
+        {
+            stillSwapping = false;
+        }
         private static Transform scope;
         private static bool changedMagnification = false;
         private static bool matchingHeadToBody = false;
+        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass1765), "UpdateInput")]
         private static bool BlockLookAxis(GClass1765 __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
@@ -329,7 +381,8 @@ namespace TarkovVR
                     // 57: Sprint
                     else if (k == 57)
                     {
-                        if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any)) {
+                        if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any))
+                        {
                             if (!isSprinting)
                                 __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleSprinting;
                             else
@@ -389,14 +442,15 @@ namespace TarkovVR
                         }
                     }
                     // 78: breathing
-                    else if (k == 78) {
+                    else if (k == 78)
+                    {
                         if (!isHoldingBreath && isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
                         {
                             __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
                             isHoldingBreath = true;
                             CameraManager.smoothingFactor = scopeSensitivity * 75f;
                         }
-                        else if (isHoldingBreath && (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f || !isAiming) )
+                        else if (isHoldingBreath && (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f || !isAiming))
                         {
                             __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
                             isHoldingBreath = false;
@@ -408,6 +462,17 @@ namespace TarkovVR
                         //else if (SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
                         //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
                     }
+                    else if (k == 95 && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any))
+                        __instance.ecommand_0 = EFT.InputSystem.ECommand.Escape;
+                    else if (k == 65 && MenuPatches.bodyRot && MenuPatches.bodyRot.swapWeapon && !stillSwapping) { 
+                        if (selectSecondary)
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectSecondPrimaryWeapon;
+                        else
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon;
+                        selectSecondary = !selectSecondary;
+                        stillSwapping = true;
+                    }
+
 
                     // 0: ChangeAimScope
                     // 1: ChangeAimScopeMagnification
@@ -462,80 +527,82 @@ namespace TarkovVR
             {
                 return false;
             }
-            for (int m = 0; m < __instance.gclass1761_1.Length; m++)
-            {
-                if (Mathf.Abs(axis[__instance.gclass1761_1[m].IntAxis]) < 0.0001f)
+            if (cameraManager) { 
+                for (int m = 0; m < __instance.gclass1761_1.Length; m++)
                 {
+                    if (Mathf.Abs(axis[__instance.gclass1761_1[m].IntAxis]) < 0.0001f)
+                    {
 
-                    axis[__instance.gclass1761_1[m].IntAxis] = __instance.gclass1761_1[m].GetValue();
+                        axis[__instance.gclass1761_1[m].IntAxis] = __instance.gclass1761_1[m].GetValue();
+                    }
+                    if (m == 3)
+                        axis[__instance.gclass1761_1[m].IntAxis] = 0;
+                    else if (m == 2)
+                    {
+                        axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
+                        if (camRoot != null)
+                            camRoot.transform.Rotate(0, axis[__instance.gclass1761_1[m].IntAxis], 0);
+                    }
+                    else if (m == 0 && Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
+                        axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.x;
+                    else if (m == 1 && Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
+                        axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.y;
+                    //else if (leftArmIk)
+                    //{
+                    //    Vector3 headsetPos = Camera.main.transform.position;
+                    //    Vector3 playerBodyPos = leftArmIk.transform.root.position + CameraManager.headOffset;
+                    //    headsetPos.y = 0;
+                    //    playerBodyPos.y = 0;
+                    //    float distanceBetweenBodyAndHead = Vector3.Distance(playerBodyPos, headsetPos);
+                    //    if (distanceBetweenBodyAndHead >= 0.325 || (matchingHeadToBody && distanceBetweenBodyAndHead > 0.05))
+                    //    {
+                    //        // Add code for headset to body difference
+                    //        matchingHeadToBody = true;
+                    //        float moveSpeed = 0.5f;
+                    //        Vector3 newPosition = Vector3.MoveTowards(leftArmIk.transform.root.position, headsetPos, moveSpeed * Time.deltaTime);
+                    //        Vector3 movementDelta = newPosition - leftArmIk.transform.root.position; // The actual movement vector
+                    //        leftArmIk.transform.root.position = newPosition;
+                    //        // Now, counteract this movement for vrOffsetter to keep the camera stable in world space
+                    //        if (vrOffsetter != null && oldWeaponHolder) // Ensure vrOffsetter is assigned
+                    //        {
+                    //            Vector3 localMovementDelta = vrOffsetter.transform.parent.InverseTransformVector(movementDelta);
+                    //            cameraManager.initPos += localMovementDelta; // Apply inverse local movement to vrOffsetter
+                    //        }
+                    //    }
+                    //    else
+                    //        matchingHeadToBody = false;
+                    //}
                 }
-                if (m == 3)
-                    axis[__instance.gclass1761_1[m].IntAxis] = 0;
-                else if (m == 2)
+                if (player)
                 {
-                    axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
-                    if (camRoot != null)
-                        camRoot.transform.Rotate(0, axis[__instance.gclass1761_1[m].IntAxis], 0);
+                    // Base Height - the height at which crouching begins.
+                    float baseHeight = cameraManager.initPos.y * 0.90f; // 90% of init height
+                                                                       // Floor Height - the height at which full prone is achieved.
+                    float floorHeight = cameraManager.initPos.y * 0.40f; // Significant crouch/prone
+
+                    // Current height position normalized between baseHeight and floorHeight.
+                    float normalizedHeightPosition = (Camera.main.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
+
+                    // Ensure the normalized height is within 0 (full crouch/prone) and 1 (full stand).
+                    float crouchLevel = Mathf.Clamp(normalizedHeightPosition, 0, 1);
+
+
+
+                    // Handling prone based on crouchLevel instead of raw height differences.
+                    if (normalizedHeightPosition < -0.2 && player.MovementContext.CanProne) // Example threshold for prone
+                        player.MovementContext.IsInPronePose = true;
+                    else
+                        player.MovementContext.IsInPronePose = false;
+
+                    // Debug or apply the crouch level
+                    //Plugin.MyLog.LogError("Crouch Level: " + crouchLevel + " " + normalizedHeightPosition);
+                    player.MovementContext._poseLevel = crouchLevel;
+
+                    //player.MovementContext._poseLevel = crouchLevel;
                 }
-                else if (m == 0 && Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
-                    axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.x;
-                else if (m == 1 && Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
-                    axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.y;
-                //else if (leftArmIk)
-                //{
-                //    Vector3 headsetPos = Camera.main.transform.position;
-                //    Vector3 playerBodyPos = leftArmIk.transform.root.position + CameraManager.headOffset;
-                //    headsetPos.y = 0;
-                //    playerBodyPos.y = 0;
-                //    float distanceBetweenBodyAndHead = Vector3.Distance(playerBodyPos, headsetPos);
-                //    if (distanceBetweenBodyAndHead >= 0.325 || (matchingHeadToBody && distanceBetweenBodyAndHead > 0.05))
-                //    {
-                //        // Add code for headset to body difference
-                //        matchingHeadToBody = true;
-                //        float moveSpeed = 0.5f;
-                //        Vector3 newPosition = Vector3.MoveTowards(leftArmIk.transform.root.position, headsetPos, moveSpeed * Time.deltaTime);
-                //        Vector3 movementDelta = newPosition - leftArmIk.transform.root.position; // The actual movement vector
-                //        leftArmIk.transform.root.position = newPosition;
-                //        // Now, counteract this movement for vrOffsetter to keep the camera stable in world space
-                //        if (vrOffsetter != null && oldWeaponHolder) // Ensure vrOffsetter is assigned
-                //        {
-                //            Vector3 localMovementDelta = vrOffsetter.transform.parent.InverseTransformVector(movementDelta);
-                //            cameraManager.initPos += localMovementDelta; // Apply inverse local movement to vrOffsetter
-                //        }
-                //    }
-                //    else
-                //        matchingHeadToBody = false;
-                //}
             }
             //Plugin.MyLog.LogWarning("\n");
 
-            if (player)
-            {
-                // Base Height - the height at which crouching begins.
-                float baseHeight = cameraManager.initPos.y * 0.90f; // 90% of init height
-                                                                   // Floor Height - the height at which full prone is achieved.
-                float floorHeight = cameraManager.initPos.y * 0.40f; // Significant crouch/prone
-
-                // Current height position normalized between baseHeight and floorHeight.
-                float normalizedHeightPosition = (Camera.main.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
-
-                // Ensure the normalized height is within 0 (full crouch/prone) and 1 (full stand).
-                float crouchLevel = Mathf.Clamp(normalizedHeightPosition, 0, 1);
-
-
-
-                // Handling prone based on crouchLevel instead of raw height differences.
-                if (normalizedHeightPosition < -0.2 && player.MovementContext.CanProne) // Example threshold for prone
-                    player.MovementContext.IsInPronePose = true;
-                else
-                    player.MovementContext.IsInPronePose = false;
-
-                // Debug or apply the crouch level
-                //Plugin.MyLog.LogError("Crouch Level: " + crouchLevel + " " + normalizedHeightPosition);
-                player.MovementContext._poseLevel = crouchLevel;
-
-                //player.MovementContext._poseLevel = crouchLevel;
-            }
             return false;
             //if (__instance.gclass1761_1 == null)
             //{
@@ -827,6 +894,7 @@ namespace TarkovVR
             if (mainCam.name == "FPS Camera") {
                 Plugin.MyLog.LogWarning("\n\nSetting camera \n\n");
                 mainCam.transform.parent = vrOffsetter.transform;
+                mainCam.cullingMask = -1;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
                 //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
                 //cameraManager.initPos = VRCam.transform.localPosition;
@@ -1046,6 +1114,7 @@ namespace TarkovVR
             bool leftJoystickUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
             bool leftJoystickLastUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.lastAxis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.lastAxis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
             
+            // Normally you'd stand with your left foot forward and right foot back, which doesn't feel natural in VR so rotate 28 degrees to have both feet in front when standing still
             Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
             Vector3 cameraForward = Camera.main.transform.forward;
             float rotDiff = Vector3.SignedAngle(bodyForward, cameraForward, Vector3.up);

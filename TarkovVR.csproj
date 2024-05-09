@@ -39,6 +39,15 @@
     <Reference Include="Assembly-CSharp-firstpass">
       <HintPath>libs\Managed\Assembly-CSharp-firstpass.dll</HintPath>
     </Reference>
+    <Reference Include="Comfort">
+      <HintPath>libs\Managed\Comfort.dll</HintPath>
+    </Reference>
+    <Reference Include="CommonExtensions">
+      <HintPath>libs\Managed\CommonExtensions.dll</HintPath>
+    </Reference>
+    <Reference Include="Sirenix.Serialization">
+      <HintPath>libs\Managed\Sirenix.Serialization.dll</HintPath>
+    </Reference>
     <Reference Include="SteamVR">
       <HintPath>libs\Managed\SteamVR.dll</HintPath>
     </Reference>
@@ -47,6 +56,9 @@
     </Reference>
     <Reference Include="Unity.Postprocessing.Runtime">
       <HintPath>libs\Managed\Unity.Postprocessing.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>libs\Managed\Unity.TextMeshPro.dll</HintPath>
     </Reference>
     <Reference Include="Unity.XR.Management">
       <HintPath>libs\Managed\Unity.XR.Management.dll</HintPath>

@@ -4,6 +4,8 @@ using Valve.VR;
 using System.Collections.Generic;
 using UnityEngine.UIElements;
 using System.Diagnostics;
+using TarkovVR.cam;
+using EFT.UI.Ragfair;
 
 namespace TarkovVR.Input
 {
@@ -13,7 +15,7 @@ namespace TarkovVR.Input
         private float rotx, roty, rotz;
         private float supportRotX, supportRotY, supportRotZ;
         private float rx, ry, rz;
-
+        private CanvasCast canvasCast;
         public Vector3 initPos;
 
         public Vector3 rightHandOffset = new Vector3(0f, 0f, 0f);
@@ -42,21 +44,14 @@ namespace TarkovVR.Input
         public static GameObject RightHand = null;
         private bool isSupporting = false;
         private float timeHeld = 0;
-
+        private RenderTexture renderTexture;
         public void Awake()
         {
             //x = rightHandOffset.x;
             //y = rightHandOffset.y;
             //z = rightHandOffset.z;
             //rotx = 70;
-            roty = 170;
-            rotx = 50;
-            ry = 90;
-            supportRotX = 330;
 
-            x = -20;
-            y = 0;
-            z = 70;
             //supportRotY = 135;
 
             SpawnHands();
@@ -67,12 +62,12 @@ namespace TarkovVR.Input
 
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
-
-
         }
 
         private void Update() {
-            if (initPos.y == 0 && Camera.main != null)
+            if (Camera.main == null)
+                return;
+            if (initPos.y == 0)
                 initPos = Camera.main.transform.localPosition;
     
             if (initPos.y != 0)
@@ -98,6 +93,7 @@ namespace TarkovVR.Input
         {
             if (RightHand)
             {
+
                 bool isAiming = SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f;
 
                 if (isAiming && !wasAimingPreviously) // You need a boolean flag to track the previous state
@@ -152,9 +148,43 @@ namespace TarkovVR.Input
                     RightHand.transform.Rotate(70, 170, 50);
                 }
 
+                if (CamPatches.stancePanel && CamPatches.leftWrist) {
+                    //CamPatches.stancePanel.transform.position = RightHand.transform.position + new Vector3(x,y,z);
+                    CamPatches.stancePanel.transform.position = CamPatches.leftWrist.position + CamPatches.leftWrist.TransformDirection(new Vector3(0,0.06f,0.01f));
+                    CamPatches.stancePanel.transform.localEulerAngles = CamPatches.leftWrist.rotation.eulerAngles;
+                    CamPatches.stancePanel.transform.Rotate(140,0,90);
+
+                    CamPatches.healthPanel.transform.position = CamPatches.leftWrist.position + CamPatches.leftWrist.TransformDirection(new Vector3(-0.1f, 0.01f, 0.05f));
+                    CamPatches.healthPanel.transform.localEulerAngles = CamPatches.leftWrist.rotation.eulerAngles;
+                    CamPatches.healthPanel.transform.Rotate(320,0,90);
+
+                    //Vector3 wristToCamera = (Camera.main.transform.position - CamPatches.leftWrist.position).normalized;
+                    float wristToCamera = Vector3.Dot(CamPatches.healthPanel.transform.transform.forward, (Camera.main.transform.position - CamPatches.healthPanel.transform.position).normalized);
+
+                    if (wristToCamera > 0.4)
+                    {
+                        if (!showingUI)
+                        {
+                            CamPatches.stancePanel.AnimatedShow(false);
+                            CamPatches.healthPanel.AnimatedShow(false);
+                            showingUI = true;
+                        }
+                    }
+                    else if (showingUI)
+                    {
+                        CamPatches.stancePanel.AnimatedHide();
+                        CamPatches.healthPanel.AnimatedHide();
+                        showingUI = false;
+                    }
+
+
+                }
 
             }
         }
+
+        private bool showingUI = false;
+
         private bool handLock = false;
         private void UpdateLeftHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
@@ -165,17 +195,21 @@ namespace TarkovVR.Input
                     CamPatches.leftArmIk.solver.target = leftHandGunIK;
                     if (SteamVR_Actions._default.LeftGrip.state)
                         handLock = true;
-                    else 
+                    else
                         handLock = false;
                     isSupporting = true;
                     LeftHand.transform.localPosition = fromAction.localPosition + supportLeftHandOffset;
                 }
-                else {
+                else if (CamPatches.leftArmIk)
+                {
                     isSupporting = false;
                     CamPatches.leftArmIk.solver.target = LeftHand.transform;
                     Vector3 virtualBasePosition = fromAction.localPosition - (fromAction.localRotation * Vector3.forward * controllerLength);
                     LeftHand.transform.localPosition = virtualBasePosition + leftHandOffset;
                     //LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
+                }
+                else {
+                    LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
                 }
                 LeftHand.transform.localRotation = fromAction.localRotation;
                 LeftHand.transform.Rotate(-60,0,70);
@@ -183,52 +217,38 @@ namespace TarkovVR.Input
             }
         }
 
-        void OnDrawGizmos()
-        {
-            if (LeftHand != null)
-            {
-                Gizmos.color = Color.red;
-                Gizmos.DrawRay(LeftHand.transform.position, LeftHand.transform.forward * 0.1f); // Visualize controller orientation
-            }
-
-            if (LeftHand != null)
-            {
-                Gizmos.color = Color.blue;
-                Gizmos.DrawSphere(LeftHand.transform.position, 0.01f); // Visualize IK target position
-            }
-
-            if (RightHand != null)
-            {
-                Gizmos.color = Color.red;
-                Gizmos.DrawRay(RightHand.transform.position, RightHand.transform.forward * 0.1f); // Visualize controller orientation
-            }
-
-            if (LeftHand != null)
-            {
-                Gizmos.color = Color.blue;
-                Gizmos.DrawSphere(RightHand.transform.position, 0.01f); // Visualize IK target position
-            }
-        }
 
 
         public void SpawnHands()
         {
             if (!RightHand)
             {
-                //RightHand = GameObject.Instantiate(AssetLoader.RightHandBase, Vector3.zero, Quaternion.identity);
-                RightHand = new GameObject("RightHand");
-                RightHand.AddComponent<SteamVR_Behaviour_Pose>();
-                //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
-                RightHand.transform.parent = CamPatches.camHolder.transform.parent;
+                if (MenuCameraManager.RightHand)
+                    RightHand = MenuCameraManager.RightHand;
+                else { 
+                    //RightHand = GameObject.Instantiate(AssetLoader.RightHandBase, Vector3.zero, Quaternion.identity);
+                    RightHand = new GameObject("RightHand");
+                    RightHand.AddComponent<SteamVR_Behaviour_Pose>();
+                    //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
+                    RightHand.transform.parent = CamPatches.camHolder.transform.parent;
+                    MenuPatches.bodyRot = RightHand.AddComponent<BodyRotationFixer>();
+                
+                }
 
             }
             if (!LeftHand)
             {
-                //LeftHand = GameObject.Instantiate(AssetLoader.LeftHandBase, Vector3.zero, Quaternion.identity);
-                LeftHand = new GameObject("LeftHand");
-                LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
-                LeftHand.transform.parent = CamPatches.camHolder.transform.parent;
+                if (MenuCameraManager.LeftHand)
+                    LeftHand = MenuCameraManager.LeftHand;
+                else
+                {
+                    //LeftHand = GameObject.Instantiate(AssetLoader.LeftHandBase, Vector3.zero, Quaternion.identity);
+                    LeftHand = new GameObject("LeftHand");
+                    LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
+                    LeftHand.transform.parent = CamPatches.camHolder.transform.parent;
+                }
             }
+
         }
 
         private void UpdateHistory(Vector3 position, Quaternion rotation)
