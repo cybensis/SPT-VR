@@ -29,6 +29,7 @@ using JetBrains.Annotations;
 using EFT.Hideout;
 using RootMotion;
 using EFT;
+using UnityEngine.XR.Management;
 
 
 
@@ -40,7 +41,7 @@ namespace TarkovVR
         //TODO: Set all the different UI Canvas' to worldspace, change the culling mask or mess around with that shit
         // then position everything
 
-        public static BodyRotationFixer bodyRot;
+        public static VRUIInteracter vrUiInteracter;
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
@@ -88,27 +89,79 @@ namespace TarkovVR
         private static BoxCollider backingCollider;
         private static GameObject cubeUiMover;
         private static MenuMover menuMover;
-
+        public static Transform commonUi;
+        public static Transform preloaderUi;
+        public static Transform menuUi;
+        private static EnvironmentUI environmentUi;
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MainMenuController), "method_5")]
         private static void AddAndFixMenuVRCam(MainMenuController __instance)
         {
             if (__instance.environmentUI_0 && __instance.environmentUI_0.environmentUIRoot_0) {
-                FixMainMenuCamera(__instance.environmentUI_0.environmentUIRoot_0, __instance.environmentUI_0._alignmentCamera);
+                FixMainMenuCamera();
             }
+            commonUi = __instance.commonUI_0.transform;
+            preloaderUi = __instance.preloaderUI_0.transform;
+            menuUi = __instance.menuUI_0.transform;
+            environmentUi = __instance.environmentUI_0;
 
-            Transform menuUIObject = __instance.commonUI_0.transform.GetChild(0);
+            PositionMainMenuUi();
+        }
+
+
+
+        public static void PositionMainMenuUi() {
+            PositionCommonUi();
+            PositionMenuUi();
+            PositionPreloaderUi();
+        }
+
+
+        private static void PositionMenuUi() {
+            if (menuUi.transform.childCount > 0)
+            {
+                Canvas otherMenuCanvas = menuUi.GetChild(0).GetComponent<Canvas>();
+                if (otherMenuCanvas)
+                {
+                    menuUi.transform.eulerAngles = Vector3.zero;
+                    otherMenuCanvas.renderMode = RenderMode.WorldSpace;
+                    menuUi.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+                    menuUi.transform.position = new Vector3(0f, -999.9333f, 1);
+                    otherMenuCanvas.transform.localScale = new Vector3(1, 1, 1);
+                    otherMenuCanvas.transform.localPosition = Vector3.zero;
+                }
+            }
+        }
+        private static void PositionPreloaderUi() {
+            if (preloaderUi.transform.childCount > 0)
+            {
+                Canvas overlayCanvas = preloaderUi.GetChild(0).GetComponent<Canvas>();
+                if (overlayCanvas)
+                {
+                    preloaderUi.transform.eulerAngles = Vector3.zero;
+                    overlayCanvas.renderMode = RenderMode.WorldSpace;
+                    preloaderUi.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+                    preloaderUi.transform.position = new Vector3(0f, -999.9333f, 1);
+                    overlayCanvas.transform.localScale = new Vector3(1, 1, 1);
+                    overlayCanvas.transform.localPosition = Vector3.zero;
+                }
+            }
+        }
+
+        private static void PositionCommonUi() {
+            Transform menuUIObject = commonUi.transform.GetChild(0);
             if (menuUIObject)
             {
-                
+
                 Canvas menuUICanvas = menuUIObject.GetComponent<Canvas>();
                 menuUICanvas.renderMode = RenderMode.WorldSpace;
                 menuUICanvas.RectTransform().localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
                 menuUICanvas.RectTransform().anchoredPosition = new Vector3(1280, 720, 0);
                 menuUICanvas.RectTransform().sizeDelta = new Vector2(1920, 1080);
-                __instance.commonUI_0.transform.position = new Vector3(-1.283f, -1000.66f, 0.9748f);
-                __instance.commonUI_0.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+                commonUi.transform.position = new Vector3(-1.283f, -1000.66f, 0.9748f);
+                commonUi.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+                commonUi.transform.eulerAngles = Vector3.zero;
                 BoxCollider menuCollider = menuUIObject.gameObject.AddComponent<BoxCollider>();
                 menuCollider.extents = new Vector3(2560, 1440, 0.5f);
 
@@ -116,7 +169,7 @@ namespace TarkovVR
                 if (backingCollider == null)
                 {
                     GameObject colliderHolder = new GameObject("uiMover");
-                    colliderHolder.transform.parent = __instance.environmentUI_0.transform.root;
+                    colliderHolder.transform.parent = environmentUi.transform.root;
                     colliderHolder.transform.position = new Vector3(-1.283f, -1001.76f, 0.9748f);
                     colliderHolder.transform.localEulerAngles = new Vector3(90, 0, 0);
                     backingCollider = colliderHolder.AddComponent<BoxCollider>();
@@ -131,26 +184,25 @@ namespace TarkovVR
                     menuMover.menuCollider = menuCollider;
                     colliderHolder.layer = LayerMask.NameToLayer("UI");
                     cubeUiMover.layer = LayerMask.NameToLayer("UI");
-                    menuMover.commonUI = __instance.commonUI_0.gameObject;
-                    menuMover.preloaderUI = __instance.preloaderUI_0.gameObject;
-                    menuMover.menuUI = __instance.menuUI_0.gameObject;
+                    menuMover.commonUI = commonUi.gameObject;
+                    menuMover.preloaderUI = preloaderUi.gameObject;
+                    menuMover.menuUI = menuUi.gameObject;
                 }
             }
-
         }
 
 
-
-        private static void FixMainMenuCamera(EnvironmentUIRoot envUIRoot, Camera alignmentCamera)
+        public static void FixMainMenuCamera()
         {
-            if (envUIRoot && envUIRoot.CameraContainer)
+            if (environmentUi)
             {
-                Transform camContainer = envUIRoot.CameraContainer.GetChild(0);
-                camContainer.gameObject.AddComponent<SteamVR_TrackedObject>();
+                Transform camContainer = environmentUi.environmentUIRoot_0.CameraContainer.GetChild(0);
+                if (!camContainer.gameObject.GetComponent<SteamVR_TrackedObject>())
+                    camContainer.gameObject.AddComponent<SteamVR_TrackedObject>();
                 camContainer.transform.parent.localPosition = new Vector3(0, -1.1f, -0.7f);
                 camContainer.transform.parent.localRotation = Quaternion.Euler(0, 345, 0);
 
-                camContainer.GetComponent<PostProcessLayer>().m_Camera = alignmentCamera;
+                camContainer.GetComponent<PostProcessLayer>().m_Camera = environmentUi._alignmentCamera;
                 Camera mainMenuCam = camContainer.GetComponent<Camera>();
                 camContainer.tag = "MainCamera";
                 if (mainMenuCam)
@@ -172,21 +224,8 @@ namespace TarkovVR
 
                     cameraManager = CamPatches.camHolder.AddComponent<MenuCameraManager>();
                 }
-                CamPatches.camRoot.transform.position = Camera.main.transform.position;
-
-                if (envUIRoot.ScreenAnchors.Length > 0)
-                {
-                    Transform envProp = envUIRoot.ScreenAnchors[0].transform;
-                    if (envProp.name == "CameraContainer") {
-                        envProp.localPosition = new Vector3(2.8f, 0.81f, 2.86f);
-                        envProp.localRotation = Quaternion.Euler(273f, 43f, 0);
-                    }
-                    else {
-                        envProp.localPosition = new Vector3(2.5f, 0.31f, 2.36f);
-                        envProp.localScale = new Vector3(1.7f, 1.7f, 1.7f);
-                        envProp.localRotation = Quaternion.Euler(354, 247, 20);
-                    }
-                }
+                CamPatches.camRoot.transform.position = mainMenuCam.transform.position;
+                PositionMenuEnvironmentProps();
             }
         }
 
@@ -194,10 +233,10 @@ namespace TarkovVR
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EnvironmentUI), "ShowEnvironment")]
-        private static void FixDragHighligwhting(EnvironmentUI __instance) {
-            if (__instance.environmentUIRoot_0 && __instance.environmentUIRoot_0.ScreenAnchors.Length > 0)
+        private static void PositionMenuEnvironmentProps() {
+            if (environmentUi && environmentUi.environmentUIRoot_0.ScreenAnchors.Length > 0)
             {
-                Transform envProp = __instance.environmentUIRoot_0.ScreenAnchors[0].transform;
+                Transform envProp = environmentUi.environmentUIRoot_0.ScreenAnchors[0].transform;
                 if (envProp.name == "CameraContainer")
                 {
                     envProp.localPosition = new Vector3(2.8f, 0.81f, 2.86f);
@@ -223,7 +262,7 @@ namespace TarkovVR
             Vector2 pivot = rectTransform.pivot;
             Vector2 vector = size * pivot;
             Vector2 cellSizes = itemContext.Item.CalculateCellSize();
-            Vector2 pointerPos = bodyRot.uiPointerPos;
+            Vector3 pointerPos = vrUiInteracter.uiPointerPos;
             // The highlighted spaces place the corner on the pointer position so I need to move the pointer position
             // so it highlight from the center of the pointer, and in world space each grid item is about 0.084 away
             // from each other so use this to center it properly
@@ -232,15 +271,23 @@ namespace TarkovVR
                 cellSizes.x = cellSizes.y;
                 cellSizes.y = tempHolder;
             }
-            pointerPos.x = (float)(pointerPos.x - ((cellSizes.x / 2) * 0.084));
-            pointerPos.y = (float)(pointerPos.y - ((cellSizes.y / 2) * 0.0837));
+            //Vector2 should come out to an x,y value that represents the position in the grid
             Vector2 vector2 = rectTransform.InverseTransformPoint(pointerPos);
+            //Plugin.MyLog.LogWarning( vector2 + "   |     " + pointerPos);
+
             vector2 += vector;
             GStruct23 gStruct = itemContext.Item.CalculateRotatedSize(itemContext.ItemRotation);
             vector2 /= 63f;
             vector2.y = (float)__instance.Grid.GridHeight.Value - vector2.y;
             vector2.y -= gStruct.Y;
+            vector2.x = (float)(vector2.x - ((cellSizes.x / 2)));
+            vector2.y = (float)(vector2.y + ((cellSizes.y / 2)));
+            //vector2.x = (float)(vector2.x + ((cellSizes.x / 2) * 0.084));
+            //vector2.y = (float)(vector2.y + ((cellSizes.y / 2) * 0.0837));
             __result = new LocationInGrid(Mathf.Clamp(Mathf.RoundToInt(vector2.x), 0, __instance.Grid.GridWidth.Value), Mathf.Clamp(Mathf.RoundToInt(vector2.y), 0, __instance.Grid.GridHeight.Value), itemContext.ItemRotation);
+            Quaternion gridRotation = rectTransform.rotation;
+            vector2 = gridRotation * vector2;
+            // a uiPointerPos of -3.4 and 1.5 on X left most grid and Y in the middle, seems to be working just fine
             return false;
         }
 
@@ -293,8 +340,10 @@ namespace TarkovVR
         [HarmonyPatch(typeof(EnvironmentUIRoot), "Init")]
         private static void RepositionEnvironmentAfterChange(EnvironmentUIRoot __instance, Camera alignmentCamera, IReadOnlyCollection<EEventType> events, bool isMain)
         {
-            Plugin.MyLog.LogMessage("SET ENVIRONEMNT " + __instance);
-            FixMainMenuCamera(__instance, alignmentCamera);
+            if (environmentUi = __instance.transform.parent.GetComponent<EnvironmentUI>()) { 
+                Plugin.MyLog.LogMessage("SET ENVIRONEMNT " + __instance);
+                FixMainMenuCamera();
+            }
         }
 
 
@@ -316,9 +365,9 @@ namespace TarkovVR
         [HarmonyPatch(typeof(DraggedItemView), "method_6")]
         private static bool RotateInventoryItem(DraggedItemView __instance)
         {
-            if (!bodyRot.rotated && bodyRot.rightJoyTimeHeld > 0.125)
-            {   
-                bodyRot.rotated = true;
+            if (!vrUiInteracter.rotated && vrUiInteracter.rightJoyTimeHeld > 0.125)
+            {
+                vrUiInteracter.rotated = true;
                 __instance.method_2((__instance.ItemContext.ItemRotation == ItemRotation.Horizontal) ? ItemRotation.Vertical : ItemRotation.Horizontal);
                 if ((UnityEngine.Object)__instance.ginterface322_0 != null)
                 {
@@ -516,14 +565,6 @@ namespace TarkovVR
         }
 
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(ScrollRectNoDrag), "OnScroll")]
-        private static void SetItemPwreviewCameraFoV(ScrollRectNoDrag __instance, PointerEventData data)
-        {
-            Plugin.MyLog.LogError("OnScroll " + data.scrollDelta);
-
-        }
-
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(DraggedItemView), "OnDrag")]
@@ -531,18 +572,20 @@ namespace TarkovVR
         {
             if (!(__instance.RectTransform_0 == null))
             {
-                __instance.RectTransform_0.position = eventData.position;
-                Vector3 newPos = __instance.RectTransform_0.localPosition;
-                //newPos.y -= __instance.RectTransform_0.sizeDelta.y / 2;
-                //newPos.x -= __instance.RectTransform_0.sizeDelta.x / 2;
-                newPos.z = 0f;
-                __instance.RectTransform_0.localPosition = newPos;
-                RectTransform rectTransform = __instance.transform.RectTransform();
-                Vector2 size = rectTransform.rect.size;
-                Vector2 pivot = rectTransform.pivot;
-                Vector2 vector = size * pivot * rectTransform.lossyScale;
-                Vector2 vector2 = __instance.transform.position;
-                __instance.ItemContext.SetPosition(vector2, vector2 - vector);
+                __instance.RectTransform_0.position = vrUiInteracter.uiPointerPos;
+                __instance.RectTransform_0.localEulerAngles = commonUi.eulerAngles;
+                //Vector3 newPos = __instance.RectTransform_0.localPosition;
+                ////newPos.y -= __instance.RectTransform_0.sizeDelta.y / 2;
+                ////newPos.x -= __instance.RectTransform_0.sizeDelta.x / 2;
+                ////if (!CamPatches.player)
+                ////    newPos.z = 0f;
+                //__instance.RectTransform_0.localPosition = newPos;
+                //RectTransform rectTransform = __instance.transform.RectTransform();
+                //Vector2 size = rectTransform.rect.size;
+                //Vector2 pivot = rectTransform.pivot;
+                //Vector2 vector = size * pivot * rectTransform.lossyScale;
+                //Vector2 vector2 = __instance.transform.position;
+                //__instance.ItemContext.SetPosition(vector2, vector2 - vector);
             }
         }
 
@@ -614,38 +657,41 @@ namespace TarkovVR
         //    return false;
         //}
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(PreloaderUI), "Awake")]
-        private static void PositionDisplayOverlay(PreloaderUI __instance)
-        {
-            if (__instance.transform.childCount > 0) { 
-                Canvas overlayCanvas = __instance.transform.GetChild(0).GetComponent<Canvas>();
-                if (overlayCanvas) { 
-                    overlayCanvas.renderMode = RenderMode.WorldSpace;
-                    __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
-                    __instance.transform.position = new Vector3(0f, -999.9333f, 1);
-                    overlayCanvas.transform.localScale = new Vector3(1, 1, 1);
-                    overlayCanvas.transform.localPosition = Vector3.zero;
-                }   
-            }
-        }
+        //public static PreloaderUI preloader;
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MenuUI), "Awake")]
-        private static void PositionOtherMenu(PreloaderUI __instance) {
-            if (__instance.transform.childCount > 0)
-            {
-                Canvas otherMenuCanvas = __instance.transform.GetChild(0).GetComponent<Canvas>();
-                if (otherMenuCanvas)
-                {
-                    otherMenuCanvas.renderMode = RenderMode.WorldSpace;
-                    __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
-                    __instance.transform.position = new Vector3(0f, -999.9333f, 1);
-                    otherMenuCanvas.transform.localScale = new Vector3(1, 1, 1);
-                    otherMenuCanvas.transform.localPosition = Vector3.zero;
-                }
-            }
-        }
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(PreloaderUI), "Awake")]
+        //private static void PositionDisplayOverlay(PreloaderUI __instance)
+        //{
+        //    if (__instance.transform.childCount > 0) {
+        //        preloader = __instance;
+        //        Canvas overlayCanvas = __instance.transform.GetChild(0).GetComponent<Canvas>();
+        //        if (overlayCanvas) { 
+        //            overlayCanvas.renderMode = RenderMode.WorldSpace;
+        //            __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+        //            __instance.transform.position = new Vector3(0f, -999.9333f, 1);
+        //            overlayCanvas.transform.localScale = new Vector3(1, 1, 1);
+        //            overlayCanvas.transform.localPosition = Vector3.zero;
+        //        }   
+        //    }
+        //}
+
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(MenuUI), "Awake")]
+        //private static void PositionOtherMenu(PreloaderUI __instance) {
+        //    if (__instance.transform.childCount > 0)
+        //    {
+        //        Canvas otherMenuCanvas = __instance.transform.GetChild(0).GetComponent<Canvas>();
+        //        if (otherMenuCanvas)
+        //        {
+        //            otherMenuCanvas.renderMode = RenderMode.WorldSpace;
+        //            __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+        //            __instance.transform.position = new Vector3(0f, -999.9333f, 1);
+        //            otherMenuCanvas.transform.localScale = new Vector3(1, 1, 1);
+        //            otherMenuCanvas.transform.localPosition = Vector3.zero;
+        //        }
+        //    }
+        //}
 
 
         [HarmonyPrefix]
@@ -693,7 +739,7 @@ namespace TarkovVR
 
             if (__instance.pointerEventData_0 != null && SteamVR_Actions._default.RightTrigger.axis < 0.7)
             {
-                bodyRot.EndDrop();
+                vrUiInteracter.EndDrop();
                 __instance.OnEndDrag(__instance.pointerEventData_0);
             }
             if (__instance.IsSearched)

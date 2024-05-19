@@ -18,7 +18,7 @@ namespace TarkovVR
         // VR Origin and body stuff
         public static GameObject LeftHand = null;
         public static GameObject RightHand = null;
-        public static SteamVR_LaserPointer pointer = null;
+        public static LaserPointer pointer = null;
         private float x = 42;
         private float y = 355;
         private float z = 0;
@@ -41,10 +41,24 @@ namespace TarkovVR
 
         public void OnDisable()
         {
-            pointer.enabled = false;
-            pointer.holder.active = false;
-
+            if (pointer && pointer.holder)
+            {
+                pointer.enabled = false;
+                pointer.holder.active = false;
+                SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+                SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            }
         }
+        public void OnEnable()
+        {
+            if (pointer && pointer.holder) { 
+                pointer.enabled = true;
+                pointer.holder.active = true;
+                SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+                SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            }
+        }
+
 
         private void Update()
         {
@@ -108,8 +122,8 @@ namespace TarkovVR
                 RightHand.AddComponent<SteamVR_Behaviour_Pose>();
                 //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
                 RightHand.transform.parent = CamPatches.camHolder.transform.parent;
-                MenuPatches.bodyRot = RightHand.AddComponent<BodyRotationFixer>();
-                pointer = RightHand.AddComponent<SteamVR_LaserPointer>();
+                MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
+                pointer = RightHand.AddComponent<LaserPointer>();
                 pointer.color = Color.cyan;
 
             }

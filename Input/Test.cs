@@ -12,7 +12,7 @@ namespace TarkovVR.Input
 {
     internal class Test : MonoBehaviour
     {
-        static float x, y, z;
+        public float x, y, z;
         public static float ex, ey, ez;
         //private Vector3 headOffset = new Vector3(0.05f, 1.56f, 0.25f);
         private Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
@@ -31,7 +31,7 @@ namespace TarkovVR.Input
         void LateUpdate() {
 
 
-            if (CamPatches.player && CamPatches.player.PointOfView == EPointOfView.FirstPerson && this.name == "Base HumanSpine3")
+            if (CamPatches.inGame && CamPatches.player && CamPatches.player.PointOfView == EPointOfView.FirstPerson && this.name == "Base HumanSpine3")
             {
                 Vector3 headsetPos = Camera.main.transform.position;
                 Vector3 playerBodyPos = this.transform.root.position + headOffset;

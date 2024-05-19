@@ -6,15 +6,18 @@ using UnityEngine.UIElements;
 using System.Diagnostics;
 using TarkovVR.cam;
 using EFT.UI.Ragfair;
+using static EFT.Hideout.ShootingRange.RailTarget;
+using EFT;
+using System.Reflection;
 
 namespace TarkovVR.Input
 {
     internal class CameraManager : MonoBehaviour
     {
-        private float x, y, z;
+        public float x, y, z;
         private float rotx, roty, rotz;
         private float supportRotX, supportRotY, supportRotZ;
-        private float rx, ry, rz;
+        public float rx, ry, rz;
         private CanvasCast canvasCast;
         public Vector3 initPos;
 
@@ -23,12 +26,14 @@ namespace TarkovVR.Input
         //private Vector3 headOffset = new Vector3(0f, 0.12f, 0.1f);
         //private Vector3 headOffset = new Vector3(-0.07f, 0.12f, 0.09f);
         public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
-        private Vector3 supportRightHandOffset = new Vector3(-0.05f, -0.05f,-0.15f);
+        private Vector3 supportRightHandOffset = new Vector3(-0.05f, -0.05f, -0.15f);
         //private Vector3 supportRightHandOffset = new Vector3(0.1f, -0.05f,-0.05f);
         //private Vector3 leftHandOffset = new Vector3(0f, -0.05f, -0.2f);
         private Vector3 leftHandOffset = new Vector3(0f, 0f, 0f);
         //private Vector3 supportLeftHandOffset = new Vector3(-0.05f,0,0);
-        private Vector3 supportLeftHandOffset = new Vector3(-0.1f, -0.05f,0);
+        private Vector3 supportLeftHandOffset = new Vector3(-0.1f, -0.05f, 0);
+
+        private Vector3 supportingWeaponHolderOffset = new Vector3(0.155f, 0.09f, 0.05f);
 
         public Transform gunTransform;
         public static Transform leftHandGunIK;
@@ -42,9 +47,11 @@ namespace TarkovVR.Input
         // VR Origin and body stuff
         public static GameObject LeftHand = null;
         public static GameObject RightHand = null;
-        private bool isSupporting = false;
+        public bool isSupporting = false;
         private float timeHeld = 0;
-        private RenderTexture renderTexture;
+        public Transform interactionUi;
+        public Vector3 startingPlace;
+        private Quaternion camRotation;
         public void Awake()
         {
             //x = rightHandOffset.x;
@@ -53,7 +60,13 @@ namespace TarkovVR.Input
             //rotx = 70;
 
             //supportRotY = 135;
-
+            //x = 200f;
+            //y = 25f;
+            //z = -150f;
+            x = 0.7f;
+            y = -0.6f;
+            z = -0.75f;
+            ry = 225;
             SpawnHands();
             if (RightHand)
                 RightHand.transform.parent = CamPatches.vrOffsetter.transform;
@@ -62,19 +75,35 @@ namespace TarkovVR.Input
 
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            camRotation = Camera.main.transform.rotation;
+
         }
+
+
+        public void OnDisable()
+        {
+            SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+        }
+        public void OnEnable()
+        {
+            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+        }
+
+
 
         private void Update() {
             if (Camera.main == null)
                 return;
             if (initPos.y == 0)
                 initPos = Camera.main.transform.localPosition;
-    
+
             if (initPos.y != 0)
                 CamPatches.vrOffsetter.transform.localPosition = (initPos * -1) + headOffset;
             else
                 CamPatches.vrOffsetter.transform.localPosition = (Camera.main.transform.localPosition * -1) + headOffset;
-           
+
             if (SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.Any))
             {
                 timeHeld += Time.deltaTime;
@@ -83,10 +112,53 @@ namespace TarkovVR.Input
                     initPos = Camera.main.transform.localPosition;
                 }
             }
-            else if (timeHeld != 0) { 
+            else if (timeHeld != 0) {
                 timeHeld = 0;
             }
+
+
+            if (interactionUi)
+            {
+                //// Get the rotation angles of the camera
+                //float rotationX = cameraTransform.rotation.eulerAngles.x;
+                //float rotationY = cameraTransform.rotation.eulerAngles.y;
+
+                //// Calculate the movement offsets based on the rotation angles
+                //float offsetX = Mathf.Clamp((rotationY - 180) / maxLeftRotation, 0, 1) * movementSpeed;
+                //float offsetY = Mathf.Clamp(rotationX / maxUpRotation, 0, 1) * movementSpeed;
+
+                //// Calculate the new position of the UI
+                //Vector3 newPosition = originalPosition + new Vector3(offsetX, -offsetY, 0);
+
+                //// Apply the new position to the UI
+                //transform.position = newPosition;
+
+                float yRotationDifference = Mathf.Abs(Quaternion.Angle(Camera.main.transform.localRotation, camRotation));
+                //Plugin.MyLog.LogWarning(yRotationDifference);    
+
+                // If the Y-axis rotation difference exceeds the maximum allowed, reposition the UI
+                if (yRotationDifference > 45)
+                {
+
+                    PositionInteractionUI();
+                }
+
+            }
+
         }
+
+
+        public void PositionInteractionUI() {
+            camRotation = Camera.main.transform.localRotation;
+
+            // Set position not local position so it doesn't inherit rotated position from camRoot
+            interactionUi.position = Camera.main.transform.position + Camera.main.transform.forward * 0.4f + Camera.main.transform.up * -0.2f + Camera.main.transform.right * 0;
+            interactionUi.LookAt(Camera.main.transform);
+            // Need to rotate 180 degrees otherwise it shows up backwards
+            interactionUi.Rotate(0, 180, 0);
+        }
+
+
         private bool wasAimingPreviously = false;
         private float controllerLength = 0.175f;
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
@@ -110,7 +182,7 @@ namespace TarkovVR.Input
                     //    // Apply smoothed position and rotation
                     //    ApplySmoothedTransform();
                     //}
-                    Vector3 currentRightHandPosition = fromAction.localPosition + supportRightHandOffset;
+                    Vector3 currentRightHandPosition = fromAction.localPosition + rightHandOffset;
 
                     Vector3 toLeftHand = LeftHand.transform.position - RightHand.transform.position;
                     Vector3 flatToHand = new Vector3(toLeftHand.x, 0, toLeftHand.z); // For yaw
@@ -122,7 +194,7 @@ namespace TarkovVR.Input
                     float pitchAngle = Mathf.Atan2(toLeftHand.y, flatToHand.magnitude) * Mathf.Rad2Deg;
 
                     // Separate rotation offsets for clearer control
-                    Quaternion offsetRotation = Quaternion.Euler(330, 0, 0); // Apply pitch offset here
+                    Quaternion offsetRotation = Quaternion.Euler(340, 0, 0); // Apply pitch offset here
 
                     // Now, extract the roll from the right hand's rotation
                     // This captures the wrist twist/roll
@@ -132,7 +204,7 @@ namespace TarkovVR.Input
 
                     Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
                     // Additional correction for yaw and roll offsets if necessary
-                    combinedRotation *= Quaternion.Euler(0, 120, -45);
+                    combinedRotation *= Quaternion.Euler(0, 130, -30);
 
                     RightHand.transform.rotation = Quaternion.Slerp(RightHand.transform.rotation, combinedRotation, smoothingFactor * Time.deltaTime);
 
@@ -186,24 +258,39 @@ namespace TarkovVR.Input
         private bool showingUI = false;
 
         private bool handLock = false;
+        private Vector3 supportInitPos = Vector3.zero;
+        private Vector3 weaponHolderOriginalOffset;
+        private Vector3 initialLeftHandLocalPositionAtSnap;
+
         private void UpdateLeftHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
             if (LeftHand)
             {
-                if (leftHandGunIK && (Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.1f || handLock || (isSupporting && Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.15f)))
+                if (leftHandGunIK && (Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.1f || handLock || (isSupporting && Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.175f)))
                 {
-                    CamPatches.leftArmIk.solver.target = leftHandGunIK;
+                    if (!isSupporting)
+                    {
+                        // Set target to null so the left hand returns to its normal position on the gun
+                        CamPatches.leftArmIk.solver.target = null;
+                        isSupporting = true;
+                        weaponHolderOriginalOffset = CamPatches.weaponHolder.transform.localPosition;
+                        CamPatches.weaponHolder.transform.localPosition = weaponHolderOriginalOffset + supportingWeaponHolderOffset;
+
+                    }
                     if (SteamVR_Actions._default.LeftGrip.state)
                         handLock = true;
                     else
                         handLock = false;
-                    isSupporting = true;
-                    LeftHand.transform.localPosition = fromAction.localPosition + supportLeftHandOffset;
+
+                    LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
                 }
                 else if (CamPatches.leftArmIk)
                 {
-                    isSupporting = false;
-                    CamPatches.leftArmIk.solver.target = LeftHand.transform;
+                    if (isSupporting) { 
+                        isSupporting = false;
+                        CamPatches.leftArmIk.solver.target = LeftHand.transform;
+                        CamPatches.weaponHolder.transform.localPosition = weaponHolderOriginalOffset;
+                    }
                     Vector3 virtualBasePosition = fromAction.localPosition - (fromAction.localRotation * Vector3.forward * controllerLength);
                     LeftHand.transform.localPosition = virtualBasePosition + leftHandOffset;
                     //LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
@@ -231,7 +318,7 @@ namespace TarkovVR.Input
                     RightHand.AddComponent<SteamVR_Behaviour_Pose>();
                     //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
                     RightHand.transform.parent = CamPatches.camHolder.transform.parent;
-                    MenuPatches.bodyRot = RightHand.AddComponent<BodyRotationFixer>();
+                    MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
                 
                 }
 

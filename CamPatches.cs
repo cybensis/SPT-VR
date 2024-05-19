@@ -13,16 +13,15 @@ using System.Collections.Generic;
 using UnityEngine.Rendering.PostProcessing;
 using System.Diagnostics;
 using System;
-using UnityStandardAssets.ImageEffects;
+
 using EFT.CameraControl;
-using EFT.PostEffects;
-using EFT.AssetsManager;
-using UnityEngine.UIElements;
-using EFT.Animations;
-using static GClass603;
-using static Val;
+
 using UnityEngine.Rendering;
 using EFT.UI;
+
+using EFT.UI.DragAndDrop;
+
+
 
 
 
@@ -53,6 +52,8 @@ namespace TarkovVR
         public static GameObject oldWeaponHolder;
 
         public static Player player;
+        public static VROpticController vrOpticController;
+        public static HandsInteractionController handsInteractionController;
 
         public static Transform leftWrist;
 
@@ -61,7 +62,7 @@ namespace TarkovVR
         private static bool isHoldingBreath = false;
         private static bool isSprinting = false;
         private static bool isShooting = false;
-
+        public static bool inGame = false;
 
 
         [HarmonyPostfix]
@@ -70,8 +71,8 @@ namespace TarkovVR
         {
             if (__instance.transform.root.name != "PlayerSuperior(Clone)")
                 return;
+             Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");
             if (camRoot == null) {
-                Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");
                 camHolder = new GameObject("camHolder");
                 vrOffsetter = new GameObject("vrOffsetter");
                 camRoot = new GameObject("camRoot");
@@ -89,6 +90,8 @@ namespace TarkovVR
                 cameraManager = camHolder.AddComponent<CameraManager>();
                 weaponHolder = new GameObject("weaponHolder");
                 weaponHolder.transform.parent = CameraManager.RightHand.transform;
+                vrOpticController = camHolder.AddComponent<VROpticController>();
+                handsInteractionController = camHolder.AddComponent<HandsInteractionController>();
             }
             if (backHolster == null) { 
                 backHolster = new GameObject("backHolsterCollider").transform;
@@ -99,6 +102,7 @@ namespace TarkovVR
                 backCollider.isTrigger = true;
                 backHolster.gameObject.layer = 3;
             }
+            inGame = true;
         }
 
         public static BattleStancePanel stancePanel;
@@ -107,6 +111,8 @@ namespace TarkovVR
         [HarmonyPatch(typeof(GameUI), "Awake")]
         private static void SetGameUI(GameUI __instance)
         {
+            if (!inGame)
+                return;
             __instance.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
             __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
             stancePanel = __instance.BattleUiScreen._battleStancePanel;
@@ -116,6 +122,295 @@ namespace TarkovVR
             healthPanel = __instance.BattleUiScreen._characterHealthPanel;
             healthPanel.transform.localScale = new Vector3(0.20f, 0.20f, 0.20f);
         }
+
+
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InventoryScreen), "TranslateCommand")]
+        private static void HandleCloseInventory(InventoryScreen __instance, ECommand command)
+        {
+            if (!inGame)
+                return;
+            if (command.IsCommand(ECommand.Escape))
+            {
+                if (!__instance.Boolean_0)
+                {
+                    // If the menu is closed get rid of it, there would be better ways to do this but oh well 
+                    HandleCloseInventory();
+                }
+            }
+            if (command.IsCommand(ECommand.ToggleInventory)) {
+                HandleCloseInventory();
+            }
+        }
+        //private static Material uiTopMaterial;
+
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(InventoryScreen), "Awake")]
+        //private static void HandleCloseIwnventory(InventoryScreen __instance)
+        //{
+        //    foreach (Transform child in __instance.transform) {
+        //        if (child.name == "Left Glow") {
+        //            uiTopMaterial = child.GetComponent<UnityEngine.UI.Image>().material;
+        //            Plugin.MyLog.LogError("FOUND UI MATERIAL " + uiTopMaterial);
+        //        }
+        //    }
+        //}
+
+
+        private static void HandleOpenInventory() {
+            menuOpen = true;
+            cameraManager.enabled = false;
+            MenuPatches.cameraManager.enabled = true;
+        }
+
+        private static void HandleCloseInventory()
+        {
+            menuOpen = false;
+            cameraManager.enabled = true;
+            MenuPatches.cameraManager.enabled = false;
+            MenuPatches.commonUi.position = new Vector3(1000, 1000, 1000);
+            MenuPatches.preloaderUi.position = new Vector3(1000, 1000, 1000);
+        }
+            [HarmonyPostfix]
+        [HarmonyPatch(typeof(ActionPanel), "Start")]
+        private static void DisableUiPointer(ActionPanel __instance)
+        {
+            __instance._pointer.gameObject.SetActive(false);
+        }
+
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ActionPanel), "method_0")]
+        private static void PositionInteractableUi(ActionPanel __instance, GClass2805 interactionState)
+        {
+            if (interactionState == null) {
+                cameraManager.interactionUi = null;
+            }
+            else
+            {
+                if (cameraManager.interactionUi == null) { 
+                    cameraManager.interactionUi = __instance._interactionButtonsContainer;
+                    cameraManager.PositionInteractionUI();
+                }
+                else { 
+                    cameraManager.interactionUi = __instance._interactionButtonsContainer;
+                }
+                cameraManager.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InventoryBlur), "Enable")]
+        private static void DisableInvBlur(InventoryBlur __instance)
+        {
+            __instance.enabled = false;
+        }
+
+
+        // When the grid is being initialized we need to make sure the rotation is 0,0,0 otherwise the grid items don't
+        // spawn in because of their weird code.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
+        private static void ReturnCommonUiToZeroRot(GridViewMagnifier __instance)
+        {
+            __instance.transform.root.rotation = Quaternion.identity;
+        }
+
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MainMenuController), "method_17")]
+        private static void ReturnFromGameToMainMenu(MainMenuController __instance)
+        {
+            inGame = false;
+            cameraManager.enabled = false;
+            MenuPatches.cameraManager.enabled = true;
+            MenuPatches.PositionMainMenuUi();
+            MenuPatches.FixMainMenuCamera();
+            leftArmIk.solver.target = null;
+            rightArmIk.solver.target = null;
+            menuOpen = false;
+            camRoot.transform.eulerAngles = Vector3.zero;
+        }
+
+        // Changes to in game when selecting the hideout option in the preloader UI
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MainMenuController), "method_16")]
+        private static void SetInGameOnReturnToHideout_Preloader(MainMenuController __instance)
+        {
+            // Only set inGame if the player is set. If this is the first time going to hideout when starting the game
+            // we only want inGame set if everythings been loaded, and if player is set then that means the hideout
+            // has already been opened once, and swapping between hideout and the menu is fast now
+            if (player) { 
+                inGame = true;
+                cameraManager.enabled = true;
+                MenuPatches.cameraManager.enabled = false;
+                leftArmIk.solver.target = CameraManager.LeftHand.transform;
+                rightArmIk.solver.target = CameraManager.RightHand.transform;
+            }
+        }
+        // Changes to in game when selecting the hideout option in the main menu Common UI
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MenuScreen), "method_6")]
+        private static void SetInGameOnReturnToHideout_Common(MenuScreen __instance, EMenuType menuType)
+        {
+            if (menuType == EMenuType.Hideout && player) { 
+                inGame = true;
+                cameraManager.enabled = true;
+                MenuPatches.cameraManager.enabled = false;
+                leftArmIk.solver.target = CameraManager.LeftHand.transform;
+                rightArmIk.solver.target = CameraManager.RightHand.transform;
+            }
+        }
+
+
+        private static bool menuOpen = false;
+        // Position inventory in front of player
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
+        private static void PositionInGameInventory(GridViewMagnifier __instance)
+        {
+            if (!inGame)
+                return;
+            if (player && !menuOpen) {
+                __instance.transform.root.rotation = Quaternion.identity;
+                Transform commonUI = __instance.transform.root;
+                commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+                Vector3 newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f) + (Camera.main.transform.right * -0.75f);
+                newUiPos.y = Camera.main.transform.position.y + -0.6f;
+                commonUI.position = newUiPos;
+                commonUI.LookAt(Camera.main.transform);
+                commonUI.Rotate(0, 225, 0);
+                Vector3 newRot = commonUI.eulerAngles;
+                newRot.x = 0;
+                newRot.z = 0;
+                commonUI.eulerAngles = newRot;
+                HandleOpenInventory();
+                if (MenuPatches.preloaderUi) {
+                    MenuPatches.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+
+                    newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f);
+                    newUiPos.y = Camera.main.transform.position.y + -0.2f;
+                    MenuPatches.preloaderUi.position = newUiPos;
+                    MenuPatches.preloaderUi.eulerAngles = newRot;
+
+                }
+
+                //if (uiTopMaterial) { 
+                //    Plugin.MyLog.LogError("SETTTING UI MATERIAL " + uiTopMaterial);
+                //    foreach (CanvasRenderer renderer in commonUI.GetComponentsInChildren<CanvasRenderer>()) {
+                //        renderer.SetMaterial(uiTopMaterial,0);
+                //    }
+                //}
+            }
+        }
+
+        // Method_1 starts to despawn the grid items if its rotated
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(GridViewMagnifier), "Update")]
+        //private static bool StopGridFromHidingItemsThroughUpdate(GridViewMagnifier __instance)
+        //{
+        //    if (__instance.enabled)
+        //    {
+        //        //__instance.method_1(calculate: true, forceMagnify: false);
+        //        __instance.method_0();
+        //    }
+        //    return false;
+        //}
+        // If the canvas roots rotation isn't 0,0,0 the grid/slot items display on an angle
+        // so these patches prevent them from being on an angle
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GridView), "method_5")]
+        private static void PreventOffAxisGridItemsViews(GridView __instance, ItemView itemView)
+        {
+            itemView.transform.localEulerAngles = Vector3.zero;
+            itemView.MainImage.transform.localEulerAngles = new Vector3(0, 0, itemView.MainImage.transform.localEulerAngles.z);
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SlotView), "method_5")]
+        private static void PreventOffAxisSlotItemsViews(SlotView __instance)
+        {
+            __instance.itemView_0.transform.localEulerAngles = Vector3.zero;
+            __instance.itemView_0.MainImage.transform.localEulerAngles = new Vector3(0, 0, __instance.itemView_0.MainImage.transform.localEulerAngles.z);
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(QuickSlotView), "SetItem")]
+        private static void PreventOffAxisSlowtItwemsViews(QuickSlotView __instance)
+        {
+            __instance.ItemView.transform.localEulerAngles = Vector3.zero;
+            __instance.ItemView.MainImage.transform.localEulerAngles = new Vector3(0, 0, __instance.ItemView.MainImage.transform.localEulerAngles.z);
+        }
+
+        // This code is somehow responsible for determining which items in the stash/inv grid are shown and it shits the bed if
+        // the CommonUI rotation isn't 0,0,0 so set it to that before running this code
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GridViewMagnifier), "method_1")]
+        private static bool StopGridFromHidingItemsWhenUiRotated(GridViewMagnifier __instance, bool calculate, bool forceMagnify)
+        {
+            if ((object)__instance.rectTransform_0 == null || (object)__instance._gridView == null || (object)__instance._scrollRect == null)
+            {
+                return false;
+            }
+            Vector3 originalRot = __instance.transform.root.eulerAngles;
+             __instance.transform.root.eulerAngles = Vector3.zero;
+            if (calculate)
+            {
+
+                Rect rect = __instance.rectTransform_0.rect;
+                Vector3 vector = __instance.rectTransform_0.TransformPoint(rect.position);
+                Vector3 vector2 = __instance.rectTransform_0.TransformPoint(rect.position + rect.size) - vector;
+                rect = new Rect(vector, vector2);
+
+                if (!forceMagnify && __instance.nullable_0 == rect)
+                {
+                    __instance.transform.root.eulerAngles = originalRot;
+                    return false;
+                }
+                __instance.nullable_0 = rect;
+            }
+            if (__instance.nullable_0.HasValue)
+            {
+                __instance._gridView.MagnifyIfPossible(__instance.nullable_0.Value, forceMagnify);
+            }
+            __instance.transform.root.eulerAngles = originalRot;
+            return false;
+        }
+
+
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(GridViewMagnifier), "method_2")]
+        //private static bool StopGridFromHidingItemsWhenMovingUi(GridViewMagnifier __instance, Vector2 position)
+        //{
+        //    if (!position.Equals(__instance.vector2_0))
+        //    {
+        //        __instance.vector2_0 = position;
+        //    }
+        //    return false;
+        //}
+
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(InventoryScreen), "Show", new Type[] { typeof(GClass2907) })]
+        //private static void PositionInvScreen(InventoryScreen __instance)
+        //{
+        //    Transform commonUI = __instance.transform.root;
+        //    commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+        //    commonUI.position = Camera.main.transform.position + (Camera.main.transform.forward * cameraManager.x) + (Camera.main.transform.up * cameraManager.y) + (Camera.main.transform.right * cameraManager.z);
+        //    commonUI.LookAt(Camera.main.transform);
+        //    commonUI.Rotate(0, cameraManager.ry, 0);
+        //    Vector3 newRot = commonUI.eulerAngles;
+        //    newRot.x = 0;
+        //    commonUI.eulerAngles = newRot;
+        //}
+
+
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(ActionPanel), "Display")]
+        //private static void SetGamweUwI(ActionPanel __instance)
+        //{
+        //    Plugin.MyLog.LogError("Display ");
+        //}
 
         public static Transform backHolster;
         public static BoxCollider backCollider;
@@ -135,7 +430,7 @@ namespace TarkovVR
         //}
 
 
-            [HarmonyPostfix]
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void AddVRHands(LimbIK __instance)
         {
@@ -165,6 +460,8 @@ namespace TarkovVR
             {
                 return;
             }
+
+            //    //This is for Base HumanSpine3 to stop it doing something, cant remember
 
             if (__instance.transform.parent.parent.GetComponent<Test>() == null)
             {
@@ -227,9 +524,10 @@ namespace TarkovVR
                 // This is a bot player, so do not execute the rest of the code
                 return;
             }
-
+            firearmController = null;
             emptyHands = __instance.ControllerGameObject.transform;
             player = __instance._player;
+
             if (oldWeaponHolder && weaponHolder.transform.childCount > 0)
             {
                 Plugin.MyLog.LogWarning("\n\nAAAAAAAAAAA : " + __instance._player.gameObject + " \n");
@@ -239,21 +537,21 @@ namespace TarkovVR
                 weaponRoot.localPosition = Vector3.zero;
                 oldWeaponHolder = null;
             }
+
+
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
-        private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "IEventsConsumerOnWeapOut")]
+        private static void ReturnWeaponToOriginalParentOnChange(EFT.Player.FirearmController __instance)
         {
             if (__instance._player.IsAI)
                 return;
 
-            player = __instance._player;
-            emptyHands = __instance.ControllerGameObject.transform;
-            Plugin.MyLog.LogError("\n\n" + oldWeaponHolder + "\n\n");
-            scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform;
-            // Check if a weapon is currently equipped, if that weapon isn't the same as the one trying to be equipped, and that the weaponHolder actually has something there
-            if (oldWeaponHolder && oldWeaponHolder != __instance.WeaponRoot.parent.gameObject && weaponHolder.transform.childCount > 0)
+            Plugin.MyLog.LogWarning("IEventsConsumerOnWeapOut " + __instance + "   |    " +  __instance.WeaponRoot + "   |    " + __instance.WeaponRoot.parent);
+
+            // Check if a weapon is currently equipped, if that weapon isn the same as the one trying to be equipped, and that the weaponHolder actually has something there
+            if (oldWeaponHolder && weaponHolder == __instance.WeaponRoot.parent.gameObject && weaponHolder.transform.childCount > 0)
             {
                 Plugin.MyLog.LogWarning("\n\n Init ball calc 1 \n\n");
                 rightArmIk.solver.target = CameraManager.RightHand.transform;
@@ -262,6 +560,31 @@ namespace TarkovVR
                 weaponRoot.localPosition = Vector3.zero;
                 oldWeaponHolder = null;
             }
+        }
+
+        private static EFT.Player.FirearmController firearmController;
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
+        private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
+        {
+            if (__instance._player.IsAI)
+                return;
+
+            firearmController = __instance;
+            player = __instance._player;
+            emptyHands = __instance.ControllerGameObject.transform;
+            Plugin.MyLog.LogError("\n\n" + oldWeaponHolder + "\n\n");
+            scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform;
+            // Check if a weapon is currently equipped, if that weapon isn't the same as the one trying to be equipped, and that the weaponHolder actually has something there
+            //if (oldWeaponHolder && oldWeaponHolder != __instance.WeaponRoot.parent.gameObject && weaponHolder.transform.childCount > 0)
+            //{
+            //    Plugin.MyLog.LogWarning("\n\n Init ball calc 1 \n\n");
+            //    rightArmIk.solver.target = CameraManager.RightHand.transform;
+            //    Transform weaponRoot = weaponHolder.transform.GetChild(0);
+            //    weaponRoot.parent = oldWeaponHolder.transform;
+            //    weaponRoot.localPosition = Vector3.zero;
+            //    oldWeaponHolder = null;
+            //}
 
             if (rightArmIk && oldWeaponHolder == null)
             {
@@ -269,11 +592,11 @@ namespace TarkovVR
                 // Weapon_root goes in weapon holder, holder goes in VR right hand, set rot of holder to 15,270,90
                 // pos to 0.141 0.0204 -0.1003
                 // Pistols rot: 7.8225 278.6073 88.9711  pos: 0.3398 -0.0976 -0.1754
-                Transform weaponRightHandIKPositioner = __instance.HandsHierarchy.Transforms[9];
+
                 CameraManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[11];
                 //weaponRightHandIKPositioner.gameObject.active = false;
                 //Positioner positioner = weaponRightHandIKPositioner.gameObject.AddComponent<Positioner>();
-                rightArmIk.solver.target = weaponRightHandIKPositioner;
+                rightArmIk.solver.target = null;
                 //Positioner positioner = rightHandIK.AddComponent<Positioner>();
                 //positioner.target = rightHandIK.transform;
 
@@ -285,6 +608,8 @@ namespace TarkovVR
                     __instance.WeaponRoot.gameObject.AddComponent<Test>();
                 if (__instance.Weapon.WeapClass == "pistol")
                     weaponHolder.transform.localPosition = new Vector3(0.341f, 0.0904f, -0.0803f);
+                else if (__instance.Weapon.WeapClass == "marksmanRifle")
+                    weaponHolder.transform.localPosition = new Vector3(0.241f, 0.0204f, -0.1303f);
                 else
                     weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1303f);
                 //else if (__instance.Weapon.WeapClass == "assaultRifle" || __instance.Weapon.WeapClass == "assaultCarbine" || __instance.Weapon.WeapClass == "smg" || __instance.Weapon.WeapClass == "sniperRifle" || __instance.Weapon.WeapClass == "marksmanRifle")
@@ -301,17 +626,9 @@ namespace TarkovVR
             // -0.089 -0.0796 -0.1970 
         }
 
-        private static bool stillSwapping = false;
-        private static bool selectSecondary = true;
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(PlayerOwner), "method_0", new Type[] { typeof(GInterface109) })]
-        private static void BlockLookwAxis(GamePlayerOwner __instance)
-        {
-            stillSwapping = false;
-        }
         private static Transform scope;
-        private static bool changedMagnification = false;
-        private static bool matchingHeadToBody = false;
+        private static bool isScrolling;
+
         
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass1765), "UpdateInput")]
@@ -332,6 +649,7 @@ namespace TarkovVR
             // 25: Backwards/S
             // 64: Right/D
             // 65: Left/A
+             bool isAiming = false;
 
 
             if (__instance.ginterface141_0 != null)
@@ -364,6 +682,126 @@ namespace TarkovVR
                 for (int k = 0; k < __instance.gclass1760_0.Length; k++)
                 {
                     __instance.ecommand_0 = __instance.gclass1760_0[k].UpdateCommand(deltaTime);
+
+                    if (menuOpen)
+                    {
+
+                    }
+                    else { 
+                        // 62: Jump
+                        if (k == 62 && (!cameraManager || !cameraManager.interactionUi || !cameraManager.interactionUi.gameObject.active) && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.Jump;
+                        // 57: Sprint
+                        else if (k == 57)
+                        {
+                            if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any))
+                            {
+                                if (!isSprinting)
+                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleSprinting;
+                                else
+                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndSprinting;
+
+                            }
+                            else if (isSprinting && SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndSprinting;
+                        }
+                        // 52: Reload
+                        else if (k == 52 && SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any))
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ReloadWeapon;
+                        // 39: Aim
+                        else if (k == 39 && firearmController)
+                        {
+                            float angle = 100f;
+                            Vector3 directionToScope = scope.transform.position - camHolder.transform.position;
+                            directionToScope = directionToScope.normalized;
+                            angle = Vector3.Angle(camHolder.transform.forward, directionToScope);
+                            isAiming = firearmController.IsAiming;
+                            if (!isAiming && angle <= 20f)
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleAlternativeShooting;
+                            }
+                            else if (isAiming && angle > 20f)
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndAlternativeShooting;
+                                CameraManager.smoothingFactor = 20f;
+                            }
+                            //if (!isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
+                            //{
+                            //    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleAlternativeShooting;
+                            //    isAiming = true;
+                            //}
+                            //else if (isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
+                            //{
+                            //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndAlternativeShooting;
+                            //    isAiming = false;
+                            //}
+                        }
+                        // 38: Shooting
+                        else if (k == 38)
+                        {
+                            if (!isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleShooting;
+                                isShooting = true;
+                            }
+                            else if (isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndShooting;
+                                isShooting = false;
+                            }
+                        }
+                        else if (k == 13)
+                        {
+                            if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.5f)
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ScrollPrevious;
+                                isScrolling = true;
+                            }
+                            else if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < -0.5f)
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ScrollNext;
+                                isScrolling = true;
+                            }
+                            else if (SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > -0.5f && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < 0.5f)
+                                isScrolling = false;
+                        }
+                        // 78: breathing
+                        else if (k == 78)
+                        {
+                            if (!isHoldingBreath && isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
+                                isHoldingBreath = true;
+                                CameraManager.smoothingFactor = scopeSensitivity * 75f;
+                            }
+                            else if (isHoldingBreath && (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f || !isAiming))
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
+                                isHoldingBreath = false;
+                                CameraManager.smoothingFactor = 20f;
+                            }
+
+                            //if (SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.Any))
+                            //    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
+                            //else if (SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
+                            //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
+                        }
+                        else if (k == 65 && handsInteractionController && handsInteractionController.swapWeapon)
+                        {
+                            if (player && player.ActiveSlot.ID == "FirstPrimaryWeapon")
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectSecondPrimaryWeapon;
+                            else
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon;
+                        }
+                        if (k == 1 && isAiming) {
+                            if (vrOpticController.swapZooms)
+                            {
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ChangeScopeMagnification;
+                                vrOpticController.swapZooms = false;
+                            }
+                        }
+                        
+                    }
                     // 50: Interact
                     if (k == 50)
                     {
@@ -375,103 +813,8 @@ namespace TarkovVR
                     // 61: Toggle inv
                     else if (k == 61 && SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any))
                         __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleInventory;
-                    // 62: Jump
-                    else if (k == 62 && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
-                        __instance.ecommand_0 = EFT.InputSystem.ECommand.Jump;
-                    // 57: Sprint
-                    else if (k == 57)
-                    {
-                        if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any))
-                        {
-                            if (!isSprinting)
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleSprinting;
-                            else
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndSprinting;
-
-                        }
-                        else if (isSprinting && SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.EndSprinting;
-                    }
-                    // 52: Reload
-                    else if (k == 52 && SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any))
-                        __instance.ecommand_0 = EFT.InputSystem.ECommand.ReloadWeapon;
-                    // 39: Aim
-                    else if (k == 39)
-                    {
-                        float angle = 100f;
-                        if (scope != null && camHolder != null)
-                        {
-                            Vector3 directionToScope = scope.transform.position - camHolder.transform.position;
-                            directionToScope = directionToScope.normalized;
-                            angle = Vector3.Angle(camHolder.transform.forward, directionToScope);
-                        }
-                        if (!isAiming && angle <= 20f)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleAlternativeShooting;
-                            isAiming = true;
-                        }
-                        else if (isAiming && angle > 20f)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.EndAlternativeShooting;
-                            isAiming = false;
-                            CameraManager.smoothingFactor = 20f;
-                        }
-                        //if (!isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
-                        //{
-                        //    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleAlternativeShooting;
-                        //    isAiming = true;
-                        //}
-                        //else if (isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
-                        //{
-                        //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndAlternativeShooting;
-                        //    isAiming = false;
-                        //}
-                    }
-                    // 38: Shooting
-                    else if (k == 38)
-                    {
-                        if (!isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleShooting;
-                            isShooting = true;
-                        }
-                        else if (isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.EndShooting;
-                            isShooting = false;
-                        }
-                    }
-                    // 78: breathing
-                    else if (k == 78)
-                    {
-                        if (!isHoldingBreath && isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
-                            isHoldingBreath = true;
-                            CameraManager.smoothingFactor = scopeSensitivity * 75f;
-                        }
-                        else if (isHoldingBreath && (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f || !isAiming))
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
-                            isHoldingBreath = false;
-                            CameraManager.smoothingFactor = 20f;
-                        }
-
-                        //if (SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.Any))
-                        //    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
-                        //else if (SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
-                        //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
-                    }
                     else if (k == 95 && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any))
                         __instance.ecommand_0 = EFT.InputSystem.ECommand.Escape;
-                    else if (k == 65 && MenuPatches.bodyRot && MenuPatches.bodyRot.swapWeapon && !stillSwapping) { 
-                        if (selectSecondary)
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectSecondPrimaryWeapon;
-                        else
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon;
-                        selectSecondary = !selectSecondary;
-                        stillSwapping = true;
-                    }
 
 
                     // 0: ChangeAimScope
@@ -497,18 +840,8 @@ namespace TarkovVR
                     // 93-94: Enter
                     // 95: Escape
                     //__instance.ecommand_0 = SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
-                    if (isAiming) { 
-                        if (!changedMagnification && SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.Any)) {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ChangeScopeMagnification;
-                            changedMagnification = true;
-                        }
-                        if (changedMagnification && SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
-                        {
-                            changedMagnification = false;
-                        }
-                    }
 
-                        if (__instance.ecommand_0 != 0)
+                    if (__instance.ecommand_0 != 0)
                     {
                         commands.Add(__instance.ecommand_0);
                         //Plugin.MyLog.LogError(k + ": " + (__instance.gclass1760_0[k] as GClass1802).GameKey + "\n");
@@ -527,7 +860,7 @@ namespace TarkovVR
             {
                 return false;
             }
-            if (cameraManager) { 
+            if (cameraManager && !menuOpen) { 
                 for (int m = 0; m < __instance.gclass1761_1.Length; m++)
                 {
                     if (Mathf.Abs(axis[__instance.gclass1761_1[m].IntAxis]) < 0.0001f)
@@ -539,7 +872,10 @@ namespace TarkovVR
                         axis[__instance.gclass1761_1[m].IntAxis] = 0;
                     else if (m == 2)
                     {
-                        axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
+                        if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < 0.75f)
+                            axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
+                        else
+                            axis[__instance.gclass1761_1[m].IntAxis] = 0;
                         if (camRoot != null)
                             camRoot.transform.Rotate(0, axis[__instance.gclass1761_1[m].IntAxis], 0);
                     }
@@ -573,7 +909,7 @@ namespace TarkovVR
                     //        matchingHeadToBody = false;
                     //}
                 }
-                if (player)
+                if (inGame && player)
                 {
                     // Base Height - the height at which crouching begins.
                     float baseHeight = cameraManager.initPos.y * 0.90f; // 90% of init height
@@ -630,6 +966,7 @@ namespace TarkovVR
         }
 
 
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VolumetricLightRenderer), "OnPreRender")]
         private static bool PatchVolumetricLightingToVR(VolumetricLightRenderer __instance)
@@ -671,8 +1008,8 @@ namespace TarkovVR
         private static void SetOpticCamFoV(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)
         {
             // NOTE::: I don't think FOV matters at all really for 1x if its not a scope, e.g. collimators or the thermal sights, so all fovs can probs default to 26/27
-
-
+            //StackTrace stackTrace = new StackTrace();
+            //Plugin.MyLog.LogWarning(stackTrace.ToString()); 
             //1x    27 FoV  parent/parent/scope_30mm_s&b_pm_ii_1_8x24(Clone)
             //1x    15 fov parent/parent/scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone) parent/scope_all_torrey_pines_logic_t12_w_30hz(Clone)
             //1x    26 FOV for PARENT/PARENT/scope_30mm_eotech_vudu_1_6x24(Clone)
@@ -713,98 +1050,65 @@ namespace TarkovVR
             if (!visualController)
                 visualController = opticSight.transform.parent.GetComponent<SightModVisualControllers>();
             float fov = 27;
-            if (visualController ) {
-                float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
+            if (visualController && vrOpticController) {
                 scopeSensitivity = visualController.sightComponent_0.GetCurrentSensitivity;
-                string scopeName = opticSight.name;
-                // For scopes that have multiple levels of zoom of different zoom effects (e.g. changing sight lines from black to red), opticSight will be stored in 
-                // mode_000, mode_001, etc, and that will be stored in the scope game object, so we need to get parent name for scopes with multiple settings
-                string parentName = opticSight.transform.parent.name;
-                if (zoomLevel == 7)
-                    fov = 1.6f;
-                else if (zoomLevel == 12 || zoomLevel == 25)
-                    fov = 1.9f;
-                else if (zoomLevel == 4)
-                    fov = 6f;
-                else if (zoomLevel == 5)
-                    fov = 3.6f;
-                else if (zoomLevel == 8)
-                    fov = 3f;
-                else if (zoomLevel == 9)
-                    fov = 2.9f;
-                else if (zoomLevel == 20)
-                    fov = 1.5f;
-                else if (zoomLevel == 10)
-                    fov = 2.5f;
-                else if (zoomLevel == 6)
-                    fov = 3.2f;
-                else if (zoomLevel == 2.5)
-                    fov = 10f;
-                else if (zoomLevel == 10)
-                    fov = 2.5f;
-                else if (zoomLevel == 10)
-                    fov = 2.5f;
-                else if (zoomLevel == 1)
+                if (vrOpticController.scopeCamera == __instance.camera_0)
                 {
-                    if (parentName == "scope_30mm_s&b_pm_ii_1_8x24(Clone)")
-                        fov = 27;
-                    else if (parentName == "scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)" || scopeName == "scope_all_torrey_pines_logic_t12_w_30hz(Clone)")
-                        fov = 15;
-                    else 
-                        fov = 26; //scope_30mm_eotech_vudu_1_6x24(Clone)
+                    fov = vrOpticController.currentFov;
                 }
-                else if (zoomLevel == 1.5)
-                {
-                    if (scopeName == "scope_g36_hensoldt_hkv_single_optic_carry_handle_1,5x(Clone)")
-                        fov = 18;
-                    else if (scopeName == "scope_aug_steyr_rail_optic_1,5x(Clone)")
-                        fov = 14;
-                    else
-                        fov = 15; // scope_aug_steyr_stg77_optic_1,5x
-                }
-                else if (zoomLevel == 2)
-                {
-                    if (parentName == "scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)")
-                        fov = 4;
-                    else
-                        fov = 11; // scope_all_monstrum_compact_prism_scope_2x32(Clone)
-                }
-                else if (zoomLevel == 3)
-                {
-                    if (scopeName == "scope_g36_hensoldt_hkv_carry_handle_3x(Clone)" || scopeName == "3")
-                        fov = 7.5f;
-                    else if (parentName == "scope_base_kmz_1p59_3_10x(Clone)" || parentName == "scope_all_ncstar_advance_dual_optic_3_9x_42(Clone)")
-                        fov = 7.6f;
-                    else if (scopeName == "scope_base_npz_1p78_1_2,8x24(Clone)")
-                        fov = 9f;
-                    else
-                        fov = 12f; // scope_34mm_s&b_pm_ii_3_12x50(Clone)
-                }
-                else if (zoomLevel == 3.5)
-                {
-                    if (scopeName == "scope_base_progress_pu_3,5x(Clone)")
-                        fov = 6;
-                    else if (scopeName == "scope_dovetail_npz_nspum_3,5x(Clone)")
-                        fov = 6.5f;
-                    else if (scopeName == "scope_all_swampfox_trihawk_prism_scope_3x30(Clone)")
-                        fov = 7.5f;
-                    else 
-                        fov = 7; // scope_base_trijicon_acog_ta11_3,5x35(Clone)
-                }
-                else if (zoomLevel == 16)
-                {
-                    if (parentName == "scope_34mm_nightforce_atacr_7_35x56(Clone)")
-                        fov = 1;
-                    else
-                        fov = 1.2f; // Unknown scope
+                else {
+                    vrOpticController.scopeCamera = __instance.camera_0;
+                    float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
+                    string scopeName = opticSight.name;
+                    // For scopes that have multiple levels of zoom of different zoom effects (e.g. changing sight lines from black to red), opticSight will be stored in 
+                    // mode_000, mode_001, etc, and that will be stored in the scope game object, so we need to get parent name for scopes with multiple settings
+                    BoxCollider scopeCollider;
+                    if (scopeName.Contains("mode_"))
+                    {
+                        scopeName = opticSight.transform.parent.name;
+                        opticSight.transform.parent.gameObject.layer = 6;
+                        scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
+                    }
+                    else { 
+                        opticSight.gameObject.layer = 6;
+                        scopeCollider = opticSight.GetComponent<BoxCollider>();
+                    }
+                    if (scopeCollider) {
+                        scopeCollider.size = new Vector3(0.01f, 0.04f, 0.02f);
+                        scopeCollider.center = new Vector3(-0.04f,0, -0.075f);
+                        scopeCollider.enabled = true;
+                    }
+                    fov = ScopeManager.GetFOV(scopeName, zoomLevel);
+                    vrOpticController.minFov = ScopeManager.GetMinFOV(scopeName);
+                    vrOpticController.maxFov = ScopeManager.GetMaxFOV(scopeName);
+                    vrOpticController.currentFov = fov;
                 }
 
-                }
+                if (opticSight.name.Contains("mode_"))
+                    opticSight.transform.parent.GetComponent<BoxCollider>().enabled = true;
+                else
+                    opticSight.GetComponent<BoxCollider>().enabled = true;
 
+                
+
+            }
             __instance.camera_0.fieldOfView = fov;
 
 
-            // The SightModeVisualControllers on the scopes contains sightComponent_0 which has a function GetCurrentOpticZoom which returns the zoom
+
+
+                // The SightModeVisualControllers on the scopes contains sightComponent_0 which has a function GetCurrentOpticZoom which returns the zoom
+
+            }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameUI), "Awake")]
+        private static void w(GameUI __instance)
+        {
+            __instance.transform.parent = camRoot.transform;
+            __instance.transform.localPosition = Vector3.zero;
+            __instance.transform.localRotation = Quaternion.identity;
 
         }
 
@@ -826,50 +1130,50 @@ namespace TarkovVR
 
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(PrismEffects), "OnRenderImage")]
-        private static bool DisablePrismEffects(PrismEffects __instance)
-        {
-            if (__instance.gameObject.name != "FPS Camera")
-                return true;
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(PrismEffects), "OnRenderImage")]
+        //private static bool DisablePrismEffects(PrismEffects __instance)
+        //{
+        //    if (__instance.gameObject.name != "FPS Camera")
+        //        return true;
 
-            __instance.enabled = false;
-            return false;
-        }
+        //    __instance.enabled = false;
+        //    return false;
+        //}
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(BloomAndFlares), "OnRenderImage")]
-        private static bool DisableBloomAndFlares(BloomAndFlares __instance)
-        {
-            if (__instance.gameObject.name != "FPS Camera")
-                return true;
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(BloomAndFlares), "OnRenderImage")]
+        //private static bool DisableBloomAndFlares(BloomAndFlares __instance)
+        //{
+        //    if (__instance.gameObject.name != "FPS Camera")
+        //        return true;
 
-            __instance.enabled = false;
-            return false;
-        }
+        //    __instance.enabled = false;
+        //    return false;
+        //}
 
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(ChromaticAberration), "OnRenderImage")]
-        private static bool DisableChromaticAberration(ChromaticAberration __instance)
-        {
-            if (__instance.gameObject.name != "FPS Camera")
-                return true;
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(ChromaticAberration), "OnRenderImage")]
+        //private static bool DisableChromaticAberration(ChromaticAberration __instance)
+        //{
+        //    if (__instance.gameObject.name != "FPS Camera")
+        //        return true;
 
-            __instance.enabled = false;
-            return false;
-        }
+        //    __instance.enabled = false;
+        //    return false;
+        //}
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(UltimateBloom), "OnRenderImage")]
-        private static bool DisableUltimateBloom(UltimateBloom __instance)
-        {
-            if (__instance.gameObject.name != "FPS Camera")
-                return true;
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(UltimateBloom), "OnRenderImage")]
+        //private static bool DisableUltimateBloom(UltimateBloom __instance)
+        //{
+        //    if (__instance.gameObject.name != "FPS Camera")
+        //        return true;
 
-            __instance.enabled = false;
-            return false;
-        }
+        //    __instance.enabled = false;
+        //    return false;
+        //}
 
         private static Camera postProcessingStoogeCamera; 
         [HarmonyPostfix]
@@ -919,14 +1223,14 @@ namespace TarkovVR
         [HarmonyPatch(typeof(SSAAImpl), "GetOutputWidth")]
         private static bool ReturnVROutputWidth(SSAAImpl __instance, ref int __result)
         {
-            __result = __instance.GetInputWidth();
+            __result = (int)Mathf.Ceil(__instance.GetInputWidth() * 1.25f);
             return false;
         }
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "GetOutputHeight")]
         private static bool ReturnVROutputHeight(SSAAImpl __instance, ref int __result)
         {
-            __result = __instance.GetInputWidth();
+            __result = (int) Mathf.Ceil(__instance.GetInputHeight() * 1.25f);
             return false;
         }
 
@@ -1060,23 +1364,9 @@ namespace TarkovVR
         [HarmonyPatch(typeof(GClass1916), "ManualLateUpdate")]
         private static bool StopCamXRotation(GClass1916 __instance)
         {
-            if (__instance.player_0.IsAI)
+            //Plugin.MyLog.LogError(inGame + "   |   " + Time.deltaTime.ToString());
+            if (__instance.player_0.IsAI || !inGame)
                 return true;
-            //__instance.transform_1.localRotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, __instance.transform_0.eulerAngles.z);
-            //__instance.transform_1.localPosition = __instance.method_1(__instance.transform_1.position, __instance.transform_1.rotation, __instance.transform_0.position) + new Vector3(Test.ex, Test.ey, Test.ez);
-            if (SteamVR_Actions._default.LeftJoystick.axis.x != 0 || SteamVR_Actions._default.LeftJoystick.axis.y != 0)
-            {
-                //camRoot.transform.Rotate(0, Camera.main.transform.rotation.y, 0);
-                //Camera.main.transform.Rotate(0, Camera.main.transform.rotation.y * -1, 0);
-                //__instance.transform_0.parent.localRotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
-            }
-
-            //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
-            //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, 0);
-            //camRoot.transform.rotation = Quaternion.Euler(0, __instance.transform_0.eulerAngles.y, __instance.transform_0.eulerAngles.z);
-
-            //camRoot.transform.position = __instance.player_0.gameObject.transform.position + (new Vector3(-0.0728f, 1.5057f, -0.0578f) + new Vector3(-0.0381f, -0.1104f, -0.2739f));
-            //camRoot.transform.position = __instance.player_0.gameObject.transform.position + new Vector3(0.0509f, 1.5057f, 0.1496f);
 
             if (emptyHands)
                 camRoot.transform.position = emptyHands.position;
@@ -1110,6 +1400,9 @@ namespace TarkovVR
         {
             if (__instance.MovementContext.IsAI)
                 return true;
+
+            if (menuOpen || !inGame)
+                return false;
 
             bool leftJoystickUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
             bool leftJoystickLastUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.lastAxis.x) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.lastAxis.y) > MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
@@ -1165,8 +1458,7 @@ namespace TarkovVR
             //float y = Mathf.Abs(__instance.MovementContext.TransformRotation.eulerAngles.y - camRoot.transform.eulerAngles.y);
             //if (y > 20)
             //    __instance.MovementContext.ApplyRotation(Quaternion.Lerp(__instance.MovementContext.TransformRotation, __instance.MovementContext.TransformRotation * Quaternion.Euler(0f, y, 0f), 30f * deltaTime));
-
-            if (__instance.MovementContext._player.IsAI) 
+            if (__instance.MovementContext._player.IsAI || inGame) 
                 return true;
 
             __instance.UpdateRotationSpeed(deltaTime);
