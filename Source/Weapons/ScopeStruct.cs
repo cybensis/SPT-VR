@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 
 
-namespace TarkovVR
+namespace TarkovVR.Source.Weapons
 {
 
     public class Scope

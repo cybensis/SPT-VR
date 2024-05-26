@@ -1,24 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using TarkovVR.cam;
-using UnityEngine;
-using Valve.VR.Extras;
+﻿using UnityEngine;
 using Valve.VR;
-using JetBrains.Annotations;
+using TarkovVR.Patches.Misc;
+using TarkovVR.Source.Misc;
+using TarkovVR.Source.UI;
 
-namespace TarkovVR
+namespace TarkovVR.Source.Player.VRManager
 {
-    internal class MenuCameraManager : MonoBehaviour
+    internal class MenuVRManager : MonoBehaviour
     {
         public Vector3 initPos;
 
         // VR Origin and body stuff
-        public static GameObject LeftHand = null;
-        public static GameObject RightHand = null;
-        public static LaserPointer pointer = null;
+        public GameObject LeftHand = null;
+        public GameObject RightHand = null;
+        public LaserPointer pointer = null;
         private float x = 42;
         private float y = 355;
         private float z = 0;
@@ -29,9 +24,9 @@ namespace TarkovVR
         {
             SpawnHands();
             if (RightHand)
-                RightHand.transform.parent = CamPatches.vrOffsetter.transform;
+                RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
             if (LeftHand)
-                LeftHand.transform.parent = CamPatches.vrOffsetter.transform;
+                LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
 
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
@@ -51,7 +46,8 @@ namespace TarkovVR
         }
         public void OnEnable()
         {
-            if (pointer && pointer.holder) { 
+            if (pointer && pointer.holder)
+            {
                 pointer.enabled = true;
                 pointer.holder.active = true;
                 SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
@@ -67,7 +63,7 @@ namespace TarkovVR
             if (initPos.y == 0)
                 initPos = Camera.main.transform.localPosition;
 
-            CamPatches.vrOffsetter.transform.localPosition = (initPos * -1);
+            VRGlobals.vrOffsetter.transform.localPosition = initPos * -1;
 
 
             if (SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.Any))
@@ -83,7 +79,7 @@ namespace TarkovVR
                 timeHeld = 0;
             }
 
-            
+
             //SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 1, SteamVR_Input_Sources.RightHand);
 
         }
@@ -94,7 +90,7 @@ namespace TarkovVR
             if (RightHand)
             {
 
-                RightHand.transform.localPosition = fromAction.localPosition + new Vector3(-0.1f,0,0);
+                RightHand.transform.localPosition = fromAction.localPosition + new Vector3(-0.1f, 0, 0);
                 //RightHand.transform.localEulerAngles = fromAction.localRotation.eulerAngles + new Vector3(x,y,z);
                 RightHand.transform.localEulerAngles = fromAction.localRotation.eulerAngles;
                 RightHand.transform.Rotate(x, y, z);
@@ -121,7 +117,7 @@ namespace TarkovVR
                 RightHand = new GameObject("RightHand");
                 RightHand.AddComponent<SteamVR_Behaviour_Pose>();
                 //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
-                RightHand.transform.parent = CamPatches.camHolder.transform.parent;
+                RightHand.transform.parent = VRGlobals.camHolder.transform.parent;
                 MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
                 pointer = RightHand.AddComponent<LaserPointer>();
                 pointer.color = Color.cyan;
@@ -132,7 +128,7 @@ namespace TarkovVR
                 //LeftHand = GameObject.Instantiate(AssetLoader.LeftHandBase, Vector3.zero, Quaternion.identity);
                 LeftHand = new GameObject("LeftHand");
                 LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
-                LeftHand.transform.parent = CamPatches.camHolder.transform.parent;
+                LeftHand.transform.parent = VRGlobals.camHolder.transform.parent;
             }
         }
     }

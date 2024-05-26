@@ -1,13 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using UnityEngine;
-using UnityEngine.UIElements;
+﻿using UnityEngine;
 using Valve.VR;
 
-namespace TarkovVR
+namespace TarkovVR.Source.Weapons
 {
     internal class VROpticController : MonoBehaviour
     {
@@ -20,8 +14,10 @@ namespace TarkovVR
         public float currentFov;
         private float fovAtStart;
         public bool swapZooms;
-        public void initZoomDial() {
-            if (scopeCamera) {
+        public void initZoomDial()
+        {
+            if (scopeCamera)
+            {
                 fovAtStart = scopeCamera.fieldOfView;
                 initialHandRot = SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
                 swapZooms = false;
@@ -47,12 +43,12 @@ namespace TarkovVR
                 if (degreesHandTurned > 0)
                 {
                     float fovDif = maxFov - fovAtStart;
-                    currentFov = fovAtStart + (fovDif * fovScaler);
+                    currentFov = fovAtStart + fovDif * fovScaler;
                 }
                 if (degreesHandTurned < 0)
                 {
                     float fovDif = fovAtStart - minFov;
-                    currentFov = fovAtStart + (fovDif * fovScaler);
+                    currentFov = fovAtStart + fovDif * fovScaler;
                 }
 
                 currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
@@ -60,7 +56,7 @@ namespace TarkovVR
                 if (currentFov >= maxFov || currentFov <= minFov)
                     SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.LeftHand);
 
-                if ((scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov  >= 0.5 ) || (scopeCamera.fieldOfView / maxFov  >= 0.5 && currentFov / maxFov < 0.5))
+                if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 || scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
                     swapZooms = true;
 
                 scopeCamera.fieldOfView = currentFov;

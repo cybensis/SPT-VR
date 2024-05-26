@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace TarkovVR
+namespace TarkovVR.Source.UI
 {
     internal class MenuMover : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
@@ -39,10 +34,9 @@ namespace TarkovVR
             raycastReceiver.position = newPos;
             //menuCollider.center = commonUI.transform.position;
             transform.position = newPos;
-            Plugin.MyLog.LogError("Pos " + eventData.worldPosition);
             if (commonUI)
             {
-                commonUI.transform.position = new Vector3(transform.position.x  - 1.283f, commonUI.transform.position.y, transform.position.z - 0.0252f);
+                commonUI.transform.position = new Vector3(transform.position.x - 1.283f, commonUI.transform.position.y, transform.position.z - 0.0252f);
             }
             if (menuUI)
             {

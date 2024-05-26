@@ -1,25 +1,16 @@
-﻿
-using EFT;
-using EFT.Hideout;
-using EFT.UI;
-using EFT.UI.DragAndDrop;
-using EFT.UI.Ragfair;
+﻿using EFT.UI;
 using System.Collections.Generic;
-using System.Reflection;
-using TarkovVR.Input;
-using Unity.Audio;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UIElements;
 using Valve.VR;
 
-namespace TarkovVR.cam
+namespace TarkovVR.Source.UI
 {
     internal class VRUIInteracter : MonoBehaviour
     {
 
         private float rayDistance = 100f;
- 
+
         private PointerEventData eventData;
         private GameObject lastHighlightedObject;
         private GameObject dragObject;
@@ -43,7 +34,8 @@ namespace TarkovVR.cam
             {
                 rightJoyTimeHeld += Time.deltaTime;
             }
-            else if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) < 0.7) {
+            else if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) < 0.7)
+            {
                 rightJoyTimeHeld = 0;
                 rotated = false;
             }
@@ -61,7 +53,7 @@ namespace TarkovVR.cam
                 hitObject = RaycastFindHit(hit, ref eventData);
                 //Plugin.MyLog.LogWarning("WDWD: " + hit.collider.gameObject.name + " " + hitObject?.name + " " + hit.point);
                 eventData.worldPosition = hit.point;
-                
+
                 if (hitObject)
                 {
                     eventData.pointerEnter = hitObject;
@@ -88,7 +80,8 @@ namespace TarkovVR.cam
         }
 
         // Handle OnEnter and OnExit events
-        private void handleOnEnterExit() {
+        private void handleOnEnterExit()
+        {
             if (lastHighlightedObject != hitObject)
             {
                 if (lastHighlightedObject != null)

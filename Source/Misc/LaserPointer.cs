@@ -1,10 +1,11 @@
-﻿
-using UnityEngine;
+﻿using UnityEngine;
 using Valve.VR;
 
 
-namespace TarkovVR
+namespace TarkovVR.Source.Misc
 {
+    // Original code from https://github.com/ValveSoftware/steamvr_unity_plugin/blob/master/Assets/SteamVR/Extras/SteamVR_LaserPointer.cs
+    // I've only modified this slightly to change it so it doesn't get blocked by unwanted layers
     public class LaserPointer : MonoBehaviour
     {
         public SteamVR_Behaviour_Pose pose;
@@ -31,7 +32,7 @@ namespace TarkovVR
         private void Start()
         {
             if (pose == null)
-                pose = this.GetComponent<SteamVR_Behaviour_Pose>();
+                pose = GetComponent<SteamVR_Behaviour_Pose>();
             if (pose == null)
                 Debug.LogError("No SteamVR_Behaviour_Pose component found on this object");
 
@@ -40,7 +41,7 @@ namespace TarkovVR
 
 
             holder = new GameObject();
-            holder.transform.parent = this.transform;
+            holder.transform.parent = transform;
             holder.transform.localPosition = Vector3.zero;
             holder.transform.localRotation = Quaternion.identity;
 
@@ -64,7 +65,7 @@ namespace TarkovVR
             {
                 if (collider)
                 {
-                    Object.Destroy(collider);
+                    Destroy(collider);
                 }
             }
             Material newMaterial = new Material(Shader.Find("Unlit/Color"));
@@ -96,14 +97,15 @@ namespace TarkovVR
             if (!isActive)
             {
                 isActive = true;
-                this.transform.GetChild(0).gameObject.SetActive(true);
+                transform.GetChild(0).gameObject.SetActive(true);
             }
 
             float dist = 100f;
 
             Ray raycast = new Ray(transform.position, transform.forward);
             RaycastHit hit;
-            bool bHit = Physics.Raycast(raycast, out hit, interactableLayers);
+            LayerMask layerMask = 1 << interactableLayers;
+            bool bHit = Physics.Raycast(raycast, out hit, layerMask);
 
             if (previousContact && previousContact != hit.transform)
             {
@@ -158,14 +160,14 @@ namespace TarkovVR
         }
 
 
-    public struct PointerEventArgs
-    {
-        public SteamVR_Input_Sources fromInputSource;
-        public uint flags;
-        public float distance;
-        public Transform target;
-    }
+        public struct PointerEventArgs
+        {
+            public SteamVR_Input_Sources fromInputSource;
+            public uint flags;
+            public float distance;
+            public Transform target;
+        }
 
-    public delegate void PointerEventHandler(object sender, PointerEventArgs e);
+        public delegate void PointerEventHandler(object sender, PointerEventArgs e);
     }
 }
