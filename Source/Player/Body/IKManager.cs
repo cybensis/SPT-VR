@@ -1,5 +1,6 @@
 ﻿using EFT;
 using RootMotion.FinalIK;
+using TarkovVR.Patches.UI;
 using UnityEngine;
 
 namespace TarkovVR.Source.Player.VR
@@ -44,6 +45,8 @@ namespace TarkovVR.Source.Player.VR
 
         void LateUpdate()
         {
+            if (VRGlobals.menuOpen)
+                return;
 
             if (leftUpperArm)
                 leftUpperArm.localPosition = upperArmPos;

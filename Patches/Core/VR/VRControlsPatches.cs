@@ -10,7 +10,7 @@ namespace TarkovVR.Patches.Core.VR
     [HarmonyPatch]
     internal class VRControlsPatches
     {
-        
+
         private static bool isScrolling;
         //private static bool isAiming = false;
         private static bool isHoldingBreath = false;
@@ -80,7 +80,7 @@ namespace TarkovVR.Patches.Core.VR
                     else
                     {
                         // 62: Jump
-                        if (k == 62 && (!VRGlobals.vrPlayer || !VRGlobals.vrPlayer.interactionUi || !VRGlobals.vrPlayer.interactionUi.gameObject.active) && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
+                        if (k == 62 && !VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
                             __instance.ecommand_0 = EFT.InputSystem.ECommand.Jump;
                         // 57: Sprint
                         else if (k == 57)
@@ -140,7 +140,7 @@ namespace TarkovVR.Patches.Core.VR
                                 isShooting = false;
                             }
                         }
-                        else if (k == 13)
+                        else if (k == 13 && VRGlobals.blockRightJoystick)
                         {
                             if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.5f)
                             {
@@ -248,7 +248,7 @@ namespace TarkovVR.Patches.Core.VR
             {
                 return false;
             }
-            if (VRGlobals.vrPlayer && !VRGlobals.menuOpen)
+            if (VRGlobals.inGame && !VRGlobals.menuOpen )
             {
                 for (int m = 0; m < __instance.gclass1761_1.Length; m++)
                 {
@@ -261,7 +261,7 @@ namespace TarkovVR.Patches.Core.VR
                         axis[__instance.gclass1761_1[m].IntAxis] = 0;
                     else if (m == 2)
                     {
-                        if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < 0.75f)
+                        if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < 0.75f && !VRGlobals.blockRightJoystick)
                             axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
                         else
                             axis[__instance.gclass1761_1[m].IntAxis] = 0;
@@ -302,7 +302,7 @@ namespace TarkovVR.Patches.Core.VR
                 {
                     // Base Height - the height at which crouching begins.
                     float baseHeight = VRGlobals.vrPlayer.initPos.y * 0.90f; // 90% of init height
-                                                                        // Floor Height - the height at which full prone is achieved.
+                                                                             // Floor Height - the height at which full prone is achieved.
                     float floorHeight = VRGlobals.vrPlayer.initPos.y * 0.40f; // Significant crouch/prone
 
                     // Current height position normalized between baseHeight and floorHeight.

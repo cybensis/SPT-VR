@@ -19,7 +19,7 @@ namespace TarkovVR.Source.Player.VRManager
 
                 float yRotationDifference = Mathf.Abs(Quaternion.Angle(Camera.main.transform.localRotation, camRotation));
 
-                if (yRotationDifference > 45)
+                if (yRotationDifference > 30)
                 {
 
                     PositionInteractionUI();
@@ -46,8 +46,9 @@ namespace TarkovVR.Source.Player.VRManager
         {
             if (!RightHand && VRGlobals.menuVRManager.RightHand)
                 RightHand = VRGlobals.menuVRManager.RightHand;
-            if (!LeftHand && VRGlobals.menuVRManager.LeftHand)
+            if (!LeftHand && VRGlobals.menuVRManager.LeftHand) { 
                 LeftHand = VRGlobals.menuVRManager.LeftHand;
+            }
         }
     }
 }

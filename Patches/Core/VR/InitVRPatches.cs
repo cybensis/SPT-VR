@@ -34,6 +34,10 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.weaponHolder.transform.parent = VRPlayerManager.RightHand.transform;
                     VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
                     VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
+                    SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
+                    collider.radius = 0.2f;
+                    collider.isTrigger = true;
+                    VRGlobals.camHolder.layer = 7;
                 }
             }
             else
@@ -53,8 +57,13 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.weaponHolder.transform.parent = VRPlayerManager.RightHand.transform;
                     VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
                     VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
+                    SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
+                    collider.radius = 0.2f;
+                    collider.isTrigger = true;
+                    VRGlobals.camHolder.layer = 7;
                 }
             }
+
 
             if (VRGlobals.backHolster == null)
             {
@@ -109,17 +118,14 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
             }
 
-
             if (__instance.name == VRGlobals.LEFT_ARM_OBJECT_NAME)
             {
-
-
                 __instance.enabled = true;
                 VRGlobals.ikManager.leftArmIk = __instance;
                 __instance.solver.target = VRPlayerManager.LeftHand.transform;
                 // Set the weight to 2.5 so when rotating the hand, the wrist rotates as well, showing the watch time
-                Transform leftWrist = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0);
-                leftWrist.GetComponent<TwistRelax>().weight = 2.5f;
+                VRGlobals.leftWrist = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0);
+                //leftWrist.GetComponent<TwistRelax>().weight = 2.5f;
             }
             else if (__instance.name == VRGlobals.RIGHT_ARM_OBJECT_NAME)
             {
@@ -136,7 +142,7 @@ namespace TarkovVR.Patches.Core.VR
 
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Don't know why the hell I chose this method for setting the main cam but it works so whatever
+        // Don't know why I chose this method for setting the main cam but it works so whatever
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BloodOnScreen), "Start")]
         private static void SetMainCamParent(BloodOnScreen __instance)

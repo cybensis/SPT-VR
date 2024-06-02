@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using TarkovVR.Patches.UI;
+using UnityEngine;
 using Valve.VR;
 
 namespace TarkovVR.Source.Player.VRManager
@@ -27,6 +28,8 @@ namespace TarkovVR.Source.Player.VRManager
         public static GameObject LeftHand = null;
         public static GameObject RightHand = null;
 
+        private GameObject radialMenu;
+        private GameObject leftWristUi;
 
         public bool isSupporting = false;
         private float timeHeld = 0;
@@ -39,10 +42,34 @@ namespace TarkovVR.Source.Player.VRManager
         {
 
             SpawnHands();
-            if (RightHand)
+            if (RightHand) { 
                 RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
-            if (LeftHand)
+                if (!radialMenu) {
+                    radialMenu = new GameObject("radialMenu");
+                    radialMenu.transform.parent = RightHand.transform;
+                    radialMenu.AddComponent<CircularSegmentUI>();
+                    radialMenu.active = false;
+                }
+            }
+            if (LeftHand) { 
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
+                if (!leftWristUi && UIPatches.stancePanel) {
+                    leftWristUi = new GameObject("leftWristUi");
+                    leftWristUi.transform.parent = LeftHand.transform;
+                    leftWristUi.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+                    leftWristUi.transform.localPosition = new Vector3(0, -0.05f, 0.015f);
+                    leftWristUi.transform.localEulerAngles = Vector3.zero;
+
+                    UIPatches.healthPanel.transform.parent = leftWristUi.transform;
+                    UIPatches.healthPanel.transform.localPosition = Vector3.zero;
+                    UIPatches.healthPanel.transform.localEulerAngles = new Vector3(270,87,0);
+
+                    UIPatches.stancePanel.transform.parent = leftWristUi.transform;
+                    UIPatches.stancePanel.transform.localPosition = new Vector3(0.1f, 0, 0.03f);
+                    UIPatches.stancePanel.transform.localEulerAngles = new Vector3(270, 87, 0);
+
+                }
+            }
 
 
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
@@ -89,6 +116,28 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 timeHeld = 0;
             }
+
+            if (radialMenu)
+            {
+
+                RaycastHit hit;
+                LayerMask mask = 1 << 7;
+                if (Physics.Raycast(RightHand.transform.position, RightHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
+                {
+                    if (!radialMenu.active)
+                    {
+                        radialMenu.active = true;
+                        VRGlobals.blockRightJoystick = true;
+                    }
+
+                }
+                else if (radialMenu.active)
+                {
+                    radialMenu.active = false;
+                    VRGlobals.blockRightJoystick = false;
+                }
+            }
+
         }
 
 
@@ -215,6 +264,28 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 LeftHand.transform.localRotation = fromAction.localRotation;
                 LeftHand.transform.Rotate(-60, 0, 70);
+
+                if (UIPatches.stancePanel)
+                {
+
+                    RaycastHit hit;
+                    LayerMask mask = 1 << 7;
+                    if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder") { 
+                        if (!showingUI)
+                        {
+                            UIPatches.stancePanel.AnimatedShow(false);
+                            UIPatches.healthPanel.AnimatedShow(false);
+                            showingUI = true;
+                        }
+
+                    }
+                    else if (showingUI)
+                    {
+                        UIPatches.stancePanel.AnimatedHide();
+                        UIPatches.healthPanel.AnimatedHide();
+                        showingUI = false;
+                    }
+                }
 
             }
         }

@@ -9,6 +9,7 @@ namespace TarkovVR.Source.Player.Interactions
         public Quaternion initialHandRot;
 
         public bool swapWeapon = false;
+        private bool changingScopeZoom = false;
         public void Update()
         {
 
@@ -38,6 +39,8 @@ namespace TarkovVR.Source.Player.Interactions
                     handleScopeInteraction();
                 }
             }
+            if (changingScopeZoom)
+                handleScopeInteraction();
         }
 
         private void handleScopeInteraction()
@@ -45,6 +48,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (SteamVR_Actions._default.LeftGrip.stateDown)
             {
                 VRGlobals.vrOpticController.initZoomDial();
+                changingScopeZoom = true;
             }
             if (SteamVR_Actions._default.LeftGrip.state)
             {
@@ -52,6 +56,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
             else
             {
+                if (changingScopeZoom)
+                    changingScopeZoom = false;
                 SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.2f, SteamVR_Input_Sources.LeftHand);
             }
         }

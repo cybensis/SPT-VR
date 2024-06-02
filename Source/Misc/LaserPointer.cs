@@ -25,7 +25,7 @@ namespace TarkovVR.Source.Misc
         public event PointerEventHandler PointerIn;
         public event PointerEventHandler PointerOut;
         public event PointerEventHandler PointerClick;
-        public LayerMask interactableLayers;  // Add this field
+        public int interactableLayers = 5;  // Add this field
         Transform previousContact = null;
 
 
@@ -105,7 +105,7 @@ namespace TarkovVR.Source.Misc
             Ray raycast = new Ray(transform.position, transform.forward);
             RaycastHit hit;
             LayerMask layerMask = 1 << interactableLayers;
-            bool bHit = Physics.Raycast(raycast, out hit, layerMask);
+            bool bHit = Physics.Raycast(raycast, out hit, 10, layerMask);
 
             if (previousContact && previousContact != hit.transform)
             {

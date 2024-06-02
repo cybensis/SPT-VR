@@ -444,17 +444,17 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(DialogWindow<GClass2878>), "Show")]
-        //private static void DisableItemDisplayWindowStretchCowmponents(DialogWindow<GClass2878> __instance, string title, Action acceptAction, [CanBeNull] Action cancelAction)
-        //{
-
-        //    __instance.WaitOneFrame(delegate
-        //    {
-        //        __instance.WindowTransform.localPosition = Vector3.zeroVector;
-        //    });
-
-        //}
+        // Some piece of code keeps repositioning this shit and I can't figure out what 
+        // so just wait a frame and set it. This is for the  delete/confirm windows
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(DialogWindow<GClass2878>), "Show")]
+        private static void DisplayDialogWindow(DialogWindow<GClass2878> __instance, string title, Action acceptAction, Action cancelAction)
+        {
+            __instance.WaitOneFrame(delegate
+            {
+                __instance.WindowTransform.localPosition = Vector3.zeroVector;
+            });
+        }
 
         //[HarmonyPostfix]
         //[HarmonyPatch(typeof(ItemUiContext), "ThrowItem")]

@@ -28,7 +28,7 @@ namespace TarkovVR
 
         public Transform playerCam;
         public static Transform emptyHands;
-
+        public static Transform leftWrist;
 
         public static EFT.Player player;
         public static VROpticController vrOpticController;
@@ -45,5 +45,10 @@ namespace TarkovVR
 
         public static GameObject weaponHolder;
         public static GameObject oldWeaponHolder;
+
+        public static bool inspectWeapon = false;
+        public static bool checkMagazine = false;
+
+        public static bool blockRightJoystick = false;
     }
 }
