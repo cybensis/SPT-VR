@@ -3,7 +3,12 @@ using EFT.UI;
 using EFT.UI.DragAndDrop;
 using HarmonyLib;
 using UnityEngine;
-
+using EFT.Interactive;
+using TarkovVR.Source.Player.VRManager;
+using EFT.InventoryLogic;
+using EFT;
+using System.Reflection;
+using System;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -106,16 +111,71 @@ namespace TarkovVR.Patches.UI
             __instance.transform.root.rotation = Quaternion.identity;
         }
 
+        // Position inventory in front of player
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(ItemsPanel), "Show")]
+        //private static void PositionInGamweInventory(ItemsPanel __instance)
+        //{
+        //    Plugin.MyLog.LogWarning("show " + Time.deltaTime);
+        //}
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ItemsPanel), "Show")]
+        private static void PositionInGamweInventory(ItemsPanel __instance)
+        {
+            Plugin.MyLog.LogWarning("Awake " + Time.deltaTime);
+            if (!VRGlobals.inGame)
+                return;
+            if (VRGlobals.player && !menuOpen)
+            {
+                Plugin.MyLog.LogWarning("Awake " + Time.deltaTime);
+                __instance.transform.root.rotation = Quaternion.identity;
+                Transform commonUI = __instance.transform.root;
+                commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+                Vector3 newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f) + (Camera.main.transform.right * -0.75f);
+                newUiPos.y = Camera.main.transform.position.y + -0.6f;
+                commonUI.position = newUiPos;
+                commonUI.LookAt(Camera.main.transform);
+                commonUI.Rotate(0, 225, 0);
+                Vector3 newRot = commonUI.eulerAngles;
+                newRot.x = 0;
+                newRot.z = 0;
+                commonUI.eulerAngles = newRot;
+                HandleOpenInventory();
+                if (VRGlobals.preloaderUi)
+                {
+                    VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+
+                    newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f);
+                    newUiPos.y = Camera.main.transform.position.y + -0.2f;
+                    VRGlobals.preloaderUi.position = newUiPos;
+                    VRGlobals.preloaderUi.eulerAngles = newRot;
+
+                }
+
+                //if (uiTopMaterial) { 
+                //    Plugin.MyLog.LogError("SETTTING UI MATERIAL " + uiTopMaterial);
+                //    foreach (CanvasRenderer renderer in commonUI.GetComponentsInChildren<CanvasRenderer>()) {
+                //        renderer.SetMaterial(uiTopMaterial,0);
+                //    }
+                //}
+            }
+        }
+
+
         private static bool menuOpen = false;
         // Position inventory in front of player
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
         private static void PositionInGameInventory(GridViewMagnifier __instance)
         {
+
+            Plugin.MyLog.LogWarning("method_3 " + Time.deltaTime);
             if (!VRGlobals.inGame)
                 return;
             if (VRGlobals.player && !menuOpen)
             {
+                Plugin.MyLog.LogWarning("inside " + Time.deltaTime);
                 __instance.transform.root.rotation = Quaternion.identity;
                 Transform commonUI = __instance.transform.root;
                 commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
@@ -221,185 +281,185 @@ namespace TarkovVR.Patches.UI
         }
 
 
-        //    [HarmonyPrefix]
-        //    [HarmonyPatch(typeof(Player), "InteractionRaycast")]
-        //    private static bool Raycaster(Player __instance)
-        //    {
-        //        if (__instance._playerLookRaycastTransform == null || !__instance.HealthController.IsAlive)
-        //        {
-        //            return false;
-        //        }
-        //        InteractableObject interactableObject = null;
-        //        __instance.InteractableObjectIsProxy = false;
-        //        Player player = null;
-        //        Ray interactionRay = __instance.InteractionRay;
-        //        if (__instance.CurrentState.CanInteract && (bool)__instance.HandsController && __instance.HandsController.CanInteract())
-        //        {
-        //            RaycastHit hit;
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player), "InteractionRaycast")]
+        private static bool Raycaster(EFT.Player __instance)
+        {
+            if (__instance._playerLookRaycastTransform == null || !__instance.HealthController.IsAlive || !(VRGlobals.vrPlayer is RaidVRPlayerManager))
+            {
+                return false;
+            }
+            RaidVRPlayerManager manager = (RaidVRPlayerManager)VRGlobals.vrPlayer;
+            InteractableObject interactableObject = null;
+            __instance.InteractableObjectIsProxy = false;
+            EFT.Player player = null;
+            Ray interactionRay = __instance.InteractionRay;
+            if (__instance.CurrentState.CanInteract && (bool)__instance.HandsController && __instance.HandsController.CanInteract())
+            {
+                RaycastHit hit;
 
-        //            Vector3 rayOrigin = Camera.main.transform.position;
-        //            Vector3 rayDirection = Camera.main.transform.forward;
-        //            rayDirection.y -= cameraManager.downwardOffset;
-        //            float adjustedRayDistance = cameraManager.rayDistance * cameraManager.GetDistanceMultiplier(rayDirection);
+                Vector3 rayOrigin = Camera.main.transform.position;
+                Vector3 rayDirection = Camera.main.transform.forward;
+                rayDirection.y -= manager.downwardOffset;
+                float adjustedRayDistance = manager.rayDistance * manager.GetDistanceMultiplier(rayDirection);
 
-        //            //Plugin.MyLog.LogError(adjustedRayDistance);
+                GameObject gameObject = null;
 
-        //            GameObject gameObject = null; 
+                if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld.int_0))
+                {
+                    gameObject = hit.collider.gameObject;
+                }
 
-        //            if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, GameWorld.int_0)) { 
-        //                gameObject = hit.collider.gameObject;
-        //                Plugin.MyLog.LogError(gameObject);
-        //            }
+                if (gameObject != null)
+                {
+                    InteractiveProxy interactiveProxy = null;
+                    interactableObject = gameObject.GetComponentInParent<InteractableObject>();
+                    if (interactableObject == null)
+                    {
+                        interactiveProxy = gameObject.GetComponent<InteractiveProxy>();
+                        if (interactiveProxy != null)
+                        {
+                            __instance.InteractableObjectIsProxy = true;
+                            interactableObject = interactiveProxy.Link;
+                        }
+                    }
+                    // Move the cube slightly closer to the player
+                    //Vector3 offsetDirection = (rayOrigin - hit.point).normalized;
+                    //hitPoint = hit.point + offsetDirection * RaidVRPlayerManager.dirMultiplier; // Adjust the offset distance as needed
+                                                                                          //if (interactableObject != __instance.InteractableObject || __instance._nextCastHasForceEvent) { 
+                                                                                          //    cameraManager.PlaceInteractorAfterDelay(gameObject);
+                                                                                          //}
+                                                                                          //cameraManager.interactionUi.transform.position = interactorPosition;
+                                                                                          //cameraManager.interactionUi.transform.LookAt(rayOrigin); // Make the interactor face the pl
 
-        //            if (gameObject != null)
-        //            {
-        //                InteractiveProxy interactiveProxy = null;
-        //                interactableObject = gameObject.GetComponentInParent<InteractableObject>();
-        //                if (interactableObject == null)
-        //                {
-        //                    interactiveProxy = gameObject.GetComponent<InteractiveProxy>();
-        //                    if (interactiveProxy != null)
-        //                    {
-        //                        __instance.InteractableObjectIsProxy = true;
-        //                        interactableObject = interactiveProxy.Link;
-        //                    }
-        //                }
-        //                // Move the cube slightly closer to the player
-        //                Vector3 offsetDirection = (rayOrigin - hit.point).normalized;
-        //                hitPoint = hit.point + offsetDirection * cameraManager.directionmult; // Adjust the offset distance as needed
-        //                //if (interactableObject != __instance.InteractableObject || __instance._nextCastHasForceEvent) { 
-        //                //    cameraManager.PlaceInteractorAfterDelay(gameObject);
-        //                //}
-        //                    //cameraManager.interactionUi.transform.position = interactorPosition;
-        //                    //cameraManager.interactionUi.transform.LookAt(rayOrigin); // Make the interactor face the pl
-
-        //                    //if (interactableObject != null && interactiveProxy == null)
-        //                    //{
-        //                    //    if (interactableObject.InteractsFromAppropriateDirection(__instance.LookDirection))
-        //                    //    {
-        //                    //        if (!(hit.distance > EFTHardSettings.Instance.LOOT_RAYCAST_DISTANCE + EFTHardSettings.Instance.BEHIND_CAST) && interactableObject.isActiveAndEnabled)
-        //                    //        {
-        //                    //            if (hit.distance > EFTHardSettings.Instance.DOOR_RAYCAST_DISTANCE + EFTHardSettings.Instance.BEHIND_CAST && interactableObject is Door)
-        //                    //            {
-        //                    //                interactableObject = null;
-        //                    //            }
-        //                    //        }
-        //                    //        else
-        //                    //        {
-        //                    //            interactableObject = null;
-        //                    //        }
-        //                    //    }
-        //                    //    else
-        //                    //    {
-        //                    //        interactableObject = null;
-        //                    //    }
-        //                    //}
-        //                    player = ((interactableObject == null) ? gameObject.GetComponent<Player>() : null);
-        //            }
-        //            __instance.RayLength = hit.distance;
-        //        }
-        //        if (interactableObject is WorldInteractiveObject worldInteractiveObject)
-        //        {
-        //            if (worldInteractiveObject is BufferGateSwitcher bufferGateSwitcher)
-        //            {
-        //                _ = bufferGateSwitcher.BufferGatesState;
-        //                if (interactableObject == __instance.InteractableObject)
-        //                {
-        //                    __instance._nextCastHasForceEvent = true;
-        //                }
-        //            }
-        //            else
-        //            {
-        //                EDoorState doorState = worldInteractiveObject.DoorState;
-        //                if (doorState != EDoorState.Interacting && worldInteractiveObject.Operatable)
-        //                {
-        //                    if (interactableObject == __instance.InteractableObject && __instance._lastInteractionState != doorState)
-        //                    {
-        //                        __instance._nextCastHasForceEvent = true;
-        //                    }
-        //                }
-        //                else
-        //                {
-        //                    interactableObject = null;
-        //                }
-        //            }
-        //        }
-        //        else if (interactableObject is LootItem lootItem)
-        //        {
-        //            if (lootItem.Item is Weapon { IsOneOff: not false } weapon && weapon.Repairable.Durability == 0f)
-        //            {
-        //                interactableObject = null;
-        //            }
-        //        }
-        //        else if (interactableObject is StationaryWeapon stationaryWeapon)
-        //        {
-        //            if (stationaryWeapon.Locked)
-        //            {
-        //                interactableObject = null;
-        //            }
-        //            else if (interactableObject == __instance.InteractableObject && __instance._lastInteractionState != stationaryWeapon.State)
-        //            {
-        //                __instance._nextCastHasForceEvent = true;
-        //            }
-        //        }
-        //        else if (interactableObject != null)
-        //        {
-        //            if (__instance._lastStateUpdateTime != interactableObject.StateUpdateTime)
-        //            {
-        //                __instance._nextCastHasForceEvent = true;
-        //            }
-        //            __instance._lastStateUpdateTime = interactableObject.StateUpdateTime;
-        //        }
-        //        if (interactableObject != __instance.InteractableObject || __instance._nextCastHasForceEvent)
-        //        {
-        //            __instance.StartCoroutine(cameraManager.PlaceInteractorAfterDelay());
-        //            __instance._nextCastHasForceEvent = false;
-        //            __instance.InteractableObject = interactableObject;
-        //            if (__instance.InteractableObject is WorldInteractiveObject worldInteractiveObject2)
-        //            {
-        //                __instance._lastInteractionState = worldInteractiveObject2.DoorState;
-        //            }
-        //            else if (__instance.InteractableObject is StationaryWeapon stationaryWeapon2)
-        //            {
-        //                __instance._lastInteractionState = stationaryWeapon2.State;
-        //            }
-        //            var eventInfo = typeof(Player).GetEvent("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-        //            var field = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-        //            var eventDelegate = (Action)field.GetValue(__instance);
-        //            eventDelegate?.Invoke();
-        //        }
-        //        if (player != __instance.InteractablePlayer || __instance._nextCastHasForceEvent)
-        //        {
-        //            __instance._nextCastHasForceEvent = false;
-        //            __instance.InteractablePlayer = ((player != __instance) ? player : null);
-        //            if (player == __instance)
-        //            {
-        //                UnityEngine.Debug.LogWarning(__instance.Profile.Nickname + " wants to interact to himself");
-        //            }
-        //            var eventInfo = typeof(Player).GetEvent("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-        //            var field = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-        //            var eventDelegate = (Action)field.GetValue(__instance);
-        //            eventDelegate?.Invoke();
-        //        }
-        //        if (player == null && interactableObject == null)
-        //        {
-        //            float radius = 0.1f * (1f + (float)__instance.Skills.PerceptionLootDot);
-        //            float distance = 1.5f;
-        //            if ((bool)__instance.Skills.PerceptionEliteNoIdea)
-        //            {
-        //                distance = 2.35f;
-        //                radius = 1.1f;
-        //                interactionRay.origin = __instance.Transform.position + Vector3.up * 3f;
-        //                interactionRay.direction = Vector3.down;
-        //            }
-        //            __instance.Boolean_0 = GameWorld.InteractionSense(Camera.main.transform.position, Camera.main.transform.forward, radius, distance);
-        //        }
-        //        else
-        //        {
-        //            __instance.Boolean_0 = false;
-        //        }
-        //        return false;
-        //    }
+                    //if (interactableObject != null && interactiveProxy == null)
+                    //{
+                    //    if (interactableObject.InteractsFromAppropriateDirection(__instance.LookDirection))
+                    //    {
+                    //        if (!(hit.distance > EFTHardSettings.Instance.LOOT_RAYCAST_DISTANCE + EFTHardSettings.Instance.BEHIND_CAST) && interactableObject.isActiveAndEnabled)
+                    //        {
+                    //            if (hit.distance > EFTHardSettings.Instance.DOOR_RAYCAST_DISTANCE + EFTHardSettings.Instance.BEHIND_CAST && interactableObject is Door)
+                    //            {
+                    //                interactableObject = null;
+                    //            }
+                    //        }
+                    //        else
+                    //        {
+                    //            interactableObject = null;
+                    //        }
+                    //    }
+                    //    else
+                    //    {
+                    //        interactableObject = null;
+                    //    }
+                    //}
+                    player = ((interactableObject == null) ? gameObject.GetComponent<EFT.Player>() : null);
+                }
+                __instance.RayLength = hit.distance;
+            }
+            if (interactableObject is WorldInteractiveObject worldInteractiveObject)
+            {
+                if (worldInteractiveObject is BufferGateSwitcher bufferGateSwitcher)
+                {
+                    _ = bufferGateSwitcher.BufferGatesState;
+                    if (interactableObject == __instance.InteractableObject)
+                    {
+                        __instance._nextCastHasForceEvent = true;
+                    }
+                }
+                else
+                {
+                    EDoorState doorState = worldInteractiveObject.DoorState;
+                    if (doorState != EDoorState.Interacting && worldInteractiveObject.Operatable)
+                    {
+                        if (interactableObject == __instance.InteractableObject && __instance._lastInteractionState != doorState)
+                        {
+                            __instance._nextCastHasForceEvent = true;
+                        }
+                    }
+                    else
+                    {
+                        interactableObject = null;
+                    }
+                }
+            }
+            else if (interactableObject is LootItem lootItem)
+            {
+                if (lootItem.Item is Weapon { IsOneOff: not false } weapon && weapon.Repairable.Durability == 0f)
+                {
+                    interactableObject = null;
+                }
+            }
+            else if (interactableObject is StationaryWeapon stationaryWeapon)
+            {
+                if (stationaryWeapon.Locked)
+                {
+                    interactableObject = null;
+                }
+                else if (interactableObject == __instance.InteractableObject && __instance._lastInteractionState != stationaryWeapon.State)
+                {
+                    __instance._nextCastHasForceEvent = true;
+                }
+            }
+            else if (interactableObject != null)
+            {
+                if (__instance._lastStateUpdateTime != interactableObject.StateUpdateTime)
+                {
+                    __instance._nextCastHasForceEvent = true;
+                }
+                __instance._lastStateUpdateTime = interactableObject.StateUpdateTime;
+            }
+            if (interactableObject != __instance.InteractableObject || __instance._nextCastHasForceEvent)
+            {
+                Plugin.MyLog.LogWarning("place interacter");
+                manager.PlaceUiInteracter();
+                __instance._nextCastHasForceEvent = false;
+                __instance.InteractableObject = interactableObject;
+                if (__instance.InteractableObject is WorldInteractiveObject worldInteractiveObject2)
+                {
+                    __instance._lastInteractionState = worldInteractiveObject2.DoorState;
+                }
+                else if (__instance.InteractableObject is StationaryWeapon stationaryWeapon2)
+                {
+                    __instance._lastInteractionState = stationaryWeapon2.State;
+                }
+                var eventInfo = typeof(Player).GetEvent("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
+                var field = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
+                var eventDelegate = (Action)field.GetValue(__instance);
+                eventDelegate?.Invoke();
+            }
+            if (player != __instance.InteractablePlayer || __instance._nextCastHasForceEvent)
+            {
+                __instance._nextCastHasForceEvent = false;
+                __instance.InteractablePlayer = ((player != __instance) ? player : null);
+                if (player == __instance)
+                {
+                    UnityEngine.Debug.LogWarning(__instance.Profile.Nickname + " wants to interact to himself");
+                }
+                var eventInfo = typeof(Player).GetEvent("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
+                var field = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
+                var eventDelegate = (Action)field.GetValue(__instance);
+                eventDelegate?.Invoke();
+            }
+            if (player == null && interactableObject == null)
+            {
+                float radius = 0.1f * (1f + (float)__instance.Skills.PerceptionLootDot);
+                float distance = 1.5f;
+                if ((bool)__instance.Skills.PerceptionEliteNoIdea)
+                {
+                    distance = 2.35f;
+                    radius = 1.1f;
+                    interactionRay.origin = __instance.Transform.position + Vector3.up * 3f;
+                    interactionRay.direction = Vector3.down;
+                }
+                __instance.Boolean_0 = GameWorld.InteractionSense(Camera.main.transform.position, Camera.main.transform.forward, radius, distance);
+            }
+            else
+            {
+                __instance.Boolean_0 = false;
+            }
+            return false;
+        }
 
         //[HarmonyPostfix]
         //[HarmonyPatch(typeof(ActionPanel), "method_0")]

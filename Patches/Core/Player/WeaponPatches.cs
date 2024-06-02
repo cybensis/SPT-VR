@@ -13,6 +13,8 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal class WeaponPatches
     {
+        public static Vector3 weaponOffset = Vector3.zero;
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Spawn")]
@@ -126,11 +128,13 @@ namespace TarkovVR.Patches.Core.Player
                 if (!__instance.WeaponRoot.gameObject.GetComponent<IKManager>())
                     __instance.WeaponRoot.gameObject.AddComponent<IKManager>();
                 if (__instance.Weapon.WeapClass == "pistol")
-                    VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.341f, 0.0904f, -0.0803f);
+                    weaponOffset = new Vector3(0.341f, 0.0904f, -0.0803f);
                 else if (__instance.Weapon.WeapClass == "marksmanRifle")
-                    VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.241f, 0.0204f, -0.1303f);
+                    weaponOffset = new Vector3(0.241f, 0.0204f, -0.1303f);
                 else
-                    VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1303f);
+                    weaponOffset = new Vector3(0.141f, 0.0204f, -0.1303f);
+
+                VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
                 //else if (__instance.Weapon.WeapClass == "assaultRifle" || __instance.Weapon.WeapClass == "assaultCarbine" || __instance.Weapon.WeapClass == "smg" || __instance.Weapon.WeapClass == "sniperRifle" || __instance.Weapon.WeapClass == "marksmanRifle")
                 //    weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1303f);
                 //    //weaponHolder.transform.localPosition = new Vector3(0.111f, 0.0204f, -0.1003f);

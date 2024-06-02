@@ -67,6 +67,7 @@ namespace TarkovVR.Source.Player.VRManager
                     Vector3 worldHitFaceCenter = hit.transform.TransformPoint(hitFaceCenter);
                     interactorPosition = worldHitFaceCenter + (rayOrigin - worldHitFaceCenter).normalized * dirMultiplier;
                 }
+                    Plugin.MyLog.LogWarning(boxCollider + " | " + interactorPosition + " |  " + interactionUi);
                 // Set the interactions UI position
                 if (interactionUi)
                 {
@@ -108,24 +109,26 @@ namespace TarkovVR.Source.Player.VRManager
             return multiplier;
         }
 
-        protected override void SpawnHands()
-        {
-            if(!RightHand)
-            {
-                RightHand = new GameObject("RightHand");
-                RightHand.AddComponent<SteamVR_Behaviour_Pose>();
-                //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
-                RightHand.transform.parent = VRGlobals.camHolder.transform.parent;
-                //MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
+        //0.296 0.1104 -0.0803
+
+        //protected override void SpawnHands()
+        //{
+        //    if(!RightHand)
+        //    {
+        //        RightHand = new GameObject("RightHand");
+        //        RightHand.AddComponent<SteamVR_Behaviour_Pose>();
+        //        //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
+        //        RightHand.transform.parent = VRGlobals.camHolder.transform.parent;
+        //        //MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
 
 
-            }
-            if (!LeftHand)
-            {
-                LeftHand = new GameObject("LeftHand");
-                LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
-                LeftHand.transform.parent = VRGlobals.camHolder.transform.parent;
-            }
-        }
+        //    }
+        //    if (!LeftHand)
+        //    {
+        //        LeftHand = new GameObject("LeftHand");
+        //        LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
+        //        LeftHand.transform.parent = VRGlobals.camHolder.transform.parent;
+        //    }
+        //}
     }
 }

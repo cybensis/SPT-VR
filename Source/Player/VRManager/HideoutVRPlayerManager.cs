@@ -42,13 +42,13 @@ namespace TarkovVR.Source.Player.VRManager
 
 
 
-        protected override void SpawnHands()
-        {
-            if (!RightHand && VRGlobals.menuVRManager.RightHand)
-                RightHand = VRGlobals.menuVRManager.RightHand;
-            if (!LeftHand && VRGlobals.menuVRManager.LeftHand) { 
-                LeftHand = VRGlobals.menuVRManager.LeftHand;
-            }
-        }
+        //protected override void SpawnHands()
+        //{
+        //    if (!RightHand && VRGlobals.menuVRManager.RightHand)
+        //        RightHand = VRGlobals.menuVRManager.RightHand;
+        //    if (!LeftHand && VRGlobals.menuVRManager.LeftHand) { 
+        //        LeftHand = VRGlobals.menuVRManager.LeftHand;
+        //    }
+        //}
     }
 }

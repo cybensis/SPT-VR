@@ -76,6 +76,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(MainMenuController), "method_17")]
         private static void ReturnFromGameToMainMenu(MainMenuController __instance)
         {
+
             VRGlobals.inGame = false;
             VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
@@ -112,6 +113,7 @@ namespace TarkovVR.Patches.Misc
         {
             if (menuType == EMenuType.Hideout && VRGlobals.player)
             {
+                Plugin.MyLog.LogWarning("true");
                 VRGlobals.inGame = true;
                 VRGlobals.vrPlayer.enabled = true;
                 VRGlobals.menuVRManager.enabled = false;

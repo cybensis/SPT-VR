@@ -42,16 +42,17 @@ namespace TarkovVR.Patches.Core.VR
             }
             else
             {
-                VRGlobals.camHolder = new GameObject("camHolder");
-                VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
-                VRGlobals.camRoot = new GameObject("camRoot");
-                VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
-                //Camera.main.transform.parent = vrOffsetter.transform;
-                //Camera.main.gameObject.AddComponent<SteamVR_TrackedObject>();
-                VRGlobals.vrOffsetter.transform.parent = VRGlobals.camRoot.transform;
                 if (!VRGlobals.vrPlayer)
                 {
+                    VRGlobals.camHolder = new GameObject("camHolder");
+                    VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
+                    VRGlobals.camRoot = new GameObject("camRoot");
+                    VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
+                    //Camera.main.transform.parent = vrOffsetter.transform;
+                    //Camera.main.gameObject.AddComponent<SteamVR_TrackedObject>();
+                    VRGlobals.vrOffsetter.transform.parent = VRGlobals.camRoot.transform;
                     VRGlobals.camHolder.AddComponent<SteamVR_TrackedObject>();
+                    VRGlobals.menuVRManager = VRGlobals.camHolder.AddComponent<MenuVRManager>();
                     VRGlobals.vrPlayer = VRGlobals.camHolder.AddComponent<RaidVRPlayerManager>();
                     VRGlobals.weaponHolder = new GameObject("weaponHolder");
                     VRGlobals.weaponHolder.transform.parent = VRPlayerManager.RightHand.transform;
@@ -61,6 +62,7 @@ namespace TarkovVR.Patches.Core.VR
                     collider.radius = 0.2f;
                     collider.isTrigger = true;
                     VRGlobals.camHolder.layer = 7;
+                    VRGlobals.menuVRManager.enabled = false;
                 }
             }
 
@@ -75,6 +77,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.backCollider.isTrigger = true;
                 VRGlobals.backHolster.gameObject.layer = 3;
             }
+            Plugin.MyLog.LogWarning("true");
             VRGlobals.inGame = true;
         }
 
@@ -154,6 +157,7 @@ namespace TarkovVR.Patches.Core.VR
                 mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
                 mainCam.cullingMask = -1;
                 mainCam.nearClipPlane = 0.001f;
+                mainCam.farClipPlane = 1000f;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
                 //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
                 //cameraManager.initPos = VRCam.transform.localPosition;

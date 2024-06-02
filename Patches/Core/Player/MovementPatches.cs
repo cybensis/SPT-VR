@@ -95,7 +95,6 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(GClass1916), "ManualLateUpdate")]
         private static bool StopCamXRotation(GClass1916 __instance)
         {
-            //Plugin.MyLog.LogError(inGame + "   |   " + Time.deltaTime.ToString());
             if (__instance.player_0.IsAI || !VRGlobals.inGame)
                 return true;
 
@@ -104,6 +103,7 @@ namespace TarkovVR.Patches.Core.Player
             else
                 VRGlobals.camRoot.transform.position = __instance.method_1(VRGlobals.camRoot.transform.position, VRGlobals.camRoot.transform.rotation, __instance.transform_0.position);
             VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.camRoot.transform.position.x, __instance.player_0.Transform.position.y + 1.5f, VRGlobals.camRoot.transform.position.z);
+
             //camHolder.transform.position = __instance.transform_0.position + new Vector3(Test.ex, Test.ey, Test.ez);
             return false;
         }

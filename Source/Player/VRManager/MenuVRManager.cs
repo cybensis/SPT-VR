@@ -101,6 +101,7 @@ namespace TarkovVR.Source.Player.VRManager
         {
             if (LeftHand)
             {
+                Plugin.MyLog.LogWarning(fromAction.localPosition + " |  wdwdw");
                 LeftHand.transform.localPosition = fromAction.localPosition;
                 LeftHand.transform.localRotation = fromAction.localRotation;
 

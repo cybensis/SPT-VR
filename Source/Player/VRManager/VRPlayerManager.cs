@@ -1,4 +1,5 @@
-﻿using TarkovVR.Patches.UI;
+﻿using TarkovVR.Patches.Core.Player;
+using TarkovVR.Patches.UI;
 using UnityEngine;
 using Valve.VR;
 
@@ -22,7 +23,7 @@ namespace TarkovVR.Source.Player.VRManager
         public Transform gunTransform;
         public static Transform leftHandGunIK;
 
-        public static float smoothingFactor = 20f; // Adjust this value to lower to increase aim smoothing - 20 is barely noticable so good baseline
+        public static float smoothingFactor = 100f; // Adjust this value to lower to increase aim smoothing - 20 is barely noticable so good baseline
 
         // VR Origin and body stuff
         public static GameObject LeftHand = null;
@@ -37,7 +38,6 @@ namespace TarkovVR.Source.Player.VRManager
         public Vector3 startingPlace;
         private bool showingUI = false;
         private bool handLock = false;
-        private Vector3 weaponHolderOriginalOffset;
         protected virtual void Awake()
         {
 
@@ -70,7 +70,8 @@ namespace TarkovVR.Source.Player.VRManager
 
                 }
             }
-
+            SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
 
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
@@ -122,7 +123,7 @@ namespace TarkovVR.Source.Player.VRManager
 
                 RaycastHit hit;
                 LayerMask mask = 1 << 7;
-                if (Physics.Raycast(RightHand.transform.position, RightHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
+                if (SteamVR_Actions._default.RightGrip.state && Physics.Raycast(RightHand.transform.position, RightHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
                 {
                     if (!radialMenu.active)
                     {
@@ -131,11 +132,13 @@ namespace TarkovVR.Source.Player.VRManager
                     }
 
                 }
-                else if (radialMenu.active)
+                else if (VRGlobals.blockRightJoystick && SteamVR_Actions._default.RightJoystick.axis.x == 0 && SteamVR_Actions._default.RightJoystick.axis.y == 0)
                 {
                     radialMenu.active = false;
                     VRGlobals.blockRightJoystick = false;
                 }
+                else
+                    radialMenu.active = false;
             }
 
         }
@@ -235,8 +238,8 @@ namespace TarkovVR.Source.Player.VRManager
                         // Set target to null so the left hand returns to its normal position on the gun
                         VRGlobals.ikManager.leftArmIk.solver.target = null;
                         isSupporting = true;
-                        weaponHolderOriginalOffset = VRGlobals.weaponHolder.transform.localPosition;
-                        VRGlobals.weaponHolder.transform.localPosition = weaponHolderOriginalOffset + supportingWeaponHolderOffset;
+                        VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset + supportingWeaponHolderOffset;
+                        //VRGlobals.weaponHolder.transform.localPosition = supportingWeaponHolderOffset;
 
                     }
                     if (SteamVR_Actions._default.LeftGrip.state)
@@ -252,7 +255,7 @@ namespace TarkovVR.Source.Player.VRManager
                     {
                         isSupporting = false;
                         VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
-                        VRGlobals.weaponHolder.transform.localPosition = weaponHolderOriginalOffset;
+                        VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
                     }
                     Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
                     LeftHand.transform.localPosition = virtualBasePosition;
@@ -290,7 +293,15 @@ namespace TarkovVR.Source.Player.VRManager
             }
         }
 
-        protected abstract void SpawnHands();
+        protected void SpawnHands()
+        {
+            if (!RightHand && VRGlobals.menuVRManager.RightHand)
+                RightHand = VRGlobals.menuVRManager.RightHand;
+            if (!LeftHand && VRGlobals.menuVRManager.LeftHand)
+            {
+                LeftHand = VRGlobals.menuVRManager.LeftHand;
+            }
+        }
 
 
         // REMOVE BEFOREGBuFFER maybe
