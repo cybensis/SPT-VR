@@ -154,8 +154,16 @@ namespace TarkovVR.Patches.Core.VR
             if (mainCam.name == "FPS Camera")
             {
                 Plugin.MyLog.LogWarning("\n\nSetting camera \n\n");
+                GameObject uiCamHolder = new GameObject("uiCam");
+                uiCamHolder.transform.parent = __instance.transform;
+                uiCamHolder.transform.localRotation = Quaternion.identity;
+                uiCamHolder.transform.localPosition = Vector3.zero;
+                Camera uiCam = uiCamHolder.AddComponent<Camera>();
+                uiCam.depth = 1;
+                uiCam.cullingMask = 32;
+                uiCam.clearFlags = CameraClearFlags.Depth;
                 mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
-                mainCam.cullingMask = -1;
+                //mainCam.cullingMask = -1;
                 mainCam.nearClipPlane = 0.001f;
                 mainCam.farClipPlane = 1000f;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();

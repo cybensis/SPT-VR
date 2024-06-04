@@ -50,6 +50,7 @@ namespace TarkovVR.Patches.Core.VR
             // 64: Right/D
             // 65: Left/A
             bool isAiming = false;
+            bool interactMenuOpen = (VRGlobals.vrPlayer && VRGlobals.vrPlayer.interactionUi && VRGlobals.vrPlayer.interactionUi.gameObject.active);
             if (VRGlobals.firearmController)
                 isAiming = VRGlobals.firearmController.IsAiming;
 
@@ -91,7 +92,7 @@ namespace TarkovVR.Patches.Core.VR
                     else
                     {
                         // 62: Jump
-                        if (k == 62 && !VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
+                        if (k == 62 && !VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && !interactMenuOpen && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
                             __instance.ecommand_0 = EFT.InputSystem.ECommand.Jump;
                         // 57: Sprint
                         else if (k == 57)
@@ -151,7 +152,7 @@ namespace TarkovVR.Patches.Core.VR
                                 isShooting = false;
                             }
                         }
-                        else if (k == 13 && VRGlobals.blockRightJoystick)
+                        else if (k == 13 && !VRGlobals.blockRightJoystick && interactMenuOpen)
                         {
                             if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.5f)
                             {

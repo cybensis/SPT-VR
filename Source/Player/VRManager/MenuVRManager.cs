@@ -3,6 +3,7 @@ using Valve.VR;
 using TarkovVR.Patches.Misc;
 using TarkovVR.Source.Misc;
 using TarkovVR.Source.UI;
+using System.Reflection;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -23,8 +24,11 @@ namespace TarkovVR.Source.Player.VRManager
         public void Awake()
         {
             SpawnHands();
-            if (RightHand)
+            if (RightHand) { 
                 RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
+                if (pointer && pointer.pointer)
+                    pointer.pointer.layer = LayerMask.NameToLayer("UI");
+            }
             if (LeftHand)
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
 
@@ -101,7 +105,6 @@ namespace TarkovVR.Source.Player.VRManager
         {
             if (LeftHand)
             {
-                Plugin.MyLog.LogWarning(fromAction.localPosition + " |  wdwdw");
                 LeftHand.transform.localPosition = fromAction.localPosition;
                 LeftHand.transform.localRotation = fromAction.localRotation;
 

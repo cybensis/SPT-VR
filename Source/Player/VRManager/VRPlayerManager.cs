@@ -32,6 +32,8 @@ namespace TarkovVR.Source.Player.VRManager
         private GameObject radialMenu;
         private GameObject leftWristUi;
 
+        public bool x = false;
+
         public bool isSupporting = false;
         private float timeHeld = 0;
         public Transform interactionUi;

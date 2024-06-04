@@ -76,7 +76,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(MainMenuController), "method_17")]
         private static void ReturnFromGameToMainMenu(MainMenuController __instance)
         {
-
+            Plugin.MyLog.LogWarning("wdwdwd");
             VRGlobals.inGame = false;
             VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
@@ -235,12 +235,20 @@ namespace TarkovVR.Patches.Misc
                 camContainer.transform.parent.localPosition = new Vector3(0, -1.1f, -0.7f);
                 camContainer.transform.parent.localRotation = Quaternion.Euler(0, 345, 0);
 
-                camContainer.GetComponent<PostProcessLayer>().m_Camera = environmentUi._alignmentCamera;
+                //camContainer.GetComponent<PostProcessLayer>().m_Camera = environmentUi._alignmentCamera;
                 Camera mainMenuCam = camContainer.GetComponent<Camera>();
                 camContainer.tag = "MainCamera";
                 if (mainMenuCam)
                 {
-                    mainMenuCam.cullingMask = -1;
+                    GameObject uiCamHolder = new GameObject("uiCam");
+                    uiCamHolder.transform.parent = camContainer.transform;
+                    uiCamHolder.transform.localRotation = Quaternion.identity;
+                    uiCamHolder.transform.localPosition = Vector3.zero;
+                    Camera uiCam = uiCamHolder.AddComponent<Camera>();
+                    uiCam.depth = 11;
+                    uiCam.cullingMask = 32;
+                    uiCam.clearFlags = CameraClearFlags.Depth;
+                    //mainMenuCam.cullingMask = -1;
                     mainMenuCam.RemoveAllCommandBuffers();
 
                 }

@@ -9,6 +9,7 @@ using EFT.InventoryLogic;
 using EFT;
 using System.Reflection;
 using System;
+using System.Diagnostics;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -76,21 +77,36 @@ namespace TarkovVR.Patches.UI
         //}
 
 
+
         private static void HandleOpenInventory()
         {
             menuOpen = true;
+            VRGlobals.blockRightJoystick = true;
             VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
+            VRGlobals.commonUi.parent = VRGlobals.camRoot.transform;
+            VRGlobals.commonUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+            VRGlobals.commonUi.localPosition = new Vector3(-0.8f, -0.5f, 0.8f);
+            VRGlobals.commonUi.localEulerAngles = Vector3.zero;
+            if (VRGlobals.preloaderUi) { 
+
+                VRGlobals.preloaderUi.parent = VRGlobals.camRoot.transform;
+                VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+                VRGlobals.preloaderUi.localPosition = new Vector3(-0.025f,-0.1f, 0.8f);
+                VRGlobals.preloaderUi.localEulerAngles = Vector3.zero;
+
+            }
         }
 
         private static void HandleCloseInventory()
         {
             menuOpen = false;
+            VRGlobals.blockRightJoystick = false;
             VRGlobals.vrPlayer.enabled = true;
             VRGlobals.menuVRManager.enabled = false;
-
-            VRGlobals.menuVRManager.enabled = false;
+            VRGlobals.commonUi.parent = null;
             VRGlobals.commonUi.position = new Vector3(1000, 1000, 1000);
+            VRGlobals.preloaderUi.parent = null;
             VRGlobals.preloaderUi.position = new Vector3(1000, 1000, 1000);
         }
         [HarmonyPostfix]
@@ -119,39 +135,39 @@ namespace TarkovVR.Patches.UI
         //    Plugin.MyLog.LogWarning("show " + Time.deltaTime);
         //}
 
+        // When in hideout the stash panel also gets shown which causes the UI to reposition/rotate so only rely
+        // on this patch if its in raid, for hideout use PositionInHideoutInventory()
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ItemsPanel), "Show")]
-        private static void PositionInGamweInventory(ItemsPanel __instance)
+        private static void PositionInRaidInventory(ItemsPanel __instance)
         {
-            Plugin.MyLog.LogWarning("Awake " + Time.deltaTime);
-            if (!VRGlobals.inGame)
+            if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager)
                 return;
             if (VRGlobals.player && !menuOpen)
             {
-                Plugin.MyLog.LogWarning("Awake " + Time.deltaTime);
-                __instance.transform.root.rotation = Quaternion.identity;
-                Transform commonUI = __instance.transform.root;
-                commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
-                Vector3 newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f) + (Camera.main.transform.right * -0.75f);
-                newUiPos.y = Camera.main.transform.position.y + -0.6f;
-                commonUI.position = newUiPos;
-                commonUI.LookAt(Camera.main.transform);
-                commonUI.Rotate(0, 225, 0);
-                Vector3 newRot = commonUI.eulerAngles;
-                newRot.x = 0;
-                newRot.z = 0;
-                commonUI.eulerAngles = newRot;
                 HandleOpenInventory();
-                if (VRGlobals.preloaderUi)
-                {
-                    VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+                //__instance.transform.root.rotation = Quaternion.identity;
+                //Transform commonUI = __instance.transform.root;
+                //commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+                //Vector3 newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f) + (Camera.main.transform.right * -0.75f);
+                //newUiPos.y = Camera.main.transform.position.y + -0.6f;
+                //commonUI.position = newUiPos;
+                //commonUI.LookAt(Camera.main.transform);
+                //commonUI.Rotate(0, 225, 0);
+                //Vector3 newRot = commonUI.eulerAngles;
+                //newRot.x = 0;
+                //newRot.z = 0;
+                //commonUI.eulerAngles = newRot;
+                //if (VRGlobals.preloaderUi)
+                //{
+                //    VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
 
-                    newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f);
-                    newUiPos.y = Camera.main.transform.position.y + -0.2f;
-                    VRGlobals.preloaderUi.position = newUiPos;
-                    VRGlobals.preloaderUi.eulerAngles = newRot;
+                //    newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f);
+                //    newUiPos.y = Camera.main.transform.position.y + -0.2f;
+                //    VRGlobals.preloaderUi.position = newUiPos;
+                //    VRGlobals.preloaderUi.eulerAngles = newRot;
 
-                }
+                //}
 
                 //if (uiTopMaterial) { 
                 //    Plugin.MyLog.LogError("SETTTING UI MATERIAL " + uiTopMaterial);
@@ -167,38 +183,37 @@ namespace TarkovVR.Patches.UI
         // Position inventory in front of player
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
-        private static void PositionInGameInventory(GridViewMagnifier __instance)
+        private static void PositionInHideoutInventory(GridViewMagnifier __instance)
         {
 
-            Plugin.MyLog.LogWarning("method_3 " + Time.deltaTime);
             if (!VRGlobals.inGame)
                 return;
             if (VRGlobals.player && !menuOpen)
             {
-                Plugin.MyLog.LogWarning("inside " + Time.deltaTime);
-                __instance.transform.root.rotation = Quaternion.identity;
-                Transform commonUI = __instance.transform.root;
-                commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
-                Vector3 newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f) + (Camera.main.transform.right * -0.75f);
-                newUiPos.y = Camera.main.transform.position.y + -0.6f;
-                commonUI.position = newUiPos;
-                commonUI.LookAt(Camera.main.transform);
-                commonUI.Rotate(0, 225, 0);
-                Vector3 newRot = commonUI.eulerAngles;
-                newRot.x = 0;
-                newRot.z = 0;
-                commonUI.eulerAngles = newRot;
                 HandleOpenInventory();
-                if (VRGlobals.preloaderUi)
-                {
-                    VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+                //Plugin.MyLog.LogWarning("inside " + Time.deltaTime);
+                //__instance.transform.root.rotation = Quaternion.identity;
+                //Transform commonUI = __instance.transform.root;
+                //commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+                //Vector3 newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f) + (Camera.main.transform.right * -0.75f);
+                //newUiPos.y = Camera.main.transform.position.y + -0.6f;
+                //commonUI.position = newUiPos;
+                //commonUI.LookAt(Camera.main.transform);
+                //commonUI.Rotate(0, 225, 0);
+                //Vector3 newRot = commonUI.eulerAngles;
+                //newRot.x = 0;
+                //newRot.z = 0;
+                //commonUI.eulerAngles = newRot;
+                //if (VRGlobals.preloaderUi)
+                //{
+                //    VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
 
-                    newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f);
-                    newUiPos.y = Camera.main.transform.position.y + -0.2f;
-                    VRGlobals.preloaderUi.position = newUiPos;
-                    VRGlobals.preloaderUi.eulerAngles = newRot;
+                //    newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f);
+                //    newUiPos.y = Camera.main.transform.position.y + -0.2f;
+                //    VRGlobals.preloaderUi.position = newUiPos;
+                //    VRGlobals.preloaderUi.eulerAngles = newRot;
 
-                }
+                //}
 
                 //if (uiTopMaterial) { 
                 //    Plugin.MyLog.LogError("SETTTING UI MATERIAL " + uiTopMaterial);
@@ -236,6 +251,22 @@ namespace TarkovVR.Patches.UI
         {
             __instance.itemView_0.transform.localEulerAngles = Vector3.zero;
             __instance.itemView_0.MainImage.transform.localEulerAngles = new Vector3(0, 0, __instance.itemView_0.MainImage.transform.localEulerAngles.z);
+        }
+    
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ModSlotView), "Show")]
+        private static void PreventOffAxisModSlotItemsViews(ModSlotView __instance)
+        {
+            __instance.transform.localEulerAngles = Vector3.zero;
+            
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(UISpawnableToggle), "method_2")]
+        private static void PreventOffAxisSettingsTabText(UISpawnableToggle __instance)
+        {
+            __instance.transform.localEulerAngles = Vector3.zero;
+
         }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(QuickSlotView), "SetItem")]
