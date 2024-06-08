@@ -10,21 +10,23 @@ using EFT;
 using System.Reflection;
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
+using UnityEngine.UI;
+using EFT.UI.Matchmaker;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
     internal class UIPatches
     {
-
+        public static GameObject quickSlotUi;
         public static BattleStancePanel stancePanel;
         public static CharacterHealthPanel healthPanel;
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GameUI), "Awake")]
         private static void SetGameUI(GameUI __instance)
         {
-            //if (!inGame)
-            //    return;
-
+            if (!VRGlobals.inGame)
+                return;
 
             __instance.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
             __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
@@ -117,7 +119,52 @@ namespace TarkovVR.Patches.UI
             VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InventoryScreenQuickAccessPanel), "Show", new Type[] { typeof(InventoryControllerClass), typeof(ItemUiContext), typeof(GamePlayerOwner), typeof(InsuranceCompanyClass) })]
+        private static void YoinkQuickSlotImages(InventoryScreenQuickAccessPanel __instance)
+        {
+            List<Sprite> mainImagesList = new List<Sprite>();
+            Plugin.MyLog.LogWarning("Show " + __instance._boundItems.Count);
+            foreach (KeyValuePair<EBoundItem, BoundItemView> boundItem in __instance._boundItems)
+            {
+                Plugin.MyLog.LogWarning(boundItem.Value.ItemView);
+                if (boundItem.Value.ItemView) {
+                    Plugin.MyLog.LogWarning(boundItem.Value.ItemView.MainImage.sprite);
+                    mainImagesList.Add(boundItem.Value.ItemView.MainImage.sprite);
+                }
+            }
+            Plugin.MyLog.LogWarning("after");
+            if (!quickSlotUi)
+            {
+                quickSlotUi = new GameObject("quickSlotUi");
+                quickSlotUi.layer = 5;
+                quickSlotUi.transform.parent = VRGlobals.vrPlayer.LeftHand.transform;
+                CircularSegmentUI circularSegmentUI = quickSlotUi.AddComponent<CircularSegmentUI>();
+                circularSegmentUI.Init();
+                circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
+            }
+            else {
+                CircularSegmentUI circularSegmentUI = quickSlotUi.GetComponent<CircularSegmentUI>();
+                circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
+            }
 
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InventoryScreenQuickAccessPanel), "RefreshSelection")]
+        private static void YoinkwQuickSlotImages(InventoryScreenQuickAccessPanel __instance)
+        {
+            Plugin.MyLog.LogWarning("refresh");
+
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InventoryScreenQuickAccessPanel), "RefreshBoundSlotSelectView")]
+        private static void YoinkwQuickwSlotImages(InventoryScreenQuickAccessPanel __instance)
+        {
+            Plugin.MyLog.LogWarning("RefreshBoundSlotSelectView");
+
+        }
         // When the grid is being initialized we need to make sure the rotation is 0,0,0 otherwise the grid items don't
         // spawn in because of their weird code.
         [HarmonyPrefix]
@@ -515,5 +562,11 @@ namespace TarkovVR.Patches.UI
         //        cameraManager.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
         //    }
         //}
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BannerPageToggle), "Init")]
+        private static void PositionInteractwableUi(BannerPageToggle __instance) {
+            __instance.transform.localScale = Vector3.one;
+        }
     }
 }

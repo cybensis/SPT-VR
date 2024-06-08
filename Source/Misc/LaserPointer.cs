@@ -50,7 +50,7 @@ namespace TarkovVR.Source.Misc
             pointer.transform.localScale = new Vector3(thickness, thickness, 100f);
             pointer.transform.localPosition = new Vector3(0f, 0f, 50f);
             pointer.transform.localRotation = Quaternion.identity;
-
+            pointer.layer = 5;
             BoxCollider collider = pointer.GetComponent<BoxCollider>();
             if (addRigidBody)
             {

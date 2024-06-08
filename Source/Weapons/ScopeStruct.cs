@@ -1,4 +1,4 @@
-﻿using System;
+﻿    using System;
 using System.Collections.Generic;
 
 
@@ -59,8 +59,9 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_25_4mm_vomz_pilad_4x32m(Clone)", 4f, 6);
             AddScope("scope_all_leupold_mark4_hamr(Clone)", 4f, 6);
             AddScope("scope_all_sig_bravo4_4x30(Clone)", 4f, 6);
-            AddScope("scope_34mm_hensoldt_zf_4_16x56_ff(Clone)", 4f, 1.6f);
-            AddScope("scope_34mm_hensoldt_zf_4_16x56_ff(Clone)", 16f, 1.6f);
+            AddScope("scope_34mm_hensoldt_zf_4_16x56_ff(Clone)", 4f, 6f);
+            AddScope("scope_34mm_hensoldt_zf_4_16x56_ff(Clone)", 16f, 1.2f);
+            AddScope("scope_dovetail_npz_1p29_4x(Clone)", 4f, 6f);
 
         }
 

@@ -16,6 +16,9 @@ using EFT.Hideout;
 using EFT;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.UI;
+using System.Reflection.Emit;
+using System.Linq;
+using System.Reflection;
 
 
 
@@ -32,51 +35,82 @@ namespace TarkovVR.Patches.Misc
 
         public static VRUIInteracter vrUiInteracter;
 
-        [HarmonyPrefix]
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
+        //private static bool FixMenuImagesScaling(PixelPerfectSpriteScaler __instance)
+        //{
+        //    Vector3 lossyScale = new Vector3(1.333f, 1.333f, 1.333f);
+        //    float num = Math.Min(lossyScale.x, lossyScale.y);
+        //    if (__instance.image_0 != null)
+        //    {
+        //        if (num.ApproxEquals(__instance.image_0.pixelsPerUnitMultiplier))
+        //        {
+        //            return false;
+        //        }
+        //        __instance.image_0.pixelsPerUnitMultiplier = num;
+        //        __instance.image_0.SetVerticesDirty();
+        //    }
+        //    Vector2 offsetMin = __instance.rectTransform_0.offsetMin;
+        //    Vector2 offsetMax = __instance.rectTransform_0.offsetMax;
+        //    if (__instance._sidesToScale.HasFlag(EScaleSide.Top))
+        //    {
+        //        offsetMax.y = __instance.vector2_1.y / num;
+        //    }
+        //    if (__instance._sidesToScale.HasFlag(EScaleSide.Left))
+        //    {
+        //        offsetMin.x = __instance.vector2_0.x / num;
+        //    }
+        //    if (__instance._sidesToScale.HasFlag(EScaleSide.Bottom))
+        //    {
+        //        offsetMin.y = __instance.vector2_0.y / num;
+        //    }
+        //    if (__instance._sidesToScale.HasFlag(EScaleSide.Right))
+        //    {
+        //        offsetMax.x = __instance.vector2_1.x / num;
+        //    }
+        //    __instance.rectTransform_0.offsetMin = offsetMin;
+        //    __instance.rectTransform_0.offsetMax = offsetMax;
+
+        //    return false;
+        //}
+
         [HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
-        private static bool FixMenuImagesScaling(PixelPerfectSpriteScaler __instance)
+        public static class FixMenuImagesScaling
         {
-            Vector3 lossyScale = new Vector3(1.333f, 1.333f, 1.333f);
-            float num = Math.Min(lossyScale.x, lossyScale.y);
-            if (__instance.image_0 != null)
+            static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
             {
-                if (num.ApproxEquals(__instance.image_0.pixelsPerUnitMultiplier))
+                var codes = new List<CodeInstruction>(instructions);
+
+                for (int i = 0; i < codes.Count; i++)
                 {
-                    return false;
+                    // Find the call to get_lossyScale and Math.Min
+                    if (codes[i].opcode == OpCodes.Callvirt && codes[i].operand is MethodInfo methodInfo && methodInfo.Name == "get_lossyScale")
+                    {
+                        // Replace the call to get_lossyScale with the constant value 1.333
+                        codes[i] = new CodeInstruction(OpCodes.Ldc_R4, 1.333f); // Load constant 1.333
+                                                                                // Remove the instructions that load x and y and call Math.Min
+                        codes.RemoveAt(i + 1); // Remove stloc.0
+                        codes.RemoveAt(i + 1); // Remove ldloc.0
+                        codes.RemoveAt(i + 1); // Remove ldfld float32 x
+                        codes.RemoveAt(i + 1); // Remove ldloc.0
+                        codes.RemoveAt(i + 1); // Remove ldfld float32 y
+                        codes.RemoveAt(i + 1); // Remove call Math.Min
+                        codes.Insert(i + 1, new CodeInstruction(OpCodes.Stloc_1)); // Store the constant into num (stloc.1)
+                        break;
+                    }
                 }
-                __instance.image_0.pixelsPerUnitMultiplier = num;
-                __instance.image_0.SetVerticesDirty();
-            }
-            Vector2 offsetMin = __instance.rectTransform_0.offsetMin;
-            Vector2 offsetMax = __instance.rectTransform_0.offsetMax;
-            if (__instance._sidesToScale.HasFlag(EScaleSide.Top))
-            {
-                offsetMax.y = __instance.vector2_1.y / num;
-            }
-            if (__instance._sidesToScale.HasFlag(EScaleSide.Left))
-            {
-                offsetMin.x = __instance.vector2_0.x / num;
-            }
-            if (__instance._sidesToScale.HasFlag(EScaleSide.Bottom))
-            {
-                offsetMin.y = __instance.vector2_0.y / num;
-            }
-            if (__instance._sidesToScale.HasFlag(EScaleSide.Right))
-            {
-                offsetMax.x = __instance.vector2_1.x / num;
-            }
-            __instance.rectTransform_0.offsetMin = offsetMin;
-            __instance.rectTransform_0.offsetMax = offsetMax;
 
-            return false;
-
+                return codes.AsEnumerable();
+            }
         }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MainMenuController), "method_17")]
         private static void ReturnFromGameToMainMenu(MainMenuController __instance)
         {
-            Plugin.MyLog.LogWarning("wdwdwd");
+            VRGlobals.commonUi.parent = null;
+            VRGlobals.preloaderUi.parent = null;
             VRGlobals.inGame = false;
             VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
@@ -101,8 +135,8 @@ namespace TarkovVR.Patches.Misc
                 VRGlobals.inGame = true;
                 VRGlobals.vrPlayer.enabled = true;
                 VRGlobals.menuVRManager.enabled = false;
-                VRGlobals.ikManager.leftArmIk.solver.target = VRPlayerManager.LeftHand.transform;
-                VRGlobals.ikManager.rightArmIk.solver.target = VRPlayerManager.RightHand.transform;
+                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -117,8 +151,8 @@ namespace TarkovVR.Patches.Misc
                 VRGlobals.inGame = true;
                 VRGlobals.vrPlayer.enabled = true;
                 VRGlobals.menuVRManager.enabled = false;
-                VRGlobals.ikManager.leftArmIk.solver.target = VRPlayerManager.LeftHand.transform;
-                VRGlobals.ikManager.rightArmIk.solver.target = VRPlayerManager.RightHand.transform;
+                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
             }
         }
 
@@ -246,6 +280,7 @@ namespace TarkovVR.Patches.Misc
                     uiCamHolder.transform.localPosition = Vector3.zero;
                     Camera uiCam = uiCamHolder.AddComponent<Camera>();
                     uiCam.depth = 11;
+                    uiCam.nearClipPlane = 0.001f;
                     uiCam.cullingMask = 32;
                     uiCam.clearFlags = CameraClearFlags.Depth;
                     //mainMenuCam.cullingMask = -1;
@@ -807,3 +842,6 @@ namespace TarkovVR.Patches.Misc
         }
     }
 }
+
+
+// In game menu CommonUI pos -0.0795 -999.9302 0.4915 rot 0,0,0, same for preloaddergggg

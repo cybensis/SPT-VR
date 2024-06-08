@@ -26,8 +26,8 @@ namespace TarkovVR.Source.Player.VRManager
         public static float smoothingFactor = 100f; // Adjust this value to lower to increase aim smoothing - 20 is barely noticable so good baseline
 
         // VR Origin and body stuff
-        public static GameObject LeftHand = null;
-        public static GameObject RightHand = null;
+        public GameObject LeftHand = null;
+        public GameObject RightHand = null;
 
         private GameObject radialMenu;
         private GameObject leftWristUi;
@@ -44,12 +44,16 @@ namespace TarkovVR.Source.Player.VRManager
         {
 
             SpawnHands();
+            Plugin.MyLog.LogWarning("Create hands");
             if (RightHand) { 
                 RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
                 if (!radialMenu) {
                     radialMenu = new GameObject("radialMenu");
+                    radialMenu.layer = 5;
                     radialMenu.transform.parent = RightHand.transform;
-                    radialMenu.AddComponent<CircularSegmentUI>();
+                    CircularSegmentUI uiComp = radialMenu.AddComponent<CircularSegmentUI>();
+                    uiComp.Init();
+                    uiComp.CreateGunUi(new string[] { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" });
                     radialMenu.active = false;
                 }
             }
@@ -57,6 +61,7 @@ namespace TarkovVR.Source.Player.VRManager
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
                 if (!leftWristUi && UIPatches.stancePanel) {
                     leftWristUi = new GameObject("leftWristUi");
+                    leftWristUi.layer = 5;
                     leftWristUi.transform.parent = LeftHand.transform;
                     leftWristUi.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
                     leftWristUi.transform.localPosition = new Vector3(0, -0.05f, 0.015f);
@@ -139,8 +144,6 @@ namespace TarkovVR.Source.Player.VRManager
                     radialMenu.active = false;
                     VRGlobals.blockRightJoystick = false;
                 }
-                else
-                    radialMenu.active = false;
             }
 
         }
@@ -280,6 +283,8 @@ namespace TarkovVR.Source.Player.VRManager
                         {
                             UIPatches.stancePanel.AnimatedShow(false);
                             UIPatches.healthPanel.AnimatedShow(false);
+                            if (UIPatches.quickSlotUi)
+                                UIPatches.quickSlotUi.active = true;
                             showingUI = true;
                         }
 

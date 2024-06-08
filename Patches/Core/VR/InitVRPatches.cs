@@ -31,7 +31,7 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.camHolder.AddComponent<SteamVR_TrackedObject>();
                     VRGlobals.vrPlayer = VRGlobals.camHolder.AddComponent<HideoutVRPlayerManager>();
                     VRGlobals.weaponHolder = new GameObject("weaponHolder");
-                    VRGlobals.weaponHolder.transform.parent = VRPlayerManager.RightHand.transform;
+                    VRGlobals.weaponHolder.transform.parent = VRGlobals.vrPlayer.RightHand.transform;
                     VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
                     VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
                     SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
@@ -55,7 +55,7 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.menuVRManager = VRGlobals.camHolder.AddComponent<MenuVRManager>();
                     VRGlobals.vrPlayer = VRGlobals.camHolder.AddComponent<RaidVRPlayerManager>();
                     VRGlobals.weaponHolder = new GameObject("weaponHolder");
-                    VRGlobals.weaponHolder.transform.parent = VRPlayerManager.RightHand.transform;
+                    VRGlobals.weaponHolder.transform.parent = VRGlobals.vrPlayer.RightHand.transform;
                     VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
                     VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
                     SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
@@ -125,7 +125,7 @@ namespace TarkovVR.Patches.Core.VR
             {
                 __instance.enabled = true;
                 VRGlobals.ikManager.leftArmIk = __instance;
-                __instance.solver.target = VRPlayerManager.LeftHand.transform;
+                __instance.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
                 // Set the weight to 2.5 so when rotating the hand, the wrist rotates as well, showing the watch time
                 VRGlobals.leftWrist = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0);
                 //leftWrist.GetComponent<TwistRelax>().weight = 2.5f;
@@ -137,7 +137,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.ikManager.rightArmIk = __instance;
                 if (VRGlobals.ikManager.rightHandIK == null)
                     VRGlobals.ikManager.rightHandIK = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(0).gameObject;
-                __instance.solver.target = VRPlayerManager.RightHand.transform;
+                __instance.solver.target = VRGlobals.vrPlayer.RightHand.transform;
 
 
 
@@ -159,6 +159,7 @@ namespace TarkovVR.Patches.Core.VR
                 uiCamHolder.transform.localRotation = Quaternion.identity;
                 uiCamHolder.transform.localPosition = Vector3.zero;
                 Camera uiCam = uiCamHolder.AddComponent<Camera>();
+                uiCam.nearClipPlane = 0.001f;
                 uiCam.depth = 1;
                 uiCam.cullingMask = 32;
                 uiCam.clearFlags = CameraClearFlags.Depth;

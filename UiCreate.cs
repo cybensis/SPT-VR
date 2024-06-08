@@ -11,13 +11,16 @@ public class CircularSegmentUI : MonoBehaviour
     public float segmentSpacing = 2f; // Spacing between segments in degrees
 
     public string spritePath = Path.Combine(Application.dataPath, "Assets"); // Path to the image in the Resources folder
-    public string[] menuSprites = { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" };
-    public Image[] menuSegments = new Image[5];
+    //public string[] menuSprites = { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" };
+    public Sprite[] menuSprites;
+    public Image[] menuSegments;
     public Sprite defaultMenuSprite = null;
     public Sprite selectedMenuSprite = null;
+    public bool leftHand = false;
 
-    void Start()
+    public void Init()
     {
+        Plugin.MyLog.LogWarning("Start");
         string fullPath = Path.Combine(spritePath, "radialMenu.png");
         byte[] fileData = File.ReadAllBytes(fullPath);
         Texture2D texture = new Texture2D(2, 2);
@@ -35,14 +38,42 @@ public class CircularSegmentUI : MonoBehaviour
         transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
         transform.localPosition = new Vector3(-0.0728f, -0.1343f, 0);
         transform.localEulerAngles = new Vector3(290, 252, 80);
-        CreateSegments();
     }
 
     private int lastSelectedSegment = -1;
 
+
+    public void CreateGunUi(string[] menuSpriteNames) {
+        Plugin.MyLog.LogWarning("Create gun ui");
+        menuSegments = new Image[menuSpriteNames.Length];
+        this.menuSprites = new Sprite[menuSpriteNames.Length];
+        numberOfSegments = menuSpriteNames.Length;
+        for (int i = 0; i < numberOfSegments; i++) {
+            byte[] fileData = File.ReadAllBytes(Path.Combine(spritePath, menuSpriteNames[i]));
+            Texture2D texture = new Texture2D(2, 2);
+            texture.LoadImage(fileData);
+            menuSprites[i] = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+        }
+        CreateSegments();
+    }
+
+    public void CreateQuickSlotUi(Sprite[] menuSprites)
+    {
+        
+        menuSegments = new Image[menuSprites.Length];
+        numberOfSegments = menuSprites.Length;
+        this.menuSprites = menuSprites;
+        leftHand = true;
+        CreateSegments();
+    }
+
     void Update()
     {
+        if (numberOfSegments == 0)
+            return;
         Vector2 joystickInput = SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand);
+        if (leftHand)
+            joystickInput = SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand);
 
         if (lastSelectedSegment != -1)
         {
@@ -64,14 +95,22 @@ public class CircularSegmentUI : MonoBehaviour
             lastSelectedSegment = selectedSegment;
         }
 
-        if (lastSelectedSegment != -1 && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand))
+        if (!leftHand && lastSelectedSegment != -1 && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand))
         {
             if (lastSelectedSegment == 1)
                 VRGlobals.checkMagazine = true;
             else if (lastSelectedSegment == 2)
-                // Implement inspect logic
-                Debug.Log("Inspect");
+                VRGlobals.inspectWeapon = true;
+            else if (lastSelectedSegment == 4)
+                VRGlobals.changeFireMode = true;
+            gameObject.active = false;
             // Add additional actions as necessary
+        }
+        if (leftHand && VRGlobals.quickSlot == -1 && lastSelectedSegment != -1 && !SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand))
+        {
+            Plugin.MyLog.LogWarning("Selected item " + lastSelectedSegment);
+            VRGlobals.quickSlot = lastSelectedSegment;
+            gameObject.active = false;
         }
     }
 
@@ -117,28 +156,36 @@ public class CircularSegmentUI : MonoBehaviour
             menuOption.transform.localPosition = Vector3.zero;
             Vector3 newRot = rectTransform.localEulerAngles * -1;
             newRot.z += 90;
+            if (leftHand)
+                newRot.z += 90;
             menuOption.transform.localEulerAngles = newRot;
             
             menuOption.transform.localScale = Vector3.one;
+            if (leftHand)
+                menuOption.transform.localScale = new Vector3(1.25f, 1.25f, 1.25f);
+
             Image optionIcon = menuOption.AddComponent<Image>();
 
-            byte[] fileData = File.ReadAllBytes(Path.Combine(spritePath, menuSprites[i]));
-            Texture2D texture = new Texture2D(2, 2);
-            texture.LoadImage(fileData);
-            Sprite loadedSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+
+           
 
             // Assign the loaded sprite to the target image
-            optionIcon.sprite = loadedSprite;
+            optionIcon.sprite = menuSprites[i];
             optionIcon.color = new Color(1f, 1f, 1f, 1f);
 
             RectTransform iconRectTransform = menuOption.GetComponent<RectTransform>();
             iconRectTransform.sizeDelta = new Vector2(radius * 0.5f, radius * 0.5f); // Adjust size as needed
-            if (numberOfSegments > 4)
-            {
-                float x = -0.45f + ((numberOfSegments - 4) * 0.06f);
-                float y = -0.5f - ((numberOfSegments - 4) * 0.06f);
-                iconRectTransform.localPosition = new Vector3(radius * x, radius * y, 0); // Adjust position as needed
-            }
+            float x = -0.45f + ((numberOfSegments - 4) * 0.06f);
+            float y = -0.5f - ((numberOfSegments - 4) * 0.06f);
+            iconRectTransform.localPosition = new Vector3(radius * x, radius * y, 0); // Adjust position as needed
+            //if (numberOfSegments > 4)
+            //{
+            //}
+            //else if (numberOfSegments == 4) {
+            //    float x = -0.45f + ((numberOfSegments - 4) * 0.06f);
+            //    float y = -0.5f - ((numberOfSegments - 4) * 0.06f);
+            //    iconRectTransform.localPosition = new Vector3(radius * x, radius * y, 0); // Adjust position as needed
+            //}
         }
     }
 }

@@ -242,8 +242,10 @@ namespace TarkovVR.Source.UI
                     i++;
                 }
             }
-            if (foundValidObject)
+            if (foundValidObject) { 
+
                 return hitObject;
+            }
             else
                 return null;
         }

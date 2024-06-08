@@ -100,8 +100,8 @@ namespace TarkovVR.Patches.Core.Player
 
             if (VRGlobals.emptyHands)
                 VRGlobals.camRoot.transform.position = VRGlobals.emptyHands.position;
-            else
-                VRGlobals.camRoot.transform.position = __instance.method_1(VRGlobals.camRoot.transform.position, VRGlobals.camRoot.transform.rotation, __instance.transform_0.position);
+            //else
+            //    VRGlobals.camRoot.transform.position = __instance.method_1(VRGlobals.camRoot.transform.position, VRGlobals.camRoot.transform.rotation, __instance.transform_0.position);
             VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.camRoot.transform.position.x, __instance.player_0.Transform.position.y + 1.5f, VRGlobals.camRoot.transform.position.z);
 
             //camHolder.transform.position = __instance.transform_0.position + new Vector3(Test.ex, Test.ey, Test.ez);

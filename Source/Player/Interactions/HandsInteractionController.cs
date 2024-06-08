@@ -13,7 +13,7 @@ namespace TarkovVR.Source.Player.Interactions
         public void Update()
         {
 
-            Collider[] nearbyColliders = Physics.OverlapSphere(VRPlayerManager.RightHand.transform.position, 0.125f);
+            Collider[] nearbyColliders = Physics.OverlapSphere(VRGlobals.vrPlayer.RightHand.transform.position, 0.125f);
             swapWeapon = false;
             foreach (Collider collider in nearbyColliders)
             {
@@ -22,7 +22,7 @@ namespace TarkovVR.Source.Player.Interactions
                     if (!VRGlobals.vrPlayer.isSupporting)
                     {
                         SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.RightHand);
-                        if (collider.gameObject.name == "backHolsterCollider" && SteamVR_Actions._default.RightGrip.state)
+                        if (collider.gameObject.name == "backHolsterCollider" && SteamVR_Actions._default.RightGrip.stateDown)
                         {
                             swapWeapon = true;
                         }
@@ -30,7 +30,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
             }
 
-            nearbyColliders = Physics.OverlapSphere(VRPlayerManager.LeftHand.transform.position, 0.125f);
+            nearbyColliders = Physics.OverlapSphere(VRGlobals.vrPlayer.LeftHand.transform.position, 0.125f);
 
             foreach (Collider collider in nearbyColliders)
             {

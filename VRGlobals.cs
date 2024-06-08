@@ -48,6 +48,8 @@ namespace TarkovVR
 
         public static bool inspectWeapon = false;
         public static bool checkMagazine = false;
+        public static bool changeFireMode = false;
+        public static int quickSlot = -1;
 
         public static bool blockRightJoystick = false;
     }

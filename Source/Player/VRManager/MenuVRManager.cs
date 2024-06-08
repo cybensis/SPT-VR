@@ -26,8 +26,6 @@ namespace TarkovVR.Source.Player.VRManager
             SpawnHands();
             if (RightHand) { 
                 RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
-                if (pointer && pointer.pointer)
-                    pointer.pointer.layer = LayerMask.NameToLayer("UI");
             }
             if (LeftHand)
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
