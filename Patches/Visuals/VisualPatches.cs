@@ -28,195 +28,196 @@ namespace TarkovVR.Patches.Visuals
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Holy fuck this actually fixes so many visual problems :)
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
-        //private static bool ReturnVROutputWidth(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
-        //{
-        //    if (VRGlobals.vrPlayer && VRGlobals.vrPlayer.x) {
-        //        return true;
-        //    }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
+        private static bool ReturnVROutputWidth(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
+        {
+            if (VRGlobals.vrPlayer && VRGlobals.vrPlayer.x)
+            {
+                return true;
+            }
 
-        //    if (__instance._postProcessLayer != null)
-        //    {
-        //        Graphics.Blit(source, destination);
-        //        return false;
-        //    }
-        //    __instance._currentDestinationHDR = 0;
-        //    __instance._currentDestinationLDR = 0;
-        //    __instance._HDRSourceDestination = true;
-        //    int width = Camera.main.pixelWidth;
-        //    int height = Camera.main.pixelHeight;
-        //    if (__instance._resampledColorTargetHDR[0] == null || __instance._resampledColorTargetHDR[0].width != width || __instance._resampledColorTargetHDR[0].height != height || __instance._resampledColorTargetHDR[0].format != RuntimeUtilities.defaultHDRRenderTextureFormat)
-        //    {
-        //        if (__instance._resampledColorTargetHDR[0] != null)
-        //        {
-        //            __instance._resampledColorTargetHDR[0].Release();
-        //            RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetHDR[0]);
-        //            __instance._resampledColorTargetHDR[0] = null;
-        //        }
-        //        if (__instance._resampledColorTargetHDR[1] != null)
-        //        {
-        //            __instance._resampledColorTargetHDR[1].Release();
-        //            RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetHDR[1]);
-        //            __instance._resampledColorTargetHDR[1] = null;
-        //        }
-        //        RenderTextureFormat defaultHDRRenderTextureFormat = RuntimeUtilities.defaultHDRRenderTextureFormat;
-        //        __instance._resampledColorTargetHDR[0] = new RenderTexture(width, height, 0, defaultHDRRenderTextureFormat);
-        //        __instance._resampledColorTargetHDR[0].name = "SSAAPropagator0HDR";
-        //        __instance._resampledColorTargetHDR[0].enableRandomWrite = true;
-        //        __instance._resampledColorTargetHDR[0].Create();
-        //        __instance._resampledColorTargetHDR[1] = new RenderTexture(width, height, 0, defaultHDRRenderTextureFormat);
-        //        __instance._resampledColorTargetHDR[1].name = "SSAAPropagator1HDR";
-        //        __instance._resampledColorTargetHDR[1].enableRandomWrite = true;
-        //        __instance._resampledColorTargetHDR[1].Create();
-        //    }
-        //    if (__instance._resampledColorTargetLDR[0] == null || __instance._resampledColorTargetLDR[0].width != width || __instance._resampledColorTargetLDR[0].height != height)
-        //    {
-        //        if (__instance._resampledColorTargetLDR[0] != null)
-        //        {
-        //            __instance._resampledColorTargetLDR[0].Release();
-        //            RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[0]);
-        //            __instance._resampledColorTargetLDR[0] = null;
-        //        }
-        //        if (__instance._resampledColorTargetLDR[1] != null)
-        //        {
-        //            __instance._resampledColorTargetLDR[1].Release();
-        //            RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[1]);
-        //            __instance._resampledColorTargetLDR[1] = null;
-        //        }
-        //        if (__instance._resampledColorTargetLDR[2] != null)
-        //        {
-        //            __instance._resampledColorTargetLDR[2].Release();
-        //            RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[2]);
-        //            __instance._resampledColorTargetLDR[2] = null;
-        //        }
-        //        RenderTextureFormat format = RenderTextureFormat.ARGB32;
-        //        __instance._resampledColorTargetLDR[0] = new RenderTexture(width, height, 0, format);
-        //        __instance._resampledColorTargetLDR[1] = new RenderTexture(width, height, 0, format);
-        //        __instance._resampledColorTargetLDR[1].name = "SSAAPropagator1LDR";
-        //        __instance._resampledColorTargetLDR[2] = new RenderTexture(width, height, 0, format);
-        //        __instance._resampledColorTargetLDR[2].name = "Stub";
-        //    }
-        //    if ((double)Mathf.Abs(__instance.m_ssaa.GetCurrentSSRatio() - 1f) < 0.001)
-        //    {
-        //        Graphics.Blit(source, __instance._resampledColorTargetHDR[0]);
-        //    }
-        //    else if (__instance.m_ssaa.GetCurrentSSRatio() > 1f)
-        //    {
-        //        __instance.m_ssaa.RenderImage(__instance.m_ssaa.GetRT(), __instance._resampledColorTargetHDR[0], flipV: true, null);
-        //    }
-        //    else
-        //    {
-        //        __instance.m_ssaa.RenderImage(source, __instance._resampledColorTargetHDR[0], flipV: true, null);
-        //    }
-        //    if (__instance._cmdBuf == null)
-        //    {
-        //        __instance._cmdBuf = new CommandBuffer();
-        //        __instance._cmdBuf.name = "SSAAPropagator";
-        //    }
-        //    __instance._cmdBuf.Clear();
-        //    if (!__instance._thermalVisionIsOn && (__instance._opticLensRenderer != null || __instance._collimatorRenderer != null))
-        //    {
-        //        if (__instance._resampledDepthTarget == null || __instance._resampledDepthTarget.width != width || __instance._resampledDepthTarget.height != height)
-        //        {
-        //            if (__instance._resampledDepthTarget != null)
-        //            {
-        //                __instance._resampledDepthTarget.Release();
-        //                RuntimeUtilities.SafeDestroy(__instance._resampledDepthTarget);
-        //                __instance._resampledDepthTarget = null;
-        //            }
-        //            __instance._resampledDepthTarget = new RenderTexture(width, height, 24, RenderTextureFormat.Depth);
-        //            __instance._resampledDepthTarget.name = "SSAAPropagatorDepth";
-        //        }
-        //        __instance._cmdBuf.BeginSample("OutputOptic");
-        //        __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_TAA);
-        //        __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
-        //        __instance._cmdBuf.SetGlobalMatrix(SSAAPropagator.ID_NONJITTEREDPROJ, GL.GetGPUProjectionMatrix(__instance._camera.nonJitteredProjectionMatrix, renderIntoTexture: true));
-        //        __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
-        //        __instance._cmdBuf.ClearRenderTarget(clearDepth: true, clearColor: false, Color.black);
-        //        if (__instance._opticLensRenderer == null && __instance._collimatorRenderer != null)
-        //        {
-        //            __instance._cmdBuf.DrawRenderer(__instance._collimatorRenderer, __instance._collimatorMaterial);
-        //        }
-        //        if (__instance._opticLensRenderer != null)
-        //        {
-        //            if (__instance._sightNonLensRenderers != null && __instance._sightNonLensRenderers.Length != 0)
-        //            {
-        //                __instance._cmdBuf.BeginSample("DEPTH_PREPASS");
-        //                __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetLDR[2], __instance._resampledDepthTarget);
-        //                __instance._cmdBuf.BeginSample("SIGHT_DEPTH");
-        //                for (int i = 0; i < __instance._sightNonLensRenderers.Length; i++)
-        //                {
-        //                    if (__instance._sightNonLensRenderers[i] != null && __instance._sightNonLensRenderersMaterials[i] != null && __instance._sightNonLensRenderers[i].gameObject.activeSelf)
-        //                    {
-        //                        __instance._cmdBuf.DrawRenderer(__instance._sightNonLensRenderers[i], __instance._sightNonLensRenderersMaterials[i]);
-        //                    }
-        //                }
-        //                __instance._cmdBuf.EndSample("SIGHT_DEPTH");
-        //                __instance._cmdBuf.BeginSample("WEAPON_DEPTH");
-        //                for (int j = 0; j < __instance._otherWeaponRenderers.Length; j++)
-        //                {
-        //                    if (__instance._otherWeaponRenderers[j] != null && __instance._otherWeaponRenderersMaterials[j] != null && __instance._otherWeaponRenderers[j].gameObject.activeSelf)
-        //                    {
-        //                        __instance._cmdBuf.DrawRenderer(__instance._otherWeaponRenderers[j], __instance._otherWeaponRenderersMaterials[j]);
-        //                    }
-        //                }
-        //                __instance._cmdBuf.EndSample("WEAPON_DEPTH");
-        //                __instance._cmdBuf.EndSample("DEPTH_PREPASS");
-        //            }
-        //            __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
-        //            __instance._cmdBuf.DrawRenderer(__instance._opticLensRenderer, __instance._opticLensMaterial);
-        //        }
-        //        __instance._cmdBuf.SetRenderTarget(destination);
-        //        __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
-        //        __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_TAA);
-        //        __instance._cmdBuf.EndSample("OutputOptic");
-        //    }
-        //    if ((bool)__instance._nightVisionMaterial)
-        //    {
-        //        __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_NIGHTVISION_NOISE);
-        //        __instance._cmdBuf.Blit(__instance._resampledColorTargetHDR[0], __instance._resampledColorTargetHDR[1], __instance._nightVisionMaterial);
-        //        __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_NIGHTVISION_NOISE);
-        //        __instance._currentDestinationHDR = 1;
-        //    }
-        //    else if (__instance._thermalVisionIsOn && __instance._thermalVisionMaterial != null)
-        //    {
-        //        int pass = 1;
-        //        __instance._cmdBuf.Blit(__instance._resampledColorTargetHDR[0], __instance._resampledColorTargetHDR[1], __instance._thermalVisionMaterial, pass);
-        //        __instance._currentDestinationHDR = 1;
-        //    }
-        //    Graphics.ExecuteCommandBuffer(__instance._cmdBuf);
-        //    return false;
-        //}
+            if (__instance._postProcessLayer != null)
+            {
+                Graphics.Blit(source, destination);
+                return false;
+            }
+            __instance._currentDestinationHDR = 0;
+            __instance._currentDestinationLDR = 0;
+            __instance._HDRSourceDestination = true;
+            int width = Camera.main.pixelWidth;
+            int height = Camera.main.pixelHeight;
+            if (__instance._resampledColorTargetHDR[0] == null || __instance._resampledColorTargetHDR[0].width != width || __instance._resampledColorTargetHDR[0].height != height || __instance._resampledColorTargetHDR[0].format != RuntimeUtilities.defaultHDRRenderTextureFormat)
+            {
+                if (__instance._resampledColorTargetHDR[0] != null)
+                {
+                    __instance._resampledColorTargetHDR[0].Release();
+                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetHDR[0]);
+                    __instance._resampledColorTargetHDR[0] = null;
+                }
+                if (__instance._resampledColorTargetHDR[1] != null)
+                {
+                    __instance._resampledColorTargetHDR[1].Release();
+                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetHDR[1]);
+                    __instance._resampledColorTargetHDR[1] = null;
+                }
+                RenderTextureFormat defaultHDRRenderTextureFormat = RuntimeUtilities.defaultHDRRenderTextureFormat;
+                __instance._resampledColorTargetHDR[0] = new RenderTexture(width, height, 0, defaultHDRRenderTextureFormat);
+                __instance._resampledColorTargetHDR[0].name = "SSAAPropagator0HDR";
+                __instance._resampledColorTargetHDR[0].enableRandomWrite = true;
+                __instance._resampledColorTargetHDR[0].Create();
+                __instance._resampledColorTargetHDR[1] = new RenderTexture(width, height, 0, defaultHDRRenderTextureFormat);
+                __instance._resampledColorTargetHDR[1].name = "SSAAPropagator1HDR";
+                __instance._resampledColorTargetHDR[1].enableRandomWrite = true;
+                __instance._resampledColorTargetHDR[1].Create();
+            }
+            if (__instance._resampledColorTargetLDR[0] == null || __instance._resampledColorTargetLDR[0].width != width || __instance._resampledColorTargetLDR[0].height != height)
+            {
+                if (__instance._resampledColorTargetLDR[0] != null)
+                {
+                    __instance._resampledColorTargetLDR[0].Release();
+                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[0]);
+                    __instance._resampledColorTargetLDR[0] = null;
+                }
+                if (__instance._resampledColorTargetLDR[1] != null)
+                {
+                    __instance._resampledColorTargetLDR[1].Release();
+                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[1]);
+                    __instance._resampledColorTargetLDR[1] = null;
+                }
+                if (__instance._resampledColorTargetLDR[2] != null)
+                {
+                    __instance._resampledColorTargetLDR[2].Release();
+                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[2]);
+                    __instance._resampledColorTargetLDR[2] = null;
+                }
+                RenderTextureFormat format = RenderTextureFormat.ARGB32;
+                __instance._resampledColorTargetLDR[0] = new RenderTexture(width, height, 0, format);
+                __instance._resampledColorTargetLDR[1] = new RenderTexture(width, height, 0, format);
+                __instance._resampledColorTargetLDR[1].name = "SSAAPropagator1LDR";
+                __instance._resampledColorTargetLDR[2] = new RenderTexture(width, height, 0, format);
+                __instance._resampledColorTargetLDR[2].name = "Stub";
+            }
+            if ((double)Mathf.Abs(__instance.m_ssaa.GetCurrentSSRatio() - 1f) < 0.001)
+            {
+                Graphics.Blit(source, __instance._resampledColorTargetHDR[0]);
+            }
+            else if (__instance.m_ssaa.GetCurrentSSRatio() > 1f)
+            {
+                __instance.m_ssaa.RenderImage(__instance.m_ssaa.GetRT(), __instance._resampledColorTargetHDR[0], flipV: true, null);
+            }
+            else
+            {
+                __instance.m_ssaa.RenderImage(source, __instance._resampledColorTargetHDR[0], flipV: true, null);
+            }
+            if (__instance._cmdBuf == null)
+            {
+                __instance._cmdBuf = new CommandBuffer();
+                __instance._cmdBuf.name = "SSAAPropagator";
+            }
+            __instance._cmdBuf.Clear();
+            if (!__instance._thermalVisionIsOn && (__instance._opticLensRenderer != null || __instance._collimatorRenderer != null))
+            {
+                if (__instance._resampledDepthTarget == null || __instance._resampledDepthTarget.width != width || __instance._resampledDepthTarget.height != height)
+                {
+                    if (__instance._resampledDepthTarget != null)
+                    {
+                        __instance._resampledDepthTarget.Release();
+                        RuntimeUtilities.SafeDestroy(__instance._resampledDepthTarget);
+                        __instance._resampledDepthTarget = null;
+                    }
+                    __instance._resampledDepthTarget = new RenderTexture(width, height, 24, RenderTextureFormat.Depth);
+                    __instance._resampledDepthTarget.name = "SSAAPropagatorDepth";
+                }
+                __instance._cmdBuf.BeginSample("OutputOptic");
+                __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_TAA);
+                __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
+                __instance._cmdBuf.SetGlobalMatrix(SSAAPropagator.ID_NONJITTEREDPROJ, GL.GetGPUProjectionMatrix(__instance._camera.nonJitteredProjectionMatrix, renderIntoTexture: true));
+                __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
+                __instance._cmdBuf.ClearRenderTarget(clearDepth: true, clearColor: false, Color.black);
+                if (__instance._opticLensRenderer == null && __instance._collimatorRenderer != null)
+                {
+                    __instance._cmdBuf.DrawRenderer(__instance._collimatorRenderer, __instance._collimatorMaterial);
+                }
+                if (__instance._opticLensRenderer != null)
+                {
+                    if (__instance._sightNonLensRenderers != null && __instance._sightNonLensRenderers.Length != 0)
+                    {
+                        __instance._cmdBuf.BeginSample("DEPTH_PREPASS");
+                        __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetLDR[2], __instance._resampledDepthTarget);
+                        __instance._cmdBuf.BeginSample("SIGHT_DEPTH");
+                        for (int i = 0; i < __instance._sightNonLensRenderers.Length; i++)
+                        {
+                            if (__instance._sightNonLensRenderers[i] != null && __instance._sightNonLensRenderersMaterials[i] != null && __instance._sightNonLensRenderers[i].gameObject.activeSelf)
+                            {
+                                __instance._cmdBuf.DrawRenderer(__instance._sightNonLensRenderers[i], __instance._sightNonLensRenderersMaterials[i]);
+                            }
+                        }
+                        __instance._cmdBuf.EndSample("SIGHT_DEPTH");
+                        __instance._cmdBuf.BeginSample("WEAPON_DEPTH");
+                        for (int j = 0; j < __instance._otherWeaponRenderers.Length; j++)
+                        {
+                            if (__instance._otherWeaponRenderers[j] != null && __instance._otherWeaponRenderersMaterials[j] != null && __instance._otherWeaponRenderers[j].gameObject.activeSelf)
+                            {
+                                __instance._cmdBuf.DrawRenderer(__instance._otherWeaponRenderers[j], __instance._otherWeaponRenderersMaterials[j]);
+                            }
+                        }
+                        __instance._cmdBuf.EndSample("WEAPON_DEPTH");
+                        __instance._cmdBuf.EndSample("DEPTH_PREPASS");
+                    }
+                    __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
+                    __instance._cmdBuf.DrawRenderer(__instance._opticLensRenderer, __instance._opticLensMaterial);
+                }
+                __instance._cmdBuf.SetRenderTarget(destination);
+                __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
+                __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_TAA);
+                __instance._cmdBuf.EndSample("OutputOptic");
+            }
+            if ((bool)__instance._nightVisionMaterial)
+            {
+                __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_NIGHTVISION_NOISE);
+                __instance._cmdBuf.Blit(__instance._resampledColorTargetHDR[0], __instance._resampledColorTargetHDR[1], __instance._nightVisionMaterial);
+                __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_NIGHTVISION_NOISE);
+                __instance._currentDestinationHDR = 1;
+            }
+            else if (__instance._thermalVisionIsOn && __instance._thermalVisionMaterial != null)
+            {
+                int pass = 1;
+                __instance._cmdBuf.Blit(__instance._resampledColorTargetHDR[0], __instance._resampledColorTargetHDR[1], __instance._thermalVisionMaterial, pass);
+                __instance._currentDestinationHDR = 1;
+            }
+            Graphics.ExecuteCommandBuffer(__instance._cmdBuf);
+            return false;
+        }
 
         // Use a Transpiler to replace the Screen.Width/Height calls to get the camera height and width
-        [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
-        public static class OnRenderImageTranspiler
-        {
-            static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
-            {
-                var codes = new List<CodeInstruction>(instructions);
+        //[HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
+        //public static class OnRenderImageTranspiler
+        //{
+        //    static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
+        //    {
+        //        var codes = new List<CodeInstruction>(instructions);
 
-                // Find the instructions to replace
-                for (int i = 0; i < codes.Count; i++)
-                {
-                    if (codes[i].opcode == OpCodes.Call && codes[i].operand.ToString().Contains("UnityEngine.Screen::get_width"))
-                    {
-                        // Replace Screen.width with Camera.main.pixelWidth
-                        codes[i] = new CodeInstruction(OpCodes.Call, AccessTools.PropertyGetter(typeof(Camera), "main"));
-                        codes.Insert(i + 1, new CodeInstruction(OpCodes.Callvirt, AccessTools.PropertyGetter(typeof(Camera), "pixelWidth")));
-                    }
-                    else if (codes[i].opcode == OpCodes.Call && codes[i].operand.ToString().Contains("UnityEngine.Screen::get_height"))
-                    {
-                        // Replace Screen.height with Camera.main.pixelHeight
-                        codes[i] = new CodeInstruction(OpCodes.Call, AccessTools.PropertyGetter(typeof(Camera), "main"));
-                        codes.Insert(i + 1, new CodeInstruction(OpCodes.Callvirt, AccessTools.PropertyGetter(typeof(Camera), "pixelHeight")));
-                    }
-                }
+        //        // Find the instructions to replace
+        //        for (int i = 0; i < codes.Count; i++)
+        //        {
+        //            if (codes[i].opcode == OpCodes.Call && codes[i].operand.ToString().Contains("UnityEngine.Screen::get_width"))
+        //            {
+        //                // Replace Screen.width with Camera.main.pixelWidth
+        //                codes[i] = new CodeInstruction(OpCodes.Call, AccessTools.PropertyGetter(typeof(Camera), "main"));
+        //                codes.Insert(i + 1, new CodeInstruction(OpCodes.Callvirt, AccessTools.PropertyGetter(typeof(Camera), "pixelWidth")));
+        //            }
+        //            else if (codes[i].opcode == OpCodes.Call && codes[i].operand.ToString().Contains("UnityEngine.Screen::get_height"))
+        //            {
+        //                // Replace Screen.height with Camera.main.pixelHeight
+        //                codes[i] = new CodeInstruction(OpCodes.Call, AccessTools.PropertyGetter(typeof(Camera), "main"));
+        //                codes.Insert(i + 1, new CodeInstruction(OpCodes.Callvirt, AccessTools.PropertyGetter(typeof(Camera), "pixelHeight")));
+        //            }
+        //        }
 
-                return codes;
-            }
-        }
+        //        return codes;
+        //    }
+        //}
 
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

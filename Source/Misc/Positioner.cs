@@ -17,6 +17,12 @@ namespace TarkovVR.Source.Misc
             //rz = 90f;
         }
 
+        private void Update() {
+            if (VRGlobals.vrPlayer.RightHand) {
+                transform.position = VRGlobals.vrPlayer.RightHand.transform.position;
+                transform.rotation = VRGlobals.vrPlayer.RightHand.transform.rotation;
+            }
+        }
         private void LateUpdate()
         {
             //if (target) {
@@ -34,7 +40,11 @@ namespace TarkovVR.Source.Misc
             //    //transform.rotation = VRPlayerManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
             //    transform.rotation = Quaternion.Euler(rx, ry, rz);
             //}\
-            transform.localRotation = Quaternion.Euler(x, y, z);
+            if (VRGlobals.vrPlayer.RightHand)
+            {
+                transform.position = VRGlobals.vrPlayer.RightHand.transform.position;
+                transform.rotation = VRGlobals.vrPlayer.RightHand.transform.rotation;
+            }
             //if (CamPatches.VRCam != null)
             //{
             //    //transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0) + (CamPatches.VRCam.transform.up * -0.04f) + (CamPatches.VRCam.transform.forward * -0.06f);

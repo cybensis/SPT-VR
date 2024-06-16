@@ -18,16 +18,25 @@ namespace TarkovVR.Patches.UI
     [HarmonyPatch]
     internal class UIPatches
     {
+        private static int playerLayer = 8;
         public static GameObject quickSlotUi;
         public static BattleStancePanel stancePanel;
         public static CharacterHealthPanel healthPanel;
+        public static GameUI gameUi;
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GameUI), "Awake")]
         private static void SetGameUI(GameUI __instance)
         {
-            if (!VRGlobals.inGame)
+            gameUi = __instance;
+            if (!VRGlobals.camRoot)
+            {
                 return;
+            }
 
+            PositionGameUi(__instance);
+        }
+
+        public static void PositionGameUi(GameUI __instance) {
             __instance.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
             __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
             stancePanel = __instance.BattleUiScreen._battleStancePanel;
@@ -36,20 +45,20 @@ namespace TarkovVR.Patches.UI
 
             healthPanel = __instance.BattleUiScreen._characterHealthPanel;
             healthPanel.transform.localScale = new Vector3(0.20f, 0.20f, 0.20f);
-
+            
             __instance.transform.parent = VRGlobals.camRoot.transform;
             __instance.transform.localPosition = Vector3.zero;
             __instance.transform.localRotation = Quaternion.identity;
+
+            gameUi = null;
         }
-
-
 
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(InventoryScreen), "TranslateCommand")]
-        private static void HandleCloseInventory(InventoryScreen __instance, ECommand command)
+        private static void HandleCloseInventoryPatch(InventoryScreen __instance, ECommand command)
         {
-            if (!VRGlobals.inGame)
+            if (!VRGlobals.inGame || !VRGlobals.vrPlayer)
                 return;
             if (command.IsCommand(ECommand.Escape))
             {
@@ -64,25 +73,17 @@ namespace TarkovVR.Patches.UI
                 HandleCloseInventory();
             }
         }
-        //private static Material uiTopMaterial;
-
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(InventoryScreen), "Awake")]
-        //private static void HandleCloseIwnventory(InventoryScreen __instance)
-        //{
-        //    foreach (Transform child in __instance.transform) {
-        //        if (child.name == "Left Glow") {
-        //            uiTopMaterial = child.GetComponent<UnityEngine.UI.Image>().material;
-        //            Plugin.MyLog.LogError("FOUND UI MATERIAL " + uiTopMaterial);
-        //        }
-        //    }
-        //}
 
 
 
-        private static void HandleOpenInventory()
+
+        public static void HandleOpenInventory()
         {
-            menuOpen = true;
+            ShowUiScreens();
+            int bitmask = 1 << playerLayer; // 256
+            Camera.main.cullingMask &= ~bitmask; // -524321 & -257
+
+            VRGlobals.menuOpen = true;
             VRGlobals.blockRightJoystick = true;
             VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
@@ -90,19 +91,21 @@ namespace TarkovVR.Patches.UI
             VRGlobals.commonUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
             VRGlobals.commonUi.localPosition = new Vector3(-0.8f, -0.5f, 0.8f);
             VRGlobals.commonUi.localEulerAngles = Vector3.zero;
-            if (VRGlobals.preloaderUi) { 
+            if (VRGlobals.preloaderUi) {
 
-                VRGlobals.preloaderUi.parent = VRGlobals.camRoot.transform;
-                VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
-                VRGlobals.preloaderUi.localPosition = new Vector3(-0.025f,-0.1f, 0.8f);
-                VRGlobals.preloaderUi.localEulerAngles = Vector3.zero;
-
-            }
+                VRGlobals.preloaderUi.transform.parent = VRGlobals.camRoot.transform;
+                VRGlobals.preloaderUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+                VRGlobals.preloaderUi.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
+                VRGlobals.preloaderUi.localPosition = new Vector3(-0.03f, -0.1f, 0.8f);
+                VRGlobals.preloaderUi.localRotation = Quaternion.identity;     }
         }
 
-        private static void HandleCloseInventory()
+        public static void HandleCloseInventory()
         {
-            menuOpen = false;
+            HideUiScreens();
+            int bitmask = 1 << playerLayer; // 256
+            Camera.main.cullingMask |= bitmask; // -524321 & -257
+            VRGlobals.menuOpen = false;
             VRGlobals.blockRightJoystick = false;
             VRGlobals.vrPlayer.enabled = true;
             VRGlobals.menuVRManager.enabled = false;
@@ -123,17 +126,17 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(InventoryScreenQuickAccessPanel), "Show", new Type[] { typeof(InventoryControllerClass), typeof(ItemUiContext), typeof(GamePlayerOwner), typeof(InsuranceCompanyClass) })]
         private static void YoinkQuickSlotImages(InventoryScreenQuickAccessPanel __instance)
         {
+            if (!VRGlobals.inGame)
+                return;
+
             List<Sprite> mainImagesList = new List<Sprite>();
-            Plugin.MyLog.LogWarning("Show " + __instance._boundItems.Count);
             foreach (KeyValuePair<EBoundItem, BoundItemView> boundItem in __instance._boundItems)
             {
-                Plugin.MyLog.LogWarning(boundItem.Value.ItemView);
-                if (boundItem.Value.ItemView) {
-                    Plugin.MyLog.LogWarning(boundItem.Value.ItemView.MainImage.sprite);
+                if (boundItem.Value.ItemView)
+                {
                     mainImagesList.Add(boundItem.Value.ItemView.MainImage.sprite);
                 }
             }
-            Plugin.MyLog.LogWarning("after");
             if (!quickSlotUi)
             {
                 quickSlotUi = new GameObject("quickSlotUi");
@@ -143,28 +146,16 @@ namespace TarkovVR.Patches.UI
                 circularSegmentUI.Init();
                 circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
             }
-            else {
+            else
+            {
                 CircularSegmentUI circularSegmentUI = quickSlotUi.GetComponent<CircularSegmentUI>();
                 circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
             }
+            quickSlotUi.active = false;
 
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(InventoryScreenQuickAccessPanel), "RefreshSelection")]
-        private static void YoinkwQuickSlotImages(InventoryScreenQuickAccessPanel __instance)
-        {
-            Plugin.MyLog.LogWarning("refresh");
 
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(InventoryScreenQuickAccessPanel), "RefreshBoundSlotSelectView")]
-        private static void YoinkwQuickwSlotImages(InventoryScreenQuickAccessPanel __instance)
-        {
-            Plugin.MyLog.LogWarning("RefreshBoundSlotSelectView");
-
-        }
         // When the grid is being initialized we need to make sure the rotation is 0,0,0 otherwise the grid items don't
         // spawn in because of their weird code.
         [HarmonyPrefix]
@@ -190,7 +181,7 @@ namespace TarkovVR.Patches.UI
         {
             if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager)
                 return;
-            if (VRGlobals.player && !menuOpen)
+            if (VRGlobals.player && !VRGlobals.menuOpen)
             {
                 HandleOpenInventory();
                 //__instance.transform.root.rotation = Quaternion.identity;
@@ -226,50 +217,6 @@ namespace TarkovVR.Patches.UI
         }
 
 
-        private static bool menuOpen = false;
-        // Position inventory in front of player
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
-        private static void PositionInHideoutInventory(GridViewMagnifier __instance)
-        {
-
-            if (!VRGlobals.inGame)
-                return;
-            if (VRGlobals.player && !menuOpen)
-            {
-                HandleOpenInventory();
-                //Plugin.MyLog.LogWarning("inside " + Time.deltaTime);
-                //__instance.transform.root.rotation = Quaternion.identity;
-                //Transform commonUI = __instance.transform.root;
-                //commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
-                //Vector3 newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f) + (Camera.main.transform.right * -0.75f);
-                //newUiPos.y = Camera.main.transform.position.y + -0.6f;
-                //commonUI.position = newUiPos;
-                //commonUI.LookAt(Camera.main.transform);
-                //commonUI.Rotate(0, 225, 0);
-                //Vector3 newRot = commonUI.eulerAngles;
-                //newRot.x = 0;
-                //newRot.z = 0;
-                //commonUI.eulerAngles = newRot;
-                //if (VRGlobals.preloaderUi)
-                //{
-                //    VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
-
-                //    newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f);
-                //    newUiPos.y = Camera.main.transform.position.y + -0.2f;
-                //    VRGlobals.preloaderUi.position = newUiPos;
-                //    VRGlobals.preloaderUi.eulerAngles = newRot;
-
-                //}
-
-                //if (uiTopMaterial) { 
-                //    Plugin.MyLog.LogError("SETTTING UI MATERIAL " + uiTopMaterial);
-                //    foreach (CanvasRenderer renderer in commonUI.GetComponentsInChildren<CanvasRenderer>()) {
-                //        renderer.SetMaterial(uiTopMaterial,0);
-                //    }
-                //}
-            }
-        }
 
         // Method_1 starts to despawn the grid items if its rotated
         //[HarmonyPrefix]
@@ -324,7 +271,7 @@ namespace TarkovVR.Patches.UI
         }
 
         // This code is somehow responsible for determining which items in the stash/inv grid are shown and it shits the bed if
-        // the CommonUI rotation isn't 0,0,0 so set it to that before running this code
+        // the CommonUI rotation isn't 0,0,0 so set it to that before running this code then set it back
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridViewMagnifier), "method_1")]
         private static bool StopGridFromHidingItemsWhenUiRotated(GridViewMagnifier __instance, bool calculate, bool forceMagnify)
@@ -489,7 +436,6 @@ namespace TarkovVR.Patches.UI
             }
             if (interactableObject != __instance.InteractableObject || __instance._nextCastHasForceEvent)
             {
-                Plugin.MyLog.LogWarning("place interacter");
                 manager.PlaceUiInteracter();
                 __instance._nextCastHasForceEvent = false;
                 __instance.InteractableObject = interactableObject;
@@ -565,8 +511,32 @@ namespace TarkovVR.Patches.UI
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BannerPageToggle), "Init")]
-        private static void PositionInteractwableUi(BannerPageToggle __instance) {
+        private static void PositionLoadRaidBannerToggles(BannerPageToggle __instance) {
             __instance.transform.localScale = Vector3.one;
+            Vector3 newPos = __instance.transform.localPosition;
+            newPos.z = 0;
+            __instance.transform.localPosition = newPos;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MatchMakerPlayerPreview), "Show")]
+        private static void SetLoadRaidPlayerViewCamFoV(MatchMakerPlayerPreview __instance)
+        {
+            Transform camHolder = __instance._playerModelView.transform.FindChild("Camera_acceptScreen");
+            if (camHolder)
+                camHolder.GetComponent<Camera>().fieldOfView = 20;
+        }
+
+        public static void HideUiScreens() { 
+            VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+            VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+            VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+        }
+        public static void ShowUiScreens()
+        {
+            VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = true;
         }
     }
 }

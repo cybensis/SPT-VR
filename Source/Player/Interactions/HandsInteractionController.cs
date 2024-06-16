@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Player.VRManager;
+using TarkovVR.Patches.UI;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -14,15 +15,14 @@ namespace TarkovVR.Source.Player.Interactions
         {
 
             Collider[] nearbyColliders = Physics.OverlapSphere(VRGlobals.vrPlayer.RightHand.transform.position, 0.125f);
-            swapWeapon = false;
-            foreach (Collider collider in nearbyColliders)
-            {
-                if (collider.gameObject.layer == 3)
+            if (!VRGlobals.vrPlayer.isSupporting) {
+                swapWeapon = false;
+                foreach (Collider collider in nearbyColliders)
                 {
-                    if (!VRGlobals.vrPlayer.isSupporting)
+                    if (collider.gameObject.layer == 3 && collider.gameObject.name == "backHolsterCollider")
                     {
                         SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.RightHand);
-                        if (collider.gameObject.name == "backHolsterCollider" && SteamVR_Actions._default.RightGrip.stateDown)
+                        if (SteamVR_Actions._default.RightGrip.stateDown)
                         {
                             swapWeapon = true;
                         }
@@ -37,6 +37,13 @@ namespace TarkovVR.Source.Player.Interactions
                 if (collider.gameObject.layer == 6)
                 {
                     handleScopeInteraction();
+                }
+                else if (collider.gameObject.layer == 3 && collider.gameObject.name == "rigCollider")
+                {
+                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.LeftHand);
+                    if (UIPatches.quickSlotUi && SteamVR_Actions._default.LeftGrip.stateDown) { 
+                        UIPatches.quickSlotUi.active = true;
+                    }
                 }
             }
             if (changingScopeZoom)

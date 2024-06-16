@@ -20,7 +20,7 @@ public class CircularSegmentUI : MonoBehaviour
 
     public void Init()
     {
-        Plugin.MyLog.LogWarning("Start");
+
         string fullPath = Path.Combine(spritePath, "radialMenu.png");
         byte[] fileData = File.ReadAllBytes(fullPath);
         Texture2D texture = new Texture2D(2, 2);
@@ -44,7 +44,6 @@ public class CircularSegmentUI : MonoBehaviour
 
 
     public void CreateGunUi(string[] menuSpriteNames) {
-        Plugin.MyLog.LogWarning("Create gun ui");
         menuSegments = new Image[menuSpriteNames.Length];
         this.menuSprites = new Sprite[menuSpriteNames.Length];
         numberOfSegments = menuSpriteNames.Length;
@@ -59,7 +58,11 @@ public class CircularSegmentUI : MonoBehaviour
 
     public void CreateQuickSlotUi(Sprite[] menuSprites)
     {
-        
+        int children = transform.childCount;
+        for (int i = 0; i < children; i++)
+        {
+            Destroy(transform.GetChild(0).gameObject);
+        }
         menuSegments = new Image[menuSprites.Length];
         numberOfSegments = menuSprites.Length;
         this.menuSprites = menuSprites;
@@ -106,10 +109,10 @@ public class CircularSegmentUI : MonoBehaviour
             gameObject.active = false;
             // Add additional actions as necessary
         }
-        if (leftHand && VRGlobals.quickSlot == -1 && lastSelectedSegment != -1 && !SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand))
+        if (leftHand && !SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand))
         {
-            Plugin.MyLog.LogWarning("Selected item " + lastSelectedSegment);
-            VRGlobals.quickSlot = lastSelectedSegment;
+            if (VRGlobals.quickSlot == -1 && lastSelectedSegment != -1)
+                VRGlobals.quickSlot = lastSelectedSegment;
             gameObject.active = false;
         }
     }

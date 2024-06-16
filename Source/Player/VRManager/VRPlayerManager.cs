@@ -1,4 +1,5 @@
 ﻿using TarkovVR.Patches.Core.Player;
+using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using UnityEngine;
 using Valve.VR;
@@ -107,11 +108,13 @@ namespace TarkovVR.Source.Player.VRManager
             if (initPos.y == 0)
                 initPos = Camera.main.transform.localPosition;
 
-            if (initPos.y != 0)
-                VRGlobals.vrOffsetter.transform.localPosition = initPos * -1 + headOffset;
-            else
-                VRGlobals.vrOffsetter.transform.localPosition = Camera.main.transform.localPosition * -1 + headOffset;
+            Vector3 newLocalPos = Vector3.zero;
+            // Set the rig collider position to 75% of the cameras height so it appears under the head
+            //if (VRGlobals.ikManager)
+            //    InitVRPatches.rigCollider.position = newLocalPos;
+            //    newLocalPos.y = Camera.main.transform.localPosition.y * 0.75f;
 
+            VRGlobals.vrOffsetter.transform.localPosition = initPos * -1 + headOffset;
             if (SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.Any))
             {
                 timeHeld += Time.deltaTime;
@@ -283,8 +286,8 @@ namespace TarkovVR.Source.Player.VRManager
                         {
                             UIPatches.stancePanel.AnimatedShow(false);
                             UIPatches.healthPanel.AnimatedShow(false);
-                            if (UIPatches.quickSlotUi)
-                                UIPatches.quickSlotUi.active = true;
+                            //if (UIPatches.quickSlotUi)
+                            //    UIPatches.quickSlotUi.active = true;
                             showingUI = true;
                         }
 
@@ -293,6 +296,8 @@ namespace TarkovVR.Source.Player.VRManager
                     {
                         UIPatches.stancePanel.AnimatedHide();
                         UIPatches.healthPanel.AnimatedHide();
+                        //if (UIPatches.quickSlotUi)
+                        //    UIPatches.quickSlotUi.active = false;
                         showingUI = false;
                     }
                 }

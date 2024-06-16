@@ -45,7 +45,7 @@ namespace TarkovVR.Source.Player.VR
 
         void LateUpdate()
         {
-            if (VRGlobals.menuOpen)
+            if (!VRGlobals.vrPlayer || VRGlobals.menuOpen)
                 return;
 
             if (leftUpperArm)

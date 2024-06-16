@@ -17,7 +17,7 @@ namespace TarkovVR.Patches.Core.Player
     internal class WeaponPatches
     {
         public static Vector3 weaponOffset = Vector3.zero;
-        private static Transform returnAfterGrenade;
+        public static Transform returnAfterGrenade;
         private static Transform oldGrenadeHolder;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -54,7 +54,6 @@ namespace TarkovVR.Patches.Core.Player
 
             if (VRGlobals.oldWeaponHolder && VRGlobals.weaponHolder.transform.childCount > 0)
             {
-                Plugin.MyLog.LogWarning("\n\nAAAAAAAAAAA : " + __instance._player.gameObject + " \n");
                 VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
                 Transform weaponRoot = VRGlobals.ikManager.rightArmIk.transform.GetChild(0);
                 weaponRoot.parent = VRGlobals.ikManager.rightArmIk.transform;
@@ -72,18 +71,32 @@ namespace TarkovVR.Patches.Core.Player
             if (__instance._player.IsAI)
                 return;
 
-            Plugin.MyLog.LogWarning("IEventsConsumerOnWeapOut " + __instance + "   |    " + __instance.WeaponRoot + "   |    " + __instance.WeaponRoot.parent);
-
             // Check if a weapon is currently equipped, if that weapon isn the same as the one trying to be equipped, and that the weaponHolder actually has something there
             if (VRGlobals.oldWeaponHolder && VRGlobals.weaponHolder == __instance.WeaponRoot.parent.gameObject && VRGlobals.weaponHolder.transform.childCount > 0)
             {
-                Plugin.MyLog.LogWarning("\n\n Init ball calc 1 \n\n");
+                Plugin.MyLog.LogWarning("On weap out");
                 VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
                 Transform weaponRoot = VRGlobals.weaponHolder.transform.GetChild(0);
                 weaponRoot.parent = VRGlobals.oldWeaponHolder.transform;
                 weaponRoot.localPosition = Vector3.zero;
                 VRGlobals.oldWeaponHolder = null;
             }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "IEventsConsumerOnWeapIn")]
+        private static void ReturnWeaponToOriwginalParentOnChange(EFT.Player.FirearmController __instance)
+        {
+            if (__instance._player.IsAI || !returnAfterGrenade)
+                return;
+
+            Plugin.MyLog.LogWarning("On weap in");
+            VRGlobals.firearmController = __instance;
+            VRGlobals.player = __instance._player;
+            //VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
+            if (__instance.gclass1555_0.sightModVisualControllers_0[0])
+                VRGlobals.scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform.FindChild("mod_aim_camera");
+            returnAfterGrenade = null;
         }
 
 
@@ -97,13 +110,17 @@ namespace TarkovVR.Patches.Core.Player
                 return;
 
             if (returnAfterGrenade) {
+                Plugin.MyLog.LogError("\n\nRETURN AFTER GRENADE " + __instance.Weapon.WeapClass + "\n" + returnAfterGrenade);
                 // Return the grenade back to its original holder
                 Transform weaponRoot = VRGlobals.weaponHolder.transform.GetChild(0);
                 weaponRoot.parent = oldGrenadeHolder;
 
                 VRGlobals.emptyHands = returnAfterGrenade;
-                if (returnAfterGrenade.FindChildRecursive("Weapon_root"))
+                Transform weapRoot = returnAfterGrenade.FindChildRecursive("Weapon_root");
+                if (weapRoot) {
+                    VRGlobals.oldWeaponHolder = weapRoot.parent.gameObject;
                     returnAfterGrenade.FindChildRecursive("Weapon_root").transform.parent = VRGlobals.weaponHolder.transform;
+                }
                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
                 if (!__instance.WeaponRoot.gameObject.GetComponent<IKManager>())
                     __instance.WeaponRoot.gameObject.AddComponent<IKManager>();
@@ -116,33 +133,19 @@ namespace TarkovVR.Patches.Core.Player
 
                 VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
                 VRGlobals.ikManager.rightArmIk.solver.target = null;
-
-                returnAfterGrenade = null;
                 return;
             }
+ 
             VRGlobals.firearmController = __instance;
             VRGlobals.player = __instance._player;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
-            Plugin.MyLog.LogError("\n\n" + VRGlobals.oldWeaponHolder + "\n\n");
+            VRGlobals.usingItem = false;
             if (__instance.gclass1555_0.sightModVisualControllers_0[0]) 
                 VRGlobals.scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform.FindChild("mod_aim_camera");
-            // Check if a weapon is currently equipped, if that weapon isn't the same as the one trying to be equipped, and that the weaponHolder actually has something there
-            //if (oldWeaponHolder && oldWeaponHolder != __instance.WeaponRoot.parent.gameObject && weaponHolder.transform.childCount > 0)
-            //{
-            //    Plugin.MyLog.LogWarning("\n\n Init ball calc 1 \n\n");
-            //    rightArmIk.solver.target = VRPlayerManager.RightHand.transform;
-            //    Transform weaponRoot = weaponHolder.transform.GetChild(0);
-            //    weaponRoot.parent = oldWeaponHolder.transform;
-            //    weaponRoot.localPosition = Vector3.zero;
-            //    oldWeaponHolder = null;
-            //}
 
             if (VRGlobals.ikManager.rightArmIk && VRGlobals.oldWeaponHolder == null)
             {
-                Plugin.MyLog.LogWarning("\n\n Init ball calc 2 SET RIGHT HAND \n\n");
-                // Weapon_root goes in weapon holder, holder goes in VR right hand, set rot of holder to 15,270,90
-                // pos to 0.141 0.0204 -0.1003
-                // Pistols rot: 7.8225 278.6073 88.9711  pos: 0.3398 -0.0976 -0.1754
+
 
                 VRPlayerManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[11];
                 //weaponRightHandIKPositioner.gameObject.active = false;
@@ -165,18 +168,10 @@ namespace TarkovVR.Patches.Core.Player
                     weaponOffset = new Vector3(0.141f, 0.0204f, -0.1303f);
 
                 VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
-                //else if (__instance.Weapon.WeapClass == "assaultRifle" || __instance.Weapon.WeapClass == "assaultCarbine" || __instance.Weapon.WeapClass == "smg" || __instance.Weapon.WeapClass == "sniperRifle" || __instance.Weapon.WeapClass == "marksmanRifle")
-                //    weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1303f);
-                //    //weaponHolder.transform.localPosition = new Vector3(0.111f, 0.0204f, -0.1003f);
-                //else if (__instance.Weapon.WeapClass == "smg" || __instance.Weapon.WeapClass == "sniperRifle" || __instance.Weapon.WeapClass == "marksmanRifle")
-                //    weaponHolder.transform.localPosition = new Vector3(0.141f, 0.0204f, -0.1303f);
-                //else
-                //    weaponHolder.transform.localPosition = new Vector3(0.241f, 0.0204f, -0.1003f);
+
             }
 
 
-            // 26.0009 320.911 103.7912
-            // -0.089 -0.0796 -0.1970 
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -433,6 +428,7 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.emptyHands = __result._controllerObject.transform;
                 VRGlobals.ikManager.rightArmIk.solver.target = null;
                 VRGlobals.ikManager.leftArmIk.solver.target = null;
+                VRGlobals.usingItem = true;
             }
         }
         [HarmonyPatch]
@@ -453,17 +449,20 @@ namespace TarkovVR.Patches.Core.Player
             //// Define the prefix method
             static void Postfix(EFT.Player player, GrenadeClass item, GrenadeController __result)
             {
-                //Plugin.MyLog.LogWarning("Grenade is AI: " + player.IsAI + "  |  Player: " + player);
                 if (player.IsAI)
                     return;
-                //StackTrace stackTrace = new StackTrace();
-                //Plugin.MyLog.LogWarning(stackTrace);
+
                 returnAfterGrenade = VRGlobals.emptyHands;
                 VRGlobals.emptyHands = __result._controllerObject.transform;
                 Transform weaponRoot = __result._controllerObject.transform.FindChildRecursive("Weapon_root");
                 VRGlobals.ikManager.rightArmIk.solver.target = null;
-                oldGrenadeHolder = weaponRoot.parent;
-                weaponRoot.parent = VRGlobals.weaponHolder.transform;
+                if (weaponRoot != null) { 
+                        oldGrenadeHolder = weaponRoot.parent;
+                    weaponRoot.parent = VRGlobals.weaponHolder.transform;
+                }
+
+                VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.2f, -0.2f, -0.3f);
+
                 //VRGlobals.ikManager.rightArmIk.solver.target = null;
                 //VRGlobals.ikManager.leftArmIk.solver.target = null;
             }

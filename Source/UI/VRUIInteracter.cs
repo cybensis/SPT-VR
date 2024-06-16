@@ -1,7 +1,10 @@
 ﻿using EFT.UI;
+using EFT.UI.Ragfair;
+using EFT.UI.Utilities.LightScroller;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 using Valve.VR;
 
 namespace TarkovVR.Source.UI
@@ -51,7 +54,7 @@ namespace TarkovVR.Source.UI
                 //i++;
                 eventData = new PointerEventData(EventSystem.current);
                 hitObject = RaycastFindHit(hit, ref eventData);
-                //Plugin.MyLog.LogWarning("WDWD: " + hit.collider.gameObject.name + " " + hitObject?.name + " " + hit.point);
+                //Plugin.MyLog.LogWarning("WDWD: " + " " + hitObject?.name + " " + hitObject?.transform.parent);
                 eventData.worldPosition = hit.point;
 
                 if (hitObject)
@@ -97,6 +100,14 @@ namespace TarkovVR.Source.UI
 
         private void handleButtonClick(Vector2 hitPoint)
         {
+            if (hitObject.transform.parent && hitObject.transform.parent.GetComponent<CategoryView>())
+            {
+                hitObject = hitObject.transform.parent.GetComponent<CategoryView>()._toggle.gameObject;
+            }
+            else if (hitObject.transform.parent && hitObject.transform.parent.GetComponent<SubcategoryView>())
+            {
+                hitObject = hitObject.transform.parent.gameObject;
+            }
             if (SteamVR_Actions._default.ButtonA.stateDown)
             {
                 pressedObject = hitObject;
@@ -130,6 +141,16 @@ namespace TarkovVR.Source.UI
             {
                 eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y);
                 ExecuteEvents.Execute(hitObject.GetComponentInParent<ScrollRectNoDrag>().gameObject, eventData, ExecuteEvents.scrollHandler);
+            }
+            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.7 && hitObject.GetComponentInParent<ScrollRect>() != null)
+            {
+                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y);
+                ExecuteEvents.Execute(hitObject.GetComponentInParent<ScrollRect>().gameObject, eventData, ExecuteEvents.scrollHandler);
+            }
+            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.7 && hitObject.GetComponentInParent<LightScroller>() != null)
+            {
+                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y);
+                ExecuteEvents.Execute(hitObject.GetComponentInParent<LightScroller>().gameObject, eventData, ExecuteEvents.scrollHandler);
             }
         }
 
@@ -171,7 +192,7 @@ namespace TarkovVR.Source.UI
             {
                 //Plugin.MyLog.LogWarning("state down");
                 timeHeld += Time.deltaTime;
-                if (dragObject == null && timeHeld > 0.2)
+                if (dragObject == null && timeHeld > 0.125)
                 {
                     pressPosition = hitPoint;
                     eventData.dragging = true;
@@ -222,6 +243,7 @@ namespace TarkovVR.Source.UI
                 // Work up the parents to see if any of them are interactable
                 while (i < 5)
                 {
+
                     if (hitObject.GetComponent<IPointerEnterHandler>() != null || hitObject.GetComponent<IBeginDragHandler>() != null || hitObject.GetComponent<IDragHandler>() != null || hitObject.GetComponent<GInterface322>() != null)
                     {
                         foundValidObject = true;

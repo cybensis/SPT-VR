@@ -1,7 +1,9 @@
 ﻿using EFT;
+using EFT.Animations;
 using HarmonyLib;
 using RootMotion.FinalIK;
 using System.Diagnostics;
+using TarkovVR.Patches.UI;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
@@ -13,9 +15,9 @@ using Valve.VR.InteractionSystem;
 namespace TarkovVR.Patches.Core.VR
 {
     [HarmonyPatch]
-    internal class CamPatches
+    internal class InitVRPatches
     {
-        //private static Transform leftWrist;
+        public static Transform rigCollider;
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CharacterControllerSpawner), "Spawn")]
@@ -26,19 +28,20 @@ namespace TarkovVR.Patches.Core.VR
 
             if (__instance.transform.root.GetComponent<HideoutPlayer>() != null)
             {
-                if (!VRGlobals.vrPlayer)
-                {
-                    VRGlobals.camHolder.AddComponent<SteamVR_TrackedObject>();
-                    VRGlobals.vrPlayer = VRGlobals.camHolder.AddComponent<HideoutVRPlayerManager>();
-                    VRGlobals.weaponHolder = new GameObject("weaponHolder");
-                    VRGlobals.weaponHolder.transform.parent = VRGlobals.vrPlayer.RightHand.transform;
-                    VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
-                    VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
-                    SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
-                    collider.radius = 0.2f;
-                    collider.isTrigger = true;
-                    VRGlobals.camHolder.layer = 7;
-                }
+                //if (!VRGlobals.vrPlayer)
+                //{
+                //    VRGlobals.camHolder.AddComponent<SteamVR_TrackedObject>();
+                //    VRGlobals.vrPlayer = VRGlobals.camHolder.AddComponent<HideoutVRPlayerManager>();
+                //    VRGlobals.weaponHolder = new GameObject("weaponHolder");
+                //    VRGlobals.weaponHolder.transform.parent = VRGlobals.vrPlayer.RightHand.transform;
+                //    VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
+                //    VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
+                //    SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
+                //    collider.radius = 0.2f;
+                //    collider.isTrigger = true;
+                //    VRGlobals.camHolder.layer = 7;
+                //    Camera.main.clearFlags = CameraClearFlags.SolidColor;
+                //}
             }
             else
             {
@@ -47,6 +50,14 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.camHolder = new GameObject("camHolder");
                     VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
                     VRGlobals.camRoot = new GameObject("camRoot");
+                    if (UIPatches.gameUi)
+                    {
+                        Plugin.MyLog.LogWarning("Positiing ui from cam init");
+                        UIPatches.PositionGameUi(UIPatches.gameUi);
+                    }
+                    else {
+                        Plugin.MyLog.LogWarning("Not set");
+                    }
                     VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
                     //Camera.main.transform.parent = vrOffsetter.transform;
                     //Camera.main.gameObject.AddComponent<SteamVR_TrackedObject>();
@@ -77,7 +88,6 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.backCollider.isTrigger = true;
                 VRGlobals.backHolster.gameObject.layer = 3;
             }
-            Plugin.MyLog.LogWarning("true");
             VRGlobals.inGame = true;
         }
 
@@ -121,11 +131,12 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
             }
 
-            if (__instance.name == VRGlobals.LEFT_ARM_OBJECT_NAME)
+            if (__instance.name == VRGlobals.LEFT_ARM_OBJECT_NAME )
             {
                 __instance.enabled = true;
                 VRGlobals.ikManager.leftArmIk = __instance;
-                __instance.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                if (VRGlobals.vrPlayer)
+                    __instance.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
                 // Set the weight to 2.5 so when rotating the hand, the wrist rotates as well, showing the watch time
                 VRGlobals.leftWrist = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0);
                 //leftWrist.GetComponent<TwistRelax>().weight = 2.5f;
@@ -137,7 +148,8 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.ikManager.rightArmIk = __instance;
                 if (VRGlobals.ikManager.rightHandIK == null)
                     VRGlobals.ikManager.rightHandIK = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(0).gameObject;
-                __instance.solver.target = VRGlobals.vrPlayer.RightHand.transform;
+                if (VRGlobals.vrPlayer)
+                    __instance.solver.target = VRGlobals.vrPlayer.RightHand.transform;
 
 
 
@@ -172,6 +184,24 @@ namespace TarkovVR.Patches.Core.VR
                 //cameraManager.initPos = VRCam.transform.localPosition;
             }
 
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PlayerSpring), "Start")]
+        private static void SetMwainCamParent(PlayerSpring __instance)
+        {
+            if (__instance.name == "Base HumanRibcage" && rigCollider == null)
+            {
+                rigCollider = new GameObject("rigCollider").transform;
+                BoxCollider collider = rigCollider.gameObject.AddComponent<BoxCollider>();
+                rigCollider.parent = __instance.transform.parent;
+                rigCollider.localEulerAngles = Vector3.zero;
+                rigCollider.localPosition = Vector3.zero;
+                rigCollider.gameObject.layer = 3;
+                collider.isTrigger = true;
+                collider.size = new Vector3(0.1f, 0.1f, 0.1f);
+            }
         }
     }
 }

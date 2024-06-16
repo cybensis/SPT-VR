@@ -95,7 +95,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(GClass1916), "ManualLateUpdate")]
         private static bool StopCamXRotation(GClass1916 __instance)
         {
-            if (__instance.player_0.IsAI || !VRGlobals.inGame)
+            if (__instance.player_0.IsAI || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;
 
             if (VRGlobals.emptyHands)

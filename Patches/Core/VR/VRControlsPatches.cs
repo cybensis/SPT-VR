@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Player.VRManager;
+using TarkovVR.Patches.Core.Player;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -33,7 +34,7 @@ namespace TarkovVR.Patches.Core.VR
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass1765), "UpdateInput")]
-        private static bool BlockLookAxis(GClass1765 __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
+        private static bool MasterVRControls(GClass1765 __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
         {
             // 14: Shoot/F
             // 28: Open Inv/Tab
@@ -89,11 +90,7 @@ namespace TarkovVR.Patches.Core.VR
                 for (int k = 0; k < __instance.gclass1760_0.Length; k++)
                 {
                     __instance.ecommand_0 = __instance.gclass1760_0[k].UpdateCommand(deltaTime);
-                    if (VRGlobals.menuOpen)
-                    {
-
-                    }
-                    else
+                    if (VRGlobals.inGame && !VRGlobals.menuOpen)
                     {
                         // 62: Jump
                         if (k == ((int)ECommand.Jump) && !VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && !interactMenuOpen && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
@@ -198,12 +195,19 @@ namespace TarkovVR.Patches.Core.VR
                             //else if (SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
                             //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
                         }
-                        else if (k == ((int)ECommand.SelectFirstPrimaryWeapon) && VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.swapWeapon)
+                        else if (k == ((int)ECommand.SelectFirstPrimaryWeapon) && (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.swapWeapon) || (WeaponPatches.returnAfterGrenade && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
                         {
-                            if (VRGlobals.player && VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
+
+                            if (VRGlobals.player && VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon" )
+                                if (WeaponPatches.returnAfterGrenade)
+                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon;
+                                else 
                                 __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectSecondPrimaryWeapon;
                             else
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon;
+                                if (WeaponPatches.returnAfterGrenade)
+                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectSecondPrimaryWeapon;
+                                else
+                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon;
                         }
                         else if (k == ((int)ECommand.ChangeScopeMagnification) && isAiming && VRGlobals.vrOpticController.swapZooms)
                         {
@@ -231,21 +235,27 @@ namespace TarkovVR.Patches.Core.VR
                             __instance.ecommand_0 = quickSlotCommands[VRGlobals.quickSlot];
                             VRGlobals.quickSlot = -1;
                         }
-                    }
-                    // 50: Interact
-                    if (k == ((int)ECommand.BeginInteracting))
-                    {
-                        if (SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any))
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.BeginInteracting;
-                        else if (SteamVR_Actions._default.ButtonA.GetStateUp(SteamVR_Input_Sources.Any))
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.EndInteracting;
-                    }
-                    // 61: Toggle inv
-                    else if (k == ((int)ECommand.ToggleInventory) && SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any))
-                        __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleInventory;
-                    else if (k == ((int)ECommand.Escape) && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any))
-                        __instance.ecommand_0 = EFT.InputSystem.ECommand.Escape;
+                        // 50: Interact
+                        else if (k == ((int)ECommand.BeginInteracting))
+                        {
+                            if (SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any))
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.BeginInteracting;
+                            else if (SteamVR_Actions._default.ButtonA.GetStateUp(SteamVR_Input_Sources.Any))
+                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndInteracting;
+                        }
+                        // 61: Toggle inv
+                        else if (k == ((int)ECommand.ToggleInventory) && SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any))
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleInventory;
+                        else if (k == ((int)ECommand.TryHighThrow) && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5)
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.TryHighThrow;
 
+                    }
+                    if (k == ((int)ECommand.Escape) && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any) && !WeaponPatches.returnAfterGrenade) { 
+                        if (VRGlobals.usingItem)
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleShooting;
+                        else
+                            __instance.ecommand_0 = EFT.InputSystem.ECommand.Escape;
+                    }
 
                     // 0: ChangeAimScope
                     // 1: ChangeAimScopeMagnification
@@ -303,7 +313,7 @@ namespace TarkovVR.Patches.Core.VR
                         axis[__instance.gclass1761_1[m].IntAxis] = 0;
                     else if (m == 2)
                     {
-                        if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < 0.75f && !VRGlobals.blockRightJoystick)
+                        if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < 0.75f && !VRGlobals.blockRightJoystick && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.1f)
                             axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
                         else
                             axis[__instance.gclass1761_1[m].IntAxis] = 0;
@@ -495,4 +505,5 @@ namespace TarkovVR.Patches.Core.VR
 //100: DoubleF12
 //101: Enter
 //102: Escape
-//103: HighThrow104: LowThrow
+//103: HighThrow
+//104: LowThrow

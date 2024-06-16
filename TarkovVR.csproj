@@ -39,6 +39,9 @@
     <Reference Include="Assembly-CSharp-firstpass">
       <HintPath>libs\Managed\Assembly-CSharp-firstpass.dll</HintPath>
     </Reference>
+    <Reference Include="Cinemachine">
+      <HintPath>libs\Managed\Cinemachine.dll</HintPath>
+    </Reference>
     <Reference Include="Comfort">
       <HintPath>libs\Managed\Comfort.dll</HintPath>
     </Reference>

@@ -19,6 +19,15 @@ using TarkovVR.Source.UI;
 using System.Reflection.Emit;
 using System.Linq;
 using System.Reflection;
+using System.Collections;
+using System.Diagnostics;
+using System.Threading.Tasks;
+using TMPro;
+using System.Text;
+using EFT.UI.Ragfair;
+using UnityEngine.SceneManagement;
+using static EFT.UI.PlayerProfilePreview;
+using UnityEngine.XR;
 
 
 
@@ -35,126 +44,80 @@ namespace TarkovVR.Patches.Misc
 
         public static VRUIInteracter vrUiInteracter;
 
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
-        //private static bool FixMenuImagesScaling(PixelPerfectSpriteScaler __instance)
-        //{
-        //    Vector3 lossyScale = new Vector3(1.333f, 1.333f, 1.333f);
-        //    float num = Math.Min(lossyScale.x, lossyScale.y);
-        //    if (__instance.image_0 != null)
-        //    {
-        //        if (num.ApproxEquals(__instance.image_0.pixelsPerUnitMultiplier))
-        //        {
-        //            return false;
-        //        }
-        //        __instance.image_0.pixelsPerUnitMultiplier = num;
-        //        __instance.image_0.SetVerticesDirty();
-        //    }
-        //    Vector2 offsetMin = __instance.rectTransform_0.offsetMin;
-        //    Vector2 offsetMax = __instance.rectTransform_0.offsetMax;
-        //    if (__instance._sidesToScale.HasFlag(EScaleSide.Top))
-        //    {
-        //        offsetMax.y = __instance.vector2_1.y / num;
-        //    }
-        //    if (__instance._sidesToScale.HasFlag(EScaleSide.Left))
-        //    {
-        //        offsetMin.x = __instance.vector2_0.x / num;
-        //    }
-        //    if (__instance._sidesToScale.HasFlag(EScaleSide.Bottom))
-        //    {
-        //        offsetMin.y = __instance.vector2_0.y / num;
-        //    }
-        //    if (__instance._sidesToScale.HasFlag(EScaleSide.Right))
-        //    {
-        //        offsetMax.x = __instance.vector2_1.x / num;
-        //    }
-        //    __instance.rectTransform_0.offsetMin = offsetMin;
-        //    __instance.rectTransform_0.offsetMax = offsetMax;
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
+        private static bool FixMenuImagesScaling(PixelPerfectSpriteScaler __instance)
+        {
+            Vector3 lossyScale = new Vector3(1.333f, 1.333f, 1.333f);
+            float num = 1.333f;
+            if (__instance.image_0 != null)
+            {
+                if (num.ApproxEquals(__instance.image_0.pixelsPerUnitMultiplier))
+                {
+                    return false;
+                }
+                __instance.image_0.pixelsPerUnitMultiplier = num;
+                __instance.image_0.SetVerticesDirty();
+            }
+            Vector2 offsetMin = __instance.rectTransform_0.offsetMin;
+            Vector2 offsetMax = __instance.rectTransform_0.offsetMax;
+            if (__instance._sidesToScale.HasFlag(EScaleSide.Top))
+            {
+                offsetMax.y = __instance.vector2_1.y / num;
+            }
+            if (__instance._sidesToScale.HasFlag(EScaleSide.Left))
+            {
+                offsetMin.x = __instance.vector2_0.x / num;
+            }
+            if (__instance._sidesToScale.HasFlag(EScaleSide.Bottom))
+            {
+                offsetMin.y = __instance.vector2_0.y / num;
+            }
+            if (__instance._sidesToScale.HasFlag(EScaleSide.Right))
+            {
+                offsetMax.x = __instance.vector2_1.x / num;
+            }
+            __instance.rectTransform_0.offsetMin = offsetMin;
+            __instance.rectTransform_0.offsetMax = offsetMax;
 
-        //    return false;
+            return false;
+        }
+
+        //[HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
+        //public static class FixMenuImagesScaling
+        //{
+        //    static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        //    {
+        //        var codes = new List<CodeInstruction>(instructions);
+
+        //        for (int i = 0; i < codes.Count; i++)
+        //        {
+        //            // Find the call to get_lossyScale and Math.Min
+        //            if (codes[i].opcode == OpCodes.Callvirt && codes[i].operand is MethodInfo methodInfo && methodInfo.Name == "get_lossyScale")
+        //            {
+        //                // Replace the call to get_lossyScale with the constant value 1.333
+        //                codes[i] = new CodeInstruction(OpCodes.Ldc_R4, 1.333f); // Load constant 1.333
+        //                                                                        // Remove the instructions that load x and y and call Math.Min
+        //                //codes.RemoveAt(i - 1); // Remove stloc.0
+        //                //codes.RemoveAt(i); // Remove stloc.0
+        //                codes.RemoveAt(i + 1); // Remove stloc.0
+        //                codes.RemoveAt(i + 1); // Remove ldloc.0
+        //                codes.RemoveAt(i + 1); // Remove ldfld float32 x
+        //                codes.RemoveAt(i + 1); // Remove ldloc.0
+        //                codes.RemoveAt(i + 1); // Remove ldfld float32 y
+        //                codes.RemoveAt(i + 1); // Remove call Math.Min
+        //                codes.Insert(i + 1, new CodeInstruction(OpCodes.Stloc_1)); // Store the constant into num (stloc.1)
+        //                break;
+        //            }
+        //        }
+
+        //        return codes.AsEnumerable();
+        //    }
         //}
 
-        [HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
-        public static class FixMenuImagesScaling
-        {
-            static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
-            {
-                var codes = new List<CodeInstruction>(instructions);
 
-                for (int i = 0; i < codes.Count; i++)
-                {
-                    // Find the call to get_lossyScale and Math.Min
-                    if (codes[i].opcode == OpCodes.Callvirt && codes[i].operand is MethodInfo methodInfo && methodInfo.Name == "get_lossyScale")
-                    {
-                        // Replace the call to get_lossyScale with the constant value 1.333
-                        codes[i] = new CodeInstruction(OpCodes.Ldc_R4, 1.333f); // Load constant 1.333
-                                                                                // Remove the instructions that load x and y and call Math.Min
-                        codes.RemoveAt(i + 1); // Remove stloc.0
-                        codes.RemoveAt(i + 1); // Remove ldloc.0
-                        codes.RemoveAt(i + 1); // Remove ldfld float32 x
-                        codes.RemoveAt(i + 1); // Remove ldloc.0
-                        codes.RemoveAt(i + 1); // Remove ldfld float32 y
-                        codes.RemoveAt(i + 1); // Remove call Math.Min
-                        codes.Insert(i + 1, new CodeInstruction(OpCodes.Stloc_1)); // Store the constant into num (stloc.1)
-                        break;
-                    }
-                }
 
-                return codes.AsEnumerable();
-            }
-        }
 
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(MainMenuController), "method_17")]
-        private static void ReturnFromGameToMainMenu(MainMenuController __instance)
-        {
-            VRGlobals.commonUi.parent = null;
-            VRGlobals.preloaderUi.parent = null;
-            VRGlobals.inGame = false;
-            VRGlobals.vrPlayer.enabled = false;
-            VRGlobals.menuVRManager.enabled = true;
-            MenuPatches.PositionMainMenuUi();
-            MenuPatches.FixMainMenuCamera();
-            VRGlobals.ikManager.leftArmIk.solver.target = null;
-            VRGlobals.ikManager.rightArmIk.solver.target = null;
-            VRGlobals.menuOpen = false;
-            VRGlobals.camRoot.transform.eulerAngles = Vector3.zero;
-        }
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Changes to in game when selecting the hideout option in the preloader UI
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(MainMenuController), "method_16")]
-        private static void SetInGameOnReturnToHideout_Preloader(MainMenuController __instance)
-        {
-            // Only set inGame if the player is set. If this is the first time going to hideout when starting the game
-            // we only want inGame set if everythings been loaded, and if player is set then that means the hideout
-            // has already been opened once, and swapping between hideout and the menu is fast now
-            if (VRGlobals.player)
-            {
-                VRGlobals.inGame = true;
-                VRGlobals.vrPlayer.enabled = true;
-                VRGlobals.menuVRManager.enabled = false;
-                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-                VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
-            }
-        }
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Changes to in game when selecting the hideout option in the main menu Common UI
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(MenuScreen), "method_6")]
-        private static void SetInGameOnReturnToHideout_Common(MenuScreen __instance, EMenuType menuType)
-        {
-            if (menuType == EMenuType.Hideout && VRGlobals.player)
-            {
-                Plugin.MyLog.LogWarning("true");
-                VRGlobals.inGame = true;
-                VRGlobals.vrPlayer.enabled = true;
-                VRGlobals.menuVRManager.enabled = false;
-                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-                VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
-            }
-        }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MainMenuController), "method_5")]
@@ -186,6 +149,7 @@ namespace TarkovVR.Patches.Misc
         {
             if (VRGlobals.menuUi.transform.childCount > 0)
             {
+                VRGlobals.menuUi.transform.parent = null;
                 Canvas otherMenuCanvas = VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>();
                 if (otherMenuCanvas)
                 {
@@ -205,6 +169,7 @@ namespace TarkovVR.Patches.Misc
                 Canvas overlayCanvas = VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>();
                 if (overlayCanvas)
                 {
+                    PreloaderUI.DontDestroyOnLoad(VRGlobals.preloaderUi.gameObject);
                     VRGlobals.preloaderUi.transform.eulerAngles = Vector3.zero;
                     overlayCanvas.renderMode = RenderMode.WorldSpace;
                     VRGlobals.preloaderUi.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
@@ -214,6 +179,8 @@ namespace TarkovVR.Patches.Misc
                 }
             }
         }
+
+
 
         private static void PositionCommonUi()
         {
@@ -226,38 +193,41 @@ namespace TarkovVR.Patches.Misc
                 menuUICanvas.RectTransform().localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
                 menuUICanvas.RectTransform().anchoredPosition = new Vector3(1280, 720, 0);
                 menuUICanvas.RectTransform().sizeDelta = new Vector2(1920, 1080);
+                CommonUI.DontDestroyOnLoad(VRGlobals.commonUi.gameObject);
                 VRGlobals.commonUi.transform.position = new Vector3(-1.283f, -1000.66f, 0.9748f);
                 VRGlobals.commonUi.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
                 VRGlobals.commonUi.transform.eulerAngles = Vector3.zero;
-                BoxCollider menuCollider = menuUIObject.gameObject.AddComponent<BoxCollider>();
-                menuCollider.extents = new Vector3(2560, 1440, 0.5f);
-
-
-                if (backingCollider == null)
-                {
-                    GameObject colliderHolder = new GameObject("uiMover");
-                    colliderHolder.transform.parent = environmentUi.transform.root;
-                    colliderHolder.transform.position = new Vector3(-1.283f, -1001.76f, 0.9748f);
-                    colliderHolder.transform.localEulerAngles = new Vector3(90, 0, 0);
-                    backingCollider = colliderHolder.AddComponent<BoxCollider>();
-                    backingCollider.extents = new Vector3(2222, 2222, 0.5f);
-                    cubeUiMover = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    cubeUiMover.transform.parent = backingCollider.transform;
-                    cubeUiMover.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
-                    cubeUiMover.transform.position = new Vector3(0.017f, -1001.26f, 0.8748f);
-                    menuMover = cubeUiMover.AddComponent<MenuMover>();
-                    menuMover.raycastReceiver = cubeUiMover.AddComponent<Rigidbody>();
-                    menuMover.raycastReceiver.isKinematic = true;
-                    menuMover.menuCollider = menuCollider;
-                    colliderHolder.layer = LayerMask.NameToLayer("UI");
-                    cubeUiMover.layer = LayerMask.NameToLayer("UI");
-                    menuMover.commonUI = VRGlobals.commonUi.gameObject;
-                    menuMover.preloaderUI = VRGlobals.preloaderUi.gameObject;
-                    menuMover.menuUI = VRGlobals.menuUi.gameObject;
+                if (!menuUIObject.GetComponent<BoxCollider>()) { 
+                    BoxCollider menuCollider = menuUIObject.gameObject.AddComponent<BoxCollider>();
+                    menuCollider.extents = new Vector3(2560, 1440, 0.5f);
                 }
+
+
+                //if (backingCollider == null)
+                //{
+                //    GameObject colliderHolder = new GameObject("uiMover");
+                //    colliderHolder.transform.parent = environmentUi.transform.root;
+                //    colliderHolder.transform.position = new Vector3(-1.283f, -1001.76f, 0.9748f);
+                //    colliderHolder.transform.localEulerAngles = new Vector3(90, 0, 0);
+                //    backingCollider = colliderHolder.AddComponent<BoxCollider>();
+                //    backingCollider.extents = new Vector3(2222, 2222, 0.5f);
+                //    cubeUiMover = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                //    cubeUiMover.transform.parent = backingCollider.transform;
+                //    cubeUiMover.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
+                //    cubeUiMover.transform.position = new Vector3(0.017f, -1001.26f, 0.8748f);
+                //    menuMover = cubeUiMover.AddComponent<MenuMover>();
+                //    menuMover.raycastReceiver = cubeUiMover.AddComponent<Rigidbody>();
+                //    menuMover.raycastReceiver.isKinematic = true;
+                //    menuMover.menuCollider = menuCollider;
+                //    colliderHolder.layer = LayerMask.NameToLayer("UI");
+                //    cubeUiMover.layer = LayerMask.NameToLayer("UI");
+                //    menuMover.commonUI = VRGlobals.commonUi.gameObject;
+                //    menuMover.preloaderUI = VRGlobals.preloaderUi.gameObject;
+                //    menuMover.menuUI = VRGlobals.menuUi.gameObject;
+                //}
             }
         }
-
+        private static Quaternion camHolderRot;
 
         public static void FixMainMenuCamera()
         {
@@ -266,23 +236,31 @@ namespace TarkovVR.Patches.Misc
                 Transform camContainer = environmentUi.environmentUIRoot_0.CameraContainer.GetChild(0);
                 if (!camContainer.gameObject.GetComponent<SteamVR_TrackedObject>())
                     camContainer.gameObject.AddComponent<SteamVR_TrackedObject>();
-                camContainer.transform.parent.localPosition = new Vector3(0, -1.1f, -0.7f);
-                camContainer.transform.parent.localRotation = Quaternion.Euler(0, 345, 0);
 
                 //camContainer.GetComponent<PostProcessLayer>().m_Camera = environmentUi._alignmentCamera;
                 Camera mainMenuCam = camContainer.GetComponent<Camera>();
+                Vector3 newCamHolderPos = mainMenuCam.transform.localPosition * -1;
+                newCamHolderPos.y += 0.1f;
+                newCamHolderPos.z = -0.6f;
+                camContainer.transform.parent.localPosition = newCamHolderPos;
+                camContainer.localRotation = Quaternion.identity;
+                camHolderRot = Quaternion.Euler(0, mainMenuCam.transform.localEulerAngles.y * -1, 0);
+                camContainer.transform.parent.localRotation = camHolderRot;
                 camContainer.tag = "MainCamera";
                 if (mainMenuCam)
                 {
-                    GameObject uiCamHolder = new GameObject("uiCam");
-                    uiCamHolder.transform.parent = camContainer.transform;
-                    uiCamHolder.transform.localRotation = Quaternion.identity;
-                    uiCamHolder.transform.localPosition = Vector3.zero;
-                    Camera uiCam = uiCamHolder.AddComponent<Camera>();
-                    uiCam.depth = 11;
-                    uiCam.nearClipPlane = 0.001f;
-                    uiCam.cullingMask = 32;
-                    uiCam.clearFlags = CameraClearFlags.Depth;
+                    if (!camContainer.FindChild("uiCam"))
+                    {
+                        GameObject uiCamHolder = new GameObject("uiCam");
+                        uiCamHolder.transform.parent = camContainer.transform;
+                        uiCamHolder.transform.localRotation = Quaternion.identity;
+                        uiCamHolder.transform.localPosition = Vector3.zero;
+                        Camera uiCam = uiCamHolder.AddComponent<Camera>();
+                        uiCam.depth = 11;
+                        uiCam.nearClipPlane = 0.001f;
+                        uiCam.cullingMask = 32;
+                        uiCam.clearFlags = CameraClearFlags.Depth;
+                    }
                     //mainMenuCam.cullingMask = -1;
                     mainMenuCam.RemoveAllCommandBuffers();
 
@@ -297,10 +275,11 @@ namespace TarkovVR.Patches.Misc
                     VRGlobals.camRoot = new GameObject("camRoot");
                     VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
                     VRGlobals.vrOffsetter.transform.parent = VRGlobals.camRoot.transform;
+                    VRGlobals.vrOffsetter.transform.localRotation = camHolderRot;
 
                     VRGlobals.menuVRManager = VRGlobals.camHolder.AddComponent<MenuVRManager>();
                 }
-                VRGlobals.camRoot.transform.position = mainMenuCam.transform.position;
+                VRGlobals.camRoot.transform.position = camContainer.transform.parent.position;
                 PositionMenuEnvironmentProps();
             }
         }
@@ -398,18 +377,16 @@ namespace TarkovVR.Patches.Misc
         //    //}
         //}
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(HideoutScreenOverlay), "Show")]
-        private static void AutomaticallyEnterHideout(HideoutScreenOverlay __instance)
-        {
-            __instance.method_5();
-            VRGlobals.menuVRManager.enabled = false;
-        }
-
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EnvironmentUIRoot), "RandomRotate")]
         private static bool PreventMenuOptionSelectCamRotation(EnvironmentUIRoot __instance)
+        {
+            return false;
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EnvironmentUIRoot), "method_2")]
+        private static bool PreventMenuReturnCamRotatiown(EnvironmentUIRoot __instance)
         {
             return false;
         }
@@ -420,7 +397,6 @@ namespace TarkovVR.Patches.Misc
         {
             if (environmentUi = __instance.transform.parent.GetComponent<EnvironmentUI>())
             {
-                Plugin.MyLog.LogMessage("SET ENVIRONEMNT " + __instance);
                 FixMainMenuCamera();
             }
         }
@@ -520,8 +496,36 @@ namespace TarkovVR.Patches.Misc
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeaponPreview), "Init")]
-        private static void SetItemPreviewCameraFoV(WeaponPreview __instance)
+        [HarmonyPatch(typeof(WeaponPreview), "method_2")]
+        private static void SetItemPreviewCameraFoVM2(WeaponPreview __instance)
+        {
+            // Need to wait a bit before setting the FoV on this cam because
+            // something else is changing it
+            __instance.WaitSeconds(0.5f, delegate
+            {
+                if (__instance.WeaponPreviewCamera)
+                {
+                    __instance.WeaponPreviewCamera.fieldOfView = 60;
+                }
+            });
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WeaponPreview), "method_0")]
+        private static void SetItemPreviewCameraFoVM0(WeaponPreview __instance)
+        {
+            // Need to wait a bit before setting the FoV on this cam because
+            // something else is changing it
+            __instance.WaitSeconds(0.5f, delegate
+            {
+                if (__instance.WeaponPreviewCamera)
+                {
+                    __instance.WeaponPreviewCamera.fieldOfView = 60;
+                }
+            });
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WeaponPreview), "method_1")]
+        private static void SetItemPreviewCameraFoVM1(WeaponPreview __instance)
         {
             // Need to wait a bit before setting the FoV on this cam because
             // something else is changing it
@@ -681,6 +685,13 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        // Stupid hover thingy blocks the autofill from being selected
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(HoverTooltipArea), "Init")]
+        private static void HideTraderAutoFillHover(HoverTooltipArea __instance)
+        {
+            __instance.gameObject.active = false;
+        }
 
 
 
@@ -839,6 +850,153 @@ namespace TarkovVR.Patches.Misc
                 }
             }
             return false;
+        }
+
+        // 0 1.7 -0.9
+
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(DropDownBox), "method_2")]
+        private static bool PositionHeadVoiceDropdownMenus(DropDownBox __instance)
+        {
+            if (__instance.name == "VoiceSelectorDropDown" || __instance.name == "FaceSelectorDropdown") {
+                __instance.rectTransform_1 = __instance.GetComponent<RectTransform>();
+            }
+            return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PlayerProfilePreview), "ChangeCameraPosition")]
+        private static void PositionLoginPlayerModelPreview(PlayerProfilePreview __instance, ECameraViewType viewType, float duration)
+        {
+            __instance._camera.stereoTargetEye = StereoTargetEyeMask.None;
+            __instance._camera.fieldOfView = 41;
+
+            if (__instance.name == "UsecPanel")
+                __instance.PlayerModelView.transform.localPosition = new Vector3(300f, 0, 0);
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PlayerModelView), "method_0")]
+        private static void PositionRaidPlayerModelPreview(PlayerModelView __instance, Task __result)
+        {
+            __result.ContinueWith(task =>
+            {
+                if (task.IsCompleted)
+                {
+                    if (__instance.transform.parent.name == "ScavPlayerMV")
+                    {
+                        __instance.transform.FindChild("Camera_matchmaker").GetComponent<Camera>().fieldOfView = 45;
+                        //Transform camBodyViewer = __instance.transform.FindChild("Camera_matchmaker");
+                        //camBodyViewer.position = new Vector3(-0.41f, -999.2792f, 4.68f);
+                        //Transform scavBody = __instance.PlayerBody.transform;
+                        //scavBody.position = new Vector3(0.0818f, -1000.139f, 5.9f);
+                    }
+                    else if (__instance.transform.parent.name == "PMCPlayerMV")
+                    {
+                        Transform camera = __instance.transform.FindChild("Camera_matchmaker");
+                        camera.localEulerAngles = new Vector3(353, 19, 0);
+                        camera.GetComponent<Camera>().fieldOfView = 45;
+                        Transform pmcBody = __instance.PlayerBody.transform;
+                        pmcBody.localPosition = new Vector3(2, -1, 5);
+                        __instance.transform.FindChild("Lights").transform.localEulerAngles = new Vector3(17,114,0);
+                    }
+                    else if (__instance.transform.FindChild("Camera_timehascome0"))
+                    {
+                        Transform camera = __instance.transform.FindChild("Camera_timehascome0");
+                        camera.localPosition = new Vector3(-1.4f, -0.7f, 3.45f);
+                        camera.GetComponent<Camera>().fieldOfView = 41;
+                    }
+                    //else if (__instance.transform.parent.parent.name == "UsecPanel")
+                    //{
+                    //    Transform camera = __instance.transform.FindChildRecursive("Camera_matchmaker");
+                    //    camera.localEulerAngles = new Vector3(353, 356, 0);
+                    //    camera.GetComponent<Camera>().fieldOfView = 41;
+                    //    Transform pmcBody = __instance.PlayerBody.transform;
+                    //    pmcBody.localPosition = new Vector3(0.4f,0,0);
+                    //}
+                    //else if (__instance.transform.parent.parent.name == "BearPanel")
+                    //{
+                    //    Transform camera = __instance.transform.FindChildRecursive("Camera_matchmaker");
+                    //    camera.GetComponent<Camera>().fieldOfView = 41;
+                    //}
+                }
+            }, TaskScheduler.FromCurrentSynchronizationContext());
+
+        }
+        // 0 20.9346 0
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TMP_InputField), "OnPointerClick")]
+        private static void OpenVRKeyboard(TMP_InputField __instance)
+        {
+            SteamVR.instance.overlay.ShowKeyboard(
+                (int)EGamepadTextInputMode.k_EGamepadTextInputModeNormal,
+                (int)EGamepadTextInputLineMode.k_EGamepadTextInputLineModeSingleLine,
+                (uint)EKeyboardFlags.KeyboardFlag_Modal, "Description", 256, "", 0);
+
+            var keyboardDoneAction =
+            SteamVR_Events.SystemAction(EVREventType.VREvent_KeyboardDone, ev => {
+                StringBuilder stringBuilder = new StringBuilder(256);
+                SteamVR.instance.overlay.GetKeyboardText(stringBuilder, 256);
+                string value = stringBuilder.ToString();
+                __instance.SetText(value, true);
+            });
+            keyboardDoneAction.enabled = true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(AddOfferWindow), "Show")]
+        private static void PositionOfferWindow(AddOfferWindow __instance, Task __result)
+        {
+            __result.ContinueWith(task =>
+            {
+                if (task.IsCompleted)
+                {
+                    __instance.transform.localPosition = Vector3.zero;
+                }
+            }, TaskScheduler.FromCurrentSynchronizationContext());
+
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(RagfairFilterWindow), "Show")]
+        private static void PositionFleaMarketFilterWindow(RagfairFilterWindow __instance)
+        {
+            __instance.transform.localPosition = Vector3.zero;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Window<GClass2876>), "Show")]
+        private static void PositionFleaMarketFilwterWindow(Window<GClass2876> __instance)
+        {
+            __instance.transform.localPosition = Vector3.zero;
+            __instance.transform.GetChild(0).localPosition = Vector3.zero;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WelcomeScreen), "Show", new Type[] { typeof(WelcomeScreen.GClass2931)})]
+        private static void PositionFleaMarkewtFilwterWindow(WelcomeScreen __instance)
+        {
+            
+            __instance.transform.parent.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            __instance.transform.parent.localScale = new Vector3(0.002f, 0.002f, 0.002f);
+            __instance.transform.parent.localPosition = new Vector3(0.0478f, -999.938f, 1.7484f);
+            __instance.transform.parent.gameObject.layer = 5;
+            if (VRGlobals.camRoot == null)
+            {
+                //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");
+                VRGlobals.camRoot = new GameObject("camRoot");
+                VRGlobals.camHolder = new GameObject("camHolder");
+                VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
+                VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
+                VRGlobals.vrOffsetter.transform.parent = VRGlobals.camRoot.transform;
+
+                VRGlobals.menuVRManager = VRGlobals.camHolder.AddComponent<MenuVRManager>();
+                VRGlobals.camRoot.transform.position = new Vector3(0,-999.8f, -0.5f);
+                BoxCollider loginCollider = __instance.transform.parent.gameObject.AddComponent<BoxCollider>();
+                loginCollider.size = new Vector3(5120, 2880, 1);
+            }
         }
     }
 }

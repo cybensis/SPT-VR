@@ -42,6 +42,7 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 pointer.enabled = false;
                 pointer.holder.active = false;
+                MenuPatches.vrUiInteracter.enabled = false;
                 SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
                 SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
             }
@@ -52,39 +53,40 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 pointer.enabled = true;
                 pointer.holder.active = true;
+                MenuPatches.vrUiInteracter.enabled = true;
                 SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
                 SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
             }
         }
 
 
-        private void Update()
-        {
-            if (Camera.main == null)
-                return;
-            if (initPos.y == 0)
-                initPos = Camera.main.transform.localPosition;
+        //private void Update()
+        //{
+        //    if (Camera.main == null)
+        //        return;
+        //    if (initPos.y == 0)
+        //        initPos = Camera.main.transform.localPosition;
 
-            VRGlobals.vrOffsetter.transform.localPosition = initPos * -1;
-
-
-            if (SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.Any))
-            {
-                timeHeld += Time.deltaTime;
-                if (Camera.main != null && timeHeld > 0.75f)
-                {
-                    initPos = Camera.main.transform.localPosition;
-                }
-            }
-            else if (timeHeld != 0)
-            {
-                timeHeld = 0;
-            }
+        //    VRGlobals.vrOffsetter.transform.localPosition = initPos * -1;
 
 
-            //SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 1, SteamVR_Input_Sources.RightHand);
+        //    if (SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.Any))
+        //    {
+        //        timeHeld += Time.deltaTime;
+        //        if (Camera.main != null && timeHeld > 0.75f)
+        //        {
+        //            initPos = Camera.main.transform.localPosition;
+        //        }
+        //    }
+        //    else if (timeHeld != 0)
+        //    {
+        //        timeHeld = 0;
+        //    }
 
-        }
+
+        //    //SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 1, SteamVR_Input_Sources.RightHand);
+
+        //}
 
 
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
