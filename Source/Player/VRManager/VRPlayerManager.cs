@@ -244,7 +244,8 @@ namespace TarkovVR.Source.Player.VRManager
                     if (!isSupporting)
                     {
                         // Set target to null so the left hand returns to its normal position on the gun
-                        VRGlobals.ikManager.leftArmIk.solver.target = null;
+                        //VRGlobals.ikManager.leftArmIk.solver.target = null;
+                        VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                         isSupporting = true;
                         VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset + supportingWeaponHolderOffset;
                         //VRGlobals.weaponHolder.transform.localPosition = supportingWeaponHolderOffset;
@@ -256,23 +257,27 @@ namespace TarkovVR.Source.Player.VRManager
                         handLock = false;
 
                     LeftHand.transform.localPosition = fromAction.localPosition;
+                    //Plugin.MyLog.LogError(Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) + "   |    " + isSupporting);
                 }
-                else if (VRGlobals.ikManager && VRGlobals.ikManager.leftArmIk)
+                else
                 {
                     if (isSupporting)
                     {
                         isSupporting = false;
-                        VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                        VRGlobals.player._markers[0] = LeftHand.transform;
+                        //VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
                         VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
                     }
                     Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
                     LeftHand.transform.localPosition = virtualBasePosition;
+                    //if (leftHandGunIK)
+                        //Plugin.MyLog.LogWarning(Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) + "   |    " + isSupporting);
                     //LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
                 }
-                else
-                {
-                    LeftHand.transform.localPosition = fromAction.localPosition;
-                }
+                //else
+                //{
+                //    LeftHand.transform.localPosition = fromAction.localPosition;
+                //}
                 LeftHand.transform.localRotation = fromAction.localRotation;
                 LeftHand.transform.Rotate(-60, 0, 70);
 

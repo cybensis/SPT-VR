@@ -32,6 +32,7 @@ namespace TarkovVR.Patches.Misc
         private static Camera hideoutUiCam;
         private static bool hideoutOverlayActive = false;
 
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // When at the shooting range, if you look or point the gun away from down range it lowers the weapon
         // which is annoying so do this to prevent it from happening
@@ -128,9 +129,14 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.menuVRManager.enabled = false;
             VRGlobals.menuOpen = false;
             hideoutOverlayActive = false;
-            VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-            VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
+            //VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+            //VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
             VRGlobals.inGame = true;
+            if (VRGlobals.player)
+            {
+                VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
+                VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
+            }
         }
 
         private static Vector3 camRootRot;
@@ -148,9 +154,11 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
         private static void PositionInHideoutInventory(GridViewMagnifier __instance)
         {
+            Plugin.MyLog.LogError("method_3");
             VRGlobals.camRoot.transform.eulerAngles = camRootRot;
             if (!VRGlobals.inGame)
                 return;
+            Plugin.MyLog.LogError("methd3-2");
             if (VRGlobals.player && !VRGlobals.menuOpen)
                 UIPatches.HandleOpenInventory();
         }
@@ -194,8 +202,8 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.menuVRManager.enabled = true;
             MenuPatches.PositionMainMenuUi();
             MenuPatches.FixMainMenuCamera();
-            VRGlobals.ikManager.leftArmIk.solver.target = null;
-            VRGlobals.ikManager.rightArmIk.solver.target = null;
+            //VRGlobals.ikManager.leftArmIk.solver.target = null;
+            //VRGlobals.ikManager.rightArmIk.solver.target = null;
             VRGlobals.menuOpen = false;
             VRGlobals.camRoot.transform.eulerAngles = Vector3.zero;
             Camera.main.farClipPlane = 500f;
@@ -224,8 +232,8 @@ namespace TarkovVR.Patches.Misc
                 {
                     //VRGlobals.inGame = true;
                     VRGlobals.vrPlayer.enabled = true;
-                    VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-                    VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
+                    //VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                    //VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
 
                 }
                 VRGlobals.menuVRManager.enabled = false;
@@ -243,8 +251,8 @@ namespace TarkovVR.Patches.Misc
                 if (VRGlobals.vrPlayer)
                 {
                     VRGlobals.vrPlayer.enabled = true;
-                    VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-                    VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
+                    //VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                    //VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
 
                 }
                 VRGlobals.menuVRManager.enabled = false;

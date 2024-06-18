@@ -11,6 +11,7 @@ namespace TarkovVR.Patches.Core.Player
 
         private static float lastYRot = 0f;
         private static float timeSinceLastLookRot = 0f;
+        private static bool leftJoystickLastUsed = false;
         // Found in Player object under CurrentState variable, and is inherited by Gclass1573
         // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
         [HarmonyPrefix]
@@ -24,7 +25,6 @@ namespace TarkovVR.Patches.Core.Player
                 return false;
 
             bool leftJoystickUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x) > VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
-            bool leftJoystickLastUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.lastAxis.x) > VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.lastAxis.y) > VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
 
             // Normally you'd stand with your left foot forward and right foot back, which doesn't feel natural in VR so rotate 28 degrees to have both feet in front when standing still
             Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
@@ -46,10 +46,9 @@ namespace TarkovVR.Patches.Core.Player
                 timeSinceLastLookRot = 0;
             }
             timeSinceLastLookRot += Time.deltaTime;
-            if (!leftJoystickUsed && leftJoystickLastUsed)
-                lastYRot -= 40;
+            //if (!leftJoystickUsed && leftJoystickLastUsed)
+            //    lastYRot -= 40;
             deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
-
 
             // If difference between cam and body exceed something when using the right joystick, then turn the body.
             // Keep it a very tight amount before the body starts to rotate since the arms will become fucky otherwise
@@ -62,8 +61,7 @@ namespace TarkovVR.Patches.Core.Player
 
             __instance.MovementContext.Rotation = deltaRotation;
             //__instance.MovementContext._player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y-40, 0);
-
-
+            leftJoystickLastUsed = leftJoystickUsed;
             return false;
         }
 
@@ -77,7 +75,7 @@ namespace TarkovVR.Patches.Core.Player
             //float y = Mathf.Abs(__instance.MovementContext.TransformRotation.eulerAngles.y - camRoot.transform.eulerAngles.y);
             //if (y > 20)
             //    __instance.MovementContext.ApplyRotation(Quaternion.Lerp(__instance.MovementContext.TransformRotation, __instance.MovementContext.TransformRotation * Quaternion.Euler(0f, y, 0f), 30f * deltaTime));
-            if (__instance.MovementContext._player.IsAI || VRGlobals.inGame)
+            if (__instance.MovementContext._player.IsAI || !VRGlobals.inGame)
                 return true;
 
             __instance.UpdateRotationSpeed(deltaTime);
@@ -88,12 +86,13 @@ namespace TarkovVR.Patches.Core.Player
             __instance.MovementContext.ApplyRotation(Quaternion.AngleAxis(float_3, Vector3.up) * __instance.MovementContext.AnimatorDeltaRotation);
             //Plugin.MyLog.LogError("Process upper " + (Quaternion.AngleAxis(float_3, Vector3.up) * __instance.MovementContext.AnimatorDeltaRotation).eulerAngles);
             return false;
+             
         }
 
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass1916), "ManualLateUpdate")]
-        private static bool StopCamXRotation(GClass1916 __instance)
+        private static bool PositionCamera(GClass1916 __instance)
         {
             if (__instance.player_0.IsAI || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;

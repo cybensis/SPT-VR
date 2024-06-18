@@ -43,7 +43,7 @@ namespace TarkovVR.Source.Player.VR
         // the upper arm, or the collarbone, for the upper arm the +y value goes forward
         // For collarbone setting everything to 0 and z = 0.1 seemed to work fine
 
-        void LateUpdate()
+        void Update()
         {
             if (!VRGlobals.vrPlayer || VRGlobals.menuOpen)
                 return;

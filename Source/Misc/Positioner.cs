@@ -2,12 +2,13 @@
 
 namespace TarkovVR.Source.Misc
 {
-    internal class Positioner : MonoBehaviour
+    internal class WeaponPositioner : MonoBehaviour
     {
 
         private float x, y, z;
         private float rx, ry, rz;
         public Transform target;
+        public bool left = false;
         private void Awake()
         {
             x = 90f;
@@ -17,42 +18,45 @@ namespace TarkovVR.Source.Misc
             //rz = 90f;
         }
 
-        private void Update() {
-            if (VRGlobals.vrPlayer.RightHand) {
-                transform.position = VRGlobals.vrPlayer.RightHand.transform.position;
-                transform.rotation = VRGlobals.vrPlayer.RightHand.transform.rotation;
-            }
-        }
         private void LateUpdate()
         {
-            //if (target) {
-            //     //transform.position = target.position + new Vector3(x, y, z);
-            //    //transform.rotation = target.rotation * Quaternion.Euler(rx, ry, rz);
-
-            //    target.position = transform.position;
-            //    target.rotation = transform.rotation;
-            //    // transform.position = VRPlayerManager.RightHand.transform.position + new Vector3(x, y, z);
-            //    //transform.rotation = VRPlayerManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
-            //}
-            //else
-            //{
-            //    //transform.position = VRPlayerManager.RightHand.transform.position + new Vector3(x, y, z);
-            //    //transform.rotation = VRPlayerManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
-            //    transform.rotation = Quaternion.Euler(rx, ry, rz);
-            //}\
-            if (VRGlobals.vrPlayer.RightHand)
-            {
-                transform.position = VRGlobals.vrPlayer.RightHand.transform.position;
-                transform.rotation = VRGlobals.vrPlayer.RightHand.transform.rotation;
-            }
-            //if (CamPatches.VRCam != null)
-            //{
-            //    //transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0) + (CamPatches.VRCam.transform.up * -0.04f) + (CamPatches.VRCam.transform.forward * -0.06f);
-            //    transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0.025f) + (CamPatches.VRCam.transform.up * 0.3f) + (CamPatches.VRCam.transform.forward * -0.06f);
-            //    //transform.localPosition += (transform.right * x) + (transform.up * y) + (transform.forward * z);
-            //    transform.rotation = CamPatches.VRCam.transform.rotation * Quaternion.Euler(180, 90, 90);
-            //}
+            transform.localPosition = Vector3.zero;
         }
+        //private void LateUpdate()
+        //{
+        //    //if (target) {
+        //    //     //transform.position = target.position + new Vector3(x, y, z);
+        //    //    //transform.rotation = target.rotation * Quaternion.Euler(rx, ry, rz);
+
+        //    //    target.position = transform.position;
+        //    //    target.rotation = transform.rotation;
+        //    //    // transform.position = VRPlayerManager.RightHand.transform.position + new Vector3(x, y, z);
+        //    //    //transform.rotation = VRPlayerManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
+        //    //}
+        //    //else
+        //    //{
+        //    //    //transform.position = VRPlayerManager.RightHand.transform.position + new Vector3(x, y, z);
+        //    //    //transform.rotation = VRPlayerManager.RightHand.transform.rotation * Quaternion.Euler(rx, ry, rz);
+        //    //    transform.rotation = Quaternion.Euler(rx, ry, rz);
+        //    //}\
+        //    if (left && VRGlobals.vrPlayer.LeftHand)
+        //    {
+        //        transform.position = VRGlobals.vrPlayer.LeftHand.transform.position;
+        //        transform.rotation = VRGlobals.vrPlayer.LeftHand.transform.rotation;
+        //    }
+        //    else if (VRGlobals.vrPlayer.RightHand)
+        //    {
+        //        transform.position = VRGlobals.vrPlayer.RightHand.transform.position;
+        //        transform.rotation = VRGlobals.vrPlayer.RightHand.transform.rotation;
+        //    }
+        //    //if (CamPatches.VRCam != null)
+        //    //{
+        //    //    //transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0) + (CamPatches.VRCam.transform.up * -0.04f) + (CamPatches.VRCam.transform.forward * -0.06f);
+        //    //    transform.position = CamPatches.VRCam.transform.position + (CamPatches.VRCam.transform.right * 0.025f) + (CamPatches.VRCam.transform.up * 0.3f) + (CamPatches.VRCam.transform.forward * -0.06f);
+        //    //    //transform.localPosition += (transform.right * x) + (transform.up * y) + (transform.forward * z);
+        //    //    transform.rotation = CamPatches.VRCam.transform.rotation * Quaternion.Euler(180, 90, 90);
+        //    //}
+        //}
 
         /*        private void LateUpdate()
                 {

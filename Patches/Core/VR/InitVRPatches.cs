@@ -17,6 +17,8 @@ namespace TarkovVR.Patches.Core.VR
     [HarmonyPatch]
     internal class InitVRPatches
     {
+        private static Transform originalLeftHandMarker;
+        private static Transform originalRightHandMarker;
         public static Transform rigCollider;
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
@@ -94,6 +96,14 @@ namespace TarkovVR.Patches.Core.VR
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player), "UpdateBonesOnWeaponChange")]
+        private static void AdwdVR(EFT.Player __instance)
+        {
+            Plugin.MyLog.LogWarning("UpdateBonesOnWeaponChange " + VRGlobals.vrPlayer);
+        }
+
+
+            [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void AddVRHands(LimbIK __instance)
         {
@@ -101,6 +111,7 @@ namespace TarkovVR.Patches.Core.VR
             //    return;
             if (__instance.transform.root.name != "PlayerSuperior(Clone)")
                 return;
+
 
             StackTrace stackTrace = new StackTrace();
             bool isBotPlayer = false;
@@ -129,31 +140,10 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.transform.parent.parent.GetComponent<IKManager>() == null)
             {
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
+                //VRGlobals.ikManager.enabled = false;
             }
+            //GameObject.Destroy(__instance);
 
-            if (__instance.name == VRGlobals.LEFT_ARM_OBJECT_NAME )
-            {
-                __instance.enabled = true;
-                VRGlobals.ikManager.leftArmIk = __instance;
-                if (VRGlobals.vrPlayer)
-                    __instance.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
-                // Set the weight to 2.5 so when rotating the hand, the wrist rotates as well, showing the watch time
-                VRGlobals.leftWrist = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0);
-                //leftWrist.GetComponent<TwistRelax>().weight = 2.5f;
-            }
-            else if (__instance.name == VRGlobals.RIGHT_ARM_OBJECT_NAME)
-            {
-
-                __instance.enabled = true;
-                VRGlobals.ikManager.rightArmIk = __instance;
-                if (VRGlobals.ikManager.rightHandIK == null)
-                    VRGlobals.ikManager.rightHandIK = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(0).gameObject;
-                if (VRGlobals.vrPlayer)
-                    __instance.solver.target = VRGlobals.vrPlayer.RightHand.transform;
-
-
-
-            }
 
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -97,7 +97,8 @@ namespace TarkovVR.Patches.UI
                 VRGlobals.preloaderUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
                 VRGlobals.preloaderUi.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
                 VRGlobals.preloaderUi.localPosition = new Vector3(-0.03f, -0.1f, 0.8f);
-                VRGlobals.preloaderUi.localRotation = Quaternion.identity;     }
+                VRGlobals.preloaderUi.localRotation = Quaternion.identity;     
+            }
         }
 
         public static void HandleCloseInventory()
@@ -527,16 +528,16 @@ namespace TarkovVR.Patches.UI
                 camHolder.GetComponent<Camera>().fieldOfView = 20;
         }
 
-        public static void HideUiScreens() { 
-            VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
-            VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = false;
-            VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+        public static void HideUiScreens() {
+            //VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+            //VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+            //VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = false;
         }
         public static void ShowUiScreens()
         {
-            VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
-            VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = true;
-            VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            //VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            //VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            //VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = true;
         }
     }
 }
