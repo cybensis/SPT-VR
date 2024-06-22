@@ -73,6 +73,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(HideoutScreenOverlay), "Show")]
         private static void HandleHideoutOverlay(HideoutScreenOverlay __instance)
         {
+
             UIPatches.ShowUiScreens();
             if (!hideoutUiCam)
             {
@@ -154,11 +155,9 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
         private static void PositionInHideoutInventory(GridViewMagnifier __instance)
         {
-            Plugin.MyLog.LogError("method_3");
             VRGlobals.camRoot.transform.eulerAngles = camRootRot;
             if (!VRGlobals.inGame)
                 return;
-            Plugin.MyLog.LogError("methd3-2");
             if (VRGlobals.player && !VRGlobals.menuOpen)
                 UIPatches.HandleOpenInventory();
         }
@@ -314,7 +313,7 @@ namespace TarkovVR.Patches.Misc
         {
             if (VRGlobals.inGame && (
                     (!arg && __instance.menuType != EMenuType.Chat && __instance.menuType != EMenuType.MainMenu ) || 
-                    (arg && __instance.menuType != EMenuType.Hideout & __instance.menuType != EMenuType.MainMenu)
+                    (arg && __instance.menuType == EMenuType.Hideout)
                 ))
                 UIPatches.HandleCloseInventory();
         }
@@ -323,7 +322,8 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(TemplatedGridsView), "Show")]
         private static void PositionWeaponRackTransferWindow(TemplatedGridsView __instance)
         {
-            __instance.SwitchZoneTabsPosition.parent.localPosition = Vector3.zero;
+            if (__instance.name == "WeaponStand_Stash(Clone)")
+                __instance.SwitchZoneTabsPosition.parent.localPosition = Vector3.zero;
         }
     }
 }

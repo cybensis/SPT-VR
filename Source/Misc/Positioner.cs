@@ -21,6 +21,7 @@ namespace TarkovVR.Source.Misc
         private void LateUpdate()
         {
             transform.localPosition = Vector3.zero;
+            transform.localEulerAngles = Vector3.zero;
         }
         //private void LateUpdate()
         //{

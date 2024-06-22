@@ -529,15 +529,15 @@ namespace TarkovVR.Patches.UI
         }
 
         public static void HideUiScreens() {
-            //VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
-            //VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = false;
-            //VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+            VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+            VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+            VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = false;
         }
         public static void ShowUiScreens()
         {
-            //VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
-            //VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = true;
-            //VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = true;
         }
     }
 }

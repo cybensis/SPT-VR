@@ -966,9 +966,10 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.localPosition = Vector3.zero;
         }
 
+        //Dunno what this is for
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Window<GClass2876>), "Show")]
-        private static void PositionFleaMarketFilwterWindow(Window<GClass2876> __instance)
+        private static void PositionSomeWindow(Window<GClass2876> __instance)
         {
             __instance.transform.localPosition = Vector3.zero;
             __instance.transform.GetChild(0).localPosition = Vector3.zero;
@@ -976,7 +977,7 @@ namespace TarkovVR.Patches.Misc
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WelcomeScreen), "Show", new Type[] { typeof(WelcomeScreen.GClass2931)})]
-        private static void PositionFleaMarkewtFilwterWindow(WelcomeScreen __instance)
+        private static void PositionLoginWelcomeScreen(WelcomeScreen __instance)
         {
             
             __instance.transform.parent.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;

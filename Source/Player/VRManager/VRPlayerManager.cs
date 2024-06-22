@@ -2,6 +2,7 @@
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using UnityEngine;
+using UnityEngine.UI;
 using Valve.VR;
 
 namespace TarkovVR.Source.Player.VRManager
@@ -101,6 +102,7 @@ namespace TarkovVR.Source.Player.VRManager
         }
 
 
+        private static Transform lastHitGunComp;
         protected virtual void Update()
         {
             if (Camera.main == null)
@@ -148,11 +150,7 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.blockRightJoystick = false;
                 }
             }
-
         }
-
-
-
 
         private float controllerLength = 0.175f;
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
