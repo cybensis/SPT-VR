@@ -1,0 +1,347 @@
+﻿using EFT.InputSystem;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using TarkovVR.Patches.Core.Player;
+using TarkovVR.Source.Player.VRManager;
+using UnityEngine;
+using Valve.VR;
+
+namespace TarkovVR.Source.Controls
+{
+    public static class InputHandlers
+    {
+        public interface IInputHandler
+        {
+            void UpdateCommand(ref ECommand command);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class JumpInputHandler : IInputHandler
+        {
+
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (VRGlobals.vrPlayer.canJump && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
+                {
+                        command = ECommand.Jump;
+                }
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class SprintInputHandler : IInputHandler
+        {
+            private bool isSprinting = false;
+
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any))
+                {
+                    if (!isSprinting)
+                        command = ECommand.ToggleSprinting;
+                    else
+                        command = ECommand.EndSprinting;
+
+                    isSprinting = !isSprinting;
+                }
+                else if (isSprinting && SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
+                {
+                    command = ECommand.EndSprinting;
+                    isSprinting = false;
+                }
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class ReloadInputHandler : IInputHandler
+        {
+            private bool toggleReload = false; 
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any))
+                    command = ECommand.ReloadWeapon;
+                if (toggleReload) {
+                    command = ECommand.ReloadWeapon;
+                    toggleReload = false;
+                }
+            }
+
+            public void TriggerReload()
+            {
+                toggleReload = true;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class AimHandler : IInputHandler
+        {
+            public void UpdateCommand(ref ECommand command)
+            {
+                float angleToScope = 100f;
+                float angleFromScope = 100f;
+                if (VRGlobals.firearmController && VRGlobals.scope) {
+                    bool isAiming = VRGlobals.firearmController.IsAiming;
+                    Vector3 directionToScope = (VRGlobals.scope.transform.position + (VRGlobals.scope.transform.forward * -0.25f)) - VRGlobals.camHolder.transform.position;
+                    directionToScope = directionToScope.normalized;
+                    angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward* -1, directionToScope);
+                    angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
+                    Plugin.MyLog.LogWarning(angleToScope + "   " + angleFromScope);
+                    if (!isAiming && angleToScope <= 20f && angleFromScope <= 20f)
+                    {
+                        command = ECommand.ToggleAlternativeShooting;
+                    }
+                    else if (isAiming && (angleToScope > 20f || angleFromScope > 20f))
+                    {
+                        command = ECommand.EndAlternativeShooting;
+                        VRPlayerManager.smoothingFactor = 20f;
+                    }
+                    
+                }
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class FireHandler : IInputHandler
+        {
+            private bool isShooting = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (!isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
+                {
+                    command = ECommand.ToggleShooting;
+                    isShooting = true;
+                }
+                else if (isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
+                {
+                    command = ECommand.EndShooting;
+                    isShooting = false;
+                }
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class ScrollHandler : IInputHandler
+        {
+            private bool isScrolling = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (!VRGlobals.blockRightJoystick && VRGlobals.vrPlayer.interactMenuOpen)
+                {
+
+                    if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.5f)
+                    {
+                        command = ECommand.ScrollPrevious;
+                        isScrolling = true;
+                    }
+                    else if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < -0.5f)
+                    {
+                        command = ECommand.ScrollNext;
+                        isScrolling = true;
+                    }
+                    else if (SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > -0.5f && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < 0.5f)
+                        isScrolling = false;
+                }
+            }
+
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class BreathingHandler : IInputHandler
+        {
+            private bool isHoldingBreath = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (!VRGlobals.firearmController)
+                    return;
+                bool isAiming = VRGlobals.firearmController.IsAiming;
+                if (!isHoldingBreath && isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
+                {
+                    command = ECommand.ToggleBreathing;
+                    isHoldingBreath = true;
+                    if (VRGlobals.scopeSensitivity * 75f > 0)
+                        VRPlayerManager.smoothingFactor = VRGlobals.scopeSensitivity * 75f;
+                }
+                else if (isHoldingBreath && (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f || !isAiming))
+                {
+                    command = ECommand.EndBreathing;
+                    isHoldingBreath = false;
+                    VRPlayerManager.smoothingFactor = 50f;
+                }
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class SelectWeaponHandler : IInputHandler
+        {
+            private bool swapPrimaryWeapon = false;
+            private bool swapSecondaryWeapon = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if ((swapPrimaryWeapon) || VRGlobals.handsInteractionController.swapWeapon || (WeaponPatches.returnAfterGrenade && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
+                {
+
+                    if (VRGlobals.player && VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
+                        if (WeaponPatches.returnAfterGrenade)
+                            command = ECommand.SelectFirstPrimaryWeapon;
+                        else
+                            command = ECommand.SelectSecondPrimaryWeapon;
+                    else
+                        if (WeaponPatches.returnAfterGrenade)
+                            command = ECommand.SelectSecondPrimaryWeapon;
+                        else
+                            command = ECommand.SelectFirstPrimaryWeapon;
+
+                    swapPrimaryWeapon = false;
+                    VRGlobals.handsInteractionController.swapWeapon = false;
+                }
+            }
+
+            public void TriggerSwapPrimaryWeapon() {
+                swapPrimaryWeapon = true;
+            }
+            public void TriggerSwapSecondaryWeapon() {
+                swapSecondaryWeapon = true;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class ScopeZoomHandler : IInputHandler
+        {
+            private bool swapZooms = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (!VRGlobals.firearmController)
+                    return;
+                if (VRGlobals.firearmController.IsAiming && swapZooms) { 
+                    command = ECommand.ChangeScopeMagnification;
+                    swapZooms = false;
+                }
+            }
+
+            public void TriggerSwapZooms()
+            {
+                swapZooms = true;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class CheckAmmoHandler : IInputHandler
+        {
+            private bool checkAmmo = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (checkAmmo)
+                {
+                    command = ECommand.CheckAmmo;
+                    checkAmmo = false;
+                }
+                
+            }
+            public void TriggerCheckAmmo()
+            {
+                checkAmmo = true;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class FireModeHandler : IInputHandler
+        {
+            private bool changeFireMode = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (changeFireMode)
+                {
+                    command = ECommand.ChangeWeaponMode;
+                    changeFireMode = false;
+                }
+            }
+            public void TriggerChangeFireMode()
+            {
+                changeFireMode = true;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class CheckChamberHandler : IInputHandler
+        {
+            private bool checkChamber = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+
+                if (checkChamber)
+                {
+                    command = ECommand.CheckChamber;
+                    checkChamber = false;
+                }
+            }
+            public void TriggerCheckChamber()
+            {
+                checkChamber = true;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class QuickSlotHandler : IInputHandler
+        {
+            private int currentSlot;
+            // The user set quick slots start at 4, 1-3 are weapon slots
+            private ECommand[] quickSlotCommands = { 
+                ECommand.SelectFastSlot4, 
+                ECommand.SelectFastSlot5, 
+                ECommand.SelectFastSlot6, 
+                ECommand.SelectFastSlot7, 
+                ECommand.SelectFastSlot8, 
+                ECommand.SelectFastSlot9, 
+                ECommand.SelectFastSlot0 
+            };
+
+            public void UpdateCommand(ref ECommand command)
+            {
+
+                if (currentSlot != -1)
+                {
+                    command = quickSlotCommands[currentSlot];
+                    currentSlot = -1;
+                }
+            }
+            public void TriggerUseQuickSlot(int quickSlot)
+            {
+                currentSlot = quickSlot;
+            }
+            public int GetQuickUseSlot()
+            {
+                return currentSlot;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class InteractHandler : IInputHandler
+        {
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any))
+                    command = ECommand.BeginInteracting;
+                else if (SteamVR_Actions._default.ButtonA.GetStateUp(SteamVR_Input_Sources.Any))
+                    command = ECommand.EndInteracting;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class InventoryHandler : IInputHandler
+        {
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any))
+                    command = ECommand.ToggleInventory;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class GrenadeHandler : IInputHandler
+        {
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5)
+                    command = ECommand.TryHighThrow;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class EscapeHandler : IInputHandler
+        {
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any))
+                    command = ECommand.Escape;
+            }
+        }
+
+    }
+}

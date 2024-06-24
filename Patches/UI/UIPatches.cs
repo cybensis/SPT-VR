@@ -325,8 +325,7 @@ namespace TarkovVR.Patches.UI
                 RaycastHit hit;
 
                 Vector3 rayOrigin = Camera.main.transform.position;
-                Vector3 rayDirection = Camera.main.transform.forward;
-                rayDirection.y -= manager.downwardOffset;
+                Vector3 rayDirection = Quaternion.Euler(5, 0, 0) * Camera.main.transform.forward;
                 float adjustedRayDistance = manager.rayDistance * manager.GetDistanceMultiplier(rayDirection);
 
                 GameObject gameObject = null;
@@ -529,13 +528,15 @@ namespace TarkovVR.Patches.UI
         }
 
         public static void HideUiScreens() {
-            VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
+            if (VRGlobals.menuUi)
+                VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
             VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = false;
             VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = false;
         }
         public static void ShowUiScreens()
         {
-            VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+            if (VRGlobals.menuUi)
+                VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
             VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = true;
             VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = true;
         }

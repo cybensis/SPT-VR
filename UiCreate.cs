@@ -1,8 +1,10 @@
 ﻿using System.IO;
 using TarkovVR;
+using TarkovVR.Source.Controls;
 using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
+using static TarkovVR.Source.Controls.InputHandlers;
 
 public class CircularSegmentUI : MonoBehaviour
 {
@@ -17,7 +19,7 @@ public class CircularSegmentUI : MonoBehaviour
     public Sprite defaultMenuSprite = null;
     public Sprite selectedMenuSprite = null;
     public bool leftHand = false;
-
+    private QuickSlotHandler quickSlotHandler;
     public void Init()
     {
 
@@ -61,13 +63,17 @@ public class CircularSegmentUI : MonoBehaviour
         int children = transform.childCount;
         for (int i = 0; i < children; i++)
         {
-            Destroy(transform.GetChild(0).gameObject);
+            Destroy(transform.GetChild(i).gameObject);
         }
         menuSegments = new Image[menuSprites.Length];
         numberOfSegments = menuSprites.Length;
         this.menuSprites = menuSprites;
         leftHand = true;
         CreateSegments();
+        IInputHandler baseHandler;
+        VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.SelectFastSlot4, out baseHandler);
+        if (baseHandler != null)
+            quickSlotHandler = baseHandler as QuickSlotHandler;
     }
 
     void Update()
@@ -111,8 +117,8 @@ public class CircularSegmentUI : MonoBehaviour
         }
         if (leftHand && !SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand))
         {
-            if (VRGlobals.quickSlot == -1 && lastSelectedSegment != -1)
-                VRGlobals.quickSlot = lastSelectedSegment;
+            if (quickSlotHandler.GetQuickUseSlot() == -1 && lastSelectedSegment != -1)
+                quickSlotHandler.TriggerUseQuickSlot(lastSelectedSegment);
             gameObject.active = false;
         }
     }

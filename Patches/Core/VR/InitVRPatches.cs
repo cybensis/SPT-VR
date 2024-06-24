@@ -76,6 +76,7 @@ namespace TarkovVR.Patches.Core.VR
                     collider.isTrigger = true;
                     VRGlobals.camHolder.layer = 7;
                     VRGlobals.menuVRManager.enabled = false;
+
                 }
             }
 
@@ -95,15 +96,9 @@ namespace TarkovVR.Patches.Core.VR
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player), "UpdateBonesOnWeaponChange")]
-        private static void AdwdVR(EFT.Player __instance)
-        {
-            Plugin.MyLog.LogWarning("UpdateBonesOnWeaponChange " + VRGlobals.vrPlayer);
-        }
-
-
-            [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void AddVRHands(LimbIK __instance)
         {
@@ -170,6 +165,8 @@ namespace TarkovVR.Patches.Core.VR
                 mainCam.nearClipPlane = 0.001f;
                 mainCam.farClipPlane = 1000f;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
+                mainCam.useOcclusionCulling = false;
+
                 //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
                 //cameraManager.initPos = VRCam.transform.localPosition;
             }

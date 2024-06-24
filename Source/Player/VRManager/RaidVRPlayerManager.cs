@@ -17,7 +17,8 @@ namespace TarkovVR.Source.Player.VRManager
         // The center of the camera doesn't feel like it aligns with the center of my vision in VR
         // so use this to drop it down a little bit
         public float downwardOffset = 0.1f;
-
+        private Vector3 interactUiPos;
+        private bool raycastHit = false;
 
         //public void Awake()
         //{
@@ -25,6 +26,21 @@ namespace TarkovVR.Source.Player.VRManager
         //    cube.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
 
         //}
+
+        private void Update() {
+            base.Update(); 
+            if (interactionUi) {
+                if (raycastHit && interactionUi.gameObject.active)
+                {
+                    interactionUi.position = interactUiPos;
+                    interactionUi.LookAt(Camera.main.transform);
+                    // Need to rotate 180 degrees otherwise it shows up backwards
+                    interactionUi.Rotate(0, 180, 0);
+                }
+                else if (raycastHit && !interactionUi.gameObject.active)
+                    raycastHit = false;
+            }
+        }
 
 
 
@@ -42,7 +58,7 @@ namespace TarkovVR.Source.Player.VRManager
 
                 BoxCollider boxCollider = hit.collider as BoxCollider;
                 Vector3 offsetDirection = (rayOrigin - hit.point).normalized;
-                Vector3 interactorPosition = hit.point + offsetDirection * dirMultiplier; // Adjust the offset distance as needed
+                interactUiPos = hit.point + offsetDirection * dirMultiplier; // Adjust the offset distance as needed
                 // If the interactable object has a box collider then use this to set the UI position to the very center
                 // of the face of the collider the raycast has hit.
                 if (boxCollider != null)
@@ -65,18 +81,13 @@ namespace TarkovVR.Source.Player.VRManager
                         hitFaceCenter.z = localHitPoint.z > localCenter.z ? localCenter.z + halfZ : localCenter.z - halfZ;
 
                     Vector3 worldHitFaceCenter = hit.transform.TransformPoint(hitFaceCenter);
-                    interactorPosition = worldHitFaceCenter + (rayOrigin - worldHitFaceCenter).normalized * dirMultiplier;
+                    interactUiPos = worldHitFaceCenter + (rayOrigin - worldHitFaceCenter).normalized * dirMultiplier;
                 }
-                    Plugin.MyLog.LogWarning(boxCollider + " | " + interactorPosition + " |  " + interactionUi);
+                    Plugin.MyLog.LogWarning(boxCollider + " | " + interactUiPos + " |  " + interactionUi);
+                raycastHit = true;
                 // Set the interactions UI position
-                if (interactionUi)
-                {
-                    interactionUi.position = interactorPosition;
-                    interactionUi.LookAt(Camera.main.transform);
-                    // Need to rotate 180 degrees otherwise it shows up backwards
-                    interactionUi.Rotate(0, 180, 0);
-                }
             }
+
 
 
         }

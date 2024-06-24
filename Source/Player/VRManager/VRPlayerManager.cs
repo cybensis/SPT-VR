@@ -1,6 +1,8 @@
-﻿using TarkovVR.Patches.Core.Player;
+﻿using Sirenix.Serialization;
+using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
+using TarkovVR.Source.Controls;
 using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
@@ -42,22 +44,27 @@ namespace TarkovVR.Source.Player.VRManager
         public Vector3 startingPlace;
         private bool showingUI = false;
         private bool handLock = false;
+        public bool canJump = true;
+        public bool interactMenuOpen = false;
+        private static int LEFT_HAND_ANIMATOR_HASH = UnityEngine.Animator.StringToHash("ReloadFloat");
+        //public VRInputManager inputManager;
+        private bool leftHandInAnimation = false;
         protected virtual void Awake()
         {
-
+            
             SpawnHands();
             Plugin.MyLog.LogWarning("Create hands");
             if (RightHand) { 
                 RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
-                if (!radialMenu) {
-                    radialMenu = new GameObject("radialMenu");
-                    radialMenu.layer = 5;
-                    radialMenu.transform.parent = RightHand.transform;
-                    CircularSegmentUI uiComp = radialMenu.AddComponent<CircularSegmentUI>();
-                    uiComp.Init();
-                    uiComp.CreateGunUi(new string[] { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" });
-                    radialMenu.active = false;
-                }
+                //if (!radialMenu) {
+                //    radialMenu = new GameObject("radialMenu");
+                //    radialMenu.layer = 5;
+                //    radialMenu.transform.parent = RightHand.transform;
+                //    CircularSegmentUI uiComp = radialMenu.AddComponent<CircularSegmentUI>();
+                //    uiComp.Init();
+                //    uiComp.CreateGunUi(new string[] { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" });
+                //    radialMenu.active = false;
+                //}
             }
             if (LeftHand) { 
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
@@ -85,6 +92,9 @@ namespace TarkovVR.Source.Player.VRManager
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
 
+            //if (inputManager == null) {
+            //    inputManager = new VRInputManager();
+            //}
 
         }
 
@@ -130,26 +140,28 @@ namespace TarkovVR.Source.Player.VRManager
                 timeHeld = 0;
             }
 
-            if (radialMenu)
-            {
+            //if (radialMenu)
+            //{
 
-                RaycastHit hit;
-                LayerMask mask = 1 << 7;
-                if (SteamVR_Actions._default.RightGrip.state && Physics.Raycast(RightHand.transform.position, RightHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
-                {
-                    if (!radialMenu.active)
-                    {
-                        radialMenu.active = true;
-                        VRGlobals.blockRightJoystick = true;
-                    }
+            //    RaycastHit hit;
+            //    LayerMask mask = 1 << 7;
+            //    if (SteamVR_Actions._default.RightGrip.state && Physics.Raycast(RightHand.transform.position, RightHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
+            //    {
+            //        if (!radialMenu.active)
+            //        {
+            //            radialMenu.active = true;
+            //            VRGlobals.blockRightJoystick = true;
+            //        }
 
-                }
-                else if (VRGlobals.blockRightJoystick && SteamVR_Actions._default.RightJoystick.axis.x == 0 && SteamVR_Actions._default.RightJoystick.axis.y == 0)
-                {
-                    radialMenu.active = false;
-                    VRGlobals.blockRightJoystick = false;
-                }
-            }
+            //    }
+            //    else if (VRGlobals.blockRightJoystick && SteamVR_Actions._default.RightJoystick.axis.x == 0 && SteamVR_Actions._default.RightJoystick.axis.y == 0)
+            //    {
+            //        radialMenu.active = false;
+            //        VRGlobals.blockRightJoystick = false;
+            //    }
+            //}
+            interactMenuOpen = (interactionUi && interactionUi.gameObject.active);
+            canJump = (!VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && !interactMenuOpen);
         }
 
         private float controllerLength = 0.175f;
@@ -237,6 +249,20 @@ namespace TarkovVR.Source.Player.VRManager
         {
             if (LeftHand)
             {
+                if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(LEFT_HAND_ANIMATOR_HASH) == 1.0)
+                {
+                    if (!leftHandInAnimation)
+                    {
+                        VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                        leftHandInAnimation = true;
+                    }
+                    return;
+                }
+                else if (leftHandInAnimation) {
+                    VRGlobals.player._markers[0] = LeftHand.transform;
+                    leftHandInAnimation = false;
+                }
+
                 if (leftHandGunIK && (Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.1f || handLock || isSupporting && Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.175f))
                 {
                     if (!isSupporting)

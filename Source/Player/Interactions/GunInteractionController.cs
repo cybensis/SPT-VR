@@ -4,26 +4,34 @@ using System.Collections.Generic;
 using System.Text;
 using TarkovVR;
 using TarkovVR.Patches.Core.Player;
+using TarkovVR.Source.Controls;
+using TarkovVR.Source.Weapons;
 using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
+using static HighLightMesh;
 using static System.Net.Mime.MediaTypeNames;
+using static TarkovVR.Source.Controls.InputHandlers;
 
 public class GunInteractionController : MonoBehaviour
 {
-    private Transform magazine;
+    public Transform magazine;
+    private static LayerMask WEAPON_COLLIDER_LAYER = 9;
     private Transform internalMag;
     private Transform chargingHandle;
     private Transform bolt;
     private Transform fireModeSwitch;
     private List<Transform> tacDevices;
     private List<Transform> interactables;
-    private Transform gunRaycastReciever;
+    private GameObject gunRaycastReciever;
     private Vector3 rotOffset = Vector3.zero;
-    private bool initialized = false;
+    public bool initialized = false;
     private int lastHitCompIndex = -1;
     private GamePlayerOwner playerOwner;
     private List<GClass2805> weaponUiLists;
+    private List<Class497> meshList;
+    private HighLightMesh meshHighlighter;
+    private bool hightlightingMesh = false;
     public void Init()
     {
         //gameObject.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
@@ -33,24 +41,50 @@ public class GunInteractionController : MonoBehaviour
             tacDevices = new List<Transform>();
         if (weaponUiLists == null)
             weaponUiLists = new List<GClass2805>();
-
-
+        if (meshList == null)
+            meshList = new List<Class497>();
     }
-    // 3. Run HideoutPlayerOwner.AvailableInteractionState.set_Value(Gclass2805)
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
+    private void FinishInit() {
+        meshHighlighter.Awake();
+        initialized = true;
+    }
+
+    private void OnEnable() {
+        if (initialized)
+            gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
+    }
+    private void OnDisable()
+    {
+        if (initialized)
+            gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
+    }
+    public void SetHighlightComponent(HighLightMesh meshHighlighter) { 
+        this.meshHighlighter = meshHighlighter;
+    }
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void SetPlayerOwner(GamePlayerOwner owner) {
         playerOwner = owner;
     }
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void Update()
     {
         if (!initialized)
             return;
-        for (int i = 0; i < interactables.Count; i++)
-        {
-            interactables[i].LookAt(Camera.main.transform);
-        }
+        //for (int i = 0; i < interactables.Count; i++)
+        //{
+        //    interactables[i].LookAt(Camera.main.transform);
+        //}
 
         if (SteamVR_Actions._default.RightGrip.state)
         {
+            if (!hightlightingMesh && meshHighlighter) {
+
+                meshHighlighter.class497_0 = meshList.ToArray();
+                meshHighlighter.enabled = true;
+                hightlightingMesh = true;
+            }
+
             RaycastHit hit;
             LayerMask mask = 1 << 9;
             if (Physics.Raycast(Camera.main.transform.position, Quaternion.Euler(5, 0, 0) * Camera.main.transform.forward, out hit, 2, mask))
@@ -58,12 +92,12 @@ public class GunInteractionController : MonoBehaviour
                 int index = FindClosestTransform(hit.point);
                 if (lastHitCompIndex != index)
                 {
-                    if (lastHitCompIndex != -1)
-                        interactables[lastHitCompIndex].gameObject.active = true;
+                    //if (lastHitCompIndex != -1)
+                    //    interactables[lastHitCompIndex].gameObject.active = true;
 
                     weaponUiLists[index].SelectedAction = weaponUiLists[index].Actions[0];
                     playerOwner.AvailableInteractionState.method_0(weaponUiLists[index]);
-                    interactables[index].gameObject.active = false;
+                    //interactables[index].gameObject.active = false;
                     lastHitCompIndex = index;
                     VRGlobals.vrPlayer.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
                 }
@@ -71,7 +105,7 @@ public class GunInteractionController : MonoBehaviour
             else if (lastHitCompIndex != -1)
             {
                 playerOwner.AvailableInteractionState.method_0(null);
-                interactables[lastHitCompIndex].gameObject.active = true;
+                //interactables[lastHitCompIndex].gameObject.active = true;
                 lastHitCompIndex = -1;
                 VRGlobals.vrPlayer.interactionUi.localScale = Vector3.one;
             }
@@ -79,10 +113,14 @@ public class GunInteractionController : MonoBehaviour
         }
         else if (lastHitCompIndex != -1) {
             playerOwner.AvailableInteractionState.method_0(null);
-            interactables[lastHitCompIndex].gameObject.active = true;
+            //interactables[lastHitCompIndex].gameObject.active = true;
             lastHitCompIndex = -1;
             VRGlobals.vrPlayer.interactionUi.localScale = Vector3.one;
         }
+        else if (hightlightingMesh && meshHighlighter) {
+                meshHighlighter.enabled = false;
+                hightlightingMesh = false;
+            }
 
         if (lastHitCompIndex != -1)
         {
@@ -90,8 +128,8 @@ public class GunInteractionController : MonoBehaviour
             VRGlobals.vrPlayer.interactionUi.LookAt(Camera.main.transform);
             VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);
         }
-
     }
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private int FindClosestTransform(Vector3 hitPoint)
     {
         int index = -1;
@@ -111,20 +149,34 @@ public class GunInteractionController : MonoBehaviour
 
         return index;
     }
-
-
-
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void SetMagazine(Renderer magTransform, bool isInternal) {
         if (isInternal)
             internalMag = magTransform.transform;
         else 
             magazine = magTransform.transform;
         CreateInteractableMarker(magTransform.transform, "magMarker");
+        GetMesh(magTransform.transform);
         List<GClass2804> listComponents = new List<GClass2804>();
         GClass2804 checkMagazine = new GClass2804();
         checkMagazine.Name = "Check Magazine";
         GClass2804 reload = new GClass2804();
         reload.Name = "Reload";
+        IInputHandler baseHandler;
+        VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ReloadWeapon, out baseHandler);
+        if (baseHandler != null)
+        {
+            ReloadInputHandler reloadHandler = baseHandler as ReloadInputHandler;
+            reload.Action = reloadHandler.TriggerReload;
+
+        }
+        VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.CheckAmmo, out baseHandler);
+        if (baseHandler != null)
+        {
+            CheckAmmoHandler checkAmmoHandler =  baseHandler as CheckAmmoHandler;
+            checkMagazine.Action = checkAmmoHandler.TriggerCheckAmmo;
+
+        }
         listComponents.Add(checkMagazine);
         listComponents.Add(reload);
         GClass2805 magazineList = new GClass2805();
@@ -132,11 +184,11 @@ public class GunInteractionController : MonoBehaviour
         weaponUiLists.Add(magazineList);
         interactables[interactables.Count - 1].position = magTransform.bounds.center;
     }
-
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public bool IsMagazineSet() {
         return (magazine || internalMag);
     }
-
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void SetChargingHandleOrBolt(Transform chargeOrBoltTransform, bool isBolt) {
         if (chargingHandle || bolt)
             return;
@@ -146,69 +198,119 @@ public class GunInteractionController : MonoBehaviour
             chargingHandle = chargeOrBoltTransform;
 
         CreateInteractableMarker(chargeOrBoltTransform, "boltMarker");
+        GetMesh(chargeOrBoltTransform);
         List<GClass2804> listComponents = new List<GClass2804>();
         GClass2804 fixMalfunction = new GClass2804();
         fixMalfunction.Name = "Check/Fix Malfunction";
+        IInputHandler baseHandler;
+        //VRGlobals.vrPlayer.inputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.CheckAmmo, out baseHandler);
+        //if (baseHandler != null)
+        //{
+        //    CheckChamberHandler checkChamberHandler = baseHandler as CheckChamberHandler;
+        //    fixMalfunction.Action = checkChamberHandler.TriggerCheckChamber;
+        //}
+        listComponents.Add(fixMalfunction);
+
+
         GClass2804 checkChamber = new GClass2804();
         checkChamber.Name = "Check Chamber";
-        listComponents.Add(fixMalfunction);
+        VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.CheckChamber, out baseHandler);
+        if (baseHandler != null)
+        {
+            CheckChamberHandler checkChamberHandler = baseHandler as CheckChamberHandler;
+            checkChamber.Action = checkChamberHandler.TriggerCheckChamber;
+        }
         listComponents.Add(checkChamber);
+
+
         GClass2805 chamberList = new GClass2805();
         chamberList.Actions = listComponents;
         weaponUiLists.Add(chamberList);
     }
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void SetFireModeSwitch(Transform fireModeSwitch) {
         CreateInteractableMarker(fireModeSwitch, "fireModeMarker");
+        GetMesh(fireModeSwitch);
         List<GClass2804> listComponents = new List<GClass2804>();
         GClass2804 toggleFireMode = new GClass2804();
         toggleFireMode.Name = "Toggle Fire Mode";
+        IInputHandler baseHandler;
+        VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ChangeWeaponMode, out baseHandler);
+        if (baseHandler != null)
+        {
+            FireModeHandler checkChamberHandler = baseHandler as FireModeHandler;
+            toggleFireMode.Action = checkChamberHandler.TriggerChangeFireMode;
+        }
+
         listComponents.Add(toggleFireMode);
+
+
         GClass2805 fireModList = new GClass2805();
         fireModList.Actions = listComponents;
         weaponUiLists.Add(fireModList);
         this.fireModeSwitch = fireModeSwitch;
     }
-    public void AddTacticalDevice(Transform tacDevice) {
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
+    public void AddTacticalDevice(Transform tacDevice, FirearmsAnimator animator) {
         CreateInteractableMarker(tacDevice, "tacDeviceMarker");
+        GetMesh(tacDevice);
         List<GClass2804> listComponents = new List<GClass2804>();
         GClass2804 changeMode = new GClass2804();
-        changeMode.Name = "Change Mode";
-        listComponents.Add(changeMode);
         GClass2804 toggleTacDevice = new GClass2804();
+        changeMode.Name = "Change Mode";
         toggleTacDevice.Name = "Turn On/Off";
+        TacticalDeviceController tacDeviceController = new TacticalDeviceController(tacDevice.GetComponent<TacticalComboVisualController>(), animator);
+        changeMode.Action = tacDeviceController.ChangeTacDeviceSetting;
+        toggleTacDevice.Action = tacDeviceController.ToggleTacDevice;
+        listComponents.Add(changeMode);
         listComponents.Add(toggleTacDevice);
         GClass2805 fireModList = new GClass2805();
         fireModList.Actions = listComponents;
         weaponUiLists.Add(fireModList);
         this.tacDevices.Add(tacDevice);
     }
-
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void CreateInteractableMarker(Transform parent, string name)
     {
         GameObject marker = new GameObject(name);
-        marker.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
-        marker.AddComponent<UnityEngine.UI.Image>().color = new Color(0, 0.7174f, 1, 1);
+        //marker.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+        //marker.AddComponent<UnityEngine.UI.Image>().color = new Color(0, 0.7174f, 1, 1);
         marker.transform.localScale = new Vector3(0.0001f, 0.0001f, 0.0001f);
         marker.transform.parent = parent;
         marker.transform.localPosition = Vector3.zero;
         marker.transform.localEulerAngles = new Vector3(0, 270, 0);
-        marker.layer = 5;
+        //marker.layer = 5;
         interactables.Add(marker.transform);
     }
-
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void CreateRaycastReceiver(Transform parent, float weaponLength) {
-        
-        Plugin.MyLog.LogWarning("Creating collider " + parent + "    " + weaponLength);
-        GameObject weaponInteractCollider = new GameObject("weaponInteractReceiver");
-        weaponInteractCollider.AddComponent<BoxCollider>().isTrigger = true;
-        weaponInteractCollider.transform.parent = parent;
-        weaponInteractCollider.transform.localScale = new Vector3(0.1f, weaponLength, 0.4f);
-        weaponInteractCollider.transform.localRotation = Quaternion.identity;
-        weaponInteractCollider.transform.localPosition = new Vector3(0, (weaponLength / 2) * -1, 0);
-        weaponInteractCollider.layer = 9;
-        initialized = true;
-    }
 
+        gunRaycastReciever = new GameObject("weaponInteractReceiver");
+        gunRaycastReciever.AddComponent<BoxCollider>().isTrigger = true;
+        gunRaycastReciever.transform.parent = parent;
+        gunRaycastReciever.transform.localScale = new Vector3(0.175f, weaponLength, 0.4f);
+        gunRaycastReciever.transform.localRotation = Quaternion.identity;
+        gunRaycastReciever.transform.localPosition = new Vector3(0, (weaponLength / 2) * -1, 0);
+        gunRaycastReciever.layer = 9;
+        FinishInit();
+    }
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
+    public void GetMesh(Transform transform) {
+        Renderer[] componentsInChildren = transform.GetComponentsInChildren<Renderer>(includeInactive: false);
+        Renderer[] array = componentsInChildren;
+        foreach (Renderer renderer in array)
+        {
+            SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
+            if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
+            {
+                meshList.Add(new Class497(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+            }
+            else if (renderer is MeshRenderer && renderer.enabled)
+            {
+                meshList.Add(new Class497(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+            }
+        }
+    }
 
 
 

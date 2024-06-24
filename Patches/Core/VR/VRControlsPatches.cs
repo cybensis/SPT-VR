@@ -5,6 +5,7 @@ using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Patches.Core.Player;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -52,7 +53,7 @@ namespace TarkovVR.Patches.Core.VR
             // 64: Right/D
             // 65: Left/A
 
-
+            
 
             bool isAiming = false;
             bool interactMenuOpen = (VRGlobals.vrPlayer && VRGlobals.vrPlayer.interactionUi && VRGlobals.vrPlayer.interactionUi.gameObject.active);
@@ -87,208 +88,31 @@ namespace TarkovVR.Patches.Core.VR
                 {
                     commands.Clear();
                 }
-                for (int k = 0; k < __instance.gclass1760_0.Length; k++)
-                {
-                    __instance.ecommand_0 = __instance.gclass1760_0[k].UpdateCommand(deltaTime);
-                    if (VRGlobals.inGame && !VRGlobals.menuOpen)
-                    {
-                        // 62: Jump
-                        if (k == ((int)ECommand.Jump) && !VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && !interactMenuOpen && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.Jump;
-                        // 57: Sprint
-                        else if (k == ((int)ECommand.ToggleSprinting))
-                        {
-                            if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any))
-                            {
-                                if (!isSprinting)
-                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleSprinting;
-                                else
-                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndSprinting;
 
-                            }
-                            else if (isSprinting && SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndSprinting;
-                        }
-                        // 52: Reload
-                        else if (k == ((int)ECommand.ReloadWeapon) && SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any))
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ReloadWeapon;
-                        // 39: Aim
-                        else if (k == ((int)ECommand.ToggleAlternativeShooting) && VRGlobals.firearmController)
-                        {
-                            float angleToScope = 100f;
-                            float angleFromScope = 100f;
-                            Vector3 directionToScope = (VRGlobals.scope.transform.position + (VRGlobals.scope.transform.forward * -0.25f)) - VRGlobals.camHolder.transform.position;
-                            directionToScope = directionToScope.normalized;
-                            //angle = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
-                            angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward * -1, directionToScope);
-                            angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
+                VRInputManager.UpdateCommands(ref commands);
 
+                //for (int k = 0; k < __instance.gclass1760_0.Length; k++)
+                //{
+                //    __instance.ecommand_0 = __instance.gclass1760_0[k].UpdateCommand(deltaTime);
+                //    if (VRGlobals.inGame && !VRGlobals.menuOpen)
+                //    {
+                        
 
-                            if (!isAiming && angleToScope <= 20f && angleFromScope <= 20f)
-                            {
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleAlternativeShooting;
-                            }
-                            else if (isAiming && (angleToScope > 20f || angleFromScope > 20f))
-                            {
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndAlternativeShooting;
-                                VRPlayerManager.smoothingFactor = 20f;
-                            }
-                            //if (!isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
-                            //{
-                            //    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleAlternativeShooting;
-                            //    isAiming = true;
-                            //}
-                            //else if (isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
-                            //{
-                            //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndAlternativeShooting;
-                            //    isAiming = false;
-                            //}
-                        }
-                        // 38: Shooting
-                        else if (k == ((int)ECommand.ToggleShooting))
-                        {
-                            if (!isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
-                            {
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleShooting;
-                                isShooting = true;
-                            }
-                            else if (isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f)
-                            {
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndShooting;
-                                isShooting = false;
-                            }
-                        }
-                        else if (k == ((int)ECommand.ScrollNext) && !VRGlobals.blockRightJoystick && interactMenuOpen)
-                        {
-                            if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.5f)
-                            {
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ScrollPrevious;
-                                isScrolling = true;
-                            }
-                            else if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < -0.5f)
-                            {
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ScrollNext;
-                                isScrolling = true;
-                            }
-                            else if (SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > -0.5f && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < 0.5f)
-                                isScrolling = false;
-                        }
-                        // 78: breathing
-                        else if (k == ((int)ECommand.ToggleBreathing))
-                        {
-                            if (!isHoldingBreath && isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
-                            {
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
-                                isHoldingBreath = true;
-                                if (VRGlobals.scopeSensitivity * 75f > 0)
-                                    VRPlayerManager.smoothingFactor = VRGlobals.scopeSensitivity * 75f;
-                            }
-                            else if (isHoldingBreath && (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f || !isAiming))
-                            {
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
-                                isHoldingBreath = false;
-                                VRPlayerManager.smoothingFactor = 50f;
-                            }
-
-                            //if (SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.Any))
-                            //    __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleBreathing;
-                            //else if (SteamVR_Actions._default.ClickRightJoystick.GetStateUp(SteamVR_Input_Sources.Any))
-                            //    __instance.ecommand_0 = EFT.InputSystem.ECommand.EndBreathing;
-                        }
-                        else if (k == ((int)ECommand.SelectFirstPrimaryWeapon) && (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.swapWeapon) || (WeaponPatches.returnAfterGrenade && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
-                        {
-
-                            if (VRGlobals.player && VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon" )
-                                if (WeaponPatches.returnAfterGrenade)
-                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon;
-                                else 
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectSecondPrimaryWeapon;
-                            else
-                                if (WeaponPatches.returnAfterGrenade)
-                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectSecondPrimaryWeapon;
-                                else
-                                    __instance.ecommand_0 = EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon;
-                        }
-                        else if (k == ((int)ECommand.ChangeScopeMagnification) && isAiming && VRGlobals.vrOpticController.swapZooms)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ChangeScopeMagnification;
-                            VRGlobals.vrOpticController.swapZooms = false;
-                        }
-                        else if (k == ((int)ECommand.CheckAmmo) && VRGlobals.checkMagazine)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.CheckAmmo;
-                            VRGlobals.checkMagazine = false;
-                        }
-                        else if (k == ((int)ECommand.ChangeWeaponMode) && VRGlobals.changeFireMode)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ChangeWeaponMode;
-                            VRGlobals.changeFireMode = false;
-                        }
-                        else if (k == ((int)ECommand.ExamineWeapon) && VRGlobals.inspectWeapon)
-                        {
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.CheckChamber;
-                            VRGlobals.inspectWeapon = false;
-                        }
-                        else if (k == ((int)ECommand.SelectFastSlot4) && VRGlobals.quickSlot != -1)
-                        {
-                            Plugin.MyLog.LogWarning("Quick slot selected " + quickSlotCommands[VRGlobals.quickSlot]);
-                            __instance.ecommand_0 = quickSlotCommands[VRGlobals.quickSlot];
-                            VRGlobals.quickSlot = -1;
-                        }
-                        // 50: Interact
-                        else if (k == ((int)ECommand.BeginInteracting))
-                        {
-                            if (SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any))
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.BeginInteracting;
-                            else if (SteamVR_Actions._default.ButtonA.GetStateUp(SteamVR_Input_Sources.Any))
-                                __instance.ecommand_0 = EFT.InputSystem.ECommand.EndInteracting;
-                        }
-                        // 61: Toggle inv
-                        else if (k == ((int)ECommand.ToggleInventory) && SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any))
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleInventory;
-                        else if (k == ((int)ECommand.TryHighThrow) && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5)
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.TryHighThrow;
-
-                    }
-                    if (k == ((int)ECommand.Escape) && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any) && !WeaponPatches.returnAfterGrenade) { 
-                        if (VRGlobals.usingItem)
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleShooting;
-                        else
-                            __instance.ecommand_0 = EFT.InputSystem.ECommand.Escape;
-                    }
-
-                    // 0: ChangeAimScope
-                    // 1: ChangeAimScopeMagnification
-                    // 5: CheckAmmo??
-                    // 9: NextWalkPose - Uncrouching Upwards
-                    // 10: PreviousWalkPose - Uncrouching Down
-                    // 34: WatchTimerAndExits
-                    // 41: ToggleGoggles
-                    // 47: Tactical - Toggle tactical device like flashlights I think
-                    // 48: Next - Scroll next, walk louder
-                    // 48: Previous - Scroll previous, walk quieter
-                    // 51: Throw grenade
-                    // 54: Shooting mode - Semi or auto
-                    // 55: Check chamber
-                    // 56: Prone
-                    // 58: Duck - Full crouch
-                    // 63: Knife
-                    // 64: PrimaryWeaponFirst
-                    // 65: PrimaryWeaponSecond
-                    // 66: SecondaryWeapon
-                    // 67-73: Quick slots
-                    // 93-94: Enter
-                    // 95: Escape
-                    //__instance.ecommand_0 = SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
-
-                    if (__instance.ecommand_0 != 0)
-                    {
-                        commands.Add(__instance.ecommand_0);
-                        //Plugin.MyLog.LogError(k + ": " + (__instance.gclass1760_0[k] as GClass1802).GameKey + "\n");
-                    }
-                    //if (__instance.gclass1760_0[k].GetInputCount() != 0)
-                    //    Plugin.MyLog.LogWarning(i + ": " + __instance.ginterface141_0 [i].GetValue() + "\n");
-                }
+                //    }
+                //    if (k == ((int)ECommand.Escape) && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any) && !WeaponPatches.returnAfterGrenade) { 
+                //        if (VRGlobals.usingItem)
+                //            __instance.ecommand_0 = EFT.InputSystem.ECommand.ToggleShooting;
+                //        else
+                //            __instance.ecommand_0 = EFT.InputSystem.ECommand.Escape;
+                //    }
+                //    if (__instance.ecommand_0 != 0)
+                //    {
+                //        commands.Add(__instance.ecommand_0);
+                //        //Plugin.MyLog.LogError(k + ": " + (__instance.gclass1760_0[k] as GClass1802).GameKey + "\n");
+                //    }
+                //    //if (__instance.gclass1760_0[k].GetInputCount() != 0)
+                //    //    Plugin.MyLog.LogWarning(i + ": " + __instance.ginterface141_0 [i].GetValue() + "\n");
+                //}
             }
 
             for (int l = 0; l < axis.Length; l++)
@@ -324,6 +148,7 @@ namespace TarkovVR.Patches.Core.VR
                         axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.x;
                     else if (m == 1 && Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
                         axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.LeftJoystick.axis.y;
+
                     //else if (leftArmIk)
                     //{
                     //    Vector3 headsetPos = Camera.main.transform.position;

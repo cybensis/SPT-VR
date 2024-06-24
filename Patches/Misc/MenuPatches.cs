@@ -153,6 +153,7 @@ namespace TarkovVR.Patches.Misc
                 Canvas otherMenuCanvas = VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>();
                 if (otherMenuCanvas)
                 {
+                    PreloaderUI.DontDestroyOnLoad(VRGlobals.menuUi.gameObject);
                     VRGlobals.menuUi.transform.eulerAngles = Vector3.zero;
                     otherMenuCanvas.renderMode = RenderMode.WorldSpace;
                     VRGlobals.menuUi.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
