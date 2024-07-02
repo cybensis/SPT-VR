@@ -30,8 +30,14 @@ public class GunInteractionController : MonoBehaviour
     private GamePlayerOwner playerOwner;
     private List<GClass2805> weaponUiLists;
     private List<Class497> meshList;
+    private List<Class497> malfunctionMeshList;
     private HighLightMesh meshHighlighter;
     private bool hightlightingMesh = false;
+    private int boltIndex = -1;
+    private bool initMalfunction = false;
+    public bool hasExaminedAfterMalfunction = false;
+
+    //private bool
     public void Init()
     {
         //gameObject.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
@@ -43,6 +49,8 @@ public class GunInteractionController : MonoBehaviour
             weaponUiLists = new List<GClass2805>();
         if (meshList == null)
             meshList = new List<Class497>();
+        if (malfunctionMeshList == null)
+            malfunctionMeshList = new List<Class497>();
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void FinishInit() {
@@ -54,7 +62,7 @@ public class GunInteractionController : MonoBehaviour
         if (initialized)
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
     }
-    private void OnDisable()
+    public void OnDisable()
     {
         if (initialized)
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
@@ -71,56 +79,97 @@ public class GunInteractionController : MonoBehaviour
     {
         if (!initialized)
             return;
-        //for (int i = 0; i < interactables.Count; i++)
-        //{
-        //    interactables[i].LookAt(Camera.main.transform);
-        //}
 
-        if (SteamVR_Actions._default.RightGrip.state)
+
+        if (SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active))
         {
-            if (!hightlightingMesh && meshHighlighter) {
-
-                meshHighlighter.class497_0 = meshList.ToArray();
-                meshHighlighter.enabled = true;
-                hightlightingMesh = true;
-            }
-
-            RaycastHit hit;
-            LayerMask mask = 1 << 9;
-            if (Physics.Raycast(Camera.main.transform.position, Quaternion.Euler(5, 0, 0) * Camera.main.transform.forward, out hit, 2, mask))
-            {
-                int index = FindClosestTransform(hit.point);
-                if (lastHitCompIndex != index)
+            if (VRGlobals.firearmController.Weapon.MalfState.State != EFT.InventoryLogic.Weapon.EMalfunctionState.None) {
+                if ((!hightlightingMesh || !initMalfunction) && meshHighlighter)
                 {
-                    //if (lastHitCompIndex != -1)
-                    //    interactables[lastHitCompIndex].gameObject.active = true;
-
-                    weaponUiLists[index].SelectedAction = weaponUiLists[index].Actions[0];
-                    playerOwner.AvailableInteractionState.method_0(weaponUiLists[index]);
-                    //interactables[index].gameObject.active = false;
-                    lastHitCompIndex = index;
-                    VRGlobals.vrPlayer.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+                    meshHighlighter.class497_0 = malfunctionMeshList.ToArray();
+                    meshHighlighter.enabled = true;
+                    hightlightingMesh = true;
+                    meshHighlighter.Color = Color.red;
+                    initMalfunction = true;
+                    Camera.main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
                 }
-            }
-            else if (lastHitCompIndex != -1)
-            {
-                playerOwner.AvailableInteractionState.method_0(null);
-                //interactables[lastHitCompIndex].gameObject.active = true;
-                lastHitCompIndex = -1;
-                VRGlobals.vrPlayer.interactionUi.localScale = Vector3.one;
-            }
 
+                RaycastHit hit;
+                LayerMask mask = 1 << 9;
+                if (Physics.Raycast(Camera.main.transform.position, Quaternion.Euler(5, 0, 0) * Camera.main.transform.forward, out hit, 2, mask)) {
+                    if (lastHitCompIndex != boltIndex)
+                    {
+                        //if (lastHitCompIndex != -1)
+                        //    interactables[lastHitCompIndex].gameObject.active = true;
+                        if (hasExaminedAfterMalfunction) {
+                            weaponUiLists[boltIndex].SelectedAction = weaponUiLists[boltIndex].Actions[1];
+                            playerOwner.AvailableInteractionState.method_0(weaponUiLists[boltIndex]);
+                        }
+                        else { 
+                            weaponUiLists[boltIndex].SelectedAction = weaponUiLists[boltIndex].Actions[0];
+                            playerOwner.AvailableInteractionState.method_0(weaponUiLists[boltIndex]);
+                        }
+                        //interactables[index].gameObject.active = false;
+                        lastHitCompIndex = boltIndex;
+                        VRGlobals.vrPlayer.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+                    }
+                }
+
+            }
+            else
+            {
+                if ((!hightlightingMesh || initMalfunction) && meshHighlighter) {
+
+                    meshHighlighter.class497_0 = meshList.ToArray();
+                    meshHighlighter.enabled = true;
+                    hightlightingMesh = true;
+                    meshHighlighter.Color = Color.white;
+                    initMalfunction = false;
+                    hasExaminedAfterMalfunction = false;
+                    Camera.main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+
+                }
+
+                RaycastHit hit;
+                LayerMask mask = 1 << 9;
+
+
+                if (Physics.Raycast(Camera.main.transform.position, Quaternion.Euler(5, 0, 0) * Camera.main.transform.forward, out hit, 2, mask))
+                {
+                    int index = FindClosestTransform(hit.point);
+                    if (lastHitCompIndex != index)
+                    {
+                        //if (lastHitCompIndex != -1)
+                        //    interactables[lastHitCompIndex].gameObject.active = true;
+
+                        weaponUiLists[index].SelectedAction = weaponUiLists[index].Actions[0];
+                        playerOwner.AvailableInteractionState.method_0(weaponUiLists[index]);
+                        //interactables[index].gameObject.active = false;
+                        lastHitCompIndex = index;
+                        VRGlobals.vrPlayer.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
+                    }
+                }
+                else if (lastHitCompIndex != -1)
+                {
+                    playerOwner.AvailableInteractionState.method_0(null);
+                    //interactables[lastHitCompIndex].gameObject.active = true;
+                    lastHitCompIndex = -1;
+                    VRGlobals.vrPlayer.interactionUi.localScale = Vector3.one;
+                }
+
+            }
         }
         else if (lastHitCompIndex != -1) {
             playerOwner.AvailableInteractionState.method_0(null);
             //interactables[lastHitCompIndex].gameObject.active = true;
             lastHitCompIndex = -1;
             VRGlobals.vrPlayer.interactionUi.localScale = Vector3.one;
+            Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
         }
         else if (hightlightingMesh && meshHighlighter) {
-                meshHighlighter.enabled = false;
-                hightlightingMesh = false;
-            }
+            meshHighlighter.enabled = false;
+            hightlightingMesh = false;
+        }
 
         if (lastHitCompIndex != -1)
         {
@@ -129,6 +178,34 @@ public class GunInteractionController : MonoBehaviour
             VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);
         }
     }
+
+
+    public void SetScopeHighlight(Transform scopeTransform)
+    {
+
+        List<Class497> scopeMeshList = new List<Class497>();
+        Renderer[] componentsInChildren = scopeTransform.GetComponentsInChildren<Renderer>(includeInactive: false);
+        Renderer[] array = componentsInChildren;
+        foreach (Renderer renderer in array)
+        {
+            SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
+            if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
+            {
+                scopeMeshList.Add(new Class497(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+            }
+            else if (renderer is MeshRenderer && renderer.enabled)
+            {
+                scopeMeshList.Add(new Class497(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+            }
+        }
+        meshHighlighter.class497_0 = scopeMeshList.ToArray();
+        meshHighlighter.enabled = true;
+    }
+    public void RemoveScopeHighlight()
+    {
+        meshHighlighter.enabled = false;
+    }
+
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private int FindClosestTransform(Vector3 hitPoint)
     {
@@ -198,22 +275,24 @@ public class GunInteractionController : MonoBehaviour
             chargingHandle = chargeOrBoltTransform;
 
         CreateInteractableMarker(chargeOrBoltTransform, "boltMarker");
+        boltIndex = interactables.Count - 1;
         GetMesh(chargeOrBoltTransform);
+        GetMalfunctionMeshes(chargeOrBoltTransform);
         List<GClass2804> listComponents = new List<GClass2804>();
-        GClass2804 fixMalfunction = new GClass2804();
-        fixMalfunction.Name = "Check/Fix Malfunction";
+        GClass2804 examineWeapon = new GClass2804();
+        examineWeapon.Name = "Examine Weapon";
         IInputHandler baseHandler;
-        //VRGlobals.vrPlayer.inputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.CheckAmmo, out baseHandler);
-        //if (baseHandler != null)
-        //{
-        //    CheckChamberHandler checkChamberHandler = baseHandler as CheckChamberHandler;
-        //    fixMalfunction.Action = checkChamberHandler.TriggerCheckChamber;
-        //}
-        listComponents.Add(fixMalfunction);
+        VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ExamineWeapon, out baseHandler);
+        if (baseHandler != null)
+        {
+            ExamineWeaponHandler examineWeaponHandler = baseHandler as ExamineWeaponHandler;
+            examineWeapon.Action = examineWeaponHandler.TriggerExamineWeapon;
+        }
+        listComponents.Add(examineWeapon);
 
 
         GClass2804 checkChamber = new GClass2804();
-        checkChamber.Name = "Check Chamber";
+        checkChamber.Name = "Check Chamber/Fix Malfunction";
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.CheckChamber, out baseHandler);
         if (baseHandler != null)
         {
@@ -250,6 +329,7 @@ public class GunInteractionController : MonoBehaviour
         weaponUiLists.Add(fireModList);
         this.fireModeSwitch = fireModeSwitch;
     }
+    public Transform GetFireModeSwitch() { return this.fireModeSwitch; }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void AddTacticalDevice(Transform tacDevice, FirearmsAnimator animator) {
         CreateInteractableMarker(tacDevice, "tacDeviceMarker");
@@ -312,6 +392,22 @@ public class GunInteractionController : MonoBehaviour
         }
     }
 
-
+    public void GetMalfunctionMeshes(Transform transform)
+    {
+        Renderer[] componentsInChildren = transform.GetComponentsInChildren<Renderer>(includeInactive: false);
+        Renderer[] array = componentsInChildren;
+        foreach (Renderer renderer in array)
+        {
+            SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
+            if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
+            {
+                malfunctionMeshList.Add(new Class497(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+            }
+            else if (renderer is MeshRenderer && renderer.enabled)
+            {
+                malfunctionMeshList.Add(new Class497(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+            }
+        }
+    }
 
 }

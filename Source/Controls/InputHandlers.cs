@@ -85,15 +85,15 @@ namespace TarkovVR.Source.Controls
                     directionToScope = directionToScope.normalized;
                     angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward* -1, directionToScope);
                     angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
-                    Plugin.MyLog.LogWarning(angleToScope + "   " + angleFromScope);
-                    if (!isAiming && angleToScope <= 20f && angleFromScope <= 20f)
+                    //Plugin.MyLog.LogWarning(angleToScope + "   " + angleFromScope);
+                    if (!isAiming && angleToScope <= 25f && angleFromScope <= 25f)
                     {
                         command = ECommand.ToggleAlternativeShooting;
                     }
-                    else if (isAiming && (angleToScope > 20f || angleFromScope > 20f))
+                    else if (isAiming && (angleToScope > 25f || angleFromScope > 25f))
                     {
                         command = ECommand.EndAlternativeShooting;
-                        VRPlayerManager.smoothingFactor = 20f;
+                        VRPlayerManager.smoothingFactor = 50f;
                     }
                     
                 }
@@ -169,14 +169,22 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class SelectWeaponHandler : IInputHandler
         {
+            private bool swapWeapon = false;
             private bool swapPrimaryWeapon = false;
             private bool swapSecondaryWeapon = false;
+            private bool swapSidearm = false;
             public void UpdateCommand(ref ECommand command)
             {
-                if ((swapPrimaryWeapon) || VRGlobals.handsInteractionController.swapWeapon || (WeaponPatches.returnAfterGrenade && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
+                if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.returnAfterGrenade && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
                 {
+                    if (VRGlobals.player && VRGlobals.player.ActiveSlot == null)
+                        // If the first weapon slot is null then attempt select secondary
+                        if (VRGlobals.player.Equipment.slot_0[0].ContainedItem != null)
+                            command = ECommand.SelectFirstPrimaryWeapon;
+                        else
+                            command = ECommand.SelectSecondPrimaryWeapon;
 
-                    if (VRGlobals.player && VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
+                    else if (VRGlobals.player && VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
                         if (WeaponPatches.returnAfterGrenade)
                             command = ECommand.SelectFirstPrimaryWeapon;
                         else
@@ -188,10 +196,27 @@ namespace TarkovVR.Source.Controls
                             command = ECommand.SelectFirstPrimaryWeapon;
 
                     swapPrimaryWeapon = false;
-                    VRGlobals.handsInteractionController.swapWeapon = false;
+                    swapWeapon = false;
+                    swapSecondaryWeapon = false;
+                }
+                if (swapSidearm) {
+                    command = ECommand.SelectSecondaryWeapon;
+                    swapSidearm = false;
+                }
+                if (swapSecondaryWeapon)
+                {
+                    command = ECommand.SelectSecondPrimaryWeapon;
+                    swapSecondaryWeapon = false;
                 }
             }
 
+            public void TriggerSwapOtherPrimary() {
+                swapWeapon = true;
+            }
+            public void TriggerSwapSidearm()
+            {
+                swapSidearm = true;
+            }
             public void TriggerSwapPrimaryWeapon() {
                 swapPrimaryWeapon = true;
             }
@@ -264,6 +289,7 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.CheckChamber;
                     checkChamber = false;
+                    WeaponPatches.currentGunInteractController.hasExaminedAfterMalfunction = false;
                 }
             }
             public void TriggerCheckChamber()
@@ -342,6 +368,22 @@ namespace TarkovVR.Source.Controls
                     command = ECommand.Escape;
             }
         }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class ExamineWeaponHandler : IInputHandler
+        {
+            private bool examineWeapon = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (examineWeapon) { 
+                    command = ECommand.ExamineWeapon;
+                    examineWeapon = false;
+                    WeaponPatches.currentGunInteractController.hasExaminedAfterMalfunction = true;
+                }
+            }
 
+            public void TriggerExamineWeapon() {
+                examineWeapon = true;
+            }
+        }
     }
 }

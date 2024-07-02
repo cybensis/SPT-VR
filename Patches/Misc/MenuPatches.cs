@@ -28,6 +28,10 @@ using EFT.UI.Ragfair;
 using UnityEngine.SceneManagement;
 using static EFT.UI.PlayerProfilePreview;
 using UnityEngine.XR;
+using static EFT.UI.MenuScreen;
+using static EFT.UI.BattleUiVoipPanel;
+using EFT.UI.Screens;
+using TarkovVR.Patches.UI;
 
 
 
@@ -147,20 +151,19 @@ namespace TarkovVR.Patches.Misc
 
         private static void PositionMenuUi()
         {
-            if (VRGlobals.menuUi.transform.childCount > 0)
+            if (VRGlobals.menuUi == null || VRGlobals.menuUi.transform.childCount == 0)
+                return;
+            VRGlobals.menuUi.transform.parent = null;
+            Canvas otherMenuCanvas = VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>();
+            if (otherMenuCanvas)
             {
-                VRGlobals.menuUi.transform.parent = null;
-                Canvas otherMenuCanvas = VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>();
-                if (otherMenuCanvas)
-                {
-                    PreloaderUI.DontDestroyOnLoad(VRGlobals.menuUi.gameObject);
-                    VRGlobals.menuUi.transform.eulerAngles = Vector3.zero;
-                    otherMenuCanvas.renderMode = RenderMode.WorldSpace;
-                    VRGlobals.menuUi.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
-                    VRGlobals.menuUi.transform.position = new Vector3(0f, -999.9333f, 1);
-                    otherMenuCanvas.transform.localScale = new Vector3(1, 1, 1);
-                    otherMenuCanvas.transform.localPosition = Vector3.zero;
-                }
+                PreloaderUI.DontDestroyOnLoad(VRGlobals.menuUi.gameObject);
+                VRGlobals.menuUi.transform.eulerAngles = Vector3.zero;
+                otherMenuCanvas.renderMode = RenderMode.WorldSpace;
+                VRGlobals.menuUi.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+                VRGlobals.menuUi.transform.position = new Vector3(0f, -999.9333f, 1);
+                otherMenuCanvas.transform.localScale = new Vector3(1, 1, 1);
+                otherMenuCanvas.transform.localPosition = Vector3.zero;
             }
         }
         private static void PositionPreloaderUi()
@@ -408,9 +411,15 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(SimpleContextMenu), "CorrectPosition")]
         private static bool FixContentMenuPositioning(SimpleContextMenu __instance)
         {
-            Vector3 newPos = __instance.Transform.position;
-            newPos.z = 1f;
-            __instance.Transform.position = newPos;
+            if (!VRGlobals.inGame)
+            {
+                Vector3 newPos = __instance.Transform.position;
+                newPos.z = 1f;
+                __instance.Transform.position = newPos;
+            }
+            else {
+                __instance.transform.position = MenuPatches.vrUiInteracter.pressPosition;
+            }
             return false;
         }
 
@@ -496,47 +505,16 @@ namespace TarkovVR.Patches.Misc
         //}
 
 
-        [HarmonyPostfix]
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(WeaponPreview), "method_2")]
-        private static void SetItemPreviewCameraFoVM2(WeaponPreview __instance)
+        private static bool FixWeaponPreviewCamera(WeaponPreview __instance)
         {
             // Need to wait a bit before setting the FoV on this cam because
             // something else is changing it
-            __instance.WaitSeconds(0.5f, delegate
-            {
-                if (__instance.WeaponPreviewCamera)
-                {
-                    __instance.WeaponPreviewCamera.fieldOfView = 60;
-                }
-            });
-        }
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeaponPreview), "method_0")]
-        private static void SetItemPreviewCameraFoVM0(WeaponPreview __instance)
-        {
-            // Need to wait a bit before setting the FoV on this cam because
-            // something else is changing it
-            __instance.WaitSeconds(0.5f, delegate
-            {
-                if (__instance.WeaponPreviewCamera)
-                {
-                    __instance.WeaponPreviewCamera.fieldOfView = 60;
-                }
-            });
-        }
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeaponPreview), "method_1")]
-        private static void SetItemPreviewCameraFoVM1(WeaponPreview __instance)
-        {
-            // Need to wait a bit before setting the FoV on this cam because
-            // something else is changing it
-            __instance.WaitSeconds(0.5f, delegate
-            {
-                if (__instance.WeaponPreviewCamera)
-                {
-                    __instance.WeaponPreviewCamera.fieldOfView = 60;
-                }
-            });
+            __instance._cameraTemplate.stereoTargetEye = StereoTargetEyeMask.None;
+            __instance._cameraTemplate.fieldOfView = 22;
+
+            return true;
         }
 
 
@@ -906,7 +884,7 @@ namespace TarkovVR.Patches.Misc
                     else if (__instance.transform.FindChild("Camera_timehascome0"))
                     {
                         Transform camera = __instance.transform.FindChild("Camera_timehascome0");
-                        camera.localPosition = new Vector3(-1.4f, -0.7f, 3.45f);
+                        camera.localPosition = new Vector3(-1.4f, 0.6f, 3.45f);
                         camera.GetComponent<Camera>().fieldOfView = 41;
                     }
                     //else if (__instance.transform.parent.parent.name == "UsecPanel")
@@ -1000,6 +978,38 @@ namespace TarkovVR.Patches.Misc
                 loginCollider.size = new Vector3(5120, 2880, 1);
             }
         }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GClass2914), "ShowAction")]
+        private static void PositionInRaidMenu(GClass2914 __instance)
+        {
+            if (!VRGlobals.inGame)
+                return;
+
+            Transform mainMenuCam = EnvironmentUI.Instance.environmentUIRoot_0.CameraContainer.FindChild("MainMenuCamera");
+            PositionMainMenuUi();
+            UIPatches.ShowUiScreens();
+            VRGlobals.vrPlayer.enabled = false;
+            VRGlobals.menuVRManager.enabled = true;
+            Vector3 newCamHolderPos = mainMenuCam.localPosition * -1;
+            newCamHolderPos.y -= 0.1f;
+            newCamHolderPos.z += 0.6f;
+            VRGlobals.vrOffsetter.transform.position = mainMenuCam.position;
+            VRGlobals.vrOffsetter.transform.localPosition += newCamHolderPos;
+            //camContainer.localRotation = Quaternion.identity;
+            //camHolderRot = Quaternion.Euler(0, mainMenuCam.transform.localEulerAngles.y * -1, 0);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(UserInterfaceClass<EFT.UI.Screens.EEftScreenType>.GClass2899<EFT.UI.MenuScreen.GClass2911, EFT.UI.MenuScreen>), "CloseScreen")]
+        private static void w(UserInterfaceClass<EFT.UI.Screens.EEftScreenType>.GClass2899<EFT.UI.MenuScreen.GClass2911, EFT.UI.MenuScreen> __instance)
+        {
+            UIPatches.HideUiScreens();
+            VRGlobals.vrPlayer.enabled = true;
+            VRGlobals.menuVRManager.enabled = false;
+        }
+
     }
 }
 

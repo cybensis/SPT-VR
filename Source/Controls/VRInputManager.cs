@@ -33,6 +33,7 @@ namespace TarkovVR.Source.Controls
                 { ECommand.ToggleInventory, new InputHandlers.InventoryHandler() },
                 { ECommand.TryHighThrow, new InputHandlers.GrenadeHandler() },
                 { ECommand.Escape, new InputHandlers.EscapeHandler() },
+                { ECommand.ExamineWeapon, new InputHandlers.ExamineWeaponHandler() },
                 // Add other command handlers here
             };
             menuInputHandlers = new Dictionary<ECommand, IInputHandler>

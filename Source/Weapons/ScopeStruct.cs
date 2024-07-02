@@ -64,7 +64,6 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_dovetail_npz_1p29_4x(Clone)", 4f, 6f);
             AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 4f, 6f);
             AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 1f, 27);
-            AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 4f, 6);
 
         }
 

@@ -13,6 +13,8 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using UnityEngine.UI;
 using EFT.UI.Matchmaker;
+using System.Management.Instrumentation;
+using System.Threading.Tasks;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -23,6 +25,9 @@ namespace TarkovVR.Patches.UI
         public static BattleStancePanel stancePanel;
         public static CharacterHealthPanel healthPanel;
         public static GameUI gameUi;
+        public static OpticCratePanel opticUi;
+        public static NotifierView notifierUi;
+        public static ExtractionTimersPanel extractionTimerUi;
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GameUI), "Awake")]
         private static void SetGameUI(GameUI __instance)
@@ -34,6 +39,31 @@ namespace TarkovVR.Patches.UI
             }
 
             PositionGameUi(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(NotifierView), "Awake")]
+        private static void SetNotificationsUi(NotifierView __instance)
+        {
+            notifierUi = __instance;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(NotificationView), "Init")]
+        private static void DisableComponentThatBlocksText(NotificationView __instance)
+        {
+            RectMask2D rectmask = __instance._background.GetComponent<RectMask2D>();
+            if (rectmask)
+                rectmask.enabled = false;
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ExtractionTimersPanel), "Awake")]
+        private static void DisableComponentThatBlocksText(ExtractionTimersPanel __instance)
+        {
+            extractionTimerUi = __instance;
+            VRGlobals.vrPlayer.SetExtractionUi();
         }
 
         public static void PositionGameUi(GameUI __instance) {
@@ -97,8 +127,17 @@ namespace TarkovVR.Patches.UI
                 VRGlobals.preloaderUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
                 VRGlobals.preloaderUi.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
                 VRGlobals.preloaderUi.localPosition = new Vector3(-0.03f, -0.1f, 0.8f);
-                VRGlobals.preloaderUi.localRotation = Quaternion.identity;     
+                VRGlobals.preloaderUi.localRotation = Quaternion.identity;
+
+                if (UIPatches.notifierUi)
+                {
+                    UIPatches.notifierUi.transform.parent = VRGlobals.preloaderUi.GetComponent<PreloaderUI>()._alphaVersionLabel.transform.parent;
+                    UIPatches.notifierUi.transform.localPosition = new Vector3(1920, 0, 0);
+                    UIPatches.notifierUi.transform.localRotation = Quaternion.identity;
+                    UIPatches.notifierUi.transform.localScale = Vector3.one;
+                }
             }
+
         }
 
         public static void HandleCloseInventory()
@@ -114,6 +153,8 @@ namespace TarkovVR.Patches.UI
             VRGlobals.commonUi.position = new Vector3(1000, 1000, 1000);
             VRGlobals.preloaderUi.parent = null;
             VRGlobals.preloaderUi.position = new Vector3(1000, 1000, 1000);
+            VRGlobals.vrPlayer.SetNotificationUi();
+
         }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ActionPanel), "Start")]
@@ -539,6 +580,71 @@ namespace TarkovVR.Patches.UI
                 VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
             VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = true;
             VRGlobals.preloaderUi.GetChild(0).GetComponent<Canvas>().enabled = true;
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(OpticCratePanel), "Show")]
+        private static void SetAmmoCountUi(OpticCratePanel __instance)
+        {
+            if (VRGlobals.vrPlayer) {
+                VRGlobals.vrPlayer.showScopeZoom = true;
+            }
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameUI), "Awake")]
+        private static void SetOpticUi(GameUI __instance)
+        {
+            if (__instance.BattleUiScreen) { 
+                opticUi = __instance.BattleUiScreen._opticCratePanel;
+                opticUi.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BattleUIScreen), "ShowAmmoDetails")]
+        private static void SetAmmoCountUi(BattleUIScreen __instance)
+        {
+            __instance._ammoCountPanel.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
+            if (VRGlobals.vrPlayer) { 
+                VRGlobals.vrPlayer.SetAmmoFireModeUi(__instance._ammoCountPanel.transform, true);
+                __instance._ammoCountPanel._ammoDetails.transform.localPosition = new Vector3(136, -23, 0);
+                showAgain = true;
+            }
+        }
+        private static bool showAgain = false;
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(AmmoCountPanel), "ShowFireMode")]
+        private static void SetFireModeUi(AmmoCountPanel __instance)
+        {
+            __instance.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
+            if (VRGlobals.vrPlayer) { 
+                VRGlobals.vrPlayer.SetAmmoFireModeUi(__instance.transform, false);
+                showAgain = true;
+            }
+        }
+        // On BattleUIComponentAnimation.Hide() with name == AmmoPanel stop updating position
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BattleUIComponentAnimation), "Hide")]
+        private static bool HideFireModeUi(BattleUIComponentAnimation __instance, ref float delaySeconds)
+        {
+            showAgain = false ;
+            if (__instance.name == "AmmoPanel" && VRGlobals.vrPlayer) {
+                delaySeconds = 5f;
+                __instance.WaitSeconds(delaySeconds + 2, () => { if (!showAgain) VRGlobals.vrPlayer.SetAmmoFireModeUi(null, false); });
+            }
+            else if (__instance.name == "OpticCratePanel" && VRGlobals.vrPlayer) { 
+                __instance.WaitSeconds(delaySeconds + 2, () => { if (!showAgain) VRGlobals.vrPlayer.showScopeZoom = false; });
+            }
+            return true;
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EquipItemWindow), "Show")]
+        private static void PositiionEquipItemWindow(EquipItemWindow __instance, Slot slot, InventoryControllerClass inventoryController, SkillManager skills, Vector3 position)
+        {
+            __instance.WindowTransform.localPosition = Vector3.zero;
         }
     }
 }

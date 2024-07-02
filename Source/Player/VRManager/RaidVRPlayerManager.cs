@@ -83,7 +83,7 @@ namespace TarkovVR.Source.Player.VRManager
                     Vector3 worldHitFaceCenter = hit.transform.TransformPoint(hitFaceCenter);
                     interactUiPos = worldHitFaceCenter + (rayOrigin - worldHitFaceCenter).normalized * dirMultiplier;
                 }
-                    Plugin.MyLog.LogWarning(boxCollider + " | " + interactUiPos + " |  " + interactionUi);
+                    //Plugin.MyLog.LogWarning(boxCollider + " | " + interactUiPos + " |  " + interactionUi);
                 raycastHit = true;
                 // Set the interactions UI position
             }

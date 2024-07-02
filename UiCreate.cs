@@ -20,6 +20,7 @@ public class CircularSegmentUI : MonoBehaviour
     public Sprite selectedMenuSprite = null;
     public bool leftHand = false;
     private QuickSlotHandler quickSlotHandler;
+    private SelectWeaponHandler selectWeaponHandler;
     public void Init()
     {
 
@@ -56,6 +57,10 @@ public class CircularSegmentUI : MonoBehaviour
             menuSprites[i] = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
         }
         CreateSegments();
+        IInputHandler baseHandler;
+        VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon, out baseHandler);
+        if (baseHandler != null)
+            selectWeaponHandler = baseHandler as SelectWeaponHandler;
     }
 
     public void CreateQuickSlotUi(Sprite[] menuSprites)
@@ -106,15 +111,16 @@ public class CircularSegmentUI : MonoBehaviour
 
         if (!leftHand && lastSelectedSegment != -1 && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand))
         {
-            if (lastSelectedSegment == 1)
-                VRGlobals.checkMagazine = true;
+            if (lastSelectedSegment == 0)
+                selectWeaponHandler.TriggerSwapPrimaryWeapon();
+            else if (lastSelectedSegment == 1)
+                selectWeaponHandler.TriggerSwapSecondaryWeapon();
             else if (lastSelectedSegment == 2)
-                VRGlobals.inspectWeapon = true;
-            else if (lastSelectedSegment == 4)
-                VRGlobals.changeFireMode = true;
+                selectWeaponHandler.TriggerSwapSidearm();
             gameObject.active = false;
             // Add additional actions as necessary
         }
+
         if (leftHand && !SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand))
         {
             if (quickSlotHandler.GetQuickUseSlot() == -1 && lastSelectedSegment != -1)

@@ -19,6 +19,7 @@ using UnityEngine.UI;
 using EFT.UI;
 using Sirenix.Serialization;
 using Valve.VR.InteractionSystem;
+using JetBrains.Annotations;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -29,7 +30,7 @@ namespace TarkovVR.Patches.Core.Player
         public static Transform returnAfterGrenade;
         private static Transform oldGrenadeHolder;
         public static Transform previousLeftHandMarker;
-        private static GunInteractionController currentGunInteractController;
+        public static GunInteractionController currentGunInteractController;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
@@ -122,8 +123,24 @@ namespace TarkovVR.Patches.Core.Player
                     currentGunInteractController.CreateRaycastReceiver(__instance.GunBaseTransform, __instance.WeaponLn);
                 currentGunInteractController.enabled = true;
             }
-
+            __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
         }
+
+
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(EFT.Player.FirearmController), "SetAim")]
+        //private static void FinishMovingWeapwonToVrHands(EFT.Player.FirearmController __instance, bool value)
+        //{
+        //    if (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0) {
+        //        int i = 0;
+        //        int firstScope = __instance.Item.AimIndex.Value;
+        //        __instance.ChangeAimingMode();
+        //        while (__instance.Item.AimIndex.Value != firstScope && __instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0) {
+        //            __instance.ChangeAimingMode();
+        //        }
+        //    }
+        //}
+
 
         //[HarmonyPostfix]
         //[HarmonyPatch(typeof(MagazineInHandsVisualController), "ReturnToPool")]
@@ -173,15 +190,18 @@ namespace TarkovVR.Patches.Core.Player
         private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
         {
 
-            // WeaponPrefab gunShadowDisabler_0 has lasers and flashlights
-            // WeaponPrefab.Renderers for something with charge in name for charging handle to check bolt
-            // Do the same above but check every components parent for a MagazineInHandsVisualizer
-            // Also do same for "selector" for different firemodes    }
+            // AmmoCountPanel - on ShowFireMode position on selector position 
+            // rotation = ammopanel rotation, localrotation = 0 90 90
+            // psosition = ammopanel pos, localpos = -0.0175 0.03 0
+            // On BattleUIComponentAnimation.Hide() with name == AmmoPanel stop updating position
 
+            // For Ammo do the exact same vu
 
             if (!__instance._player.IsYourPlayer)
                 return;
 
+            if (currentGunInteractController != null)
+                currentGunInteractController.OnDisable();
 
             Plugin.MyLog.LogWarning("Init calc: " + __instance);
             VRGlobals.firearmController = __instance;
@@ -235,7 +255,7 @@ namespace TarkovVR.Patches.Core.Player
                                     currentGunInteractController.SetFireModeSwitch(__instance.weaponPrefab_0.Renderers[i].transform);
                                 else if (__instance.weaponPrefab_0.Renderers[i].name.Contains("charge"))
                                     currentGunInteractController.SetChargingHandleOrBolt(__instance.weaponPrefab_0.Renderers[i].transform, false);
-                                else if (__instance.weaponPrefab_0.Renderers[i].name.Contains("bolt") || __instance.weaponPrefab_0.Renderers[i].name.Contains("slide_LOD0"))
+                                else if (__instance.weaponPrefab_0.Renderers[i].name.Contains("bolt") || __instance.weaponPrefab_0.Renderers[i].name.Contains("slide_LOD0") || (__instance.Weapon.WeapClass == "pistol" && __instance.weaponPrefab_0.Renderers[i].name.Contains("mod_reciever")))
                                     currentGunInteractController.SetChargingHandleOrBolt(__instance.weaponPrefab_0.Renderers[i].transform, true);
                                 else if (!currentGunInteractController.IsMagazineSet() && __instance.weaponPrefab_0.Renderers[i].transform.parent.GetComponent<MagazineInHandsVisualController>())
                                     currentGunInteractController.SetMagazine(__instance.weaponPrefab_0.Renderers[i], false);
@@ -260,13 +280,12 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
                 //if (!__instance.WeaponRoot.gameObject.GetComponent<IKManager>())
                 //    __instance.WeaponRoot.gameObject.AddComponent<IKManager>();
-                if (__instance.Weapon.WeapClass == "pistol")
-                    weaponOffset = new Vector3(0.341f, 0.0904f, -0.0803f);
-                else if (__instance.Weapon.WeapClass == "marksmanRifle")
-                    weaponOffset = new Vector3(0.241f, 0.0204f, -0.1303f);
-                else
-                    weaponOffset = new Vector3(0.141f, 0.0204f, -0.1303f);
+                //1.3334 - 0.211 -0.0796 -0.1603
+                //1.2614 - 0.171 -0.1096 -0.0903
+                //1.2002 - 0.271 -0.1096 -0.1803
+                // 0.608 - 0.341 -0.05 -0.1803
 
+                weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(__instance.weaponPrefab_0.name, __instance.Weapon.WeapClass);
                 VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
             }
             else if (__instance.WeaponRoot.parent.FindChild("RightHandPositioner"))
@@ -281,8 +300,17 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
                 //VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
             }
-            __instance.WeaponRoot.localPosition = Vector3.zero;
-
+            __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
+            if (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0)
+            {
+                int i = 0;
+                int firstScope = __instance.Item.AimIndex.Value;
+                __instance.ChangeAimingMode();
+                while (__instance.Item.AimIndex.Value != firstScope && __instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0)
+                {
+                    __instance.ChangeAimingMode();
+                }
+            }
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -304,6 +332,8 @@ namespace TarkovVR.Patches.Core.Player
                 }
                 else
                 {
+
+
                     VRGlobals.vrOpticController.scopeCamera = __instance.camera_0;
                     float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
                     string scopeName = opticSight.name;
@@ -312,18 +342,22 @@ namespace TarkovVR.Patches.Core.Player
                     BoxCollider scopeCollider;
                     if (scopeName.Contains("mode_"))
                     {
+                        if (__instance.transform_0)
+                            VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.parent.FindChild("backLens");
                         scopeName = opticSight.transform.parent.name;
                         opticSight.transform.parent.gameObject.layer = 6;
                         scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
                     }
                     else
                     {
+                        if (__instance.transform_0)
+                            VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.FindChild("backLens");
                         opticSight.gameObject.layer = 6;
                         scopeCollider = opticSight.GetComponent<BoxCollider>();
                     }
                     if (scopeCollider)
                     {
-                        scopeCollider.size = new Vector3(0.01f, 0.04f, 0.02f);
+                        scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
                         scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
                         scopeCollider.enabled = true;
                     }

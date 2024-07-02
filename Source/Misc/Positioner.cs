@@ -18,10 +18,14 @@ namespace TarkovVR.Source.Misc
             //rz = 90f;
         }
 
+        private void Update()
+        {
+            transform.localPosition = Vector3.zero;
+        }
         private void LateUpdate()
         {
             transform.localPosition = Vector3.zero;
-            transform.localEulerAngles = Vector3.zero;
+
         }
         //private void LateUpdate()
         //{

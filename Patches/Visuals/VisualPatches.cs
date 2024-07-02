@@ -32,7 +32,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
         private static bool ReturnVROutputWidth(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
         {
-            if (VRGlobals.vrPlayer && VRGlobals.vrPlayer.x)
+            if (VRGlobals.vrPlayer)
             {
                 return true;
             }
@@ -292,7 +292,18 @@ namespace TarkovVR.Patches.Visuals
         {
             __instance.enabled = false;
         }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(FakeCharacterGI), "OnRenderImage")]
+        private static bool FixCharacterLighting(FakeCharacterGI __instance, RenderTexture src, RenderTexture dest)
+        {
+            Camera.StereoscopicEye eye = (Camera.StereoscopicEye)Camera.current.stereoActiveEye;
 
+            Matrix4x4 viewMatrix = __instance.camera_0.GetStereoViewMatrix(eye);
+            __instance.method_0().SetMatrix(FakeCharacterGI.int_0, viewMatrix);
+            Graphics.Blit(src, dest, __instance.method_0());
+            return false;
+        }
 
 
 

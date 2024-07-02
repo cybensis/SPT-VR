@@ -2,6 +2,7 @@
 using EFT.Animations;
 using HarmonyLib;
 using RootMotion.FinalIK;
+using System.Collections.Generic;
 using System.Diagnostics;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Player.Interactions;
@@ -25,27 +26,11 @@ namespace TarkovVR.Patches.Core.VR
         [HarmonyPatch(typeof(CharacterControllerSpawner), "Spawn")]
         private static void AddVR(CharacterControllerSpawner __instance)
         {
+            EFT.Player player = __instance.transform.root.GetComponent<EFT.Player>();
             if (__instance.transform.root.name != "PlayerSuperior(Clone)")
                 return;
 
-            if (__instance.transform.root.GetComponent<HideoutPlayer>() != null)
-            {
-                //if (!VRGlobals.vrPlayer)
-                //{
-                //    VRGlobals.camHolder.AddComponent<SteamVR_TrackedObject>();
-                //    VRGlobals.vrPlayer = VRGlobals.camHolder.AddComponent<HideoutVRPlayerManager>();
-                //    VRGlobals.weaponHolder = new GameObject("weaponHolder");
-                //    VRGlobals.weaponHolder.transform.parent = VRGlobals.vrPlayer.RightHand.transform;
-                //    VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
-                //    VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
-                //    SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
-                //    collider.radius = 0.2f;
-                //    collider.isTrigger = true;
-                //    VRGlobals.camHolder.layer = 7;
-                //    Camera.main.clearFlags = CameraClearFlags.SolidColor;
-                //}
-            }
-            else
+            if (player is not HideoutPlayer)
             {
                 if (!VRGlobals.vrPlayer)
                 {
@@ -53,13 +38,8 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
                     VRGlobals.camRoot = new GameObject("camRoot");
                     if (UIPatches.gameUi)
-                    {
-                        Plugin.MyLog.LogWarning("Positiing ui from cam init");
                         UIPatches.PositionGameUi(UIPatches.gameUi);
-                    }
-                    else {
-                        Plugin.MyLog.LogWarning("Not set");
-                    }
+
                     VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
                     //Camera.main.transform.parent = vrOffsetter.transform;
                     //Camera.main.gameObject.AddComponent<SteamVR_TrackedObject>();
@@ -76,7 +56,6 @@ namespace TarkovVR.Patches.Core.VR
                     collider.isTrigger = true;
                     VRGlobals.camHolder.layer = 7;
                     VRGlobals.menuVRManager.enabled = false;
-
                 }
             }
 
@@ -90,7 +69,19 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.backHolster.localPosition = new Vector3(0.2f, -0.1f, -0.2f);
                 VRGlobals.backCollider.isTrigger = true;
                 VRGlobals.backHolster.gameObject.layer = 3;
+
+                VRGlobals.sidearmHolster = new GameObject("sidearmHolsterCollider").transform;
+                BoxCollider sidearmCollider = VRGlobals.sidearmHolster.gameObject.AddComponent<BoxCollider>();
+                sidearmCollider.isTrigger = true;
+                sidearmCollider.size = new Vector3(0.01f, 0.01f, 0.01f);
+                VRGlobals.sidearmHolster.transform.parent = player.PlayerBones.HolsterPistol.parent;
+                VRGlobals.sidearmHolster.transform.localPosition = new Vector3(0, 0.1f, 0.1f);
+                VRGlobals.sidearmHolster.transform.localRotation = Quaternion.identity;
+                VRGlobals.sidearmHolster.gameObject.layer = 3;
             }
+
+
+
             VRGlobals.inGame = true;
         }
 
@@ -137,6 +128,13 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
                 //VRGlobals.ikManager.enabled = false;
             }
+            if (__instance.name == "Base HumanLCollarbone") {
+                Transform wrist = __instance.transform.FindChildRecursive("Base HumanLForearm3");
+                if (wrist != null && wrist.GetComponent<TwistRelax>())
+                {
+                    wrist.GetComponent<TwistRelax>().weight = 3;
+                }
+            }
             //GameObject.Destroy(__instance);
 
 
@@ -176,18 +174,36 @@ namespace TarkovVR.Patches.Core.VR
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerSpring), "Start")]
-        private static void SetMwainCamParent(PlayerSpring __instance)
+        private static void SetRigAndSidearmHolsters(PlayerSpring __instance)
         {
-            if (__instance.name == "Base HumanRibcage" && rigCollider == null)
+            if (__instance.transform.root.name != "PlayerSuperior(Clone)" || __instance.name != "Base HumanRibcage" || rigCollider != null)
+                return;
+
+            rigCollider = new GameObject("rigCollider").transform;
+            BoxCollider collider = rigCollider.gameObject.AddComponent<BoxCollider>();
+            rigCollider.parent = __instance.transform.parent;
+            rigCollider.localEulerAngles = Vector3.zero;
+            rigCollider.localPosition = Vector3.zero;
+            rigCollider.gameObject.layer = 3;
+            collider.isTrigger = true;
+            collider.size = new Vector3(0.1f, 0.1f, 0.1f);
+
+            if (VRGlobals.sidearmHolster)
+                VRGlobals.sidearmHolster.gameObject.layer = 3;
+        }
+        // local pos -0.1 -0.15 -0.1
+        // size 0.001 0.005 0.005
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TransformLinks), "CacheTransforms")]
+        private static void SetRigAndSidearmHolsters(TransformLinks __instance, Transform parent, IEnumerable<string> cachedBoneNames)
+        {
+            Plugin.MyLog.LogWarning("Cache transform: " + __instance + "   |   " + parent);
+            foreach (string boneName in cachedBoneNames)
             {
-                rigCollider = new GameObject("rigCollider").transform;
-                BoxCollider collider = rigCollider.gameObject.AddComponent<BoxCollider>();
-                rigCollider.parent = __instance.transform.parent;
-                rigCollider.localEulerAngles = Vector3.zero;
-                rigCollider.localPosition = Vector3.zero;
-                rigCollider.gameObject.layer = 3;
-                collider.isTrigger = true;
-                collider.size = new Vector3(0.1f, 0.1f, 0.1f);
+                Plugin.MyLog.LogWarning("\t - name " + boneName);
+
             }
         }
     }

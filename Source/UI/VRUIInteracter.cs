@@ -21,7 +21,7 @@ namespace TarkovVR.Source.UI
         public Vector3 pos;
         public Vector3 uiPointerPos;
         public float timeHeld = 0f;
-        private Vector3 pressPosition;
+        public Vector3 pressPosition;
         private GameObject pressedObject;
 
 
@@ -120,6 +120,7 @@ namespace TarkovVR.Source.UI
                 {
                     rightClickTriggered = true;
                     eventData.pressPosition = hitPoint;
+                    pressPosition = eventData.worldPosition;
                     eventData.button = PointerEventData.InputButton.Right;
                     ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
                 }
