@@ -61,6 +61,8 @@ public class CircularSegmentUI : MonoBehaviour
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon, out baseHandler);
         if (baseHandler != null)
             selectWeaponHandler = baseHandler as SelectWeaponHandler;
+
+        gameObject.active = false;
     }
 
     public void CreateQuickSlotUi(Sprite[] menuSprites)
@@ -109,7 +111,7 @@ public class CircularSegmentUI : MonoBehaviour
             lastSelectedSegment = selectedSegment;
         }
 
-        if (!leftHand && lastSelectedSegment != -1 && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand))
+        if (!leftHand && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand))
         {
             if (lastSelectedSegment == 0)
                 selectWeaponHandler.TriggerSwapPrimaryWeapon();
@@ -128,6 +130,15 @@ public class CircularSegmentUI : MonoBehaviour
             gameObject.active = false;
         }
     }
+
+    // parent is HumanLForearm3
+
+    // Timer panel localpos: 0.047 0.08 0.025
+    // local rot = 88.5784 83.1275 174.7802
+    // child(0).localeuler = 0 342.1273 0
+
+    // leftwristui localpos = -0.1 0.04 0.035
+    // localrot = 304.3265 181 180
 
     void CreateSegments()
     {

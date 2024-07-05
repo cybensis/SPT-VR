@@ -4,6 +4,7 @@ using HarmonyLib;
 using RootMotion.FinalIK;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
@@ -21,6 +22,7 @@ namespace TarkovVR.Patches.Core.VR
         private static Transform originalLeftHandMarker;
         private static Transform originalRightHandMarker;
         public static Transform rigCollider;
+        public static Transform leftWrist;
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CharacterControllerSpawner), "Spawn")]
@@ -56,6 +58,8 @@ namespace TarkovVR.Patches.Core.VR
                     collider.isTrigger = true;
                     VRGlobals.camHolder.layer = 7;
                     VRGlobals.menuVRManager.enabled = false;
+
+                    //VRGlobals.vrPlayer.radialMenu.active = false;
                 }
             }
 
@@ -69,6 +73,13 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.backHolster.localPosition = new Vector3(0.2f, -0.1f, -0.2f);
                 VRGlobals.backCollider.isTrigger = true;
                 VRGlobals.backHolster.gameObject.layer = 3;
+
+                VRGlobals.backpackCollider = new GameObject("backpackCollider").transform;
+                VRGlobals.backpackCollider.parent = VRGlobals.camHolder.transform;
+                VRGlobals.backpackCollider.gameObject.AddComponent<BoxCollider>().isTrigger = true;
+                VRGlobals.backpackCollider.localScale = new Vector3(0.2f, 0.2f, 0.2f);
+                VRGlobals.backpackCollider.localPosition = new Vector3(-0.2f, -0.1f, -0.2f);
+                VRGlobals.backpackCollider.gameObject.layer = 3;
 
                 VRGlobals.sidearmHolster = new GameObject("sidearmHolsterCollider").transform;
                 BoxCollider sidearmCollider = VRGlobals.sidearmHolster.gameObject.AddComponent<BoxCollider>();
@@ -129,12 +140,23 @@ namespace TarkovVR.Patches.Core.VR
                 //VRGlobals.ikManager.enabled = false;
             }
             if (__instance.name == "Base HumanLCollarbone") {
-                Transform wrist = __instance.transform.FindChildRecursive("Base HumanLForearm3");
-                if (wrist != null && wrist.GetComponent<TwistRelax>())
+                leftWrist = __instance.transform.FindChildRecursive("Base HumanLForearm3");
+                if (leftWrist != null && leftWrist.GetComponent<TwistRelax>())
                 {
-                    wrist.GetComponent<TwistRelax>().weight = 3;
+                    leftWrist.GetComponent<TwistRelax>().weight = 3;
                 }
+
             }
+
+            // parent is HumanLForearm3
+
+            // Timer panel localpos: 0.047 0.08 0.025
+            // local rot = 88.5784 83.1275 174.7802
+            // child(0).localeuler = 0 342.1273 0
+
+            // leftwristui localpos = -0.1 0.04 0.035
+            // localrot = 304.3265 181 180
+
             //GameObject.Destroy(__instance);
 
 
@@ -164,7 +186,13 @@ namespace TarkovVR.Patches.Core.VR
                 mainCam.farClipPlane = 1000f;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
                 mainCam.useOcclusionCulling = false;
-
+                if (VRGlobals.vrPlayer) { 
+                    if (VRGlobals.vrPlayer.radialMenu)
+                            VRGlobals.vrPlayer.radialMenu.active = false;
+                    if (VRGlobals.vrPlayer is RaidVRPlayerManager) {
+                        VRGlobals.menuVRManager.OnDisable();
+                    }
+                }
                 //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
                 //cameraManager.initPos = VRCam.transform.localPosition;
             }
@@ -195,16 +223,5 @@ namespace TarkovVR.Patches.Core.VR
         // size 0.001 0.005 0.005
 
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(TransformLinks), "CacheTransforms")]
-        private static void SetRigAndSidearmHolsters(TransformLinks __instance, Transform parent, IEnumerable<string> cachedBoneNames)
-        {
-            Plugin.MyLog.LogWarning("Cache transform: " + __instance + "   |   " + parent);
-            foreach (string boneName in cachedBoneNames)
-            {
-                Plugin.MyLog.LogWarning("\t - name " + boneName);
-
-            }
-        }
     }
 }

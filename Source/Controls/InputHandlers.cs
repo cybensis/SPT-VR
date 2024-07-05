@@ -26,7 +26,32 @@ namespace TarkovVR.Source.Controls
             {
                 if (VRGlobals.vrPlayer.canJump && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
                 {
-                        command = ECommand.Jump;
+                    command = ECommand.Jump;
+                }
+            }
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class CrouchHandler : IInputHandler
+        {
+
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (!VRGlobals.vrPlayer.isSupporting && SteamVR_Actions._default.RightJoystick.axis.y < -0.8)
+                {
+                    VRGlobals.player.ChangePose(-1.5f * Time.deltaTime);
+                    VRGlobals.vrPlayer.crouchHeightDiff = 1.6f - VRGlobals.player.MovementContext.CharacterController.height;
+                }
+
+                if (!VRGlobals.vrPlayer.isSupporting && VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && SteamVR_Actions._default.RightJoystick.axis.y > 0.8)
+                {
+                    VRGlobals.player.ChangePose(0.05f);
+                    VRGlobals.vrPlayer.crouchHeightDiff = Mathf.Clamp(1.61f - VRGlobals.player.MovementContext.CharacterController.height, 0.01f, 1);
+                }
+                // Really shit way to do this, but this prevents a jump happening immediately after changing the crouch height diff by 
+                // keeping it at 0.01 until the right joystick Y axis goes down
+                else if (VRGlobals.vrPlayer.crouchHeightDiff ==  0.01f && SteamVR_Actions._default.RightJoystick.axis.y < 0.5) { 
+                    VRGlobals.vrPlayer.crouchHeightDiff = 0f;
                 }
             }
         }
@@ -45,12 +70,14 @@ namespace TarkovVR.Source.Controls
                         command = ECommand.EndSprinting;
 
                     isSprinting = !isSprinting;
+                    VRGlobals.vrPlayer.crouchHeightDiff = 0;
                 }
                 else if (isSprinting && SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
                 {
                     command = ECommand.EndSprinting;
                     isSprinting = false;
                 }
+
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

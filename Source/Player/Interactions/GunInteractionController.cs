@@ -36,6 +36,7 @@ public class GunInteractionController : MonoBehaviour
     private int boltIndex = -1;
     private bool initMalfunction = false;
     public bool hasExaminedAfterMalfunction = false;
+    public Vector3 armsOffset = new Vector3(-0.05f, -0.075f, -0.075f);
 
     //private bool
     public void Init()
@@ -51,6 +52,9 @@ public class GunInteractionController : MonoBehaviour
             meshList = new List<Class497>();
         if (malfunctionMeshList == null)
             malfunctionMeshList = new List<Class497>();
+
+
+        transform.localEulerAngles = new Vector3(325, 0, 0);
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void FinishInit() {
@@ -59,13 +63,15 @@ public class GunInteractionController : MonoBehaviour
     }
 
     private void OnEnable() {
-        if (initialized)
+        if (initialized) {
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
+            gunRaycastReciever.GetComponent<BoxCollider>().enabled = true;
+            }
     }
     public void OnDisable()
     {
         if (initialized)
-            gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
+            gunRaycastReciever.GetComponent<BoxCollider>().enabled = false;
     }
     public void SetHighlightComponent(HighLightMesh meshHighlighter) { 
         this.meshHighlighter = meshHighlighter;
@@ -80,6 +86,8 @@ public class GunInteractionController : MonoBehaviour
         if (!initialized)
             return;
 
+        transform.position = Camera.main.transform.position;
+        transform.localPosition += armsOffset;
 
         if (SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active))
         {

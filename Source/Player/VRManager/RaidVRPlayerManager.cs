@@ -1,4 +1,7 @@
 ﻿using EFT;
+using EFT.Hideout;
+using TarkovVR.Patches.Core.VR;
+using TarkovVR.Patches.UI;
 using UnityEngine;
 using Valve.VR;
 
@@ -20,12 +23,7 @@ namespace TarkovVR.Source.Player.VRManager
         private Vector3 interactUiPos;
         private bool raycastHit = false;
 
-        //public void Awake()
-        //{
-        //    cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        //    cube.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
 
-        //}
 
         private void Update() {
             base.Update(); 
@@ -43,18 +41,49 @@ namespace TarkovVR.Source.Player.VRManager
         }
 
 
+        public override void PositionLeftWristUi()
+        {
+            // Timer panel localpos: 0.047 0.08 0.025
+            // local rot = 88.5784 83.1275 174.7802
+            // child(0).localeuler = 0 342.1273 0
 
-        public void PlaceUiInteracter()
+            // leftwristui localpos = -0.1 0.04 0.035
+            // localrot = 304.3265 181 180
+
+            leftWristUi.transform.parent = InitVRPatches.leftWrist;
+            leftWristUi.transform.localPosition = new Vector3(-0.1f, 0.04f, 0.035f);
+            leftWristUi.transform.localEulerAngles = new Vector3(304, 180, 180);
+
+            UIPatches.extractionTimerUi.transform.parent = leftWristUi.transform;
+            UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.047f, 0.08f, 0.025f);
+            UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(88, 83, 175);
+            UIPatches.extractionTimerUi._mainContainer.localEulerAngles = new Vector3(0, 342, 0);
+            UIPatches.extractionTimerUi.transform.localScale = new Vector3(0.0003f, 0.0003f, 0.0003f);
+
+            UIPatches.healthPanel.transform.parent = leftWristUi.transform;
+            UIPatches.healthPanel.transform.localPosition = Vector3.zero;
+            UIPatches.healthPanel.transform.localEulerAngles = new Vector3(270, 87, 0);
+
+            UIPatches.stancePanel.transform.parent = leftWristUi.transform;
+            UIPatches.stancePanel.transform.localPosition = new Vector3(0.1f, 0, 0.03f);
+            UIPatches.stancePanel.transform.localEulerAngles = new Vector3(270, 87, 0);
+
+            UIPatches.notifierUi.transform.parent = leftWristUi.transform;
+            UIPatches.notifierUi.transform.localPosition = new Vector3(0.12f, 0f, -0.085f);
+            UIPatches.notifierUi.transform.localEulerAngles = new Vector3(272, 163, 283);
+            UIPatches.notifierUi.transform.localScale = new Vector3(0.0003f, 0.0003f, 0.0003f);
+        }
+        public void PlaceUiInteracter(RaycastHit hit)
         {
 
             // Verify if the current hit object is still the same after the delay
             Vector3 rayOrigin = Camera.main.transform.position;
-            Vector3 rayDirection = Camera.main.transform.forward;
-            RaycastHit hit;
-            rayDirection.y -= downwardOffset;
-            float adjustedRayDistance = rayDistance * GetDistanceMultiplier(rayDirection);
-            if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, GameWorld.int_0))
-            {
+            //Vector3 rayDirection = Camera.main.transform.forward;
+            //RaycastHit hit;
+            //rayDirection.y -= downwardOffset;
+            //float adjustedRayDistance = rayDistance * GetDistanceMultiplier(rayDirection);
+            //if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, GameWorld.int_0))
+            //{
 
                 BoxCollider boxCollider = hit.collider as BoxCollider;
                 Vector3 offsetDirection = (rayOrigin - hit.point).normalized;
@@ -86,11 +115,11 @@ namespace TarkovVR.Source.Player.VRManager
                     //Plugin.MyLog.LogWarning(boxCollider + " | " + interactUiPos + " |  " + interactionUi);
                 raycastHit = true;
                 // Set the interactions UI position
-            }
-
-
-
+            //}
         }
+
+        public void StopPlacingUi() { raycastHit = false; }
+
 
         // We need to extend the raycast distance when the player is looking down because if a filing cabinet was in
         // front of them, the raycast distance might be enough to reach the top shelf, but standing in the same place

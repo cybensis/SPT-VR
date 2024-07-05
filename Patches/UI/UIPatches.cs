@@ -58,12 +58,13 @@ namespace TarkovVR.Patches.UI
         }
 
 
+        // The extraction timer is the last in the left wrist UI components to awake so use it to position everything
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ExtractionTimersPanel), "Awake")]
-        private static void DisableComponentThatBlocksText(ExtractionTimersPanel __instance)
+        private static void SetExtractionTimerAndPositionLeftWristUi(ExtractionTimersPanel __instance)
         {
             extractionTimerUi = __instance;
-            VRGlobals.vrPlayer.SetExtractionUi();
+            VRGlobals.vrPlayer.PositionLeftWristUi();
         }
 
         public static void PositionGameUi(GameUI __instance) {
@@ -119,14 +120,16 @@ namespace TarkovVR.Patches.UI
             VRGlobals.menuVRManager.enabled = true;
             VRGlobals.commonUi.parent = VRGlobals.camRoot.transform;
             VRGlobals.commonUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
-            VRGlobals.commonUi.localPosition = new Vector3(-0.8f, -0.5f, 0.8f);
+            VRGlobals.commonUi.localPosition = new Vector3(-0.8f, -0.5f - VRGlobals.vrPlayer.crouchHeightDiff, 0.8f);
             VRGlobals.commonUi.localEulerAngles = Vector3.zero;
             if (VRGlobals.preloaderUi) {
 
                 VRGlobals.preloaderUi.transform.parent = VRGlobals.camRoot.transform;
                 VRGlobals.preloaderUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
                 VRGlobals.preloaderUi.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
-                VRGlobals.preloaderUi.localPosition = new Vector3(-0.03f, -0.1f, 0.8f);
+
+                VRGlobals.preloaderUi.localPosition = new Vector3(-0.03f, -0.1f - VRGlobals.vrPlayer.crouchHeightDiff, 0.8f);
+                
                 VRGlobals.preloaderUi.localRotation = Quaternion.identity;
 
                 if (UIPatches.notifierUi)
@@ -361,12 +364,13 @@ namespace TarkovVR.Patches.UI
             __instance.InteractableObjectIsProxy = false;
             EFT.Player player = null;
             Ray interactionRay = __instance.InteractionRay;
+            RaycastHit hit;
             if (__instance.CurrentState.CanInteract && (bool)__instance.HandsController && __instance.HandsController.CanInteract())
             {
-                RaycastHit hit;
 
                 Vector3 rayOrigin = Camera.main.transform.position;
-                Vector3 rayDirection = Quaternion.Euler(5, 0, 0) * Camera.main.transform.forward;
+                // Raycasts hit a bit too high so tilt it down for it to hit closer to the centre of vision
+                Vector3 rayDirection = Quaternion.Euler(-5, 0, 0) * Camera.main.transform.forward;
                 float adjustedRayDistance = manager.rayDistance * manager.GetDistanceMultiplier(rayDirection);
 
                 GameObject gameObject = null;
@@ -374,6 +378,8 @@ namespace TarkovVR.Patches.UI
                 if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld.int_0))
                 {
                     gameObject = hit.collider.gameObject;
+                    if (!__instance.InteractableObject || __instance.InteractableObject.gameObject != gameObject)
+                        manager.PlaceUiInteracter(hit);
                 }
 
                 if (gameObject != null)
@@ -477,7 +483,6 @@ namespace TarkovVR.Patches.UI
             }
             if (interactableObject != __instance.InteractableObject || __instance._nextCastHasForceEvent)
             {
-                manager.PlaceUiInteracter();
                 __instance._nextCastHasForceEvent = false;
                 __instance.InteractableObject = interactableObject;
                 if (__instance.InteractableObject is WorldInteractiveObject worldInteractiveObject2)
@@ -549,6 +554,15 @@ namespace TarkovVR.Patches.UI
         //        cameraManager.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
         //    }
         //}
+
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(GClass2597), MethodType.Constructor, typeof(Item), typeof(ItemAddress), typeof(ItemAddress), typeof(TraderControllerClass), typeof(GInterface277), typeof(GClass2596), typeof(GClass2593), typeof(List<GClass2614>), typeof(List<GClass2618>))]
+        //private static void PositionLoadRaidBannerToggles(GClass2597 __instance, Item item)
+        //{
+        //    Plugin.MyLog.LogWarning(item);
+        //    Plugin.MyLog.LogError(new StackTrace());
+        //}
+
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BannerPageToggle), "Init")]

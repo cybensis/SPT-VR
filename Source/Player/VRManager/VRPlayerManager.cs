@@ -23,7 +23,7 @@ namespace TarkovVR.Source.Player.VRManager
         private Vector3 y;
         public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
         private Vector3 supportingWeaponHolderOffset = new Vector3(0.155f, 0.09f, 0.05f);
-        private Vector3 supportingLeftHandOffset = new Vector3(0,0.1f,0);
+        private Vector3 supportingLeftHandOffset = new Vector3(0,0f,0);
         private Quaternion initialRightHandRotation;
         public Transform gunTransform;
         public static Transform leftHandGunIK;
@@ -37,7 +37,7 @@ namespace TarkovVR.Source.Player.VRManager
         public GameObject RightHand = null;
 
         public GameObject radialMenu;
-        private GameObject leftWristUi;
+        protected GameObject leftWristUi;
 
 
         public bool isSupporting = false;
@@ -56,6 +56,7 @@ namespace TarkovVR.Source.Player.VRManager
         //public VRInputManager inputManager;
         private bool leftHandInAnimation = false;
         public bool showScopeZoom = false;
+        public float crouchHeightDiff = 0;
         public Transform scopeUiPosition;
 
 
@@ -67,15 +68,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         }
 
-        public void SetExtractionUi() {
-            if (UIPatches.extractionTimerUi)
-            {
-                UIPatches.extractionTimerUi.transform.parent = leftWristUi.transform;
-                UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.02f, 0.1f, 0);
-                UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(71, 103, 180);
-                UIPatches.extractionTimerUi.transform.localScale = new Vector3(0.0003f, 0.0003f, 0.0003f);
-            }
-        }
+
         protected virtual void Awake()
         {
             
@@ -102,19 +95,18 @@ namespace TarkovVR.Source.Player.VRManager
                     leftWristUi.layer = 5;
                     leftWristUi.transform.parent = LeftHand.transform;
                     leftWristUi.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
-                    leftWristUi.transform.localPosition = new Vector3(0, -0.05f, 0.015f);
-                    leftWristUi.transform.localEulerAngles = Vector3.zero;
+                    //leftWristUi.transform.localPosition = new Vector3(0, -0.05f, 0.015f);
+                    //leftWristUi.transform.localEulerAngles = Vector3.zero;
 
-                    UIPatches.healthPanel.transform.parent = leftWristUi.transform;
-                    UIPatches.healthPanel.transform.localPosition = Vector3.zero;
-                    UIPatches.healthPanel.transform.localEulerAngles = new Vector3(270,87,0);
+                    //UIPatches.healthPanel.transform.parent = leftWristUi.transform;
+                    //UIPatches.healthPanel.transform.localPosition = Vector3.zero;
+                    //UIPatches.healthPanel.transform.localEulerAngles = new Vector3(270,87,0);
 
-                    UIPatches.stancePanel.transform.parent = leftWristUi.transform;
-                    UIPatches.stancePanel.transform.localPosition = new Vector3(0.1f, 0, 0.03f);
-                    UIPatches.stancePanel.transform.localEulerAngles = new Vector3(270, 87, 0);
+                    //UIPatches.stancePanel.transform.parent = leftWristUi.transform;
+                    //UIPatches.stancePanel.transform.localPosition = new Vector3(0.1f, 0, 0.03f);
+                    //UIPatches.stancePanel.transform.localEulerAngles = new Vector3(270, 87, 0);
 
                 }
-                SetNotificationUi();
             }
             SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
             SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
@@ -127,7 +119,10 @@ namespace TarkovVR.Source.Player.VRManager
             //}
 
         }
-        public void SetNotificationUi() {
+
+        public abstract void PositionLeftWristUi();
+        public void SetNotificationUi()
+        {
             if (UIPatches.notifierUi)
             {
                 UIPatches.notifierUi.transform.parent = leftWristUi.transform;
@@ -158,13 +153,16 @@ namespace TarkovVR.Source.Player.VRManager
             if (initPos.y == 0)
                 initPos = Camera.main.transform.localPosition;
 
-            Vector3 newLocalPos = Vector3.zero;
+            Vector3 newLocalPos = initPos * -1 + headOffset;
+            newLocalPos.y -= crouchHeightDiff;
             // Set the rig collider position to 75% of the cameras height so it appears under the head
             //if (VRGlobals.ikManager)
             //    InitVRPatches.rigCollider.position = newLocalPos;
             //    newLocalPos.y = Camera.main.transform.localPosition.y * 0.75f;
 
-            VRGlobals.vrOffsetter.transform.localPosition = initPos * -1 + headOffset;
+
+            VRGlobals.vrOffsetter.transform.localPosition = newLocalPos;
+
             if (SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.Any))
             {
                 timeHeld += Time.deltaTime;
@@ -199,7 +197,7 @@ namespace TarkovVR.Source.Player.VRManager
             //    }
             //}
             interactMenuOpen = (interactionUi && interactionUi.gameObject.active);
-            canJump = (!VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && !interactMenuOpen);
+            canJump = (!VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && !interactMenuOpen && crouchHeightDiff == 0);
             if (canJump)
                 canJump = (!isSupporting && (!VRGlobals.firearmController || !VRGlobals.firearmController.IsAiming));
 
@@ -251,7 +249,7 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 if (isSupporting)
                 {
-                    if (VRGlobals.vrOpticController)
+                    if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController)
                         VRGlobals.vrOpticController.handleJoystickZoomDial();
                     Vector3 toLeftHand = LeftHand.transform.position - RightHand.transform.position;
                     Vector3 flatToHand = new Vector3(toLeftHand.x, 0, toLeftHand.z); // For yaw
@@ -421,9 +419,7 @@ namespace TarkovVR.Source.Player.VRManager
             if (!RightHand && VRGlobals.menuVRManager.RightHand)
                 RightHand = VRGlobals.menuVRManager.RightHand;
             if (!LeftHand && VRGlobals.menuVRManager.LeftHand)
-            {
                 LeftHand = VRGlobals.menuVRManager.LeftHand;
-            }
         }
 
 

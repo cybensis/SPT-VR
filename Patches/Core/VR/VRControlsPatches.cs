@@ -138,7 +138,7 @@ namespace TarkovVR.Patches.Core.VR
                     else if (m == 2)
                     {
                         if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < 0.75f && !VRGlobals.blockRightJoystick && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.1f)
-                            axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 8;
+                            axis[__instance.gclass1761_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * 5;
                         else
                             axis[__instance.gclass1761_1[m].IntAxis] = 0;
                         if (VRGlobals.camRoot != null)
@@ -174,34 +174,35 @@ namespace TarkovVR.Patches.Core.VR
                     //    else
                     //        matchingHeadToBody = false;
                     //}
+
                 }
-                if (VRGlobals.inGame && VRGlobals.player)
-                {
-                    // Base Height - the height at which crouching begins.
-                    float baseHeight = VRGlobals.vrPlayer.initPos.y * 0.90f; // 90% of init height
-                                                                             // Floor Height - the height at which full prone is achieved.
-                    float floorHeight = VRGlobals.vrPlayer.initPos.y * 0.40f; // Significant crouch/prone
+                //if (VRGlobals.inGame && VRGlobals.player)
+                //{
+                //    // Base Height - the height at which crouching begins.
+                //    float baseHeight = VRGlobals.vrPlayer.initPos.y * 0.90f; // 90% of init height
+                //                                                             // Floor Height - the height at which full prone is achieved.
+                //    float floorHeight = VRGlobals.vrPlayer.initPos.y * 0.40f; // Significant crouch/prone
 
-                    // Current height position normalized between baseHeight and floorHeight.
-                    float normalizedHeightPosition = (Camera.main.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
+                //    // Current height position normalized between baseHeight and floorHeight.
+                //    float normalizedHeightPosition = (Camera.main.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
 
-                    // Ensure the normalized height is within 0 (full crouch/prone) and 1 (full stand).
-                    float crouchLevel = Mathf.Clamp(normalizedHeightPosition, 0, 1);
+                //    // Ensure the normalized height is within 0 (full crouch/prone) and 1 (full stand).
+                //    float crouchLevel = Mathf.Clamp(normalizedHeightPosition, 0, 1);
 
 
 
-                    // Handling prone based on crouchLevel instead of raw height differences.
-                    if (normalizedHeightPosition < -0.2 && VRGlobals.player.MovementContext.CanProne) // Example threshold for prone
-                        VRGlobals.player.MovementContext.IsInPronePose = true;
-                    else
-                        VRGlobals.player.MovementContext.IsInPronePose = false;
+                //    // Handling prone based on crouchLevel instead of raw height differences.
+                //    if (normalizedHeightPosition < -0.2 && VRGlobals.player.MovementContext.CanProne) // Example threshold for prone
+                //        VRGlobals.player.MovementContext.IsInPronePose = true;
+                //    else
+                //        VRGlobals.player.MovementContext.IsInPronePose = false;
 
-                    // Debug or apply the crouch level
-                    //Plugin.MyLog.LogError("Crouch Level: " + crouchLevel + " " + normalizedHeightPosition);
-                    VRGlobals.player.MovementContext._poseLevel = crouchLevel;
+                //    // Debug or apply the crouch level
+                //    //Plugin.MyLog.LogError("Crouch Level: " + crouchLevel + " " + normalizedHeightPosition);
+                //    VRGlobals.player.MovementContext._poseLevel = crouchLevel;
 
-                    //player.MovementContext._poseLevel = crouchLevel;
-                }
+                //    //player.MovementContext._poseLevel = crouchLevel;
+                //}
             }
             //Plugin.MyLog.LogWarning("\n");
 

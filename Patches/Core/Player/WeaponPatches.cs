@@ -20,6 +20,8 @@ using EFT.UI;
 using Sirenix.Serialization;
 using Valve.VR.InteractionSystem;
 using JetBrains.Annotations;
+using EFT.AssetsManager;
+using EFT.Interactive;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -208,8 +210,13 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.player = __instance._player;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
             VRGlobals.usingItem = false;
-            if (__instance.gclass1555_0.sightModVisualControllers_0.Length > 0)
+            if (__instance.gclass1555_0.sightModVisualControllers_0.Length > 0) { 
                 VRGlobals.scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform.FindChild("mod_aim_camera");
+                // Some scopes have more than two modes or something which changes the name to 001, 002 etc,
+                if (!VRGlobals.scope)
+                    VRGlobals.scope = __instance.gclass1555_0.sightModVisualControllers_0[0].transform.FindChild("mod_aim_camera_001");
+
+            }
 
             VRPlayerManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[10];
 
@@ -507,7 +514,64 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
 
-        [HarmonyPatch]
+        public static void DropObject(LootItem val)
+        {
+            AssetPoolObject component = val.GetComponent<AssetPoolObject>();
+            GameObject gameObject = val.gameObject;
+            Item item = val.Item;
+            string name = val.Item.Name;
+            BoxCollider collider = val._boundCollider;
+            float makeVisibleAfterDelay = 0.15f;
+            val._rigidBody = val.gameObject.GetComponent<Rigidbody>();
+            if (val._rigidBody == null)
+            {
+                val._rigidBody = val.gameObject.AddComponent<Rigidbody>();
+            }
+            if (gameObject.activeInHierarchy)
+            {
+                val.method_3();
+            }
+            else
+            {
+                val.bool_2 = true;
+            }
+            if (component != null)
+            {
+                component.RegisteredComponentsToClean.Add(val._rigidBody);
+            }
+            val._rigidBody.mass = val.item_0.GetSingleItemTotalWeight();
+            val._rigidBody.isKinematic = false;
+            val._currentPhysicsTime = 0f;
+            val.method_1(val._rigidBody.centerOfMass);
+            List<Collider> colliders = component.GetColliders(includeNestedAssetPoolObjects: true);
+            if (colliders.Count == 0)
+            {
+                Plugin.MyLog.LogError("No colliders found on item: " + gameObject.name);
+            }
+            else
+            {
+                LootItem.smethod_1(gameObject, colliders, val._boundCollider);
+            }
+            val._cullingRegisterRadius = 0.005f;
+            Vector3 size = val._boundCollider.size;
+            if (size.x * size.y * size.z <= EFTHardSettings.Instance.LootVolumeForHighQuallityPhysicsClient)
+            {
+                val._rigidBody.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            }
+            else
+            {
+                val._rigidBody.collisionDetectionMode = CollisionDetectionMode.Discrete;
+            }
+            val.OnRigidbodyStarted();
+            collider = val._boundCollider;
+            if (makeVisibleAfterDelay > 0f)
+            {
+                val.method_10(isVisible: false);
+                val.StartCoroutine(val.method_11(makeVisibleAfterDelay));
+            }
+        }
+
+            [HarmonyPatch]
         public class ItemHandsControllerPatch
         {
             //// This method is called to dynamically determine the method to patch
