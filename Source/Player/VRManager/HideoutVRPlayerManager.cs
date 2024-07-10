@@ -33,12 +33,6 @@ namespace TarkovVR.Source.Player.VRManager
 
         public override void PositionLeftWristUi()
         {
-            // Timer panel localpos: 0.047 0.08 0.025
-            // local rot = 88.5784 83.1275 174.7802
-            // child(0).localeuler = 0 342.1273 0
-
-            // leftwristui localpos = -0.1 0.04 0.035
-            // localrot = 304.3265 181 180
 
             leftWristUi.transform.parent = InitVRPatches.leftWrist;
             leftWristUi.transform.localPosition = new Vector3(-0.1f, 0.04f, 0.035f);
@@ -69,15 +63,5 @@ namespace TarkovVR.Source.Player.VRManager
             interactionUi.Rotate(0, 180, 0);
         }
 
-
-
-        //protected override void SpawnHands()
-        //{
-        //    if (!RightHand && VRGlobals.menuVRManager.RightHand)
-        //        RightHand = VRGlobals.menuVRManager.RightHand;
-        //    if (!LeftHand && VRGlobals.menuVRManager.LeftHand) { 
-        //        LeftHand = VRGlobals.menuVRManager.LeftHand;
-        //    }
-        //}
     }
 }

@@ -144,7 +144,7 @@ namespace TarkovVR.Patches.Misc
         // Occasionally opening the inventory will set camRoot rot to 0,0,0 so get it here and set later
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InventoryScreen), "Show", new Type[] { typeof(GClass2907) })]
-        private static bool SetOriiginalCamRotOnInvOpen(GridViewMagnifier __instance)
+        private static bool SetOriginalCamRotOnInvOpen(GridViewMagnifier __instance)
         {
             camRootRot = VRGlobals.camRoot.transform.eulerAngles;
             return true;
@@ -191,6 +191,9 @@ namespace TarkovVR.Patches.Misc
 
         private static void ReturnToMainMenuFromHideout()
         {
+            if (UIPatches.notifierUi)
+                UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
+
             VRGlobals.vrOffsetter.transform.localPosition = Vector3.zero;
             VRGlobals.commonUi.parent = null;
             VRGlobals.preloaderUi.parent = null;

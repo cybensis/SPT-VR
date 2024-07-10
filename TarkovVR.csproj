@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
@@ -45,8 +45,14 @@
     <Reference Include="Comfort">
       <HintPath>libs\Managed\Comfort.dll</HintPath>
     </Reference>
+    <Reference Include="Comfort.Unity">
+      <HintPath>libs\Managed\Comfort.Unity.dll</HintPath>
+    </Reference>
     <Reference Include="CommonExtensions">
       <HintPath>libs\Managed\CommonExtensions.dll</HintPath>
+    </Reference>
+    <Reference Include="ItemComponent.Types">
+      <HintPath>libs\Managed\ItemComponent.Types.dll</HintPath>
     </Reference>
     <Reference Include="Sirenix.Serialization">
       <HintPath>libs\Managed\Sirenix.Serialization.dll</HintPath>

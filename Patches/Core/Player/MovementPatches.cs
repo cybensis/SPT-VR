@@ -1,5 +1,6 @@
 ﻿using EFT;
 using HarmonyLib;
+using System.Drawing.Printing;
 using UnityEngine;
 using Valve.VR;
 
@@ -31,6 +32,14 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 cameraForward = Camera.main.transform.forward;
             float rotDiff = Vector3.SignedAngle(bodyForward, cameraForward, Vector3.up);
 
+            Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
+
+            // Normalize the angle to the range [-180, 180]
+            float pitch = headEulerAngles.x;
+            if (pitch > 180)
+            {
+                pitch -= 360;
+            }
 
             if (leftJoystickUsed)
             {
@@ -40,7 +49,8 @@ namespace TarkovVR.Patches.Core.Player
             {
                 lastYRot = VRGlobals.camRoot.transform.eulerAngles.y;
             }
-            else if (Mathf.Abs(rotDiff) > 80 && timeSinceLastLookRot > 0.25)
+            // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 80 degrees, and if they haven't already rotated recently
+            else if (pitch < 50 && Mathf.Abs(rotDiff) > 80 && timeSinceLastLookRot > 0.25)
             {
                 lastYRot += rotDiff;
                 timeSinceLastLookRot = 0;

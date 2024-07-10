@@ -66,7 +66,7 @@ public class GunInteractionController : MonoBehaviour
         if (initialized) {
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
             gunRaycastReciever.GetComponent<BoxCollider>().enabled = true;
-            }
+        }
     }
     public void OnDisable()
     {
@@ -83,11 +83,11 @@ public class GunInteractionController : MonoBehaviour
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void Update()
     {
+        transform.position = Camera.main.transform.position;
+        transform.localPosition += armsOffset;
         if (!initialized)
             return;
 
-        transform.position = Camera.main.transform.position;
-        transform.localPosition += armsOffset;
 
         if (SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active))
         {

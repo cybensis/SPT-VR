@@ -37,13 +37,16 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                if (!VRGlobals.vrPlayer.isSupporting && SteamVR_Actions._default.RightJoystick.axis.y < -0.8)
+                if (VRGlobals.vrPlayer.isSupporting || VRGlobals.vrPlayer.interactMenuOpen)
+                    return;
+
+                if (SteamVR_Actions._default.RightJoystick.axis.y < -0.8)
                 {
                     VRGlobals.player.ChangePose(-1.5f * Time.deltaTime);
                     VRGlobals.vrPlayer.crouchHeightDiff = 1.6f - VRGlobals.player.MovementContext.CharacterController.height;
                 }
 
-                if (!VRGlobals.vrPlayer.isSupporting && VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && SteamVR_Actions._default.RightJoystick.axis.y > 0.8)
+                if (VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && SteamVR_Actions._default.RightJoystick.axis.y > 0.8)
                 {
                     VRGlobals.player.ChangePose(0.05f);
                     VRGlobals.vrPlayer.crouchHeightDiff = Mathf.Clamp(1.61f - VRGlobals.player.MovementContext.CharacterController.height, 0.01f, 1);
@@ -103,27 +106,27 @@ namespace TarkovVR.Source.Controls
         public class AimHandler : IInputHandler
         {
             public void UpdateCommand(ref ECommand command)
-            {
-                float angleToScope = 100f;
-                float angleFromScope = 100f;
-                if (VRGlobals.firearmController && VRGlobals.scope) {
-                    bool isAiming = VRGlobals.firearmController.IsAiming;
-                    Vector3 directionToScope = (VRGlobals.scope.transform.position + (VRGlobals.scope.transform.forward * -0.25f)) - VRGlobals.camHolder.transform.position;
-                    directionToScope = directionToScope.normalized;
-                    angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward* -1, directionToScope);
-                    angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
-                    //Plugin.MyLog.LogWarning(angleToScope + "   " + angleFromScope);
-                    if (!isAiming && angleToScope <= 25f && angleFromScope <= 25f)
-                    {
-                        command = ECommand.ToggleAlternativeShooting;
-                    }
-                    else if (isAiming && (angleToScope > 25f || angleFromScope > 25f))
-                    {
-                        command = ECommand.EndAlternativeShooting;
-                        VRPlayerManager.smoothingFactor = 50f;
-                    }
-                    
+            { 
+                if (VRGlobals.firearmController == null || VRGlobals.scope == null)
+                    return;
+
+
+                bool isAiming = VRGlobals.firearmController.IsAiming;
+                Vector3 directionToScope = (VRGlobals.scope.transform.position + (VRGlobals.scope.transform.forward * -0.25f)) - VRGlobals.camHolder.transform.position;
+                directionToScope = directionToScope.normalized;
+                float angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward* -1, directionToScope);
+                float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
+                //Plugin.MyLog.LogWarning(angleToScope + "   " + angleFromScope);
+                if (!isAiming && angleToScope <= 25f && angleFromScope <= 25f)
+                {
+                    command = ECommand.ToggleAlternativeShooting;
                 }
+                else if (isAiming && (angleToScope > 25f || angleFromScope > 25f))
+                {
+                    command = ECommand.EndAlternativeShooting;
+                    VRPlayerManager.smoothingFactor = 50f;
+                }
+ 
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -150,23 +153,23 @@ namespace TarkovVR.Source.Controls
             private bool isScrolling = false;
             public void UpdateCommand(ref ECommand command)
             {
-                if (!VRGlobals.blockRightJoystick && VRGlobals.vrPlayer.interactMenuOpen)
-                {
+                if (VRGlobals.blockRightJoystick || !VRGlobals.vrPlayer.interactMenuOpen)
+                    return;
 
-                    if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.5f)
-                    {
-                        command = ECommand.ScrollPrevious;
-                        isScrolling = true;
-                    }
-                    else if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < -0.5f)
-                    {
-                        command = ECommand.ScrollNext;
-                        isScrolling = true;
-                    }
-                    else if (SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > -0.5f && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < 0.5f)
-                        isScrolling = false;
+
+                if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.5f)
+                {
+                    command = ECommand.ScrollPrevious;
+                    isScrolling = true;
                 }
-            }
+                else if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < -0.5f)
+                {
+                    command = ECommand.ScrollNext;
+                    isScrolling = true;
+                }
+                else if (SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > -0.5f && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < 0.5f)
+                    isScrolling = false;
+                }
 
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -202,16 +205,18 @@ namespace TarkovVR.Source.Controls
             private bool swapSidearm = false;
             public void UpdateCommand(ref ECommand command)
             {
+                if (!VRGlobals.player)
+                    return;
                 if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.returnAfterGrenade && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
                 {
-                    if (VRGlobals.player && VRGlobals.player.ActiveSlot == null)
+                    if (VRGlobals.player.ActiveSlot == null)
                         // If the first weapon slot is null then attempt select secondary
                         if (VRGlobals.player.Equipment.slot_0[0].ContainedItem != null)
                             command = ECommand.SelectFirstPrimaryWeapon;
                         else
                             command = ECommand.SelectSecondPrimaryWeapon;
 
-                    else if (VRGlobals.player && VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
+                    else if (VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
                         if (WeaponPatches.returnAfterGrenade)
                             command = ECommand.SelectFirstPrimaryWeapon;
                         else

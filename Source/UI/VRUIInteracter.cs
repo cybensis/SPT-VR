@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Valve.VR;
+using static RootMotion.FinalIK.HitReaction;
 
 namespace TarkovVR.Source.UI
 {
@@ -15,10 +16,9 @@ namespace TarkovVR.Source.UI
         private float rayDistance = 100f;
 
         private PointerEventData eventData;
-        private GameObject lastHighlightedObject;
+        public GameObject lastHighlightedObject;
         private GameObject dragObject;
         private GameObject hitObject;
-        public Vector3 pos;
         public Vector3 uiPointerPos;
         public float timeHeld = 0f;
         public Vector3 pressPosition;
@@ -54,7 +54,7 @@ namespace TarkovVR.Source.UI
                 //i++;
                 eventData = new PointerEventData(EventSystem.current);
                 hitObject = RaycastFindHit(hit, ref eventData);
-                //Plugin.MyLog.LogWarning("WDWD: " + " " + hitObject?.name + " " + hitObject?.transform.parent);
+                //Plugin.MyLog.LogWarning("HIT:    " + hitObject?.name + "    |   LAST HIT:    " + hit.point.x + ","+ hit.point.y+","+ hit.point.z);
                 eventData.worldPosition = hit.point;
 
                 if (hitObject)
@@ -63,7 +63,6 @@ namespace TarkovVR.Source.UI
                     handleOnEnterExit();
                     handleButtonClick(hit.point);
                     handleUIScrollwheel();
-                    handleNewHitDragging();
                 }
                 // Handle on exit if applicable
                 else if (lastHighlightedObject != null)
@@ -71,10 +70,14 @@ namespace TarkovVR.Source.UI
                     ExecuteEvents.Execute(lastHighlightedObject, eventData, ExecuteEvents.pointerExitHandler);
                     lastHighlightedObject = null;
                 }
-                handleMainDragging(hit.point);
+                if (hitObject || dragObject) 
+                    handleDragging(hit.point);
 
             }
-
+            //else
+            //{
+            //    Plugin.MyLog.LogError("NO HIT");
+            //}
         }
 
         public void EndDrop()
@@ -155,28 +158,35 @@ namespace TarkovVR.Source.UI
             }
         }
 
-        private void handleNewHitDragging()
+        private void handleDragging(Vector2 hitPoint)
         {
             // Use pressedObject to ensure that the object the user is trying to drag is the one they have selected,
             // not an object they selected then moved off from.
-            if (SteamVR_Actions._default.RightTrigger.axis > 0.7)
-            {
-                pressedObject = hitObject;
-            }
-            else
-            {
-                timeHeld = 0;
-                if (dragObject)
-                {
-                    cancelDrag();
+            if (SteamVR_Actions._default.RightTrigger.axis > 0.7) {
+                if (dragObject == null) {
+                    pressedObject = hitObject;
+                    pressPosition = eventData.worldPosition;
+                    eventData.dragging = true;
+                    eventData.pressPosition = hitPoint;
+                    ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.beginDragHandler);
+                    dragObject = hitObject;
                 }
-            }
+                else {
+                    eventData.button = PointerEventData.InputButton.Left;
+                    eventData.position = uiPointerPos;
+                    eventData.pressPosition = pressPosition;
+                    eventData.dragging = true;
+                    ExecuteEvents.Execute(dragObject, eventData, ExecuteEvents.dragHandler);
+                }
+                if (dragObject && SteamVR_Actions._default.ButtonB.stateUp)
+                    cancelDrag();
 
-            if (dragObject && SteamVR_Actions._default.ButtonB.stateUp)
-            {
-                timeHeld = 0;
-                cancelDrag();
             }
+            else if (dragObject)
+                cancelDrag();
+
+
+
         }
 
         private void cancelDrag()
@@ -186,39 +196,6 @@ namespace TarkovVR.Source.UI
             ExecuteEvents.Execute(dragObject, eventData, ExecuteEvents.endDragHandler);
             dragObject = null;
         }
-
-        private void handleMainDragging(Vector2 hitPoint)
-        {
-            if (SteamVR_Actions._default.RightTrigger.axis > 0.7 && (dragObject || pressedObject == hitObject))
-            {
-                //Plugin.MyLog.LogWarning("state down");
-                timeHeld += Time.deltaTime;
-                if (dragObject == null && timeHeld > 0.125)
-                {
-                    pressPosition = hitPoint;
-                    eventData.dragging = true;
-                    eventData.pressPosition = pressPosition;
-                    ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.beginDragHandler);
-                    dragObject = hitObject;
-                }
-            }
-            else if (SteamVR_Actions._default.RightTrigger.axis < 0.7 && dragObject)
-            {
-                //eventData.dragging = true;
-                //eventData.pressPosition = hitPoint;
-                //ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.endDragHandler);
-                cancelDrag();
-            }
-            if (dragObject)
-            {
-                eventData.button = PointerEventData.InputButton.Left;
-                eventData.position = uiPointerPos;
-                eventData.pressPosition = pressPosition;
-                eventData.dragging = true;
-                ExecuteEvents.Execute(dragObject, eventData, ExecuteEvents.dragHandler);
-            }
-        }
-
         private GameObject RaycastFindHit(RaycastHit hit, ref PointerEventData eventData)
         {
             var pointerPosition = Camera.main.WorldToScreenPoint(hit.point);

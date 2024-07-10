@@ -13,8 +13,14 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using UnityEngine.UI;
 using EFT.UI.Matchmaker;
-using System.Management.Instrumentation;
+using TarkovVR.Patches.Misc;
+using EFT.UI.Ragfair;
+using static RootMotion.FinalIK.GrounderQuadruped;
+using EFT.HealthSystem;
+using static EFT.UI.ItemsPanel;
 using System.Threading.Tasks;
+using UnityEngine.Profiling;
+using UnityEngine.UIElements.UIR;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -34,9 +40,7 @@ namespace TarkovVR.Patches.UI
         {
             gameUi = __instance;
             if (!VRGlobals.camRoot)
-            {
                 return;
-            }
 
             PositionGameUi(__instance);
         }
@@ -81,7 +85,6 @@ namespace TarkovVR.Patches.UI
             __instance.transform.localPosition = Vector3.zero;
             __instance.transform.localRotation = Quaternion.identity;
 
-            gameUi = null;
         }
 
 
@@ -105,9 +108,40 @@ namespace TarkovVR.Patches.UI
             }
         }
 
+        
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ItemsPanel), "Show")]
+        private static void FixInventoryAfterRaid(ItemsPanel __instance, LootItemClass lootItem, InventoryControllerClass inventoryController, IHealthController health, Profile profile, InsuranceCompanyClass insurance, GClass2969 buildsStorage, EItemsTab currentTab, EItemViewType viewType, bool inRaid, Task __result)
+        {
+            __result.ContinueWith(task =>
+            {
+                if (task.IsCanceled || task.IsFaulted)
+                {
+                    if (lootItem is EquipmentClass item)
+                    {
+                        __instance._complexStashPanel.Configure(__instance.gclass2572_0, new GClass2625<EquipmentClass>(item, viewType), __instance.profile_0.Skills, __instance.gclass2966_0, __instance.itemUiContext_0);
+                        __instance.ginterface314_0 = __instance._complexStashPanel;
+                        __instance.ginterface314_0?.Show(__instance.gclass2572_0, __instance.eitemsTab_0);
+                    }
+                    else if (lootItem != null)
+                    {
+                        __instance._simpleStashPanel.Configure(lootItem, __instance.gclass2572_0, new GClass2627(lootItem, viewType));
+                        __instance.ginterface314_0 = __instance._simpleStashPanel;
+                        __instance.ginterface314_0?.Show(__instance.gclass2572_0, __instance.eitemsTab_0);
+                    }
+                    else
+                    {
+                        __instance.ginterface314_0?.Close();
+                        __instance.ginterface314_0 = null;
+                    }
+                    if (__instance.ginterface314_0 != null)
+                    {
+                        __instance.UI.AddDisposable(__instance.ginterface314_0);
+                    }
+                }
+            }, TaskScheduler.FromCurrentSynchronizationContext());
 
-
-
+        }
         public static void HandleOpenInventory()
         {
             ShowUiScreens();
@@ -134,7 +168,7 @@ namespace TarkovVR.Patches.UI
 
                 if (UIPatches.notifierUi)
                 {
-                    UIPatches.notifierUi.transform.parent = VRGlobals.preloaderUi.GetComponent<PreloaderUI>()._alphaVersionLabel.transform.parent;
+                    UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
                     UIPatches.notifierUi.transform.localPosition = new Vector3(1920, 0, 0);
                     UIPatches.notifierUi.transform.localRotation = Quaternion.identity;
                     UIPatches.notifierUi.transform.localScale = Vector3.one;
@@ -210,13 +244,7 @@ namespace TarkovVR.Patches.UI
             __instance.transform.root.rotation = Quaternion.identity;
         }
 
-        // Position inventory in front of player
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(ItemsPanel), "Show")]
-        //private static void PositionInGamweInventory(ItemsPanel __instance)
-        //{
-        //    Plugin.MyLog.LogWarning("show " + Time.deltaTime);
-        //}
+
 
         // When in hideout the stash panel also gets shown which causes the UI to reposition/rotate so only rely
         // on this patch if its in raid, for hideout use PositionInHideoutInventory()
@@ -224,57 +252,17 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(ItemsPanel), "Show")]
         private static void PositionInRaidInventory(ItemsPanel __instance)
         {
-            if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager)
+            // Dont open inv if not in game, player is in hideout, game player isn't set and the menu isn't already open
+            if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager || !VRGlobals.player || VRGlobals.menuOpen)
                 return;
-            if (VRGlobals.player && !VRGlobals.menuOpen)
-            {
-                HandleOpenInventory();
-                //__instance.transform.root.rotation = Quaternion.identity;
-                //Transform commonUI = __instance.transform.root;
-                //commonUI.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
-                //Vector3 newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f) + (Camera.main.transform.right * -0.75f);
-                //newUiPos.y = Camera.main.transform.position.y + -0.6f;
-                //commonUI.position = newUiPos;
-                //commonUI.LookAt(Camera.main.transform);
-                //commonUI.Rotate(0, 225, 0);
-                //Vector3 newRot = commonUI.eulerAngles;
-                //newRot.x = 0;
-                //newRot.z = 0;
-                //commonUI.eulerAngles = newRot;
-                //if (VRGlobals.preloaderUi)
-                //{
-                //    VRGlobals.preloaderUi.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
 
-                //    newUiPos = Camera.main.transform.position + (Camera.main.transform.forward * 0.7f);
-                //    newUiPos.y = Camera.main.transform.position.y + -0.2f;
-                //    VRGlobals.preloaderUi.position = newUiPos;
-                //    VRGlobals.preloaderUi.eulerAngles = newRot;
+            HandleOpenInventory();
 
-                //}
-
-                //if (uiTopMaterial) { 
-                //    Plugin.MyLog.LogError("SETTTING UI MATERIAL " + uiTopMaterial);
-                //    foreach (CanvasRenderer renderer in commonUI.GetComponentsInChildren<CanvasRenderer>()) {
-                //        renderer.SetMaterial(uiTopMaterial,0);
-                //    }
-                //}
-            }
         }
 
 
 
-        // Method_1 starts to despawn the grid items if its rotated
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(GridViewMagnifier), "Update")]
-        //private static bool StopGridFromHidingItemsThroughUpdate(GridViewMagnifier __instance)
-        //{
-        //    if (__instance.enabled)
-        //    {
-        //        //__instance.method_1(calculate: true, forceMagnify: false);
-        //        __instance.method_0();
-        //    }
-        //    return false;
-        //}
+
         // If the canvas roots rotation isn't 0,0,0 the grid/slot items display on an angle
         // so these patches prevent them from being on an angle
         [HarmonyPostfix]
@@ -309,7 +297,7 @@ namespace TarkovVR.Patches.UI
         }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(QuickSlotView), "SetItem")]
-        private static void PreventOffAxisSlowtItwemsViews(QuickSlotView __instance)
+        private static void PreventOffAxisQuickSlotItemsViews(QuickSlotView __instance)
         {
             __instance.ItemView.transform.localEulerAngles = Vector3.zero;
             __instance.ItemView.MainImage.transform.localEulerAngles = new Vector3(0, 0, __instance.ItemView.MainImage.transform.localEulerAngles.z);
@@ -395,36 +383,6 @@ namespace TarkovVR.Patches.UI
                             interactableObject = interactiveProxy.Link;
                         }
                     }
-                    // Move the cube slightly closer to the player
-                    //Vector3 offsetDirection = (rayOrigin - hit.point).normalized;
-                    //hitPoint = hit.point + offsetDirection * RaidVRPlayerManager.dirMultiplier; // Adjust the offset distance as needed
-                                                                                          //if (interactableObject != __instance.InteractableObject || __instance._nextCastHasForceEvent) { 
-                                                                                          //    cameraManager.PlaceInteractorAfterDelay(gameObject);
-                                                                                          //}
-                                                                                          //cameraManager.interactionUi.transform.position = interactorPosition;
-                                                                                          //cameraManager.interactionUi.transform.LookAt(rayOrigin); // Make the interactor face the pl
-
-                    //if (interactableObject != null && interactiveProxy == null)
-                    //{
-                    //    if (interactableObject.InteractsFromAppropriateDirection(__instance.LookDirection))
-                    //    {
-                    //        if (!(hit.distance > EFTHardSettings.Instance.LOOT_RAYCAST_DISTANCE + EFTHardSettings.Instance.BEHIND_CAST) && interactableObject.isActiveAndEnabled)
-                    //        {
-                    //            if (hit.distance > EFTHardSettings.Instance.DOOR_RAYCAST_DISTANCE + EFTHardSettings.Instance.BEHIND_CAST && interactableObject is Door)
-                    //            {
-                    //                interactableObject = null;
-                    //            }
-                    //        }
-                    //        else
-                    //        {
-                    //            interactableObject = null;
-                    //        }
-                    //    }
-                    //    else
-                    //    {
-                    //        interactableObject = null;
-                    //    }
-                    //}
                     player = ((interactableObject == null) ? gameObject.GetComponent<EFT.Player>() : null);
                 }
                 __instance.RayLength = hit.distance;
@@ -531,37 +489,6 @@ namespace TarkovVR.Patches.UI
             return false;
         }
 
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(ActionPanel), "method_0")]
-        //private static void PositionInteractableUi(ActionPanel __instance, GClass2805 interactionState)
-        //{
-        //    Plugin.MyLog.LogWarning("Method_0    " + interactionState);
-        //    if (interactionState == null) {
-        //        cameraManager.interactionUi = null;
-        //    }
-        //    else
-        //    {
-        //        if (cameraManager.interactionUi == null) { 
-        //            cameraManager.interactionUi = __instance._interactionButtonsContainer;
-        //            cameraManager.interactionUi.position = hitPoint;
-        //            cameraManager.interactionUi.LookAt(Camera.main.transform);
-        //            // Need to rotate 180 degrees otherwise it shows up backwards
-        //            cameraManager.interactionUi.Rotate(0, 180, 0);
-        //        }
-        //        else { 
-        //            cameraManager.interactionUi = __instance._interactionButtonsContainer;
-        //        }
-        //        cameraManager.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
-        //    }
-        //}
-
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(GClass2597), MethodType.Constructor, typeof(Item), typeof(ItemAddress), typeof(ItemAddress), typeof(TraderControllerClass), typeof(GInterface277), typeof(GClass2596), typeof(GClass2593), typeof(List<GClass2614>), typeof(List<GClass2618>))]
-        //private static void PositionLoadRaidBannerToggles(GClass2597 __instance, Item item)
-        //{
-        //    Plugin.MyLog.LogWarning(item);
-        //    Plugin.MyLog.LogError(new StackTrace());
-        //}
 
 
         [HarmonyPostfix]
@@ -659,6 +586,54 @@ namespace TarkovVR.Patches.UI
         private static void PositiionEquipItemWindow(EquipItemWindow __instance, Slot slot, InventoryControllerClass inventoryController, SkillManager skills, Vector3 position)
         {
             __instance.WindowTransform.localPosition = Vector3.zero;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Tooltip), "method_0")]
+        private static bool PositionToolTips(SimpleTooltip __instance, Vector2 position)
+        {
+            if (MenuPatches.vrUiInteracter) {
+                __instance._mainTransform.position = MenuPatches.vrUiInteracter.uiPointerPos;
+                return false;
+            }
+            return true;
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(OfferView), "method_10")]
+        private static void ActivateTooltipHoverArea(OfferView __instance)
+        {
+            if (__instance.Offer_0.Locked) { 
+                __instance._hoverTooltipArea.gameObject.active = true;
+                // The hover area is constantly regenerated which means we need to run another OnEnter function
+                // but we need to set the last object to null so it knows its different
+                if (MenuPatches.vrUiInteracter.lastHighlightedObject == __instance._hoverTooltipArea.gameObject) 
+                    MenuPatches.vrUiInteracter.lastHighlightedObject = null;
+            }
+        }
+
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(OfferView), "Show")]
+        private static void ResetZAxisOnFleaMarketTrades(OfferView __instance)
+        {
+            SetLocalZToZeroRecursively(__instance.gameObject);
+        }
+
+        static private void SetLocalZToZeroRecursively(GameObject current)
+        {
+            foreach (Transform child in current.transform)
+            {
+                // Set the local Z position to 0
+                Vector3 localPosition = child.localPosition;
+                localPosition.z = 0;
+                child.localPosition = localPosition;
+
+                // Recursively call this method for each child
+                SetLocalZToZeroRecursively(child.gameObject);
+            }
         }
     }
 }

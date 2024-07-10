@@ -102,7 +102,7 @@ namespace TarkovVR.Patches.Core.VR
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
-        private static void AddVRHands(LimbIK __instance)
+        private static void SetupIK(LimbIK __instance)
         {
             //if (__instance.transform.root.name != "PlayerSuperior(Clone)")
             //    return;
