@@ -67,6 +67,7 @@ public class GunInteractionController : MonoBehaviour
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
             gunRaycastReciever.GetComponent<BoxCollider>().enabled = true;
         }
+        transform.localEulerAngles = new Vector3(325, 0, 0);
     }
     public void OnDisable()
     {
@@ -235,7 +236,7 @@ public class GunInteractionController : MonoBehaviour
         return index;
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
-    public void SetMagazine(Renderer magTransform, bool isInternal) {
+    public void SetMagazine(Transform magTransform, bool isInternal) {
         if (isInternal)
             internalMag = magTransform.transform;
         else 
@@ -267,7 +268,7 @@ public class GunInteractionController : MonoBehaviour
         GClass2805 magazineList = new GClass2805();
         magazineList.Actions = listComponents;
         weaponUiLists.Add(magazineList);
-        interactables[interactables.Count - 1].position = magTransform.bounds.center;
+        //interactables[interactables.Count - 1].position = meshList[meshList.Count - 1].mesh_0.bounds.center;
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public bool IsMagazineSet() {

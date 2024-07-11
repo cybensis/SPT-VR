@@ -306,7 +306,10 @@ namespace TarkovVR.Source.Player.VRManager
                     return;
                 }
                 else if (leftHandInAnimation) {
-                    VRGlobals.player._markers[0] = LeftHand.transform;
+                    if (isSupporting)
+                        VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                    else
+                        VRGlobals.player._markers[0] = LeftHand.transform;
                     leftHandInAnimation = false;
                 }
 

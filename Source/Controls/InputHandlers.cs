@@ -59,6 +59,23 @@ namespace TarkovVR.Source.Controls
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class ProneInputHandler : IInputHandler
+        {
+            public void UpdateCommand(ref ECommand command)
+            {
+                if ( SteamVR_Actions._default.ClickRightJoystick.stateDown)
+                {
+                    command = ECommand.ToggleProne;
+                    if (!VRGlobals.player.IsInPronePose)
+                        VRGlobals.vrPlayer.crouchHeightDiff = 1.3f;
+                    else
+                        VRGlobals.vrPlayer.crouchHeightDiff = 0f;
+
+                }
+            }
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class SprintInputHandler : IInputHandler
         {
             private bool isSprinting = false;

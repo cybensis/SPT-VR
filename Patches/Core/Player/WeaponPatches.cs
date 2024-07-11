@@ -172,7 +172,7 @@ namespace TarkovVR.Patches.Core.Player
                     for (int i = 0; i < __instance.weaponPrefab_0.Renderers.Length; i++)
                     {
                         if (__instance.weaponPrefab_0.Renderers[i].transform.parent.GetComponent<MagazineInHandsVisualController>()) { 
-                            currentGunInteractController.SetMagazine(__instance.weaponPrefab_0.Renderers[i], false);
+                            currentGunInteractController.SetMagazine(__instance.weaponPrefab_0.Renderers[i].transform, false);
                             return;
                         }
                     }
@@ -246,31 +246,56 @@ namespace TarkovVR.Patches.Core.Player
 
                     }
                     currentGunInteractController.SetPlayerOwner(__instance._player.gameObject.GetComponent<GamePlayerOwner>());
-                    if (__instance.weaponPrefab_0)
-                    {
-                        if (__instance.weaponPrefab_0.gunShadowDisabler_0 != null)
-                        {
-                            for (int i = 0; i < __instance.weaponPrefab_0.gunShadowDisabler_0.Length; i++)
-                            {
-                                currentGunInteractController.AddTacticalDevice(__instance.weaponPrefab_0.gunShadowDisabler_0[i].transform, __instance.FirearmsAnimator);
-                            }
+                    WeaponMeshParts weaponHighlightParts = WeaponMeshList.GetWeaponMeshList(__instance.WeaponRoot.transform.root.name);
+                    Transform weaponMeshRoot = __instance.GunBaseTransform.GetChild(0);
+                    if (weaponHighlightParts != null) {
+                        foreach (string magazineMesh in weaponHighlightParts.magazine) {
+                            if (weaponMeshRoot.FindChildRecursive(magazineMesh))
+                                currentGunInteractController.SetMagazine(weaponMeshRoot.FindChildRecursive(magazineMesh), false);
                         }
-                        if (__instance.weaponPrefab_0.Renderers != null)
+                        foreach (string chamberMesh in weaponHighlightParts.chamber)
                         {
-                            for (int i = 0; i < __instance.weaponPrefab_0.Renderers.Length; i++)
-                            {
-                                if (__instance.weaponPrefab_0.Renderers[i].name.Contains("selector"))
-                                    currentGunInteractController.SetFireModeSwitch(__instance.weaponPrefab_0.Renderers[i].transform);
-                                else if (__instance.weaponPrefab_0.Renderers[i].name.Contains("charge"))
-                                    currentGunInteractController.SetChargingHandleOrBolt(__instance.weaponPrefab_0.Renderers[i].transform, false);
-                                else if (__instance.weaponPrefab_0.Renderers[i].name.Contains("bolt") || __instance.weaponPrefab_0.Renderers[i].name.Contains("slide_LOD0") || (__instance.Weapon.WeapClass == "pistol" && __instance.weaponPrefab_0.Renderers[i].name.Contains("mod_reciever")))
-                                    currentGunInteractController.SetChargingHandleOrBolt(__instance.weaponPrefab_0.Renderers[i].transform, true);
-                                else if (!currentGunInteractController.IsMagazineSet() && __instance.weaponPrefab_0.Renderers[i].transform.parent.GetComponent<MagazineInHandsVisualController>())
-                                    currentGunInteractController.SetMagazine(__instance.weaponPrefab_0.Renderers[i], false);
-                            }
-
+                            if (weaponMeshRoot.FindChildRecursive(chamberMesh))
+                                currentGunInteractController.SetChargingHandleOrBolt(weaponMeshRoot.FindChildRecursive(chamberMesh), false);
                         }
+                        foreach (string firingModeSwitch in weaponHighlightParts.firingModeSwitch)
+                        {
+                            if (weaponMeshRoot.FindChildRecursive(firingModeSwitch))
+                                currentGunInteractController.SetFireModeSwitch(weaponMeshRoot.FindChildRecursive(firingModeSwitch));
+                        }
+                        //foreach (string firingModeSwitch in weaponHighlightParts.stock)
+                        //{
+                        //    if (weaponMeshRoot.FindChildRecursive(firingModeSwitch))
+                        //        currentGunInteractController.SetFireModeSwitch(weaponMeshRoot.FindChildRecursive(firingModeSwitch));
+                        //}
                     }
+
+
+                    //if (__instance.weaponPrefab_0)
+                    //{
+                    //    if (__instance.weaponPrefab_0.gunShadowDisabler_0 != null)
+                    //    {
+                    //        for (int i = 0; i < __instance.weaponPrefab_0.gunShadowDisabler_0.Length; i++)
+                    //        {
+                    //            currentGunInteractController.AddTacticalDevice(__instance.weaponPrefab_0.gunShadowDisabler_0[i].transform, __instance.FirearmsAnimator);
+                    //        }
+                    //    }
+                    //    if (__instance.weaponPrefab_0.Renderers != null)
+                    //    {
+                    //        for (int i = 0; i < __instance.weaponPrefab_0.Renderers.Length; i++)
+                    //        {
+                    //            if (__instance.weaponPrefab_0.Renderers[i].name.Contains("selector"))
+                    //                currentGunInteractController.SetFireModeSwitch(__instance.weaponPrefab_0.Renderers[i].transform);
+                    //            else if (__instance.weaponPrefab_0.Renderers[i].name.Contains("charge"))
+                    //                currentGunInteractController.SetChargingHandleOrBolt(__instance.weaponPrefab_0.Renderers[i].transform, false);
+                    //            else if (__instance.weaponPrefab_0.Renderers[i].name.Contains("bolt") || __instance.weaponPrefab_0.Renderers[i].name.Contains("slide_LOD0") || (__instance.Weapon.WeapClass == "pistol" && __instance.weaponPrefab_0.Renderers[i].name.Contains("mod_reciever")))
+                    //                currentGunInteractController.SetChargingHandleOrBolt(__instance.weaponPrefab_0.Renderers[i].transform, true);
+                    //            else if (!currentGunInteractController.IsMagazineSet() && __instance.weaponPrefab_0.Renderers[i].transform.parent.GetComponent<MagazineInHandsVisualController>())
+                    //                currentGunInteractController.SetMagazine(__instance.weaponPrefab_0.Renderers[i], false);
+                    //        }
+
+                    //    }
+                    //}
 
                     GameObject rightHandPositioner = new GameObject("RightHandPositioner");
                     rightHandPositioner.transform.parent = __instance.WeaponRoot.transform.parent;

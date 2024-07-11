@@ -57,12 +57,12 @@ namespace TarkovVR.Source.Player.VR
             {
                 // Position the player torso under the head
                 // Set the position of the spin under the camera and a little bit backwards so it matches with the camera better
-                Vector3 cameraPosition = Camera.main.transform.position + new Vector3(0, -0.5f, 0);
-                transform.position = cameraPosition + Camera.main.transform.forward * -0.3f;
+                //Vector3 cameraPosition = Camera.main.transform.position + new Vector3(0, -0.5f, 0);
+                //transform.position = cameraPosition + Camera.main.transform.forward * -0.3f;
 
-                // Set the spine rotation to have x and z static but y (left and right) to the camera + offset to face forward
-                Vector3 cameraEulerAngles = new Vector3(0, Camera.main.transform.eulerAngles.y + 280, -105);
-                transform.eulerAngles = cameraEulerAngles;
+                //// Set the spine rotation to have x and z static but y (left and right) to the camera + offset to face forward
+                //Vector3 cameraEulerAngles = new Vector3(0, Camera.main.transform.eulerAngles.y + 280, -105);
+                //transform.eulerAngles = cameraEulerAngles;
 
 
 
