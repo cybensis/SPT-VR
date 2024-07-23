@@ -38,6 +38,7 @@ namespace TarkovVR
 
         public static Transform backHolster;
         public static Transform backpackCollider;
+        public static Transform leftArmBendGoal;
         public static Transform sidearmHolster;
         public static BoxCollider backCollider;
         public static FirearmController firearmController;

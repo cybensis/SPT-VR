@@ -58,7 +58,7 @@ namespace TarkovVR.Patches.Core.VR
                     collider.isTrigger = true;
                     VRGlobals.camHolder.layer = 7;
                     VRGlobals.menuVRManager.enabled = false;
-
+                    VRGlobals.menuOpen = false;
                     //VRGlobals.vrPlayer.radialMenu.active = false;
                 }
             }
@@ -91,6 +91,12 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.sidearmHolster.gameObject.layer = 3;
             }
 
+            if (VRGlobals.leftArmBendGoal == null) {
+                VRGlobals.leftArmBendGoal = new GameObject("leftArmBendGoal").transform;
+                VRGlobals.leftArmBendGoal.parent = VRGlobals.vrOffsetter.transform;
+                VRGlobals.leftArmBendGoal.localEulerAngles = Vector3.zero;
+                VRGlobals.leftArmBendGoal.localPosition = new Vector3(-1,0,-0.8f);
+            }
 
 
             VRGlobals.inGame = true;

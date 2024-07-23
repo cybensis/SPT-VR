@@ -54,6 +54,9 @@
     <Reference Include="ItemComponent.Types">
       <HintPath>libs\Managed\ItemComponent.Types.dll</HintPath>
     </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>libs\Managed\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="Sirenix.Serialization">
       <HintPath>libs\Managed\Sirenix.Serialization.dll</HintPath>
     </Reference>

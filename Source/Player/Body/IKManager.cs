@@ -100,6 +100,7 @@ namespace TarkovVR.Source.Player.VR
                         // initPos because the camRoot and player pos are linked, so any movements to the player are made to camRoot and
                         // need to be offset via vrOffsetter/initPos so the headset doesn't move with the camRoot.
                         matchingHeadToBody = true;
+                        headsetPos.y = transform.root.position.y;
                         Vector3 newPosition = Vector3.MoveTowards(transform.root.position, headsetPos, Time.deltaTime);
                         Vector3 movementDelta = newPosition - transform.root.position; // The actual movement vector
 

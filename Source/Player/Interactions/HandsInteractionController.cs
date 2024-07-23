@@ -8,8 +8,9 @@ using TarkovVR.Patches.Core.Player;
 using EFT.Interactive;
 using System;
 using EFT;
-using static GClass1726;
+using static GClass1859;
 using static EFT.Player;
+using static InteractionsHandlerClass;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -107,7 +108,7 @@ namespace TarkovVR.Source.Player.Interactions
                         float initialDistance = Vector3.Distance(VRGlobals.player.Transform.position, container.transform.position);
                         VRGlobals.player.SetCallbackForInteraction(delegate (Action callback)
                         {
-                            smethod_17(VRGlobals.player.GetComponent<GamePlayerOwner>(), callback, container, initialDistance);
+                            GetActionsClass.smethod_18(VRGlobals.player.GetComponent<GamePlayerOwner>(), callback, container, initialDistance);
                         });
                         VRGlobals.player.StartBehaviourTimer(EFTHardSettings.Instance.DelayToOpenContainer, delegate
                         {
@@ -121,10 +122,10 @@ namespace TarkovVR.Source.Player.Interactions
                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.LeftHand);
                     if (SteamVR_Actions._default.LeftGrip.stateUp)
                     {
-                        GStruct375<GInterface275> pickUpResult = GClass2585.QuickFindAppropriatePlace(heldItem.Item, VRGlobals.player.GClass2572_0, VRGlobals.player.GClass2572_0.Inventory.Equipment.ToEnumerable(), GClass2585.EMoveItemOrder.PickUp, simulate: true);
+                        GStruct414<GInterface339> pickUpResult = InteractionsHandlerClass.QuickFindAppropriatePlace(heldItem.Item, VRGlobals.player.InventoryControllerClass, VRGlobals.player.InventoryControllerClass.Inventory.Equipment.ToEnumerable(), EMoveItemOrder.PickUp, simulate: true);
                         if (pickUpResult.Succeeded && heldItem.ItemOwner.CanExecute(pickUpResult.Value))
                         {
-                            GClass1726.smethod_5(VRGlobals.player, pickUpResult.Value, heldItem.Item, heldItem.LastOwner);
+                            GetActionsClass.smethod_6(VRGlobals.player, pickUpResult.Value, heldItem.Item, heldItem.LastOwner);
                             heldItem = null;
                         }
 

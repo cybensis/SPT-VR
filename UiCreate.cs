@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using TarkovVR;
 using TarkovVR.Source.Controls;
 using UnityEngine;
@@ -12,7 +13,7 @@ public class CircularSegmentUI : MonoBehaviour
     public float radius = 100f;       // Radius of the circle
     public float segmentSpacing = 2f; // Spacing between segments in degrees
 
-    public string spritePath = Path.Combine(Application.dataPath, "Assets"); // Path to the image in the Resources folder
+    public string spritePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\sptvr\\Assets"); // Path to the image in the Resources folder
     //public string[] menuSprites = { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" };
     public Sprite[] menuSprites;
     public Image[] menuSegments;

@@ -26,8 +26,9 @@ namespace TarkovVR.Source.Player.VRManager
 
 
         private void Update() {
-            base.Update(); 
-            if (interactionUi) {
+            base.Update();
+            if (interactionUi)
+            {
                 if (raycastHit && interactionUi.gameObject.active)
                 {
                     interactionUi.position = interactUiPos;

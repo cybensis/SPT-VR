@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -6,6 +7,7 @@ using System.Reflection.Emit;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
+using static Val;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -32,11 +34,6 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
         private static bool ReturnVROutputWidth(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
         {
-            if (VRGlobals.vrPlayer)
-            {
-                return true;
-            }
-
             if (__instance._postProcessLayer != null)
             {
                 Graphics.Blit(source, destination);
@@ -241,7 +238,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(PostProcessLayer), "InitLegacy")]
         private static void FixPostProcessing(PostProcessLayer __instance)
         {
-            Object.Destroy(__instance);
+            UnityEngine.Object.Destroy(__instance);
             //if (VRGlobals.camHolder && VRGlobals.camHolder.GetComponent<Camera>() == null)
             //{
             //    postProcessingStoogeCamera = VRGlobals.camHolder.AddComponent<Camera>();
@@ -354,6 +351,43 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
+
+        // This also uses Screen width and height so need to fix it
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] {typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
+        private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
+            {
+            int shaderPass = 0;
+            if (__instance.CurrentState == SSAAImpl.SSState.UPSCALE)
+            {
+                bool flag = ((__instance.EnableDLSS && !__instance._failedToInitializeDLSS && !__instance.NeedToApplySwitch()) || (__instance.EnableDLSS && (__instance.DLSSDebugDisable || DLSSWrapper.WantToDebugDLSSViaRenderdoc))) && !__instance.InventoryBlurIsEnabled;
+                bool flag2 = __instance.EnableFSR && !__instance._failedToInitializeFSR && !flag && !__instance.NeedToApplySwitch();
+                bool flag3 = __instance.EnableFSR2 && !__instance._failedToInitializeFSR2 && !flag && !__instance.NeedToApplySwitch();
+                if ((flag && __instance.TryRenderDLSS(source, destination, externalCommandBuffer)) || (flag2 && __instance.TryRenderFSR(source, destination, externalCommandBuffer)) || (flag3 && __instance.TryRenderFSR2(source, destination, externalCommandBuffer)))
+                {
+                    return false;
+                }
+            }
+            if (__instance.RenderTextureMaterialBicubic == null)
+            {
+                __instance.RenderTextureMaterialBicubic = new Material(Shader.Find("Hidden/BicubicSampling"));
+            }
+            int num = (destination ? destination.width : Screen.width);
+            int num2 = (destination ? destination.height : Screen.height);
+            if (Camera.main != null)
+            {
+                num = Camera.main.pixelWidth;
+                num2 = Camera.main.pixelHeight;
+            }
+            __instance._applyResultCmdBuf.Clear();
+            __instance._applyResultCmdBuf.SetRenderTarget(destination);
+            __instance._applyResultCmdBuf.SetViewport(new Rect(0f, 0f, num, num2));
+            Mesh mesh = (flipV ? __instance.FullScreenYFlippedMesh : __instance.FullScreenMesh);
+            __instance._applyResultCmdBuf.DrawMesh(mesh, Matrix4x4.identity, __instance.RenderTextureMaterialBicubic, 0, shaderPass);
+            __instance.RenderTextureMaterialBicubic.SetTexture("_MainTex", source);
+            Graphics.ExecuteCommandBuffer(__instance._applyResultCmdBuf);
+            return false;
+        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //[HarmonyPrefix]

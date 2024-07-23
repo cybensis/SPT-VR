@@ -1,6 +1,7 @@
 ﻿using Sirenix.Serialization;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 using static TarkovVR.Source.Controls.InputHandlers;
@@ -40,7 +41,7 @@ namespace TarkovVR.Source.Weapons
 
 
         public void handleJoystickZoomDial() {
-            if (scopeCamera)
+            if (scopeCamera && SteamVR_Actions._default.RightJoystick.axis.y > VRSettings.GetRightStickSensitivity())
             {
                 currentFov -= SteamVR_Actions._default.RightJoystick.axis.y / 2;
                 currentFov = Mathf.Clamp(currentFov, minFov, maxFov);

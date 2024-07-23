@@ -1,6 +1,9 @@
 ﻿using EFT;
+using EFT.UI;
 using HarmonyLib;
+using System.ComponentModel.Design;
 using System.Drawing.Printing;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 
@@ -19,36 +22,82 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(MovementState), "Rotate")]
         private static bool SetPlayerRotate(MovementState __instance, ref Vector2 deltaRotation)
         {
-            if (__instance.MovementContext.IsAI)
+            if (!__instance.MovementContext._player.IsYourPlayer)
                 return true;
 
             if (VRGlobals.menuOpen || !VRGlobals.inGame)
                 return false;
 
-            bool leftJoystickUsed = (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x) > VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT || Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y) > VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT);
-
             // Normally you'd stand with your left foot forward and right foot back, which doesn't feel natural in VR so rotate 28 degrees to have both feet in front when standing still
             Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
+            GetBodyRotation(bodyForward, ref deltaRotation);
+
+            __instance.MovementContext.Rotation = deltaRotation;
+           
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GClass1709), "Rotate")]
+        private static bool SetPlayerRotateOnProneStationary(GClass1709 __instance, ref Vector2 deltaRotation)
+        {
+
+            if (!__instance.MovementContext._player.IsYourPlayer)
+                return true;
+
+            if (VRGlobals.menuOpen || !VRGlobals.inGame)
+                return false;
+
+            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
+            GetBodyRotation(bodyForward, ref deltaRotation);
+
+            __instance.MovementContext.Rotation = deltaRotation;
+            
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GClass1718), "Rotate")]
+        private static bool SetPlayerRotateOnProneMoving(GClass1718 __instance, ref Vector2 deltaRotation)
+        {
+            if (!__instance.MovementContext._player.IsYourPlayer)
+                return true;
+
+            if (VRGlobals.menuOpen || !VRGlobals.inGame)
+                return false;
+
+            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
+            GetBodyRotation(bodyForward, ref deltaRotation);
+
+            __instance.MovementContext.Rotation = deltaRotation;
+
+            return false;
+        }
+
+        private static void GetBodyRotation(Vector3 bodyForward, ref Vector2 deltaRotation) {
+            float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
+            float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
+            bool leftJoystickUsed = xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity();
+
             Vector3 cameraForward = Camera.main.transform.forward;
             float rotDiff = Vector3.SignedAngle(bodyForward, cameraForward, Vector3.up);
 
             Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
-
             // Normalize the angle to the range [-180, 180]
             float pitch = headEulerAngles.x;
             if (pitch > 180)
-            {
                 pitch -= 360;
-            }
 
-            if (leftJoystickUsed)
-            {
-                lastYRot = Camera.main.transform.eulerAngles.y;
+            if (leftJoystickUsed) {
+                if (VRSettings.GetMovementMode() == VRSettings.MovementMode.HeadBased)
+                    lastYRot = Camera.main.transform.eulerAngles.y;
+                else
+                    lastYRot = VRGlobals.vrPlayer.leftHandYRotation + VRGlobals.vrOffsetter.transform.eulerAngles.y;
+
             }
+            
             else if (SteamVR_Actions._default.RightJoystick.axis.x != 0)
-            {
                 lastYRot = VRGlobals.camRoot.transform.eulerAngles.y;
-            }
             // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 80 degrees, and if they haven't already rotated recently
             else if (pitch < 50 && Mathf.Abs(rotDiff) > 80 && timeSinceLastLookRot > 0.25)
             {
@@ -56,24 +105,17 @@ namespace TarkovVR.Patches.Core.Player
                 timeSinceLastLookRot = 0;
             }
             timeSinceLastLookRot += Time.deltaTime;
-            //if (!leftJoystickUsed && leftJoystickLastUsed)
-            //    lastYRot -= 40;
+
             deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
-
-            // If difference between cam and body exceed something when using the right joystick, then turn the body.
-            // Keep it a very tight amount before the body starts to rotate since the arms will become fucky otherwise
-
-            //------- MovementContext has some interesting variables like trunk rotation limit, worth looking at maybe
-
-            // ------- When body 45 degrees in either direction thats when it moves and it goes to the other extreme, e.g. exceeding 45 goes to 315
-
-            //camRoot.transform.Rotate(0, __instance.MovementContext.Rotation.x - deltaRotation.x,0);
-
-            __instance.MovementContext.Rotation = deltaRotation;
-            //__instance.MovementContext._player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y-40, 0);
             leftJoystickLastUsed = leftJoystickUsed;
-            return false;
+
+            if (yAxis > xAxis)
+                VRGlobals.player.MovementContext._relativeSpeed = yAxis;
+            else
+                VRGlobals.player.MovementContext._relativeSpeed = xAxis;
+            VRGlobals.player.MovementContext.SetCharacterMovementSpeed(VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed);
         }
+
 
         // GClass1854 inherits MovementState and its version of ProcessUpperbodyRotation is ran when the player is moving, this ensures 
         // the rotation when not moving is similar to that when moving otherwise the player can rotate their camera faster than the body
@@ -101,8 +143,8 @@ namespace TarkovVR.Patches.Core.Player
 
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass1916), "ManualLateUpdate")]
-        private static bool PositionCamera(GClass1916 __instance)
+        [HarmonyPatch(typeof(GClass2969), "ManualLateUpdate")]
+        private static bool PositionCamera(GClass2969 __instance)
         {
             if (__instance.player_0.IsAI || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;

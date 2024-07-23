@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.VRManager;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 
@@ -90,9 +91,11 @@ namespace TarkovVR.Source.Controls
                         command = ECommand.EndSprinting;
 
                     isSprinting = !isSprinting;
+                    if (VRGlobals.player.IsInPronePose)
+                        command = ECommand.ToggleProne;
                     VRGlobals.vrPlayer.crouchHeightDiff = 0;
                 }
-                else if (isSprinting && SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < VRGlobals.MIN_JOYSTICK_AXIS_FOR_MOVEMENT)
+                else if (isSprinting && SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < VRSettings.GetLeftStickSensitivity())
                 {
                     command = ECommand.EndSprinting;
                     isSprinting = false;
@@ -106,8 +109,10 @@ namespace TarkovVR.Source.Controls
             private bool toggleReload = false; 
             public void UpdateCommand(ref ECommand command)
             {
-                if (SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any))
+                if (SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)) { 
                     command = ECommand.ReloadWeapon;
+                    toggleReload = false;
+                }
                 if (toggleReload) {
                     command = ECommand.ReloadWeapon;
                     toggleReload = false;
@@ -152,6 +157,8 @@ namespace TarkovVR.Source.Controls
             private bool isShooting = false;
             public void UpdateCommand(ref ECommand command)
             {
+                if (WeaponPatches.grenadeEquipped)
+                    return;
                 if (!isShooting && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
                 {
                     command = ECommand.ToggleShooting;
@@ -168,6 +175,7 @@ namespace TarkovVR.Source.Controls
         public class ScrollHandler : IInputHandler
         {
             private bool isScrolling = false;
+            private bool scrolledLastFrame = false;
             public void UpdateCommand(ref ECommand command)
             {
                 if (VRGlobals.blockRightJoystick || !VRGlobals.vrPlayer.interactMenuOpen)
@@ -224,7 +232,7 @@ namespace TarkovVR.Source.Controls
             {
                 if (!VRGlobals.player)
                     return;
-                if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.returnAfterGrenade && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
+                if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.grenadeEquipped && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
                 {
                     if (VRGlobals.player.ActiveSlot == null)
                         // If the first weapon slot is null then attempt select secondary
@@ -234,12 +242,12 @@ namespace TarkovVR.Source.Controls
                             command = ECommand.SelectSecondPrimaryWeapon;
 
                     else if (VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
-                        if (WeaponPatches.returnAfterGrenade)
+                        if (WeaponPatches.grenadeEquipped)
                             command = ECommand.SelectFirstPrimaryWeapon;
                         else
                             command = ECommand.SelectSecondPrimaryWeapon;
                     else
-                        if (WeaponPatches.returnAfterGrenade)
+                        if (WeaponPatches.grenadeEquipped)
                             command = ECommand.SelectSecondPrimaryWeapon;
                         else
                             command = ECommand.SelectFirstPrimaryWeapon;
@@ -395,17 +403,44 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
-                if (SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any))
+                if (SteamVR_Actions._default.ButtonY.GetStateUp(SteamVR_Input_Sources.Any))
                     command = ECommand.ToggleInventory;
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class GrenadeHandler : IInputHandler
         {
+            private bool grenadePinPulled = false;
+            private bool shootingToggled = false;
+            private bool releaseGrenade = false;
             public void UpdateCommand(ref ECommand command)
             {
-                if (SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5)
+                if (!WeaponPatches.grenadeEquipped)
+                    return;
+
+                if (!shootingToggled && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5)
+                {
+                    command = ECommand.ToggleShooting;
+                    shootingToggled = true;
+                }
+                else if (shootingToggled && !grenadePinPulled) { 
                     command = ECommand.TryHighThrow;
+                    grenadePinPulled = true;
+                }
+                else if (shootingToggled && grenadePinPulled && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5) {
+                    command = ECommand.EndShooting;
+                    shootingToggled = false;
+                }
+                else if (!shootingToggled && grenadePinPulled)
+                {
+                    command = ECommand.FinishHighThrow;
+                    grenadePinPulled = false;
+                    //WeaponPatches.grenadeEquipped = false;
+                }
+                //else if (grenadePinPulled && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5) {
+                //    command = ECommand.TryHighThrow;
+                //    grenadePinPulled = false;
+                //}
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -413,7 +448,9 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
-                if (SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any))
+                if (SteamVR_Actions._default.ButtonX.GetStateUp(SteamVR_Input_Sources.Any))
+                    command = ECommand.Escape;
+                else if (VRGlobals.menuOpen && SteamVR_Actions._default.ButtonB.GetStateUp(SteamVR_Input_Sources.Any))
                     command = ECommand.Escape;
             }
         }

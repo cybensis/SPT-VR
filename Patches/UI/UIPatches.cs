@@ -21,6 +21,7 @@ using static EFT.UI.ItemsPanel;
 using System.Threading.Tasks;
 using UnityEngine.Profiling;
 using UnityEngine.UIElements.UIR;
+using EFT.UI.Screens;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -28,6 +29,7 @@ namespace TarkovVR.Patches.UI
     {
         private static int playerLayer = 8;
         public static GameObject quickSlotUi;
+        public static EftBattleUIScreen battleScreenUi;
         public static BattleStancePanel stancePanel;
         public static CharacterHealthPanel healthPanel;
         public static GameUI gameUi;
@@ -35,14 +37,22 @@ namespace TarkovVR.Patches.UI
         public static NotifierView notifierUi;
         public static ExtractionTimersPanel extractionTimerUi;
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GameUI), "Awake")]
-        private static void SetGameUI(GameUI __instance)
+        [HarmonyPatch(typeof(UsingPanel), "Init")]
+        private static void SetGameUI(UsingPanel __instance)
         {
-            gameUi = __instance;
+
+            gameUi = __instance.transform.root.GetComponent<GameUI>();
+            battleScreenUi = VRGlobals.commonUi.GetComponent<CommonUI>().EftBattleUIScreen;
+            battleScreenUi.transform.parent = VRGlobals.camRoot.transform;
+            battleScreenUi.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+            opticUi = battleScreenUi._opticCratePanel;
+            opticUi.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+            gameUi.GetComponent<RectTransform>().sizeDelta = new Vector2(2560, 1440);
+            //VRGlobals.vrPlayer.interactionUi = UIPatches.battleScreenUi.ActionPanel._interactionButtonsContainer;
             if (!VRGlobals.camRoot)
                 return;
 
-            PositionGameUi(__instance);
+            PositionGameUi(gameUi);
         }
 
         [HarmonyPostfix]
@@ -53,8 +63,8 @@ namespace TarkovVR.Patches.UI
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(NotificationView), "Init")]
-        private static void DisableComponentThatBlocksText(NotificationView __instance)
+        [HarmonyPatch(typeof(BaseNotificationView), "Init")]
+        private static void DisableComponentThatBlocksText(BaseNotificationView __instance)
         {
             RectMask2D rectmask = __instance._background.GetComponent<RectMask2D>();
             if (rectmask)
@@ -74,11 +84,11 @@ namespace TarkovVR.Patches.UI
         public static void PositionGameUi(GameUI __instance) {
             __instance.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
             __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
-            stancePanel = __instance.BattleUiScreen._battleStancePanel;
+            stancePanel = battleScreenUi._battleStancePanel;
             stancePanel.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
             stancePanel._battleStances[0].StanceObject.transform.parent.gameObject.active = false;
 
-            healthPanel = __instance.BattleUiScreen._characterHealthPanel;
+            healthPanel = battleScreenUi._characterHealthPanel;
             healthPanel.transform.localScale = new Vector3(0.20f, 0.20f, 0.20f);
             
             __instance.transform.parent = VRGlobals.camRoot.transform;
@@ -111,32 +121,32 @@ namespace TarkovVR.Patches.UI
         
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ItemsPanel), "Show")]
-        private static void FixInventoryAfterRaid(ItemsPanel __instance, LootItemClass lootItem, InventoryControllerClass inventoryController, IHealthController health, Profile profile, InsuranceCompanyClass insurance, GClass2969 buildsStorage, EItemsTab currentTab, EItemViewType viewType, bool inRaid, Task __result)
+        private static void FixInventoryAfterRaid(ItemsPanel __instance, ItemContextAbstractClass sourceContext, LootItemClass lootItem, ISession session, InventoryControllerClass inventoryController, IHealthController health, Profile profile, InsuranceCompanyClass insurance, EquipmentBuildsStorageClass buildsStorage, EItemsTab currentTab, bool inRaid, Task __result)
         {
             __result.ContinueWith(task =>
             {
                 if (task.IsCanceled || task.IsFaulted)
                 {
-                    if (lootItem is EquipmentClass item)
+                    if (lootItem is EquipmentClass equipmentClass)
                     {
-                        __instance._complexStashPanel.Configure(__instance.gclass2572_0, new GClass2625<EquipmentClass>(item, viewType), __instance.profile_0.Skills, __instance.gclass2966_0, __instance.itemUiContext_0);
-                        __instance.ginterface314_0 = __instance._complexStashPanel;
-                        __instance.ginterface314_0?.Show(__instance.gclass2572_0, __instance.eitemsTab_0);
+                        __instance._complexStashPanel.Configure(__instance.inventoryControllerClass, sourceContext.CreateChild(equipmentClass), equipmentClass, __instance.profile_0.Skills, __instance.insuranceCompanyClass, __instance.itemUiContext_0);
+                        __instance.ginterface390_0 = __instance._complexStashPanel;
+                        __instance.ginterface390_0?.Show(__instance.inventoryControllerClass, __instance.eitemsTab_0);
                     }
                     else if (lootItem != null)
                     {
-                        __instance._simpleStashPanel.Configure(lootItem, __instance.gclass2572_0, new GClass2627(lootItem, viewType));
-                        __instance.ginterface314_0 = __instance._simpleStashPanel;
-                        __instance.ginterface314_0?.Show(__instance.gclass2572_0, __instance.eitemsTab_0);
+                        __instance._simpleStashPanel.Configure(lootItem, __instance.inventoryControllerClass, sourceContext.CreateChild(lootItem), inRaid);
+                        __instance.ginterface390_0 = __instance._simpleStashPanel;
+                        __instance.ginterface390_0?.Show(__instance.inventoryControllerClass, __instance.eitemsTab_0);
                     }
                     else
                     {
-                        __instance.ginterface314_0?.Close();
-                        __instance.ginterface314_0 = null;
+                        __instance.ginterface390_0?.Close();
+                        __instance.ginterface390_0 = null;
                     }
-                    if (__instance.ginterface314_0 != null)
+                    if (__instance.ginterface390_0 != null)
                     {
-                        __instance.UI.AddDisposable(__instance.ginterface314_0);
+                        __instance.UI.AddDisposable(__instance.ginterface390_0);
                     }
                 }
             }, TaskScheduler.FromCurrentSynchronizationContext());
@@ -196,6 +206,13 @@ namespace TarkovVR.Patches.UI
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ActionPanel), "Start")]
         private static void DisableUiPointer(ActionPanel __instance)
+        {
+            __instance._pointer.gameObject.SetActive(false);
+            VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ActionPanel), "method_6")]
+        private static void CopyInteractionUi(ActionPanel __instance)
         {
             __instance._pointer.gameObject.SetActive(false);
             VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
@@ -532,22 +549,15 @@ namespace TarkovVR.Patches.UI
                 VRGlobals.vrPlayer.showScopeZoom = true;
             }
         }
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(GameUI), "Awake")]
-        private static void SetOpticUi(GameUI __instance)
-        {
-            if (__instance.BattleUiScreen) { 
-                opticUi = __instance.BattleUiScreen._opticCratePanel;
-                opticUi.transform.localScale = new Vector3(0.3f, 0.3f, 0.3f);
-            }
-        }
+
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(BattleUIScreen), "ShowAmmoDetails")]
-        private static void SetAmmoCountUi(BattleUIScreen __instance)
+        [HarmonyPatch(typeof(BattleUIScreen<EftBattleUIScreen.GClass3136, EEftScreenType>), "ShowAmmoDetails")]
+        private static void SetAmmoCountUi(BattleUIScreen<EftBattleUIScreen.GClass3136, EEftScreenType> __instance)
         {
             __instance._ammoCountPanel.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
-            if (VRGlobals.vrPlayer) { 
+            if (VRGlobals.vrPlayer)
+            {
                 VRGlobals.vrPlayer.SetAmmoFireModeUi(__instance._ammoCountPanel.transform, true);
                 __instance._ammoCountPanel._ammoDetails.transform.localPosition = new Vector3(136, -23, 0);
                 showAgain = true;

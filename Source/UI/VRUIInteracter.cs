@@ -1,4 +1,5 @@
 ﻿using EFT.UI;
+using EFT.UI.Health;
 using EFT.UI.Ragfair;
 using EFT.UI.Utilities.LightScroller;
 using System.Collections.Generic;
@@ -54,7 +55,7 @@ namespace TarkovVR.Source.UI
                 //i++;
                 eventData = new PointerEventData(EventSystem.current);
                 hitObject = RaycastFindHit(hit, ref eventData);
-                //Plugin.MyLog.LogWarning("HIT:    " + hitObject?.name + "    |   LAST HIT:    " + hit.point.x + ","+ hit.point.y+","+ hit.point.z);
+                //Plugin.MyLog.LogWarning("HIT:    " + hit.collider + "    |   LAST HIT:    " + hitObject.name);
                 eventData.worldPosition = hit.point;
 
                 if (hitObject)
@@ -93,9 +94,11 @@ namespace TarkovVR.Source.UI
                 if (lastHighlightedObject != null)
                     ExecuteEvents.Execute(lastHighlightedObject, eventData, ExecuteEvents.pointerExitHandler);
 
-                if (dragObject == null)
+                if (dragObject == null || hitObject.GetComponent<HealthBarButton>())
                 {
-                    ExecuteEvents.Execute(hitObject, new PointerEventData(EventSystem.current), ExecuteEvents.pointerEnterHandler);
+                    PointerEventData newEnterData = new PointerEventData(EventSystem.current);
+                    newEnterData.pointerDrag = dragObject;
+                    ExecuteEvents.Execute(hitObject, newEnterData, ExecuteEvents.pointerEnterHandler);
                     lastHighlightedObject = hitObject;
                 }
             }
@@ -141,19 +144,19 @@ namespace TarkovVR.Source.UI
 
         private void handleUIScrollwheel()
         {
-            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.7 && hitObject.GetComponentInParent<ScrollRectNoDrag>() != null)
+            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.4 && hitObject.GetComponentInParent<ScrollRectNoDrag>() != null)
             {
-                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y);
+                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y / 1.5f);
                 ExecuteEvents.Execute(hitObject.GetComponentInParent<ScrollRectNoDrag>().gameObject, eventData, ExecuteEvents.scrollHandler);
             }
-            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.7 && hitObject.GetComponentInParent<ScrollRect>() != null)
+            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.4 && hitObject.GetComponentInParent<ScrollRect>() != null)
             {
-                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y);
+                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y / 1.5f);
                 ExecuteEvents.Execute(hitObject.GetComponentInParent<ScrollRect>().gameObject, eventData, ExecuteEvents.scrollHandler);
             }
-            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.7 && hitObject.GetComponentInParent<LightScroller>() != null)
+            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.4 && hitObject.GetComponentInParent<LightScroller>() != null)
             {
-                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y);
+                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y / 1.5f);
                 ExecuteEvents.Execute(hitObject.GetComponentInParent<LightScroller>().gameObject, eventData, ExecuteEvents.scrollHandler);
             }
         }
@@ -162,8 +165,10 @@ namespace TarkovVR.Source.UI
         {
             // Use pressedObject to ensure that the object the user is trying to drag is the one they have selected,
             // not an object they selected then moved off from.
-            if (SteamVR_Actions._default.RightTrigger.axis > 0.7) {
-                if (dragObject == null) {
+            if (SteamVR_Actions._default.RightTrigger.axis > 0.7)
+            {
+                if (dragObject == null)
+                {
                     pressedObject = hitObject;
                     pressPosition = eventData.worldPosition;
                     eventData.dragging = true;
@@ -171,7 +176,8 @@ namespace TarkovVR.Source.UI
                     ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.beginDragHandler);
                     dragObject = hitObject;
                 }
-                else {
+                else
+                {
                     eventData.button = PointerEventData.InputButton.Left;
                     eventData.position = uiPointerPos;
                     eventData.pressPosition = pressPosition;
@@ -179,17 +185,27 @@ namespace TarkovVR.Source.UI
                     ExecuteEvents.Execute(dragObject, eventData, ExecuteEvents.dragHandler);
                 }
                 if (dragObject && SteamVR_Actions._default.ButtonB.stateUp)
-                    cancelDrag();
+                    CancelDrag();
 
             }
+            else if (dragObject && hitObject)
+                DropItem();
             else if (dragObject)
-                cancelDrag();
+                CancelDrag();
 
 
 
         }
 
-        private void cancelDrag()
+        private void DropItem()
+        {
+            eventData.dragging = false;
+            eventData.pointerDrag = dragObject;
+            ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.dropHandler);
+            dragObject = null;
+        }
+
+        private void CancelDrag()
         {
             eventData.pointerDrag = null;
             eventData.dragging = false;
@@ -222,7 +238,7 @@ namespace TarkovVR.Source.UI
                 while (i < 5)
                 {
 
-                    if (hitObject.GetComponent<IPointerEnterHandler>() != null || hitObject.GetComponent<IBeginDragHandler>() != null || hitObject.GetComponent<IDragHandler>() != null || hitObject.GetComponent<GInterface322>() != null)
+                    if (hitObject.GetComponent<IPointerEnterHandler>() != null || hitObject.GetComponent<IBeginDragHandler>() != null || hitObject.GetComponent<IDragHandler>() != null || hitObject.GetComponent<IContainer>() != null)
                     {
                         foundValidObject = true;
                         break;

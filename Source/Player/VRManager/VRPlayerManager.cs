@@ -4,6 +4,7 @@ using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
@@ -22,14 +23,12 @@ namespace TarkovVR.Source.Player.VRManager
         private Vector3 x;
         private Vector3 y;
         public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
-        private Vector3 supportingWeaponHolderOffset = new Vector3(0.155f, 0.09f, 0.05f);
         private Vector3 supportingLeftHandOffset = new Vector3(0,0f,0);
-        private Quaternion initialRightHandRotation;
         public Transform gunTransform;
         public static Transform leftHandGunIK;
-        private Vector3 leftHandSupportOffset;
         public bool leftHandOnScope = false;
 
+        public float leftHandYRotation = 0f;
         public static float smoothingFactor = 100f; // Adjust this value to lower to increase aim smoothing - 20 is barely noticable so good baseline
 
         // VR Origin and body stuff
@@ -90,7 +89,7 @@ namespace TarkovVR.Source.Player.VRManager
             }
             if (LeftHand) { 
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
-                if (!leftWristUi && UIPatches.stancePanel) {
+                if (!leftWristUi) {
                     leftWristUi = new GameObject("leftWristUi");
                     leftWristUi.layer = 5;
                     leftWristUi.transform.parent = LeftHand.transform;
@@ -273,8 +272,14 @@ namespace TarkovVR.Source.Player.VRManager
                     // Additional correction for yaw and roll offsets if necessary
                     combinedRotation *= Quaternion.Euler(0, 130, -30);
 
-                    if (smoothingFactor < 50)
-                        RightHand.transform.rotation = Quaternion.Slerp(RightHand.transform.rotation, combinedRotation, smoothingFactor * Time.deltaTime);
+                    if (smoothingFactor < 50) {
+                        if (VRSettings.SmoothScopeAim())
+                            RightHand.transform.rotation = Quaternion.Slerp(RightHand.transform.rotation, combinedRotation, smoothingFactor * Time.deltaTime);
+                        else
+                            RightHand.transform.rotation = combinedRotation;
+                    }
+                    else if (VRSettings.SmoothWeaponAim())
+                        RightHand.transform.rotation = Quaternion.Slerp(RightHand.transform.rotation, combinedRotation, VRSettings.GetSmoothingSensitivity() * Time.deltaTime);
                     else
                         RightHand.transform.rotation = combinedRotation;
                 }
@@ -291,6 +296,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         private void UpdateLeftHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
+            leftHandYRotation = fromAction.localRotation.eulerAngles.y;
             if (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && SteamVR_Actions._default.LeftGrip.state) 
                 return;
 

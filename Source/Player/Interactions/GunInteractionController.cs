@@ -16,7 +16,7 @@ using static TarkovVR.Source.Controls.InputHandlers;
 public class GunInteractionController : MonoBehaviour
 {
     public Transform magazine;
-    private static LayerMask WEAPON_COLLIDER_LAYER = 9;
+    private static LayerMask WEAPON_COLLIDER_LAYER = 28;
     private Transform internalMag;
     private Transform chargingHandle;
     private Transform bolt;
@@ -28,9 +28,9 @@ public class GunInteractionController : MonoBehaviour
     public bool initialized = false;
     private int lastHitCompIndex = -1;
     private GamePlayerOwner playerOwner;
-    private List<GClass2805> weaponUiLists;
-    private List<Class497> meshList;
-    private List<Class497> malfunctionMeshList;
+    private List<ActionsReturnClass> weaponUiLists;
+    private List<Class559> meshList;
+    private List<Class559> malfunctionMeshList;
     private HighLightMesh meshHighlighter;
     private bool hightlightingMesh = false;
     private int boltIndex = -1;
@@ -47,11 +47,11 @@ public class GunInteractionController : MonoBehaviour
         if (tacDevices == null)
             tacDevices = new List<Transform>();
         if (weaponUiLists == null)
-            weaponUiLists = new List<GClass2805>();
+            weaponUiLists = new List<ActionsReturnClass>();
         if (meshList == null)
-            meshList = new List<Class497>();
+            meshList = new List<Class559>();
         if (malfunctionMeshList == null)
-            malfunctionMeshList = new List<Class497>();
+            malfunctionMeshList = new List<Class559>();
 
 
         transform.localEulerAngles = new Vector3(325, 0, 0);
@@ -84,18 +84,20 @@ public class GunInteractionController : MonoBehaviour
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void Update()
     {
-        transform.position = Camera.main.transform.position;
-        transform.localPosition += armsOffset;
         if (!initialized)
             return;
 
+        if (!VRGlobals.player.IsInPronePose) { 
+            transform.position = Camera.main.transform.position;
+            transform.localPosition += armsOffset;
+        }
 
         if (SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active))
         {
             if (VRGlobals.firearmController.Weapon.MalfState.State != EFT.InventoryLogic.Weapon.EMalfunctionState.None) {
                 if ((!hightlightingMesh || !initMalfunction) && meshHighlighter)
                 {
-                    meshHighlighter.class497_0 = malfunctionMeshList.ToArray();
+                    meshHighlighter.class559_0 = malfunctionMeshList.ToArray();
                     meshHighlighter.enabled = true;
                     hightlightingMesh = true;
                     meshHighlighter.Color = Color.red;
@@ -104,7 +106,7 @@ public class GunInteractionController : MonoBehaviour
                 }
 
                 RaycastHit hit;
-                LayerMask mask = 1 << 9;
+                LayerMask mask = 1 << WEAPON_COLLIDER_LAYER;
                 if (Physics.Raycast(Camera.main.transform.position, Quaternion.Euler(5, 0, 0) * Camera.main.transform.forward, out hit, 2, mask)) {
                     if (lastHitCompIndex != boltIndex)
                     {
@@ -129,7 +131,7 @@ public class GunInteractionController : MonoBehaviour
             {
                 if ((!hightlightingMesh || initMalfunction) && meshHighlighter) {
 
-                    meshHighlighter.class497_0 = meshList.ToArray();
+                    meshHighlighter.class559_0 = meshList.ToArray();
                     meshHighlighter.enabled = true;
                     hightlightingMesh = true;
                     meshHighlighter.Color = Color.white;
@@ -140,7 +142,7 @@ public class GunInteractionController : MonoBehaviour
                 }
 
                 RaycastHit hit;
-                LayerMask mask = 1 << 9;
+                LayerMask mask = 1 << WEAPON_COLLIDER_LAYER;
 
 
                 if (Physics.Raycast(Camera.main.transform.position, Quaternion.Euler(5, 0, 0) * Camera.main.transform.forward, out hit, 2, mask))
@@ -192,7 +194,7 @@ public class GunInteractionController : MonoBehaviour
     public void SetScopeHighlight(Transform scopeTransform)
     {
 
-        List<Class497> scopeMeshList = new List<Class497>();
+        List<Class559> scopeMeshList = new List<Class559>();
         Renderer[] componentsInChildren = scopeTransform.GetComponentsInChildren<Renderer>(includeInactive: false);
         Renderer[] array = componentsInChildren;
         foreach (Renderer renderer in array)
@@ -200,14 +202,14 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                scopeMeshList.Add(new Class497(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                scopeMeshList.Add(new Class559(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                scopeMeshList.Add(new Class497(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                scopeMeshList.Add(new Class559(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
-        meshHighlighter.class497_0 = scopeMeshList.ToArray();
+        meshHighlighter.class559_0 = scopeMeshList.ToArray();
         meshHighlighter.enabled = true;
     }
     public void RemoveScopeHighlight()
@@ -241,12 +243,15 @@ public class GunInteractionController : MonoBehaviour
             internalMag = magTransform.transform;
         else 
             magazine = magTransform.transform;
+
+
         CreateInteractableMarker(magTransform.transform, "magMarker");
+        int meshListLengthBeforeMags = meshList.Count;
         GetMesh(magTransform.transform);
-        List<GClass2804> listComponents = new List<GClass2804>();
-        GClass2804 checkMagazine = new GClass2804();
+        List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
+        ActionsTypesClass checkMagazine = new ActionsTypesClass();
         checkMagazine.Name = "Check Magazine";
-        GClass2804 reload = new GClass2804();
+        ActionsTypesClass reload = new ActionsTypesClass();
         reload.Name = "Reload";
         IInputHandler baseHandler;
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ReloadWeapon, out baseHandler);
@@ -265,10 +270,16 @@ public class GunInteractionController : MonoBehaviour
         }
         listComponents.Add(checkMagazine);
         listComponents.Add(reload);
-        GClass2805 magazineList = new GClass2805();
+        ActionsReturnClass magazineList = new ActionsReturnClass();
         magazineList.Actions = listComponents;
         weaponUiLists.Add(magazineList);
-        //interactables[interactables.Count - 1].position = meshList[meshList.Count - 1].mesh_0.bounds.center;
+        if (magazine && magazine.childCount > 0)
+        {
+            if (magazine.GetComponent<MeshRenderer>())
+                magazine.GetChild(0).position = magazine.GetComponent<MeshRenderer>().bounds.center;
+            else if (meshList.Count > meshListLengthBeforeMags)
+                interactables[interactables.Count - 1].localPosition = meshList[meshListLengthBeforeMags].mesh_0.bounds.center;
+        }
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public bool IsMagazineSet() {
@@ -287,8 +298,8 @@ public class GunInteractionController : MonoBehaviour
         boltIndex = interactables.Count - 1;
         GetMesh(chargeOrBoltTransform);
         GetMalfunctionMeshes(chargeOrBoltTransform);
-        List<GClass2804> listComponents = new List<GClass2804>();
-        GClass2804 examineWeapon = new GClass2804();
+        List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
+        ActionsTypesClass examineWeapon = new ActionsTypesClass();
         examineWeapon.Name = "Examine Weapon";
         IInputHandler baseHandler;
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ExamineWeapon, out baseHandler);
@@ -300,7 +311,7 @@ public class GunInteractionController : MonoBehaviour
         listComponents.Add(examineWeapon);
 
 
-        GClass2804 checkChamber = new GClass2804();
+        ActionsTypesClass checkChamber = new ActionsTypesClass();
         checkChamber.Name = "Check Chamber/Fix Malfunction";
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.CheckChamber, out baseHandler);
         if (baseHandler != null)
@@ -311,7 +322,7 @@ public class GunInteractionController : MonoBehaviour
         listComponents.Add(checkChamber);
 
 
-        GClass2805 chamberList = new GClass2805();
+        ActionsReturnClass chamberList = new ActionsReturnClass();
         chamberList.Actions = listComponents;
         weaponUiLists.Add(chamberList);
     }
@@ -319,8 +330,8 @@ public class GunInteractionController : MonoBehaviour
     public void SetFireModeSwitch(Transform fireModeSwitch) {
         CreateInteractableMarker(fireModeSwitch, "fireModeMarker");
         GetMesh(fireModeSwitch);
-        List<GClass2804> listComponents = new List<GClass2804>();
-        GClass2804 toggleFireMode = new GClass2804();
+        List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
+        ActionsTypesClass toggleFireMode = new ActionsTypesClass();
         toggleFireMode.Name = "Toggle Fire Mode";
         IInputHandler baseHandler;
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ChangeWeaponMode, out baseHandler);
@@ -333,7 +344,7 @@ public class GunInteractionController : MonoBehaviour
         listComponents.Add(toggleFireMode);
 
 
-        GClass2805 fireModList = new GClass2805();
+        ActionsReturnClass fireModList = new ActionsReturnClass();
         fireModList.Actions = listComponents;
         weaponUiLists.Add(fireModList);
         this.fireModeSwitch = fireModeSwitch;
@@ -343,9 +354,9 @@ public class GunInteractionController : MonoBehaviour
     public void AddTacticalDevice(Transform tacDevice, FirearmsAnimator animator) {
         CreateInteractableMarker(tacDevice, "tacDeviceMarker");
         GetMesh(tacDevice);
-        List<GClass2804> listComponents = new List<GClass2804>();
-        GClass2804 changeMode = new GClass2804();
-        GClass2804 toggleTacDevice = new GClass2804();
+        List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
+        ActionsTypesClass changeMode = new ActionsTypesClass();
+        ActionsTypesClass toggleTacDevice = new ActionsTypesClass();
         changeMode.Name = "Change Mode";
         toggleTacDevice.Name = "Turn On/Off";
         TacticalDeviceController tacDeviceController = new TacticalDeviceController(tacDevice.GetComponent<TacticalComboVisualController>(), animator);
@@ -353,7 +364,7 @@ public class GunInteractionController : MonoBehaviour
         toggleTacDevice.Action = tacDeviceController.ToggleTacDevice;
         listComponents.Add(changeMode);
         listComponents.Add(toggleTacDevice);
-        GClass2805 fireModList = new GClass2805();
+        ActionsReturnClass fireModList = new ActionsReturnClass();
         fireModList.Actions = listComponents;
         weaponUiLists.Add(fireModList);
         this.tacDevices.Add(tacDevice);
@@ -369,7 +380,21 @@ public class GunInteractionController : MonoBehaviour
         marker.transform.localPosition = Vector3.zero;
         marker.transform.localEulerAngles = new Vector3(0, 270, 0);
         //marker.layer = 5;
-        interactables.Add(marker.transform);
+        // When a gun is reloaded the existing mag marker is removed, and placing
+        // the new one on the end causes the different array indexes to not line up
+        // so we need to replace it instead
+        bool replaceInteractable = false;
+        for (int i = 0; i < interactables.Count; i++)
+        {
+            if (interactables[i] == null)
+            {
+                interactables.RemoveAt(i);
+                interactables.Insert(i, marker.transform);
+                replaceInteractable = true;
+            }
+        }
+        if (!replaceInteractable)
+            interactables.Add(marker.transform);
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void CreateRaycastReceiver(Transform parent, float weaponLength) {
@@ -377,10 +402,10 @@ public class GunInteractionController : MonoBehaviour
         gunRaycastReciever = new GameObject("weaponInteractReceiver");
         gunRaycastReciever.AddComponent<BoxCollider>().isTrigger = true;
         gunRaycastReciever.transform.parent = parent;
-        gunRaycastReciever.transform.localScale = new Vector3(0.175f, weaponLength, 0.4f);
+        gunRaycastReciever.transform.localScale = new Vector3(0.175f, weaponLength * 1.25f, 0.4f);
         gunRaycastReciever.transform.localRotation = Quaternion.identity;
         gunRaycastReciever.transform.localPosition = new Vector3(0, (weaponLength / 2) * -1, 0);
-        gunRaycastReciever.layer = 9;
+        gunRaycastReciever.layer = WEAPON_COLLIDER_LAYER;
         FinishInit();
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -392,11 +417,11 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                meshList.Add(new Class497(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                meshList.Add(new Class559(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                meshList.Add(new Class497(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                meshList.Add(new Class559(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
     }
@@ -410,11 +435,11 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                malfunctionMeshList.Add(new Class497(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                malfunctionMeshList.Add(new Class559(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                malfunctionMeshList.Add(new Class497(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                malfunctionMeshList.Add(new Class559(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
     }

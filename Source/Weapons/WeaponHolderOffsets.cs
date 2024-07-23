@@ -80,7 +80,7 @@ namespace TarkovVR.Source.Weapons
             classOffsets.Add("marksmanRifle", new Vector3(0.26f, -0.09f, -0.16f));
             classOffsets.Add("sniperRifle", new Vector3(0.27f, -0.11f, -0.18f));
             classOffsets.Add("assaultRifle", new Vector3(0.19f, -0.07f, -0.18f));
-
+            classOffsets.Add("grenade", new Vector3(0.2f, -0.13f, -0.15f));
         }
 
         public static Vector3 GetWeaponHolderOffset(string weaponName, string weaponClass) {
