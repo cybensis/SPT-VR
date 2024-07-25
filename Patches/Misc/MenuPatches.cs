@@ -229,9 +229,17 @@ namespace TarkovVR.Patches.Misc
                 VRGlobals.commonUi.transform.position = new Vector3(-1.283f, -1000.66f, 0.9748f);
                 VRGlobals.commonUi.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
                 VRGlobals.commonUi.transform.eulerAngles = Vector3.zero;
-                if (!menuUIObject.GetComponent<BoxCollider>()) { 
+                if (!menuUIObject.GetComponent<BoxCollider>())
+                {
                     BoxCollider menuCollider = menuUIObject.gameObject.AddComponent<BoxCollider>();
                     menuCollider.extents = new Vector3(2560, 1440, 0.5f);
+                }
+                // Someetimes when coming out of a raid the colliders bounds is way off so fix it here,
+                else {
+                    BoxCollider menuCollider = menuUIObject.gameObject.AddComponent<BoxCollider>();
+                    menuCollider.center = Vector3.zero;
+                    menuCollider.enabled = false;
+                    menuCollider.enabled = true;
                 }
 
                 //3.4132 1.9199 0.0007
@@ -904,7 +912,10 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(TransferItemsScreen), "Show", new Type[] { typeof(TransferItemsScreen.GClass3163) })]
         private static void UndoRotationOnTranferItems(TransferItemsScreen __instance)
         {
-            VRGlobals.camRoot.transform.rotation = Quaternion.identity; 
+            __instance.WaitOneFrame(delegate
+            {
+                VRGlobals.camRoot.transform.rotation = Quaternion.identity;
+            });
 
         }
 
@@ -1077,13 +1088,40 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(Player), "OnDead")]
+        //private static void SetUiOnDeath(Player __instance)
+        //{
+        //    if (!__instance.IsYourPlayer)
+        //        return;
+        //    Plugin.MyLog.LogWarning("Set on death");
+        //    if (UIPatches.notifierUi != null)
+        //        UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
+
+        //    if (UIPatches.extractionTimerUi != null)
+        //        UIPatches.extractionTimerUi.transform.parent = UIPatches.gameUi.transform;
+        //    if (UIPatches.healthPanel != null)
+        //        UIPatches.healthPanel.transform.parent = UIPatches.battleScreenUi.transform;
+        //    if (UIPatches.healthPanel != null)
+        //        UIPatches.stancePanel.transform.parent = UIPatches.battleScreenUi.transform;
+        //    if (UIPatches.battleScreenUi != null)
+        //        UIPatches.battleScreenUi.transform.parent = VRGlobals.commonUi.GetChild(0);
+
+
+        //    PreloaderUI.DontDestroyOnLoad(UIPatches.gameUi);
+        //    PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
+        //    PositionMainMenuUi();
+        //}
+
+
+
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(Player), "OnDead")]
-        private static void SetUiOnDeath(Player __instance)
+        [HarmonyPatch(typeof(Class1386), "method_1")]
+        private static bool SetUiOnExtractOrDeath(Class1386 __instance)
         {
-            if (!__instance.IsYourPlayer)
-                return;
-            Plugin.MyLog.LogWarning("Set on death");
+
+            if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
+                return true;
             if (UIPatches.notifierUi != null)
                 UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
 
@@ -1099,19 +1137,48 @@ namespace TarkovVR.Patches.Misc
 
             PreloaderUI.DontDestroyOnLoad(UIPatches.gameUi);
             PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
+            VRGlobals.inGame = false;
+            VRGlobals.menuOpen = true;
             PositionMainMenuUi();
+            return true;
         }
 
-
-
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(Class1386), "method_0")]
-        private static bool SetUiOnExtractOrDeath(Class1386 __instance)
+        [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386), "method_1")]
+        private static bool SetUiOnExtractOrDeath(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386 __instance)
         {
 
-            if (__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
+            if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
                 return true;
-            Plugin.MyLog.LogWarning("Set on extract/death");
+
+            if (UIPatches.notifierUi != null)
+                UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
+
+            if (UIPatches.extractionTimerUi != null)
+                UIPatches.extractionTimerUi.transform.parent = UIPatches.gameUi.transform;
+            if (UIPatches.healthPanel != null)
+                UIPatches.healthPanel.transform.parent = UIPatches.battleScreenUi.transform;
+            if (UIPatches.healthPanel != null)
+                UIPatches.stancePanel.transform.parent = UIPatches.battleScreenUi.transform;
+            if (UIPatches.battleScreenUi != null)
+                UIPatches.battleScreenUi.transform.parent = VRGlobals.commonUi.GetChild(0);
+
+
+            PreloaderUI.DontDestroyOnLoad(UIPatches.gameUi);
+            PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
+            VRGlobals.inGame = false;
+            VRGlobals.menuOpen = true;
+            PositionMainMenuUi();
+            return true;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386), "method_0")]
+        private static bool SetUiOnExtractOrDeawth(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386 __instance)
+        {
+
+            if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
+                return true;
             if (UIPatches.notifierUi != null)
                 UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
 
@@ -1134,11 +1201,12 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SessionEndUI), "Awake")]
         private static void SetSessionEndUI(SessionEndUI __instance)
         {
+            BoxCollider colllider = __instance.gameObject.AddComponent<BoxCollider>();
+            colllider.extents = new Vector3(2560, 1440, 0.5f);
             __instance.transform.eulerAngles = Vector3.zero;
             Canvas canvas = __instance.gameObject.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;

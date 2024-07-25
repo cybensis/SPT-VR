@@ -54,7 +54,7 @@ public class GunInteractionController : MonoBehaviour
             malfunctionMeshList = new List<Class559>();
 
 
-        transform.localEulerAngles = new Vector3(325, 0, 0);
+        transform.localEulerAngles = new Vector3(340, 340, 0);
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void FinishInit() {
@@ -67,7 +67,7 @@ public class GunInteractionController : MonoBehaviour
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
             gunRaycastReciever.GetComponent<BoxCollider>().enabled = true;
         }
-        transform.localEulerAngles = new Vector3(325, 0, 0);
+        transform.localEulerAngles = new Vector3(340, 340, 0);
     }
     public void OnDisable()
     {

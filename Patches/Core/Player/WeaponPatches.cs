@@ -152,7 +152,7 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.oldWeaponHolder = null;
                 currentGunInteractController.enabled = false;
             }
-
+            VRGlobals.vrPlayer.isWeapPistol = false;
             //if (VRGlobals.oldWeaponHolder && VRGlobals.weaponHolder == __instance.WeaponRoot.parent.gameObject && VRGlobals.weaponHolder.transform.childCount > 0)
             //{
             //    VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
@@ -194,6 +194,7 @@ namespace TarkovVR.Patches.Core.Player
             __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
 
             VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
+            VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
         }
 
 
@@ -390,7 +391,7 @@ namespace TarkovVR.Patches.Core.Player
                     __instance.ChangeAimingMode();
                 }
             }
-            VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(325, 0, 0);
+            VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(340, 340, 0);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -747,7 +748,7 @@ namespace TarkovVR.Patches.Core.Player
 
                 __result.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
 
-                VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(325, 0, 0);
+                VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(340, 340, 0);
 
                 //VRGlobals.ikManager.rightArmIk.solver.target = null;
                 //VRGlobals.ikManager.leftArmIk.solver.target = null;

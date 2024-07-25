@@ -22,6 +22,7 @@ namespace TarkovVR.Source.Player.VRManager
         public Vector3 initPos;
         private Vector3 x;
         private Vector3 y;
+        private bool useRightHandRot = false;
         public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
         private Vector3 supportingLeftHandOffset = new Vector3(0,0f,0);
         public Transform gunTransform;
@@ -29,6 +30,7 @@ namespace TarkovVR.Source.Player.VRManager
         public bool leftHandOnScope = false;
 
         public float leftHandYRotation = 0f;
+        public float leftHandZRotation = 0f;
         public static float smoothingFactor = 100f; // Adjust this value to lower to increase aim smoothing - 20 is barely noticable so good baseline
 
         // VR Origin and body stuff
@@ -47,7 +49,8 @@ namespace TarkovVR.Source.Player.VRManager
         private bool showingHealthUi = false;
         private bool showingExtractionUi = false;
         private bool handLock = false;
-        public bool canJump = true;
+        public bool blockJump = true;
+        public bool blockCrouch = true;
         public bool interactMenuOpen = false;
         private static int LEFT_HAND_ANIMATOR_HASH = UnityEngine.Animator.StringToHash("ReloadFloat");
         private Transform ammoFireModeUi;
@@ -57,6 +60,7 @@ namespace TarkovVR.Source.Player.VRManager
         public bool showScopeZoom = false;
         public float crouchHeightDiff = 0;
         public Transform scopeUiPosition;
+        public bool isWeapPistol = false;
 
 
         public void SetAmmoFireModeUi(Transform uiObject, bool isAmmoCount) {
@@ -196,9 +200,8 @@ namespace TarkovVR.Source.Player.VRManager
             //    }
             //}
             interactMenuOpen = (interactionUi && interactionUi.gameObject.active);
-            canJump = (!VRGlobals.blockRightJoystick && !VRGlobals.menuOpen && !interactMenuOpen && crouchHeightDiff == 0);
-            if (canJump)
-                canJump = (!isSupporting && (!VRGlobals.firearmController || !VRGlobals.firearmController.IsAiming));
+            blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0 || (VRGlobals.firearmController && VRGlobals.firearmController.IsAiming);
+            blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || (VRGlobals.firearmController && VRGlobals.firearmController.IsAiming);
 
             // AmmoCountPanel - on ShowFireMode position on selector position 
             // rotation = ammopanel rotation, localrotation = 0 90 90
@@ -246,7 +249,7 @@ namespace TarkovVR.Source.Player.VRManager
                     if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
                         VRGlobals.blockRightJoystick = false;
                 }
-                if (isSupporting)
+                if (isSupporting && !isWeapPistol)
                 {
                     if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController)
                         VRGlobals.vrOpticController.handleJoystickZoomDial();
@@ -260,17 +263,21 @@ namespace TarkovVR.Source.Player.VRManager
                     //float pitchAngle = Mathf.Atan2(0, flatToHand.magnitude) * Mathf.Rad2Deg;
 
                     // Separate rotation offsets for clearer control
-                    Quaternion offsetRotation = Quaternion.Euler(340, 0, 0); // Apply pitch offset here
+                    Quaternion offsetRotation = Quaternion.Euler(340, 0, -90); // Apply pitch offset here
 
-                    // Now, extract the roll from the right hand's rotation
-                    // This captures the wrist twist/roll
-                    float rollAngle = fromAction.localRotation.eulerAngles.z;
-                    // Ensure the roll is correctly oriented; you might need to adjust this calculation
-                    Quaternion rollRotation = Quaternion.Euler(0, 0, rollAngle - 90); // Adjusting based on initial hand orientation
 
-                    Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
+                    //Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
+                    Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation;
                     // Additional correction for yaw and roll offsets if necessary
                     combinedRotation *= Quaternion.Euler(0, 130, -30);
+
+
+                    // Interpolate between the two Z rotation angles
+                    float interpolatedZRotation = Mathf.LerpAngle(fromAction.localRotation.eulerAngles.z, leftHandZRotation, 0.5f);
+                    combinedRotation *= Quaternion.Euler(interpolatedZRotation * -1, 0, 0);
+
+                    //combinedRotation *= Quaternion.Euler(fromAction.localRotation.eulerAngles.z * -1, 0, 0);
+
 
                     if (smoothingFactor < 50) {
                         if (VRSettings.SmoothScopeAim())
@@ -297,6 +304,7 @@ namespace TarkovVR.Source.Player.VRManager
         private void UpdateLeftHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
             leftHandYRotation = fromAction.localRotation.eulerAngles.y;
+            leftHandZRotation = fromAction.localRotation.eulerAngles.z;
             if (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && SteamVR_Actions._default.LeftGrip.state) 
                 return;
 

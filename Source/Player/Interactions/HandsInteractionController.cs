@@ -18,6 +18,7 @@ namespace TarkovVR.Source.Player.Interactions
     {
         public Quaternion initialHandRot;
         private static int INTERACTIVE_LAYER = 22;
+        private static int DEAD_BODY_LAYER = 23;
         private SelectWeaponHandler selectWeaponHandler;
         public Transform scopeTransform;
         public Transform leftHand;
@@ -114,6 +115,43 @@ namespace TarkovVR.Source.Player.Interactions
                         {
                             VRGlobals.player.TryInteractionCallback(container);
                         });
+                        //VRGlobals.player.CurrentManagedState.ExecuteDoorInteraction(container, new InteractionResult(EFT.EInteractionType.Open), null, VRGlobals.player);
+                        //container.Interact(new InteractionResult(EFT.EInteractionType.Open));
+                    }
+                }
+                // Don't try to open something if there is an item to hold, always prioritize held items since you can move them out of the way
+                else if (!heldItem && collider.gameObject.layer == INTERACTIVE_LAYER && collider.gameObject.GetComponent<Door>())
+                {
+                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.LeftHand);
+                    if (SteamVR_Actions._default.LeftGrip.stateDown)
+                    {
+                        Door door = collider.gameObject.GetComponent<Door>();
+                        GetActionsClass.Class1515 doorInteractionClass = new GetActionsClass.Class1515();
+                        doorInteractionClass.door = door;
+                        doorInteractionClass.owner = VRGlobals.player.GetComponent<GamePlayerOwner>();
+                        if (door.DoorState == EDoorState.Open)
+                            doorInteractionClass.method_5();
+                        else if (door.DoorState == EDoorState.Locked)
+                            doorInteractionClass.method_1();
+                        else if (door.DoorState == EDoorState.Shut)
+                            doorInteractionClass.method_0();
+                        //VRGlobals.player.CurrentManagedState.ExecuteDoorInteraction(container, new InteractionResult(EFT.EInteractionType.Open), null, VRGlobals.player);
+                        //container.Interact(new InteractionResult(EFT.EInteractionType.Open));
+                    }
+                }
+                else if (!heldItem && collider.transform.root.gameObject.layer == DEAD_BODY_LAYER && collider.transform.root.GetComponent<Corpse>())
+                {
+                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.LeftHand);
+                    if (SteamVR_Actions._default.LeftGrip.stateDown)
+                    {
+                        Corpse corpse = collider.transform.root.GetComponent<Corpse>();
+                        GetActionsClass.Class1507 corpseInteractionClass = new GetActionsClass.Class1507();
+                        corpseInteractionClass.compoundItem = (EquipmentClass) corpse.Item;
+                        corpseInteractionClass.rootItem = (EquipmentClass) corpse.Item;
+                        corpseInteractionClass.lootItemOwner = corpse.ItemOwner;
+                        corpseInteractionClass.controller = VRGlobals.player.InventoryControllerClass;
+                        corpseInteractionClass.owner = VRGlobals.player.GetComponent<GamePlayerOwner>();
+                        corpseInteractionClass.method_3();
                         //VRGlobals.player.CurrentManagedState.ExecuteDoorInteraction(container, new InteractionResult(EFT.EInteractionType.Open), null, VRGlobals.player);
                         //container.Interact(new InteractionResult(EFT.EInteractionType.Open));
                     }

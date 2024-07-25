@@ -206,7 +206,8 @@ namespace TarkovVR.Patches.Misc
             // Player can enter hideout UI and not physically enter it and init the vrPlayer
             if (VRGlobals.vrPlayer) { 
                 VRGlobals.vrPlayer.enabled = false;
-                VRGlobals.vrPlayer.interactionUi.parent = UIPatches.battleScreenUi.ActionPanel.transform;
+                if (VRGlobals.vrPlayer.interactionUi)
+                    VRGlobals.vrPlayer.interactionUi.parent = UIPatches.battleScreenUi.ActionPanel.transform;
             }
             VRGlobals.menuVRManager.enabled = true;
             MenuPatches.PositionMainMenuUi();

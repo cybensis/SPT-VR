@@ -25,7 +25,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                if (VRGlobals.vrPlayer.canJump && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
+                if (!VRGlobals.vrPlayer.blockJump && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
                 {
                     command = ECommand.Jump;
                 }
@@ -38,7 +38,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                if (VRGlobals.vrPlayer.isSupporting || VRGlobals.vrPlayer.interactMenuOpen)
+                if (VRGlobals.vrPlayer.blockCrouch)
                     return;
 
                 if (SteamVR_Actions._default.RightJoystick.axis.y < -0.8)
@@ -127,26 +127,46 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class AimHandler : IInputHandler
         {
+            private float x = 0;
+            private float y = 0;
+            private float z = 1;
             public void UpdateCommand(ref ECommand command)
             { 
-                if (VRGlobals.firearmController == null || VRGlobals.scope == null)
+                if (VRGlobals.firearmController == null)
                     return;
 
-
                 bool isAiming = VRGlobals.firearmController.IsAiming;
-                Vector3 directionToScope = (VRGlobals.scope.transform.position + (VRGlobals.scope.transform.forward * -0.25f)) - VRGlobals.camHolder.transform.position;
-                directionToScope = directionToScope.normalized;
-                float angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward* -1, directionToScope);
-                float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
-                //Plugin.MyLog.LogWarning(angleToScope + "   " + angleFromScope);
-                if (!isAiming && angleToScope <= 25f && angleFromScope <= 25f)
+                if (VRGlobals.scope != null)
                 {
-                    command = ECommand.ToggleAlternativeShooting;
+                    Vector3 directionToScope = (VRGlobals.scope.transform.position + (VRGlobals.scope.transform.forward * -0.25f)) - VRGlobals.camHolder.transform.position;
+                    directionToScope = directionToScope.normalized;
+                    float angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward * -1, directionToScope);
+                    float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
+                    if (!isAiming && angleToScope <= 25f && angleFromScope <= 25f)
+                    {
+                        command = ECommand.ToggleAlternativeShooting;
+                    }
+                    else if (isAiming && (angleToScope > 25f || angleFromScope > 25f))
+                    {
+                        command = ECommand.EndAlternativeShooting;
+                        VRPlayerManager.smoothingFactor = 50f;
+                    }
                 }
-                else if (isAiming && (angleToScope > 25f || angleFromScope > 25f))
-                {
-                    command = ECommand.EndAlternativeShooting;
-                    VRPlayerManager.smoothingFactor = 50f;
+                else {
+                    Vector3 direction = VRGlobals.vrPlayer.RightHand.transform.right * -1;
+                    Vector3 directionToGun = (VRGlobals.vrPlayer.RightHand.transform.position + direction) - VRGlobals.camHolder.transform.position;
+                    directionToGun = directionToGun.normalized;
+                    float angleToScope = Vector3.Angle(direction, directionToGun);
+                    float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToGun);
+                    if (!isAiming && angleToScope <= 20f && angleFromScope <= 25f)
+                    {
+                        command = ECommand.ToggleAlternativeShooting;
+                    }
+                    else if (isAiming && (angleToScope > 20f || angleFromScope > 25f))
+                    {
+                        command = ECommand.EndAlternativeShooting;
+                        VRPlayerManager.smoothingFactor = 50f;
+                    }
                 }
  
             }
