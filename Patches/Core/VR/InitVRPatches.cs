@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
 using TarkovVR.Patches.UI;
+using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
@@ -13,6 +14,8 @@ using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
 using Valve.VR.InteractionSystem;
+using static RoadSplineGenerator;
+using static TarkovVR.Source.Controls.InputHandlers;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -148,25 +151,39 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.name == "Base HumanLCollarbone") {
                 leftWrist = __instance.transform.FindChildRecursive("Base HumanLForearm3");
                 if (leftWrist != null && leftWrist.GetComponent<TwistRelax>())
-                {
                     leftWrist.GetComponent<TwistRelax>().weight = 3;
+
+                IInputHandler baseHandler;
+                VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.LeftStanceToggle, out baseHandler);
+                if (baseHandler != null)
+                {
+                    ResetHeightHandler resetHeightHandler = baseHandler as ResetHeightHandler;
+                    resetHeightHandler.SetLeftArmTransform(__instance.transform.FindChildRecursive("Base HumanLForearm1"));
                 }
+            }
+            if (__instance.name == "Base HumanRCollarbone")
+            {
+                IInputHandler baseHandler;
+                VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.LeftStanceToggle, out baseHandler);
+                if (baseHandler != null)
+                {
+                    ResetHeightHandler resetHeightHandler = baseHandler as ResetHeightHandler;
+                    resetHeightHandler.SetRightArmTransform(__instance.transform.FindChildRecursive("Base HumanRForearm1"));
+                }
+            }
+                // parent is HumanLForearm3
+
+                // Timer panel localpos: 0.047 0.08 0.025
+                // local rot = 88.5784 83.1275 174.7802
+                // child(0).localeuler = 0 342.1273 0
+
+                // leftwristui localpos = -0.1 0.04 0.035
+                // localrot = 304.3265 181 180
+
+                //GameObject.Destroy(__instance);
+
 
             }
-
-            // parent is HumanLForearm3
-
-            // Timer panel localpos: 0.047 0.08 0.025
-            // local rot = 88.5784 83.1275 174.7802
-            // child(0).localeuler = 0 342.1273 0
-
-            // leftwristui localpos = -0.1 0.04 0.035
-            // localrot = 304.3265 181 180
-
-            //GameObject.Destroy(__instance);
-
-
-        }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Don't know why I chose this method for setting the main cam but it works so whatever
         [HarmonyPostfix]

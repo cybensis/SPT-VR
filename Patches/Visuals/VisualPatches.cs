@@ -1,12 +1,16 @@
-﻿using HarmonyLib;
+﻿using EFT.CameraControl;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
+using UnityEngine.XR;
 using static Val;
 
 namespace TarkovVR.Patches.Visuals
@@ -285,7 +289,13 @@ namespace TarkovVR.Patches.Visuals
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(InventoryBlur), "Enable")]
-        private static void DisableInvBlur(InventoryBlur __instance)
+        private static void DisableInvBlurOnEnable(InventoryBlur __instance)
+        {
+            __instance.enabled = false;
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InventoryBlur), "Awake")]
+        private static void DisableInvBlurOnAwake(InventoryBlur __instance)
         {
             __instance.enabled = false;
         }
@@ -456,5 +466,47 @@ namespace TarkovVR.Patches.Visuals
         // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
         // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
         // POST FX - Turning it off gains about 8-10 FPS
+
+        // When aiming a lot of stuff gets culled do to the lowered LodBiasFactor, so set this to a minimum of 1 which is whats normal
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CameraLodBiasController), "SetBiasByFov")]
+        private static void FixAimCulling(CameraLodBiasController __instance)
+        {
+            if (__instance.LodBiasFactor < 1)
+                __instance.LodBiasFactor = 1;
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(DistantShadow), "Awake")]
+        private static void FixDistantShadows(DistantShadow __instance)
+        {
+            __instance.EnableMultiviewTiles = true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CC_Base), "Awake")]
+        private static void OptionalDisableSharpenAwake(CC_Base __instance)
+        {
+            if (__instance is CC_Sharpen)
+            {
+                if (!VRSettings.GetSharpenOn())
+                    __instance.enabled = false;
+                else
+                    __instance.enabled = true;
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CC_Base), "Start")]
+        private static void OptionalDisableSharpenStart(CC_Base __instance)
+        {
+            if (__instance is CC_Sharpen)
+            {
+                if (!VRSettings.GetSharpenOn())
+                    __instance.enabled = false;
+                else
+                    __instance.enabled = true;
+            }
+        }
+
     }
 }

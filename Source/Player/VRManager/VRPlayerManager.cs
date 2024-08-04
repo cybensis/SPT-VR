@@ -8,7 +8,6 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
-using static UnityEngine.UIElements.UIRAtlasAllocator;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -20,9 +19,8 @@ namespace TarkovVR.Source.Player.VRManager
 
 
         public Vector3 initPos;
-        private Vector3 x;
-        private Vector3 y;
-        private bool useRightHandRot = false;
+        public Vector3 x;
+        private Vector3 nonSupportRightHandRotOffset = new Vector3(0, 170, 50);
         public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
         private Vector3 supportingLeftHandOffset = new Vector3(0,0f,0);
         public Transform gunTransform;
@@ -74,7 +72,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         protected virtual void Awake()
         {
-            
+            x.y = -1;
             SpawnHands();
             Plugin.MyLog.LogWarning("Create hands");
             if (RightHand) { 
@@ -158,55 +156,11 @@ namespace TarkovVR.Source.Player.VRManager
 
             Vector3 newLocalPos = initPos * -1 + headOffset;
             newLocalPos.y -= crouchHeightDiff;
-            // Set the rig collider position to 75% of the cameras height so it appears under the head
-            //if (VRGlobals.ikManager)
-            //    InitVRPatches.rigCollider.position = newLocalPos;
-            //    newLocalPos.y = Camera.main.transform.localPosition.y * 0.75f;
-
-
             VRGlobals.vrOffsetter.transform.localPosition = newLocalPos;
 
-            if (SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.Any))
-            {
-                timeHeld += Time.deltaTime;
-                if (Camera.main != null && timeHeld > 0.75f)
-                {
-                    initPos = Camera.main.transform.localPosition;
-                }
-            }
-            else if (timeHeld != 0)
-            {
-                timeHeld = 0;
-            }
-
-            //if (radialMenu)
-            //{
-
-            //    RaycastHit hit;
-            //    LayerMask mask = 1 << 7;
-            //    if (SteamVR_Actions._default.RightGrip.state && Physics.Raycast(RightHand.transform.position, RightHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
-            //    {
-            //        if (!radialMenu.active)
-            //        {
-            //            radialMenu.active = true;
-            //            VRGlobals.blockRightJoystick = true;
-            //        }
-
-            //    }
-            //    else if (VRGlobals.blockRightJoystick && SteamVR_Actions._default.RightJoystick.axis.x == 0 && SteamVR_Actions._default.RightJoystick.axis.y == 0)
-            //    {
-            //        radialMenu.active = false;
-            //        VRGlobals.blockRightJoystick = false;
-            //    }
-            //}
             interactMenuOpen = (interactionUi && interactionUi.gameObject.active);
-            blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0 || (VRGlobals.firearmController && VRGlobals.firearmController.IsAiming);
-            blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || (VRGlobals.firearmController && VRGlobals.firearmController.IsAiming);
-
-            // AmmoCountPanel - on ShowFireMode position on selector position 
-            // rotation = ammopanel rotation, localrotation = 0 90 90
-            // psosition = ammopanel pos, localpos = -0.0175 0.03 0
-            // On BattleUIComponentAnimation.Hide() with name == AmmoPanel stop updating position
+            blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0 || (VRGlobals.firearmController && VRGlobals.firearmController.IsAiming && SteamVR_Actions._default.RightGrip.state);
+            blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || (VRGlobals.firearmController && VRGlobals.firearmController.IsAiming && SteamVR_Actions._default.RightGrip.state);
 
             // For Ammo do the exact same vu
             if (ammoFireModeUi != null)
@@ -241,63 +195,89 @@ namespace TarkovVR.Source.Player.VRManager
         private float controllerLength = 0.175f;
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
-            if (RightHand)
+            if (!RightHand)
+                return;
+
+            // Block right joystick is usually triggered when in a radial menu, and if you have something selected when you release the 
+            // grip you'll start rotating because of the right joystick being pushed, so don't allow for right joystick movement until
+            // its below a certain point
+
+
+
+            if (VRGlobals.blockRightJoystick == true && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand)) {
+                Vector2 joystickInput = SteamVR_Actions._default.RightJoystick.axis;
+                if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
+                    VRGlobals.blockRightJoystick = false;
+            }
+
+            if (isSupporting && !isWeapPistol)
             {
-
-                if (VRGlobals.blockRightJoystick == true && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand)) {
-                    Vector2 joystickInput = SteamVR_Actions._default.RightJoystick.axis;
-                    if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
-                        VRGlobals.blockRightJoystick = false;
+                if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && SteamVR_Actions._default.RightGrip.state) { 
+                    VRGlobals.vrOpticController.handleJoystickZoomDial();
+                    VRGlobals.blockRightJoystick = true;
                 }
-                if (isSupporting && !isWeapPistol)
-                {
-                    if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController)
-                        VRGlobals.vrOpticController.handleJoystickZoomDial();
-                    Vector3 toLeftHand = LeftHand.transform.position - RightHand.transform.position;
-                    Vector3 flatToHand = new Vector3(toLeftHand.x, 0, toLeftHand.z); // For yaw
+                else
+                    VRGlobals.blockRightJoystick = false;
 
-                    // Calculate yaw to face the left hand horizontally
-                    Quaternion yawRotation = Quaternion.LookRotation(flatToHand, Vector3.up);
-                    // Correcting pitch calculation: 
-                    float pitchAngle = Mathf.Atan2(toLeftHand.y, flatToHand.magnitude) * Mathf.Rad2Deg;
-                    //float pitchAngle = Mathf.Atan2(0, flatToHand.magnitude) * Mathf.Rad2Deg;
+                Vector3 handup = fromAction.localRotation * Vector3.right;
+                float num = Mathf.Atan2(handup.y, handup.x) * 57.29578f;
+                //LeftHand.transform.localRotation = fromAction.localRotation;
+                //LeftHand.transform.Rotate(-60, 0, 70);
+                Vector3 toLeftHand = LeftHand.transform.position - RightHand.transform.position;
+                Vector3 flatToHand = new Vector3(toLeftHand.x, 0, toLeftHand.z); // For yaw
 
-                    // Separate rotation offsets for clearer control
-                    Quaternion offsetRotation = Quaternion.Euler(340, 0, -90); // Apply pitch offset here
+                // Calculate yaw to face the left hand horizontally
+                Quaternion yawRotation = Quaternion.LookRotation(flatToHand, Vector3.up);
+                // Correcting pitch calculation: 
+                float pitchAngle = Mathf.Atan2(toLeftHand.y, flatToHand.magnitude) * Mathf.Rad2Deg;
+                //float pitchAngle = Mathf.Atan2(0, flatToHand.magnitude) * Mathf.Rad2Deg;
 
-
-                    //Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
-                    Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation;
-                    // Additional correction for yaw and roll offsets if necessary
-                    combinedRotation *= Quaternion.Euler(0, 130, -30);
+                // Separate rotation offsets for clearer control
+                Quaternion offsetRotation = Quaternion.Euler(340, 0, -90); // Apply pitch offset here
 
 
-                    // Interpolate between the two Z rotation angles
-                    float interpolatedZRotation = Mathf.LerpAngle(fromAction.localRotation.eulerAngles.z, leftHandZRotation, 0.5f);
-                    combinedRotation *= Quaternion.Euler(interpolatedZRotation * -1, 0, 0);
+                //Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
+                Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation;
+                // The lefthand at 255 has the gun straight up, so any additional rotations beyond or below 270 can be
+                // used to rotate the gun
+                float leftHandRotation = LeftHand.transform.localEulerAngles.z - 255;
 
-                    //combinedRotation *= Quaternion.Euler(fromAction.localRotation.eulerAngles.z * -1, 0, 0);
+                //When you rotate the left hand right and it goes beyond 360, it goes to 0 which makes it flip around to 0, so if the value
+                // is less than 120 just lock it at 90 so it never goes beyond 360
+                if (LeftHand.transform.localEulerAngles.z < 120)
+                    leftHandRotation = 90;
+                // Rolling the left controller feels way too sensitive so reduce the rotation amount here
+                float newRightHandRoll = (leftHandRotation * 0.65f);
+                // Additional correction for yaw and roll offsets if necessary
+                    combinedRotation *= Quaternion.Euler(num * -1, 130, -30);
+                //if (RightHand.transform.eulerAngles.x > 50)
+                //else
+                //    combinedRotation *= Quaternion.Euler(0, 130, -30);
+                //if (RightHand.transform.eulerAngles.x < 40 || RightHand.transform.eulerAngles.x > 320)
+                //else
 
 
-                    if (smoothingFactor < 50) {
-                        if (VRSettings.SmoothScopeAim())
-                            RightHand.transform.rotation = Quaternion.Slerp(RightHand.transform.rotation, combinedRotation, smoothingFactor * Time.deltaTime);
-                        else
-                            RightHand.transform.rotation = combinedRotation;
-                    }
-                    else if (VRSettings.SmoothWeaponAim())
-                        RightHand.transform.rotation = Quaternion.Slerp(RightHand.transform.rotation, combinedRotation, VRSettings.GetSmoothingSensitivity() * Time.deltaTime);
+                if (smoothingFactor < 50) {
+                    if (VRSettings.SmoothScopeAim())
+                        RightHand.transform.rotation = Quaternion.Slerp(RightHand.transform.rotation, combinedRotation, smoothingFactor * Time.deltaTime);
                     else
                         RightHand.transform.rotation = combinedRotation;
                 }
+                else if (VRSettings.SmoothWeaponAim())
+                    RightHand.transform.rotation = Quaternion.Slerp(RightHand.transform.rotation, combinedRotation, VRSettings.GetSmoothingSensitivity() * Time.deltaTime);
                 else
-                {
-                    RightHand.transform.localRotation = fromAction.localRotation;
-                    RightHand.transform.Rotate(70, 170, 50);
-                }
-                Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
-                RightHand.transform.localPosition = virtualBasePosition;
+                    RightHand.transform.rotation = combinedRotation;
+
+
             }
+            else
+            {
+                RightHand.transform.localRotation = fromAction.localRotation;
+                RightHand.transform.Rotate(VRSettings.GetWeaponAngleOffset(),nonSupportRightHandRotOffset.y, nonSupportRightHandRotOffset.z);
+            }
+            Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+            RightHand.transform.localPosition = virtualBasePosition;
+            // RightHand.transform.rotation.eulerAngles y should be between 65 and 250
         }
 
 
@@ -305,49 +285,70 @@ namespace TarkovVR.Source.Player.VRManager
         {
             leftHandYRotation = fromAction.localRotation.eulerAngles.y;
             leftHandZRotation = fromAction.localRotation.eulerAngles.z;
-            if (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && SteamVR_Actions._default.LeftGrip.state) 
+            if (!LeftHand || (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && SteamVR_Actions._default.LeftGrip.state)) 
                 return;
 
-            if (LeftHand)
+            if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(LEFT_HAND_ANIMATOR_HASH) == 1.0)
             {
-                if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(LEFT_HAND_ANIMATOR_HASH) == 1.0)
+                if (!leftHandInAnimation)
                 {
-                    if (!leftHandInAnimation)
-                    {
-                        VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
-                        leftHandInAnimation = true;
-                    }
-                    return;
+                    VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                    leftHandInAnimation = true;
                 }
-                else if (leftHandInAnimation) {
-                    if (isSupporting)
-                        VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
-                    else
-                        VRGlobals.player._markers[0] = LeftHand.transform;
-                    leftHandInAnimation = false;
-                }
+                return;
+            }
+            else if (leftHandInAnimation) {
+                if (isSupporting)
+                    VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                else
+                    VRGlobals.player._markers[0] = LeftHand.transform;
+                leftHandInAnimation = false;
+            }
+            if (leftHandGunIK)
+            {
+                bool withinDistance = Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.1f;
 
-                if (leftHandGunIK && (Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.1f || handLock || isSupporting && Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.175f))
+
+                // If the player is already in support position with snap enabled and they aren't holding grip, check for the position similar to above 
+                // but give the distance between hand and IK position some tolerance so the hand doesn't rapidly swap between support pos and non-support pos
+                // when in close vicinity.
+                bool withinDistanceAfterSnap = withinDistance && isSupporting && Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.175f;
+                if (withinDistance || handLock || withinDistanceAfterSnap)
                 {
-                    if (!isSupporting)
+                    if (!isSupporting && (!VRSettings.GetSnapToGun() || handLock))
                     {
-                        // Set target to null so the left hand returns to its normal position on the gun
-                        //VRGlobals.ikManager.leftArmIk.solver.target = null;
+                        // Set left hand target to the original left hand target
                         VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                         isSupporting = true;
-                        //VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset + supportingWeaponHolderOffset;
-                        //VRGlobals.weaponHolder.transform.localPosition = supportingWeaponHolderOffset;
-
                     }
-                    if (SteamVR_Actions._default.LeftGrip.state)
-                        handLock = true;
+                    if (VRSettings.GetSupportGunHoldToggle())
+                    {
+                        if (SteamVR_Actions._default.LeftGrip.state)
+                            handLock = true;
+                        else
+                            handLock = false;
+                    }
                     else
-                        handLock = false;
-
-                    //Vector3 leftHandWorldPosition = WeaponPatches.previousLeftHandMarker.TransformPoint(leftHandSupportOffset);
-                    //LeftHand.transform.position = leftHandWorldPosition;
-                    LeftHand.transform.localPosition = fromAction.localPosition + supportingLeftHandOffset;
-                    //Plugin.MyLog.LogError(Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) + "   |    " + isSupporting);
+                    {
+                        if (!isSupporting && SteamVR_Actions._default.LeftGrip.stateDown)
+                            handLock = true;
+                        else if (isSupporting && SteamVR_Actions._default.LeftGrip.stateDown) {
+                            isSupporting = false;
+                            VRGlobals.player._markers[0] = LeftHand.transform;
+                            //VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                            VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
+                            handLock = false;
+                        }
+                    }
+                    // This condition should only even happen if snapping to the gun is disabled
+                    if (!isSupporting)
+                    {
+                        SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.1f, SteamVR_Input_Sources.LeftHand);
+                        Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+                        LeftHand.transform.localPosition = virtualBasePosition;
+                    }
+                    else
+                        LeftHand.transform.localPosition = fromAction.localPosition + supportingLeftHandOffset;
                 }
                 else
                 {
@@ -361,73 +362,76 @@ namespace TarkovVR.Source.Player.VRManager
                     Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
                     LeftHand.transform.localPosition = virtualBasePosition;
                     //if (leftHandGunIK)
-                        //Plugin.MyLog.LogWarning(Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) + "   |    " + isSupporting);
+                    //Plugin.MyLog.LogWarning(Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) + "   |    " + isSupporting);
                     //LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
                 }
-                //else
-                //{
-                //    LeftHand.transform.localPosition = fromAction.localPosition;
-                //}
+            }
+            else {
+                Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+                LeftHand.transform.localPosition = virtualBasePosition;
                 LeftHand.transform.localRotation = fromAction.localRotation;
                 LeftHand.transform.Rotate(-60, 0, 70);
-
-                if (!isSupporting)
+            }
+            //else
+            //{
+            //    LeftHand.transform.localPosition = fromAction.localPosition;
+            //}
+            if (!isSupporting)
+            {
+                if (UIPatches.stancePanel)
                 {
-                    if (UIPatches.stancePanel)
+
+                    RaycastHit hit;
+                    LayerMask mask = 1 << 7;
+                    if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
                     {
-
-                        RaycastHit hit;
-                        LayerMask mask = 1 << 7;
-                        if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
+                        if (!showingHealthUi)
                         {
-                            if (!showingHealthUi)
-                            {
-                                UIPatches.stancePanel.AnimatedShow(false);
-                                UIPatches.healthPanel.AnimatedShow(false);
-                                //if (UIPatches.quickSlotUi)
-                                //    UIPatches.quickSlotUi.active = true;
-                                showingHealthUi = true;
-                            }
-
-                        }
-                        else if (showingHealthUi)
-                        {
-                            UIPatches.stancePanel.AnimatedHide();
-                            UIPatches.healthPanel.AnimatedHide();
+                            UIPatches.stancePanel.AnimatedShow(false);
+                            UIPatches.healthPanel.AnimatedShow(false);
                             //if (UIPatches.quickSlotUi)
-                            //    UIPatches.quickSlotUi.active = false;
-                            showingHealthUi = false;
+                            //    UIPatches.quickSlotUi.active = true;
+                            showingHealthUi = true;
                         }
+
                     }
-                    if (UIPatches.extractionTimerUi)
+                    else if (showingHealthUi)
                     {
-                        RaycastHit hit;
-                        LayerMask mask = 1 << 7;
-                        if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * 1, out hit, 2, mask) && hit.collider.name == "camHolder")
-                        {
-                            if (!showingExtractionUi)
-                            {
-                                UIPatches.extractionTimerUi.Reveal();
-                                UIPatches.extractionTimerUi.ShowTimer(true, true);
-                                showingExtractionUi = true;
-                            }
-                        }
-                        else if (showingExtractionUi)
-                        {
-                            UIPatches.extractionTimerUi.Hide();
-                            showingExtractionUi = false;
-                        }
+                        UIPatches.stancePanel.AnimatedHide();
+                        UIPatches.healthPanel.AnimatedHide();
+                        //if (UIPatches.quickSlotUi)
+                        //    UIPatches.quickSlotUi.active = false;
+                        showingHealthUi = false;
                     }
                 }
-                if (isSupporting && showingHealthUi) {
-                    UIPatches.stancePanel.AnimatedHide();
-                    UIPatches.healthPanel.AnimatedHide();
-                    showingHealthUi = false;
+                if (UIPatches.extractionTimerUi)
+                {
+                    RaycastHit hit;
+                    LayerMask mask = 1 << 7;
+                    if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * 1, out hit, 2, mask) && hit.collider.name == "camHolder")
+                    {
+                        if (!showingExtractionUi)
+                        {
+                            UIPatches.extractionTimerUi.Reveal();
+                            UIPatches.extractionTimerUi.ShowTimer(true, true);
+                            showingExtractionUi = true;
+                        }
+                    }
+                    else if (showingExtractionUi)
+                    {
+                        UIPatches.extractionTimerUi.Hide();
+                        showingExtractionUi = false;
+                    }
                 }
-                if (isSupporting && showingExtractionUi) { 
-                    UIPatches.extractionTimerUi.Reveal();
-                    showingExtractionUi = false;
-                }
+            }
+            if (isSupporting && showingHealthUi) {
+                UIPatches.stancePanel.AnimatedHide();
+                UIPatches.healthPanel.AnimatedHide();
+                showingHealthUi = false;
+            }
+            if (isSupporting && showingExtractionUi) { 
+                UIPatches.extractionTimerUi.Reveal();
+                showingExtractionUi = false;
             }
         }
 

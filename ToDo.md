@@ -1,0 +1,29 @@
+- Fix bug withs amanadsgraphics
+- Fix bug with quest bots/donuts
+- Look into fixing DLSS for VR
+- Prevent arms from doing the jump and sprint animations
+- Look at how the raycast works for filing cabinets
+- Fix the submenu items on the flea market not being selectable
+- Fix https://escapefromtarkov.fandom.com/wiki/Valday_PS-320_1/6x_scope
+- Fix SKS and Peacekeeper shotgun mesh highlighter
+- Try and dial in the two handed weapon handling
+- Apply offset rotation setting to left hand as well - Causing issues so im leaving it for now
+- Fix bug when going DISCONNECT from raid then clicking BACK, doesn't return view to in game cam
+- Specter DR scoppe not working
+- TAO1NSN not working
+- Fix inv bug with holding trigger just at the drag item threshold
+- Fix issue with haviing steam overlay open when loading into raid hiding inv
+- mosin iron sights going black?
+- In task view menu there is some other text under the UI - FIXED
+- Weapons sometimes spazes out when two handing and would stop when moving the gun away from the player
+- when you physically rotate your body angle looks all fucky
+- When loading mags, some of the UI rotates around
+- Camera is black when Quest overlay is open when loading in - FIXED
+- Change scope zoom change to holding right grip so you can crouch/jump/standup while aiming, then disable mesh highlighting will aiming - DONE
+- Fix aim culling - DONE
+- BeforeGBuffer WindowsCull_FPS Camera command buffers rendering window light in one eye
+- Fix distant shadows - FIXED
+- Added option to disable sharpening, adds a small layer of blur to things but helps hide some of the jaggies - DONE
+- Fix bug with body automatically rotating when looking around and it rotates to match the camera, rotates back, then rotates back to the camera again - DONE
+- Rotate body to match camera when aiming while two handing - DONE
+- Fix two handing right hand rotation values changing when rotating around

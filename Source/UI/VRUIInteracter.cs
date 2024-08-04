@@ -15,6 +15,7 @@ namespace TarkovVR.Source.UI
     {
 
         private float rayDistance = 100f;
+        private static float DRAG_TRIGGER_THRESHOLD = 0.5f;
 
         private PointerEventData eventData;
         public GameObject lastHighlightedObject;
@@ -165,7 +166,7 @@ namespace TarkovVR.Source.UI
         {
             // Use pressedObject to ensure that the object the user is trying to drag is the one they have selected,
             // not an object they selected then moved off from.
-            if (SteamVR_Actions._default.RightTrigger.axis > 0.7)
+            if (SteamVR_Actions._default.RightTrigger.axis > DRAG_TRIGGER_THRESHOLD)
             {
                 if (dragObject == null)
                 {

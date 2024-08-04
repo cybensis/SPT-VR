@@ -29,9 +29,13 @@ namespace TarkovVR.Source.Settings
             public float rightStickDriftSensitivity { get; set; }
             public MovementMode movementType { get; set; }
             public bool weaponAimSmoothing { get; set; }
+            public bool snapToGun { get; set; }
+            public bool supportGunHoldToggle { get; set; }
             public int smoothingSensitivity { get; set; }
 
             public bool scopeAimSmoothing { get; set; }
+            public bool enableSharpen { get; set; }
+            public int oneHandingWeaponAngle { get; set; }
 
 
             public ModSettings()
@@ -42,7 +46,11 @@ namespace TarkovVR.Source.Settings
                 movementType = MovementMode.HeadBased;
                 weaponAimSmoothing = false;
                 scopeAimSmoothing = true;
+                snapToGun = true;
+                supportGunHoldToggle = false;
                 smoothingSensitivity = 1;
+                oneHandingWeaponAngle = 50;
+                enableSharpen = true;
             }
             // Add more settings as needed
         }
@@ -54,9 +62,13 @@ namespace TarkovVR.Source.Settings
         private static SettingSelectSlider leftStickDriftSlider;
         private static SettingSelectSlider rightStickDriftSlider;
         private static SettingDropDown movementMethod;
+        private static SettingToggle sharpenToggle;
         private static SettingToggle aimSmoothingToggle;
+        private static SettingToggle snapToGunToggle;
+        private static SettingToggle supportGunHoldToggle;
         private static SettingSelectSlider aimSmoothingSlider;
         private static SettingToggle scopeSmoothingToggle;
+        private static SettingSelectSlider oneHandingWeaponAngleSlider;
 
 
         private static ModSettings settings;
@@ -158,6 +170,24 @@ namespace TarkovVR.Source.Settings
             movementMethod.transform.localPosition = new Vector3(300, -250, 0);
 
 
+            sharpenToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            sharpenToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
+            sharpenToggle.Toggle.action_0 = SetSharpen;
+            sharpenToggle.Text.localizationKey = "Enable Sharpen ";
+            sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);
+
+            snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            snapToGunToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
+            snapToGunToggle.Toggle.action_0 = SetSnapToGun;
+            snapToGunToggle.Text.localizationKey = "Toggle Left Hand Snap To Weapon ";
+            snapToGunToggle.Toggle.UpdateValue(settings.snapToGun);
+
+            supportGunHoldToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            supportGunHoldToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
+            supportGunHoldToggle.Toggle.action_0 = SetSupportGunHoldToggle;
+            supportGunHoldToggle.Text.localizationKey = "Toggle Hold Grip For Two Handing ";
+            supportGunHoldToggle.Toggle.UpdateValue(settings.supportGunHoldToggle);
+
             scopeSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             scopeSmoothingToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
             scopeSmoothingToggle.Toggle.action_0 = ToggleScopeSmoothingSensitivity;
@@ -176,9 +206,15 @@ namespace TarkovVR.Source.Settings
             aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             aimSmoothingSlider.Slider.action_0 = SetSmoothingSensitivity;
             aimSmoothingSlider.Text.localizationKey = "Aim Smoothing Sensitivity:";
-            aimSmoothingSlider.Slider.UpdateValue(settings.smoothingSensitivity);
+            aimSmoothingSlider.Slider.UpdateValue(11 - (settings.smoothingSensitivity / 2));
             aimSmoothingSlider.transform.localPosition = new Vector3(0, -440, 0);
 
+            oneHandingWeaponAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            oneHandingWeaponAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            oneHandingWeaponAngleSlider.Slider.action_0 = SetWeaponAngleOffset;
+            oneHandingWeaponAngleSlider.Text.localizationKey = "One handed weapon rotation offset:";
+            oneHandingWeaponAngleSlider.Slider.UpdateValue(settings.oneHandingWeaponAngle / 10);
+            oneHandingWeaponAngleSlider.transform.localPosition = new Vector3(0, -490, 0);
 
 
             vrSettingsObject = newSoundSettings.gameObject;
@@ -267,6 +303,56 @@ namespace TarkovVR.Source.Settings
         public static MovementMode GetMovementMode()
         {
             return settings.movementType;
+        }
+
+
+        public static int GetWeaponAngleOffset()
+        {
+            return settings.oneHandingWeaponAngle;
+        }
+        private static void SetWeaponAngleOffset(int offset)
+        {
+            settings.oneHandingWeaponAngle = offset * 10;
+        }
+
+        public static bool GetSnapToGun()
+        {
+            return settings.snapToGun;
+        }
+        private static void SetSnapToGun(bool turnOn)
+        {
+            settings.snapToGun = turnOn;
+        }
+
+        public static bool GetSupportGunHoldToggle()
+        {
+            return settings.snapToGun;
+        }
+        private static void SetSupportGunHoldToggle(bool turnOn)
+        {
+            settings.supportGunHoldToggle = turnOn;
+        }
+
+        private static void SetSharpen(bool on)
+        {
+            if (on && VRGlobals.VRCam)
+            {
+                CC_Sharpen sharpen = VRGlobals.VRCam.GetComponent<CC_Sharpen>();
+                if (sharpen != null)
+                    sharpen.enabled = true;
+            }
+            else if (!on && VRGlobals.VRCam)
+            {
+                CC_Sharpen sharpen = VRGlobals.VRCam.GetComponent<CC_Sharpen>();
+                if (sharpen != null)
+                    sharpen.enabled = false;
+            }
+            settings.enableSharpen = on;
+        }
+
+        public static bool GetSharpenOn()
+        {
+            return settings.enableSharpen;
         }
     }
 }

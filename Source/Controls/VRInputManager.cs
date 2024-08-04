@@ -36,6 +36,7 @@ namespace TarkovVR.Source.Controls
                 { ECommand.ExamineWeapon, new InputHandlers.ExamineWeaponHandler() },
                 { ECommand.NextWalkPose, new InputHandlers.CrouchHandler() },
                 { ECommand.ToggleProne, new InputHandlers.ProneInputHandler() },
+                { ECommand.LeftStanceToggle, new InputHandlers.ResetHeightHandler() },
                 // Add other command handlers here
             };
             menuInputHandlers = new Dictionary<ECommand, IInputHandler>

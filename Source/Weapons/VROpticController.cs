@@ -41,9 +41,10 @@ namespace TarkovVR.Source.Weapons
 
 
         public void handleJoystickZoomDial() {
-            if (scopeCamera && SteamVR_Actions._default.RightJoystick.axis.y > VRSettings.GetRightStickSensitivity())
+            if (scopeCamera && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > VRSettings.GetRightStickSensitivity())
             {
                 currentFov -= SteamVR_Actions._default.RightJoystick.axis.y / 2;
+
                 currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
                 if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 || scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
                     if (scopeZoomHandler != null)

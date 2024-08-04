@@ -43,6 +43,7 @@ using System.Runtime.InteropServices;
 using UnityEngine.UI;
 using TarkovVR.Source.Settings;
 using static EFT.BaseLocalGame<EFT.HideoutPlayerOwner>;
+using EFT.UI.Matchmaker;
 
 
 
@@ -234,12 +235,15 @@ namespace TarkovVR.Patches.Misc
                     BoxCollider menuCollider = menuUIObject.gameObject.AddComponent<BoxCollider>();
                     menuCollider.extents = new Vector3(2560, 1440, 0.5f);
                 }
-                // Someetimes when coming out of a raid the colliders bounds is way off so fix it here,
-                else {
-                    BoxCollider menuCollider = menuUIObject.gameObject.AddComponent<BoxCollider>();
-                    menuCollider.center = Vector3.zero;
-                    menuCollider.enabled = false;
-                    menuCollider.enabled = true;
+                else if (!VRGlobals.inGame) {
+                    // Someetimes when coming out of a raid the colliders bounds is way off so fix it here,
+                    PreloaderUI.Instance.WaitOneFrame(delegate {
+                        BoxCollider menuCollider = menuUIObject.gameObject.GetComponent<BoxCollider>();
+                        menuCollider.enabled = false;
+                        menuCollider.enabled = true;
+                        menuCollider.center = Vector3.zero;
+                    });
+
                 }
 
                 //3.4132 1.9199 0.0007
@@ -1119,7 +1123,6 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(Class1386), "method_1")]
         private static bool SetUiOnExtractOrDeath(Class1386 __instance)
         {
-
             if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
                 return true;
             if (UIPatches.notifierUi != null)
@@ -1147,7 +1150,6 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386), "method_1")]
         private static bool SetUiOnExtractOrDeath(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386 __instance)
         {
-
             if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
                 return true;
 
@@ -1176,7 +1178,6 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386), "method_0")]
         private static bool SetUiOnExtractOrDeawth(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386 __instance)
         {
-
             if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
                 return true;
             if (UIPatches.notifierUi != null)
@@ -1196,6 +1197,7 @@ namespace TarkovVR.Patches.Misc
             PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
             VRGlobals.inGame = false;
             VRGlobals.menuOpen = true;
+
             PositionMainMenuUi();
             return true;
         }
@@ -1302,6 +1304,7 @@ namespace TarkovVR.Patches.Misc
         private static void SaveVRSettings(SettingsScreen __instance)
         {
             VRSettings.SaveSettings();
+            Camera.main.farClipPlane = 1000f;
         }
 
         [HarmonyPostfix]
@@ -1312,8 +1315,25 @@ namespace TarkovVR.Patches.Misc
                 VRSettings.ShowVRSettings();
 
             Camera.main.useOcclusionCulling = false;
+            Camera.main.farClipPlane = 1000f;
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(RaidSettingsWindow), "Show")]
+        private static void SaveVRSettings(RaidSettingsWindow __instance)
+        {
+            __instance.transform.localPosition = new Vector3(0, 520, 0);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TasksScreen), "Show")]
+        private static void HideDefaultTaskDesc(TasksScreen __instance)
+        {
+            __instance._notesTaskDescription.active = false;
         }
     }
+
 }
 
 

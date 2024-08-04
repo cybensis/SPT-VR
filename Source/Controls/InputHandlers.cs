@@ -1,5 +1,7 @@
-﻿using EFT.InputSystem;
+﻿using EFT;
+using EFT.InputSystem;
 using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -62,20 +64,89 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class ProneInputHandler : IInputHandler
         {
+            float timeHeld = 0f;
+            private static float MIN_TIME_BEETWEEN_PRESSES = 1f;
+            float timeSinceLastPress = 0;
             public void UpdateCommand(ref ECommand command)
             {
-                if ( SteamVR_Actions._default.ClickRightJoystick.stateDown)
+                if (VRGlobals.player is HideoutPlayer)
+                    return;
+                if (SteamVR_Actions._default.ClickRightJoystick.stateUp && timeHeld < ResetHeightHandler.HEIGH_RESET_TIME_THRESHOLD && Time.time - timeSinceLastPress > MIN_TIME_BEETWEEN_PRESSES)
                 {
                     command = ECommand.ToggleProne;
-                    if (!VRGlobals.player.IsInPronePose)
+                    timeSinceLastPress = Time.time;
+                    if (!VRGlobals.player.IsInPronePose && VRGlobals.player.MovementContext.CanProne)
                         VRGlobals.vrPlayer.crouchHeightDiff = 1.3f;
-                    else
+                    else if (VRGlobals.player.IsInPronePose && VRGlobals.player.MovementContext.CanStandAt(VRGlobals.player.MovementContext.PoseLevel) && VRGlobals.player.MovementContext.CanSit)
                         VRGlobals.vrPlayer.crouchHeightDiff = 0f;
 
                 }
+                if (SteamVR_Actions._default.ClickRightJoystick.state)
+                    timeHeld += Time.deltaTime;
+                else
+                    timeHeld = 0f;
             }
         }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class ResetHeightHandler : IInputHandler
+        {
+            float timeHeld = 0f;
+            public static float HEIGH_RESET_TIME_THRESHOLD = 0.5f;
+            public static float ARM_SCALING_BASE_PLAYER_HEIGHT = 1.4147f;
+            public static float FOREARM_BASE_LENGTH = 1.15f;
+            private Transform leftForearm;
+            private Transform rightForearm;
+            private bool heightReset = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (!leftForearm || !rightForearm)
+                    return;
 
+                if (SteamVR_Actions._default.ClickRightJoystick.state && !heightReset)
+                {
+                    timeHeld += Time.deltaTime;
+                    if (timeHeld > HEIGH_RESET_TIME_THRESHOLD)
+                    {
+                        VRGlobals.vrPlayer.initPos = Camera.main.transform.localPosition;
+                        float heightDiffScale = (VRGlobals.vrPlayer.initPos.y / ARM_SCALING_BASE_PLAYER_HEIGHT);
+                        heightDiffScale += (1 - heightDiffScale) * 0.5f;
+                        Vector3 forearmLength = new Vector3(heightDiffScale, 1, 1) * FOREARM_BASE_LENGTH;
+
+
+                        Transform leftForearmCounterObj = leftForearm.GetChild(0);
+                        Transform rightForearmCounterObj = rightForearm.GetChild(0);
+                        // Calculate the inverse scale for forearm1
+                        Vector3 forearmInverseScale = new Vector3(
+                            1 / forearmLength.x,
+                            1 / forearmLength.y,
+                            1 / forearmLength.z
+                        );
+
+                        // Apply the inverse scale to forearm1
+                        leftForearmCounterObj.localScale = forearmInverseScale;
+                        rightForearmCounterObj.localScale = forearmInverseScale;
+
+                        leftForearm.transform.localScale = forearmLength;
+                        rightForearm.transform.localScale = forearmLength;
+
+                        heightReset = true;
+                    }
+                }
+                else { 
+                    timeHeld = 0f;
+                    heightReset = false;
+                }
+            }
+
+            public void SetRightArmTransform(Transform rightForearm)
+            {
+                this.rightForearm = rightForearm;
+            }
+            public void SetLeftArmTransform(Transform leftForearm)
+            {
+                this.leftForearm = leftForearm;
+            }
+        }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class SprintInputHandler : IInputHandler
         {
@@ -143,9 +214,7 @@ namespace TarkovVR.Source.Controls
                     float angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward * -1, directionToScope);
                     float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
                     if (!isAiming && angleToScope <= 25f && angleFromScope <= 25f)
-                    {
                         command = ECommand.ToggleAlternativeShooting;
-                    }
                     else if (isAiming && (angleToScope > 25f || angleFromScope > 25f))
                     {
                         command = ECommand.EndAlternativeShooting;
@@ -159,16 +228,17 @@ namespace TarkovVR.Source.Controls
                     float angleToScope = Vector3.Angle(direction, directionToGun);
                     float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToGun);
                     if (!isAiming && angleToScope <= 20f && angleFromScope <= 25f)
-                    {
                         command = ECommand.ToggleAlternativeShooting;
-                    }
                     else if (isAiming && (angleToScope > 20f || angleFromScope > 25f))
                     {
                         command = ECommand.EndAlternativeShooting;
                         VRPlayerManager.smoothingFactor = 50f;
                     }
                 }
- 
+
+                if (command == ECommand.ToggleAlternativeShooting && VRGlobals.vrPlayer.isSupporting)
+                        VRGlobals.player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -470,7 +540,7 @@ namespace TarkovVR.Source.Controls
             {
                 if (SteamVR_Actions._default.ButtonX.GetStateUp(SteamVR_Input_Sources.Any))
                     command = ECommand.Escape;
-                else if (VRGlobals.menuOpen && SteamVR_Actions._default.ButtonB.GetStateUp(SteamVR_Input_Sources.Any))
+                else if ((VRGlobals.menuOpen || !VRGlobals.inGame) && SteamVR_Actions._default.ButtonB.GetStateUp(SteamVR_Input_Sources.Any))
                     command = ECommand.Escape;
             }
         }

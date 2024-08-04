@@ -22,6 +22,10 @@ using System.Threading.Tasks;
 using UnityEngine.Profiling;
 using UnityEngine.UIElements.UIR;
 using EFT.UI.Screens;
+using System.Linq;
+using Valve.VR;
+using System.Reflection.Emit;
+using Comfort.Common;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -81,7 +85,8 @@ namespace TarkovVR.Patches.UI
             VRGlobals.vrPlayer.PositionLeftWristUi();
         }
 
-        public static void PositionGameUi(GameUI __instance) {
+        public static void PositionGameUi(GameUI __instance)
+        {
             __instance.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
             __instance.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
             stancePanel = battleScreenUi._battleStancePanel;
@@ -90,7 +95,7 @@ namespace TarkovVR.Patches.UI
 
             healthPanel = battleScreenUi._characterHealthPanel;
             healthPanel.transform.localScale = new Vector3(0.20f, 0.20f, 0.20f);
-            
+
             __instance.transform.parent = VRGlobals.camRoot.transform;
             __instance.transform.localPosition = Vector3.zero;
             __instance.transform.localRotation = Quaternion.identity;
@@ -118,7 +123,7 @@ namespace TarkovVR.Patches.UI
             }
         }
 
-        
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ItemsPanel), "Show")]
         private static void FixInventoryAfterRaid(ItemsPanel __instance, ItemContextAbstractClass sourceContext, LootItemClass lootItem, ISession session, InventoryControllerClass inventoryController, IHealthController health, Profile profile, InsuranceCompanyClass insurance, EquipmentBuildsStorageClass buildsStorage, EItemsTab currentTab, bool inRaid, Task __result)
@@ -166,14 +171,15 @@ namespace TarkovVR.Patches.UI
             VRGlobals.commonUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
             VRGlobals.commonUi.localPosition = new Vector3(-0.8f, -0.5f - VRGlobals.vrPlayer.crouchHeightDiff, 0.8f);
             VRGlobals.commonUi.localEulerAngles = Vector3.zero;
-            if (VRGlobals.preloaderUi) {
+            if (VRGlobals.preloaderUi)
+            {
 
                 VRGlobals.preloaderUi.transform.parent = VRGlobals.camRoot.transform;
                 VRGlobals.preloaderUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
                 VRGlobals.preloaderUi.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
 
                 VRGlobals.preloaderUi.localPosition = new Vector3(-0.03f, -0.1f - VRGlobals.vrPlayer.crouchHeightDiff, 0.8f);
-                
+
                 VRGlobals.preloaderUi.localRotation = Quaternion.identity;
 
                 if (UIPatches.notifierUi)
@@ -266,8 +272,8 @@ namespace TarkovVR.Patches.UI
         // When in hideout the stash panel also gets shown which causes the UI to reposition/rotate so only rely
         // on this patch if its in raid, for hideout use PositionInHideoutInventory()
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(ItemsPanel), "Show")]
-        private static void PositionInRaidInventory(ItemsPanel __instance)
+        [HarmonyPatch(typeof(GClass3087), "Show")]
+        private static void PositionInRaidInventory(GClass3087 __instance)
         {
             // Dont open inv if not in game, player is in hideout, game player isn't set and the menu isn't already open
             if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager || !VRGlobals.player || VRGlobals.menuOpen)
@@ -277,7 +283,17 @@ namespace TarkovVR.Patches.UI
 
         }
 
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(OverallScreen), "Show")]
+        //private static void PositionInRaidOverallInvScreen(OverallScreen __instance)
+        //{
+        //    // Dont open inv if not in game, player is in hideout, game player isn't set and the menu isn't already open
+        //    if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager || !VRGlobals.player || VRGlobals.menuOpen)
+        //        return;
 
+        //    HandleOpenInventory();
+
+        //}
 
 
         // If the canvas roots rotation isn't 0,0,0 the grid/slot items display on an angle
@@ -296,13 +312,13 @@ namespace TarkovVR.Patches.UI
             __instance.itemView_0.transform.localEulerAngles = Vector3.zero;
             __instance.itemView_0.MainImage.transform.localEulerAngles = new Vector3(0, 0, __instance.itemView_0.MainImage.transform.localEulerAngles.z);
         }
-    
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ModSlotView), "Show")]
         private static void PreventOffAxisModSlotItemsViews(ModSlotView __instance)
         {
             __instance.transform.localEulerAngles = Vector3.zero;
-            
+
         }
 
         [HarmonyPostfix]
@@ -510,7 +526,8 @@ namespace TarkovVR.Patches.UI
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BannerPageToggle), "Init")]
-        private static void PositionLoadRaidBannerToggles(BannerPageToggle __instance) {
+        private static void PositionLoadRaidBannerToggles(BannerPageToggle __instance)
+        {
             __instance.transform.localScale = Vector3.one;
             Vector3 newPos = __instance.transform.localPosition;
             newPos.z = 0;
@@ -526,7 +543,8 @@ namespace TarkovVR.Patches.UI
                 camHolder.GetComponent<Camera>().fieldOfView = 20;
         }
 
-        public static void HideUiScreens() {
+        public static void HideUiScreens()
+        {
             if (VRGlobals.menuUi)
                 VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
             VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = false;
@@ -545,7 +563,8 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(OpticCratePanel), "Show")]
         private static void SetAmmoCountUi(OpticCratePanel __instance)
         {
-            if (VRGlobals.vrPlayer) {
+            if (VRGlobals.vrPlayer)
+            {
                 VRGlobals.vrPlayer.showScopeZoom = true;
             }
         }
@@ -569,7 +588,8 @@ namespace TarkovVR.Patches.UI
         private static void SetFireModeUi(AmmoCountPanel __instance)
         {
             __instance.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
-            if (VRGlobals.vrPlayer) { 
+            if (VRGlobals.vrPlayer)
+            {
                 VRGlobals.vrPlayer.SetAmmoFireModeUi(__instance.transform, false);
                 showAgain = true;
             }
@@ -579,12 +599,14 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(BattleUIComponentAnimation), "Hide")]
         private static bool HideFireModeUi(BattleUIComponentAnimation __instance, ref float delaySeconds)
         {
-            showAgain = false ;
-            if (__instance.name == "AmmoPanel" && VRGlobals.vrPlayer) {
+            showAgain = false;
+            if (__instance.name == "AmmoPanel" && VRGlobals.vrPlayer)
+            {
                 delaySeconds = 5f;
                 __instance.WaitSeconds(delaySeconds + 2, () => { if (!showAgain) VRGlobals.vrPlayer.SetAmmoFireModeUi(null, false); });
             }
-            else if (__instance.name == "OpticCratePanel" && VRGlobals.vrPlayer) { 
+            else if (__instance.name == "OpticCratePanel" && VRGlobals.vrPlayer)
+            {
                 __instance.WaitSeconds(delaySeconds + 2, () => { if (!showAgain) VRGlobals.vrPlayer.showScopeZoom = false; });
             }
             return true;
@@ -602,7 +624,8 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(Tooltip), "method_0")]
         private static bool PositionToolTips(SimpleTooltip __instance, Vector2 position)
         {
-            if (MenuPatches.vrUiInteracter) {
+            if (MenuPatches.vrUiInteracter)
+            {
                 __instance._mainTransform.position = MenuPatches.vrUiInteracter.uiPointerPos;
                 return false;
             }
@@ -614,11 +637,12 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(OfferView), "method_10")]
         private static void ActivateTooltipHoverArea(OfferView __instance)
         {
-            if (__instance.Offer_0.Locked) { 
+            if (__instance.Offer_0.Locked)
+            {
                 __instance._hoverTooltipArea.gameObject.active = true;
                 // The hover area is constantly regenerated which means we need to run another OnEnter function
                 // but we need to set the last object to null so it knows its different
-                if (MenuPatches.vrUiInteracter.lastHighlightedObject == __instance._hoverTooltipArea.gameObject) 
+                if (MenuPatches.vrUiInteracter.lastHighlightedObject == __instance._hoverTooltipArea.gameObject)
                     MenuPatches.vrUiInteracter.lastHighlightedObject = null;
             }
         }
@@ -631,7 +655,6 @@ namespace TarkovVR.Patches.UI
         {
             SetLocalZToZeroRecursively(__instance.gameObject);
         }
-
         static private void SetLocalZToZeroRecursively(GameObject current)
         {
             foreach (Transform child in current.transform)
@@ -645,5 +668,184 @@ namespace TarkovVR.Patches.UI
                 SetLocalZToZeroRecursively(child.gameObject);
             }
         }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GridView), "AcceptItem")]
+        private static bool FixAcceptItem(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, ref Task __result)
+        {
+            // Modify the flag argument based on your logic
+            bool flag = SteamVR_Actions._default.RightGrip.state;
+
+            // Call the original method with the modified flag
+            __result = AcceptItemModified(__instance, itemContext, targetItemContext, flag);
+
+            // Skip the original method
+            return false;
+        }
+
+        private static async Task AcceptItemModified(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, bool flag)
+        {
+            // Your modified version of the AcceptItem method
+            if (!__instance.CanAccept(itemContext, targetItemContext, out var operation) || !(await GClass3104.TryShowDestroyItemsDialog(operation.Value)))
+            {
+                return;
+            }
+            if (itemContext.Item is BulletClass ammo)
+            {
+                Item item = __instance.method_8(targetItemContext);
+                if (item != null)
+                {
+                    if (item is MagazineClass magazineClass)
+                    {
+                        MagazineClass magazineClass2 = magazineClass;
+                        int loadCount = GridView.smethod_0(magazineClass2, ammo);
+                        __instance.traderControllerClass.LoadMagazine(ammo, magazineClass2, loadCount).HandleExceptions();
+                        return;
+                    }
+                    if (item is Weapon weapon)
+                    {
+                        Weapon weapon2 = weapon;
+                        if (weapon2.SupportsInternalReload)
+                        {
+                            MagazineClass currentMagazine = weapon2.GetCurrentMagazine();
+                            if (currentMagazine != null)
+                            {
+                                int num = GridView.smethod_0(currentMagazine, ammo);
+                                if (num != 0)
+                                {
+                                    __instance.traderControllerClass.LoadWeaponWithAmmo(weapon2, ammo, num).HandleExceptions();
+                                    return;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Weapon weapon3 = weapon;
+                            if (weapon3.IsMultiBarrel)
+                            {
+                                int ammoCount = GridView.smethod_1(weapon3, ammo);
+                                __instance.traderControllerClass.LoadMultiBarrelWeapon(weapon3, ammo, ammoCount).HandleExceptions();
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!operation.Failed && __instance.traderControllerClass.CanExecute(operation.Value))
+            {
+                IRaiseEvents value = operation.Value;
+                if (value == null)
+                {
+                    goto IL_0327;
+                }
+                if (!(value is GClass2811 gClass))
+                {
+                    if (!(value is GClass2812 gClass2))
+                    {
+                        goto IL_0327;
+                    }
+                    GClass2812 gClass3 = gClass2;
+                    itemContext.DragCancelled();
+                    if (gClass3.Count > 1 && flag)
+                    {
+                        __instance.itemUiContext_0.SplitDialog.Show(GClass1868.Localized("Transfer"), gClass3.Count, itemContext.CursorPosition, delegate (int count)
+                        {
+                            __instance.itemUiContext_0.SplitDialog.Hide();
+                            __instance.traderControllerClass.TryRunNetworkTransaction(gClass3.ExecuteWithNewCount(count, simulate: true));
+                        }, delegate
+                        {
+                            __instance.itemUiContext_0.SplitDialog.Hide();
+                        });
+                    }
+                    else
+                    {
+                        __instance.traderControllerClass.RunNetworkTransaction(gClass3);
+                    }
+                }
+                else
+                {
+                    GClass2811 gClass4 = gClass;
+                    itemContext.DragCancelled();
+                    if (gClass4.Count > 1 && flag)
+                    {
+                        __instance.itemUiContext_0.SplitDialog.Show(GClass1868.Localized("Split"), gClass4.Count, itemContext.CursorPosition, delegate (int count)
+                        {
+                            __instance.itemUiContext_0.SplitDialog.Hide();
+                            gClass4.ExecuteWithNewCount(__instance.traderControllerClass, count);
+                        }, delegate
+                        {
+                            __instance.itemUiContext_0.SplitDialog.Hide();
+                        });
+                    }
+                    else
+                    {
+                        __instance.traderControllerClass.RunNetworkTransaction(gClass4);
+                    }
+                }
+                goto IL_033e;
+            }
+            itemContext.DragCancelled();
+            return;
+        IL_0327:
+            __instance.traderControllerClass.RunNetworkTransaction(operation.Value);
+            goto IL_033e;
+        IL_033e:
+            ItemUiContext.PlayOperationSound(itemContext.Item, operation.Value);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GridView), "CanAccept")]
+        private static bool FixCanAccept(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, out GStruct413 operation, ref bool __result)
+        {
+            if (!__instance.SourceContext.DragAvailable)
+            {
+                operation = new GClass3317(itemContext.Item);
+                return false;
+            }
+            operation = default(GStruct413);
+            if (__instance.Grid == null)
+            {
+                return false;
+            }
+            if (__instance._nonInteractable)
+            {
+                return false;
+            }
+            Item item = itemContext.Item;
+            LocationInGrid locationInGrid = __instance.CalculateItemLocation(itemContext);
+            Item item2 = __instance.method_8(targetItemContext);
+            ItemAddressClass itemAddressClass = new ItemAddressClass(__instance.Grid, locationInGrid);
+            ItemAddress itemAddress = itemContext.ItemAddress;
+            if (itemAddress == null)
+            {
+                return false;
+            }
+            if (targetItemContext != null && !targetItemContext.ModificationAvailable)
+            {
+                operation = new StashGridClass.GClass3315(__instance.Grid);
+                return false;
+            }
+            if (itemAddress.Container == __instance.Grid && __instance.Grid.GetItemLocation(item) == locationInGrid)
+            {
+                return false;
+            }
+            bool partialTransferOnly = SteamVR_Actions._default.RightGrip.state;
+            if (!item.CheckAction(itemAddressClass))
+            {
+                return false;
+            }
+            operation = ((item2 != null) ? __instance.traderControllerClass.ExecutePossibleAction(itemContext, item2, partialTransferOnly, simulate: true) : __instance.traderControllerClass.ExecutePossibleAction(itemContext, __instance.SourceContext, itemAddressClass, partialTransferOnly, simulate: true));
+            __result = operation.Succeeded;
+
+            return false;
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SplitDialog), "Show", new Type[] { typeof(string), typeof(int), typeof(Vector2), typeof(Action<int>), typeof(Action), typeof(SplitDialog.ESplitDialogType) })]
+        private static void RepositionSplitWindow(SplitDialog __instance)
+        {
+
+            __instance._window.localPosition = Vector3.zero;
+        }
     }
+
 }
