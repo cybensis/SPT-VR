@@ -339,14 +339,11 @@ namespace TarkovVR.Patches.Core.Player
                         //        currentGunInteractController.SetFireModeSwitch(weaponMeshRoot.FindChildRecursive(firingModeSwitch));
                         //}
                     }
-                    if (__instance.weaponPrefab_0)
+                    if (__instance.weaponManagerClass != null && __instance.weaponManagerClass.tacticalComboVisualController_0 != null)
                     {
-                        if (__instance.weaponPrefab_0.gunShadowDisabler_0 != null)
+                        for (int i = 0; i < __instance.weaponManagerClass.tacticalComboVisualController_0.Length; i++)
                         {
-                            for (int i = 0; i < __instance.weaponPrefab_0.gunShadowDisabler_0.Length; i++)
-                            {
-                                currentGunInteractController.AddTacticalDevice(__instance.weaponPrefab_0.gunShadowDisabler_0[i].transform, __instance.FirearmsAnimator);
-                            }
+                            currentGunInteractController.AddTacticalDevice(__instance.weaponManagerClass.tacticalComboVisualController_0[i].transform, __instance.FirearmsAnimator);
                         }
                     }
 

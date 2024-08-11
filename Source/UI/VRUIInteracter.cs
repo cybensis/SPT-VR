@@ -107,18 +107,16 @@ namespace TarkovVR.Source.UI
 
         private void handleButtonClick(Vector2 hitPoint)
         {
-            if (hitObject.transform.parent && hitObject.transform.parent.GetComponent<CategoryView>())
-            {
-                hitObject = hitObject.transform.parent.GetComponent<CategoryView>()._toggle.gameObject;
-            }
+            if (hitObject.transform.parent && hitObject.transform.parent && hitObject.name == "Toggle" && hitObject.transform.parent.parent.GetComponent<CategoryView>())
+                hitObject = hitObject.transform.parent.parent.GetComponent<CategoryView>()._toggle.gameObject;
             else if (hitObject.transform.parent && hitObject.transform.parent.GetComponent<SubcategoryView>())
-            {
                 hitObject = hitObject.transform.parent.gameObject;
-            }
+            else if (hitObject.transform.parent && hitObject.name == "Main" && hitObject.transform.parent.GetComponent<CategoryView>())
+                hitObject = hitObject.transform.parent.gameObject;
+
+
             if (SteamVR_Actions._default.ButtonA.stateDown)
-            {
                 pressedObject = hitObject;
-            }
 
             if (SteamVR_Actions._default.ButtonA.state)
             {

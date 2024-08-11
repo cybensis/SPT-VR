@@ -32,7 +32,7 @@ public class GunInteractionController : MonoBehaviour
     private List<Class559> meshList;
     private List<Class559> malfunctionMeshList;
     private HighLightMesh meshHighlighter;
-    private bool hightlightingMesh = false;
+    public bool hightlightingMesh = false;
     private int boltIndex = -1;
     private bool initMalfunction = false;
     public bool hasExaminedAfterMalfunction = false;

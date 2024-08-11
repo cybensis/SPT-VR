@@ -140,7 +140,7 @@ namespace TarkovVR.Patches.Core.VR
                         axis[__instance.gclass1910_1[m].IntAxis] = 0;
                     else if (m == 2)
                     {
-                        if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < JUMP_OR_STAND_CLAMP_RANGE && !VRGlobals.blockRightJoystick && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > VRSettings.GetRightStickSensitivity())
+                        if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < JUMP_OR_STAND_CLAMP_RANGE && !VRGlobals.blockRightJoystick && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > VRSettings.GetRightStickSensitivity())
                             axis[__instance.gclass1910_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * VRSettings.GetRotationSensitivity();
                         else
                             axis[__instance.gclass1910_1[m].IntAxis] = 0;

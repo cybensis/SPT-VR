@@ -6,6 +6,7 @@ using System.Drawing.Printing;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using Valve.VR.InteractionSystem;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -56,6 +57,7 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
 
+        private static bool rotMatching = false;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass1718), "Rotate")]
         private static bool SetPlayerRotateOnProneMoving(GClass1718 __instance, ref Vector2 deltaRotation)
@@ -73,7 +75,22 @@ namespace TarkovVR.Patches.Core.Player
 
             return false;
         }
+        private static float CalculateYawDifference(float yawA, float yawB)
+        {
+            float difference = yawB - yawA;
 
+            // Normalize the difference to the range of -180 to 180 degrees
+            if (difference > 180)
+            {
+                difference -= 360;
+            }
+            else if (difference < -180)
+            {
+                difference += 360;
+            }
+
+            return difference;
+        }
         private static void GetBodyRotation(Vector3 bodyForward, ref Vector2 deltaRotation) {
             float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
             float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
@@ -81,31 +98,41 @@ namespace TarkovVR.Patches.Core.Player
 
             Vector3 cameraForward = Camera.main.transform.forward;
             float rotDiff = Vector3.SignedAngle(bodyForward, cameraForward, Vector3.up);
+
             float angleDifference = Camera.main.transform.eulerAngles.y - VRGlobals.player.Transform.rotation.eulerAngles.y;
             rotDiff = (angleDifference + 180) % 360 - 180;
+            rotDiff = CalculateYawDifference(Camera.main.transform.eulerAngles.y, VRGlobals.player.Transform.rotation.eulerAngles.y) * -1;
             Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
             // Normalize the angle to the range [-180, 180]
             float pitch = headEulerAngles.x;
             if (pitch > 180)
                 pitch -= 360;
 
-            if (leftJoystickUsed) {
+            if (leftJoystickUsed)
+            {
                 if (VRSettings.GetMovementMode() == VRSettings.MovementMode.HeadBased)
                     lastYRot = Camera.main.transform.eulerAngles.y;
                 else
                     lastYRot = VRGlobals.vrPlayer.leftHandYRotation + VRGlobals.vrOffsetter.transform.eulerAngles.y;
 
             }
-            
-            else if (SteamVR_Actions._default.RightJoystick.axis.x != 0)
+            else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) && SteamVR_Actions._default.RightJoystick.axis.x != 0)
                 lastYRot = VRGlobals.camRoot.transform.eulerAngles.y;
             // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 80 degrees, and if they haven't already rotated recently
-            else if (pitch < 50 && Mathf.Abs(rotDiff) > 50 && timeSinceLastLookRot > 0.25)
+            else if (pitch < 50 && Mathf.Abs(rotDiff) > 50 && timeSinceLastLookRot > 0.25f)
             {
                 lastYRot += rotDiff;
+                //Vector3 newRot = VRGlobals.player.Transform.rotation.eulerAngles;
+                //newRot.y = Camera.main.transform.eulerAngles.y;
+                //VRGlobals.player.Transform.rotation = Quaternion.Slerp(VRGlobals.player.Transform.rotation, Quaternion.Euler(newRot), Time.deltaTime);
                 timeSinceLastLookRot = 0;
+                rotMatching = true;
             }
+            else
+                rotMatching = false;
             timeSinceLastLookRot += Time.deltaTime;
+            rotDiff = Vector3.SignedAngle(bodyForward, cameraForward, Vector3.up);
+            //Plugin.MyLog.LogWarning(rotDiff + "   |  " + CalculateYawDifference(Camera.main.transform.eulerAngles.y, VRGlobals.player.Transform.rotation.eulerAngles.y));
 
             deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
             leftJoystickLastUsed = leftJoystickUsed;

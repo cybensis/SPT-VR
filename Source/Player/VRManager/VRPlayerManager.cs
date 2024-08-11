@@ -1,4 +1,5 @@
 ﻿using EFT.InventoryLogic;
+using Newtonsoft.Json.Linq;
 using Sirenix.Serialization;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
@@ -210,7 +211,7 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.blockRightJoystick = false;
             }
 
-            if (isSupporting && !isWeapPistol)
+            if (VRGlobals.firearmController && isSupporting && !isWeapPistol)
             {
                 if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && SteamVR_Actions._default.RightGrip.state) { 
                     VRGlobals.vrOpticController.handleJoystickZoomDial();
@@ -219,10 +220,82 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     VRGlobals.blockRightJoystick = false;
 
-                Vector3 handup = fromAction.localRotation * Vector3.right;
-                float num = Mathf.Atan2(handup.y, handup.x) * 57.29578f;
-                //LeftHand.transform.localRotation = fromAction.localRotation;
-                //LeftHand.transform.Rotate(-60, 0, 70);
+
+                Vector3 newRot = fromAction.localRotation.eulerAngles;
+                if (newRot.x < 320 && newRot.x > 180)
+                    newRot.x = 0;
+
+                LeftHand.transform.localRotation = Quaternion.Euler(newRot);
+                // Set the new rotation with the clamped pitch angle
+                Vector3 val = fromAction.localRotation * Vector3.right;
+                Vector3 projectedRight = Vector3.ProjectOnPlane(val, Vector3.up).normalized;
+                float xValue = Mathf.Atan2(projectedRight.z, projectedRight.x) * Mathf.Rad2Deg;
+                xValue += fromAction.localRotation.eulerAngles.y;
+                xValue = xValue % 360;
+                if (xValue < 270 && xValue > 180)
+                    xValue = 270;
+                else if (xValue > 90 && xValue < 180)
+                    xValue = 90;
+                if (fromAction.localRotation.eulerAngles.x < 300 && fromAction.localRotation.eulerAngles.x > 180)
+                    xValue = 350;
+                //float zValue = fromAction.localRotation.eulerAngles.z;
+                Vector3 val2 = fromAction.localRotation * Vector3.right;
+                Vector3 projectedRigh2t = Vector3.ProjectOnPlane(val2, Vector3.up).normalized;
+                float xValue2 = Mathf.Atan2(projectedRigh2t.z, projectedRigh2t.x) * Mathf.Rad2Deg;
+                xValue2 += fromAction.localRotation.eulerAngles.y;
+                //Plugin.MyLog.LogWarning(xValue + "   |  " + xValue2 + "   |   " + LeftHand.transform.localRotation.eulerAngles + "   |   " + fromAction.localRotation.eulerAngles) ;
+                ////float xValue = fromAction.localRotation.eulerAngles.x;
+                //if ((xValue < 285 && xValue > 260) || (zValue > 140 && zValue < 230))
+                //    zValue = -20;
+                //else if((xValue < 310 && xValue >= 285) && (zValue < 260 && zValue > 115) )
+                //    zValue = -20;
+                //else if (zValue < 290 && zValue > 180)
+                //    zValue = -290;
+                //else if (zValue > 80 && zValue < 180)
+                //    zValue = -80;
+                LeftHand.transform.localRotation = fromAction.localRotation;
+                // Step 1: Get the local rotation of the controller
+                Quaternion localRotation = LeftHand.transform.localRotation;
+
+                // Step 2: Create a reference forward vector (e.g., the forward direction of the playspace)
+                Vector3 referenceForward = Vector3.forward;
+
+                // Step 3: Remove the yaw component from the local rotation
+                Quaternion rotationWithoutYaw = Quaternion.Euler(0, localRotation.eulerAngles.y, 0);
+                Quaternion inverseYawRotation = Quaternion.Inverse(rotationWithoutYaw);
+                Quaternion rollRotation = inverseYawRotation * localRotation;
+
+                // Step 4: Calculate the roll angle from the adjusted rotation
+                Vector3 va1 = rollRotation * Vector3.right;
+                float rollValue = Mathf.Atan2(va1.y, va1.x) * Mathf.Rad2Deg;
+
+                // Step 3: Calculate the adjusted rotation that aligns the controller's forward with the reference forward
+                Quaternion referenceAlignment = Quaternion.FromToRotation(LeftHand.transform.forward, referenceForward);
+                Quaternion adjustedRotation = referenceAlignment * localRotation;
+
+                // Step 4: Calculate the roll from the adjusted rotation
+                Vector3 adjustedRight = adjustedRotation * Vector3.right;
+                float rollVawlue = Mathf.Atan2(adjustedRight.y, adjustedRight.z) * Mathf.Rad2Deg;
+                Vector3 forwardDirection = localRotation * Vector3.forward;
+                float pitchAngwle = Vector3.Angle(forwardDirection, Vector3.up);
+                Plugin.MyLog.LogWarning("Roll Angle: " + rollValue + "   |   " + pitchAngwle);
+
+                //LeftHand.transform.localRotation = Quaternion.EulerAngles(fromAction.localRotation.x, 0, fromAction.localRotation.z);
+                //LeftHand.transform.localRotation = Quaternion.Slerp(LeftHand.transform.localRotation, Quaternion.Euler(0, fromAction.localRotation.eulerAngles.y, zValue), 10 * Time.deltaTime) ;
+                LeftHand.transform.localRotation = fromAction.localRotation;
+
+                float num = Mathf.Atan2(val.y, val.x) * Mathf.Rad2Deg;
+                Vector3 val1 = fromAction.localRotation * LeftHand.transform.right;
+
+                float num2 = Mathf.Atan2(val1.y, val1.x) * Mathf.Rad2Deg;
+
+                // Project the right vector onto the horizontal plane (ignoring vertical movement)
+
+                // Calculate the roll using the angle between the projected right vector and the world right axis
+                //Plugin.MyLog.LogWarning(xValue + "   |   " + fromAction.localRotation.eulerAngles + "   |  " + LeftHand.transform.eulerAngles);
+
+
+
                 Vector3 toLeftHand = LeftHand.transform.position - RightHand.transform.position;
                 Vector3 flatToHand = new Vector3(toLeftHand.x, 0, toLeftHand.z); // For yaw
 
@@ -235,26 +308,20 @@ namespace TarkovVR.Source.Player.VRManager
                 // Separate rotation offsets for clearer control
                 Quaternion offsetRotation = Quaternion.Euler(340, 0, -90); // Apply pitch offset here
 
-
+                if (pitchAngwle < 15 || (pitchAngwle < 40 && rollValue < -150))
+                    rollValue = 15;
                 //Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
                 Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation;
-                // The lefthand at 255 has the gun straight up, so any additional rotations beyond or below 270 can be
-                // used to rotate the gun
-                float leftHandRotation = LeftHand.transform.localEulerAngles.z - 255;
 
-                //When you rotate the left hand right and it goes beyond 360, it goes to 0 which makes it flip around to 0, so if the value
-                // is less than 120 just lock it at 90 so it never goes beyond 360
-                if (LeftHand.transform.localEulerAngles.z < 120)
-                    leftHandRotation = 90;
-                // Rolling the left controller feels way too sensitive so reduce the rotation amount here
-                float newRightHandRoll = (leftHandRotation * 0.65f);
-                // Additional correction for yaw and roll offsets if necessary
-                    combinedRotation *= Quaternion.Euler(num * -1, 130, -30);
-                //if (RightHand.transform.eulerAngles.x > 50)
-                //else
-                //    combinedRotation *= Quaternion.Euler(0, 130, -30);
-                //if (RightHand.transform.eulerAngles.x < 40 || RightHand.transform.eulerAngles.x > 320)
-                //else
+                float heightDifference = Mathf.Clamp((LeftHand.transform.position.y - RightHand.transform.position.y) * 2,0,1);
+                // The lefthand rotation is controlled by right hand when two handing, this helps keep track of rolling better
+                float leftHandRotation = LeftHand.transform.localEulerAngles.z;
+
+
+                combinedRotation *= Quaternion.Euler(rollValue * -1, 130, -30);
+                //combinedRotation *= Quaternion.Euler(num * -1, 130, -30);
+                //combinedRotation *= Quaternion.Euler(0, 130, -30);
+
 
 
                 if (smoothingFactor < 50) {
@@ -268,23 +335,45 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     RightHand.transform.rotation = combinedRotation;
 
+                //Plugin.MyLog.LogWarning(LeftHand.transform.localEulerAngles + "    |   "  + LeftHand.transform.eulerAngles + "   |   " + fromAction.localRotation.eulerAngles  + "    |   " + zValue);
 
+                // Calculate the forward direction based on rotation
+                Vector3 forwardMovement = fromAction.localRotation * Vector3.forward * 0.2f;
+                // Calculate the up direction based on rotation
+                Vector3 upMovement = fromAction.localRotation * Vector3.up * 0.1f;
+                // Calculate the right direction based on rotation
+                Vector3 rightMovement = fromAction.localRotation * Vector3.right * x.z;
+                Vector3 finalPosition = fromAction.localPosition - forwardMovement + upMovement + rightMovement;
+                RightHand.transform.localPosition = finalPosition;
             }
             else
             {
                 RightHand.transform.localRotation = fromAction.localRotation;
                 RightHand.transform.Rotate(VRSettings.GetWeaponAngleOffset(),nonSupportRightHandRotOffset.y, nonSupportRightHandRotOffset.z);
+                Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+                RightHand.transform.localPosition = virtualBasePosition;
             }
-            Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
-            RightHand.transform.localPosition = virtualBasePosition;
             // RightHand.transform.rotation.eulerAngles y should be between 65 and 250
         }
+        Vector3 NormalizeEulerAngles(Vector3 eulerAngles)
+        {
+            eulerAngles.x = NormalizeAngle(eulerAngles.x);
+            eulerAngles.y = NormalizeAngle(eulerAngles.y);
+            eulerAngles.z = NormalizeAngle(eulerAngles.z);
+            return eulerAngles;
+        }
 
-
+        // Normalize a single angle to the range of -180 to 180 degrees
+        float NormalizeAngle(float angle)
+        {
+            while (angle > 180f) angle -= 360f;
+            while (angle < -180f) angle += 360f;
+            return angle;
+        }
         private void UpdateLeftHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
             leftHandYRotation = fromAction.localRotation.eulerAngles.y;
-            leftHandZRotation = fromAction.localRotation.eulerAngles.z;
+            //leftHandZRotation = fromAction.localRotation.eulerAngles.z;
             if (!LeftHand || (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && SteamVR_Actions._default.LeftGrip.state)) 
                 return;
 
@@ -349,6 +438,24 @@ namespace TarkovVR.Source.Player.VRManager
                     }
                     else
                         LeftHand.transform.localPosition = fromAction.localPosition + supportingLeftHandOffset;
+
+                    float heightDifference = LeftHand.transform.position.y - RightHand.transform.position.y;
+                    // as the left hand goes above the right hand more, the gun rolls around all wonky, so fix this by drawing a line between
+                    // the left and right hand, then moving it closer out and up from that line, or the opposite I dunno, it just works
+                    //if (heightDifference > 0)
+                    //{
+                    //    // Adjust the left hand's position based on the height difference
+                    //    // Drop the left hand down and slightly out further based on the line and height difference
+                    //    Vector3 leftHandAdjustedPosition = LeftHand.transform.localPosition;
+                    //    Vector3 toLeftHand = LeftHand.transform.position - RightHand.transform.position;
+                    //    leftHandAdjustedPosition.x -= Mathf.Abs(heightDifference) * x.x; // Drop down (adjust the factor as needed)
+                    //    leftHandAdjustedPosition.y -= Mathf.Abs(heightDifference) * x.y; // Drop down (adjust the factor as needed)
+                    //    leftHandAdjustedPosition.z -= Mathf.Abs(heightDifference) * x.z; // Drop down (adjust the factor as needed)
+                    //    //leftHandAdjustedPosition += toLeftHand.normalized * Mathf.Abs(heightDifference) * x.x; // Move out further (adjust the factor as needed)
+                    //    //leftHandAdjustedPosition.y -= Mathf.Abs(heightDifference) * -0.75f; // Drop down (adjust the factor as needed)
+                    //    //leftHandAdjustedPosition += toLeftHand.normalized * Mathf.Abs(heightDifference) * -0.75f; // Move out further (adjust the factor as needed)
+                    //    LeftHand.transform.localPosition = leftHandAdjustedPosition;
+                    //}
                 }
                 else
                 {
@@ -364,6 +471,8 @@ namespace TarkovVR.Source.Player.VRManager
                     //if (leftHandGunIK)
                     //Plugin.MyLog.LogWarning(Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) + "   |    " + isSupporting);
                     //LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
+                    LeftHand.transform.localRotation = fromAction.localRotation;
+                    LeftHand.transform.Rotate(-60, 0, 70);
                 }
             }
             else {

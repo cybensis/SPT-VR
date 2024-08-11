@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TarkovVR.ModSupport;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
@@ -37,7 +38,7 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class CrouchHandler : IInputHandler
         {
-
+            private static float MAX_CROUCH_HEIGHT_DIFF = 0.4f;
             public void UpdateCommand(ref ECommand command)
             {
                 if (VRGlobals.vrPlayer.blockCrouch)
@@ -65,14 +66,23 @@ namespace TarkovVR.Source.Controls
         public class ProneInputHandler : IInputHandler
         {
             float timeHeld = 0f;
-            private static float MIN_TIME_BEETWEEN_PRESSES = 1f;
+            private static float MIN_TIME_BETWEEN_PRESSES = 1f;
+            private static float MAX_CROUCH_HEIGHT_DIFF = 0.4f;
             float timeSinceLastPress = 0;
+            private static bool releasedPullAfterFullCrouch = false;
             public void UpdateCommand(ref ECommand command)
             {
                 if (VRGlobals.player is HideoutPlayer)
                     return;
-                if (SteamVR_Actions._default.ClickRightJoystick.stateUp && timeHeld < ResetHeightHandler.HEIGH_RESET_TIME_THRESHOLD && Time.time - timeSinceLastPress > MIN_TIME_BEETWEEN_PRESSES)
+
+                if (SteamVR_Actions._default.RightJoystick.axis.y > -0.8 && ((float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) == MAX_CROUCH_HEIGHT_DIFF))
+                    releasedPullAfterFullCrouch = true;
+                else if (releasedPullAfterFullCrouch && (float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) != MAX_CROUCH_HEIGHT_DIFF)
+                    releasedPullAfterFullCrouch = false;
+
+                if (SteamVR_Actions._default.RightJoystick.axis.y < -0.8 && releasedPullAfterFullCrouch && Time.time - timeSinceLastPress > MIN_TIME_BETWEEN_PRESSES)
                 {
+                    releasedPullAfterFullCrouch = false;
                     command = ECommand.ToggleProne;
                     timeSinceLastPress = Time.time;
                     if (!VRGlobals.player.IsInPronePose && VRGlobals.player.MovementContext.CanProne)
@@ -81,10 +91,6 @@ namespace TarkovVR.Source.Controls
                         VRGlobals.vrPlayer.crouchHeightDiff = 0f;
 
                 }
-                if (SteamVR_Actions._default.ClickRightJoystick.state)
-                    timeHeld += Time.deltaTime;
-                else
-                    timeHeld = 0f;
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -559,6 +565,17 @@ namespace TarkovVR.Source.Controls
 
             public void TriggerExamineWeapon() {
                 examineWeapon = true;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class EFTConfigHandler : IInputHandler
+        {
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (!InstalledMods.EFTApiInstalled)
+                    return;
+                if (SteamVR_Actions._default.Start.GetStateDown(SteamVR_Input_Sources.Any))
+                    EFTApiSupport.OpenCloseConfigUI();
             }
         }
     }

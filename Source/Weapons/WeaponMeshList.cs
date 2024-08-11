@@ -71,12 +71,12 @@ namespace TarkovVR.Source.Weapons
 
             WeaponMeshParts opSKS = new WeaponMeshParts();
             opSKS.magazine.Add("mod_magazine");
-            opSKS.chamber.Add("weapon_slide");
+            opSKS.chamber.Add("weapon_bolt_assembly");
             weaponMeshDictionary.Add("weapon_molot_op_sks_762x39_container(Clone)", opSKS);
 
             WeaponMeshParts tozSKS = new WeaponMeshParts();
             tozSKS.magazine.Add("mod_magazine");
-            tozSKS.chamber.Add("weapon_slide");
+            tozSKS.chamber.Add("weapon_bolt_assembly");
             weaponMeshDictionary.Add("weapon_toz_sks_762x39_container(Clone)", tozSKS);
 
             WeaponMeshParts tozSVT = new WeaponMeshParts();

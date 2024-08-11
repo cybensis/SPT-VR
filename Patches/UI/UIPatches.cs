@@ -157,12 +157,20 @@ namespace TarkovVR.Patches.UI
             }, TaskScheduler.FromCurrentSynchronizationContext());
 
         }
+
+
+        private static float lastCamRootYRot = 0;
         public static void HandleOpenInventory()
         {
             ShowUiScreens();
             int bitmask = 1 << playerLayer; // 256
             Camera.main.cullingMask &= ~bitmask; // -524321 & -257
-
+            lastCamRootYRot = VRGlobals.camRoot.transform.eulerAngles.y;
+            float initialCameraYRotation = Camera.main.transform.eulerAngles.y;
+            VRGlobals.camRoot.transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+            float newCameraYRotation = Camera.main.transform.eulerAngles.y;
+            float rotationDifference = initialCameraYRotation - newCameraYRotation;
+            VRGlobals.vrOffsetter.transform.localRotation = Quaternion.Euler(0, rotationDifference, 0);
             VRGlobals.menuOpen = true;
             VRGlobals.blockRightJoystick = true;
             VRGlobals.vrPlayer.enabled = false;
@@ -207,6 +215,8 @@ namespace TarkovVR.Patches.UI
             VRGlobals.preloaderUi.parent = null;
             VRGlobals.preloaderUi.position = new Vector3(1000, 1000, 1000);
             VRGlobals.vrPlayer.SetNotificationUi();
+            VRGlobals.vrOffsetter.transform.localRotation = Quaternion.identity;
+            VRGlobals.camRoot.transform.eulerAngles = new Vector3(0, lastCamRootYRot, 0);
 
         }
         [HarmonyPostfix]
@@ -842,6 +852,13 @@ namespace TarkovVR.Patches.UI
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SplitDialog), "Show", new Type[] { typeof(string), typeof(int), typeof(Vector2), typeof(Action<int>), typeof(Action), typeof(SplitDialog.ESplitDialogType) })]
         private static void RepositionSplitWindow(SplitDialog __instance)
+        {
+
+            __instance._window.localPosition = Vector3.zero;
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SplitDialog), "Show", new Type[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(Vector2), typeof(Action<int>), typeof(Action), typeof(SplitDialog.ESplitDialogType), typeof(bool), })]
+        private static void RepositionConsumablesWindow(SplitDialog __instance)
         {
 
             __instance._window.localPosition = Vector3.zero;
