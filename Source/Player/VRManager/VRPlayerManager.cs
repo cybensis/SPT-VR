@@ -221,79 +221,18 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.blockRightJoystick = false;
 
 
-                Vector3 newRot = fromAction.localRotation.eulerAngles;
-                if (newRot.x < 320 && newRot.x > 180)
-                    newRot.x = 0;
-
-                LeftHand.transform.localRotation = Quaternion.Euler(newRot);
-                // Set the new rotation with the clamped pitch angle
-                Vector3 val = fromAction.localRotation * Vector3.right;
-                Vector3 projectedRight = Vector3.ProjectOnPlane(val, Vector3.up).normalized;
-                float xValue = Mathf.Atan2(projectedRight.z, projectedRight.x) * Mathf.Rad2Deg;
-                xValue += fromAction.localRotation.eulerAngles.y;
-                xValue = xValue % 360;
-                if (xValue < 270 && xValue > 180)
-                    xValue = 270;
-                else if (xValue > 90 && xValue < 180)
-                    xValue = 90;
-                if (fromAction.localRotation.eulerAngles.x < 300 && fromAction.localRotation.eulerAngles.x > 180)
-                    xValue = 350;
-                //float zValue = fromAction.localRotation.eulerAngles.z;
-                Vector3 val2 = fromAction.localRotation * Vector3.right;
-                Vector3 projectedRigh2t = Vector3.ProjectOnPlane(val2, Vector3.up).normalized;
-                float xValue2 = Mathf.Atan2(projectedRigh2t.z, projectedRigh2t.x) * Mathf.Rad2Deg;
-                xValue2 += fromAction.localRotation.eulerAngles.y;
-                //Plugin.MyLog.LogWarning(xValue + "   |  " + xValue2 + "   |   " + LeftHand.transform.localRotation.eulerAngles + "   |   " + fromAction.localRotation.eulerAngles) ;
-                ////float xValue = fromAction.localRotation.eulerAngles.x;
-                //if ((xValue < 285 && xValue > 260) || (zValue > 140 && zValue < 230))
-                //    zValue = -20;
-                //else if((xValue < 310 && xValue >= 285) && (zValue < 260 && zValue > 115) )
-                //    zValue = -20;
-                //else if (zValue < 290 && zValue > 180)
-                //    zValue = -290;
-                //else if (zValue > 80 && zValue < 180)
-                //    zValue = -80;
-                LeftHand.transform.localRotation = fromAction.localRotation;
-                // Step 1: Get the local rotation of the controller
-                Quaternion localRotation = LeftHand.transform.localRotation;
-
-                // Step 2: Create a reference forward vector (e.g., the forward direction of the playspace)
-                Vector3 referenceForward = Vector3.forward;
-
                 // Step 3: Remove the yaw component from the local rotation
-                Quaternion rotationWithoutYaw = Quaternion.Euler(0, localRotation.eulerAngles.y, 0);
+                Quaternion rotationWithoutYaw = Quaternion.Euler(0, fromAction.localRotation.eulerAngles.y, 0);
                 Quaternion inverseYawRotation = Quaternion.Inverse(rotationWithoutYaw);
-                Quaternion rollRotation = inverseYawRotation * localRotation;
+                Quaternion rollRotation = inverseYawRotation * fromAction.localRotation;
 
                 // Step 4: Calculate the roll angle from the adjusted rotation
                 Vector3 va1 = rollRotation * Vector3.right;
                 float rollValue = Mathf.Atan2(va1.y, va1.x) * Mathf.Rad2Deg;
 
-                // Step 3: Calculate the adjusted rotation that aligns the controller's forward with the reference forward
-                Quaternion referenceAlignment = Quaternion.FromToRotation(LeftHand.transform.forward, referenceForward);
-                Quaternion adjustedRotation = referenceAlignment * localRotation;
 
-                // Step 4: Calculate the roll from the adjusted rotation
-                Vector3 adjustedRight = adjustedRotation * Vector3.right;
-                float rollVawlue = Mathf.Atan2(adjustedRight.y, adjustedRight.z) * Mathf.Rad2Deg;
-                Vector3 forwardDirection = localRotation * Vector3.forward;
+                Vector3 forwardDirection = fromAction.localRotation * Vector3.forward;
                 float pitchAngwle = Vector3.Angle(forwardDirection, Vector3.up);
-                Plugin.MyLog.LogWarning("Roll Angle: " + rollValue + "   |   " + pitchAngwle);
-
-                //LeftHand.transform.localRotation = Quaternion.EulerAngles(fromAction.localRotation.x, 0, fromAction.localRotation.z);
-                //LeftHand.transform.localRotation = Quaternion.Slerp(LeftHand.transform.localRotation, Quaternion.Euler(0, fromAction.localRotation.eulerAngles.y, zValue), 10 * Time.deltaTime) ;
-                LeftHand.transform.localRotation = fromAction.localRotation;
-
-                float num = Mathf.Atan2(val.y, val.x) * Mathf.Rad2Deg;
-                Vector3 val1 = fromAction.localRotation * LeftHand.transform.right;
-
-                float num2 = Mathf.Atan2(val1.y, val1.x) * Mathf.Rad2Deg;
-
-                // Project the right vector onto the horizontal plane (ignoring vertical movement)
-
-                // Calculate the roll using the angle between the projected right vector and the world right axis
-                //Plugin.MyLog.LogWarning(xValue + "   |   " + fromAction.localRotation.eulerAngles + "   |  " + LeftHand.transform.eulerAngles);
-
 
 
                 Vector3 toLeftHand = LeftHand.transform.position - RightHand.transform.position;
@@ -312,10 +251,6 @@ namespace TarkovVR.Source.Player.VRManager
                     rollValue = 15;
                 //Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
                 Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation;
-
-                float heightDifference = Mathf.Clamp((LeftHand.transform.position.y - RightHand.transform.position.y) * 2,0,1);
-                // The lefthand rotation is controlled by right hand when two handing, this helps keep track of rolling better
-                float leftHandRotation = LeftHand.transform.localEulerAngles.z;
 
 
                 combinedRotation *= Quaternion.Euler(rollValue * -1, 130, -30);

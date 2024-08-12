@@ -44,6 +44,7 @@ using UnityEngine.UI;
 using TarkovVR.Source.Settings;
 using static EFT.BaseLocalGame<EFT.HideoutPlayerOwner>;
 using EFT.UI.Matchmaker;
+using EFT.UI.Builds;
 
 
 
@@ -713,7 +714,10 @@ namespace TarkovVR.Patches.Misc
                 //__instance._target.localPosition = eventData.position - __instance.vector2_0;
                 __instance._target.position = eventData.worldPosition;
                 Vector3 newPos = __instance._target.localPosition;
-                newPos.y -= ((RectTransform)__instance._target.transform).sizeDelta.y / 2;
+                if (__instance.name != "CharacteristicsPanel")
+                    newPos.x += ((RectTransform)__instance._target.transform).sizeDelta.x / 2;
+                else
+                    newPos.y -= ((RectTransform)__instance._target.transform).sizeDelta.y / 2;
                 newPos.z = 0f;
                 __instance._target.localPosition = newPos;
 
@@ -1073,9 +1077,42 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(CharacteristicsPanel), "Show")]
+        private static void FixWeapCharactericsPanel(CharacteristicsPanel __instance)
+        {
+                __instance.transform.localPosition = new Vector3(-1050, 381, 0);
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CharacteristicsPanel), "Close")]
+        private static void FixWeapCharactericsPanelOnClose(CharacteristicsPanel __instance)
+        {
+                __instance.transform.localPosition = new Vector3(-950, 381, 0);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CharacteristicsPanel), "method_3")]
+        private static void FixWeapCharactericsPanelOnClick(CharacteristicsPanel __instance, bool expanded)
+        {
+            if (expanded)
+                __instance.transform.localPosition = new Vector3(-1050, 381, 0);
+            else
+                __instance.transform.localPosition = new Vector3(-950, 381, 0);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ModdingScreenSlotView), "Show")]
+        private static void HideModdingLines(ModdingScreenSlotView __instance)
+        {
+            __instance._boneIcon.gameObject.active = false;
+        }
+
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(WeaponModdingScreen), "Show", new Type[] { typeof(GClass3185) })]
         private static void PositionWeaponModdingCamera(WeaponModdingScreen __instance, GClass3185 controller)
         {
+            __instance._viewporter.GetComponent<DragTrigger>().enabled = false;
             GameObject weaponPreviewCamContainer = new GameObject("weaponPreviewCamContainer");
             Transform weaponCam = __instance.highLightMesh_0.transform;
             weaponPreviewCamContainer.transform.SetParent(weaponCam.parent);
@@ -1091,6 +1128,25 @@ namespace TarkovVR.Patches.Misc
 
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EditBuildScreen), "Show", new Type[] { typeof(EditBuildScreen.GClass3151) })]
+        private static void PositionWeaponModdingCamera(EditBuildScreen __instance, EditBuildScreen.GClass3151 controller)
+        {
+            __instance._viewporter.GetComponent<DragTrigger>().enabled = false;
+            GameObject weaponPreviewCamContainer = new GameObject("weaponPreviewCamContainer");
+            Transform weaponCam = __instance.highLightMesh_0.transform;
+            weaponPreviewCamContainer.transform.SetParent(weaponCam.parent);
+            weaponCam.parent = weaponPreviewCamContainer.transform;
+
+            weaponPreviewCamContainer.transform.position = (Camera.main.transform.localPosition * -1) + new Vector3(0, 0.1f, -1.6f);
+            weaponCam.gameObject.GetComponent<CC_BrightnessContrastGamma>().enabled = false;
+            Camera cam = weaponCam.gameObject.GetComponent<Camera>();
+            weaponCam.gameObject.AddComponent<SteamVR_TrackedObject>();
+            cam.depth = 11;
+            cam.stereoTargetEye = StereoTargetEyeMask.Both;
+            __instance._weaponPreview.Rotator.localScale = Vector3.one * 2;
+
+        }
 
         //[HarmonyPrefix]
         //[HarmonyPatch(typeof(Player), "OnDead")]
@@ -1331,6 +1387,20 @@ namespace TarkovVR.Patches.Misc
         private static void HideDefaultTaskDesc(TasksScreen __instance)
         {
             __instance._notesTaskDescription.active = false;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(OpenBuildWindow), "Show")]
+        private static void ShowBuildWindowWeaponSelector(OpenBuildWindow __instance)
+        {
+            __instance.transform.localPosition = new UnityEngine.Vector3(638, -167, 0);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EditBuildNameWindow), "Show")]
+        private static void ShowBuildWindowSave(EditBuildNameWindow __instance)
+        {
+            __instance.WindowTransform.localPosition = Vector3.zero;
         }
     }
 
