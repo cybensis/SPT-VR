@@ -472,8 +472,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(CameraLodBiasController), "SetBiasByFov")]
         private static void FixAimCulling(CameraLodBiasController __instance)
         {
-            if (__instance.LodBiasFactor < 1)
-                __instance.LodBiasFactor = 1;
+            __instance.LodBiasFactor = 1;
         }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(DistantShadow), "Awake")]
@@ -506,6 +505,13 @@ namespace TarkovVR.Patches.Visuals
                 else
                     __instance.enabled = true;
             }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ThermalVision), "method_1")]
+        private static void FixThermalsDoubleVision(ThermalVision __instance)
+        {
+           __instance.IsMotionBlurred = false;
         }
 
     }

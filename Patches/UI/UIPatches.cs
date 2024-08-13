@@ -398,19 +398,31 @@ namespace TarkovVR.Patches.UI
             RaycastHit hit;
             if (__instance.CurrentState.CanInteract && (bool)__instance.HandsController && __instance.HandsController.CanInteract())
             {
-
-                Vector3 rayOrigin = Camera.main.transform.position;
-                // Raycasts hit a bit too high so tilt it down for it to hit closer to the centre of vision
-                Vector3 rayDirection = Quaternion.Euler(-5, 0, 0) * Camera.main.transform.forward;
-                float adjustedRayDistance = manager.rayDistance * manager.GetDistanceMultiplier(rayDirection);
-
                 GameObject gameObject = null;
-
-                if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld.int_0))
+                if (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.useLeftHandForRaycast)
                 {
-                    gameObject = hit.collider.gameObject;
-                    if (!__instance.InteractableObject || __instance.InteractableObject.gameObject != gameObject)
-                        manager.PlaceUiInteracter(hit);
+                    Vector3 rayDirection = VRGlobals.handsInteractionController.laser.transform.forward;
+                    Vector3 rayOrigin = VRGlobals.vrPlayer.LeftHand.transform.position;
+                    if (Physics.Raycast(rayOrigin, rayDirection, out hit, 0.66f, EFT.GameWorld.int_0))
+                    {
+                        gameObject = hit.collider.gameObject;
+                        if (!__instance.InteractableObject || __instance.InteractableObject.gameObject != gameObject)
+                            manager.PlaceUiInteracter(hit);
+                    }
+                }
+                else { 
+                    Vector3 rayOrigin = Camera.main.transform.position;
+                    // Raycasts hit a bit too high so tilt it down for it to hit closer to the centre of vision
+                    Vector3 rayDirection = Quaternion.Euler(-5, 0, 0) * Camera.main.transform.forward;
+                    float adjustedRayDistance = manager.rayDistance * manager.GetDistanceMultiplier(rayDirection);
+
+
+                    if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld.int_0))
+                    {
+                        gameObject = hit.collider.gameObject;
+                        if (!__instance.InteractableObject || __instance.InteractableObject.gameObject != gameObject)
+                            manager.PlaceUiInteracter(hit);
+                    }
                 }
 
                 if (gameObject != null)

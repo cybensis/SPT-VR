@@ -194,6 +194,7 @@ namespace TarkovVR.Source.Player.VRManager
         // Rot 272.0235 163.5639 283.3635
         // scale 0.0003 0.0003 0.0003
         private float controllerLength = 0.175f;
+
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
             if (!RightHand)
@@ -247,8 +248,8 @@ namespace TarkovVR.Source.Player.VRManager
                 // Separate rotation offsets for clearer control
                 Quaternion offsetRotation = Quaternion.Euler(340, 0, -90); // Apply pitch offset here
 
-                if (pitchAngwle < 15 || (pitchAngwle < 40 && rollValue < -150))
-                    rollValue = 15;
+                //if (pitchAngwle < 15 || (pitchAngwle < 40 && rollValue < -150))
+                //    rollValue = 15;
                 //Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
                 Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation;
 
@@ -270,7 +271,6 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     RightHand.transform.rotation = combinedRotation;
 
-                //Plugin.MyLog.LogWarning(LeftHand.transform.localEulerAngles + "    |   "  + LeftHand.transform.eulerAngles + "   |   " + fromAction.localRotation.eulerAngles  + "    |   " + zValue);
 
                 // Calculate the forward direction based on rotation
                 Vector3 forwardMovement = fromAction.localRotation * Vector3.forward * 0.2f;

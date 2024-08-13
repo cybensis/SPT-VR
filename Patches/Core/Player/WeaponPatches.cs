@@ -23,6 +23,11 @@ using JetBrains.Annotations;
 using EFT.AssetsManager;
 using EFT.Interactive;
 using System.Linq;
+using static CoverPointMaster;
+using static EFT.Player.GrenadeController;
+using static EFT.Player.QuickGrenadeThrowController;
+using static UnityEngine.ParticleSystem.PlaybackState;
+using UnityEngine.UIElements;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -470,113 +475,6 @@ namespace TarkovVR.Patches.Core.Player
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // Not sure if needed
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(CameraClass), "method_10")]
-        //private static bool FixSomeAimShit(CameraClass __instance)
-        //{
-        //    __instance.ReflexController.RefreshReflexCmdBuffers();
-        //    Renderer renderer = __instance.OpticCameraManager.CurrentOpticSight?.LensRenderer;
-        //    __instance.method_11();
-        //    if (__instance.OpticCameraManager.CurrentOpticSight != null)
-        //    {
-        //        //LODGroup[] componentsInChildren = __instance.OpticCameraManager.CurrentOpticSight.gameObject.GetComponentInParent<WeaponPrefab>().gameObject.GetComponentsInChildren<LODGroup>();
-
-        //        ////////////// Since the weapons are moved around to the right controller object, this needs to be redone here
-        //        LODGroup[] componentsInChildren = VRGlobals.oldWeaponHolder.GetComponentsInChildren<LODGroup>();
-        //        if (__instance.renderer_0 != null)
-        //        {
-        //            Array.Clear(__instance.renderer_0, 0, __instance.renderer_0.Length);
-        //        }
-        //        int instanceID = renderer.GetInstanceID();
-        //        int num = 0;
-        //        int num2 = 0;
-        //        while (componentsInChildren != null && num2 < componentsInChildren.Length)
-        //        {
-        //            if (!(componentsInChildren[num2] == null))
-        //            {
-        //                LOD[] lODs = componentsInChildren[num2].GetLODs();
-        //                if (lODs.Length != 0)
-        //                {
-        //                    Renderer[] renderers = lODs[0].renderers;
-        //                    foreach (Renderer renderer2 in renderers)
-        //                    {
-        //                        if (!(renderer2 == null) && renderer2.GetInstanceID() != instanceID && !__instance.method_9(renderer2.GetInstanceID()))
-        //                        {
-        //                            num++;
-        //                        }
-        //                    }
-        //                }
-        //            }
-        //            num2++;
-        //        }
-        //        if (num > 0 && (__instance.renderer_0 == null || __instance.renderer_0.Length < num))
-        //        {
-        //            __instance.renderer_0 = new Renderer[num];
-        //        }
-        //        num = 0;
-        //        int num3 = 0;
-        //        while (componentsInChildren != null && num3 < componentsInChildren.Length)
-        //        {
-        //            if (!(componentsInChildren[num3] == null))
-        //            {
-        //                LOD[] lODs2 = componentsInChildren[num3].GetLODs();
-        //                if (lODs2.Length != 0)
-        //                {
-        //                    Renderer[] renderers = lODs2[0].renderers;
-        //                    foreach (Renderer renderer3 in renderers)
-        //                    {
-        //                        if (!(renderer3 == null) && renderer3.GetInstanceID() != instanceID && !__instance.method_9(renderer3.GetInstanceID()))
-        //                        {
-        //                            __instance.renderer_0[num++] = renderer3;
-        //                        }
-        //                    }
-        //                }
-        //            }
-        //            num3++;
-        //        }
-        //    }
-        //    __instance.SSAA.SetLensRenderer(__instance.OpticCameraManager.CurrentOpticSight?.LensRenderer, __instance.renderer_1, __instance.renderer_0);
-        //    __instance.SSAA.UnityTAAJitterSamplesRepeatCount = 2;
-        //    return false;
-        //}
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // NOTE: Currently arm stamina lasts way too long, turn it down maybe, or maybe not since the account I'm using has maxed stats
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(GClass601), "Process")]
-        //private static bool OnlyConsumeArmStamOnHoldBreath(GClass601 __instance, float dt)
-        //{
-        //    Plugin.MyLog.LogWarning(dt);
-        //    return true;
-        //    //if (isHoldingBreath) return true;
-        //    //return false;
-        //}
-
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(AbstractHandsController), "IEventsConsumerOnWeapIn")]
-        //private static void ResetWeaponOnEquwipHands(AbstractHandsController __instance)
-        //{
-        //    //StackTrace stackTrace = new StackTrace();
-        //    Plugin.MyLog.LogWarning("On weap in " + __instance + "    |    " + __instance.transform.root);
-        //}
-
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(BaseGrenadeController), "IEventsConsumerOnWeapIn")]
-        //private static void ResewtWeaponOnEquwipHands(BaseGrenadeController __instance)
-        //{
-        //    //StackTrace stackTrace = new StackTrace();
-        //    Plugin.MyLog.LogWarning("IEventsConsumerOnWeapIn " + __instance + "    |    " + __instance.transform.root);
-        //}
-
-        //[HarmonyPostfix]
-        //[HarmonyPatch(typeof(BaseGrenadeController), "IEventsConsumerOnWeapOut")]
-        //private static void ResetWeaponOnEquwipHands(BaseGrenadeController __instance)
-        //{
-        //    //StackTrace stackTrace = new StackTrace();
-        //    Plugin.MyLog.LogWarning("IEventsConsumerOnWeapOut " + __instance + "    |    " + __instance.transform.root);
-        //}
-
-
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GetActionsClass.Class1519), "method_0")]
         private static bool PreventUsingStationaryWeapon(GetActionsClass.Class1519 __instance)
@@ -756,7 +654,17 @@ namespace TarkovVR.Patches.Core.Player
         // 2. Create a GClass2805 and assign the list to Actions
         // 3. Run HideoutPlayerOwner.AvailableInteractionState.set_Value(Gclass2805)
 
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(BaseGrenadeController), "method_8")]
+        //private static bool TestGrenadePatch(BaseGrenadeController __instance, ref Vector3 position, ref Quaternion rotation, Vector3 force, float prewarm = 0f)
+        //{
+        //    position = VRGlobals.vrPlayer.RightHand.transform.position;
+        //    rotation = VRGlobals.vrPlayer.RightHand.transform.rotation;
+        //    return false;
+        //}
     }
+
+
 }
 public static class GameObjectExtensions
 {
@@ -768,14 +676,134 @@ public static class GameObjectExtensions
             {
                 return child;
             }
-
             Transform found = child.FindChildRecursive(childName);
             if (found != null)
             {
                 return found;
             }
         }
-
         return null;
     }
 }
+
+//[Message:UnityExplorer]--------------------
+//virtual void EFT.Player+GrenadeController::PullRingForHighThrow()
+//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+
+//[Message: UnityExplorer]--------------------
+//virtual bool EFT.Player+GrenadeController::CanThrow()
+//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Return value: True
+
+//[Message: UnityExplorer]--------------------
+//virtual bool EFT.Player+GrenadeController::CanThrow()
+//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Return value: True
+
+//[Message: UnityExplorer]--------------------
+//virtual bool EFT.Player+GrenadeController::get_WaitingForHighThrow()
+//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Return value: True
+
+//[Message: UnityExplorer]--------------------
+//virtual void EFT.Player+GrenadeController::HighThrow()
+//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+
+//[Message: UnityExplorer]--------------------
+//void EFT.Player + BaseGrenadeController::method_9()
+//- __instance: PlayerSuperior(Clone)(EFT.Player / GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+
+//[Message: UnityExplorer]--------------------
+//EFT.Grenade EFT.Player + BaseGrenadeController::method_8(UnityEngine.Vector3 position, UnityEngine.Quaternion rotation, UnityEngine.Vector3 force, float prewarm)
+//- __instance: PlayerSuperior(Clone)(EFT.Player / GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Parameter 0 'position': (31.7, 1.5, 28.7)
+//- Parameter 1 'rotation': (0.4, -0.4, -0.7, -0.4)
+//- Parameter 2 'force': (12.9, -2.3, -3.0)
+//- Parameter 3 'prewarm': 0
+//- Return value: weapon_grenade_f1_world(Clone)(EFT.Grenade)
+
+//[Message: UnityExplorer]--------------------
+//virtual void EFT.Player+BaseGrenadeController::vmethod_2(float timeSinceSafetyLevelRemoved, UnityEngine.Vector3 position, UnityEngine.Quaternion rotation, UnityEngine.Vector3 force, bool lowThrow)
+//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Parameter 0 'timeSinceSafetyLevelRemoved': 0
+//- Parameter 1 'position': (31.7, 1.5, 28.7)
+//- Parameter 2 'rotation': (0.4, -0.4, -0.7, -0.4)
+//- Parameter 3 'force': (12.9, -2.3, -3.0)
+//- Parameter 4 'lowThrow': False
+
+//[Message: UnityExplorer]--------------------
+//void EFT.Player + BaseGrenadeController::method_7(float timeSinceSafetyLevelRemoved, float lowHighThrow, UnityEngine.Vector3 direction, float forcePower, bool lowThrow)
+//- __instance: PlayerSuperior(Clone)(EFT.Player / GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Parameter 0 'timeSinceSafetyLevelRemoved': 0
+//- Parameter 1 'lowHighThrow': 1.16
+//- Parameter 2 'direction': (1.0, -0.2, -0.2)
+//- Parameter 3 'forcePower': 11.55
+//- Parameter 4 'lowThrow': False
+
+//[Message: UnityExplorer]--------------------
+//virtual void EFT.Player+BaseGrenadeController::vmethod_1(float timeSinceSafetyLevelRemoved, bool low)
+//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Parameter 0 'timeSinceSafetyLevelRemoved': 0
+//- Parameter 1 'low': False
+
+//[Message: UnityExplorer]--------------------
+//virtual bool EFT.Player+GrenadeController::CanRemove()
+//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Return value: True
+
+//[Warning: TarkovVR] Init calc: PlayerSuperior(Clone)(EFT.Player / FirearmController), Item: item weapon_fn_p90_57x28(id: 1a951e8aff3fce60badb91d6), CurrentHandsOperation: 
+//[Message:UnityExplorer]--------------------
+//void EFT.Player + BaseGrenadeController::method_1()
+//- __instance: PlayerSuperior(Clone)(EFT.Player / GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+
+//[Message: UnityExplorer]--------------------
+//virtual bool EFT.Player+GrenadeController::CanThrow()
+//- __instance: null, Item: item weapon_grenade_f1 (id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
+//- Return value: True
+
+//[Message: UnityExplorer]--------------------
+//void EFT.Player + BaseGrenadeController::method_0()
+//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
+
+//[Message: UnityExplorer]--------------------
+//void EFT.Player + BaseGrenadeController::method_9()
+//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
+
+//[Message: UnityExplorer]--------------------
+//EFT.Grenade EFT.Player + BaseGrenadeController::method_8(UnityEngine.Vector3 position, UnityEngine.Quaternion rotation, UnityEngine.Vector3 force, float prewarm)
+//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
+//- Parameter 0 'position': (3.5, 1.1, -34.2)
+//- Parameter 1 'rotation': (-1.0, -0.2, -0.1, 0.0)
+//- Parameter 2 'force': (-10.2, 1.8, -1.0)
+//- Parameter 3 'prewarm': 0.4239999
+//- Return value: weapon_rgd5_world(Clone)(EFT.Grenade)
+
+//[Message: UnityExplorer]--------------------
+//virtual void EFT.Player+BaseGrenadeController::vmethod_2(float timeSinceSafetyLevelRemoved, UnityEngine.Vector3 position, UnityEngine.Quaternion rotation, UnityEngine.Vector3 force, bool lowThrow)
+//- __instance: Bot8 (EFT.Player/QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
+//- Parameter 0 'timeSinceSafetyLevelRemoved': 0.4239999
+//- Parameter 1 'position': (3.5, 1.1, -34.2)
+//- Parameter 2 'rotation': (-1.0, -0.2, -0.1, 0.0)
+//- Parameter 3 'force': (-10.2, 1.8, -1.0)
+//- Parameter 4 'lowThrow': False
+
+//[Message: UnityExplorer]--------------------
+//void EFT.Player + BaseGrenadeController::method_7(float timeSinceSafetyLevelRemoved, float lowHighThrow, UnityEngine.Vector3 direction, float forcePower, bool lowThrow)
+//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
+//- Parameter 0 'timeSinceSafetyLevelRemoved': 0.4239999
+//- Parameter 1 'lowHighThrow': 1
+//- Parameter 2 'direction': (-1.0, 0.2, -0.1)
+//- Parameter 3 'forcePower': 10.37257
+//- Parameter 4 'lowThrow': False
+
+//[Message: UnityExplorer]--------------------
+//virtual void EFT.Player+BaseGrenadeController::vmethod_1(float timeSinceSafetyLevelRemoved, bool low)
+//- __instance: Bot8 (EFT.Player/QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
+//- Parameter 0 'timeSinceSafetyLevelRemoved': 0.4239999
+//- Parameter 1 'low': False
+
+//[Info: TarkovVR] FirearmController.IEventsConsumerOnWeapIn: PlayerSuperior(Clone)(EFT.Player / FirearmController), Item: item weapon_fn_p90_57x28(id: 1a951e8aff3fce60badb91d6), CurrentHandsOperation: EFT.Player + FirearmController + GClass1637
+//[Message: UnityExplorer]--------------------
+//void EFT.Player + BaseGrenadeController::method_1()
+//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
+

@@ -57,7 +57,7 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
                     VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
                     SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
-                    collider.radius = 0.2f;
+                    collider.radius = 0.075f;
                     collider.isTrigger = true;
                     VRGlobals.camHolder.layer = 7;
                     VRGlobals.menuVRManager.enabled = false;
@@ -121,6 +121,9 @@ namespace TarkovVR.Patches.Core.VR
 
             StackTrace stackTrace = new StackTrace();
             bool isBotPlayer = false;
+            if (__instance.transform.root.GetComponent<EFT.Player>() && !__instance.transform.root.GetComponent<EFT.Player>().IsYourPlayer)
+                return;
+
             foreach (var frame in stackTrace.GetFrames())
             {
                 var method = frame.GetMethod();
@@ -137,17 +140,13 @@ namespace TarkovVR.Patches.Core.VR
 
             // This is a bot player, so do not execute the rest of the code
             if (isBotPlayer)
-            {
                 return;
-            }
 
             //    //This is for Base HumanSpine3 to stop it doing something, cant remember
 
             if (__instance.transform.parent.parent.GetComponent<IKManager>() == null)
-            {
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
-                //VRGlobals.ikManager.enabled = false;
-            }
+
             if (__instance.name == "Base HumanLCollarbone") {
                 leftWrist = __instance.transform.FindChildRecursive("Base HumanLForearm3");
                 if (leftWrist != null && leftWrist.GetComponent<TwistRelax>())

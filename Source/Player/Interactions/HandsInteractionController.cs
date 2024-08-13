@@ -26,6 +26,8 @@ namespace TarkovVR.Source.Player.Interactions
         public Vector3 heldItemOffset = new Vector3(-0.1f, -0.05f, 0);
         private bool changingScopeZoom = false;
         private bool isInRange = false;
+        public GameObject laser;
+        public bool useLeftHandForRaycast = false;
         private void Awake() {
             IInputHandler baseHandler;
             VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.SelectFirstPrimaryWeapon, out baseHandler);
@@ -33,12 +35,43 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 selectWeaponHandler = (SelectWeaponHandler)baseHandler;
             }
+            AddLeftHandLaser();
         }
+        // left hand laser pos -0.4 -0.05 0 and rot 9.1637 266.6361 0 then add cube child with local scale 0.002 0.002 0.5 then go to mesh renderer->material and set the color to 0.1912 0.1924 0.1896 1
+        private void AddLeftHandLaser() {
+            GameObject laserHolder = new GameObject("LaserHolder");
+            laserHolder.transform.parent = VRGlobals.vrPlayer.LeftHand.transform;
+            laser = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            laser.transform.parent = laserHolder.transform;
+            laserHolder.transform.localPosition = new Vector3(-0.4f, -0.05f, 0f);
+            laserHolder.transform.localRotation = Quaternion.Euler(9, 266, 0);
+            laser.transform.localPosition = Vector3.zero;
+            laser.transform.localRotation = Quaternion.identity;
+            laser.transform.localScale = new Vector3(0.002f, 0.002f, 0.5f);
+            laser.transform.GetComponent<Renderer>().material = new Material(Shader.Find("Unlit/Texture"));
+            laser.transform.GetComponent<Renderer>().material.color = new Color(0.139f, 0.402f, 0.418f, 1);
+            GameObject.Destroy(laser.GetComponent<BoxCollider>());
+            laser.active = false;
+        }
+
         public void Update()
         {
 
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting || (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
                 return;
+            
+            
+            if (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f && !VRGlobals.vrPlayer.isSupporting)
+            {
+                useLeftHandForRaycast = true;
+                laser.active = true;
+            }
+            else {
+                useLeftHandForRaycast = false;
+                laser.active = false;
+            }
+            
+            
             Collider[] nearbyColliders = Physics.OverlapSphere(VRGlobals.vrPlayer.RightHand.transform.position, 0.125f);
             foreach (Collider collider in nearbyColliders)
             {
@@ -68,6 +101,8 @@ namespace TarkovVR.Source.Player.Interactions
                         selectWeaponHandler.TriggerSwapSidearm();
                     }
                 }
+
+
             }
 
             nearbyColliders = Physics.OverlapSphere(VRGlobals.vrPlayer.LeftHand.transform.position, 0.125f);
@@ -80,6 +115,19 @@ namespace TarkovVR.Source.Player.Interactions
                     scopeTransform = collider.transform;
                     handleScopeInteraction();
                     noScopeHit = false;
+                }
+                else if (collider.gameObject.layer == 7 && collider.gameObject.name == "camHolder")
+                {
+                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.LeftHand);
+                    if (SteamVR_Actions._default.LeftGrip.stateDown) {
+                        IInputHandler baseHandler;
+                        VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ToggleGoggles, out baseHandler);
+                        if (baseHandler != null)
+                        {
+                            HeadMountedDeviceHandler heeadMountDeviceHandler = baseHandler as HeadMountedDeviceHandler;
+                            heeadMountDeviceHandler.TriggerHHeadMount();
+                        }
+                    }
                 }
                 else if (collider.gameObject.layer == 3 && collider.gameObject.name == "rigCollider")
                 {
@@ -193,6 +241,8 @@ namespace TarkovVR.Source.Player.Interactions
                 WeaponPatches.currentGunInteractController.RemoveScopeHighlight();
             }
         }
+
+
 
         private void handleScopeInteraction()
         {

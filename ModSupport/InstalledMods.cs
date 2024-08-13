@@ -9,10 +9,12 @@ namespace TarkovVR.ModSupport
     internal static class InstalledMods
     {
         public static bool EFTApiInstalled { get; set; }
+        public static bool AmandsGraphicsInstalled { get; set; }
 
         static InstalledMods()
         {
             EFTApiInstalled = false;
+            AmandsGraphicsInstalled = false;
         }
     }
 }

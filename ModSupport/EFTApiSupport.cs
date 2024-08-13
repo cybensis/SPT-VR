@@ -11,7 +11,7 @@ using Valve.VR;
 using UnityEngine.EventSystems;
 using UnityEngine.Rendering.PostProcessing;
 
-namespace TarkovVR.ModSupport
+namespace TarkovVR.ModSupport.EFTApi
 {
     [HarmonyPatch]
     internal static class EFTApiSupport
@@ -21,7 +21,6 @@ namespace TarkovVR.ModSupport
         [HarmonyPatch(typeof(EFTConfigurationView), "CreateUI")]
         private static void SetEFTConfigWindow(EFTConfigurationView __instance)
         {
-            InstalledMods.EFTApiInstalled = true;
             __instance.transform.parent.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
             __instance.transform.parent.localScale = new Vector3(0.001f, 0.001f, 0.001f);
             __instance.transform.parent.localPosition = new Vector3(0.017f, -1000.26f, 0.9748f);
@@ -32,8 +31,8 @@ namespace TarkovVR.ModSupport
 
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFTConfiguration.Views.Drag), "OnDrag")]
-        private static bool HandleDragging(EFTConfiguration.Views.Drag __instance, PointerEventData eventData)
+        [HarmonyPatch(typeof(Drag), "OnDrag")]
+        private static bool HandleDragging(Drag __instance, PointerEventData eventData)
         {
             __instance.targetRoot.position = eventData.worldPosition;
             Vector3 newPos = __instance.targetRoot.localPosition;

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TarkovVR.ModSupport;
+using TarkovVR.ModSupport.EFTApi;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
@@ -25,13 +26,31 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class JumpInputHandler : IInputHandler
         {
-
+            private bool isVaulting = false;
+            private float timeHeld = 0f;
+            private static float TIME_HELD_FOR_VAULT = 0.3f;
             public void UpdateCommand(ref ECommand command)
             {
                 if (!VRGlobals.vrPlayer.blockJump && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
                 {
-                    command = ECommand.Jump;
+                    timeHeld += Time.deltaTime;
+                    if (timeHeld >= TIME_HELD_FOR_VAULT) { 
+                        command = ECommand.Vaulting;
+                        isVaulting = true;
+                    }
+                    //command = ECommand.Jump;
                 }
+                else {
+                    if (VRGlobals.player && VRGlobals.player.IsVaultingPressed)
+                    {
+                        isVaulting = false;
+                        command = ECommand.VaultingEnd;
+                    }
+                    else if (timeHeld > 0.05 && timeHeld < TIME_HELD_FOR_VAULT)
+                        command = ECommand.Jump;
+                    timeHeld = 0f;
+                }
+
             }
         }
 
@@ -576,6 +595,22 @@ namespace TarkovVR.Source.Controls
                     return;
                 if (SteamVR_Actions._default.Start.GetStateDown(SteamVR_Input_Sources.Any))
                     EFTApiSupport.OpenCloseConfigUI();
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        public class HeadMountedDeviceHandler : IInputHandler
+        {
+            private bool toggleHeadMountedDevice = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (toggleHeadMountedDevice) { 
+                    command =  ECommand.ToggleGoggles;
+                    toggleHeadMountedDevice = false;
+                }
+            }
+
+            public void TriggerHHeadMount() {
+                toggleHeadMountedDevice = true;
             }
         }
     }

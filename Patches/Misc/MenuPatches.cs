@@ -980,7 +980,7 @@ namespace TarkovVR.Patches.Misc
             if (!VRGlobals.inGame)
                 return;
 
-             Transform mainMenuCam = EnvironmentUI.Instance.environmentUIRoot_0.CameraContainer.FindChild("MainMenuCamera");
+            Transform mainMenuCam = EnvironmentUI.Instance.environmentUIRoot_0.CameraContainer.FindChild("MainMenuCamera");
             PositionMenuEnvironmentProps();
             PositionMainMenuUi();
             UIPatches.ShowUiScreens();
@@ -991,8 +991,12 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.vrPlayer.RightHand.transform.parent = mainMenuCam.parent;
 
             // The FPS cam messes with UI selection so disable it temporarily
-            VRGlobals.VRCam = Camera.main;
-            Camera.main.enabled = false;
+            if (Camera.main.name == "FPS Camera") { 
+                VRGlobals.VRCam = Camera.main;
+                Camera.main.enabled = false;
+            }
+
+            Plugin.MyLog.LogWarning("Opening menu in raid");
             
         }
 
@@ -1025,6 +1029,24 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.VRCam.enabled = true;
 
         }
+
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(ReconnectionScreen), "method_5")]
+        //private static void CloseInGameMenuFromDisconnectWindow(ReconnectionScreen __instance)
+        //{
+        //    if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager)
+        //        return;
+        //    UIPatches.HideUiScreens();
+        //    VRGlobals.vrPlayer.enabled = true;
+        //    VRGlobals.menuVRManager.enabled = false;
+        //    VRGlobals.menuOpen = false;
+        //    Camera.main.enabled = false;
+        //    VRGlobals.vrPlayer.RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
+        //    // Disabling the FPS cam stops it being main so we need to re-enable it another way
+        //    VRGlobals.VRCam.enabled = true;
+
+        //}
+
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ModdingScreenSlotView), "Start")]

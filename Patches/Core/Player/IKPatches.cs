@@ -27,5 +27,13 @@ namespace TarkovVR.Patches.Core.Player
             __instance.RibcageScaleCurrent = 1f;
         }
 
+
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(FirearmsAnimator), "SetSprint")]
+        //private static bool DisableSprintAnimation(FirearmsAnimator __instance)
+        //{
+        //    return false;
+        //}
+
     }
 }

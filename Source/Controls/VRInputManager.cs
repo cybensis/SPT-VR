@@ -38,6 +38,7 @@ namespace TarkovVR.Source.Controls
                 { ECommand.ToggleProne, new InputHandlers.ProneInputHandler() },
                 { ECommand.LeftStanceToggle, new InputHandlers.ResetHeightHandler() },
                 { ECommand.F12, new InputHandlers.EFTConfigHandler() },
+                { ECommand.ToggleGoggles, new InputHandlers.HeadMountedDeviceHandler() },
                 // Add other command handlers here
             };
             menuInputHandlers = new Dictionary<ECommand, IInputHandler>
