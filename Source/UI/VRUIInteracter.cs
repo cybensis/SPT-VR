@@ -20,7 +20,7 @@ namespace TarkovVR.Source.UI
         private PointerEventData eventData;
         public GameObject lastHighlightedObject;
         private GameObject dragObject;
-        private GameObject hitObject;
+        public GameObject hitObject;
         public Vector3 uiPointerPos;
         public float timeHeld = 0f;
         public Vector3 pressPosition;

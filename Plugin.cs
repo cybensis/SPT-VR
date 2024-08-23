@@ -72,7 +72,34 @@ public class Plugin : BaseUnityPlugin
             if (configViewType != null)
             {
                 // Apply conditional patches
-                ApplyPatches("TarkovVR.ModSupport");
+                InstalledMods.EFTApiInstalled = true;
+                ApplyPatches("TarkovVR.ModSupport.EFTApi");
+                MyLog.LogInfo("Dependent mod found and patches applied.");
+            }
+            else
+            {
+                MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+            }
+        }
+        else
+        {
+            MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
+        }
+
+        modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
+
+        if (File.Exists(modDllPath))
+        {
+            // Load the assembly
+            Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+
+            // Check for the required types and methods in the loaded assembly
+            Type configViewType = modAssembly.GetType("AmandsGraphics.AmandsGraphicsClass");
+            if (configViewType != null)
+            {
+                // Apply conditional patches
+                InstalledMods.AmandsGraphicsInstalled = true;
+                ApplyPatches("TarkovVR.ModSupport.AmandsGraphics");
                 MyLog.LogInfo("Dependent mod found and patches applied.");
             }
             else

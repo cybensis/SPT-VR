@@ -26,13 +26,14 @@ using System.Linq;
 using Valve.VR;
 using System.Reflection.Emit;
 using Comfort.Common;
+using TarkovVR.Patches.Core.Player;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
     internal class UIPatches
     {
         private static int playerLayer = 8;
-        public static GameObject quickSlotUi;
+        public static CircularSegmentUI quickSlotUi;
         public static EftBattleUIScreen battleScreenUi;
         public static BattleStancePanel stancePanel;
         public static CharacterHealthPanel healthPanel;
@@ -57,9 +58,20 @@ namespace TarkovVR.Patches.UI
                 return;
 
             PositionGameUi(gameUi);
+
         }
 
+        // If you have a weapon equipped this gets ran as soon as you go from the loading screen to the game
+        // so its a good choice to init the quick slot icons since everything should be loaded by now.
         [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
+        private static void InitQuickSlotRadialIcons(EFT.Player.FirearmController __instance)
+        {
+            if (__instance._player.IsYourPlayer)
+                UIPatches.quickSlotUi.CreateQuickSlotUi();
+        }
+
+            [HarmonyPostfix]
         [HarmonyPatch(typeof(NotifierView), "Awake")]
         private static void SetNotificationsUi(NotifierView __instance)
         {
@@ -163,8 +175,15 @@ namespace TarkovVR.Patches.UI
         public static void HandleOpenInventory()
         {
             ShowUiScreens();
-            int bitmask = 1 << playerLayer; // 256
-            Camera.main.cullingMask &= ~bitmask; // -524321 & -257
+            //int bitmask = 1 << playerLayer; // 256
+            //Camera.main.cullingMask &= ~bitmask; // -524321 & -257
+
+            if (VRGlobals.player && VRGlobals.player.PlayerBody && VRGlobals.player.PlayerBody.MeshTransform)
+                VRGlobals.player.PlayerBody.MeshTransform.gameObject.SetActive(false);
+
+            if (WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.transform.FindChild("RightHandPositioner"))
+                WeaponPatches.currentGunInteractController.transform.FindChild("RightHandPositioner").gameObject.SetActive(false);
+
             lastCamRootYRot = VRGlobals.camRoot.transform.eulerAngles.y;
             float initialCameraYRotation = Camera.main.transform.eulerAngles.y;
             VRGlobals.camRoot.transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
@@ -204,8 +223,13 @@ namespace TarkovVR.Patches.UI
         public static void HandleCloseInventory()
         {
             HideUiScreens();
-            int bitmask = 1 << playerLayer; // 256
-            Camera.main.cullingMask |= bitmask; // -524321 & -257
+            if (VRGlobals.player && VRGlobals.player.PlayerBody && VRGlobals.player.PlayerBody.MeshTransform)
+                VRGlobals.player.PlayerBody.MeshTransform.gameObject.SetActive(true);
+
+            if (WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.transform.FindChild("RightHandPositioner"))
+                WeaponPatches.currentGunInteractController.transform.FindChild("RightHandPositioner").gameObject.SetActive(true);
+            //int bitmask = 1 << playerLayer; // 256
+            //Camera.main.cullingMask |= bitmask; // -524321 & -257
             VRGlobals.menuOpen = false;
             VRGlobals.blockRightJoystick = false;
             VRGlobals.vrPlayer.enabled = true;
@@ -234,38 +258,38 @@ namespace TarkovVR.Patches.UI
             VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(InventoryScreenQuickAccessPanel), "Show", new Type[] { typeof(InventoryControllerClass), typeof(ItemUiContext), typeof(GamePlayerOwner), typeof(InsuranceCompanyClass) })]
-        private static void YoinkQuickSlotImages(InventoryScreenQuickAccessPanel __instance)
-        {
-            if (!VRGlobals.inGame)
-                return;
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(SimpleContextMenu), "method_0")]
+        //private static void FixSubMenuPositions(SimpleContextMenu __instance)
+        //{
+        //    if (__instance.transform.parent.name == "InteractionButtonsContainer") { 
+        //        Vector3 newPos = __instance.transform.localPosition;
+        //        newPos.z = 0;
+        //        newPos.x = (__instance.transform.parent as RectTransform).sizeDelta.x;
+        //        __instance.transform.localPosition = newPos;
+        //    }
+        //}
 
-            List<Sprite> mainImagesList = new List<Sprite>();
-            foreach (KeyValuePair<EBoundItem, BoundItemView> boundItem in __instance._boundItems)
-            {
-                if (boundItem.Value.ItemView)
-                {
-                    mainImagesList.Add(boundItem.Value.ItemView.MainImage.sprite);
-                }
-            }
-            if (!quickSlotUi)
-            {
-                quickSlotUi = new GameObject("quickSlotUi");
-                quickSlotUi.layer = 5;
-                quickSlotUi.transform.parent = VRGlobals.vrPlayer.LeftHand.transform;
-                CircularSegmentUI circularSegmentUI = quickSlotUi.AddComponent<CircularSegmentUI>();
-                circularSegmentUI.Init();
-                circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
-            }
-            else
-            {
-                CircularSegmentUI circularSegmentUI = quickSlotUi.GetComponent<CircularSegmentUI>();
-                circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
-            }
-            quickSlotUi.active = false;
 
-        }
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(InventoryScreenQuickAccessPanel), "Show", new Type[] { typeof(InventoryControllerClass), typeof(ItemUiContext), typeof(GamePlayerOwner), typeof(InsuranceCompanyClass) })]
+        //private static void YoinkQuickSlotImages(InventoryScreenQuickAccessPanel __instance)
+        //{
+        //    if (!VRGlobals.inGame)
+        //        return;
+
+        //    if (quickSlotUi == null)
+        //    {
+        //        GameObject quickSlotHolder = new GameObject("quickSlotUi");
+        //        quickSlotHolder.layer = 5;
+        //        quickSlotHolder.transform.parent = VRGlobals.vrPlayer.LeftHand.transform;
+        //        quickSlotUi = quickSlotHolder.AddComponent<CircularSegmentUI>();
+        //        quickSlotUi.Init();
+        //        //circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
+        //    }
+        //    quickSlotUi.gameObject.active = false;
+
+        //}
 
 
         // When the grid is being initialized we need to make sure the rotation is 0,0,0 otherwise the grid items don't

@@ -1,6 +1,12 @@
-﻿using System;
+﻿using EFT.InventoryLogic;
+using EFT.UI;
+using EFT.UI.DragAndDrop;
+using HarmonyLib;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using TarkovVR;
+using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,6 +28,8 @@ public class CircularSegmentUI : MonoBehaviour
     public bool leftHand = false;
     private QuickSlotHandler quickSlotHandler;
     private SelectWeaponHandler selectWeaponHandler;
+    private List<EBoundItem> quickSlotOrder;
+    private List<GClass822> iconsList;
     public void Init()
     {
 
@@ -46,6 +54,10 @@ public class CircularSegmentUI : MonoBehaviour
 
     private int lastSelectedSegment = -1;
 
+    //private void OnEnable() {
+    //    if (leftHand)
+    //        CreateQuickSlotUi();
+    //}
 
     public void CreateGunUi(string[] menuSpriteNames) {
         menuSegments = new Image[menuSpriteNames.Length];
@@ -66,31 +78,54 @@ public class CircularSegmentUI : MonoBehaviour
         gameObject.active = false;
     }
 
-    public void CreateQuickSlotUi(Sprite[] menuSprites)
+    public void CreateQuickSlotUi()
     {
+        Plugin.MyLog.LogWarning("Creating quick slot radial menu");
+        leftHand = true;
         int children = transform.childCount;
         for (int i = 0; i < children; i++)
         {
             Destroy(transform.GetChild(i).gameObject);
         }
-        menuSegments = new Image[menuSprites.Length];
-        numberOfSegments = menuSprites.Length;
-        this.menuSprites = menuSprites;
-        leftHand = true;
-        CreateSegments();
+        Dictionary<EBoundItem, Item> quickSlots = VRGlobals.player.Inventory.FastAccess.BoundItems;
+        menuSegments = new Image[quickSlots.Count];
+        numberOfSegments = quickSlots.Count;
+        List<Sprite> newMenuSprites = new List<Sprite>();
+        quickSlotOrder = new List<EBoundItem>();
+        iconsList = new List<GClass822>();
+        foreach (KeyValuePair<EBoundItem, Item> kvp in quickSlots)
+        {
+            GClass822 itemIcon = ItemViewFactory.LoadItemIcon(kvp.Value);
+            if (itemIcon.Sprite != null)
+            {
+                iconsList.Add(itemIcon);    
+                newMenuSprites.Add(itemIcon.Sprite);
+                quickSlotOrder.Add(kvp.Key);
+            }
+
+        }
+        this.menuSprites = newMenuSprites.ToArray();
+        if (this.menuSprites.Length > 0)
+            CreateSegments();
         IInputHandler baseHandler;
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.SelectFastSlot4, out baseHandler);
         if (baseHandler != null)
             quickSlotHandler = baseHandler as QuickSlotHandler;
-    }
 
+    }
+    private bool first = true;
     void Update()
     {
+        if (first) {
+            Plugin.MyLog.LogWarning("First update");
+            first = false;
+        }
         if (numberOfSegments == 0)
             return;
         Vector2 joystickInput = SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand);
         if (leftHand)
             joystickInput = SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand);
+
 
         if (lastSelectedSegment != -1)
         {
@@ -126,8 +161,12 @@ public class CircularSegmentUI : MonoBehaviour
 
         if (leftHand && !SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand))
         {
-            if (quickSlotHandler.GetQuickUseSlot() == -1 && lastSelectedSegment != -1)
-                quickSlotHandler.TriggerUseQuickSlot(lastSelectedSegment);
+            if (quickSlotHandler.GetQuickUseSlot() == 0 && lastSelectedSegment != -1) {
+                quickSlotHandler.TriggerUseQuickSlot(quickSlotOrder[lastSelectedSegment]);
+                menuSegments[lastSelectedSegment].color = new Color(1f, 1f, 1f, 0.3f);
+                menuSegments[lastSelectedSegment].sprite = defaultMenuSprite;
+                lastSelectedSegment = -1;
+            }
             gameObject.active = false;
         }
     }
@@ -149,7 +188,7 @@ public class CircularSegmentUI : MonoBehaviour
 
         // Calculate the fill amount considering the spacing
         float fillAmount = adjustedAngleStep / 360f;
-
+        Plugin.MyLog.LogWarning("Create segments");
         for (int i = 0; i < numberOfSegments; i++)
         {
             // Instantiate a new segment from the prefab

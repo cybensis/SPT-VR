@@ -1,5 +1,7 @@
 ﻿using EFT;
 using EFT.InputSystem;
+using EFT.InventoryLogic;
+using EFT.UI;
 using System;
 using System.CodeDom;
 using System.Collections.Generic;
@@ -9,6 +11,7 @@ using System.Threading.Tasks;
 using TarkovVR.ModSupport;
 using TarkovVR.ModSupport.EFTApi;
 using TarkovVR.Patches.Core.Player;
+using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -228,8 +231,24 @@ namespace TarkovVR.Source.Controls
             private float z = 1;
             public void UpdateCommand(ref ECommand command)
             { 
-                if (VRGlobals.firearmController == null)
+                if (VRGlobals.firearmController == null && !WeaponPatches.rangeFinder)
                     return;
+
+                if (WeaponPatches.rangeFinder)
+                {
+                    if (SteamVR_Actions._default.RightTrigger.axis > 0.5f && !WeaponPatches.rangeFinder.IsAiming)
+                    {
+                        WeaponPatches.rangeFinder.ToggleAim();
+                        VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.13f, -0.1711f, -0.24f);
+                        VRGlobals.weaponHolder.transform.localEulerAngles = new Vector3(12, 308, 90);
+                    }
+                    else if (SteamVR_Actions._default.RightTrigger.axis < 0.5f && WeaponPatches.rangeFinder.IsAiming) {
+                        WeaponPatches.rangeFinder.ToggleAim();
+                        VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(37, 267, 55);
+                        VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.23f, 0.0689f, -0.23f);
+                    }
+                    return;
+                }
 
                 bool isAiming = VRGlobals.firearmController.IsAiming;
                 if (VRGlobals.scope != null)
@@ -238,6 +257,7 @@ namespace TarkovVR.Source.Controls
                     directionToScope = directionToScope.normalized;
                     float angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward * -1, directionToScope);
                     float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
+                    //Plugin.MyLog.LogWarning("Aiming deets: " + angleToScope + "   |   " + angleFromScope + "   |   " + isAiming);
                     if (!isAiming && angleToScope <= 25f && angleFromScope <= 25f)
                         command = ECommand.ToggleAlternativeShooting;
                     else if (isAiming && (angleToScope > 25f || angleFromScope > 25f))
@@ -252,9 +272,10 @@ namespace TarkovVR.Source.Controls
                     directionToGun = directionToGun.normalized;
                     float angleToScope = Vector3.Angle(direction, directionToGun);
                     float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToGun);
-                    if (!isAiming && angleToScope <= 20f && angleFromScope <= 25f)
+                    //Plugin.MyLog.LogWarning("Aiming deets: " + angleToScope + "   |   " + angleFromScope + "   |   " + isAiming);
+                    if (!isAiming && angleToScope <= 25f && angleFromScope <= 27.5f)
                         command = ECommand.ToggleAlternativeShooting;
-                    else if (isAiming && (angleToScope > 20f || angleFromScope > 25f))
+                    else if (isAiming && (angleToScope > 25f || angleFromScope > 27.5f))
                     {
                         command = ECommand.EndAlternativeShooting;
                         VRPlayerManager.smoothingFactor = 50f;
@@ -472,32 +493,42 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class QuickSlotHandler : IInputHandler
         {
-            private int currentSlot;
+            private EBoundItem currentSlot;
             // The user set quick slots start at 4, 1-3 are weapon slots
-            private ECommand[] quickSlotCommands = { 
-                ECommand.SelectFastSlot4, 
-                ECommand.SelectFastSlot5, 
-                ECommand.SelectFastSlot6, 
-                ECommand.SelectFastSlot7, 
-                ECommand.SelectFastSlot8, 
-                ECommand.SelectFastSlot9, 
-                ECommand.SelectFastSlot0 
-            };
+            private Dictionary<EBoundItem, ECommand> quickSlotCommands = new Dictionary<EBoundItem, ECommand>();
+            public QuickSlotHandler() {
+                quickSlotCommands.Add(EBoundItem.Item4, ECommand.SelectFastSlot4);
+                quickSlotCommands.Add(EBoundItem.Item5, ECommand.SelectFastSlot5);
+                quickSlotCommands.Add(EBoundItem.Item6, ECommand.SelectFastSlot6);
+                quickSlotCommands.Add(EBoundItem.Item7, ECommand.SelectFastSlot7);
+                quickSlotCommands.Add(EBoundItem.Item8, ECommand.SelectFastSlot8);
+                quickSlotCommands.Add(EBoundItem.Item9, ECommand.SelectFastSlot9);
+                quickSlotCommands.Add(EBoundItem.Item10, ECommand.SelectFastSlot0);
+            }
+            //private ECommand[] quickSlotCommands = {
+            //    ECommand.SelectFastSlot4, 
+            //    ECommand.SelectFastSlot5, 
+            //    ECommand.SelectFastSlot6, 
+            //    ECommand.SelectFastSlot7, 
+            //    ECommand.SelectFastSlot8, 
+            //    ECommand.SelectFastSlot9, 
+            //    ECommand.SelectFastSlot0 
+            //};
 
             public void UpdateCommand(ref ECommand command)
             {
 
-                if (currentSlot != -1)
+                if (currentSlot != 0)
                 {
                     command = quickSlotCommands[currentSlot];
-                    currentSlot = -1;
+                    currentSlot = 0;
                 }
             }
-            public void TriggerUseQuickSlot(int quickSlot)
+            public void TriggerUseQuickSlot(EBoundItem slot)
             {
-                currentSlot = quickSlot;
+                currentSlot = slot;
             }
-            public int GetQuickUseSlot()
+            public EBoundItem GetQuickUseSlot()
             {
                 return currentSlot;
             }
@@ -518,7 +549,7 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
-                if (SteamVR_Actions._default.ButtonY.GetStateUp(SteamVR_Input_Sources.Any))
+                if (SteamVR_Actions._default.ButtonX.GetStateUp(SteamVR_Input_Sources.Any))
                     command = ECommand.ToggleInventory;
             }
         }
@@ -541,10 +572,40 @@ namespace TarkovVR.Source.Controls
                 else if (shootingToggled && !grenadePinPulled) { 
                     command = ECommand.TryHighThrow;
                     grenadePinPulled = true;
+                    // Change the weapon holder position for grenade after the pin pulling animation
+
+                    PreloaderUI.Instance.WaitSeconds(1f, delegate
+                    {
+                        if (VRGlobals.player.HandsController as EFT.Player.GrenadeController && (VRGlobals.player.HandsController as EFT.Player.GrenadeController).WaitingForHighThrow) {
+
+                            // You can't hold these smoke grenades after "pulling the pin" so don't set the laser to true
+                            if (VRGlobals.player.HandsController.HandsHierarchy.name != "weapon_grenade_rdg2.generated(Clone)") {
+                                InitVRPatches.rightPointerFinger.enabled = true;
+                                //VRGlobals.handsInteractionController.grenadeLaser.active = true;
+                                VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1f, -0.43f, -0.25f);
+                            }
+                            if (VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_m7920.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_rgo.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_rgn.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_m18.generated(Clone)") { 
+                                VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(30, 273, 116);
+                                VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.05f, -0.43f, -0.15f);
+                            }
+                            WeaponPatches.pinPulled = true;
+                            //thin grenades, finger should be rotated 22 and grenade x offset is 8
+                            //f1 and RGD grenades, finger should be rotated 22 and grenade x offset is 2
+                            //M1 grenade, finger 22 grenade x offset prolly like -7
+                            //M7290 whole hand would need to be rotated weaphold pos 0.05 -0.43 -0.15 rrot 30.0956 273.0178 116.7104 then finger is 22 and grenade is 8
+                            //green smoke grenades finger and offset 22
+
+                            //weapon_grenade_rgo_container(Clone)
+                        }
+                    });
                 }
                 else if (shootingToggled && grenadePinPulled && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5) {
                     command = ECommand.EndShooting;
                     shootingToggled = false;
+                    //VRGlobals.handsInteractionController.grenadeLaser.active = false;
+                    //VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
+                    //InitVRPatches.rightPointerFinger.enabled = false;
+
                 }
                 else if (!shootingToggled && grenadePinPulled)
                 {
@@ -563,7 +624,7 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
-                if (SteamVR_Actions._default.ButtonX.GetStateUp(SteamVR_Input_Sources.Any))
+                if (SteamVR_Actions._default.ButtonY.GetStateUp(SteamVR_Input_Sources.Any))
                     command = ECommand.Escape;
                 else if ((VRGlobals.menuOpen || !VRGlobals.inGame) && SteamVR_Actions._default.ButtonB.GetStateUp(SteamVR_Input_Sources.Any))
                     command = ECommand.Escape;

@@ -1,4 +1,5 @@
-﻿using Sirenix.Serialization;
+﻿using EFT.InventoryLogic;
+using Sirenix.Serialization;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;
@@ -37,21 +38,46 @@ namespace TarkovVR.Source.Weapons
                 initialHandRot = SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
                 swapZooms = false;
             }
+
+
+        }
+
+
+        public void changeScopeMode() {
+            if (VRGlobals.scope && VRGlobals.scope.parent.GetComponent<SightModVisualControllers>() != null)
+            {
+                SightComponent sightComponent = VRGlobals.scope.parent.GetComponent<SightModVisualControllers>().sightComponent_0;
+                int scopeIndex = sightComponent.SelectedScopeIndex;
+                int maxScopeModes = sightComponent.GetScopeModesCount(scopeIndex);
+                int nextScopeMode = (sightComponent.SelectedScopeMode + 1) % maxScopeModes;
+                FirearmScopeStateStruct scopeState = new FirearmScopeStateStruct();
+                scopeState.ScopeMode = nextScopeMode;
+                scopeState.Id = sightComponent.Item.Id;
+
+                VRGlobals.firearmController.SetScopeMode(new FirearmScopeStateStruct[] { scopeState });
+            //if (VRGlobals.scope.name == "scope_all_eotech_hhs_1_tan(Clone)" && VRGlobals.scope.GetComponent<SightModVisualControllers>().sightComponent_0.SelectedScopeMode == 1)
+            //{
+            //}
+            }
         }
 
 
         public void handleJoystickZoomDial() {
-            if (scopeCamera && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > VRSettings.GetRightStickSensitivity())
-            {
-                currentFov -= SteamVR_Actions._default.RightJoystick.axis.y / 2;
+            if (!scopeCamera || Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < VRSettings.GetRightStickSensitivity())
+                return;
 
-                currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
-                if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 || scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
-                    if (scopeZoomHandler != null)
-                        scopeZoomHandler.TriggerSwapZooms();
+            if (VRGlobals.scope.parent.name == "scope_all_eotech_hhs_1_tan(Clone)")
+                return;
 
-                scopeCamera.fieldOfView = currentFov;
-            }
+            currentFov -= SteamVR_Actions._default.RightJoystick.axis.y / 2;
+
+            currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
+            if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 || scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
+                if (scopeZoomHandler != null)
+                    scopeZoomHandler.TriggerSwapZooms();
+
+            scopeCamera.fieldOfView = currentFov;
+
         }
 
         public void handlePhysicalZoomDial()

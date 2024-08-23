@@ -248,8 +248,8 @@ namespace TarkovVR.Source.Player.VRManager
                 // Separate rotation offsets for clearer control
                 Quaternion offsetRotation = Quaternion.Euler(340, 0, -90); // Apply pitch offset here
 
-                //if (pitchAngwle < 15 || (pitchAngwle < 40 && rollValue < -150))
-                //    rollValue = 15;
+                if (pitchAngwle < 15 || rollValue < -150 || rollValue > 150)
+                    rollValue = 15;
                 //Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation * rollRotation;
                 Quaternion combinedRotation = yawRotation * Quaternion.Euler(-pitchAngle, 0, 0) * offsetRotation;
 
@@ -277,7 +277,12 @@ namespace TarkovVR.Source.Player.VRManager
                 // Calculate the up direction based on rotation
                 Vector3 upMovement = fromAction.localRotation * Vector3.up * 0.1f;
                 // Calculate the right direction based on rotation
-                Vector3 rightMovement = fromAction.localRotation * Vector3.right * x.z;
+                float rightOffset = 0;
+                if (VRGlobals.firearmController.WeaponLn > 0.8f)
+                    rightOffset = ((VRGlobals.firearmController.WeaponLn - 0.8f) / 10) * -1;
+
+
+                Vector3 rightMovement = fromAction.localRotation * Vector3.right * rightOffset;
                 Vector3 finalPosition = fromAction.localPosition - forwardMovement + upMovement + rightMovement;
                 RightHand.transform.localPosition = finalPosition;
             }
@@ -290,27 +295,14 @@ namespace TarkovVR.Source.Player.VRManager
             }
             // RightHand.transform.rotation.eulerAngles y should be between 65 and 250
         }
-        Vector3 NormalizeEulerAngles(Vector3 eulerAngles)
-        {
-            eulerAngles.x = NormalizeAngle(eulerAngles.x);
-            eulerAngles.y = NormalizeAngle(eulerAngles.y);
-            eulerAngles.z = NormalizeAngle(eulerAngles.z);
-            return eulerAngles;
-        }
 
-        // Normalize a single angle to the range of -180 to 180 degrees
-        float NormalizeAngle(float angle)
-        {
-            while (angle > 180f) angle -= 360f;
-            while (angle < -180f) angle += 360f;
-            return angle;
-        }
         private void UpdateLeftHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
             leftHandYRotation = fromAction.localRotation.eulerAngles.y;
             //leftHandZRotation = fromAction.localRotation.eulerAngles.z;
             if (!LeftHand || (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && SteamVR_Actions._default.LeftGrip.state)) 
                 return;
+
 
             if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(LEFT_HAND_ANIMATOR_HASH) == 1.0)
             {
@@ -344,6 +336,15 @@ namespace TarkovVR.Source.Player.VRManager
                         // Set left hand target to the original left hand target
                         VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                         isSupporting = true;
+                        if (UIPatches.stancePanel)
+                            UIPatches.stancePanel.AnimatedHide();
+                        if (UIPatches.healthPanel)    
+                            UIPatches.healthPanel.AnimatedHide();
+                        // Stance panel is stubborn and still doesn't go away after AnimatedHide sometimes so set it to inactive
+                        if (UIPatches.stancePanel)
+                            UIPatches.stancePanel.gameObject.SetActive(false);
+                        if (UIPatches.extractionTimerUi)
+                            UIPatches.extractionTimerUi.Hide();
                     }
                     if (VRSettings.GetSupportGunHoldToggle())
                     {
@@ -422,6 +423,8 @@ namespace TarkovVR.Source.Player.VRManager
             //}
             if (!isSupporting)
             {
+                if (!UIPatches.stancePanel.gameObject.active)
+                    UIPatches.stancePanel.gameObject.SetActive(true);
                 if (UIPatches.stancePanel)
                 {
 

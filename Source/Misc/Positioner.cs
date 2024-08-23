@@ -5,6 +5,7 @@ namespace TarkovVR.Source.Misc
     internal class WeaponPositioner : MonoBehaviour
     {
 
+        private float fingerBaseRotation = 22;
         private float x, y, z;
         private float rx, ry, rz;
         public Transform target;
@@ -20,11 +21,16 @@ namespace TarkovVR.Source.Misc
 
         private void Update()
         {
-            transform.localPosition = Vector3.zero;
+            transform.localRotation = Quaternion.Euler(0,0,fingerBaseRotation);
+            transform.GetChild(0).localRotation = Quaternion.Euler(0, 0, 350);
+            transform.GetChild(0).GetChild(0).localRotation = Quaternion.Euler(0, 0, 0);
         }
         private void LateUpdate()
         {
-            transform.localPosition = Vector3.zero;
+            transform.localRotation = Quaternion.Euler(0,0, fingerBaseRotation);
+            transform.GetChild(0).localRotation = Quaternion.Euler(0, 0, 350);
+            transform.GetChild(0).GetChild(0).localRotation = Quaternion.Euler(0, 0, 0);
+
 
         }
         //private void LateUpdate()

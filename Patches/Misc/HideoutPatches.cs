@@ -123,8 +123,31 @@ namespace TarkovVR.Patches.Misc
                 SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
                 collider.radius = 0.2f;
                 collider.isTrigger = true;
+
                 VRGlobals.camHolder.layer = 7;
+
+                GameObject headGearCollider = new GameObject("headGearCollider");
+                headGearCollider.transform.parent = VRGlobals.camHolder.transform;
+                headGearCollider.transform.localPosition = Vector3.zero;
+                headGearCollider.transform.localRotation = Quaternion.identity;
+                headGearCollider.layer = 3;
+                collider = headGearCollider.AddComponent<SphereCollider>();
+                collider.radius = 0.075f;
+                collider.isTrigger = true;
+
                 Camera.main.clearFlags = CameraClearFlags.SolidColor;
+
+                if (UIPatches.quickSlotUi == null)
+                {
+                    GameObject quickSlotHolder = new GameObject("quickSlotUi");
+                    quickSlotHolder.layer = 5;
+                    quickSlotHolder.transform.parent = VRGlobals.vrPlayer.LeftHand.transform;
+                    UIPatches.quickSlotUi = quickSlotHolder.AddComponent<CircularSegmentUI>();
+                    UIPatches.quickSlotUi.Init();
+                    UIPatches.quickSlotUi.CreateQuickSlotUi();
+                    //circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
+                }
+                UIPatches.quickSlotUi.gameObject.active = false;
             }
             VRGlobals.vrPlayer.enabled = true;
             VRGlobals.menuVRManager.enabled = false;

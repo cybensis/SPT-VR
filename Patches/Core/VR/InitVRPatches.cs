@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Reflection;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Misc;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
@@ -57,11 +58,31 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.vrOpticController = VRGlobals.camHolder.AddComponent<VROpticController>();
                     VRGlobals.handsInteractionController = VRGlobals.camHolder.AddComponent<HandsInteractionController>();
                     SphereCollider collider = VRGlobals.camHolder.AddComponent<SphereCollider>();
+                    collider.radius = 0.2f;
+                    collider.isTrigger = true;
+
+                    GameObject headGearCollider = new GameObject("headGearCollider");
+                    headGearCollider.transform.parent = VRGlobals.camHolder.transform;
+                    headGearCollider.transform.localPosition = Vector3.zero;
+                    headGearCollider.transform.localRotation = Quaternion.identity;
+                    headGearCollider.layer = 3;
+                    collider = headGearCollider.AddComponent<SphereCollider>();
                     collider.radius = 0.075f;
                     collider.isTrigger = true;
+
                     VRGlobals.camHolder.layer = 7;
                     VRGlobals.menuVRManager.enabled = false;
                     VRGlobals.menuOpen = false;
+                    if (UIPatches.quickSlotUi == null)
+                    {
+                        GameObject quickSlotHolder = new GameObject("quickSlotUi");
+                        quickSlotHolder.layer = 5;
+                        quickSlotHolder.transform.parent = VRGlobals.vrPlayer.LeftHand.transform;
+                        UIPatches.quickSlotUi = quickSlotHolder.AddComponent<CircularSegmentUI>();
+                        UIPatches.quickSlotUi.Init();
+                        //circularSegmentUI.CreateQuickSlotUi(mainImagesList.ToArray());
+                    }
+                    UIPatches.quickSlotUi.gameObject.active = false;
                     //VRGlobals.vrPlayer.radialMenu.active = false;
                 }
             }
@@ -92,6 +113,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.sidearmHolster.transform.localPosition = new Vector3(0, 0.1f, 0.1f);
                 VRGlobals.sidearmHolster.transform.localRotation = Quaternion.identity;
                 VRGlobals.sidearmHolster.gameObject.layer = 3;
+
             }
 
             if (VRGlobals.leftArmBendGoal == null) {
@@ -108,7 +130,8 @@ namespace TarkovVR.Patches.Core.VR
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-
+        public static WeaponPositioner rightPointerFinger;
+        public static Transform leftPalm;
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void SetupIK(LimbIK __instance)
@@ -159,6 +182,7 @@ namespace TarkovVR.Patches.Core.VR
                     ResetHeightHandler resetHeightHandler = baseHandler as ResetHeightHandler;
                     resetHeightHandler.SetLeftArmTransform(__instance.transform.FindChildRecursive("Base HumanLForearm1"));
                 }
+                leftPalm = __instance.transform.FindChildRecursive("Base HumanLPalm");
             }
             if (__instance.name == "Base HumanRCollarbone")
             {
@@ -169,6 +193,15 @@ namespace TarkovVR.Patches.Core.VR
                     ResetHeightHandler resetHeightHandler = baseHandler as ResetHeightHandler;
                     resetHeightHandler.SetRightArmTransform(__instance.transform.FindChildRecursive("Base HumanRForearm1"));
                 }
+                Transform rightFingerTransform = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(1);
+                rightPointerFinger = rightFingerTransform.gameObject.AddComponent<WeaponPositioner>();
+                rightPointerFinger.enabled = false;
+                if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.laser != null) { 
+                    VRGlobals.handsInteractionController.grenadeLaser.transform.parent = rightFingerTransform;
+                    VRGlobals.handsInteractionController.grenadeLaser.transform.localEulerAngles = new Vector3(351f, 273.6908f, 0);
+                    VRGlobals.handsInteractionController.grenadeLaser.transform.localPosition = new Vector3(-0.3037f, 0.0415f, 0.0112f);
+                }
+                    
             }
                 // parent is HumanLForearm3
 

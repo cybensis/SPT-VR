@@ -38,6 +38,11 @@ public class GunInteractionController : MonoBehaviour
     public bool hasExaminedAfterMalfunction = false;
     public Vector3 armsOffset = new Vector3(-0.05f, -0.075f, -0.075f);
 
+    private Dictionary<Transform, ActionsReturnClass> interactablesDictionary;
+    private Dictionary<Transform, ActionsReturnClass> tacDeviceDictionary;
+    private Dictionary<Transform, ActionsReturnClass> malfunctionMeshDictionary;
+
+
     //private bool
     public void Init()
     {
@@ -53,6 +58,12 @@ public class GunInteractionController : MonoBehaviour
         if (malfunctionMeshList == null)
             malfunctionMeshList = new List<Class559>();
 
+        if (interactablesDictionary == null)
+            interactablesDictionary = new Dictionary<Transform, ActionsReturnClass>();
+        if (tacDeviceDictionary == null)
+            tacDeviceDictionary = new Dictionary<Transform, ActionsReturnClass>();
+        if (malfunctionMeshDictionary == null)
+            malfunctionMeshDictionary = new Dictionary<Transform, ActionsReturnClass>();
 
         transform.localEulerAngles = new Vector3(340, 340, 0);
     }
@@ -92,7 +103,13 @@ public class GunInteractionController : MonoBehaviour
             transform.localPosition += armsOffset;
         }
 
-        if (SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && !VRGlobals.firearmController.IsAiming)
+        if (VRGlobals.menuOpen && hightlightingMesh) {
+            meshHighlighter.enabled = false;
+            hightlightingMesh = false;
+        }
+
+
+        if (!VRGlobals.menuOpen && SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && (!VRGlobals.vrPlayer.isSupporting || !VRGlobals.firearmController.IsAiming))
         {
             if (VRGlobals.firearmController.Weapon.MalfState.State != EFT.InventoryLogic.Weapon.EMalfunctionState.None) {
                 if ((!hightlightingMesh || !initMalfunction) && meshHighlighter)
@@ -395,6 +412,15 @@ public class GunInteractionController : MonoBehaviour
         }
         if (!replaceInteractable)
             interactables.Add(marker.transform);
+    }
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
+    public bool TacDeviceAlreadyRegistered(Transform tacDevice)
+    {
+        for (int i = 0; i < tacDevices.Count; i++) {
+            if (tacDevices[i] == tacDevice)
+                return true;
+        }
+        return false;
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void CreateRaycastReceiver(Transform parent, float weaponLength) {

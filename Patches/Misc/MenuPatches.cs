@@ -438,13 +438,38 @@ namespace TarkovVR.Patches.Misc
         {
             if (!VRGlobals.inGame)
             {
-                Vector3 newPos = __instance.Transform.position;
-                newPos.z = 1f;
-                __instance.Transform.position = newPos;
+                Vector3 newRootPos = __instance.Transform.position;
+                newRootPos.z = 1f;
+                __instance.Transform.position = newRootPos;
             }
             else {
                 __instance.transform.position = MenuPatches.vrUiInteracter.pressPosition;
             }
+
+
+            Vector3 newPos = __instance.transform.localPosition;
+            if (__instance.transform.parent.name == "InteractionButtonsContainer")
+            {
+                newPos.z = 0;
+                newPos.x = (__instance.transform.parent as RectTransform).sizeDelta.x;
+            }
+            __instance.WaitOneFrame(delegate { 
+                if (__instance.name == "ItemContextSubMenu(Clone)" && vrUiInteracter.hitObject && vrUiInteracter.hitObject.transform as RectTransform)
+                {
+                    __instance.transform.position = vrUiInteracter.hitObject.transform.position;
+                    Vector3 newPos = __instance.transform.localPosition;
+                    newPos.z = 0;
+                    newPos.y = newPos.y + (__instance.RectTransform.sizeDelta.y / 2);
+                    newPos.x = (vrUiInteracter.hitObject.transform as RectTransform).sizeDelta.x;
+                    if (__instance.transform.parent.name == "ItemInfoWindowTemplate(Clone)")
+                        newPos.x = ((vrUiInteracter.hitObject.transform as RectTransform).sizeDelta.x / 2) * -1;
+
+                    __instance.transform.localPosition = newPos;
+                }
+            });
+            newPos.z = 0;
+            __instance.transform.localPosition = newPos;
+
             return false;
         }
 
@@ -715,9 +740,14 @@ namespace TarkovVR.Patches.Misc
                 __instance._target.position = eventData.worldPosition;
                 Vector3 newPos = __instance._target.localPosition;
                 if (__instance.name != "CharacteristicsPanel")
-                    newPos.x += ((RectTransform)__instance._target.transform).sizeDelta.x / 2;
-                else
+                {
+                    //newPos.x -= ((RectTransform)__instance._target.transform).sizeDelta.x / 2;
                     newPos.y -= ((RectTransform)__instance._target.transform).sizeDelta.y / 2;
+                }
+                else { 
+                    newPos.x -= ((RectTransform)__instance._target.transform).sizeDelta.x / 2;
+                    //newPos.x -= ((RectTransform)__instance._target.transform).sizeDelta.y / 2;
+                }
                 newPos.z = 0f;
                 __instance._target.localPosition = newPos;
 
@@ -903,16 +933,10 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(AddOfferWindow), "Show")]
-        private static void PositionOfferWindow(AddOfferWindow __instance, Task __result)
+        [HarmonyPatch(typeof(AddOfferWindow), "method_11")]
+        private static void PositionOfferWindow(AddOfferWindow __instance)
         {
-            __result.ContinueWith(task =>
-            {
-                if (task.IsCompleted)
-                {
-                    __instance.transform.localPosition = Vector3.zero;
-                }
-            }, TaskScheduler.FromCurrentSynchronizationContext());
+             __instance.transform.localPosition = Vector3.zero;
 
         }
 
@@ -1301,7 +1325,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(RagfairOfferItemView), "Show")]
         private static void ResetOfferImageRotation(RagfairOfferItemView __instance)
         {
-            __instance.MainImage.transform.localRotation = Quaternion.identity;
+            __instance.MainImage.transform.localRotation = Quaternion.Euler(0, 0, __instance.MainImage.transform.localEulerAngles.z);
         }
 
         // Icons get rotated when loading mags and other stuff
@@ -1309,7 +1333,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(GridItemView), "OnRefreshItem")]
         private static void ResetRotationOnInvIcons(ItemView __instance)
         {
-            __instance.MainImage.transform.localRotation = Quaternion.identity;
+            __instance.MainImage.transform.localRotation = Quaternion.Euler(0,0, __instance.MainImage.transform.localEulerAngles.z);
         }
 
 

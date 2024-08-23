@@ -25,6 +25,7 @@ namespace TarkovVR.Source.Weapons
 
         static ScopeManager()
         {
+            // Name - Zoom Level - FoV
             AddScope("scope_30mm_s&b_pm_ii_1_8x24(Clone)", 1, 27);
             AddScope("scope_30mm_s&b_pm_ii_1_8x24(Clone)", 8f, 3);
             AddScope("scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)", 1, 15);
@@ -64,6 +65,8 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_dovetail_npz_1p29_4x(Clone)", 4f, 6f);
             AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 4f, 6f);
             AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 1f, 27);
+            AddScope("scope_base_trijicon_acog_ta01nsn_4x32_tan(Clone)", 4f, 6);
+            AddScope("scope_all_eotech_hhs_1_tan(Clone)", 3f, 7.3f);
 
         }
 
@@ -82,7 +85,7 @@ namespace TarkovVR.Source.Weapons
                 }
             }
             // If the scope with the specified name and zoom level is not found, return a default FOV
-            return -1f; // Or any other default value you choose
+            return -1f; 
         }
 
         public static float GetMinFOV(string name)

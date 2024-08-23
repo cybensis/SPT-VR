@@ -1,4 +1,5 @@
-﻿using TarkovVR.Source.Player.Interactions;
+﻿using EFT.UI;
+using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Weapons;
@@ -33,6 +34,8 @@ namespace TarkovVR
         public static EFT.Player player;
         public static VROpticController vrOpticController;
         public static HandsInteractionController handsInteractionController;
+        public static Vector3 grenadeOffset = new Vector3(22.5f,0,0);
+        public static float randomMultiplier = 1;
         public static bool menuOpen = false;
         public static bool inGame = false;
 

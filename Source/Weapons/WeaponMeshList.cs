@@ -61,7 +61,7 @@ namespace TarkovVR.Source.Weapons
             akVeprVpo136.magazine.Add("mod_magazine");
             akVeprVpo136.chamber.Add("weapon_bolt");
             akVeprVpo136.stock.Add("mod_stock");
-            weaponMeshDictionary.Add("wweapon_molot_vepr_km_vpo_136_762x39_container(Clone)", akVeprVpo136);
+            weaponMeshDictionary.Add("weapon_molot_vepr_km_vpo_136_762x39_container(Clone)", akVeprVpo136);
 
             WeaponMeshParts sagAk545Short = new WeaponMeshParts();
             sagAk545Short.magazine.Add("mod_magazine");
@@ -138,7 +138,7 @@ namespace TarkovVR.Source.Weapons
             hk.magazine.Add("mod_magazine");
             hk.chamber.Add("mod_charge");
             hk.stock.Add("mod_stock");
-            hk.firingModeSwitch.Add("weappon_selector");
+            hk.firingModeSwitch.Add("weapon_selector");
             weaponMeshDictionary.Add("weapon_hk_416a5_556x45_container(Clone)", hk);
 
             WeaponMeshParts mk16 = new WeaponMeshParts();
@@ -396,7 +396,7 @@ namespace TarkovVR.Source.Weapons
             weaponMeshDictionary.Add("weapon_chiappa_rhino_200ds_9x19_container(Clone)", rhino9x19);
 
             WeaponMeshParts rhino9x33 = new WeaponMeshParts();
-            rhino9x33.magazine.Add("mod_magazine");
+            rhino9x33.magazine.Add("weapon_crane");
             weaponMeshDictionary.Add("weapon_chiappa_rhino_50ds_9x33R_container(Clone)", rhino9x33);
 
             WeaponMeshParts m45a1 = new WeaponMeshParts();
@@ -411,12 +411,12 @@ namespace TarkovVR.Source.Weapons
 
             WeaponMeshParts fiveseven = new WeaponMeshParts();
             fiveseven.magazine.Add("mod_magazine");
-            fiveseven.chamber.Add("weapon_receiver");
+            fiveseven.chamber.Add("weapon_reciever");
             weaponMeshDictionary.Add("weapon_fn_five_seven_57x28_container(Clone)", fiveseven);
 
             WeaponMeshParts fivesevenfde = new WeaponMeshParts();
             fivesevenfde.magazine.Add("mod_magazine");
-            fivesevenfde.chamber.Add("weapon_receiver");
+            fivesevenfde.chamber.Add("weapon_reciever");
             weaponMeshDictionary.Add("weapon_fn_five_seven_57x28_fde_container(Clone)", fivesevenfde);
 
             WeaponMeshParts glock17 = new WeaponMeshParts();
