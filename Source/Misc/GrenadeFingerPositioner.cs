@@ -2,7 +2,7 @@
 
 namespace TarkovVR.Source.Misc
 {
-    internal class WeaponPositioner : MonoBehaviour
+    internal class GrenadeFingerPositioner : MonoBehaviour
     {
 
         private float fingerBaseRotation = 22;

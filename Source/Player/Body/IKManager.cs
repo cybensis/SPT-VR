@@ -1,7 +1,9 @@
 ﻿using EFT;
 using RootMotion.FinalIK;
 using TarkovVR.Patches.UI;
+using TarkovVR.Source.Settings;
 using UnityEngine;
+using Valve.VR;
 
 namespace TarkovVR.Source.Player.VR
 {
@@ -53,6 +55,10 @@ namespace TarkovVR.Source.Player.VR
             if (rightUpperArm)
                 rightUpperArm.localPosition = upperArmPos;
 
+            // Can't remember what this is for, I'm guessing to check if the player height and position is initialized properly
+            if (VRGlobals.vrPlayer.initPos.y == 0)
+                return;
+
             if (VRGlobals.inGame && VRGlobals.player && VRGlobals.player.PointOfView == EPointOfView.FirstPerson && name == "Base HumanSpine3")
             {
                 // Position the player torso under the head
@@ -80,11 +86,22 @@ namespace TarkovVR.Source.Player.VR
                 // keep the body and head in the same place if they're leaning backwards.
                 float dotProduct = Vector3.Dot(transform.root.forward, directionToHeadset.normalized);
 
+                float distanceFromSideOfBody = Vector3.Dot(transform.root.right, directionToHeadset.normalized);
+
+                //Plugin.MyLog.LogWarning(adotProduct + "  |   " + distanceBetweenBodyAndHead + "   |    " + dotProduct);
+
+                float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
+                float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
+                bool matchToBodyWhenMoving = (xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity()) && distanceBetweenBodyAndHead > 0.135f;
 
 
+                bool shouldMatchToBody = distanceBetweenBodyAndHead >= 0.25 || dotProduct < -0.5f;
+                if (Mathf.Abs(distanceFromSideOfBody) > 0.8)
+                    shouldMatchToBody = distanceBetweenBodyAndHead >= 0.35 || dotProduct < -0.5f;
+                bool stillNeedsToMatchToBody = matchingHeadToBody && distanceBetweenBodyAndHead > 0.135f;
 
                 // If the distance to the body is >= 0.25f, or if its currently being matched to the body, or if the head is behind the body
-                if (VRGlobals.vrPlayer.initPos.y != 0 && (distanceBetweenBodyAndHead >= 0.25 || matchingHeadToBody && distanceBetweenBodyAndHead > 0.125 || dotProduct < -0.5f))
+                if (matchToBodyWhenMoving || shouldMatchToBody || stillNeedsToMatchToBody)
                 {
 
                     if (distanceBetweenBodyAndHead > 1)

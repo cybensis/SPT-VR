@@ -32,6 +32,7 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)", 2, 4);
             AddScope("scope_all_torrey_pines_logic_t12_w_30hz(Clone)", 1, 15);
             AddScope("scope_30mm_eotech_vudu_1_6x24(Clone)", 1, 26);
+            AddScope("scope_30mm_eotech_vudu_1_6x24(Clone)", 6, 3.2f);
             AddScope("scope_g36_hensoldt_hkv_single_optic_carry_handle_1,5x(Clone)", 1.5f, 18);
             AddScope("scope_aug_steyr_rail_optic_1,5x(Clone)", 1.5f, 14);
             AddScope("scope_aug_steyr_stg77_optic_1,5x", 1.5f, 15);
@@ -65,8 +66,14 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_dovetail_npz_1p29_4x(Clone)", 4f, 6f);
             AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 4f, 6f);
             AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 1f, 27);
+            AddScope("scope_all_elcan_specter_dr_1-4(Clone)", 4f, 6f);
+            AddScope("scope_all_elcan_specter_dr_1-4(Clone)", 1f, 27);
             AddScope("scope_base_trijicon_acog_ta01nsn_4x32_tan(Clone)", 4f, 6);
             AddScope("scope_all_eotech_hhs_1_tan(Clone)", 3f, 7.3f);
+            AddScope("scope_dovetail_belomo_pso_1_4x24(Clone)",4f, 6);
+            AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 6f, 3.2f);
+            AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 1f, 26.5f);
+            AddScope("scope_dovetail_belomo_pso_1m2_4x24(Clone)", 4f, 6);
 
         }
 

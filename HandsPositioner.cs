@@ -27,12 +27,10 @@ namespace TarkovVR
             //}
             if (rightHandIk)
             {
-                rightHandIk.position = VRGlobals.vrPlayer.RightHand.transform.position;
-                rightHandIk.rotation = VRGlobals.vrPlayer.RightHand.transform.rotation;
+                rightHandIk.position = VRGlobals.vrPlayer.rawRightHand.transform.position;
+                rightHandIk.rotation = VRGlobals.vrPlayer.rawRightHand.transform.rotation;
 
             }
         }
-
-
     }
 }

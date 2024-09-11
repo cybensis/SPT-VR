@@ -29,6 +29,7 @@ using static EFT.Player.QuickGrenadeThrowController;
 using static UnityEngine.ParticleSystem.PlaybackState;
 using UnityEngine.UIElements;
 using TarkovVR.Patches.Core.VR;
+using TarkovVR.Source.Settings;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -459,6 +460,7 @@ namespace TarkovVR.Patches.Core.Player
                             scopeCollider.gameObject.layer = 6;
                             scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
                             scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
+                            scopeCollider.isTrigger = true;
                             scopeCollider.enabled = true;
                         }
                     }
@@ -546,6 +548,7 @@ namespace TarkovVR.Patches.Core.Player
                                         scopeCollider.gameObject.layer = 6;
                                         scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
                                         scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
+                                        scopeCollider.isTrigger = true;
                                         scopeCollider.enabled = true;
                                     }
                                 }
@@ -581,7 +584,18 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
 
                 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(__instance.weaponPrefab_0.name, __instance.Weapon.WeapClass);
-
+                float weaponAngleOffset = VRSettings.GetWeaponAngleOffset();
+                if (weaponAngleOffset < 50) {
+                    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                    float rotOffsetMultiplier = (50 - weaponAngleOffset) / 100;
+                    weaponOffset += new Vector3(0.08f, 0, -0.02f) * rotOffsetMultiplier;
+                }
+                else if (weaponAngleOffset > 50)
+                {
+                    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                    float rotOffsetMultiplier = (weaponAngleOffset - 50) / 100;
+                    weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier;
+                }
                 VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
             }
             else if (__instance.WeaponRoot.parent.FindChild("RightHandPositioner"))
@@ -596,18 +610,23 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
                 //VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
             }
-            __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
-            if (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0)
+            __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f); 
+            // Don't use canted sights or rear sights
+            if (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0 || __instance._player.ProceduralWeaponAnimation.CurrentScope.Bone.parent.name.Contains("rear"))
             {
                 int i = 0;
                 int firstScope = __instance.Item.AimIndex.Value;
                 __instance.ChangeAimingMode();
-                while (__instance.Item.AimIndex.Value != firstScope && __instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0)
+                while (__instance.Item.AimIndex.Value != firstScope && (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0 || __instance._player.ProceduralWeaponAnimation.CurrentScope.Bone.parent.name.Contains("rear")))
                 {
                     __instance.ChangeAimingMode();
                 }
             }
-            VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(340, 340, 0);
+            //VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(340, 340, 0);
+            //VRGlobals.weaponHolder.transform.localPosition = new Vector3(0, 0, -0.34f);
+            //VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            //VRGlobals.weaponHolder.transform.GetChild(0).localPosition = Vector3.zero;
+            VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
         }
         private static Transform currentScope;
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -663,6 +682,7 @@ namespace TarkovVR.Patches.Core.Player
                     {
                         scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
                         scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
+                        scopeCollider.isTrigger = true;
                         scopeCollider.enabled = true;
                     }
                     fov = ScopeManager.GetFOV(scopeName, zoomLevel);
@@ -687,12 +707,12 @@ namespace TarkovVR.Patches.Core.Player
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Collimators try to do some stupid shit which stops them from displaying so disable it here
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(CameraClass), "method_12")]
-        private static bool FixCollimatorSights(CameraClass __instance)
-        {
-            return false;
-        }
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(CameraClass), "method_12")]
+        //private static bool FixCollimatorSights(CameraClass __instance)
+        //{
+        //    return false;
+        //}
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 

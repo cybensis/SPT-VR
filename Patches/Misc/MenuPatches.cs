@@ -45,6 +45,8 @@ using TarkovVR.Source.Settings;
 using static EFT.BaseLocalGame<EFT.HideoutPlayerOwner>;
 using EFT.UI.Matchmaker;
 using EFT.UI.Builds;
+using EFT.UI.Insurance;
+using TarkovVR.Source.Weapons;
 
 
 
@@ -143,6 +145,9 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(MainMenuController), "method_5")]
         private static void AddAndFixMenuVRCam(MainMenuController __instance)
         {
+
+            UnityEngine.Cursor.lockState = CursorLockMode.Locked;
+
             if (__instance.environmentUI_0 && __instance.environmentUI_0.environmentUIRoot_0)
             {
                 FixMainMenuCamera();
@@ -942,7 +947,7 @@ namespace TarkovVR.Patches.Misc
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TransferItemsScreen), "Show", new Type[] { typeof(TransferItemsScreen.GClass3163) })]
-        private static void UndoRotationOnTranferItems(TransferItemsScreen __instance)
+        private static void UndoRotationOnTransferItems(TransferItemsScreen __instance)
         {
             __instance.WaitOneFrame(delegate
             {
@@ -971,6 +976,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(WelcomeScreen<EftWelcomeScreen.GClass3171, EEftScreenType>), "Show", new Type[] { typeof(EftWelcomeScreen.GClass3171) })]
         private static void PositionLoginWelcomeScreen(WelcomeScreen<EftWelcomeScreen.GClass3171, EEftScreenType> __instance)
         {
+            UnityEngine.Cursor.lockState = CursorLockMode.Locked;
 
             __instance.transform.parent.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
             __instance.transform.parent.localScale = new Vector3(0.002f, 0.002f, 0.002f);
@@ -1004,6 +1010,7 @@ namespace TarkovVR.Patches.Misc
             if (!VRGlobals.inGame)
                 return;
 
+            UnityEngine.Cursor.lockState = CursorLockMode.Locked;
             Transform mainMenuCam = EnvironmentUI.Instance.environmentUIRoot_0.CameraContainer.FindChild("MainMenuCamera");
             PositionMenuEnvironmentProps();
             PositionMainMenuUi();
@@ -1194,30 +1201,6 @@ namespace TarkovVR.Patches.Misc
 
         }
 
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(Player), "OnDead")]
-        //private static void SetUiOnDeath(Player __instance)
-        //{
-        //    if (!__instance.IsYourPlayer)
-        //        return;
-        //    Plugin.MyLog.LogWarning("Set on death");
-        //    if (UIPatches.notifierUi != null)
-        //        UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
-
-        //    if (UIPatches.extractionTimerUi != null)
-        //        UIPatches.extractionTimerUi.transform.parent = UIPatches.gameUi.transform;
-        //    if (UIPatches.healthPanel != null)
-        //        UIPatches.healthPanel.transform.parent = UIPatches.battleScreenUi.transform;
-        //    if (UIPatches.healthPanel != null)
-        //        UIPatches.stancePanel.transform.parent = UIPatches.battleScreenUi.transform;
-        //    if (UIPatches.battleScreenUi != null)
-        //        UIPatches.battleScreenUi.transform.parent = VRGlobals.commonUi.GetChild(0);
-
-
-        //    PreloaderUI.DontDestroyOnLoad(UIPatches.gameUi);
-        //    PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
-        //    PositionMainMenuUi();
-        //}
 
 
 
@@ -1227,6 +1210,14 @@ namespace TarkovVR.Patches.Misc
         {
             if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
                 return true;
+
+            GameObject deathPositioner = new GameObject("DeathPos");
+            deathPositioner.transform.position = VRGlobals.emptyHands.position;
+            deathPositioner.transform.rotation = VRGlobals.emptyHands.rotation;
+            VRGlobals.emptyHands = deathPositioner.transform;
+
+            UIPatches.gameUi.transform.parent = null;
+            UIPatches.HandleCloseInventory();
             if (UIPatches.notifierUi != null)
                 UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
 
@@ -1255,6 +1246,13 @@ namespace TarkovVR.Patches.Misc
             if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
                 return true;
 
+            GameObject deathPositioner = new GameObject("DeathPos");
+            deathPositioner.transform.position = VRGlobals.emptyHands.position;
+            deathPositioner.transform.rotation = VRGlobals.emptyHands.rotation;
+            VRGlobals.emptyHands = deathPositioner.transform;
+
+            UIPatches.gameUi.transform.parent = null;
+            UIPatches.HandleCloseInventory();
             if (UIPatches.notifierUi != null)
                 UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
 
@@ -1280,8 +1278,19 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386), "method_0")]
         private static bool SetUiOnExtractOrDeawth(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386 __instance)
         {
+
+
             if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
                 return true;
+
+            GameObject deathPositioner = new GameObject("DeathPos");
+            deathPositioner.transform.position = VRGlobals.emptyHands.position;
+            deathPositioner.transform.rotation = VRGlobals.emptyHands.rotation;
+            VRGlobals.emptyHands = deathPositioner.transform;
+
+            UIPatches.gameUi.transform.parent = null;
+            UIPatches.HandleCloseInventory();
+            
             if (UIPatches.notifierUi != null)
                 UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
 
@@ -1309,6 +1318,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(SessionEndUI), "Awake")]
         private static void SetSessionEndUI(SessionEndUI __instance)
         {
+            UnityEngine.Cursor.lockState = CursorLockMode.Locked;
             BoxCollider colllider = __instance.gameObject.AddComponent<BoxCollider>();
             colllider.extents = new Vector3(2560, 1440, 0.5f);
             __instance.transform.eulerAngles = Vector3.zero;
@@ -1391,8 +1401,9 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(SettingsScreen), "Show", new Type[] { })]
         private static void SetVRSettings(SettingsScreen __instance)
         {
-            if (VRSettings.vrSettingsObject == null)
+            if (VRSettings.vrSettingsObject == null) { 
                 VRSettings.initVrSettings(__instance);
+            }
         }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SettingsScreen), "method_8")]
@@ -1407,6 +1418,24 @@ namespace TarkovVR.Patches.Misc
         {
             VRSettings.SaveSettings();
             Camera.main.farClipPlane = 1000f;
+
+            if (VRGlobals.weaponHolder && VRGlobals.firearmController) {
+                Vector3 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(VRGlobals.firearmController.weaponPrefab_0.name, VRGlobals.firearmController.Weapon.WeapClass);
+                float weaponAngleOffset = VRSettings.GetWeaponAngleOffset();
+                if (weaponAngleOffset < 50)
+                {
+                    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                    float rotOffsetMultiplier = (50 - weaponAngleOffset) / 100;
+                    weaponOffset += new Vector3(0.08f, 0, -0.01f) * rotOffsetMultiplier;
+                }
+                else if (weaponAngleOffset > 50)
+                {
+                    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                    float rotOffsetMultiplier = (weaponAngleOffset - 50) / 100;
+                    weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier;
+                }
+                VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
+            }
         }
 
         [HarmonyPostfix]
@@ -1447,6 +1476,29 @@ namespace TarkovVR.Patches.Misc
         private static void ShowBuildWindowSave(EditBuildNameWindow __instance)
         {
             __instance.WindowTransform.localPosition = Vector3.zero;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(OverallScreen), "Show")]
+        private static void FixOverallScreenPlayerSize(OverallScreen __instance)
+        {
+            __instance.WaitOneFrame(delegate { 
+                __instance.PlayerModelWithStatsWindow._playerModelView.transform.FindChild("Camera_inventory").GetComponent<Camera>().fieldOfView = 35;
+            });
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(AchievementsScreen), "Show")]
+        private static void FixAchievementsScreenPlayerSize(AchievementsScreen __instance)
+        {
+            __instance.WaitOneFrame(delegate {
+                __instance.PlayerModelWithStatsWindow._playerModelView.transform.FindChild("Camera_inventory").GetComponent<Camera>().fieldOfView = 35;
+            });
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(InsuranceWindow), "Show")]
+        private static void FixInsuranceWindowPosition(InsuranceWindow __instance)
+        {
+            __instance.transform.localPosition = Vector3.zero;
         }
     }
 

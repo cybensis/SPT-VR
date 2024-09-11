@@ -2,9 +2,7 @@
 using EFT.Animations;
 using HarmonyLib;
 using RootMotion.FinalIK;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Reflection;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
@@ -14,8 +12,6 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
-using Valve.VR.InteractionSystem;
-using static RoadSplineGenerator;
 using static TarkovVR.Source.Controls.InputHandlers;
 
 namespace TarkovVR.Patches.Core.VR
@@ -130,7 +126,7 @@ namespace TarkovVR.Patches.Core.VR
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
-        public static WeaponPositioner rightPointerFinger;
+        public static GrenadeFingerPositioner rightPointerFinger;
         public static Transform leftPalm;
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
@@ -194,7 +190,7 @@ namespace TarkovVR.Patches.Core.VR
                     resetHeightHandler.SetRightArmTransform(__instance.transform.FindChildRecursive("Base HumanRForearm1"));
                 }
                 Transform rightFingerTransform = __instance.transform.GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(0).GetChild(1);
-                rightPointerFinger = rightFingerTransform.gameObject.AddComponent<WeaponPositioner>();
+                rightPointerFinger = rightFingerTransform.gameObject.AddComponent<GrenadeFingerPositioner>();
                 rightPointerFinger.enabled = false;
                 if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.laser != null) { 
                     VRGlobals.handsInteractionController.grenadeLaser.transform.parent = rightFingerTransform;

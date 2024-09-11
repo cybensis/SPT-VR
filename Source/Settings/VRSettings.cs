@@ -12,6 +12,7 @@ using System.Xml;
 using UnityEngine;
 using Newtonsoft.Json;
 using static HBAO_Core;
+using EFT.UI.Ragfair;
 
 namespace TarkovVR.Source.Settings
 {
@@ -36,6 +37,9 @@ namespace TarkovVR.Source.Settings
             public bool scopeAimSmoothing { get; set; }
             public bool enableSharpen { get; set; }
             public int oneHandingWeaponAngle { get; set; }
+            public int rightHandHorizontalAngle { get; set; }
+            public int leftHandHorizontalAngle { get; set; }
+            public bool weaponWeight { get; set; }
 
 
             public ModSettings()
@@ -50,7 +54,10 @@ namespace TarkovVR.Source.Settings
                 supportGunHoldToggle = false;
                 smoothingSensitivity = 1;
                 oneHandingWeaponAngle = 50;
+                rightHandHorizontalAngle = 20; 
+                leftHandHorizontalAngle = 50;
                 enableSharpen = true;
+                weaponWeight = false;
             }
             // Add more settings as needed
         }
@@ -66,9 +73,12 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle aimSmoothingToggle;
         private static SettingToggle snapToGunToggle;
         private static SettingToggle supportGunHoldToggle;
+        private static SettingToggle weaponWeightToggle;
         private static SettingSelectSlider aimSmoothingSlider;
         private static SettingToggle scopeSmoothingToggle;
         private static SettingSelectSlider oneHandingWeaponAngleSlider;
+        private static SettingSelectSlider rightHandHorizontalAngleSlider;
+        private static SettingSelectSlider leftHandHorizontalAngleSlider;
 
 
         private static ModSettings settings;
@@ -179,7 +189,7 @@ namespace TarkovVR.Source.Settings
             snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             snapToGunToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
             snapToGunToggle.Toggle.action_0 = SetSnapToGun;
-            snapToGunToggle.Text.localizationKey = "Toggle Left Hand Snap To Weapon ";
+            snapToGunToggle.Text.localizationKey = "Turn On Left Hand Snap To Weapon ";
             snapToGunToggle.Toggle.UpdateValue(settings.snapToGun);
 
             supportGunHoldToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
@@ -191,16 +201,23 @@ namespace TarkovVR.Source.Settings
             scopeSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             scopeSmoothingToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
             scopeSmoothingToggle.Toggle.action_0 = ToggleScopeSmoothingSensitivity;
-            scopeSmoothingToggle.Text.localizationKey = "Toggle Scope Aim Smoothing ";
+            scopeSmoothingToggle.Text.localizationKey = "Turn On Scope Aim Smoothing ";
             scopeSmoothingToggle.Toggle.UpdateValue(settings.scopeAimSmoothing);
             scopeSmoothingToggle.transform.localPosition = new Vector3(0, -320, 0);
 
             aimSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             aimSmoothingToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
             aimSmoothingToggle.Toggle.action_0 = ToggleSmoothingSensitivity;
-            aimSmoothingToggle.Text.localizationKey = "Toggle Weapon Aim Smoothing ";
+            aimSmoothingToggle.Text.localizationKey = "Turn On Weapon Aim Smoothing ";
             aimSmoothingToggle.Toggle.UpdateValue(settings.weaponAimSmoothing);
             aimSmoothingToggle.transform.localPosition = new Vector3(0, -370, 0);
+
+            weaponWeightToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            weaponWeightToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
+            weaponWeightToggle.Toggle.action_0 = SetWeaponWeightOn;
+            weaponWeightToggle.Text.localizationKey = "Turn On Weapon Weight";
+            weaponWeightToggle.Toggle.UpdateValue(settings.weaponWeight);
+            weaponWeightToggle.transform.localPosition = new Vector3(0, -370, 0);
 
             aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
@@ -212,10 +229,25 @@ namespace TarkovVR.Source.Settings
             oneHandingWeaponAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             oneHandingWeaponAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             oneHandingWeaponAngleSlider.Slider.action_0 = SetWeaponAngleOffset;
-            oneHandingWeaponAngleSlider.Text.localizationKey = "One handed weapon rotation offset:";
+            oneHandingWeaponAngleSlider.Text.localizationKey = "Right hand vertical rot offset:";
             oneHandingWeaponAngleSlider.Slider.UpdateValue(settings.oneHandingWeaponAngle / 10);
             oneHandingWeaponAngleSlider.transform.localPosition = new Vector3(0, -490, 0);
 
+
+            rightHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            rightHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            rightHandHorizontalAngleSlider.Slider.action_0 = SetRightHandHorizontalOffset;
+            rightHandHorizontalAngleSlider.Text.localizationKey = "Right hand horizontal rot offset:";
+            rightHandHorizontalAngleSlider.Slider.UpdateValue((50 - settings.rightHandHorizontalAngle) / 10);
+            rightHandHorizontalAngleSlider.transform.localPosition = new Vector3(0, -490, 0);
+
+
+            leftHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            leftHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            leftHandHorizontalAngleSlider.Slider.action_0 = SetLeftHandHorizontalOffset;
+            leftHandHorizontalAngleSlider.Text.localizationKey = "Left hand horizontal rot offset:";
+            leftHandHorizontalAngleSlider.Slider.UpdateValue((50 - settings.leftHandHorizontalAngle) / 10);
+            leftHandHorizontalAngleSlider.transform.localPosition = new Vector3(0, -490, 0);
 
             vrSettingsObject = newSoundSettings.gameObject;
             UnityEngine.Object.Destroy(newSoundSettings);
@@ -292,6 +324,15 @@ namespace TarkovVR.Source.Settings
             return settings.weaponAimSmoothing;
         }
 
+        private static void SetWeaponWeightOn(bool turnOn)
+        {
+            settings.weaponWeight = turnOn;
+        }
+        public static bool GetWeaponWeightOn()
+        {
+            return settings.weaponWeight;
+        }
+
         public static bool SmoothScopeAim()
         {
             return settings.scopeAimSmoothing;
@@ -348,6 +389,25 @@ namespace TarkovVR.Source.Settings
                     sharpen.enabled = false;
             }
             settings.enableSharpen = on;
+        }
+
+
+        public static int GetRightHandHorizontalOffset()
+        {
+            return settings.rightHandHorizontalAngle;
+        }
+        private static void SetRightHandHorizontalOffset(int offset)
+        {
+            settings.rightHandHorizontalAngle = 50 - (offset * 10);
+        }
+
+        public static int GetLeftHandHorizontalOffset()
+        {
+            return settings.leftHandHorizontalAngle;
+        }
+        private static void SetLeftHandHorizontalOffset(int offset)
+        {
+            settings.leftHandHorizontalAngle = 50 - (offset * 10);
         }
 
         public static bool GetSharpenOn()

@@ -27,6 +27,7 @@ using Valve.VR;
 using System.Reflection.Emit;
 using Comfort.Common;
 using TarkovVR.Patches.Core.Player;
+using EFT.Animations;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -71,7 +72,7 @@ namespace TarkovVR.Patches.UI
                 UIPatches.quickSlotUi.CreateQuickSlotUi();
         }
 
-            [HarmonyPostfix]
+        [HarmonyPostfix]
         [HarmonyPatch(typeof(NotifierView), "Awake")]
         private static void SetNotificationsUi(NotifierView __instance)
         {
@@ -174,6 +175,7 @@ namespace TarkovVR.Patches.UI
         private static float lastCamRootYRot = 0;
         public static void HandleOpenInventory()
         {
+            Cursor.lockState = CursorLockMode.Locked;
             ShowUiScreens();
             //int bitmask = 1 << playerLayer; // 256
             //Camera.main.cullingMask &= ~bitmask; // -524321 & -257
@@ -256,6 +258,27 @@ namespace TarkovVR.Patches.UI
         {
             __instance._pointer.gameObject.SetActive(false);
             VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BattleUIPanelExitTrigger), "Show")]
+        private static void PositionExtractPanel(BattleUIPanelExitTrigger __instance)
+        {
+            gameUi.transform.parent = VRGlobals.player.gameObject.transform;
+            gameUi.transform.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+            gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.48f);
+            gameUi.transform.localEulerAngles = new Vector3(29.7315f, 0.4971f, 0f);
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BattleUIPanelExtraction), "Show", new Type[] { typeof(string), typeof(float) })]
+        private static void PositionPlaceItemUI(BattleUIPanelExtraction __instance)
+        {
+            gameUi.transform.parent = VRGlobals.player.gameObject.transform;
+            gameUi.transform.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+            gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.48f);
+            gameUi.transform.localEulerAngles = new Vector3(29.7315f, 0.4971f, 0f);
         }
 
         //[HarmonyPostfix]
@@ -434,7 +457,8 @@ namespace TarkovVR.Patches.UI
                             manager.PlaceUiInteracter(hit);
                     }
                 }
-                else { 
+                else
+                {
                     Vector3 rayOrigin = Camera.main.transform.position;
                     // Raycasts hit a bit too high so tilt it down for it to hit closer to the centre of vision
                     Vector3 rayDirection = Quaternion.Euler(-5, 0, 0) * Camera.main.transform.forward;
@@ -564,6 +588,60 @@ namespace TarkovVR.Patches.UI
             else
             {
                 __instance.Boolean_0 = false;
+            }
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
+        private static bool FixItemPlacement(EFT.Player __instance)
+        {
+            if (!__instance.IsYourPlayer)
+                return true;
+
+            __instance.MovementContext?.AnimatorStatesLateUpdate();
+            __instance.DistanceDirty = true;
+            __instance.OcclusionDirty = true;
+            if (__instance.HealthController != null && __instance.HealthController.IsAlive)
+            {
+                __instance.Physical.LateUpdate();
+                __instance.VisualPass();
+                __instance._armsupdated = false;
+                __instance._bodyupdated = false;
+                if (__instance._nFixedFrames > 0)
+                {
+                    __instance._nFixedFrames = 0;
+                    __instance._fixedTime = 0f;
+                }
+                if (__instance._beaconDummy != null)
+                {
+                    if (Physics.Raycast(new Ray(Camera.main.transform.position + Camera.main.transform.forward / 2f, Camera.main.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
+                    {
+                        __instance._beaconDummy.transform.position = hitInfo.point;
+                        __instance._beaconDummy.transform.rotation = Quaternion.LookRotation(hitInfo.normal);
+                        __instance._beaconMaterialSetter.SetAvailable(__instance._beaconPlacer.Available);
+                        __instance.AllowToPlantBeacon = __instance._beaconPlacer.Available;
+                        if (__instance.AllowToPlantBeacon)
+                        {
+                            __instance.BeaconPosition = __instance._beaconDummy.transform.position;
+                            __instance.BeaconRotation = __instance._beaconDummy.transform.rotation;
+                        }
+                    }
+                    else
+                    {
+                        __instance._beaconDummy.transform.position = Camera.main.transform.position + Camera.main.transform.forward;
+                        __instance._beaconDummy.transform.rotation = Quaternion.identity;
+                        __instance._beaconMaterialSetter.SetAvailable(isAvailable: false);
+                        __instance.AllowToPlantBeacon = false;
+                    }
+                }
+                __instance.ProceduralWeaponAnimation.StartFovCoroutine(__instance);
+                __instance.PropUpdate();
+            }
+            __instance.ComplexLateUpdate(EUpdateQueue.Update, __instance.DeltaTime);
+            if (__instance.POM != null && !__instance.IsAI)
+            {
+                __instance.POM.ExtrudeCamera();
             }
             return false;
         }
@@ -898,6 +976,18 @@ namespace TarkovVR.Patches.UI
         {
 
             __instance._window.localPosition = Vector3.zero;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PlaceItemTrigger), "TriggerEnter")]
+        private static void PlaceItemPositionUi(PlaceItemTrigger __instance)
+        {
+            // Set position not local position so it doesn't inherit rotated position from camRoot
+            VRGlobals.vrPlayer.interactionUi.position = Camera.main.transform.position + Camera.main.transform.forward * 0.4f + Camera.main.transform.up * -0.2f + Camera.main.transform.right * 0;
+            VRGlobals.vrPlayer.interactionUi.LookAt(Camera.main.transform);
+            // Need to rotate 180 degrees otherwise it shows up backwards
+            VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);
+
         }
     }
 

@@ -346,8 +346,8 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.ToggleBreathing;
                     isHoldingBreath = true;
-                    if (VRGlobals.scopeSensitivity * 75f > 0)
-                        VRPlayerManager.smoothingFactor = VRGlobals.scopeSensitivity * 75f;
+                    if (VRGlobals.scopeSensitivity * 40f > 0)
+                        VRPlayerManager.smoothingFactor = VRGlobals.scopeSensitivity * 40f;
                 }
                 else if (isHoldingBreath && (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) < 0.5f || !isAiming))
                 {

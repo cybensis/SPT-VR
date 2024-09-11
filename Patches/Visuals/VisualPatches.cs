@@ -1,4 +1,5 @@
-﻿using EFT.CameraControl;
+﻿using Comfort.Common;
+using EFT.CameraControl;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
@@ -11,6 +12,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.XR;
+using static UnityEngine.ParticleSystem.PlaybackState;
 using static Val;
 
 namespace TarkovVR.Patches.Visuals
@@ -514,5 +516,117 @@ namespace TarkovVR.Patches.Visuals
            __instance.IsMotionBlurred = false;
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
+        private static bool FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
+        {
+            if (!__instance.CheckSupport(needDepth: true, needHdr: true))
+            {
+                Graphics.Blit(source, destination);
+                return false;
+            }
+
+            // Apply the effect for each eye separately if in VR mode
+            if (UnityEngine.XR.XRSettings.enabled)
+            {
+                __instance.sky.Components.Scattering = __instance;
+                for (int eye = 0; eye < 2; eye++)
+                {
+                    // Update the camera to use the correct eye's perspective
+                    Camera.StereoscopicEye stereoEye = (Camera.StereoscopicEye)eye;
+                    Matrix4x4 identity = CalculateFrustumCorners(Camera.main, stereoEye);
+
+                    __instance.material_0.SetMatrix(TOD_Scattering.int_1, identity);
+                    __instance.material_0.SetTexture(TOD_Scattering.int_2, __instance.DitheringTexture);
+
+                    Vector3 cameraDirection = Camera.main.transform.forward;
+                    float cameraHeight = Camera.main.transform.position.y;
+                    Vector3 adjustedDirection = new Vector3(cameraDirection.x, 0f, cameraDirection.z).normalized;
+
+                    float adjustedHeightFalloff = __instance.HeightFalloff * Mathf.Abs(Vector3.Dot(adjustedDirection, Vector3.up));
+                    float adjustedDensity = __instance.GlobalDensity * (1.0f - Mathf.Abs(cameraDirection.y));
+
+                    if (__instance.FromLevelSettings)
+                    {
+                        LevelSettings instance = Singleton<LevelSettings>.Instance;
+                        if (instance != null)
+                        {
+                            __instance.HeightFalloff = instance.HeightFalloff;
+                            __instance.ZeroLevel = instance.ZeroLevel;
+                        }
+                    }
+
+                    //Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(adjustedHeightFalloff, cameraHeight - __instance.ZeroLevel, adjustedDensity, 0f));
+                    Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(__instance.HeightFalloff, VRGlobals.camRoot.transform.position.y - __instance.ZeroLevel, __instance.GlobalDensity, 0f));
+                    __instance.material_0.SetFloat(TOD_Scattering.int_4, __instance.SunrizeGlow);
+
+                    if (__instance.Lighten)
+                    {
+                        __instance.material_0.EnableKeyword("LIGHTEN");
+                    }
+                    else
+                    {
+                        __instance.material_0.DisableKeyword("LIGHTEN");
+                    }
+
+                    __instance.CustomBlit(source, destination, __instance.material_0);
+                }
+            }
+            else
+            {
+                return true;
+            }
+            return false;
+        }
+
+        private static Matrix4x4 CalculateFrustumCorners(Camera cam, Camera.StereoscopicEye eye = Camera.StereoscopicEye.Left)
+        {
+            float nearClipPlane = cam.nearClipPlane;
+            float farClipPlane = cam.farClipPlane;
+            float fieldOfView = cam.fieldOfView;
+            float aspect = cam.aspect;
+
+            // Adjust based on the eye (left or right) in VR mode
+            Vector3 forward = cam.transform.forward;
+            Vector3 right = cam.transform.right;
+            Vector3 up = cam.transform.up;
+
+            if (UnityEngine.XR.XRSettings.enabled)
+            {
+                Matrix4x4 eyeMatrix = cam.GetStereoViewMatrix(eye);
+                forward = eyeMatrix.MultiplyVector(forward);
+                right = eyeMatrix.MultiplyVector(right);
+                up = eyeMatrix.MultiplyVector(up);
+            }
+
+            float halfFOV = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            Vector3 toRight = right * halfFOV * aspect * nearClipPlane;
+            Vector3 toTop = up * halfFOV * nearClipPlane;
+
+            Vector3 topLeft = (forward * nearClipPlane - toRight + toTop);
+            float scale = topLeft.magnitude * farClipPlane / nearClipPlane;
+            topLeft.Normalize();
+            topLeft *= scale;
+
+            Vector3 topRight = (forward * nearClipPlane + toRight + toTop);
+            topRight.Normalize();
+            topRight *= scale;
+
+            Vector3 bottomRight = (forward * nearClipPlane + toRight - toTop);
+            bottomRight.Normalize();
+            bottomRight *= scale;
+
+            Vector3 bottomLeft = (forward * nearClipPlane - toRight - toTop);
+            bottomLeft.Normalize();
+            bottomLeft *= scale;
+
+            Matrix4x4 frustumCorners = Matrix4x4.identity;
+            frustumCorners.SetRow(0, topLeft);
+            frustumCorners.SetRow(1, topRight);
+            frustumCorners.SetRow(2, bottomRight);
+            frustumCorners.SetRow(3, bottomLeft);
+
+            return frustumCorners;
+        }
     }
 }
