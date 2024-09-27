@@ -80,6 +80,8 @@ namespace TarkovVR.Patches.Core.VR
                     }
                     UIPatches.quickSlotUi.gameObject.active = false;
                     //VRGlobals.vrPlayer.radialMenu.active = false;
+                    // The camera on interchange doesn't stay turned off like other maps so try and disable it again here.
+                    Camera.main.useOcclusionCulling = false;
                 }
             }
 
@@ -163,6 +165,12 @@ namespace TarkovVR.Patches.Core.VR
 
             //    //This is for Base HumanSpine3 to stop it doing something, cant remember
 
+            // Disable the weapon holsters so they dont wack the player in the face
+            if (__instance.transform.parent.parent.FindChild("weapon_holster"))
+                __instance.transform.parent.parent.FindChild("weapon_holster").gameObject.active = false;
+            if (__instance.transform.parent.parent.FindChild("weapon_holster1"))
+                __instance.transform.parent.parent.FindChild("weapon_holster1").gameObject.active = false;
+
             if (__instance.transform.parent.parent.GetComponent<IKManager>() == null)
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
 
@@ -227,13 +235,13 @@ namespace TarkovVR.Patches.Core.VR
                 uiCamHolder.transform.localRotation = Quaternion.identity;
                 uiCamHolder.transform.localPosition = Vector3.zero;
                 Camera uiCam = uiCamHolder.AddComponent<Camera>();
-                uiCam.nearClipPlane = 0.001f;
+                uiCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
                 uiCam.depth = 1;
                 uiCam.cullingMask = 32;
                 uiCam.clearFlags = CameraClearFlags.Depth;
                 mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
                 //mainCam.cullingMask = -1;
-                mainCam.nearClipPlane = 0.001f;
+                mainCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
                 mainCam.farClipPlane = 1000f;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
                 mainCam.useOcclusionCulling = false;

@@ -307,7 +307,7 @@ namespace TarkovVR.Patches.Misc
                         uiCamHolder.transform.localPosition = Vector3.zero;
                         Camera uiCam = uiCamHolder.AddComponent<Camera>();
                         uiCam.depth = 12;
-                        uiCam.nearClipPlane = 0.001f;
+                        uiCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
                         uiCam.cullingMask = 32;
                         uiCam.clearFlags = CameraClearFlags.Depth;
                     }

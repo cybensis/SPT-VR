@@ -250,14 +250,16 @@ namespace TarkovVR.Patches.UI
         private static void DisableUiPointer(ActionPanel __instance)
         {
             __instance._pointer.gameObject.SetActive(false);
-            VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
+            //VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
+            VRGlobals.vrPlayer.interactionUi = __instance.transform;
         }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ActionPanel), "method_6")]
         private static void CopyInteractionUi(ActionPanel __instance)
         {
             __instance._pointer.gameObject.SetActive(false);
-            VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
+            //VRGlobals.vrPlayer.interactionUi = __instance._interactionButtonsContainer;
+            VRGlobals.vrPlayer.interactionUi = __instance.transform;
         }
 
         [HarmonyPostfix]

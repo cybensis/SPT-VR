@@ -320,12 +320,12 @@ namespace TarkovVR.Source.Controls
 
                 if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.5f)
                 {
-                    command = ECommand.ScrollPrevious;
+                    command = ECommand.ScrollNext;
                     isScrolling = true;
                 }
                 else if (!isScrolling && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < -0.5f)
                 {
-                    command = ECommand.ScrollNext;
+                    command = ECommand.ScrollPrevious;
                     isScrolling = true;
                 }
                 else if (SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > -0.5f && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y < 0.5f)

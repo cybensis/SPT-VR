@@ -1,5 +1,6 @@
 ﻿using EFT;
 using EFT.Hideout;
+using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using UnityEngine;
@@ -27,7 +28,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         private void Update() {
             base.Update();
-            if (interactionUi)
+            if (interactionUi && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.hightlightingMesh))
             {
                 if (raycastHit && interactionUi.gameObject.active)
                 {
@@ -39,6 +40,9 @@ namespace TarkovVR.Source.Player.VRManager
                 else if (raycastHit && !interactionUi.gameObject.active)
                     raycastHit = false;
             }
+            //else { 
+            //    interactionUi.localPosition = 
+            //}
         }
 
 

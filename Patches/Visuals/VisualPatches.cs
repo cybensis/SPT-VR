@@ -45,6 +45,14 @@ namespace TarkovVR.Patches.Visuals
                 Graphics.Blit(source, destination);
                 return false;
             }
+
+            // Occlusion culling keeps turning on in Interchange so keep disabling it here
+            if (Camera.main.useOcclusionCulling)
+            {
+                Camera.main.useOcclusionCulling = false;
+            }
+
+
             __instance._currentDestinationHDR = 0;
             __instance._currentDestinationLDR = 0;
             __instance._HDRSourceDestination = true;

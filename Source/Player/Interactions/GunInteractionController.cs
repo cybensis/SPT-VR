@@ -109,7 +109,7 @@ public class GunInteractionController : MonoBehaviour
         }
 
 
-        if (!VRGlobals.menuOpen && SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && (!VRGlobals.vrPlayer.isSupporting || !VRGlobals.firearmController.IsAiming))
+        if (!VRGlobals.menuOpen && SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && !VRGlobals.vrPlayer.isSupporting && !VRGlobals.firearmController.IsAiming)
         {
             if (VRGlobals.firearmController.Weapon.MalfState.State != EFT.InventoryLogic.Weapon.EMalfunctionState.None) {
                 if ((!hightlightingMesh || !initMalfunction) && meshHighlighter)

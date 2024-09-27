@@ -17,6 +17,21 @@ namespace TarkovVR.Patches.Core.Player
         private static float lastYRot = 0f;
         private static float timeSinceLastLookRot = 0f;
         private static bool leftJoystickLastUsed = false;
+
+
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MovementContext), "InitComponents")]
+        private static void SetPlayerRotate(MovementContext __instance)
+        {
+            if (!__instance._player.IsYourPlayer)
+                return;
+            __instance.TrunkRotationLimit = 0;
+
+        }
+
+
         // Found in Player object under CurrentState variable, and is inherited by Gclass1573
         // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
         [HarmonyPrefix]
@@ -97,10 +112,9 @@ namespace TarkovVR.Patches.Core.Player
             bool leftJoystickUsed = xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity();
 
             Vector3 cameraForward = Camera.main.transform.forward;
-            float rotDiff = Vector3.SignedAngle(bodyForward, cameraForward, Vector3.up);
 
             float angleDifference = Camera.main.transform.eulerAngles.y - VRGlobals.player.Transform.rotation.eulerAngles.y;
-            rotDiff = (angleDifference + 180) % 360 - 180;
+            float rotDiff = (angleDifference + 180) % 360 - 180;
             rotDiff = CalculateYawDifference(Camera.main.transform.eulerAngles.y, VRGlobals.player.Transform.rotation.eulerAngles.y) * -1;
             Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
             // Normalize the angle to the range [-180, 180]
@@ -118,25 +132,23 @@ namespace TarkovVR.Patches.Core.Player
             }
             else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) && SteamVR_Actions._default.RightJoystick.axis.x != 0)
                 lastYRot = VRGlobals.camRoot.transform.eulerAngles.y;
-            // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 80 degrees, and if they haven't already rotated recently
-            else if (pitch < 50 && Mathf.Abs(rotDiff) > 50 && timeSinceLastLookRot > 0.25f)
+
+
+            // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 80 degrees, and if they haven't already rotated recently, and they've stopped rotating around
+            else if (pitch < 50 && Mathf.Abs(rotDiff) > 50 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
             {
-                lastYRot += rotDiff;
-                //Vector3 newRot = VRGlobals.player.Transform.rotation.eulerAngles;
-                //newRot.y = Camera.main.transform.eulerAngles.y;
-                //VRGlobals.player.Transform.rotation = Quaternion.Slerp(VRGlobals.player.Transform.rotation, Quaternion.Euler(newRot), Time.deltaTime);
+                lastYRot = Camera.main.transform.eulerAngles.y;
                 timeSinceLastLookRot = 0;
                 rotMatching = true;
             }
             else
                 rotMatching = false;
+
             timeSinceLastLookRot += Time.deltaTime;
-            rotDiff = Vector3.SignedAngle(bodyForward, cameraForward, Vector3.up);
-            //Plugin.MyLog.LogWarning(rotDiff + "   |  " + CalculateYawDifference(Camera.main.transform.eulerAngles.y, VRGlobals.player.Transform.rotation.eulerAngles.y));
+            //Plugin.MyLog.LogWarning(rotDiff + "   |   " + new Vector2(deltaRotation.x + lastYRot, 0) + "  |  " + VRGlobals.player.Transform.localRotation.eulerAngles);
 
             deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
             leftJoystickLastUsed = leftJoystickUsed;
-            //Plugin.MyLog.LogWarning(rotDiff + "   |   " + deltaRotation + "  |  " + VRGlobals.player.Transform.localRotation.eulerAngles);
             if (yAxis > xAxis)
                 VRGlobals.player.MovementContext._relativeSpeed = yAxis;
             else

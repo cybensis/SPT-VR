@@ -171,8 +171,8 @@ namespace TarkovVR.Patches.Core.Player
                     rightHandPositioner.transform.parent = __instance.WeaponRoot.transform.parent;
                     VRGlobals.weaponHolder = new GameObject("weaponHolder");
                     VRGlobals.weaponHolder.transform.parent = rightHandPositioner.transform;
-                    HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
-                    handsPositioner.rightHandIk = rightHandPositioner.transform;
+                    //HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
+                    //handsPositioner.rightHandIk = rightHandPositioner.transform;
                 }
                 //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
 
@@ -312,7 +312,13 @@ namespace TarkovVR.Patches.Core.Player
                     currentGunInteractController.CreateRaycastReceiver(__instance.GunBaseTransform, __instance.WeaponLn);
                 currentGunInteractController.enabled = true;
             }
-            __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
+
+            if (!VRGlobals.vrPlayer.isSupporting)
+                __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
+            else {
+                VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1927f, -0.1642f, -0.2195f);
+                VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(355, 15, 85);
+            }
 
             VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
             VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
@@ -574,8 +580,8 @@ namespace TarkovVR.Patches.Core.Player
                     rightHandPositioner.transform.parent = __instance.WeaponRoot.transform.parent;
                     VRGlobals.weaponHolder = new GameObject("weaponHolder");
                     VRGlobals.weaponHolder.transform.parent = rightHandPositioner.transform;
-                    HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
-                    handsPositioner.rightHandIk = rightHandPositioner.transform;
+                    //HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
+                    //handsPositioner.rightHandIk = rightHandPositioner.transform;
                 }
                 //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
 
@@ -861,8 +867,8 @@ namespace TarkovVR.Patches.Core.Player
                         rightHandPositioner.transform.parent = __result.WeaponRoot.transform.parent;
                         VRGlobals.weaponHolder = new GameObject("weaponHolder");
                         VRGlobals.weaponHolder.transform.parent = rightHandPositioner.transform;
-                        HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
-                        handsPositioner.rightHandIk = rightHandPositioner.transform;
+                        //HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
+                        //handsPositioner.rightHandIk = rightHandPositioner.transform;
                     }
                     //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
                     __result.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
