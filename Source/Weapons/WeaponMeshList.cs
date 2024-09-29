@@ -20,6 +20,7 @@ namespace TarkovVR.Source.Weapons
             // - Accuracy international AXMC
             // - Sword internation mk18
             // - RSASS
+            // - SPEAR
             weaponMeshDictionary = new Dictionary<string, WeaponMeshParts>();
 
             // ---------------- ASSAULT CARBINES ----------------
@@ -305,6 +306,20 @@ namespace TarkovVR.Source.Weapons
             rd704.stock.Add("mod_stock");
             weaponMeshDictionary.Add("weapon_rifle_dynamics_704_762x39_container(Clone)", rd704);
 
+            WeaponMeshParts mdr762 = new WeaponMeshParts();
+            mdr762.magazine.Add("mod_magazine");
+            mdr762.chamber.Add("weapon_charge_000");
+            mdr762.firingModeSwitch.Add("weapon_selector");
+            weaponMeshDictionary.Add("weapon_dt_mdr_762x51_container(Clone)", mdr762);
+
+            WeaponMeshParts mutant = new WeaponMeshParts();
+            mutant.magazine.Add("mod_magazine");
+            mutant.chamber.Add("mod_charge");
+            mutant.firingModeSwitch.Add("mod_selector");
+            mutant.stock.Add("mod_stock_000");
+            weaponMeshDictionary.Add("weapon_cmmg_mk47_762x39_container(Clone)", mutant);
+
+
             // ---------------- BOLT ACTION RIFLES ----------------
             WeaponMeshParts mosinSniper = new WeaponMeshParts();
             mosinSniper.magazine.Add("mod_magazine");
@@ -341,6 +356,11 @@ namespace TarkovVR.Source.Weapons
             m700.chamber.Add("weapon_bolt");
             weaponMeshDictionary.Add("weapon_remington_model_700_762x51_container(Clone)", m700);
 
+            WeaponMeshParts rsass = new WeaponMeshParts();
+            rsass.magazine.Add("mod_magazine");
+            rsass.chamber.Add("weapon_bolt");
+            weaponMeshDictionary.Add("weapon_remington_r11_rsass_762x51_container(Clone)", rsass);
+
             // ----------------  MACHINE GUNS ----------------
 
             WeaponMeshParts rpk = new WeaponMeshParts();
@@ -350,7 +370,10 @@ namespace TarkovVR.Source.Weapons
             rpk.stock.Add("mod_stock");
             weaponMeshDictionary.Add("weapon_izhmash_rpk16_545x39_container(Clone)", rpk);
 
-
+            WeaponMeshParts rpdn = new WeaponMeshParts();
+            rpdn.magazine.Add("mod_magazine");
+            rpdn.chamber.Add("weapon_charge");
+            weaponMeshDictionary.Add("weapon_zid_rpdn_762x39_container(Clone)", rpdn);
             // ----------------  MARKSMAN RIFLE ----------------
 
             WeaponMeshParts g28 = new WeaponMeshParts();
@@ -382,6 +405,22 @@ namespace TarkovVR.Source.Weapons
             svds.magazine.Add("mod_magazine");
             svds.chamber.Add("weapon_bolt");
             weaponMeshDictionary.Add("weapon_izhmash_svd_s_762x54_container(Clone)", svds);
+
+            WeaponMeshParts axmc = new WeaponMeshParts();
+            axmc.magazine.Add("mod_magazine");
+            axmc.chamber.Add("mod_charge");
+            weaponMeshDictionary.Add("weapon_accuracy_international_axmc_86x70_container(Clone)", axmc);
+
+            WeaponMeshParts mk18 = new WeaponMeshParts();
+            mk18.magazine.Add("mod_magazine");
+            mk18.chamber.Add("weapon_charge");
+            weaponMeshDictionary.Add("weapon_sword_int_mk_18_mjolnir_86x70_container(Clone)", mk18);
+
+            WeaponMeshParts spear = new WeaponMeshParts();
+            spear.magazine.Add("mod_magazine");
+            spear.chamber.Add("weapon_bolt_assembly");
+            spear.firingModeSwitch.Add("mod_selector");
+            weaponMeshDictionary.Add("weapon_sig_mcx_spear_68x51_container(Clone)", spear);
 
             // ----------------  PISTOLS ----------------
             WeaponMeshParts apb = new WeaponMeshParts();

@@ -74,6 +74,8 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 6f, 3.2f);
             AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 1f, 26.5f);
             AddScope("scope_dovetail_belomo_pso_1m2_4x24(Clone)", 4f, 6);
+            AddScope("scope_30mm_sig_tango6t_1_6x24(Clone)", 1f, 26.5f);
+            AddScope("scope_30mm_sig_tango6t_1_6x24(Clone)", 6f, 3.2f);
 
         }
 

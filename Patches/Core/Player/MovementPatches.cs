@@ -72,7 +72,6 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
 
-        private static bool rotMatching = false;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass1718), "Rotate")]
         private static bool SetPlayerRotateOnProneMoving(GClass1718 __instance, ref Vector2 deltaRotation)
@@ -111,11 +110,7 @@ namespace TarkovVR.Patches.Core.Player
             float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
             bool leftJoystickUsed = xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity();
 
-            Vector3 cameraForward = Camera.main.transform.forward;
-
-            float angleDifference = Camera.main.transform.eulerAngles.y - VRGlobals.player.Transform.rotation.eulerAngles.y;
-            float rotDiff = (angleDifference + 180) % 360 - 180;
-            rotDiff = CalculateYawDifference(Camera.main.transform.eulerAngles.y, VRGlobals.player.Transform.rotation.eulerAngles.y) * -1;
+            float rotDiff = CalculateYawDifference(Camera.main.transform.eulerAngles.y, VRGlobals.player.Transform.rotation.eulerAngles.y) * -1;
             Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
             // Normalize the angle to the range [-180, 180]
             float pitch = headEulerAngles.x;
@@ -130,7 +125,7 @@ namespace TarkovVR.Patches.Core.Player
                     lastYRot = VRGlobals.vrPlayer.leftHandYRotation + VRGlobals.vrOffsetter.transform.eulerAngles.y;
 
             }
-            else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) && SteamVR_Actions._default.RightJoystick.axis.x != 0)
+            else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.20f && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y))
                 lastYRot = VRGlobals.camRoot.transform.eulerAngles.y;
 
 
@@ -139,14 +134,11 @@ namespace TarkovVR.Patches.Core.Player
             {
                 lastYRot = Camera.main.transform.eulerAngles.y;
                 timeSinceLastLookRot = 0;
-                rotMatching = true;
             }
-            else
-                rotMatching = false;
 
             timeSinceLastLookRot += Time.deltaTime;
-            //Plugin.MyLog.LogWarning(rotDiff + "   |   " + new Vector2(deltaRotation.x + lastYRot, 0) + "  |  " + VRGlobals.player.Transform.localRotation.eulerAngles);
-
+            //Plugin.MyLog.LogWarning(SteamVR_Actions._default.RightJoystick.axis + "  |  " + lastYRot + "   |   " + new Vector2(deltaRotation.x + lastYRot, 0) + "  |  " + VRGlobals.player.Transform.localRotation.eulerAngles);
+            
             deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
             leftJoystickLastUsed = leftJoystickUsed;
             if (yAxis > xAxis)

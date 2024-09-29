@@ -29,19 +29,23 @@ namespace TarkovVR.Source.Weapons
             weaponOffsets.Add("weapon_molot_vepr_hunter_vpo-101_762x51_container(Clone)", new Vector3(0.21f, -0.07f, -0.13f));
             weaponOffsets.Add("weapon_dt_mdr_556x45_container(Clone)", new Vector3(0.27f, -0.07f, -0.18f));
             weaponOffsets.Add("weapon_steyr_aug_a1_556x45_container(Clone)", new Vector3(0.28f, -0.07f, -0.15f));
+            weaponOffsets.Add("weapon_dt_mdr_762x51_container(Clone)", new Vector3(0.24f, -0.08f, -0.16f));
+            weaponOffsets.Add("weapon_cmmg_mk47_762x39_container(Clone)", new Vector3(0.23f, -0.09f, -0.16f));
+            weaponOffsets.Add("weapon_fn_mk16_556x45_fde_container(Clone)", new Vector3(0.22f, -0.09f, -0.16f));
             // Bolt-action rifles
             weaponOffsets.Add("weapon_izhmash_sv-98_762x54r_container(Clone)", new Vector3(0.29f, -0.11f, -0.18f));
             weaponOffsets.Add("weapon_molot_vpo_215_366tkm_container(Clone)", new Vector3(0.27f, -0.11f, -0.15f));
             weaponOffsets.Add("weapon_izhmash_mosin_rifle_762x54_container(Clone)", new Vector3(0.27f, -0.11f, -0.15f));
-            weaponOffsets.Add("weapon_remington_model_700_762x51_container(Clone)", new Vector3(0.27f, -0.11f, -0.14f));
             // Machine guns
             weaponOffsets.Add("weapon_izhmash_rpk16_545x39_container(Clone)", new Vector3(0.23f, -0.11f, -0.15f));
+            weaponOffsets.Add("weapon_zid_rpdn_762x39_container(Clone)", new Vector3(0.24f, -0.11f, -0.15f));
             // Marksman Rifle
             weaponOffsets.Add("weapon_springfield_m1a_762x51_container(Clone)", new Vector3(0.27f, -0.08f, -0.16f));
             weaponOffsets.Add("weapon_izhmash_svd_s_762x54_container(Clone)", new Vector3(0.21f, -0.11f, -0.17f));
             weaponOffsets.Add("weapon_kac_sr25_762x51_container(Clone)", new Vector3(0.19f, -0.11f, -0.17f));
             weaponOffsets.Add("weapon_tochmash_vss_9x39_container(Clone)", new Vector3(0.27f, -0.09f, -0.15f));
             weaponOffsets.Add("weapon_hk_g28_762x51_container(Clone)", new Vector3(0.24f, -0.09f, -0.16f));
+            weaponOffsets.Add("weapon_sig_mcx_spear_68x51_container(Clone)", new Vector3(0.21f, -0.08f, - 0.16f));
             // Pistols
             weaponOffsets.Add("weapon_chiappa_rhino_200ds_9x19_container(Clone)", new Vector3(0.41f, -0.04f, -0.13f));
             weaponOffsets.Add("weapon_chiappa_rhino_50ds_9x33R_container(Clone)", new Vector3(0.41f, -0.04f, -0.13f));
@@ -73,6 +77,7 @@ namespace TarkovVR.Source.Weapons
             weaponOffsets.Add("weapon_izhmeh_mr43_12g_container(Clone)", new Vector3(0.27f, -0.11f, -0.13f));
             weaponOffsets.Add("weapon_ckib_mc_255_12g_container(Clone)", new Vector3(0.27f, -0.09f, -0.13f));
             weaponOffsets.Add("weapon_izhmash_saiga12k_10_12g_container(Clone)", new Vector3(0.23f, -0.08f, -0.16f));
+
 
             classOffsets.Add("shotgun", new Vector3(0.21f, -0.1f, -0.09f));
             classOffsets.Add("smg", new Vector3(0.40f, -0.05f, -0.18f));

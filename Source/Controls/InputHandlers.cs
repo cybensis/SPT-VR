@@ -68,14 +68,23 @@ namespace TarkovVR.Source.Controls
 
                 if (SteamVR_Actions._default.RightJoystick.axis.y < -0.8)
                 {
-                    VRGlobals.player.ChangePose(-1.5f * Time.deltaTime);
+                    float poseDelta = -1.5f * Time.deltaTime;
+                    VRGlobals.player.ChangePose(poseDelta);
+                    //float poseLevel = VRGlobals.player.MovementContext.PoseLevel + poseDelta;
+                    //float poseLevelResult = Mathf.Clamp(poseLevel, 0f, VRGlobals.player.Physical.MaxPoseLevel);
+                    //float characterControllerHeight = Mathf.Lerp(1.2f, 1.6f, poseLevelResult);
                     VRGlobals.vrPlayer.crouchHeightDiff = 1.6f - VRGlobals.player.MovementContext.CharacterController.height;
                 }
 
                 if (VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && SteamVR_Actions._default.RightJoystick.axis.y > 0.8)
                 {
-                    VRGlobals.player.ChangePose(0.05f);
+                    float poseDelta = 0.05f;
+                    VRGlobals.player.ChangePose(poseDelta);
+                    //float poseLevel = VRGlobals.player.MovementContext.PoseLevel + poseDelta;
+                    //float poseLevelResult = Mathf.Clamp(poseLevel, 0f, VRGlobals.player.Physical.MaxPoseLevel);
+                    //float characterControllerHeight = Mathf.Lerp(1.2f, 1.6f, poseLevelResult);
                     VRGlobals.vrPlayer.crouchHeightDiff = Mathf.Clamp(1.61f - VRGlobals.player.MovementContext.CharacterController.height, 0.01f, 1);
+                    //Plugin.MyLog.LogWarning(VRGlobals.player.MovementContext.PoseLevel + "   |  " + poseLevel + "   |  " + poseLevelResult + "  |   " + characterControllerHeight + "   |   " + VRGlobals.vrPlayer.crouchHeightDiff);
                 }
                 // Really shit way to do this, but this prevents a jump happening immediately after changing the crouch height diff by 
                 // keeping it at 0.01 until the right joystick Y axis goes down
