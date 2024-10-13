@@ -155,6 +155,8 @@ public class CircularSegmentUI : MonoBehaviour
                 selectWeaponHandler.TriggerSwapSecondaryWeapon();
             else if (lastSelectedSegment == 2)
                 selectWeaponHandler.TriggerSwapSidearm();
+            else if (lastSelectedSegment == 3)
+                selectWeaponHandler.TriggerSwapToMelee();
             gameObject.active = false;
             // Add additional actions as necessary
         }

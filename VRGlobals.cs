@@ -14,6 +14,7 @@ namespace TarkovVR
         public const string LEFT_ARM_OBJECT_NAME = "Base HumanLCollarbone";
         public const string RIGHT_ARM_OBJECT_NAME = "Base HumanRCollarbone";
         public const float MIN_JOYSTICK_AXIS_FOR_MOVEMENT = 0.5f;
+        public const float NEAR_CLIP_PLANE = 0.01f;
 
         //public static HideoutVRPlayerManager hideoutVRPlayer;
         //public static RaidVRPlayerManager raidVRPlayer;
@@ -42,6 +43,7 @@ namespace TarkovVR
         public static Transform backHolster;
         public static Transform backpackCollider;
         public static Transform leftArmBendGoal;
+        public static Transform rightArmBendGoal;
         public static Transform sidearmHolster;
         public static BoxCollider backCollider;
         public static FirearmController firearmController;

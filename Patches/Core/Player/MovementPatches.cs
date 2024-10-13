@@ -110,32 +110,34 @@ namespace TarkovVR.Patches.Core.Player
             float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
             bool leftJoystickUsed = xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity();
 
-            float rotDiff = CalculateYawDifference(Camera.main.transform.eulerAngles.y, VRGlobals.player.Transform.rotation.eulerAngles.y) * -1;
-            Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
-            // Normalize the angle to the range [-180, 180]
-            float pitch = headEulerAngles.x;
-            if (pitch > 180)
-                pitch -= 360;
+            float dotProduct = Vector3.Dot(Camera.main.transform.up, Vector3.up);
+            float headY = (dotProduct < 0) ? (Camera.main.transform.eulerAngles.y - 180) : Camera.main.transform.eulerAngles.y;
+            float rotDiff = CalculateYawDifference(headY, VRGlobals.player.Transform.rotation.eulerAngles.y) * -1;
+            //Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
+            //// Normalize the angle to the range [-180, 180]
+            //float pitch = headEulerAngles.x;
+            //if (pitch > 180)
+            //    pitch -= 360;
 
             if (leftJoystickUsed)
             {
                 if (VRSettings.GetMovementMode() == VRSettings.MovementMode.HeadBased)
-                    lastYRot = Camera.main.transform.eulerAngles.y;
+                    lastYRot = headY;
                 else
                     lastYRot = VRGlobals.vrPlayer.leftHandYRotation + VRGlobals.vrOffsetter.transform.eulerAngles.y;
 
             }
             else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.20f && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y))
-                lastYRot = VRGlobals.camRoot.transform.eulerAngles.y;
+                lastYRot = headY;
+
 
 
             // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 80 degrees, and if they haven't already rotated recently, and they've stopped rotating around
-            else if (pitch < 50 && Mathf.Abs(rotDiff) > 50 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
+            else if (Mathf.Abs(rotDiff) > 50 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
             {
-                lastYRot = Camera.main.transform.eulerAngles.y;
+                lastYRot = headY;
                 timeSinceLastLookRot = 0;
             }
-
             timeSinceLastLookRot += Time.deltaTime;
             //Plugin.MyLog.LogWarning(SteamVR_Actions._default.RightJoystick.axis + "  |  " + lastYRot + "   |   " + new Vector2(deltaRotation.x + lastYRot, 0) + "  |  " + VRGlobals.player.Transform.localRotation.eulerAngles);
             
@@ -159,7 +161,7 @@ namespace TarkovVR.Patches.Core.Player
             //float y = Mathf.Abs(__instance.MovementContext.TransformRotation.eulerAngles.y - camRoot.transform.eulerAngles.y);
             //if (y > 20)
             //    __instance.MovementContext.ApplyRotation(Quaternion.Lerp(__instance.MovementContext.TransformRotation, __instance.MovementContext.TransformRotation * Quaternion.Euler(0f, y, 0f), 30f * deltaTime));
-            if (__instance.MovementContext._player.IsAI || !VRGlobals.inGame)
+            if (!__instance.MovementContext._player.IsYourPlayer || !VRGlobals.inGame)
                 return true;
 
             __instance.UpdateRotationSpeed(deltaTime);
@@ -178,14 +180,20 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(GClass2969), "ManualLateUpdate")]
         private static bool PositionCamera(GClass2969 __instance)
         {
-            if (__instance.player_0.IsAI || !VRGlobals.inGame || VRGlobals.menuOpen)
+            if (!__instance.player_0.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;
 
-            if (VRGlobals.emptyHands)
+            if (VRGlobals.emptyHands) { 
                 VRGlobals.camRoot.transform.position = VRGlobals.emptyHands.position;
-            //else
+                VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.camRoot.transform.position.x, __instance.player_0.Transform.position.y + 1.5f, VRGlobals.camRoot.transform.position.z);
+            }
+            else
+                VRGlobals.camRoot.transform.position = new Vector3(__instance.player_0.Transform.position.x, __instance.player_0.Transform.position.y + 1.5f, __instance.player_0.Transform.position.z);
             //    VRGlobals.camRoot.transform.position = __instance.method_1(VRGlobals.camRoot.transform.position, VRGlobals.camRoot.transform.rotation, __instance.transform_0.position);
-            VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.camRoot.transform.position.x, __instance.player_0.Transform.position.y + 1.5f, VRGlobals.camRoot.transform.position.z);
+
+            //if (__instance.player_0.IsInPronePose) {
+            //    VRGlobals.camRoot.transform.position += (__instance.player_0.Transform.forward * VRGlobals.test.x) + (__instance.player_0.Transform.right * VRGlobals.test.y);
+            //}
 
             //camHolder.transform.position = __instance.transform_0.position + new Vector3(Test.ex, Test.ey, Test.ez);
             return false;

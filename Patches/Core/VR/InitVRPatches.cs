@@ -114,12 +114,19 @@ namespace TarkovVR.Patches.Core.VR
 
             }
 
-            if (VRGlobals.leftArmBendGoal == null) {
-                VRGlobals.leftArmBendGoal = new GameObject("leftArmBendGoal").transform;
-                VRGlobals.leftArmBendGoal.parent = VRGlobals.vrOffsetter.transform;
-                VRGlobals.leftArmBendGoal.localEulerAngles = Vector3.zero;
-                VRGlobals.leftArmBendGoal.localPosition = new Vector3(-1,0,-0.8f);
-            }
+            //if (VRGlobals.leftArmBendGoal == null) {
+            //    VRGlobals.leftArmBendGoal = new GameObject("leftArmBendGoal").transform;
+            //    VRGlobals.leftArmBendGoal.parent = VRGlobals.vrOffsetter.transform;
+            //    VRGlobals.leftArmBendGoal.localEulerAngles = Vector3.zero;
+            //    VRGlobals.leftArmBendGoal.localPosition = new Vector3(-1,-0.5f,-0.8f);
+            //}
+            //if (VRGlobals.rightArmBendGoal == null)
+            //{
+            //    VRGlobals.rightArmBendGoal = new GameObject("rightArmBendGoal").transform;
+            //    VRGlobals.rightArmBendGoal.parent = VRGlobals.vrOffsetter.transform;
+            //    VRGlobals.rightArmBendGoal.localEulerAngles = Vector3.zero;
+            //    VRGlobals.rightArmBendGoal.localPosition = new Vector3(1, -0.5f, 0.8f);
+            //}
 
 
             VRGlobals.inGame = true;
@@ -207,19 +214,34 @@ namespace TarkovVR.Patches.Core.VR
                 }
                     
             }
-                // parent is HumanLForearm3
+            // parent is HumanLForearm3
 
-                // Timer panel localpos: 0.047 0.08 0.025
-                // local rot = 88.5784 83.1275 174.7802
-                // child(0).localeuler = 0 342.1273 0
+            // Timer panel localpos: 0.047 0.08 0.025
+            // local rot = 88.5784 83.1275 174.7802
+            // child(0).localeuler = 0 342.1273 0
 
-                // leftwristui localpos = -0.1 0.04 0.035
-                // localrot = 304.3265 181 180
+            // leftwristui localpos = -0.1 0.04 0.035
+            // localrot = 304.3265 181 180
 
-                //GameObject.Destroy(__instance);
+            //GameObject.Destroy(__instance);
 
-
+            if (VRGlobals.leftArmBendGoal == null)
+            {
+                VRGlobals.leftArmBendGoal = new GameObject("leftArmBendGoal").transform;
+                VRGlobals.leftArmBendGoal.parent = __instance.transform.root.transform;
+                VRGlobals.leftArmBendGoal.localEulerAngles = Vector3.zero;
+                VRGlobals.leftArmBendGoal.localPosition = new Vector3(-1, -0.5f, -0.8f);
             }
+            if (VRGlobals.rightArmBendGoal == null)
+            {
+                VRGlobals.rightArmBendGoal = new GameObject("rightArmBendGoal").transform;
+                VRGlobals.rightArmBendGoal.parent = __instance.transform.root.transform;
+                VRGlobals.rightArmBendGoal.localEulerAngles = Vector3.zero;
+                VRGlobals.rightArmBendGoal.localPosition = new Vector3(1, -0.5f, 0.8f);
+            }
+
+
+        }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Don't know why I chose this method for setting the main cam but it works so whatever
         [HarmonyPostfix]

@@ -1,50 +1,48 @@
 
 - Look into fixing DLSS for VR
 - Look at how the raycast works for filing cabinets
-- Try and dial in the two handed weapon handling
 - Apply offset rotation setting to left hand as well - Causing issues so im leaving it for now
 - Fix inv bug with holding trigger just at the drag item threshold
 - Fix issue with haviing steam overlay open when loading into raid hiding inv
 - BeforeGBuffer WindowsCull_FPS Camera command buffers rendering window light in one eye
-- Make grenades throwable
-- Make melee weapons usable
-- Check the unheard edition background works
 - Weapon mesh highlighting not working with thermals on
 - Maybe add a little icon/circle for you're looking at an interactablee so you know where the raycast hits
 - Play some raids to see if I can get the squiggly text bug
-- Add weight to items by getting the weight of said item and applying a smoothing factor to the hand movement and keeping it always rotated down
 - Make under barrel grenade launchers work
 
-- Made some small position adjustments to the hand position when you change the right hand vertical rotation offset slider - FIXED - NOT AFTER CHANGIN CODE
 
 
-- Pointing left hand down will bug out right hand selection for UI - CANT REPLICATE
-- Fix dragging heals onto body not being accurate - CANT REPLICATE
+- Updated right arm bend goals
+- Maps now appear, still cant drag them around though
+
 - Prevent arms from doing the jump and sprint animations - TRIED DUNNO HOW
-- Red dots don't move around like holos, look into this for holos - WASNT TRUE AND CANT FIGURE OUT HOW TO CENTRE THEM
-- My HK is bugging the fuck out when walking on lightouse - Seems to happen with long weapons, maybe specifically weapons where the hands are far apart? - DOESN'T SEEM TO HAPPEN MUCH ANYMORE
 
-- For like one frame when you release two handing the gun appears at a weird angle
-- Need to look at the melee weapons and grenades positions
-- Undo some of the body/head matching 
-- Pull the gun in a bit so its easier to aim it close to your face
-- Fix maps not working
+
+- LEFT HANDED MODE - Invert the weapon to -1,1,1 scale, then for the HumanRibcage->Base HumanL/RCollarbone, invert these with -1,1,1 scale and add 180 degrees to the upper arms for the weapon
+- Fix bug with moving equipped weapon to secondary or primary then trying to equip with back not working
+- Need to fix tagilla again - SEEMS TO STILL BE WORKING? I tried going in places above and below him with no issue
+- Improve the prone head and arms positions
+- Action UI not appearing in hideout
+- Fix the double vision when you're in pain
+- fix FakeCharacterGI reflections
+- OKP-7 red dot works perfectly, no parallax, look into it later
+- Issues with windows in distance not appearing in one eye
 - Add support for "UI Fixes"
-- Add vibration for shooting
-- Killa sledgehammer not connecting
 - Fix the submenus appearing in your face for a split second on UI Fixes 
-- Try and fix rotating your head really quickly where the body kind of spazzes out
-- Issue with player model spazzing out, I think its caused by the body to head matching code sitting in a sweetspot where it doesn't finish matching and gets stuck
-- Lower the blur from being shot at
+- Try and fix rotating your head really quickly where the body kind of spazzes out - MAYBE FIXED?
+- Issue with player model spazzing out, I think its caused by the body to head matching code sitting in a sweetspot where it doesn't finish matching and gets stuck - MAYBE NOT OCCURIING ANYMORE
 - Inventory item submenu wont open when in the hideout overview inventory screen
-- Add physical crouching - make it append to the stick crouching as well
-- Grenades are just randomly spawning on me, not like thrown grenades but literal items I can just pick up - Only seems to happen if you use grenades
-- Mutant doesn't have highlighting
+- Grenades are just randomly spawning on me, not like thrown grenades but literal items I can just pick up - Only seems to happen if you use grenades 
 
+- Cant drag maps around or select others in the menu
+- Issue with underbarrel grenade launchers hijacking the fire mode swithc highlighting
+- Fix eating food and med'ing so  you can move your right hand
+- Add vibration for shooting
+- Scope with red dot on top prioritizes red dot over scope
+- Issuee with black line of shadows appearing at a certain distance from the player, mostly visible indoors on interchange. Still there after disabling all camera components, increasing near clip plane increases distance from player the line appears, and I tried deleting the command buffers up to AfterForwardOpaqueBuffer
 - Work on matching colliders with physical body more
-- People are having trouble with getting the left hand extraction UI to show
 - Aiming with a scope on lighthouse, probably other maps, makes grass despawn
-- UI was bugging out when I received at item from a trader and I think pressed B to go back which overlayed the preset menu on top of other menus and the Escape from tarkov logo on the main menu was black
+- UI was bugging out when I received at item from a trader and I think pressed B to go back which overlayed the preset menu on top of other menus and the Escape from tarkov logo on the main menu was black, also going presets then clicking the hideout button, maybe menu button too will keep the presets menu there
 - Issue with there being a radius of light around you, then everything beyond that radius has a shadow or is just darker. - Disabling the DistantShadows GBuffer made it go away, so its something to do with near shadows?
 - Add an option for using the right joystick for the left handed radial menu
 - Fix TOD Scattering only rendering in one eye, probably just a matrix change - I THINK THE ISSUE IS WHEN LOOKING IN CERTAIN DIRECTIONS, THE FOG CAN BE DARKER IN ONE EYE
@@ -52,7 +50,6 @@
 - Issue on RESERVE in the undergroup area under one of the big barracks some of the walls aren't loading in on that doorway that leads to thee hallway and the stairs up to thee building
 - Fix the right arm bend goal after pulling pin
 - Make it so some components on our gun dont get lit up by our flashlights
-- Hide the back holstered gun
 - Add underhand/low grenade throws by holding left grip when throwing
 - Maybe lower some of the flashbang effects as well
 - Add a motion sickness toggle for a lot of the effects

@@ -353,6 +353,7 @@ namespace TarkovVR.Source.Controls
                 bool isAiming = VRGlobals.firearmController.IsAiming;
                 if (!isHoldingBreath && isAiming && SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f)
                 {
+                    Plugin.MyLog.LogWarning("Toggle Breating");
                     command = ECommand.ToggleBreathing;
                     isHoldingBreath = true;
                     if (VRGlobals.scopeSensitivity * 40f > 0)
@@ -373,13 +374,14 @@ namespace TarkovVR.Source.Controls
             private bool swapPrimaryWeapon = false;
             private bool swapSecondaryWeapon = false;
             private bool swapSidearm = false;
+            private bool swapToMelee = false;
             public void UpdateCommand(ref ECommand command)
             {
                 if (!VRGlobals.player)
                     return;
                 if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.grenadeEquipped && SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any)))
                 {
-                    if (VRGlobals.player.ActiveSlot == null)
+                    if (VRGlobals.player.ActiveSlot == null || WeaponPatches.rangeFinder)
                         // If the first weapon slot is null then attempt select secondary
                         if (VRGlobals.player.Equipment.slot_0[0].ContainedItem != null)
                             command = ECommand.SelectFirstPrimaryWeapon;
@@ -410,6 +412,10 @@ namespace TarkovVR.Source.Controls
                     command = ECommand.SelectSecondPrimaryWeapon;
                     swapSecondaryWeapon = false;
                 }
+                if (swapToMelee) {
+                    command = ECommand.SelectKnife;
+                    swapToMelee = false;
+                }
             }
 
             public void TriggerSwapOtherPrimary() {
@@ -424,6 +430,10 @@ namespace TarkovVR.Source.Controls
             }
             public void TriggerSwapSecondaryWeapon() {
                 swapSecondaryWeapon = true;
+            }
+            public void TriggerSwapToMelee()
+            {
+                swapToMelee = true;
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -469,7 +479,7 @@ namespace TarkovVR.Source.Controls
             private bool changeFireMode = false;
             public void UpdateCommand(ref ECommand command)
             {
-                if (changeFireMode)
+                if (changeFireMode || (VRGlobals.vrPlayer.isSupporting && !VRGlobals.vrPlayer.interactMenuOpen && SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any)))
                 {
                     command = ECommand.ChangeWeaponMode;
                     changeFireMode = false;

@@ -49,29 +49,6 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance._player.IsYourPlayer)
                 return;
-
-            //StackTrace stackTrace = new StackTrace();
-            //bool isBotPlayer = false;
-
-            //foreach (var frame in stackTrace.GetFrames())
-            //{
-            //    var method = frame.GetMethod();
-            //    var declaringType = method.DeclaringType.FullName;
-            //    var methodName = method.Name;
-
-            //    // Check for bot-specific methods
-            //    if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("GClass732") && methodName.Contains("ActivateBot"))
-            //    {
-            //        isBotPlayer = true;
-            //        break;
-            //    }
-            //}
-            //if (isBotPlayer)
-            //{
-            //    // This is a bot player, so do not execute the rest of the code
-            //    Plugin.MyLog.LogWarning("Wasn't AI but is bot, is my player: " + __instance._player.IsYourPlayer);
-            //    return;
-            //}
             VRGlobals.firearmController = null;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
             VRGlobals.player = __instance._player;
@@ -91,92 +68,93 @@ namespace TarkovVR.Patches.Core.Player
                 grenadeEquipped = false;
 
             VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
+            VRGlobals.player._elbowBends[1] = VRGlobals.rightArmBendGoal;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.KnifeController), "Spawn")]
-        private static void SetMeleeWeapon(EFT.Player.KnifeController __instance)
-        {
-            if (!__instance._player.IsYourPlayer)
-                return;
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(EFT.Player.KnifeController), "Spawn")]
+        //private static void SetMeleeWeapon(EFT.Player.KnifeController __instance)
+        //{
+        //    if (!__instance._player.IsYourPlayer)
+        //        return;
 
-            //StackTrace stackTrace = new StackTrace();
-            //bool isBotPlayer = false;
+        //    //StackTrace stackTrace = new StackTrace();
+        //    //bool isBotPlayer = false;
 
-            //foreach (var frame in stackTrace.GetFrames())
-            //{
-            //    var method = frame.GetMethod();
-            //    var declaringType = method.DeclaringType.FullName;
-            //    var methodName = method.Name;
+        //    //foreach (var frame in stackTrace.GetFrames())
+        //    //{
+        //    //    var method = frame.GetMethod();
+        //    //    var declaringType = method.DeclaringType.FullName;
+        //    //    var methodName = method.Name;
 
-            //    // Check for bot-specific methods
-            //    if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("GClass732") && methodName.Contains("ActivateBot"))
-            //    {
-            //        isBotPlayer = true;
-            //        break;
-            //    }
-            //}
-            //if (isBotPlayer)
-            //{
-            //    // This is a bot player, so do not execute the rest of the code
-            //    Plugin.MyLog.LogWarning("Wasn't AI but is bot, is my player: " + __instance._player.IsYourPlayer);
-            //    return;
-            //}
-            VRGlobals.firearmController = null;
-            VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
-            VRGlobals.player = __instance._player;
+        //    //    // Check for bot-specific methods
+        //    //    if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("GClass732") && methodName.Contains("ActivateBot"))
+        //    //    {
+        //    //        isBotPlayer = true;
+        //    //        break;
+        //    //    }
+        //    //}
+        //    //if (isBotPlayer)
+        //    //{
+        //    //    // This is a bot player, so do not execute the rest of the code
+        //    //    Plugin.MyLog.LogWarning("Wasn't AI but is bot, is my player: " + __instance._player.IsYourPlayer);
+        //    //    return;
+        //    //}
+        //    VRGlobals.firearmController = null;
+        //    VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
+        //    VRGlobals.player = __instance._player;
 
-            if (!__instance.WeaponRoot.parent.GetComponent<GunInteractionController>())
-            {
-                currentGunInteractController = __instance.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
-            }
+        //    if (!__instance.WeaponRoot.parent.GetComponent<GunInteractionController>())
+        //    {
+        //        currentGunInteractController = __instance.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
+        //    }
 
-            if (VRGlobals.vrPlayer)
-            {
-                VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
-                VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
-            }
-            Plugin.MyLog.LogInfo("KnifeController.Spawn: " + __instance);
-            if (grenadeEquipped)
-                grenadeEquipped = false;
+        //    if (VRGlobals.vrPlayer)
+        //    {
+        //        VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
+        //        VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
+        //    }
+        //    Plugin.MyLog.LogInfo("KnifeController.Spawn: " + __instance);
+        //    if (grenadeEquipped)
+        //        grenadeEquipped = false;
 
-            VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
-        }
+        //    VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
+        //}
 
 
         public static PortableRangeFinderController rangeFinder;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(PortableRangeFinderController), "vmethod_0")]
-        private static void SetRangeFinder(PortableRangeFinderController __instance)
+        [HarmonyPatch(typeof(UsableItemController), "IEventsConsumerOnWeapIn")]
+        private static void SetRangeFinder(UsableItemController __instance)
         {
-            if (!__instance._player.IsYourPlayer)
+            if (!__instance._player.IsYourPlayer || !(__instance as PortableRangeFinderController))
                 return;
-
-            Plugin.MyLog.LogWarning("RANG vmethod_0");
-            rangeFinder = __instance;
-            __instance.tacticalRangeFinderController_0._boneToCastRay.parent.FindChild("linza").gameObject.SetActive(false);
-            VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
+            PortableRangeFinderController instance = (PortableRangeFinderController) __instance;
+            Plugin.MyLog.LogWarning("PortableRangeFinderController::IEventsConsumerOnWeapIn");
+            rangeFinder = instance;
+            instance.tacticalRangeFinderController_0._boneToCastRay.parent.FindChild("linza").gameObject.SetActive(false);
+            VRGlobals.emptyHands = instance.ControllerGameObject.transform;
             if (__instance.WeaponRoot.parent.name != "weaponHolder")
             {
-                VRGlobals.oldWeaponHolder = __instance.WeaponRoot.parent.gameObject;
-                if (__instance.WeaponRoot.parent.FindChild("RightHandPositioner"))
+                VRGlobals.oldWeaponHolder = instance.WeaponRoot.parent.gameObject;
+                if (instance.WeaponRoot.parent.FindChild("RightHandPositioner"))
                 {
-                    VRGlobals.weaponHolder = __instance.WeaponRoot.parent.FindChild("RightHandPositioner").GetChild(0).gameObject;
+                    VRGlobals.weaponHolder = instance.WeaponRoot.parent.FindChild("RightHandPositioner").GetChild(0).gameObject;
                 }
                 else
                 {
                     GameObject rightHandPositioner = new GameObject("RightHandPositioner");
-                    rightHandPositioner.transform.parent = __instance.WeaponRoot.transform.parent;
+                    rightHandPositioner.transform.parent = instance.WeaponRoot.transform.parent;
                     VRGlobals.weaponHolder = new GameObject("weaponHolder");
                     VRGlobals.weaponHolder.transform.parent = rightHandPositioner.transform;
-                    //HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
-                    //handsPositioner.rightHandIk = rightHandPositioner.transform;
+                    HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
+                    handsPositioner.rightHandIk = rightHandPositioner.transform;
                 }
                 //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
 
-                __instance.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
+                instance.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
                 //__instance.WeaponRoot.localPosition = Vector3.zero;
                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(37, 267, 55);
 
@@ -184,11 +162,10 @@ namespace TarkovVR.Patches.Core.Player
 
                 VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.23f, 0.0689f, -0.23f);
             }
-            else if (__instance.WeaponRoot.parent.FindChild("RightHandPositioner"))
+            else if (instance.WeaponRoot.parent.parent.name == "RightHandPositioner")
             {
 
-                VRGlobals.weaponHolder = __instance.WeaponRoot.parent.FindChild("RightHandPositioner").gameObject;
-                __instance.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
+                VRGlobals.weaponHolder = instance.WeaponRoot.parent.parent.gameObject;
             }
             if (VRGlobals.player)
             {
@@ -205,14 +182,24 @@ namespace TarkovVR.Patches.Core.Player
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(UsableItemController), "IEventsConsumerOnWeapOut")]
-        private static void UnequipRangeFinder(UsableItemController __instance)
+        [HarmonyPatch(typeof(PortableRangeFinderController), "method_16")]
+        private static void UnequipRangeFinder(PortableRangeFinderController __instance)
         {
-            if (!__instance._player.IsYourPlayer || !(__instance as PortableRangeFinderController))
+            if (!__instance._player.IsYourPlayer )
                 return;
 
+            //Plugin.MyLog.LogWarning("PortableRangeFinderController::IEventsConsumerOnWeapOut  " + VRGlobals.emptyHands + "   |   " + VRGlobals.weaponHolder + "   |   " + VRGlobals.oldWeaponHolder);
+            if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
+            {
+                VRGlobals.weaponHolder.transform.GetChild(0).parent = VRGlobals.oldWeaponHolder.transform;
+                VRGlobals.oldWeaponHolder.transform.localRotation = Quaternion.identity;
+                VRGlobals.oldWeaponHolder = null;
+                VRGlobals.emptyHands = null;
+            }
             rangeFinder = null;
         }
+
+
 
         private static bool compassEquipped = false;
         //This method will set the compass position to the right hand
@@ -321,9 +308,121 @@ namespace TarkovVR.Patches.Core.Player
             }
 
             VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
+            VRGlobals.player._elbowBends[1] = VRGlobals.rightArmBendGoal;
+
             VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
         }
 
+
+        private static Transform knifeTransform = null;
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player.BaseKnifeController), "IEventsConsumerOnWeapIn")]
+        private static void MoveKnifeToIKHands(EFT.Player.BaseKnifeController __instance)
+        {
+            if (!__instance._player.IsYourPlayer)
+                return;
+
+            if (grenadeEquipped)
+                grenadeEquipped = false;
+
+            if (currentGunInteractController != null) { 
+                currentGunInteractController.enabled = false;
+                currentGunInteractController = null;
+            }
+
+            Plugin.MyLog.LogWarning("Move knife to VR hands: " + __instance);
+            VRGlobals.player = __instance._player;
+            VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
+            knifeTransform = VRGlobals.emptyHands;
+            VRGlobals.usingItem = false;
+            VRPlayerManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[10];
+
+            if (__instance.WeaponRoot.parent.name != "weaponHolder")
+            {
+                VRGlobals.oldWeaponHolder = __instance.WeaponRoot.parent.gameObject;
+                GameObject rightHandPositioner = new GameObject("RightHandPositioner");
+                rightHandPositioner.transform.parent = __instance.WeaponRoot.transform.parent;
+                VRGlobals.weaponHolder = new GameObject("weaponHolder");
+                VRGlobals.weaponHolder.transform.parent = rightHandPositioner.transform;
+                rightHandPositioner.AddComponent<HandsPositioner>();
+                //if (__instance.WeaponRoot.parent.FindChild("RightHandPositioner"))
+                //{
+                //    VRGlobals.weaponHolder = __instance.WeaponRoot.parent.FindChild("RightHandPositioner").GetChild(0).gameObject;
+                //    VRGlobals.weaponHolder.GetComponent<HandsPositioner>().enabled = true;
+                //}
+                //else
+                //{
+                //    //HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
+                //    //handsPositioner.rightHandIk = rightHandPositioner.transform;
+                //}
+                //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
+
+                __instance.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
+                VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
+
+                //weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(__instance.weaponPrefab_0.name, __instance.Weapon.WeapClass);
+                //float weaponAngleOffset = VRSettings.GetWeaponAngleOffset();
+                //if (weaponAngleOffset < 50)
+                //{
+                //    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                //    float rotOffsetMultiplier = (50 - weaponAngleOffset) / 100;
+                //    weaponOffset += new Vector3(0.08f, 0, -0.02f) * rotOffsetMultiplier;
+                //}
+                //else if (weaponAngleOffset > 50)
+                //{
+                //    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                //    float rotOffsetMultiplier = (weaponAngleOffset - 50) / 100;
+                //    weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier;
+                //}
+                //VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
+            }
+            else {
+                __instance.WeaponRoot.parent.parent.GetComponent<HandsPositioner>().enabled = true;
+                VRGlobals.oldWeaponHolder = __instance.WeaponRoot.parent.parent.parent.gameObject;
+                VRGlobals.weaponHolder = __instance.WeaponRoot.parent.gameObject;
+                __instance.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
+                VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
+
+            }
+            if (VRGlobals.player)
+            {
+                previousLeftHandMarker = VRGlobals.player._markers[0];
+                VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
+                //VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
+            }
+            // MELEE WEAPONS
+            // weaponHolder local pos = 0.13 0 -0.43
+            // weaponHolder local rot = 33.2821 312.3405 83.0464
+            VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.13f, 0f, -0.43f);
+            VRGlobals.weaponHolder.transform.localEulerAngles = new Vector3(33f, 312f, 83f);
+            VRGlobals.player._elbowBends[1] = VRGlobals.rightArmBendGoal;
+
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player.KnifeController), "method_10")]
+        private static void UnequipVrKnife(EFT.Player.KnifeController __instance)
+        {
+            if (!__instance._player.IsYourPlayer)
+                return;
+
+            knifeTransform = null;
+            Plugin.MyLog.LogWarning("BaseKnifeController unequip");
+            if (__instance.WeaponRoot.parent.name == "weaponHolder")
+            {
+                __instance.WeaponRoot.parent.parent.GetComponent<HandsPositioner>().enabled = false;
+            }
+
+            // Check if a weapon is currently equipped, if that weapon isn the same as the one trying to be equipped, and that the weaponHolder actually has something there
+            //if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
+            //{
+            //    VRGlobals.weaponHolder.transform.GetChild(0).parent = VRGlobals.oldWeaponHolder.transform;
+            //    VRGlobals.oldWeaponHolder.transform.localRotation = Quaternion.identity;
+            //}
+                VRGlobals.oldWeaponHolder = null;
+                //VRGlobals.emptyHands = null;
+        }
 
 
         [HarmonyPostfix]
@@ -580,8 +679,8 @@ namespace TarkovVR.Patches.Core.Player
                     rightHandPositioner.transform.parent = __instance.WeaponRoot.transform.parent;
                     VRGlobals.weaponHolder = new GameObject("weaponHolder");
                     VRGlobals.weaponHolder.transform.parent = rightHandPositioner.transform;
-                    //HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
-                    //handsPositioner.rightHandIk = rightHandPositioner.transform;
+                    HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
+                    handsPositioner.rightHandIk = rightHandPositioner.transform;
                 }
                 //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
 
@@ -804,14 +903,69 @@ namespace TarkovVR.Patches.Core.Player
             {
                 if (!player.IsYourPlayer)
                     return;
-                //StackTrace stackTrace = new StackTrace();
-                //Plugin.MyLog.LogError(stackTrace);
+
                 VRGlobals.emptyHands = __result._controllerObject.transform;
                 //VRGlobals.ikManager.rightArmIk.solver.target = null;
                 //VRGlobals.ikManager.leftArmIk.solver.target = null;
                 VRGlobals.usingItem = true;
+
+                //    grenadeEquipped = true;
+                //    InitVRPatches.rightPointerFinger.enabled = false;
+                //    if (currentGunInteractController != null)
+                //        currentGunInteractController.enabled = false;
+
+                //    //VRGlobals.firearmController = __result;
+                //    VRGlobals.player = player;
+                //    VRGlobals.emptyHands = __result._controllerObject.transform;
+                //    VRGlobals.usingItem = true;
+
+                //    VRPlayerManager.leftHandGunIK = __result.HandsHierarchy.Transforms[10];
+                //    VRGlobals.oldWeaponHolder = __result.HandsHierarchy.gameObject;
+                //    if (__result.WeaponRoot.parent.name != "weaponHolder")
+                //    {
+
+                //        if (__result.WeaponRoot.parent.FindChild("RightHandPositioner"))
+                //        {
+                //            VRGlobals.weaponHolder = __result.WeaponRoot.parent.FindChild("RightHandPositioner").GetChild(0).gameObject;
+                //        }
+                //        else
+                //        {
+                //            GameObject rightHandPositioner = new GameObject("RightHandPositioner");
+                //            rightHandPositioner.transform.parent = __result.WeaponRoot.transform.parent;
+                //            VRGlobals.weaponHolder = new GameObject("weaponHolder");
+                //            VRGlobals.weaponHolder.transform.parent = rightHandPositioner.transform;
+                //            HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
+                //            handsPositioner.rightHandIk = rightHandPositioner.transform;
+                //        }
+                //        //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
+                //        __result.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
+                //        //__instance.WeaponRoot.localPosition = Vector3.zero;
+                //        VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
+                //        weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset("", "grenade");
+
+                //    }
+                //    else if (__result.WeaponRoot.parent.parent.name == "RightHandPositioner")
+                //    {
+                //        VRGlobals.weaponHolder = __result.WeaponRoot.parent.gameObject;
+                //        __result.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
+                //    }
+                //    if (VRGlobals.player)
+                //    {
+                //        previousLeftHandMarker = VRGlobals.player._markers[0];
+                //        VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
+                //        //VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
+                //    }
+
+                //    __result.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
+
+                //    VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(340, 340, 0);
+                //    VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
+                //    //VRGlobals.ikManager.rightArmIk.solver.target = null;
+                //    //VRGlobals.ikManager.leftArmIk.solver.target = null;
             }
         }
+
+
         [HarmonyPatch]
         public class GrenadeHandsControllerPatch
         {
@@ -867,8 +1021,8 @@ namespace TarkovVR.Patches.Core.Player
                         rightHandPositioner.transform.parent = __result.WeaponRoot.transform.parent;
                         VRGlobals.weaponHolder = new GameObject("weaponHolder");
                         VRGlobals.weaponHolder.transform.parent = rightHandPositioner.transform;
-                        //HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
-                        //handsPositioner.rightHandIk = rightHandPositioner.transform;
+                        HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
+                        handsPositioner.rightHandIk = rightHandPositioner.transform;
                     }
                     //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
                     __result.WeaponRoot.transform.parent = VRGlobals.weaponHolder.transform;
@@ -968,6 +1122,7 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
             InitVRPatches.rightPointerFinger.enabled = false;
             pinPulled = false;
+            VRGlobals.emptyHands = null;
             return false;
         }
         [HarmonyPrefix]
@@ -979,8 +1134,25 @@ namespace TarkovVR.Patches.Core.Player
 
             VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
             InitVRPatches.rightPointerFinger.enabled = false;
+            VRGlobals.emptyHands = null;
             pinPulled = false;
             return true;
+        }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CollimatorSight), "OnEnable")]
+        private static void FixCollimatorParallaxEffect(CollimatorSight __instance)
+        {
+            // Mark scale pulls the red dot/holo closer to the lens the higher it is, which makes it shift around when looking
+            // as this value decreases it gets pushed further away from the lens, gets smaller, but it stops shifting around
+            float markScale = __instance.CollimatorMaterial.GetFloat("_MarkScale");
+            if (markScale != 1) {
+                __instance.CollimatorMaterial.SetFloat("_MarkScale", 1f);
+                // Mark shift increases the size of the dot/holo the smaller the value, the more negative it gets the smaller it gets
+                float newMarkShift = 150 + ((1 - markScale) * 125);
+                __instance.CollimatorMaterial.SetVector("_MarkShift",new Vector4(0, newMarkShift * -1, 0,0));
+            }
         }
 
 
@@ -1005,125 +1177,3 @@ public static class GameObjectExtensions
         return null;
     }
 }
-
-//[Message:UnityExplorer]--------------------
-//virtual void EFT.Player+GrenadeController::PullRingForHighThrow()
-//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-
-//[Message: UnityExplorer]--------------------
-//virtual bool EFT.Player+GrenadeController::CanThrow()
-//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Return value: True
-
-//[Message: UnityExplorer]--------------------
-//virtual bool EFT.Player+GrenadeController::CanThrow()
-//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Return value: True
-
-//[Message: UnityExplorer]--------------------
-//virtual bool EFT.Player+GrenadeController::get_WaitingForHighThrow()
-//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Return value: True
-
-//[Message: UnityExplorer]--------------------
-//virtual void EFT.Player+GrenadeController::HighThrow()
-//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-
-//[Message: UnityExplorer]--------------------
-//void EFT.Player + BaseGrenadeController::method_9()
-//- __instance: PlayerSuperior(Clone)(EFT.Player / GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-
-//[Message: UnityExplorer]--------------------
-//EFT.Grenade EFT.Player + BaseGrenadeController::method_8(UnityEngine.Vector3 position, UnityEngine.Quaternion rotation, UnityEngine.Vector3 force, float prewarm)
-//- __instance: PlayerSuperior(Clone)(EFT.Player / GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Parameter 0 'position': (31.7, 1.5, 28.7)
-//- Parameter 1 'rotation': (0.4, -0.4, -0.7, -0.4)
-//- Parameter 2 'force': (12.9, -2.3, -3.0)
-//- Parameter 3 'prewarm': 0
-//- Return value: weapon_grenade_f1_world(Clone)(EFT.Grenade)
-
-//[Message: UnityExplorer]--------------------
-//virtual void EFT.Player+BaseGrenadeController::vmethod_2(float timeSinceSafetyLevelRemoved, UnityEngine.Vector3 position, UnityEngine.Quaternion rotation, UnityEngine.Vector3 force, bool lowThrow)
-//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Parameter 0 'timeSinceSafetyLevelRemoved': 0
-//- Parameter 1 'position': (31.7, 1.5, 28.7)
-//- Parameter 2 'rotation': (0.4, -0.4, -0.7, -0.4)
-//- Parameter 3 'force': (12.9, -2.3, -3.0)
-//- Parameter 4 'lowThrow': False
-
-//[Message: UnityExplorer]--------------------
-//void EFT.Player + BaseGrenadeController::method_7(float timeSinceSafetyLevelRemoved, float lowHighThrow, UnityEngine.Vector3 direction, float forcePower, bool lowThrow)
-//- __instance: PlayerSuperior(Clone)(EFT.Player / GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Parameter 0 'timeSinceSafetyLevelRemoved': 0
-//- Parameter 1 'lowHighThrow': 1.16
-//- Parameter 2 'direction': (1.0, -0.2, -0.2)
-//- Parameter 3 'forcePower': 11.55
-//- Parameter 4 'lowThrow': False
-
-//[Message: UnityExplorer]--------------------
-//virtual void EFT.Player+BaseGrenadeController::vmethod_1(float timeSinceSafetyLevelRemoved, bool low)
-//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Parameter 0 'timeSinceSafetyLevelRemoved': 0
-//- Parameter 1 'low': False
-
-//[Message: UnityExplorer]--------------------
-//virtual bool EFT.Player+GrenadeController::CanRemove()
-//- __instance: PlayerSuperior(Clone) (EFT.Player/GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Return value: True
-
-//[Warning: TarkovVR] Init calc: PlayerSuperior(Clone)(EFT.Player / FirearmController), Item: item weapon_fn_p90_57x28(id: 1a951e8aff3fce60badb91d6), CurrentHandsOperation: 
-//[Message:UnityExplorer]--------------------
-//void EFT.Player + BaseGrenadeController::method_1()
-//- __instance: PlayerSuperior(Clone)(EFT.Player / GrenadeController), Item: item weapon_grenade_f1(id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-
-//[Message: UnityExplorer]--------------------
-//virtual bool EFT.Player+GrenadeController::CanThrow()
-//- __instance: null, Item: item weapon_grenade_f1 (id: 08b8a70e13ee4b36bd0bb643), CurrentHandsOperation: EFT.Player + GrenadeController + Class1049
-//- Return value: True
-
-//[Message: UnityExplorer]--------------------
-//void EFT.Player + BaseGrenadeController::method_0()
-//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
-
-//[Message: UnityExplorer]--------------------
-//void EFT.Player + BaseGrenadeController::method_9()
-//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
-
-//[Message: UnityExplorer]--------------------
-//EFT.Grenade EFT.Player + BaseGrenadeController::method_8(UnityEngine.Vector3 position, UnityEngine.Quaternion rotation, UnityEngine.Vector3 force, float prewarm)
-//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
-//- Parameter 0 'position': (3.5, 1.1, -34.2)
-//- Parameter 1 'rotation': (-1.0, -0.2, -0.1, 0.0)
-//- Parameter 2 'force': (-10.2, 1.8, -1.0)
-//- Parameter 3 'prewarm': 0.4239999
-//- Return value: weapon_rgd5_world(Clone)(EFT.Grenade)
-
-//[Message: UnityExplorer]--------------------
-//virtual void EFT.Player+BaseGrenadeController::vmethod_2(float timeSinceSafetyLevelRemoved, UnityEngine.Vector3 position, UnityEngine.Quaternion rotation, UnityEngine.Vector3 force, bool lowThrow)
-//- __instance: Bot8 (EFT.Player/QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
-//- Parameter 0 'timeSinceSafetyLevelRemoved': 0.4239999
-//- Parameter 1 'position': (3.5, 1.1, -34.2)
-//- Parameter 2 'rotation': (-1.0, -0.2, -0.1, 0.0)
-//- Parameter 3 'force': (-10.2, 1.8, -1.0)
-//- Parameter 4 'lowThrow': False
-
-//[Message: UnityExplorer]--------------------
-//void EFT.Player + BaseGrenadeController::method_7(float timeSinceSafetyLevelRemoved, float lowHighThrow, UnityEngine.Vector3 direction, float forcePower, bool lowThrow)
-//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
-//- Parameter 0 'timeSinceSafetyLevelRemoved': 0.4239999
-//- Parameter 1 'lowHighThrow': 1
-//- Parameter 2 'direction': (-1.0, 0.2, -0.1)
-//- Parameter 3 'forcePower': 10.37257
-//- Parameter 4 'lowThrow': False
-
-//[Message: UnityExplorer]--------------------
-//virtual void EFT.Player+BaseGrenadeController::vmethod_1(float timeSinceSafetyLevelRemoved, bool low)
-//- __instance: Bot8 (EFT.Player/QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
-//- Parameter 0 'timeSinceSafetyLevelRemoved': 0.4239999
-//- Parameter 1 'low': False
-
-//[Info: TarkovVR] FirearmController.IEventsConsumerOnWeapIn: PlayerSuperior(Clone)(EFT.Player / FirearmController), Item: item weapon_fn_p90_57x28(id: 1a951e8aff3fce60badb91d6), CurrentHandsOperation: EFT.Player + FirearmController + GClass1637
-//[Message: UnityExplorer]--------------------
-//void EFT.Player + BaseGrenadeController::method_1()
-//- __instance: Bot8(EFT.Player / QuickGrenadeThrowController), Item: item РГД-5(id: 789e907c92fd049464acdaba), CurrentHandsOperation: EFT.Player + QuickGrenadeThrowController + Class1054
-

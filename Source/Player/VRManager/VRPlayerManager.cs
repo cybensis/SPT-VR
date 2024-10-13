@@ -64,6 +64,7 @@ namespace TarkovVR.Source.Player.VRManager
         public float crouchHeightDiff = 0;
         public Transform scopeUiPosition;
         public bool isWeapPistol = false;
+        public int framesAfterSwitching = 0;
 
 
         public void SetAmmoFireModeUi(Transform uiObject, bool isAmmoCount) {
@@ -130,7 +131,7 @@ namespace TarkovVR.Source.Player.VRManager
                     CircularSegmentUI uiComp = radialMenu.AddComponent<CircularSegmentUI>();
                     uiComp.Init();
                     //uiComp.CreateGunUi(new string[] { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" });
-                    uiComp.CreateGunUi(new string[] { "firstPrimary.png", "secondPrimary.png", "pistol.png"});
+                    uiComp.CreateGunUi(new string[] { "firstPrimary.png", "secondPrimary.png", "pistol.png", "knife.png"});
                     radialMenu.active = false;
                 }
             }
@@ -207,6 +208,7 @@ namespace TarkovVR.Source.Player.VRManager
             blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0 || (VRGlobals.firearmController && VRGlobals.firearmController.IsAiming && SteamVR_Actions._default.RightGrip.state);
             blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || (VRGlobals.firearmController && VRGlobals.firearmController.IsAiming && SteamVR_Actions._default.RightGrip.state);
 
+
             // For Ammo do the exact same vu
             if (ammoFireModeUi != null)
             {
@@ -269,6 +271,7 @@ namespace TarkovVR.Source.Player.VRManager
             //Plugin.MyLog.LogError("Crouch Level:  " + crouchLevel  + "   |   " + VRGlobals.player.PoseLevel + "   |   " + ( 1 - VRGlobals.vrPlayer.crouchHeightDiff / 0.4));
                 //Plugin.MyLog.LogError("Crouch Level: " + crouchLevel + "   | " + normalizedHeightPosition + "  |   " + VRGlobals.player.PoseLevel);
                 //VRGlobals.player.ChangePose(-1.5f * Time.deltaTime);
+
             }
 
 
@@ -311,6 +314,7 @@ namespace TarkovVR.Source.Player.VRManager
                 // Dampen the inertia over time
                 inertiaVelocity *= inertiaDamping;
             }
+
         }
 
         private Vector3 preVelocityRightHandPos;
@@ -329,6 +333,7 @@ namespace TarkovVR.Source.Player.VRManager
 
             if (VRGlobals.firearmController && isSupporting && !isWeapPistol)
             {
+
                 if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && SteamVR_Actions._default.RightGrip.state)
                 {
                     VRGlobals.vrOpticController.handleJoystickZoomDial();
@@ -342,7 +347,7 @@ namespace TarkovVR.Source.Player.VRManager
 
                 if (!isEnteringTwoHandedMode)
                 {
-
+                    framesAfterSwitching = 0;
                     VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1927f, -0.1642f, -0.2195f);
                     VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(355, 15, 85);
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
@@ -355,7 +360,6 @@ namespace TarkovVR.Source.Player.VRManager
                     rawRightHand.transform.rotation = Quaternion.Euler(combinedRotation.eulerAngles + rotDiff.eulerAngles);
 
                 }
-
 
                 combinedRotation = Quaternion.Euler(combinedRotation.eulerAngles + rotDiff.eulerAngles);
 
@@ -400,12 +404,19 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     rawRightHand.transform.position = RightHand.transform.position;
 
-                VRGlobals.weaponHolder.transform.parent.position = rawRightHand.transform.position;
-                VRGlobals.weaponHolder.transform.parent.rotation = rawRightHand.transform.rotation;
+                //Plugin.MyLog.LogWarning(RightHand.transform.rotation.eulerAngles + "     |   " + rawRightHand.transform.rotation.eulerAngles + "  |  " + VRGlobals.weaponHolder.transform.rotation.eulerAngles);
+
+                if (framesAfterSwitching < 2) { 
+                    VRGlobals.weaponHolder.transform.parent.position = rawRightHand.transform.position;
+                    VRGlobals.weaponHolder.transform.parent.rotation = rawRightHand.transform.rotation;
+                    framesAfterSwitching++;
+                }
             }
             else
             {
-                if (isEnteringTwoHandedMode) { 
+                if (isEnteringTwoHandedMode)
+                {
+                    framesAfterSwitching = 0;
                     isEnteringTwoHandedMode = false;
                     VRGlobals.player._markers[0] = LeftHand.transform;
                     //VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
@@ -447,9 +458,11 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     rawRightHand.transform.position = RightHand.transform.position;
 
-                if (VRGlobals.firearmController || WeaponPatches.grenadeEquipped | WeaponPatches.rangeFinder) {
+                if ((VRGlobals.firearmController || WeaponPatches.grenadeEquipped || WeaponPatches.rangeFinder) && framesAfterSwitching < 2)
+                {
                     VRGlobals.weaponHolder.transform.parent.position = rawRightHand.transform.position;
                     VRGlobals.weaponHolder.transform.parent.rotation = rawRightHand.transform.rotation;
+                    framesAfterSwitching++;
                 }
                 //Plugin.MyLog.LogInfo(RightHand.transform.rotation.eulerAngles + "     |   " + rawRightHand.transform.rotation.eulerAngles + "  |  " + VRGlobals.weaponHolder.transform.rotation.eulerAngles);
             }
@@ -495,7 +508,8 @@ namespace TarkovVR.Source.Player.VRManager
                 {
                     if (!isSupporting && (!VRSettings.GetSnapToGun() || handLock))
                     {
-
+                        if (isWeapPistol)
+                            VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                         initialRightHandRotation = rawRightHand.transform.rotation;
                         // Set left hand target to the original left hand target
                         //VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
@@ -551,6 +565,8 @@ namespace TarkovVR.Source.Player.VRManager
                     if (isSupporting)
                     {
                         isSupporting = false;
+                        if (isWeapPistol)
+                            VRGlobals.player._markers[0] = LeftHand.transform;
                         //VRGlobals.player._markers[0] = LeftHand.transform;
                         ////VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
                         //VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;

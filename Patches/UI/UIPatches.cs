@@ -28,6 +28,8 @@ using System.Reflection.Emit;
 using Comfort.Common;
 using TarkovVR.Patches.Core.Player;
 using EFT.Animations;
+using UnityEngine.EventSystems;
+using EFT.UI.Map;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -991,6 +993,41 @@ namespace TarkovVR.Patches.UI
             VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);
 
         }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(PocketMapTile), "UnloadImage")]
+        private static bool FixMapTilesAlwaysUnloading(PocketMapTile __instance)
+        {
+            return false;
+
+
+        }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SimplePocketMap), "BundleLoaded")]
+        private static void FixMapTilesNotLoading(SimplePocketMap __instance)
+        {
+            if (__instance.Tiles.Count > 0)
+                __instance.Tiles[0].method_0();
+        }
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(ScrollRect), "OnBeginDrag")]
+        //private static bool PlaceItemPositwionUi(ScrollRect __instance, PointerEventData eventData)
+        //{
+        //    if (eventData.button == PointerEventData.InputButton.Left && __instance.IsActive())
+        //    {
+        //        __instance.UpdateBounds();
+
+        //        // Convert world position to local UI position.
+        //        RectTransformUtility.ScreenPointToLocalPointInRectangle(__instance.viewRect,
+        //            Camera.main.WorldToScreenPoint(__instance.controllerWorldPos),
+        //            Camera.main,
+        //            out __instance.m_PointerStartLocalCursor);
+
+        //        __instance.m_ContentStartPosition = __instance.m_Content.anchoredPosition;
+        //        __instance.m_Dragging = true;
+        //    }
+        //}
+
     }
 
 }

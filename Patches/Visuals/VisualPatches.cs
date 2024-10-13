@@ -1,5 +1,6 @@
 ﻿using Comfort.Common;
 using EFT.CameraControl;
+using EFT.UI;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
@@ -523,6 +524,17 @@ namespace TarkovVR.Patches.Visuals
         {
            __instance.IsMotionBlurred = false;
         }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(FastBlur), "Start")]
+        private static void ReduceDamageBlur(FastBlur __instance)
+        {
+            __instance._downsampleTexDimension = FastBlur.Dimensions._1024;
+            __instance._upsampleTexDimension = FastBlur.Dimensions._2048;
+            __instance._blurCount = 2;
+        }
+
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]

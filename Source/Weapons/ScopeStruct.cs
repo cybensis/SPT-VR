@@ -70,6 +70,7 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_all_elcan_specter_dr_1-4(Clone)", 1f, 27);
             AddScope("scope_base_trijicon_acog_ta01nsn_4x32_tan(Clone)", 4f, 6);
             AddScope("scope_all_eotech_hhs_1_tan(Clone)", 3f, 7.3f);
+            AddScope("scope_all_eotech_hhs_1(Clone)", 3f, 7.3f);
             AddScope("scope_dovetail_belomo_pso_1_4x24(Clone)",4f, 6);
             AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 6f, 3.2f);
             AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 1f, 26.5f);

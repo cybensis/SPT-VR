@@ -1017,7 +1017,7 @@ namespace TarkovVR.Patches.Misc
             UIPatches.ShowUiScreens();
             VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
-
+            VRGlobals.menuOpen = true;
             // Move the right hand over so its synced up with the env UI cam
             VRGlobals.vrPlayer.RightHand.transform.parent = mainMenuCam.parent;
 

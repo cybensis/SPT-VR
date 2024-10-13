@@ -1,6 +1,7 @@
 ﻿using EFT;
 using JetBrains.Annotations;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text;
 using TarkovVR;
 using TarkovVR.Patches.Core.Player;
@@ -24,7 +25,7 @@ public class GunInteractionController : MonoBehaviour
     private List<Transform> tacDevices;
     private List<Transform> interactables;
     private GameObject gunRaycastReciever;
-    private Vector3 rotOffset = Vector3.zero;
+    private Vector3 rotOffset = new Vector3(0,-0.12f,0);
     public bool initialized = false;
     private int lastHitCompIndex = -1;
     private GamePlayerOwner playerOwner;
@@ -79,11 +80,30 @@ public class GunInteractionController : MonoBehaviour
             gunRaycastReciever.GetComponent<BoxCollider>().enabled = true;
         }
         transform.localEulerAngles = new Vector3(340, 340, 0);
+
+        prevRot = Vector3.zero;
+        prevPos = Vector3.zero;
+        prevForward = Vector3.zero;
+        if (transform.FindChild("RightHandPositioner") && transform.FindChild("RightHandPositioner").GetComponent<HandsPositioner>())
+        {
+            transform.FindChild("RightHandPositioner").GetComponent<HandsPositioner>().enabled = true;
+        }
     }
     public void OnDisable()
     {
         if (initialized)
             gunRaycastReciever.GetComponent<BoxCollider>().enabled = false;
+
+        if (transform.FindChild("RightHandPositioner") && transform.FindChild("RightHandPositioner").GetComponent<HandsPositioner>()) {
+            transform.FindChild("RightHandPositioner").GetComponent<HandsPositioner>().enabled = false;
+        }
+
+        prevRot = Vector3.zero;
+        prevPos = Vector3.zero;
+        prevForward = Vector3.zero;
+
+
+
     }
     public void SetHighlightComponent(HighLightMesh meshHighlighter) { 
         this.meshHighlighter = meshHighlighter;
@@ -93,15 +113,50 @@ public class GunInteractionController : MonoBehaviour
         playerOwner = owner;
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    private Vector3 prevRot;
+    private Vector3 prevPos;
+    private Vector3 prevForward;
+    private float test;
     private void Update()
     {
         if (!initialized)
             return;
 
-        if (!VRGlobals.player.IsInPronePose) { 
-            transform.position = Camera.main.transform.position;
-            transform.localPosition += armsOffset;
+        //if (!VRGlobals.menuOpen) { 
+        //    Vector3 headsetPos = Camera.main.transform.position;
+        //    // Set the position of the body forward and to the right a bit because the actual center of the body kind of leans back too far
+        //    Vector3 playerBodyPos = VRGlobals.player.Transform.position + VRGlobals.player.Transform.forward * 0.06f;
+        //    headsetPos.y = 0;
+        //    playerBodyPos.y = 0;
+        //    float distanceBetweenBodyAndHead = Vector3.Distance(playerBodyPos, headsetPos);
+
+        //    if (!VRGlobals.player.IsInPronePose && distanceBetweenBodyAndHead > 0.225) { 
+        //        transform.position = Camera.main.transform.position;
+        //        transform.localPosition += armsOffset;
+        //    }
+        //}
+        //if (prevRot != null)
+        //{
+        //    transform.eulerAngles = new Vector3(340, prevRot.y - 30, 0);
+        //}
+        //if (prevPos != null)
+        //{
+        //    Vector3 cameraPosition = prevPos + rotOffset;
+        //    transform.position = cameraPosition + prevForward * -0.1f;
+        //}
+        if (!VRGlobals.player.IsSprintEnabled && !VRGlobals.player.IsInPronePose)
+        {
+            transform.position = Camera.main.transform.position + new Vector3(0, -0.12f, 0) + (Camera.main.transform.forward * -0.1f);
+            //transform.eulerAngles = new Vector3(340, Camera.main.transform.eulerAngles.y - 30, 0);
         }
+        else {
+            transform.localPosition = Vector3.zero;
+            transform.localEulerAngles = new Vector3(340, 340, 0);
+        }
+        prevRot = Camera.main.transform.eulerAngles;
+        prevForward = Camera.main.transform.forward;
+        prevPos = Camera.main.transform.position;
 
         if (VRGlobals.menuOpen && hightlightingMesh) {
             meshHighlighter.enabled = false;
@@ -109,7 +164,8 @@ public class GunInteractionController : MonoBehaviour
         }
 
 
-        if (!VRGlobals.menuOpen && SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && !VRGlobals.vrPlayer.isSupporting && !VRGlobals.firearmController.IsAiming)
+        //if (!VRGlobals.menuOpen && SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && !VRGlobals.vrPlayer.isSupporting && !VRGlobals.firearmController.IsAiming)
+        if (!VRGlobals.menuOpen && SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && !VRGlobals.firearmController.IsAiming)
         {
             if (VRGlobals.firearmController.Weapon.MalfState.State != EFT.InventoryLogic.Weapon.EMalfunctionState.None) {
                 if ((!hightlightingMesh || !initMalfunction) && meshHighlighter)
