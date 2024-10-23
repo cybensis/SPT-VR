@@ -1,6 +1,6 @@
 # **SPT-VR (Single Player Tarkov VR Mod)**
 
-**SPT-VR** brings the immersive, intense experience of Tarkov into the realm of virtual reality. Engage in intense firefights, loot dangerous environments, and survive the unforgiving world of Tarkov—all in full VR.
+**SPT-VR** brings the immersive, intense experience of Tarkov into the realm of virtual reality. Engage in intense firefights, loot dangerous environments, and survive the unforgiving world of Tarkovâ€”all in full VR.
 
 ![Game Preview](./Assets/spt-vr-splash.gif)
 
@@ -30,6 +30,9 @@
 4. **Extract the downloaded files**: Merge the folders from the release with the folders in the SPT installation.
 5. **Launch SteamVR**: Ensure that SteamVR is running and your headset is connected before launching the game.
 6. **Launch the game through the SPT Launcher**.
+
+### **Uninstalling**
+To uninstall the mod, go to your SPT installation and remove the BepInEx/plugins/sptvr/SPT-VR.dll file, which will stop the game from launching in VR. To reinstall it, simply drag the .dll file back into the directory.
 
 ---
 
@@ -70,15 +73,23 @@
     2. For primary weapons, bring your right hand to your shoulder and press the right grip.
     3. Use the radial menu by holding the right grip at your shoulder.
 - **Quick Slot Items:** Open the radial menu by bringing your left hand to your chest and holding the left grip.
-- **Interactions with objects:** 
-    1. Use the menu by looking at the object and navigating with the right joystick.
-    2. Physically interact by bringing your hand to the object and pressing the left grip.
+- **Interacting with doors/containers/bodies/loose loot/etc:** There are two different ways to interact with the aforementioned objects:
+	1. Through a menu by looking at the object, which will bring up the menu where you're looking, then using the right joystick you can navigate it and use the **A** button to select an option, or
+	2. You can bring your left hand up to the object and press the left grip to perform the primary operation, or with loose loot you can hold the left grip to pick it up and bringing it over your left shoulder and releasing will place it in your inventory if there is room
+- **Toggle head visor/night vision:** These can be toggled by bringing the left hand up to your head and pressing the left grip
 
 ### **Menus & Menu Interactions**
+- **Select:** To interact with menu items, buttons, etc, press the **A** button while hovering over it with your laser pointer.
 - **Open Inventory:** Press **X** while in a raid.
 - **Open Menu:** Press **Y** while in a raid.
 - **Dragging Items:** Hold the right trigger to move items.
-- **Quick Equip/Transfer:** Use the **A** button with left or right grip, respectively.
+- **Opening Item Sub-Menu:** While hovering over an item, hold down the **A** button and it will bring up a dropdown menu for said item.
+- **Opening Item Display Window:** To open the items display window, double tab **A** while hovering over it.
+- **Quick Equip:** While holding the left grip, pressing the **A** button on an item will automatically equip it to its respective slot.
+- **Quick Transfer Item:** While holding the right grip, pressing the **A** button on an item will automatically transfer it in or out of your inventory.
+
+### **Configuring your experience**
+If you go into the Tarkov settings menu, you will see a VR tab, which allows you to modify some of the VR specific settings.
 
 ---
 ## FPS/Graphics Guide
@@ -105,7 +116,7 @@ The mod supports most VR headsets. The following controllers work out of the box
 - **Valve Index**
 - **Vive**
 
-If your controller isn’t working, configure the control scheme through SteamVR bindings.
+If your controller isnâ€™t working, configure the control scheme through SteamVR bindings.
 
 ### Does this work with the non-SPT Escape From Tarkov?
 No, using this mod with the official version of Escape From Tarkov can result in a ban.
@@ -144,7 +155,7 @@ For reporting bugs or recommending improvements, go to either the SPT discord or
 If you wish your own changes to the mod or want to check it out for whatever purpose, follow the below steps:
 1. **Clone the Repository**: This can either be done by downloading the source code through the GitHub page or by using the below command
    ```bash
-   git clone https://github.com/YourUsername/SPT-VR.git
+   git clone https://github.com/cybensis/SPT-VR.git
 2. **Open it up in your IDE:** I've only ever used Visual Studio for development so I would recommend using that. Opening the .sln file will open up Visual Studio which should already be configured to build without isssue
 3. **Make your changes and build:** After making your changes, to test them simply go to the *Build* dropdown menu at the top of Visual Studio and go *Build Solution*
-4. **Add the build to your SPT installation:** After building the mod, you should find the new file under *bin/Debug/TarkovVR.dll* or *bin/Release/TarkovVR.dll* depending on whether you've built a debug or release version, then in your SPT installation, replace the *BepInEx/plugins/sptvr/TarkovVR.dll* file with your new one and you should be good to go.
+4. **Add the build to your SPT installation:** After building the mod, you should find the new file under *bin/Debug/TarkovVR.dll* or *bin/Release/TarkovVR.dll* depending on whether you've built a debug or release version, then in your SPT installation, replace the *BepInEx/plugins/sptvr/SPT-VR.dll* file with your new one and you should be good to go.
