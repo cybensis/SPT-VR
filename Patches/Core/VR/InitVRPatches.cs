@@ -29,7 +29,7 @@ namespace TarkovVR.Patches.Core.VR
         private static void AddVR(CharacterControllerSpawner __instance)
         {
             EFT.Player player = __instance.transform.root.GetComponent<EFT.Player>();
-            if (__instance.transform.root.name != "PlayerSuperior(Clone)")
+            if (__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)")
                 return;
 
             if (player is not HideoutPlayer)
@@ -143,7 +143,7 @@ namespace TarkovVR.Patches.Core.VR
         {
             //if (__instance.transform.root.name != "PlayerSuperior(Clone)")
             //    return;
-            if (__instance.transform.root.name != "PlayerSuperior(Clone)")
+            if (__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)")
                 return;
 
 
@@ -237,7 +237,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.rightArmBendGoal = new GameObject("rightArmBendGoal").transform;
                 VRGlobals.rightArmBendGoal.parent = __instance.transform.root.transform;
                 VRGlobals.rightArmBendGoal.localEulerAngles = Vector3.zero;
-                VRGlobals.rightArmBendGoal.localPosition = new Vector3(1, -0.5f, 0.8f);
+                VRGlobals.rightArmBendGoal.localPosition = new Vector3(1, -0.9f, -0.8f);
             }
 
 
@@ -285,7 +285,7 @@ namespace TarkovVR.Patches.Core.VR
         [HarmonyPatch(typeof(PlayerSpring), "Start")]
         private static void SetRigAndSidearmHolsters(PlayerSpring __instance)
         {
-            if (__instance.transform.root.name != "PlayerSuperior(Clone)" || __instance.name != "Base HumanRibcage" || rigCollider != null)
+            if ((__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)") || __instance.name != "Base HumanRibcage" || rigCollider != null)
                 return;
 
             rigCollider = new GameObject("rigCollider").transform;

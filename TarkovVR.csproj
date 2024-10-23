@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
-    <AssemblyName>TarkovVR</AssemblyName>
-    <Description>My first plugin</Description>
-    <Version>1.0.0</Version>
+    <AssemblyName>SPT-VR</AssemblyName>
+	  <Description>VR mod for Single Player Tarkov</Description>
+	  <Version>1.0.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
@@ -56,6 +56,9 @@
     </Reference>
     <Reference Include="EFTConfiguration">
       <HintPath>libs\Managed\EFTConfiguration.dll</HintPath>
+    </Reference>
+    <Reference Include="Fika.Core">
+      <HintPath>libs\ModSupport\Fika.Core.dll</HintPath>
     </Reference>
     <Reference Include="ItemComponent.Types">
       <HintPath>libs\Managed\ItemComponent.Types.dll</HintPath>

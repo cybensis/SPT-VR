@@ -482,7 +482,6 @@ namespace TarkovVR.Source.Player.VRManager
                 {
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                     leftHandInAnimation = true;
-                    Plugin.MyLog.LogError("Resetting left hand 0");
                 }
                 return;
             }
@@ -492,7 +491,6 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     VRGlobals.player._markers[0] = LeftHand.transform;
 
-                Plugin.MyLog.LogError("Resetting left hand 1");
                 leftHandInAnimation = false;
             }
             if (leftHandGunIK)
@@ -593,12 +591,12 @@ namespace TarkovVR.Source.Player.VRManager
             //{
             //    LeftHand.transform.localPosition = fromAction.localPosition;
             //}
-            if (!isSupporting)
+            if (UIPatches.stancePanel && UIPatches.healthPanel)
             {
-                if (!UIPatches.stancePanel.gameObject.active)
-                    UIPatches.stancePanel.gameObject.SetActive(true);
-                if (UIPatches.stancePanel)
+                if (!isSupporting)
                 {
+                    if (!UIPatches.stancePanel.gameObject.active)
+                        UIPatches.stancePanel.gameObject.SetActive(true);
 
                     RaycastHit hit;
                     LayerMask mask = 1 << 7;
@@ -623,8 +621,15 @@ namespace TarkovVR.Source.Player.VRManager
                         showingHealthUi = false;
                     }
                 }
-                if (UIPatches.extractionTimerUi)
-                {
+                else if (showingHealthUi) {
+                    UIPatches.stancePanel.AnimatedHide();
+                    UIPatches.healthPanel.AnimatedHide();
+                    showingHealthUi = false;
+                }
+            }
+            if (UIPatches.extractionTimerUi)
+            {
+                if (!isSupporting) { 
                     RaycastHit hit;
                     LayerMask mask = 1 << 7;
                     if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * 1, out hit, 2, mask) && hit.collider.name == "camHolder")
@@ -642,15 +647,10 @@ namespace TarkovVR.Source.Player.VRManager
                         showingExtractionUi = false;
                     }
                 }
-            }
-            if (isSupporting && showingHealthUi) {
-                UIPatches.stancePanel.AnimatedHide();
-                UIPatches.healthPanel.AnimatedHide();
-                showingHealthUi = false;
-            }
-            if (isSupporting && showingExtractionUi) { 
-                UIPatches.extractionTimerUi.Reveal();
-                showingExtractionUi = false;
+                else if (showingExtractionUi) { 
+                    UIPatches.extractionTimerUi.Hide();
+                    showingExtractionUi = false;
+                }
             }
         }
 

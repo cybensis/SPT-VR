@@ -1,34 +1,150 @@
-# SPT-VR (Single Player Tarkov VR Mod)
+# **SPT-VR (Single Player Tarkov VR Mod)**
 
-SPT-VR is a mod that brings the immersive experience of Tarkov into the world of VR. Engage in intense firefights, loot dangerous environments, and survive the unforgiving world of Tarkov in full VR.
+**SPT-VR** brings the immersive, intense experience of Tarkov into the realm of virtual reality. Engage in intense firefights, loot dangerous environments, and survive the unforgiving world of Tarkov—all in full VR.
 
 ![Game Preview](./Assets/spt-vr-splash.gif)
 
 ---
 
-## Setup
+## **Table of Contents**
+1. [Setup](#setup)
+2. [Controls](#controls)
+4. [FPS/Graphics Guide](#fpsgraphics-guide)
+5. [FAQ](#faq)
+6. [Contributions](#contributions)
+7. [Support the Mod](#support-the-mod)
+8. [Development Environment Setup](#development-environment-setup)
+9. [Get in contact](#get-in-contact)
+---
 
-### Prerequisites
-- **Sinlge Player Tarkov (SPT) Installation**: You need a copy of SPT installed on your system.
-- **SteamVR**: The mod requires SteamVR for VR hardware support.
+## **Setup**
 
-### Installation Steps
-1. Ensure you have the latest version of SPT installed on your system 
-2. On the right side of this page, download the latest release from the "Releases" section.
-3. Navigate to SPT's root directory (should contain the SPT.Launcher, SPT.Server files and the BepInEx folder)
-4. Extract the files from the release into the SPT root directory so that the two folders from the release merges with the folders of the same name in the SPT installation
-5. Ensure that your SteamVR is running and your headset is connected before launching the game.
-6. Launch Tarkov through the SPT Launcher
+### **Prerequisites**
+- **Single Player Tarkov (SPT) Installation**: Make sure you have a working copy of SPT installed.
+- **SteamVR**: The mod requires SteamVR to support VR hardware.
+
+### **Installation Steps**
+1. **Ensure SPT is up to date**: Make sure you have the latest version of SPT installed on your system.
+2. **Download the latest release**: On the right side of this page (if on GitHub), download the latest release from the "Releases" section.
+3. **Navigate to SPT's root directory**: This should contain the `SPT.Launcher`, `SPT.Server` files, and the `BepInEx` folder.
+4. **Extract the downloaded files**: Merge the folders from the release with the folders in the SPT installation.
+5. **Launch SteamVR**: Ensure that SteamVR is running and your headset is connected before launching the game.
+6. **Launch the game through the SPT Launcher**.
 
 ---
 
-## Development Environment Setup
+## **Controls**
 
-If you'd like to modify or extend the mod yourself, follow these steps:
+### **Movement**
+- **Walking:** Left joystick.
+- **Look around:** Right joystick.
+- **Sprint:** Click the right joystick.
+- **Jump:** Push the right joystick up.
+- **Vault:** Hold the right joystick up at a ledge.
+- **Crouch:** Pull down on the right joystick, physically crouch, or do both.
+- **Prone:** Fully crouch, release the joystick, then pull down again.
 
-1. **Download the repository**: You can either clone this through the command line with git or just download the code from GitHub
-2. 
-   
-3. **Clone the Repository**:
+### **Weapon Controls**
+- **Shoot:** Right trigger.
+- **Two-hand weapon:** Support the gun with the left grip when it vibrates (toggle option available).
+- **Aim:** Looking down the sights automatically increases accuracy.
+- **Steady aim:** Hold the left trigger to hold your breath.
+- **Weapon interaction mode:** Hold the right grip when not aiming to interact with the weapon:
+    - **Check Magazine**
+    - **Reload**
+    - **Inspect Weapon**
+    - **Fix Malfunction**
+    - **Toggle Tactical Devices**
+    - **Change Tactical Device Mode**
+    - **Toggle Firemode**
+    - **Fold Stock** (not implemented yet)
+- **Reload:** Press **B** or use the interaction mode.
+- **Toggle Firemode:** Press **A** or use the interaction mode when two-handing.
+- **Change red dot/holo mode:** Press the left grip when your hand vibrates near the sight.
+- **Change optic zoom:** Pull the right joystick or rotate the left hand near the scope.
+- **Grenades:** Select from the radial menu, then pull the right trigger to pull the pin.
+
+### **In-Game Interactions**
+- **Swap Weapon:** 
+    1. For a pistol, bring your right hand to your hip and press the right grip.
+    2. For primary weapons, bring your right hand to your shoulder and press the right grip.
+    3. Use the radial menu by holding the right grip at your shoulder.
+- **Quick Slot Items:** Open the radial menu by bringing your left hand to your chest and holding the left grip.
+- **Interactions with objects:** 
+    1. Use the menu by looking at the object and navigating with the right joystick.
+    2. Physically interact by bringing your hand to the object and pressing the left grip.
+
+### **Menus & Menu Interactions**
+- **Open Inventory:** Press **X** while in a raid.
+- **Open Menu:** Press **Y** while in a raid.
+- **Dragging Items:** Hold the right trigger to move items.
+- **Quick Equip/Transfer:** Use the **A** button with left or right grip, respectively.
+
+---
+## FPS/Graphics Guide
+NOTE: Keep in mind these settings were based on my personal performance is likely very inaccurate. Additionally, messing around with some settings in raid can cause some bad visual glitches, so be aware of this before reporting any bugs
+#### In game graphics guide
+- Resolution likely doesn't matter too much as it's always going to render to the quality of your headset or what SteamVR is set to, but it's posssible lowering the resolution to as low as possible may net some frames.
+- Anti aliasing should be off or on FXAA - No FPS difference noticed between the two, and other options cause bad visual glitches
+- Resampling should be off/1x otherwise it may cause visual glitches
+- DLSS and FSR don't work properly so turn them both off
+- HBAO - Looks better but takes a massive hit on performance - off gets about around 10-20 fps increase
+- SSR - Low drops frames by around 2-5, ultra by about 5ish. I don't personally notice any visual improvements but it seems like if you have it on, you may as well go to ultra
+- Anistrophic filtering - No real FPS difference
+- Sharpness at 1-1.5 I think any visual gain falls off after around 1.5+
+- POST FX - Turning it off gains about 8-10 FPS in some situations, or does nothing in others
+
+#### Additional FPS guide
+- The VR Performance Toolkit (vrperfkit) can net about 10-20 extra FPS with the default configuration at the expense of some graphical fidelity, could help people with less powerful computers
+
+## **FAQ**
+
+### What controllers and headsets are supported?
+The mod supports most VR headsets. The following controllers work out of the box:
+- **Quest 2/3**
+- **Valve Index**
+- **Vive**
+
+If your controller isn’t working, configure the control scheme through SteamVR bindings.
+
+### Does this work with the non-SPT Escape From Tarkov?
+No, using this mod with the official version of Escape From Tarkov can result in a ban.
+
+### Does it support FIKA?
+Yes, it supports FIKA. VR players will appear as non-VR players in multiplayer.
+
+### Do I need to buy this mod?
+No, the mod is free, and the source code is open source.
+
+---
+
+## **Contributions**
+
+A huge thank you to these primary testers who helped shape the mod:
+- **groundzeroday**: Check out his work at [hexler.net](https://hexler.net/)
+- **Havviks**: Thanks for making the trailer, go watch his videos on [YouTube](https://www.youtube.com/@HAVVIKS)
+- **MaTSix**: Offered a lot of helpful ideas which greatly decreased the jankiness of the mod
+
+---
+
+## **Support the Mod**
+
+Donations are appreciated but not required. All content is free to ensure everyone has the same access, those who still wish to donate can do so using the link below
+
+<a href="https://buymeacoffee.com/cybensis4" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+
+
+---
+
+## **Get in contact**
+For reporting bugs or recommending improvements, go to either the SPT discord or Flat2VR discord servers, if you want to reach out to me personally, you can send me an email at cybensis@protonmail.com
+
+## **Development Environment Setup**
+
+If you wish your own changes to the mod or want to check it out for whatever purpose, follow the below steps:
+1. **Clone the Repository**: This can either be done by downloading the source code through the GitHub page or by using the below command
    ```bash
    git clone https://github.com/YourUsername/SPT-VR.git
+2. **Open it up in your IDE:** I've only ever used Visual Studio for development so I would recommend using that. Opening the .sln file will open up Visual Studio which should already be configured to build without isssue
+3. **Make your changes and build:** After making your changes, to test them simply go to the *Build* dropdown menu at the top of Visual Studio and go *Build Solution*
+4. **Add the build to your SPT installation:** After building the mod, you should find the new file under *bin/Debug/TarkovVR.dll* or *bin/Release/TarkovVR.dll* depending on whether you've built a debug or release version, then in your SPT installation, replace the *BepInEx/plugins/sptvr/TarkovVR.dll* file with your new one and you should be good to go.

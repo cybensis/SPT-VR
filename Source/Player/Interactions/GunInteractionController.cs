@@ -87,6 +87,7 @@ public class GunInteractionController : MonoBehaviour
         if (transform.FindChild("RightHandPositioner") && transform.FindChild("RightHandPositioner").GetComponent<HandsPositioner>())
         {
             transform.FindChild("RightHandPositioner").GetComponent<HandsPositioner>().enabled = true;
+            transform.FindChild("RightHandPositioner").gameObject.active = true; 
         }
     }
     public void OnDisable()
@@ -147,7 +148,7 @@ public class GunInteractionController : MonoBehaviour
         //}
         if (!VRGlobals.player.IsSprintEnabled && !VRGlobals.player.IsInPronePose)
         {
-            transform.position = Camera.main.transform.position + new Vector3(0, -0.12f, 0) + (Camera.main.transform.forward * -0.1f);
+            transform.position = Camera.main.transform.position + new Vector3(0, -0.12f, 0) + (Camera.main.transform.forward * -0.175f);
             //transform.eulerAngles = new Vector3(340, Camera.main.transform.eulerAngles.y - 30, 0);
         }
         else {

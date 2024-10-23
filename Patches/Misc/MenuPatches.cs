@@ -47,6 +47,7 @@ using EFT.UI.Matchmaker;
 using EFT.UI.Builds;
 using EFT.UI.Insurance;
 using TarkovVR.Source.Weapons;
+using Comfort.Common;
 
 
 
@@ -1276,7 +1277,7 @@ namespace TarkovVR.Patches.Misc
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386), "method_0")]
-        private static bool SetUiOnExtractOrDeawth(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386 __instance)
+        private static bool SetUiOnExtractOrDeathOther(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1386 __instance)
         {
 
 
@@ -1500,6 +1501,9 @@ namespace TarkovVR.Patches.Misc
         {
             __instance.transform.localPosition = Vector3.zero;
         }
+
+
+
     }
 
 }

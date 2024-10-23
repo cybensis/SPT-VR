@@ -49,7 +49,7 @@ public class Plugin : BaseUnityPlugin
 
         XRGeneralSettings.AttemptInitializeXRSDKOnLoad();
         XRGeneralSettings.AttemptStartXRSDKOnBeforeSplashScreen();
-
+        //Application.runInBackground = true;
         SteamVR.Initialize();
         //0.0688 -0.2245 -0.0326
         //354.4751 187.1817 105.2293
@@ -100,6 +100,32 @@ public class Plugin : BaseUnityPlugin
                 // Apply conditional patches
                 InstalledMods.AmandsGraphicsInstalled = true;
                 ApplyPatches("TarkovVR.ModSupport.AmandsGraphics");
+                MyLog.LogInfo("Dependent mod found and patches applied.");
+            }
+            else
+            {
+                MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+            }
+        }
+        else
+        {
+            MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
+        }
+
+        modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Fika.Core.dll");
+
+        if (File.Exists(modDllPath))
+        {
+            // Load the assembly
+            Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+
+            // Check for the required types and methods in the loaded assembly
+            Type configViewType = modAssembly.GetType("MatchMakerUI");
+            if (configViewType != null)
+            {
+                // Apply conditional patches
+                InstalledMods.FIKAInstalled = true;
+                ApplyPatches("TarkovVR.ModSupport.FIKA");
                 MyLog.LogInfo("Dependent mod found and patches applied.");
             }
             else

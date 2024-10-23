@@ -951,7 +951,7 @@ namespace TarkovVR.Patches.Core.Player
                 //    }
                 //    if (VRGlobals.player)
                 //    {
-                //        previousLeftHandMarker = VRGlobals.player._markers[0];
+                previousLeftHandMarker = VRGlobals.player._markers[0];
                 //        VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
                 //        //VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
                 //    }

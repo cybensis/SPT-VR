@@ -12,14 +12,15 @@
 
 
 
-- Updated right arm bend goals
-- Maps now appear, still cant drag them around though
+
+
 
 - Prevent arms from doing the jump and sprint animations - TRIED DUNNO HOW
 
-
+- Add motion sickness support, that being snap turn with different degrees, and the ability to turn off some of the visual effects and maybe vignetting
+- See if you can make it so that when guns bump into walls, instead of automatically moving the gun around, make it smack into stuff and push against them - Turning off the player component stops this from happpening, fika has some observerOverlap property that seems to have something to do with it in the player comp
+- Fix bug where eatign when two handed makes the left hand not work
 - LEFT HANDED MODE - Invert the weapon to -1,1,1 scale, then for the HumanRibcage->Base HumanL/RCollarbone, invert these with -1,1,1 scale and add 180 degrees to the upper arms for the weapon
-- Fix bug with moving equipped weapon to secondary or primary then trying to equip with back not working
 - Need to fix tagilla again - SEEMS TO STILL BE WORKING? I tried going in places above and below him with no issue
 - Improve the prone head and arms positions
 - Action UI not appearing in hideout
@@ -67,3 +68,4 @@ Known Compatible Mods List
 - Declutterer
 - Questing Bots
 - BigBrain
+- FIKA

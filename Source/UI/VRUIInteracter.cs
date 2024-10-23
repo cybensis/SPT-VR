@@ -1,4 +1,5 @@
 ﻿using EFT.UI;
+using EFT.UI.DragAndDrop;
 using EFT.UI.Health;
 using EFT.UI.Ragfair;
 using EFT.UI.Utilities.LightScroller;
@@ -56,7 +57,8 @@ namespace TarkovVR.Source.UI
                 //i++;
                 eventData = new PointerEventData(EventSystem.current);
                 hitObject = RaycastFindHit(hit, ref eventData);
-                //Plugin.MyLog.LogWarning("HIT:    " + hit.collider + "    |   LAST HIT:    " + hitObject.name);
+                //if (hitObject)
+                //    Plugin.MyLog.LogWarning("HIT:    " + hit.collider + "    |   LAST HIT:    " + hitObject.name);
                 eventData.worldPosition = hit.point;
 
                 if (hitObject)
@@ -107,12 +109,16 @@ namespace TarkovVR.Source.UI
 
         private void handleButtonClick(Vector2 hitPoint)
         {
+            bool isPointerClick = true;
+
             if (hitObject.transform.parent && hitObject.transform.parent && hitObject.name == "Toggle" && hitObject.transform.parent.parent.GetComponent<CategoryView>())
                 hitObject = hitObject.transform.parent.parent.GetComponent<CategoryView>()._toggle.gameObject;
             else if (hitObject.transform.parent && hitObject.transform.parent.GetComponent<SubcategoryView>())
                 hitObject = hitObject.transform.parent.gameObject;
             else if (hitObject.transform.parent && hitObject.name == "Main" && hitObject.transform.parent.GetComponent<CategoryView>())
                 hitObject = hitObject.transform.parent.gameObject;
+            else if (hitObject.GetComponent<EmptyItemView>())
+                isPointerClick = false;
 
 
             if (SteamVR_Actions._default.ButtonA.stateDown)
@@ -137,7 +143,10 @@ namespace TarkovVR.Source.UI
             }
             if (dragObject == null && !rightClickTriggered && SteamVR_Actions._default.ButtonA.stateUp && pressedObject == hitObject)
             {
-                ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
+                if (isPointerClick)
+                    ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
+                else
+                    ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerDownHandler);
             }
         }
 

@@ -600,7 +600,7 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
         private static bool FixItemPlacement(EFT.Player __instance)
         {
-            if (!__instance.IsYourPlayer)
+            if (!__instance.IsYourPlayer || !VRGlobals.inGame)
                 return true;
 
             __instance.MovementContext?.AnimatorStatesLateUpdate();

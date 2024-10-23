@@ -10,11 +10,13 @@ namespace TarkovVR.ModSupport
     {
         public static bool EFTApiInstalled { get; set; }
         public static bool AmandsGraphicsInstalled { get; set; }
+        public static bool FIKAInstalled { get; set; }
 
         static InstalledMods()
         {
             EFTApiInstalled = false;
             AmandsGraphicsInstalled = false;
+            FIKAInstalled = false;
         }
     }
 }
