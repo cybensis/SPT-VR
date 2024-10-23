@@ -65,7 +65,7 @@ To uninstall the mod, go to your SPT installation and remove the BepInEx/plugins
 - **Toggle Firemode:** Press **A** or use the interaction mode when two-handing.
 - **Change red dot/holo mode:** Press the left grip when your hand vibrates near the sight.
 - **Change optic zoom:** Pull the right joystick or rotate the left hand near the scope.
-- **Grenades:** Select from the radial menu, then pull the right trigger to pull the pin.
+- Grenades: Select from the quick slot radial menu, then hold the right trigger to pull the pin and aim using your in-game pointer finger.
 
 ### **In-Game Interactions**
 - **Swap Weapon:** 
