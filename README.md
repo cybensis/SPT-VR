@@ -124,6 +124,21 @@ No, using this mod with the official version of Escape From Tarkov can result in
 ### Does it support FIKA?
 Yes, it supports FIKA. VR players will appear as non-VR players in multiplayer.
 
+### Are other mods compatible with the VR mod?
+There are several mods the testers and myself were able to confirm as working, as for other mods, anything to do with adding a new UI is likely to not work, adding new guns might work but will be missing new features, and some graphics mods may also cause issues with the VR mod, so please keep in mind before reporting any bugs, remove all mods that are not listed below.
+
+Here is the current list of known compatible mods:
+- FIKA
+- Amands Graphics
+- Swag + Donuts
+- SAIN
+- EFTApi
+- Waypoints
+- Declutterer
+- Questing Bots
+- BigBrain
+
+
 ### Do I need to buy this mod?
 No, the mod is free, and the source code is open source.
 
