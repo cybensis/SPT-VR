@@ -12,21 +12,52 @@
 
 
 
+- Fixed jittering when moving and looking around physically, I'm not noticing much at all
+- Added a toggle for hands only mode that removes the arms in the VR settings tab
+- Added a toggle to hide the legs in the VR settings tab
 
 
+- Improved VR settings menu layout
+- Added snap turn option
+- Adding graphics setting for different distant shadow methods
+- Fixed issue with walls being see through and models not appearing at a distance, most noticeable indoors on interchange, looks better but tanks performance a bit
+- Fixed bug with swapping weapons causing the camera to be stuck in place for a brief moment
+
+- Fixed hide legs setting causing errors
+- Fixed issue with laser pointer not appearing after coming out of hideout
+- Possibly actually really fixed jittering this time
+- Fixed issue with hands jittering when no weapon is equipped or left hand jittering when not attached to gun
+- Fixed medding/eating disconnecting camera from body
+
+- Improved jittering
+- Hands no longer shift around when entering two handed mode
+- Improved right hand positioning for all weapons
+- Fixed the issue with medding/eating/etc causing the gun to point down
 
 - Prevent arms from doing the jump and sprint animations - TRIED DUNNO HOW
 
+- Fix the right hand laser position already
+- https://escapefromtarkov.fandom.com/wiki/KMZ_1P59_3-10x_riflescope this scope also not working apparently
+- Fix the VR keyboard not working with open composite
+- As a BEAR the watch is a separate mesh from the arms and shows up when using hands only mode
+- Remove unused settings
+- Use the CC_FastVignette for motiion sickness - Need to fix it so it renders in both eyes
+- Disable CC_Wiggle and UnityStandardAssets.ImageEffects.MotionBlur for motion sickness
+- See if you can make it so that when guns bump into walls, instead of automatically moving the gun around, make it smack into stuff and push against them - The TurnAwayEffector.Proces() function handles the positioning and rotation for collisions
+- Fix vulcan MG 3.5x night vision scope
+- Fix the inventory menu not appearing in front of the player when moving around playspace
+- Fix the issue with the left hand radial menu not blocking walking
+- There's apparently issues with the lighting getting randomly darker on interchange around the OLI escalaters - Looked into but couldn't replicate anything
+- Make it so that the left hand supporting collider is always prioritized over the scope to prevent the hand going to the scope instead of supporting
+- Can't change firemode on AUG
+- reloading PKM bugs out position, 
 - Add motion sickness support, that being snap turn with different degrees, and the ability to turn off some of the visual effects and maybe vignetting
-- See if you can make it so that when guns bump into walls, instead of automatically moving the gun around, make it smack into stuff and push against them - Turning off the player component stops this from happpening, fika has some observerOverlap property that seems to have something to do with it in the player comp
-- Fix bug where eatign when two handed makes the left hand not work
 - LEFT HANDED MODE - Invert the weapon to -1,1,1 scale, then for the HumanRibcage->Base HumanL/RCollarbone, invert these with -1,1,1 scale and add 180 degrees to the upper arms for the weapon
 - Need to fix tagilla again - SEEMS TO STILL BE WORKING? I tried going in places above and below him with no issue
 - Improve the prone head and arms positions
 - Action UI not appearing in hideout
 - Fix the double vision when you're in pain
 - fix FakeCharacterGI reflections
-- OKP-7 red dot works perfectly, no parallax, look into it later
 - Issues with windows in distance not appearing in one eye
 - Add support for "UI Fixes"
 - Fix the submenus appearing in your face for a split second on UI Fixes 
@@ -35,6 +66,7 @@
 - Inventory item submenu wont open when in the hideout overview inventory screen
 - Grenades are just randomly spawning on me, not like thrown grenades but literal items I can just pick up - Only seems to happen if you use grenades 
 
+- Fix bug where entering hideout then immediately going back hides laser
 - Cant drag maps around or select others in the menu
 - Issue with underbarrel grenade launchers hijacking the fire mode swithc highlighting
 - Fix eating food and med'ing so  you can move your right hand

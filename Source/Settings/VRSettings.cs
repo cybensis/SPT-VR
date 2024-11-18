@@ -13,6 +13,7 @@ using UnityEngine;
 using Newtonsoft.Json;
 using static HBAO_Core;
 using EFT.UI.Ragfair;
+using TarkovVR.Patches.Visuals;
 
 namespace TarkovVR.Source.Settings
 {
@@ -23,24 +24,50 @@ namespace TarkovVR.Source.Settings
             HeadBased = 0,
             WandBased = 1,
         }
+
+        public enum SnapTurnAmount
+        {
+            thirty = 30,
+            fourtyFive = 45,
+            ninety = 90,
+        }
+
+        public enum RotationMode 
+        { 
+            Smooth = 0,
+            Snap = 1
+        }
+
+        public enum ShadowOpt
+        {
+            Normal = 0,
+            DisableNearShadows = 1,
+            IncreaseLighting = 2
+        }
         public class ModSettings
         {
             public int rotationSensitivity { get; set; }
             public float leftStickDriftSensitivity { get; set; }
             public float rightStickDriftSensitivity { get; set; }
             public MovementMode movementType { get; set; }
+            public RotationMode rotationType { get; set; }
+            public SnapTurnAmount snapTurnAmount { get; set; }
             public bool weaponAimSmoothing { get; set; }
             public bool snapToGun { get; set; }
             public bool supportGunHoldToggle { get; set; }
+            public bool leftHandedMode { get; set; }
             public int smoothingSensitivity { get; set; }
 
             public bool scopeAimSmoothing { get; set; }
             public bool enableSharpen { get; set; }
-            public int oneHandingWeaponAngle { get; set; }
+            public int rightHandVerticalAngle { get; set; }
             public int rightHandHorizontalAngle { get; set; }
             public int leftHandHorizontalAngle { get; set; }
+            public int leftHandVerticalAngle { get; set; }
             public bool weaponWeight { get; set; }
-
+            public bool hideArms { get; set; }
+            public bool hideLegs { get; set; }
+            public ShadowOpt shadowOpt { get; set; }
 
             public ModSettings()
             {
@@ -48,16 +75,24 @@ namespace TarkovVR.Source.Settings
                 leftStickDriftSensitivity = 0.1f;
                 rightStickDriftSensitivity = 0.1f;
                 movementType = MovementMode.HeadBased;
+                rotationType = RotationMode.Smooth;
+                snapTurnAmount = SnapTurnAmount.fourtyFive;
                 weaponAimSmoothing = false;
                 scopeAimSmoothing = true;
+                leftHandedMode = false;
                 snapToGun = true;
                 supportGunHoldToggle = false;
                 smoothingSensitivity = 1;
-                oneHandingWeaponAngle = 50;
+                rightHandVerticalAngle = 50;
                 rightHandHorizontalAngle = 20; 
                 leftHandHorizontalAngle = 50;
+                leftHandVerticalAngle = 50;
+
                 enableSharpen = true;
                 weaponWeight = false;
+                hideArms = false;
+                hideLegs = false;
+                shadowOpt = ShadowOpt.Normal;
             }
             // Add more settings as needed
         }
@@ -65,20 +100,34 @@ namespace TarkovVR.Source.Settings
         private static SettingsScreen settingsUi;
         public static GameObject vrSettingsObject;
 
+        //private static SettingSelectSlider leftStickDriftSlider;
+        //private static SettingSelectSlider rightStickDriftSlider;
+        // Movement Settings
         private static SettingSelectSlider sensitivitySlider;
-        private static SettingSelectSlider leftStickDriftSlider;
-        private static SettingSelectSlider rightStickDriftSlider;
         private static SettingDropDown movementMethod;
-        private static SettingToggle sharpenToggle;
+        private static SettingDropDown rotationMethod;
+        private static SettingDropDown snapTurnAmountDropDown;
+        // Weapon handling settings
+        private static SettingToggle leftHandedMode;
         private static SettingToggle aimSmoothingToggle;
         private static SettingToggle snapToGunToggle;
         private static SettingToggle supportGunHoldToggle;
         private static SettingToggle weaponWeightToggle;
         private static SettingSelectSlider aimSmoothingSlider;
         private static SettingToggle scopeSmoothingToggle;
-        private static SettingSelectSlider oneHandingWeaponAngleSlider;
+        private static SettingSelectSlider rightHandVerticalAngleSlider;
         private static SettingSelectSlider rightHandHorizontalAngleSlider;
         private static SettingSelectSlider leftHandHorizontalAngleSlider;
+        private static SettingSelectSlider leftHandVerticalAngleSlider;
+        
+        // Graphics Settings
+        private static SettingToggle sharpenToggle;
+        private static SettingDropDown shadowOptsToggle;
+        
+        // Other settings
+        private static SettingToggle hideArmsToggle;
+        private static SettingToggle hideLegsToggle;
+
 
 
         private static ModSettings settings;
@@ -138,6 +187,7 @@ namespace TarkovVR.Source.Settings
             vrSettings.transform.localPosition = new Vector3(0, -71.5f, 0);
             vrSettings.transform.GetChild(0).localPosition = new Vector3(10, 433.5f, 0);
 
+
             SoundSettingsTab newSoundSettings = vrSettings.GetComponent<SoundSettingsTab>();
             Transform slidersPanel = newSoundSettings._slidersSection;
             for (int i = 0; i < slidersPanel.childCount; i++)
@@ -146,27 +196,6 @@ namespace TarkovVR.Source.Settings
             }
             GameObject.Destroy(newSoundSettings._togglesSection.gameObject);
             GameObject.Destroy(newSoundSettings._slidersSection.parent.FindChild("VoipSection").gameObject);
-            sensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            sensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            sensitivitySlider.Slider.action_0 = ChangeRotationSensitivity;
-            sensitivitySlider.Text.localizationKey = "Rotation Sensitivity:";
-            sensitivitySlider.Slider.UpdateValue(settings.rotationSensitivity);
-            sensitivitySlider.transform.localPosition = new Vector3(0, -20, 0);
-
-            leftStickDriftSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            leftStickDriftSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            leftStickDriftSlider.Slider.action_0 = ChangeLeftStickDriftSensitivity;
-            leftStickDriftSlider.Text.localizationKey = "Left Stick Drift Sensitivity: ";
-            leftStickDriftSlider.Slider.UpdateValue((int) settings.leftStickDriftSensitivity * 10);
-            leftStickDriftSlider.transform.localPosition = new Vector3(0, -70, 0);
-
-            rightStickDriftSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            rightStickDriftSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            rightStickDriftSlider.Slider.action_0 = ChangeRightStickDriftSensitivity;
-            rightStickDriftSlider.Text.localizationKey = "Right Stick Drift Sensitivity: ";
-            rightStickDriftSlider.Slider.UpdateValue((int) settings.rightStickDriftSensitivity * 10);
-            rightStickDriftSlider.transform.localPosition = new Vector3(0, -120, 0);
-
             ReadOnlyCollection<string> movementMethods = new ReadOnlyCollection<string>(new List<string> { "Head-based movement", "Wand-based movement" });
             movementMethod = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
             movementMethod.BindTo(settingsUi._soundSettingsScreen.gclass957_0.VoipDevice, movementMethods, (x) => !(x == "Head-based movement") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
@@ -177,16 +206,73 @@ namespace TarkovVR.Source.Settings
                 movementMethod.DropDown.SetLabelText("Wand-based movement");
 
             movementMethod.DropDown.onEventClass.action_0 = ChangeMovementMode;
-            movementMethod.transform.localPosition = new Vector3(300, -250, 0);
+
+            ReadOnlyCollection<string> rotationsModes = new ReadOnlyCollection<string>(new List<string> { "Smooth Turn", "Snap Turn" });
+            rotationMethod = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
+            rotationMethod.BindTo(settingsUi._soundSettingsScreen.gclass957_0.VoipDevice, rotationsModes, (x) => !(x == "Smooth Turn") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            rotationMethod.Text.localizationKey = "Rotation method: ";
+            if (settings.rotationType == RotationMode.Smooth)
+                rotationMethod.DropDown.SetLabelText("Smooth Turn");
+            else
+                rotationMethod.DropDown.SetLabelText("Snap Turn");
+
+            rotationMethod.DropDown.onEventClass.action_0 = ChangeRotationType;
+
+            
+
+            ReadOnlyCollection<string> snapTurnMethods = new ReadOnlyCollection<string>(new List<string> { "30", "45", "90" });
+            snapTurnAmountDropDown = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
+            snapTurnAmountDropDown.BindTo(settingsUi._soundSettingsScreen.gclass957_0.VoipDevice, snapTurnMethods, (x) => !(x == "45") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            snapTurnAmountDropDown.Text.localizationKey = "Snap turn Amount: ";
+            if (settings.snapTurnAmount == SnapTurnAmount.thirty)
+                snapTurnAmountDropDown.DropDown.SetLabelText("30");
+            else if (settings.snapTurnAmount == SnapTurnAmount.fourtyFive)
+                snapTurnAmountDropDown.DropDown.SetLabelText("45");
+            else
+                snapTurnAmountDropDown.DropDown.SetLabelText("90");
 
 
-            sharpenToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            sharpenToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
-            sharpenToggle.Toggle.action_0 = SetSharpen;
-            sharpenToggle.Text.localizationKey = "Enable Sharpen ";
-            sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);
+            snapTurnAmountDropDown.DropDown.onEventClass.action_0 = ChangeSnapAmount;
 
-            snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+
+            sensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            sensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            sensitivitySlider.Slider.action_0 = ChangeRotationSensitivity;
+            sensitivitySlider.Text.localizationKey = "Rotation Sensitivity:";
+            sensitivitySlider.Slider.UpdateValue(settings.rotationSensitivity);
+            //leftStickDriftSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            //leftStickDriftSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            //leftStickDriftSlider.Slider.action_0 = ChangeLeftStickDriftSensitivity;
+            //leftStickDriftSlider.Text.localizationKey = "Left Stick Drift Sensitivity: ";
+            //leftStickDriftSlider.Slider.UpdateValue((int) settings.leftStickDriftSensitivity * 10);
+            //leftStickDriftSlider.transform.localPosition = new Vector3(0, -70, 0);
+
+            //rightStickDriftSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            //rightStickDriftSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            //rightStickDriftSlider.Slider.action_0 = ChangeRightStickDriftSensitivity;
+            //rightStickDriftSlider.Text.localizationKey = "Right Stick Drift Sensitivity: ";
+            //rightStickDriftSlider.Slider.UpdateValue((int) settings.rightStickDriftSensitivity * 10);
+            //rightStickDriftSlider.transform.localPosition = new Vector3(0, -120, 0);
+
+
+            SettingSelectSlider emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            emptySpacingSlider.Slider.gameObject.SetActive(false);
+            emptySpacingSlider.Text.gameObject.SetActive(false);
+
+
+            emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            emptySpacingSlider.Slider.gameObject.SetActive(false);
+            emptySpacingSlider.Text.gameObject.SetActive(false);
+
+            leftHandedMode = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            leftHandedMode.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
+            leftHandedMode.Toggle.action_0 = SetLeftHandedMode;
+            leftHandedMode.Text.localizationKey = "Left Handed Mode ";
+            leftHandedMode.Toggle.UpdateValue(settings.leftHandedMode);
+
+                        snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             snapToGunToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
             snapToGunToggle.Toggle.action_0 = SetSnapToGun;
             snapToGunToggle.Text.localizationKey = "Turn On Left Hand Snap To Weapon ";
@@ -203,35 +289,30 @@ namespace TarkovVR.Source.Settings
             scopeSmoothingToggle.Toggle.action_0 = ToggleScopeSmoothingSensitivity;
             scopeSmoothingToggle.Text.localizationKey = "Turn On Scope Aim Smoothing ";
             scopeSmoothingToggle.Toggle.UpdateValue(settings.scopeAimSmoothing);
-            scopeSmoothingToggle.transform.localPosition = new Vector3(0, -320, 0);
 
             aimSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             aimSmoothingToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
             aimSmoothingToggle.Toggle.action_0 = ToggleSmoothingSensitivity;
             aimSmoothingToggle.Text.localizationKey = "Turn On Weapon Aim Smoothing ";
             aimSmoothingToggle.Toggle.UpdateValue(settings.weaponAimSmoothing);
-            aimSmoothingToggle.transform.localPosition = new Vector3(0, -370, 0);
 
             weaponWeightToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             weaponWeightToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
             weaponWeightToggle.Toggle.action_0 = SetWeaponWeightOn;
             weaponWeightToggle.Text.localizationKey = "Turn On Weapon Weight";
             weaponWeightToggle.Toggle.UpdateValue(settings.weaponWeight);
-            weaponWeightToggle.transform.localPosition = new Vector3(0, -370, 0);
 
             aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             aimSmoothingSlider.Slider.action_0 = SetSmoothingSensitivity;
             aimSmoothingSlider.Text.localizationKey = "Aim Smoothing Sensitivity:";
             aimSmoothingSlider.Slider.UpdateValue(11 - (settings.smoothingSensitivity / 2));
-            aimSmoothingSlider.transform.localPosition = new Vector3(0, -440, 0);
 
-            oneHandingWeaponAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            oneHandingWeaponAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            oneHandingWeaponAngleSlider.Slider.action_0 = SetWeaponAngleOffset;
-            oneHandingWeaponAngleSlider.Text.localizationKey = "Right hand vertical rot offset:";
-            oneHandingWeaponAngleSlider.Slider.UpdateValue(settings.oneHandingWeaponAngle / 10);
-            oneHandingWeaponAngleSlider.transform.localPosition = new Vector3(0, -490, 0);
+            rightHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            rightHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            rightHandVerticalAngleSlider.Slider.action_0 = SetRightHandVerticalOffset;
+            rightHandVerticalAngleSlider.Text.localizationKey = "Right hand vertical rot offset:";
+            rightHandVerticalAngleSlider.Slider.UpdateValue(settings.rightHandVerticalAngle / 10);
 
 
             rightHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
@@ -239,15 +320,56 @@ namespace TarkovVR.Source.Settings
             rightHandHorizontalAngleSlider.Slider.action_0 = SetRightHandHorizontalOffset;
             rightHandHorizontalAngleSlider.Text.localizationKey = "Right hand horizontal rot offset:";
             rightHandHorizontalAngleSlider.Slider.UpdateValue((50 - settings.rightHandHorizontalAngle) / 10);
-            rightHandHorizontalAngleSlider.transform.localPosition = new Vector3(0, -490, 0);
 
+            leftHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            leftHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            leftHandVerticalAngleSlider.Slider.action_0 = SetLeftHandVerticalOffset;
+            leftHandVerticalAngleSlider.Text.localizationKey = "Left hand vertical rot offset:";
+            leftHandVerticalAngleSlider.Slider.UpdateValue((50 - settings.leftHandHorizontalAngle) / 10);
 
             leftHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             leftHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             leftHandHorizontalAngleSlider.Slider.action_0 = SetLeftHandHorizontalOffset;
             leftHandHorizontalAngleSlider.Text.localizationKey = "Left hand horizontal rot offset:";
             leftHandHorizontalAngleSlider.Slider.UpdateValue((50 - settings.leftHandHorizontalAngle) / 10);
-            leftHandHorizontalAngleSlider.transform.localPosition = new Vector3(0, -490, 0);
+
+
+            hideArmsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            hideArmsToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
+            hideArmsToggle.Toggle.action_0 = SetHideArms;
+            hideArmsToggle.Text.localizationKey = "Hide Arms";
+            hideArmsToggle.Toggle.UpdateValue(settings.hideArms);
+
+            hideLegsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            hideLegsToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
+            hideLegsToggle.Toggle.action_0 = SetHideLegs;
+            hideLegsToggle.Text.localizationKey = "Hide Legs";
+            hideLegsToggle.Toggle.UpdateValue(settings.hideLegs);
+
+            emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            emptySpacingSlider.Slider.gameObject.SetActive(false);
+            emptySpacingSlider.Text.gameObject.SetActive(false);
+
+            ReadOnlyCollection<string> shadowOpts = new ReadOnlyCollection<string>(new List<string> { "Normal", "Disable Near Shadows", "Increase Lighting" });
+            shadowOptsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
+            shadowOptsToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.VoipDevice, shadowOpts, (x) => !(x == "Normal") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            shadowOptsToggle.Text.localizationKey = "Shadows Settings: ";
+            if (settings.shadowOpt == ShadowOpt.Normal)
+                shadowOptsToggle.DropDown.SetLabelText("Normal");
+            else if (settings.shadowOpt == ShadowOpt.DisableNearShadows)
+                shadowOptsToggle.DropDown.SetLabelText("Disable Near Shadows");
+            else
+                shadowOptsToggle.DropDown.SetLabelText("Increase Lighting");
+
+            shadowOptsToggle.DropDown.onEventClass.action_0 = ChangeShadowOpts;
+
+            //sharpenToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            //sharpenToggle.BindTo(settingsUi._soundSettingsScreen.gclass957_0.MusicOnRaidEnd);
+            //sharpenToggle.Toggle.action_0 = SetSharpen;
+            //sharpenToggle.Text.localizationKey = "Enable Sharpen ";
+            //sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);
+
 
             vrSettingsObject = newSoundSettings.gameObject;
             UnityEngine.Object.Destroy(newSoundSettings);
@@ -345,15 +467,46 @@ namespace TarkovVR.Source.Settings
         {
             return settings.movementType;
         }
-
-
-        public static int GetWeaponAngleOffset()
-        {
-            return settings.oneHandingWeaponAngle;
+        private static void SetLeftHandVerticalOffset(int offset) {
+            settings.leftHandVerticalAngle = offset * 10;
         }
-        private static void SetWeaponAngleOffset(int offset)
+        public static int GetPrimaryHandVertOffset()
         {
-            settings.oneHandingWeaponAngle = offset * 10;
+            if (settings.leftHandedMode)
+                return settings.leftHandVerticalAngle;
+            else
+                return settings.rightHandVerticalAngle;
+        }
+        public static int GetSecondaryHandVertOffset()
+        {
+            if (settings.leftHandedMode)
+                return settings.rightHandVerticalAngle;
+            else
+                return settings.leftHandVerticalAngle;
+        }
+
+        public static int GetPrimaryHandHorOffset()
+        {
+            if (settings.leftHandedMode)
+                return settings.leftHandHorizontalAngle;
+            else
+                return settings.rightHandHorizontalAngle;
+        }
+        public static int GetSecondaryHandHorOffset()
+        {
+            if (settings.leftHandedMode)
+                return settings.rightHandHorizontalAngle;
+            else
+                return settings.leftHandHorizontalAngle;
+        }
+
+        public static int GetRightHandVerticalOffset()
+        {
+            return settings.rightHandVerticalAngle;
+        }
+        private static void SetRightHandVerticalOffset(int offset)
+        {
+            settings.rightHandVerticalAngle = offset * 10;
         }
 
         public static bool GetSnapToGun()
@@ -413,6 +566,120 @@ namespace TarkovVR.Source.Settings
         public static bool GetSharpenOn()
         {
             return settings.enableSharpen;
+        }
+
+        private static void SetLeftHandedMode(bool toggle)
+        {
+            settings.leftHandedMode = toggle;
+        }
+
+        public static bool GetLeftHandedMode()
+        {
+            return settings.enableSharpen;
+        }
+
+        public static bool GetHideArms()
+        {
+            return settings.hideArms;
+        }
+        private static void SetHideArms(bool turnOff)
+        {
+            settings.hideArms = turnOff;
+            if (VRGlobals.origArmsModel && VRGlobals.handsOnlyModel) {
+                if (turnOff)
+                {
+                    VRGlobals.origArmsModel.transform.parent.gameObject.active = false;
+                    VRGlobals.handsOnlyModel.transform.parent.gameObject.active = true;
+                }
+                else {
+                    VRGlobals.origArmsModel.transform.parent.gameObject.active = true;
+                    VRGlobals.handsOnlyModel.transform.parent.gameObject.active = false;
+                }
+            }
+        }
+
+        public static bool GetHideLegs()
+        {
+            return settings.hideLegs;
+        }
+        private static void SetHideLegs(bool turnOff)
+        {
+            settings.hideLegs = turnOff;
+            if (VRGlobals.legsModel)
+                VRGlobals.legsModel.transform.parent.gameObject.active = !turnOff;
+        }
+
+
+        private static void ChangeShadowOpts(int mode)
+        {
+            settings.shadowOpt = (ShadowOpt)mode;
+            if (settings.shadowOpt == ShadowOpt.Normal) { 
+                shadowOptsToggle.DropDown.SetLabelText("Normal");
+            }
+            else if (settings.shadowOpt == ShadowOpt.DisableNearShadows)
+                shadowOptsToggle.DropDown.SetLabelText("Disable Near Shadows");
+            else
+                shadowOptsToggle.DropDown.SetLabelText("Increase Lighting");
+
+            if (!VisualPatches.distantShadow)
+                return;
+
+            if (GetShadowOpts() == VRSettings.ShadowOpt.IncreaseLighting)
+            {
+                VisualPatches.distantShadow.EnableMultiviewTiles = false;
+                VisualPatches.distantShadow.PreComputeMask = true;
+
+            }
+            else if (VRSettings.GetShadowOpts() == VRSettings.ShadowOpt.DisableNearShadows)
+            {
+                VisualPatches.distantShadow.EnableMultiviewTiles = true;
+                VisualPatches.distantShadow.PreComputeMask = false;
+            }
+            else
+            {
+                VisualPatches.distantShadow.EnableMultiviewTiles = true;
+                VisualPatches.distantShadow.PreComputeMask = true;
+            }
+        }
+        public static ShadowOpt GetShadowOpts()
+        {
+            return settings.shadowOpt;
+        }
+
+
+        private static void ChangeRotationType(int mode)
+        {
+            settings.rotationType = (RotationMode)mode;
+            if (settings.rotationType == RotationMode.Smooth)
+                rotationMethod.DropDown.SetLabelText("Smooth Turn");
+            else
+                rotationMethod.DropDown.SetLabelText("Snap Turn");
+        }
+        public static RotationMode GetRotationType()
+        {
+            return settings.rotationType;
+        }
+
+        private static void ChangeSnapAmount(int mode)
+        {
+            if (mode == 0)
+            {
+                settings.snapTurnAmount = SnapTurnAmount.thirty;
+                snapTurnAmountDropDown.DropDown.SetLabelText("30");
+            }
+            else if (mode == 1)
+            {
+                settings.snapTurnAmount = SnapTurnAmount.fourtyFive;
+                snapTurnAmountDropDown.DropDown.SetLabelText("45");
+            }
+            else { 
+                settings.snapTurnAmount = SnapTurnAmount.ninety;
+                snapTurnAmountDropDown.DropDown.SetLabelText("90");
+            }
+        }
+        public static SnapTurnAmount GetSnapTurnAmount()
+        {
+            return settings.snapTurnAmount;
         }
     }
 }

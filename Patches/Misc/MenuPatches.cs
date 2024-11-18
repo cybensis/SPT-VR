@@ -1422,7 +1422,7 @@ namespace TarkovVR.Patches.Misc
 
             if (VRGlobals.weaponHolder && VRGlobals.firearmController) {
                 Vector3 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(VRGlobals.firearmController.weaponPrefab_0.name, VRGlobals.firearmController.Weapon.WeapClass);
-                float weaponAngleOffset = VRSettings.GetWeaponAngleOffset();
+                float weaponAngleOffset = VRSettings.GetRightHandVerticalOffset();
                 if (weaponAngleOffset < 50)
                 {
                     // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it

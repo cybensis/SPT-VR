@@ -9,6 +9,7 @@
 ## **Table of Contents**
 1. [Setup](#setup)
 2. [Controls](#controls)
+3. [VR Settings](#vr-settings) 
 4. [FPS/Graphics Guide](#fpsgraphics-guide)
 5. [FAQ](#faq)
 6. [Contributions](#contributions)
@@ -38,14 +39,17 @@ To uninstall the mod, go to your SPT installation and remove the BepInEx/plugins
 
 ## **Controls**
 
+Use LiftIsTheWhey's YouTube video for a visual controls guide - https://www.youtube.com/watch?v=alh42lFp-Gw
+
 ### **Movement**
 - **Walking:** Left joystick.
 - **Look around:** Right joystick.
-- **Sprint:** Click the right joystick.
+- **Sprint:** Click the left joystick.
 - **Jump:** Push the right joystick up.
 - **Vault:** Hold the right joystick up at a ledge.
 - **Crouch:** Pull down on the right joystick, physically crouch, or do both.
 - **Prone:** Fully crouch, release the joystick, then pull down again.
+- **Reset Height and Position:** Hold down the right joystick for about half a second until you see your camera change position
 
 ### **Weapon Controls**
 - **Shoot:** Right trigger.
@@ -62,7 +66,7 @@ To uninstall the mod, go to your SPT installation and remove the BepInEx/plugins
     - **Toggle Firemode**
     - **Fold Stock** (not implemented yet)
 - **Reload:** Press **B** or use the interaction mode.
-- **Toggle Firemode:** Press **A** or use the interaction mode when two-handing.
+- **Toggle Firemode:** Press **A** when two-handing or use the interaction mode.
 - **Change red dot/holo mode:** Press the left grip when your hand vibrates near the sight.
 - **Change optic zoom:** Pull the right joystick or rotate the left hand near the scope.
 - Grenades: Select from the quick slot radial menu, then hold the right trigger to pull the pin and aim using your in-game pointer finger.
@@ -92,6 +96,18 @@ To uninstall the mod, go to your SPT installation and remove the BepInEx/plugins
 If you go into the Tarkov settings menu, you will see a VR tab, which allows you to modify some of the VR specific settings.
 
 ---
+
+## VR Settings
+If you look in Tarkovs settings menu you will see a new tab for VR which contains some VR specific configurations you can change to suit your play style, such as:
+- Snap turn/Smooth turn settings, as well as degrees for snap turn
+- Hands only / No Legs options
+- Aim smoothing options
+- Rotation offsets for your hands
+- Graphics settings
+- Weapon handling settings
+- And more
+
+---
 ## FPS/Graphics Guide
 NOTE: Keep in mind these settings were based on my personal performance is likely very inaccurate. Additionally, messing around with some settings in raid can cause some bad visual glitches, so be aware of this before reporting any bugs
 #### In game graphics guide
@@ -106,7 +122,8 @@ NOTE: Keep in mind these settings were based on my personal performance is likel
 - POST FX - Turning it off gains about 8-10 FPS in some situations, or does nothing in others
 
 #### Additional FPS guide
-- The VR Performance Toolkit (vrperfkit) can net about 10-20 extra FPS with the default configuration at the expense of some graphical fidelity, could help people with less powerful computers
+- Check out the [TrueLive](https://hub.sp-tarkov.com/files/file/2454-truelive/) Donuts+Swag configuration by MaTSix which aims to follow the AI spawns as close to live Tarkov as possible, which helps reduce CPU load throughout raids and can result in a solid FPS gain.
+- Thanks to yurinin for finding this: By downloading and setting up [this](https://github.com/RavenSystem/VRPerfKit_RSF) version of the VR performance toolkit, then going into the config file and setting the method to CAS, renderScale to 30 and sharpness to one, then using the SteamVR resolution settings you can scale up your resolution to much higher than normal to achieve a higher fidelity for no loss in FPS (atleast in my case)
 
 ## **FAQ**
 
@@ -150,6 +167,7 @@ A huge thank you to these primary testers who helped shape the mod:
 - **groundzeroday**: Check out his work at [hexler.net](https://hexler.net/)
 - **Havviks**: Thanks for making the trailer, go watch his videos on [YouTube](https://www.youtube.com/@HAVVIKS)
 - **MaTSix**: Offered a lot of helpful ideas which greatly decreased the jankiness of the mod
+- **LiftIsTheWhey**: Thanks for all the videos you've made, the controls guide and helping with testing so checkout [his channel](https://www.youtube.com/@LiftIsTheWhey)
 
 ---
 

@@ -132,8 +132,8 @@ namespace TarkovVR.Patches.Core.Player
 
 
 
-            // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 80 degrees, and if they haven't already rotated recently, and they've stopped rotating around
-            else if (Mathf.Abs(rotDiff) > 50 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
+            // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 75 degrees, and if they haven't already rotated recently, and they've stopped rotating around
+            else if (Mathf.Abs(rotDiff) > 75 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
             {
                 lastYRot = headY;
                 timeSinceLastLookRot = 0;
@@ -182,20 +182,18 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.player_0.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;
-
-            if (VRGlobals.emptyHands) { 
-                VRGlobals.camRoot.transform.position = VRGlobals.emptyHands.position;
-                VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.camRoot.transform.position.x, __instance.player_0.Transform.position.y + 1.5f, VRGlobals.camRoot.transform.position.z);
+            // When medding or eating, we need to rely on this code to position the upper body, and it will set the empty hands but the current gun interaction controller should be disabled
+            if (VRGlobals.emptyHands && VRGlobals.player.HandsIsEmpty)
+                VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
+            else if (VRGlobals.emptyHands && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.enabled)) {
+                Plugin.MyLog.LogWarning("Possitioning hands");
+                VRGlobals.ikManager.MatchLegsToArms();
+                VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
+                
             }
-            else
+            else if (!VRGlobals.emptyHands)
                 VRGlobals.camRoot.transform.position = new Vector3(__instance.player_0.Transform.position.x, __instance.player_0.Transform.position.y + 1.5f, __instance.player_0.Transform.position.z);
-            //    VRGlobals.camRoot.transform.position = __instance.method_1(VRGlobals.camRoot.transform.position, VRGlobals.camRoot.transform.rotation, __instance.transform_0.position);
 
-            //if (__instance.player_0.IsInPronePose) {
-            //    VRGlobals.camRoot.transform.position += (__instance.player_0.Transform.forward * VRGlobals.test.x) + (__instance.player_0.Transform.right * VRGlobals.test.y);
-            //}
-
-            //camHolder.transform.position = __instance.transform_0.position + new Vector3(Test.ex, Test.ey, Test.ez);
             return false;
         }
     }

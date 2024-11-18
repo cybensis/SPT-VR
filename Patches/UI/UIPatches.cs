@@ -643,7 +643,7 @@ namespace TarkovVR.Patches.UI
                 __instance.PropUpdate();
             }
             __instance.ComplexLateUpdate(EUpdateQueue.Update, __instance.DeltaTime);
-            if (__instance.POM != null && !__instance.IsAI)
+            if (__instance.POM != null && __instance.IsYourPlayer)
             {
                 __instance.POM.ExtrudeCamera();
             }

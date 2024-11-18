@@ -13,6 +13,7 @@
       https://nuget.samboy.dev/v3/index.json
     </RestoreAdditionalProjectSources>
     <RootNamespace>TarkovVR</RootNamespace>
+    <UserSecretsId>a5566ab9-7cd4-4d4a-9f17-1401464a5e66</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

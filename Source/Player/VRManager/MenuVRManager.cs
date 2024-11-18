@@ -117,7 +117,6 @@ namespace TarkovVR.Source.Player.VRManager
         {
             if (!RightHand)
             {
-                //RightHand = GameObject.Instantiate(AssetLoader.RightHandBase, Vector3.zero, Quaternion.identity);
                 RightHand = new GameObject("RightHand");
                 RightHand.AddComponent<SteamVR_Behaviour_Pose>();
                 //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
@@ -129,7 +128,6 @@ namespace TarkovVR.Source.Player.VRManager
             }
             if (!LeftHand)
             {
-                //LeftHand = GameObject.Instantiate(AssetLoader.LeftHandBase, Vector3.zero, Quaternion.identity);
                 LeftHand = new GameObject("LeftHand");
                 LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
                 LeftHand.transform.parent = VRGlobals.camHolder.transform.parent;

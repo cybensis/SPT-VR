@@ -18,6 +18,7 @@ public class Plugin : BaseUnityPlugin
 {
     public static ManualLogSource MyLog;
 
+
     private void Awake()
     {
         // Plugin startup logic
@@ -51,8 +52,6 @@ public class Plugin : BaseUnityPlugin
         XRGeneralSettings.AttemptStartXRSDKOnBeforeSplashScreen();
         //Application.runInBackground = true;
         SteamVR.Initialize();
-        //0.0688 -0.2245 -0.0326
-        //354.4751 187.1817 105.2293
 
     }
 

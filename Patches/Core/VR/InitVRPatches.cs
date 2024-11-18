@@ -9,6 +9,7 @@ using TarkovVR.Source.Misc;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
+using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
@@ -182,6 +183,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
 
             if (__instance.name == "Base HumanLCollarbone") {
+                VRGlobals.ikManager.leftArmIk = __instance.transform.GetComponent<LimbIK>();
                 leftWrist = __instance.transform.FindChildRecursive("Base HumanLForearm3");
                 if (leftWrist != null && leftWrist.GetComponent<TwistRelax>())
                     leftWrist.GetComponent<TwistRelax>().weight = 3;
@@ -197,6 +199,9 @@ namespace TarkovVR.Patches.Core.VR
             }
             if (__instance.name == "Base HumanRCollarbone")
             {
+                VRGlobals.ikManager.rightArmIk = __instance.transform.GetComponent<LimbIK>();
+                if (VRSettings.GetLeftHandedMode())
+                    VRGlobals.ikManager.rightArmIk.transform.parent.localScale = new Vector3(-1, 1, 1);
                 IInputHandler baseHandler;
                 VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.LeftStanceToggle, out baseHandler);
                 if (baseHandler != null)

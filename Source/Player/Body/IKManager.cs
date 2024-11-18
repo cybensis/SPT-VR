@@ -41,19 +41,7 @@ namespace TarkovVR.Source.Player.VR
             }
         }
 
-        // NOTE: I tried extending the arms but that offsets the hands from the gun, so instead set the local position of
-        // the upper arm, or the collarbone, for the upper arm the +y value goes forward
-        // For collarbone setting everything to 0 and z = 0.1 seemed to work fine
-
-        void Update()
-        {
-            if (!VRGlobals.vrPlayer || VRGlobals.menuOpen)
-                return;
-
-            if (leftUpperArm)
-                leftUpperArm.localPosition = upperArmPos;
-            if (rightUpperArm)
-                rightUpperArm.localPosition = upperArmPos;
+        public void MatchLegsToArms() {
 
             // Can't remember what this is for, I'm guessing to check if the player height and position is initialized properly
             if (VRGlobals.vrPlayer.initPos.y == 0)
@@ -135,6 +123,26 @@ namespace TarkovVR.Source.Player.VR
             {
                 transform.localPosition = Vector3.zero;
             }
+        }
+
+        // NOTE: I tried extending the arms but that offsets the hands from the gun, so instead set the local position of
+        // the upper arm, or the collarbone, for the upper arm the +y value goes forward
+        // For collarbone setting everything to 0 and z = 0.1 seemed to work fine
+
+        void Update()
+        {
+            if (!VRGlobals.vrPlayer || VRGlobals.menuOpen)
+                return;
+
+            if (leftUpperArm)
+                leftUpperArm.localPosition = upperArmPos;
+            if (rightUpperArm)
+                rightUpperArm.localPosition = upperArmPos;
+
+            if (!VRGlobals.emptyHands || VRGlobals.player.HandsIsEmpty) { 
+                MatchLegsToArms();
+            }
+           
 
 
         }

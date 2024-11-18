@@ -1,4 +1,5 @@
 ﻿using EFT.UI;
+using EFT.Visual;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
@@ -50,6 +51,11 @@ namespace TarkovVR
         public static float scopeSensitivity = 0;
         public static Transform scope;
         public static IKManager ikManager;
+
+        public static SkinnedMeshRenderer handsOnlyModel;
+        public static SkinnedMeshRenderer origArmsModel;
+        public static SkinnedMeshRenderer legsModel;
+        public static AssetBundle handsBundle;
 
         public static GameObject weaponHolder;
         public static GameObject oldWeaponHolder;

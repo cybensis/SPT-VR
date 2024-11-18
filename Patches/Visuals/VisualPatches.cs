@@ -22,6 +22,7 @@ namespace TarkovVR.Patches.Visuals
     internal class VisualPatches
     {
         private static Camera postProcessingStoogeCamera;
+        public static DistantShadow distantShadow;
 
         // NOTEEEEEE: You can completely delete SSAA and SSAAPropagatorOpaque and the blurriness still occcurs so it must be from SSAAPropagator or SSAAImpl
 
@@ -483,7 +484,8 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(CameraLodBiasController), "SetBiasByFov")]
         private static void FixAimCulling(CameraLodBiasController __instance)
         {
-            __instance.LodBiasFactor = 1;
+            __instance.LodBiasFactor = 3;
+
         }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(DistantShadow), "Awake")]
@@ -492,31 +494,31 @@ namespace TarkovVR.Patches.Visuals
             __instance.EnableMultiviewTiles = true;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(CC_Base), "Awake")]
-        private static void OptionalDisableSharpenAwake(CC_Base __instance)
-        {
-            if (__instance is CC_Sharpen)
-            {
-                if (!VRSettings.GetSharpenOn())
-                    __instance.enabled = false;
-                else
-                    __instance.enabled = true;
-            }
-        }
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(CC_Base), "Awake")]
+        //private static void OptionalDisableSharpenAwake(CC_Base __instance)
+        //{
+        //    if (__instance is CC_Sharpen)
+        //    {
+        //        if (!VRSettings.GetSharpenOn())
+        //            __instance.enabled = false;
+        //        else
+        //            __instance.enabled = true;
+        //    }
+        //}
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(CC_Base), "Start")]
-        private static void OptionalDisableSharpenStart(CC_Base __instance)
-        {
-            if (__instance is CC_Sharpen)
-            {
-                if (!VRSettings.GetSharpenOn())
-                    __instance.enabled = false;
-                else
-                    __instance.enabled = true;
-            }
-        }
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(CC_Base), "Start")]
+        //private static void OptionalDisableSharpenStart(CC_Base __instance)
+        //{
+        //    if (__instance is CC_Sharpen)
+        //    {
+        //        if (!VRSettings.GetSharpenOn())
+        //            __instance.enabled = false;
+        //        else
+        //            __instance.enabled = true;
+        //    }
+        //}
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ThermalVision), "method_1")]
@@ -534,6 +536,30 @@ namespace TarkovVR.Patches.Visuals
             __instance._upsampleTexDimension = FastBlur.Dimensions._2048;
             __instance._blurCount = 2;
         }
+
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(DistantShadow), "Awake")]
+        private static void SetDistantShadowSettings(DistantShadow __instance)
+        {
+            distantShadow = __instance;
+            if (VRSettings.GetShadowOpts() == VRSettings.ShadowOpt.IncreaseLighting)
+            {
+                distantShadow.EnableMultiviewTiles = false;
+                distantShadow.PreComputeMask = true;
+
+            }
+            else if (VRSettings.GetShadowOpts() == VRSettings.ShadowOpt.DisableNearShadows)
+            {
+                distantShadow.EnableMultiviewTiles = true;
+                distantShadow.PreComputeMask = false;
+            }
+            else {
+                distantShadow.EnableMultiviewTiles = true;
+                distantShadow.PreComputeMask = true;
+            }
+        }
+
 
 
         [HarmonyPrefix]

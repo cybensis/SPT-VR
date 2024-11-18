@@ -9,14 +9,17 @@ namespace TarkovVR.Source.Misc
 {
     internal class WeaponPositioner : MonoBehaviour
     {
-
+        private int i = 0;
         private void Update()
         {
-            transform.localPosition = Vector3.zero;
+            Plugin.MyLog.LogWarning(VRGlobals.player._markers[0].transform.position.ToString("F4") + "  |  " + i);
         }
         private void LateUpdate()
         {
-            transform.localPosition = Vector3.zero;
+            Plugin.MyLog.LogError(VRGlobals.player._markers[0].transform.position.ToString("F4") + "  |  " + i);
+            i++;
+            if (i > 100)
+                i = 0;
         }
 
     }

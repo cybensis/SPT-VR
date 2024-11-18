@@ -15,6 +15,7 @@ namespace TarkovVR.Patches.Core.VR
     {
 
         private static readonly float JUMP_OR_STAND_CLAMP_RANGE = 0.75f;
+        private static bool snapTurned = false;
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -76,10 +77,30 @@ namespace TarkovVR.Patches.Core.VR
                         axis[__instance.gclass1910_1[m].IntAxis] = 0;
                     else if (m == 2)
                     {
-                        if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < JUMP_OR_STAND_CLAMP_RANGE && !VRGlobals.blockRightJoystick && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > VRSettings.GetRightStickSensitivity())
-                            axis[__instance.gclass1910_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * VRSettings.GetRotationSensitivity();
-                        else
+                        // Set snap turn to false before checking for disabled conditions
+                        if (snapTurned && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) < 0.7) 
+                                snapTurned = false;
+
+                        bool disableTurn = ((WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) || Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) >= JUMP_OR_STAND_CLAMP_RANGE || VRGlobals.blockRightJoystick) ;
+                        if (disableTurn)
+                        {
                             axis[__instance.gclass1910_1[m].IntAxis] = 0;
+                            continue;
+                        }
+
+                        if (VRSettings.GetRotationType() == VRSettings.RotationMode.Smooth)
+                            axis[__instance.gclass1910_1[m].IntAxis] = SteamVR_Actions._default.RightJoystick.axis.x * VRSettings.GetRotationSensitivity();
+                        else {
+                            if (!snapTurned && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.7) {
+                                snapTurned = true;
+                                float snapTurnAmount = (float)VRSettings.GetSnapTurnAmount();
+                                if (SteamVR_Actions._default.RightJoystick.axis.x < 0)
+                                    snapTurnAmount *= -1;
+                                axis[__instance.gclass1910_1[m].IntAxis] = snapTurnAmount;
+                            }
+                        }
+
+
                         if (VRGlobals.camRoot != null)
                             VRGlobals.camRoot.transform.Rotate(0, axis[__instance.gclass1910_1[m].IntAxis], 0);
                     }

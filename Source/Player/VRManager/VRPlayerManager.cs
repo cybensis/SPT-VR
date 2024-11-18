@@ -1,5 +1,6 @@
 ﻿using EFT.InventoryLogic;
 using Newtonsoft.Json.Linq;
+using Open.Nat;
 using Sirenix.Serialization;
 using System.Collections.Generic;
 using TarkovVR;
@@ -20,14 +21,21 @@ namespace TarkovVR.Source.Player.VRManager
     {
 
         public static Transform leftWrist;
-
-
+        private static Vector3 leftHandedPrimaryHandRotOffset = new Vector3(85, 0, 95);
+        private static Vector3 rightHandedPrimaryHandRotOffset = new Vector3(0, 170, 50);
+        private static Vector3 rightHandedOtherHandRotOffset = new Vector3(-110, 0, 70);
+        private static Vector3 leftHandedOtherHandRotOffset = new Vector3(250, 0, 290);
+        // Position offsets only needed for left handed mode
+        private static Vector3 leftHandedPrimaryHandPosOffset = new Vector3(0, 0, 0);
+        private static Vector3 leftHandedOtherHandPosOffset = new Vector3(0, 0, 0);
 
         public Vector3 initPos;
         public Vector3 x;
-        private Vector3 nonSupportRightHandRotOffset = new Vector3(0, 170, 50);
+        private Vector3 mainHandRotOffset = new Vector3(0, 170, 50);
+        private Vector3 secondaryHandRotOffset = new Vector3(-110, 0, 70);
+        private Vector3 mainHandPosOffset = Vector3.zero;
+        private Vector3 secondaryHandPosOffset = Vector3.zero;
         public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
-        private Vector3 supportingLeftHandOffset = new Vector3(355, 15, 90);
         public Transform gunTransform;
         public static Transform leftHandGunIK;
         public bool leftHandOnScope = false;
@@ -155,15 +163,29 @@ namespace TarkovVR.Source.Player.VRManager
 
                 }
             }
+
+
+
             SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
             SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
 
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
 
-            //if (inputManager == null) {
-            //    inputManager = new VRInputManager();
-            //}
+            if (!VRGlobals.player || !VRGlobals.ikManager)
+                return;
+
+            if (VRGlobals.player.HandsIsEmpty) { 
+                VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                VRGlobals.ikManager.leftArmIk.enabled = true;
+                VRGlobals.ikManager.rightArmIk.solver.target = RightHand.transform;
+                VRGlobals.ikManager.rightArmIk.enabled = true;
+            }
+            else { 
+                VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                VRGlobals.ikManager.leftArmIk.enabled = true;
+                
+            }
 
         }
 
@@ -181,18 +203,22 @@ namespace TarkovVR.Source.Player.VRManager
 
         public void OnDisable()
         {
-            SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-            SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
 
         }
         public void OnEnable()
         {
-            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            if (VRSettings.GetLeftHandedMode())
+                LeftHandedMode();
+            else
+                RightHandedMode();
+
+
         }
 
 
-        private static Transform lastHitGunComp;
+        public Quaternion handsRotation;
         protected virtual void Update()
         {
             if (Camera.main == null)
@@ -244,6 +270,11 @@ namespace TarkovVR.Source.Player.VRManager
 
             if (VRGlobals.player)
             {
+                //VRGlobals.ikManager.MatchLegsToArms();
+                handsRotation = VRGlobals.player.HandsRotation;
+                VRGlobals.player.HandsController.ControllerGameObject.transform.SetPositionAndRotation(VRGlobals.player.PlayerBones.Ribcage.Original.position, handsRotation);
+                //VRGlobals.player.CameraContainer.transform.rotation = handsRotation;
+
                 // Base Height - the height at which crouching begins.
                 float baseHeight = initPos.y * 0.90f; // 90% of init height
                                                                          // Floor Height - the height at which full prone is achieved.
@@ -314,15 +345,55 @@ namespace TarkovVR.Source.Player.VRManager
                 // Dampen the inertia over time
                 inertiaVelocity *= inertiaDamping;
             }
+        }
+
+        public void LeftHandedMode() {
+            SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
+            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
+            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+            if (VRGlobals.emptyHands && VRGlobals.emptyHands.GetChild(0))
+                VRGlobals.emptyHands.GetChild(0).localScale = new Vector3(-1, 1, 1);
+            if (VRGlobals.ikManager && VRGlobals.ikManager.leftArmIk)
+                VRGlobals.ikManager.leftArmIk.transform.parent.localScale = new Vector3(-1, 1, 1);
+            mainHandRotOffset = leftHandedPrimaryHandRotOffset;
+            secondaryHandRotOffset = leftHandedOtherHandRotOffset;
+
+            mainHandPosOffset = leftHandedPrimaryHandPosOffset;
+            secondaryHandPosOffset = leftHandedOtherHandPosOffset;
 
         }
 
-        private Vector3 preVelocityRightHandPos;
+        public void RightHandedMode()
+        {
+            SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
+            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            if (VRGlobals.emptyHands)
+                VRGlobals.emptyHands.transform.localScale = new Vector3(1, 1, 1);
+            if (VRGlobals.ikManager && VRGlobals.ikManager.leftArmIk)
+                VRGlobals.ikManager.leftArmIk.transform.parent.localScale = new Vector3(1, 1, 1);
+            mainHandRotOffset = rightHandedPrimaryHandRotOffset;
+            secondaryHandRotOffset = rightHandedOtherHandRotOffset;
+            mainHandPosOffset = Vector3.zero;
+            secondaryHandPosOffset = Vector3.zero;
+
+        }
+
+        private void LateUpdate() { 
+            if (VRGlobals.emptyHands && VRGlobals.player && VRGlobals.player.HandsIsEmpty)
+                VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
+        }
+
+        public Quaternion initialCombinedRotation;
+        private Quaternion rightHandRotationOffset;
         private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
         {
             if (!RightHand)
                 return;
-
+            if (VRGlobals.emptyHands)
+                initialCombinedRotation = VRGlobals.emptyHands.rotation;
 
             if (VRGlobals.blockRightJoystick == true && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand))
             {
@@ -330,6 +401,7 @@ namespace TarkovVR.Source.Player.VRManager
                 if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
                     VRGlobals.blockRightJoystick = false;
             }
+            
 
             if (VRGlobals.firearmController && isSupporting && !isWeapPistol)
             {
@@ -348,28 +420,40 @@ namespace TarkovVR.Source.Player.VRManager
                 if (!isEnteringTwoHandedMode)
                 {
                     framesAfterSwitching = 0;
-                    VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1927f, -0.1642f, -0.2195f);
-                    VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(355, 15, 85);
+                    // Disable other left hand IK tracking
+                    VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    VRGlobals.ikManager.leftArmIk.enabled = false;
+                    // Set the left hand IK back to the original gun position
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
-                    // Capture the initial rotation when entering two-handed mode
-                    rotDiff = initialRightHandRotation * Quaternion.Inverse(combinedRotation);
-                    rotDiff = Quaternion.Euler(rotDiff.x, rotDiff.y, 0);
                     isEnteringTwoHandedMode = true;
-                    // when changing from one to two handing, the rawRightHand rotation is off so when slerping it, the gun always starts
-                    // pointing down, so for the first frame, instantly set its rotation before slerping
-                    rawRightHand.transform.rotation = Quaternion.Euler(combinedRotation.eulerAngles + rotDiff.eulerAngles);
-
+                    // First we get the current right hands local rotation
+                    initialRightHandRotation = RightHand.transform.localRotation;
+                    // Then we get the new right hands rotation for when it points towards the left hand
+                    RightHand.transform.rotation = combinedRotation;
+                    // Then we get the local rotation for the new rotation
+                    Quaternion newLocalRotation = RightHand.transform.localRotation;
+                    // Then we get the difference between the two, and this value will be applied to every local rotation when two handing, so that the gun always starts
+                    // with the exact same rotation as when you were one handing it.
+                    rightHandRotationOffset = Quaternion.Inverse(newLocalRotation) * initialRightHandRotation;
                 }
-
-                combinedRotation = Quaternion.Euler(combinedRotation.eulerAngles + rotDiff.eulerAngles);
-
+                // If aim smoothing is on, then we need to apply the rotation offset before the slerp is applied, so just use the right hand for this since it's going
+                // to be wiped over further down
+                RightHand.transform.rotation = combinedRotation;
+                RightHand.transform.localRotation *= rightHandRotationOffset;
+                // If you're using scopes and holding your breath then the smoothing factor will be below 50 to make it easier to aim with greater zoom levels
                 if (smoothingFactor < 50)
                 {
+                    // Only apply the smoothing if the option is enabled though, otherwise just use the normal rotation
                     if (VRSettings.SmoothScopeAim())
-                        rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, combinedRotation, smoothingFactor * Time.deltaTime);
+                        rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothingFactor * Time.deltaTime);
                     else
+                    {
                         rawRightHand.transform.rotation = combinedRotation;
+                        // Now we apply our offset so the rotation matches the rotation from when you were one handing
+                        rawRightHand.transform.localRotation *= rightHandRotationOffset;
+                    }
                 }
+                // For non-scoped weapons when the smoothing is still on or weapon weight is on
                 else if (VRSettings.SmoothWeaponAim() || VRSettings.GetWeaponWeightOn())
                 {
                     float smoothing = smoothingFactor;
@@ -377,15 +461,21 @@ namespace TarkovVR.Source.Player.VRManager
                         smoothing = VRSettings.GetSmoothingSensitivity();
                     if (VRSettings.GetWeaponWeightOn())
                         smoothing = smoothingFactor / VRGlobals.firearmController.ErgonomicWeight;
-                    rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, combinedRotation, smoothing * Time.deltaTime);
+                    rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothing * Time.deltaTime);
                 }
-                else
+                // If no smoothing is applied, then just use the regular rotation
+                else { 
                     rawRightHand.transform.rotation = combinedRotation;
+                    // Now we apply our offset so the rotation matches the rotation from when you were one handing
+                    rawRightHand.transform.localRotation *= rightHandRotationOffset;
+                }
 
+
+                //rawRightHand.transform.localRotation *= rightHandRotationOffset;
 
                 RightHand.transform.localRotation = fromAction.localRotation;
-                RightHand.transform.Rotate(VRSettings.GetWeaponAngleOffset(), nonSupportRightHandRotOffset.y, nonSupportRightHandRotOffset.z + VRSettings.GetRightHandHorizontalOffset());
-                Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+                RightHand.transform.Rotate(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
+                Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + mainHandPosOffset;
                 RightHand.transform.localPosition = virtualBasePosition;
 
                 if (VRSettings.SmoothWeaponAim() || VRSettings.GetWeaponWeightOn())
@@ -404,8 +494,9 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     rawRightHand.transform.position = RightHand.transform.position;
 
-                //Plugin.MyLog.LogWarning(RightHand.transform.rotation.eulerAngles + "     |   " + rawRightHand.transform.rotation.eulerAngles + "  |  " + VRGlobals.weaponHolder.transform.rotation.eulerAngles);
 
+                // The first 2 frames after swapping to or from two handed mode are slow to update for some reason so the gun will appear at a very weird angle
+                // just for a moment, so just manually set the weaponholder pos and rotation here.
                 if (framesAfterSwitching < 2) { 
                     VRGlobals.weaponHolder.transform.parent.position = rawRightHand.transform.position;
                     VRGlobals.weaponHolder.transform.parent.rotation = rawRightHand.transform.rotation;
@@ -414,22 +505,36 @@ namespace TarkovVR.Source.Player.VRManager
             }
             else
             {
-                if (isEnteringTwoHandedMode)
+                if (isWeapPistol && isSupporting && !isEnteringTwoHandedMode) {
+                    // Disable other left hand IK tracking
+                    VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    VRGlobals.ikManager.leftArmIk.enabled = false;
+                    isEnteringTwoHandedMode = true;
+                }
+                if (isWeapPistol && !isSupporting && isEnteringTwoHandedMode)
+                {
+                    VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                    VRGlobals.ikManager.leftArmIk.enabled = true;
+                    isEnteringTwoHandedMode = false;
+                }
+                if (isEnteringTwoHandedMode && !isWeapPistol)
                 {
                     framesAfterSwitching = 0;
                     isEnteringTwoHandedMode = false;
                     VRGlobals.player._markers[0] = LeftHand.transform;
+                    VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                    VRGlobals.ikManager.leftArmIk.enabled = true;
                     //VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
-                    VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
-                    VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
-                    VRGlobals.firearmController.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
+                    //VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
+                    //VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
+                    //VRGlobals.firearmController.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
                     rawRightHand.transform.rotation = RightHand.transform.rotation;
                 }
 
                 RightHand.transform.localRotation = fromAction.localRotation;
-                RightHand.transform.Rotate(VRSettings.GetWeaponAngleOffset(), nonSupportRightHandRotOffset.y, nonSupportRightHandRotOffset.z + VRSettings.GetRightHandHorizontalOffset());
+                RightHand.transform.Rotate(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
 
-                Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+                Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + mainHandPosOffset;
                 RightHand.transform.localPosition = virtualBasePosition;
 
                 // Smoothing if weight is on
@@ -464,7 +569,6 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.weaponHolder.transform.parent.rotation = rawRightHand.transform.rotation;
                     framesAfterSwitching++;
                 }
-                //Plugin.MyLog.LogInfo(RightHand.transform.rotation.eulerAngles + "     |   " + rawRightHand.transform.rotation.eulerAngles + "  |  " + VRGlobals.weaponHolder.transform.rotation.eulerAngles);
             }
 
         }
@@ -480,6 +584,8 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 if (!leftHandInAnimation)
                 {
+                    VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    VRGlobals.ikManager.leftArmIk.enabled = false;
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                     leftHandInAnimation = true;
                 }
@@ -488,8 +594,11 @@ namespace TarkovVR.Source.Player.VRManager
             else if (leftHandInAnimation) {
                 if (isSupporting)
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
-                else
+                else {
+                    VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
+                    VRGlobals.ikManager.leftArmIk.enabled = true;
                     VRGlobals.player._markers[0] = LeftHand.transform;
+                }
 
                 leftHandInAnimation = false;
             }
@@ -537,9 +646,7 @@ namespace TarkovVR.Source.Player.VRManager
                             isSupporting = false;
                             //VRGlobals.player._markers[0] = LeftHand.transform;
                             ////VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
-                            //VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
-                            //VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
-                            //VRGlobals.firearmController.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
+
                             handLock = false;
                         }
                     }
@@ -547,7 +654,7 @@ namespace TarkovVR.Source.Player.VRManager
                     if (!isSupporting)
                     {
                         SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.1f, SteamVR_Input_Sources.LeftHand);
-                        Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+                        Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + secondaryHandPosOffset;
                         LeftHand.transform.localPosition = virtualBasePosition;
                     }
                     else {
@@ -572,20 +679,20 @@ namespace TarkovVR.Source.Player.VRManager
                         //VRGlobals.firearmController.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
 
                     }
-                    Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+                    Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + secondaryHandPosOffset;
                     LeftHand.transform.localPosition = virtualBasePosition;
                     //if (leftHandGunIK)
-                    //Plugin.MyLog.LogWarning(Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) + "   |    " + isSupporting);
                     //LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
                     LeftHand.transform.localRotation = fromAction.localRotation;
-                    LeftHand.transform.Rotate(-60, 0, 70);
+                    LeftHand.transform.Rotate(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x, secondaryHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
+
                 }
             }
             else {
-                Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
+                Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + secondaryHandPosOffset;
                 LeftHand.transform.localPosition = virtualBasePosition;
                 LeftHand.transform.localRotation = fromAction.localRotation;
-                LeftHand.transform.Rotate(-60, 0, 70 + VRSettings.GetLeftHandHorizontalOffset());
+                LeftHand.transform.Rotate(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x, secondaryHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
             }
             //else
             //{
