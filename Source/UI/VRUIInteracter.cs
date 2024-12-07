@@ -4,6 +4,7 @@ using EFT.UI.Health;
 using EFT.UI.Ragfair;
 using EFT.UI.Utilities.LightScroller;
 using System.Collections.Generic;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -34,13 +35,25 @@ namespace TarkovVR.Source.UI
         private bool rightClickTriggered = false;
         private float timeAButtonHeld = 0f;
 
+        //private Transform raycastSource;
+
+        //private void Awake()
+        //{
+        //    if (this.transform.GetChild(0) != null)
+        //        raycastSource = this.transform.GetChild(0);
+        //    else
+        //        raycastSource = this.transform;
+
+        //}
         public void Update()
         {
-            if (dragObject != null && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.7)
+            float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftJoystick.axis.x : SteamVR_Actions._default.RightJoystick.axis.x;
+
+            if (dragObject != null && Mathf.Abs(primaryHandJoystickAxis) > 0.7)
             {
                 rightJoyTimeHeld += Time.deltaTime;
             }
-            else if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) < 0.7)
+            else if (Mathf.Abs(primaryHandJoystickAxis) < 0.7)
             {
                 rightJoyTimeHeld = 0;
                 rotated = false;
@@ -110,7 +123,7 @@ namespace TarkovVR.Source.UI
         private void handleButtonClick(Vector2 hitPoint)
         {
             bool isPointerClick = true;
-
+            SteamVR_Action_Boolean actionButtton = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.ButtonX : SteamVR_Actions._default.ButtonA;
             if (hitObject.transform.parent && hitObject.transform.parent && hitObject.name == "Toggle" && hitObject.transform.parent.parent.GetComponent<CategoryView>())
                 hitObject = hitObject.transform.parent.parent.GetComponent<CategoryView>()._toggle.gameObject;
             else if (hitObject.transform.parent && hitObject.transform.parent.GetComponent<SubcategoryView>())
@@ -121,10 +134,10 @@ namespace TarkovVR.Source.UI
                 isPointerClick = false;
 
 
-            if (SteamVR_Actions._default.ButtonA.stateDown)
+            if (actionButtton.stateDown)
                 pressedObject = hitObject;
 
-            if (SteamVR_Actions._default.ButtonA.state)
+            if (actionButtton.state)
             {
                 timeAButtonHeld += Time.deltaTime;
                 if (!rightClickTriggered && timeAButtonHeld > 0.25)
@@ -141,7 +154,7 @@ namespace TarkovVR.Source.UI
                 timeAButtonHeld = 0f;
                 rightClickTriggered = false;
             }
-            if (dragObject == null && !rightClickTriggered && SteamVR_Actions._default.ButtonA.stateUp && pressedObject == hitObject)
+            if (dragObject == null && !rightClickTriggered && actionButtton.stateUp && pressedObject == hitObject)
             {
                 if (isPointerClick)
                     ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
@@ -152,19 +165,20 @@ namespace TarkovVR.Source.UI
 
         private void handleUIScrollwheel()
         {
-            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.4 && hitObject.GetComponentInParent<ScrollRectNoDrag>() != null)
+            float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftJoystick.axis.y : SteamVR_Actions._default.RightJoystick.axis.y;
+            if (Mathf.Abs(primaryHandJoystickAxis) > 0.4 && hitObject.GetComponentInParent<ScrollRectNoDrag>() != null)
             {
-                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y / 1.5f);
+                eventData.scrollDelta = new Vector2(0, primaryHandJoystickAxis / 1.5f);
                 ExecuteEvents.Execute(hitObject.GetComponentInParent<ScrollRectNoDrag>().gameObject, eventData, ExecuteEvents.scrollHandler);
             }
-            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.4 && hitObject.GetComponentInParent<ScrollRect>() != null)
+            if (Mathf.Abs(primaryHandJoystickAxis) > 0.4 && hitObject.GetComponentInParent<ScrollRect>() != null)
             {
-                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y / 1.5f);
+                eventData.scrollDelta = new Vector2(0, primaryHandJoystickAxis / 1.5f);
                 ExecuteEvents.Execute(hitObject.GetComponentInParent<ScrollRect>().gameObject, eventData, ExecuteEvents.scrollHandler);
             }
-            if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) > 0.4 && hitObject.GetComponentInParent<LightScroller>() != null)
+            if (Mathf.Abs(primaryHandJoystickAxis) > 0.4 && hitObject.GetComponentInParent<LightScroller>() != null)
             {
-                eventData.scrollDelta = new Vector2(0, SteamVR_Actions._default.RightJoystick.axis.y / 1.5f);
+                eventData.scrollDelta = new Vector2(0, primaryHandJoystickAxis / 1.5f);
                 ExecuteEvents.Execute(hitObject.GetComponentInParent<LightScroller>().gameObject, eventData, ExecuteEvents.scrollHandler);
             }
         }
@@ -173,8 +187,10 @@ namespace TarkovVR.Source.UI
         {
             // Use pressedObject to ensure that the object the user is trying to drag is the one they have selected,
             // not an object they selected then moved off from.
-            if (SteamVR_Actions._default.RightTrigger.axis > DRAG_TRIGGER_THRESHOLD)
+            if ((VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis :  SteamVR_Actions._default.RightTrigger.axis) > DRAG_TRIGGER_THRESHOLD)
             {
+                SteamVR_Action_Boolean cancelButton = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.ButtonY : SteamVR_Actions._default.ButtonB;
+
                 if (dragObject == null)
                 {
                     pressedObject = hitObject;
@@ -192,7 +208,7 @@ namespace TarkovVR.Source.UI
                     eventData.dragging = true;
                     ExecuteEvents.Execute(dragObject, eventData, ExecuteEvents.dragHandler);
                 }
-                if (dragObject && SteamVR_Actions._default.ButtonB.stateUp)
+                if (dragObject && cancelButton.stateUp)
                     CancelDrag();
 
             }

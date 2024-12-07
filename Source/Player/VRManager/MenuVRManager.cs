@@ -4,6 +4,7 @@ using TarkovVR.Patches.Misc;
 using TarkovVR.Source.Misc;
 using TarkovVR.Source.UI;
 using System.Reflection;
+using TarkovVR.Source.Settings;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -18,6 +19,7 @@ namespace TarkovVR.Source.Player.VRManager
         private float x = 42;
         private float y = 355;
         private float z = 0;
+        private Vector3 pos;
         public SteamVR_Action_Vibration hapticAction;
         private float timeHeld = 0;
 
@@ -30,8 +32,16 @@ namespace TarkovVR.Source.Player.VRManager
             if (LeftHand)
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
 
-            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            if (VRSettings.GetLeftHandedMode())
+            {
+                SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
+                SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+            }
+            else
+            {
+                SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+                SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            }
 
         }
 
@@ -45,6 +55,8 @@ namespace TarkovVR.Source.Player.VRManager
                 MenuPatches.vrUiInteracter.enabled = false;
                 SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
                 SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+                SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+                SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
             }
         }
         public void OnEnable()
@@ -54,11 +66,32 @@ namespace TarkovVR.Source.Player.VRManager
                 pointer.enabled = true;
                 pointer.holder.active = true;
                 MenuPatches.vrUiInteracter.enabled = true;
-                SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-                SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+                if (VRSettings.GetLeftHandedMode())
+                {
+                    SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
+                    SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+                }
+                else
+                {
+                    SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+                    SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+                }
             }
         }
 
+        public void LeftHandedMode() {
+            SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
+            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+        }
+        public void RightHandedMode()
+        {
+            SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
+            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+        }
 
         //private void Update()
         //{
@@ -94,10 +127,11 @@ namespace TarkovVR.Source.Player.VRManager
             if (RightHand)
             {
 
-                RightHand.transform.localPosition = fromAction.localPosition + new Vector3(-0.1f, 0, 0);
+                RightHand.transform.localPosition = fromAction.localPosition + new Vector3(0,-0.03f,0);
+                //RightHand.transform.localPosition = fromAction.localPosition;
                 //RightHand.transform.localEulerAngles = fromAction.localRotation.eulerAngles + new Vector3(x,y,z);
-                RightHand.transform.localEulerAngles = fromAction.localRotation.eulerAngles;
-                RightHand.transform.Rotate(x, y, z);
+                RightHand.transform.localRotation = fromAction.localRotation;
+                RightHand.transform.Rotate(45, 10, 0);
 
             }
         }

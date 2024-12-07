@@ -77,7 +77,7 @@ namespace TarkovVR.ModSupport.FIKA
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Fika.Core.Coop.FreeCamera.FreeCameraController), "Update")]
-        private static bool PositionExitRaidUI(Fika.Core.Coop.FreeCamera.FreeCameraController __instance)
+        private static bool PositionExitRaidUIAndCam(Fika.Core.Coop.FreeCamera.FreeCameraController __instance)
         {
             if (__instance.extracted) {
                 if (__instance.CameraParent != null && Camera.main.transform.parent == null) {
@@ -112,7 +112,7 @@ namespace TarkovVR.ModSupport.FIKA
         private static bool OverrideExitRaidButton(Fika.Core.Coop.Components.CoopHandler __instance)
         {
             EQuitState quitState = __instance.GetQuitState();
-            if (!SteamVR_Actions._default.ButtonB.stateDown || quitState == EQuitState.NONE || __instance.requestQuitGame)
+            if ( (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonY.stateDown : !SteamVR_Actions._default.ButtonB.stateDown) || quitState == EQuitState.NONE || __instance.requestQuitGame)
             {
                 return false;
             }
@@ -124,22 +124,22 @@ namespace TarkovVR.ModSupport.FIKA
             {
                 if (Singleton<FikaServer>.Instance.NetServer.ConnectedPeersCount > 0 && quitState != EQuitState.NONE)
                 {
-                    NotificationManagerClass.DisplayWarningNotification(GClass1868.Localized("F_Client_HostCannotExtract", (string)null), (ENotificationDurationType)0);
+                    NotificationManagerClass.DisplayWarningNotification(GClass2069.Localized("F_Client_HostCannotExtract", (string)null), (ENotificationDurationType)0);
                     __instance.requestQuitGame = false;
                 }
                 else if (Singleton<FikaServer>.Instance.NetServer.ConnectedPeersCount == 0 && Singleton<FikaServer>.Instance.timeSinceLastPeerDisconnected > DateTime.Now.AddSeconds(-5.0) && Singleton<FikaServer>.Instance.HasHadPeer)
                 {
-                    NotificationManagerClass.DisplayWarningNotification(GClass1868.Localized("F_Client_Wait5Seconds", (string)null), (ENotificationDurationType)0);
+                    NotificationManagerClass.DisplayWarningNotification(GClass2069.Localized("F_Client_Wait5Seconds", (string)null), (ENotificationDurationType)0);
                     __instance.requestQuitGame = false;
                 }
                 else
                 {
-                    ((BaseLocalGame<EftGamePlayerOwner>)coopGame).Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.MyExitStatus, ((GClass2430<GClass2429>)(object)((EFT.Player)__instance.MyPlayer).ActiveHealthController).IsAlive ? coopGame.MyExitLocation : null, 0f);
+                    ((BaseLocalGame<EftGamePlayerOwner>)coopGame).Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.MyExitStatus, ((GClass2747<GClass2746>)(object)((EFT.Player)__instance.MyPlayer).ActiveHealthController).IsAlive ? coopGame.MyExitLocation : null, 0f);
                 }
             }
             else
             {
-                ((BaseLocalGame<EftGamePlayerOwner>)coopGame).Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.MyExitStatus, ((GClass2430<GClass2429>)(object)((EFT.Player)__instance.MyPlayer).ActiveHealthController).IsAlive ? coopGame.MyExitLocation : null, 0f);
+                ((BaseLocalGame<EftGamePlayerOwner>)coopGame).Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.MyExitStatus, ((GClass2747<GClass2746>)(object)((EFT.Player)__instance.MyPlayer).ActiveHealthController).IsAlive ? coopGame.MyExitLocation : null, 0f);
             }
             return false;
         }

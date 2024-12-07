@@ -8,10 +8,11 @@ using TarkovVR.Patches.Core.Player;
 using EFT.Interactive;
 using System;
 using EFT;
-using static GClass1859;
 using static EFT.Player;
 using static InteractionsHandlerClass;
 using TarkovVR.Patches.Core.VR;
+using TarkovVR.Source.Settings;
+using EFT.InventoryLogic;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -113,10 +114,16 @@ namespace TarkovVR.Source.Player.Interactions
             bool inScope = false;
             bool inRigCollider = false;
             bool inLootCollider = false;
+            bool leftHandedMode = VRSettings.GetLeftHandedMode();
+
+            float secondaryHandTriggerAxis = (leftHandedMode) ? SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any);
+            SteamVR_Action_Boolean primaryHandGrip = (leftHandedMode) ? SteamVR_Actions._default.LeftGrip : SteamVR_Actions._default.RightGrip;
+            SteamVR_Action_Boolean secondaryHandGrip = (leftHandedMode) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
+
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting || (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
                 return;
 
-            if (SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f && !VRGlobals.vrPlayer.isSupporting)
+            if (secondaryHandTriggerAxis > 0.5f && !VRGlobals.vrPlayer.isSupporting)
             {
                 useLeftHandForRaycast = true;
                 laser.active = true;
@@ -138,19 +145,22 @@ namespace TarkovVR.Source.Player.Interactions
                     inBackHolster = true;
                     if (!hasEnteredBackHolster)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.RightHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand);
                         hasEnteredBackHolster = true;
                     }
-                    if (SteamVR_Actions._default.RightGrip.stateUp)
+                    if (primaryHandGrip.stateUp)
                     {
                         selectWeaponHandler.TriggerSwapOtherPrimary();
                     }
-                    if (SteamVR_Actions._default.RightGrip.state && VRGlobals.vrPlayer.radialMenu)
+                    if (primaryHandGrip.state && VRGlobals.vrPlayer.radialMenu)
                     {
                         if (!VRGlobals.vrPlayer.radialMenu.active)
                         {
                             VRGlobals.vrPlayer.radialMenu.active = true;
-                            VRGlobals.blockRightJoystick = true;
+                            if (VRSettings.GetLeftHandedMode())
+                                VRGlobals.blockLeftJoystick = true;
+                            else
+                                VRGlobals.blockRightJoystick = true;
                         }
                     }
                 }
@@ -159,10 +169,10 @@ namespace TarkovVR.Source.Player.Interactions
                     inSidearmHolster = true;
                     if (!hasEnteredSidearmHolster)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.RightHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand);
                         hasEnteredSidearmHolster = true;
                     }
-                    if (SteamVR_Actions._default.RightGrip.stateDown)
+                    if (primaryHandGrip.stateDown)
                     {
                         selectWeaponHandler.TriggerSwapSidearm();
                     }
@@ -185,10 +195,10 @@ namespace TarkovVR.Source.Player.Interactions
                     inRigCollider = true;
                     if (!hasEnteredRigCollider)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                         hasEnteredRigCollider = true;
                     }
-                    if (UIPatches.quickSlotUi && SteamVR_Actions._default.LeftGrip.stateDown)
+                    if (UIPatches.quickSlotUi && secondaryHandGrip.stateDown)
                     {
                         UIPatches.quickSlotUi.CreateQuickSlotUi();
                         UIPatches.quickSlotUi.gameObject.SetActive(true);
@@ -199,10 +209,10 @@ namespace TarkovVR.Source.Player.Interactions
                     inLootCollider = true;
                     if (!hasEnteredLootCollider)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                         hasEnteredLootCollider = true;
                     }
-                    if (SteamVR_Actions._default.LeftGrip.stateDown)
+                    if (secondaryHandGrip.stateDown)
                     {
                         heldItem = collider.gameObject.GetComponent<LootItem>();
                     }
@@ -213,17 +223,17 @@ namespace TarkovVR.Source.Player.Interactions
                     inLootCollider = true;
                     if (!hasEnteredLootCollider)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                         hasEnteredLootCollider = true;
                     }
-                    if (SteamVR_Actions._default.LeftGrip.stateDown)
+                    if (secondaryHandGrip.stateDown)
                     {
                         LootableContainer container = collider.gameObject.GetComponent<LootableContainer>();
                         VRGlobals.player.vmethod_1(container, new InteractionResult(EInteractionType.Open));
                         float initialDistance = Vector3.Distance(VRGlobals.player.Transform.position, container.transform.position);
                         VRGlobals.player.SetCallbackForInteraction(delegate (Action callback)
                         {
-                            GetActionsClass.smethod_18(VRGlobals.player.GetComponent<GamePlayerOwner>(), callback, container, initialDistance);
+                            GetActionsClass.smethod_21(VRGlobals.player.GetComponent<GamePlayerOwner>(), callback, container, initialDistance);
                         });
                         VRGlobals.player.StartBehaviourTimer(EFTHardSettings.Instance.DelayToOpenContainer, delegate
                         {
@@ -239,13 +249,13 @@ namespace TarkovVR.Source.Player.Interactions
                     inLootCollider = true;
                     if (!hasEnteredLootCollider)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                         hasEnteredLootCollider = true;
                     }
-                    if (SteamVR_Actions._default.LeftGrip.stateDown)
+                    if (secondaryHandGrip.stateDown)
                     {
                         Door door = collider.gameObject.GetComponent<Door>();
-                        GetActionsClass.Class1515 doorInteractionClass = new GetActionsClass.Class1515();
+                        GetActionsClass.Class1620 doorInteractionClass = new GetActionsClass.Class1620();
                         doorInteractionClass.door = door;
                         doorInteractionClass.owner = VRGlobals.player.GetComponent<GamePlayerOwner>();
                         if (door.DoorState == EDoorState.Open)
@@ -263,17 +273,17 @@ namespace TarkovVR.Source.Player.Interactions
                     inLootCollider = true;
                     if (!hasEnteredLootCollider)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                         hasEnteredLootCollider = true;
                     }
-                    if (SteamVR_Actions._default.LeftGrip.stateDown)
+                    if (secondaryHandGrip.stateDown)
                     {
                         Corpse corpse = collider.transform.root.GetComponent<Corpse>();
-                        GetActionsClass.Class1507 corpseInteractionClass = new GetActionsClass.Class1507();
-                        corpseInteractionClass.compoundItem = (EquipmentClass)corpse.Item;
-                        corpseInteractionClass.rootItem = (EquipmentClass)corpse.Item;
+                        GetActionsClass.Class1612 corpseInteractionClass = new GetActionsClass.Class1612();
+                        corpseInteractionClass.compoundItem = (InventoryEquipment)corpse.Item;
+                        corpseInteractionClass.rootItem = (InventoryEquipment)corpse.Item;
                         corpseInteractionClass.lootItemOwner = corpse.ItemOwner;
-                        corpseInteractionClass.controller = VRGlobals.player.InventoryControllerClass;
+                        corpseInteractionClass.controller = VRGlobals.player.InventoryController;
                         corpseInteractionClass.owner = VRGlobals.player.GetComponent<GamePlayerOwner>();
                         corpseInteractionClass.method_3();
                         //VRGlobals.player.CurrentManagedState.ExecuteDoorInteraction(container, new InteractionResult(EFT.EInteractionType.Open), null, VRGlobals.player);
@@ -285,15 +295,15 @@ namespace TarkovVR.Source.Player.Interactions
                     inBackpack = true;
                     if (!hasEnteredBackpack)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                         hasEnteredBackpack = true;
                     }
-                    if (SteamVR_Actions._default.LeftGrip.stateUp)
+                    if (secondaryHandGrip.stateUp)
                     {
-                        GStruct414<GInterface339> pickUpResult = InteractionsHandlerClass.QuickFindAppropriatePlace(heldItem.Item, VRGlobals.player.InventoryControllerClass, VRGlobals.player.InventoryControllerClass.Inventory.Equipment.ToEnumerable(), EMoveItemOrder.PickUp, simulate: true);
+                        GStruct446<GInterface385> pickUpResult = InteractionsHandlerClass.QuickFindAppropriatePlace(heldItem.Item, VRGlobals.player.InventoryController, VRGlobals.player.InventoryController.Inventory.Equipment.ToEnumerable(), EMoveItemOrder.PickUp, simulate: true);
                         if (pickUpResult.Succeeded && heldItem.ItemOwner.CanExecute(pickUpResult.Value))
                         {
-                            GetActionsClass.smethod_6(VRGlobals.player, pickUpResult.Value, heldItem.Item, heldItem.LastOwner);
+                            GetActionsClass.smethod_9(VRGlobals.player, pickUpResult.Value, heldItem.Item, heldItem.LastOwner);
                             heldItem = null;
                         }
 
@@ -304,10 +314,10 @@ namespace TarkovVR.Source.Player.Interactions
                     inHeadGear = true;
                     if (!hasEnteredHeadGear)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                        SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (leftHandedMode) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                         hasEnteredHeadGear = true;
                     }
-                    if (SteamVR_Actions._default.LeftGrip.stateDown)
+                    if (secondaryHandGrip.stateDown)
                     {
                         IInputHandler baseHandler;
                         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ToggleGoggles, out baseHandler);
@@ -330,7 +340,7 @@ namespace TarkovVR.Source.Player.Interactions
                 heldItem.transform.rotation = VRGlobals.vrPlayer.LeftHand.transform.rotation;
 
 
-                if (!SteamVR_Actions._default.LeftGrip.state)
+                if (!secondaryHandGrip.state)
                 {
                     WeaponPatches.DropObject(heldItem);
                     heldItem = null;
@@ -356,7 +366,7 @@ namespace TarkovVR.Source.Player.Interactions
                 hasEnteredHeadGear = false;
 
 
-            if (noScopeHit && isInRange && !SteamVR_Actions._default.LeftGrip.state)
+            if (noScopeHit && isInRange && !secondaryHandGrip.state)
             {
                 isInRange = false;
                 scopeTransform = null;
@@ -367,12 +377,14 @@ namespace TarkovVR.Source.Player.Interactions
         }
         private void handleScopeInteraction()
         {
+            SteamVR_Action_Boolean secondaryHandGrip = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
+
             if (!isInRange)
             {
                 isInRange = true;
                 if (!hasEnteredScope)
                 {
-                    SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                    SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (VRSettings.GetLeftHandedMode()) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                     hasEnteredScope = true;
                 }
                 if (WeaponPatches.currentGunInteractController != null && scopeTransform != null)
@@ -381,7 +393,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
             }
 
-            if (SteamVR_Actions._default.LeftGrip.state)
+            if (secondaryHandGrip.state)
             {
                 scopeTimeHeldFor += Time.deltaTime;
                 if (scopeTimeHeldFor >= 0.3f)
@@ -394,7 +406,7 @@ namespace TarkovVR.Source.Player.Interactions
                     VRGlobals.vrOpticController.handlePhysicalZoomDial();
                 }
             }
-            else if (SteamVR_Actions._default.LeftGrip.stateUp && scopeTimeHeldFor < 0.3f)
+            else if (secondaryHandGrip.stateUp && scopeTimeHeldFor < 0.3f)
             {
                 VRGlobals.vrOpticController.changeScopeMode();
             }
@@ -405,7 +417,7 @@ namespace TarkovVR.Source.Player.Interactions
                     changingScopeZoom = false;
                 if (!hasEnteredScope)
                 {
-                    SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, SteamVR_Input_Sources.LeftHand);
+                    SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (VRSettings.GetLeftHandedMode()) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                     hasEnteredScope = true;
                 }
             }

@@ -102,7 +102,7 @@ namespace TarkovVR.Source.Misc
 
             float dist = 100f;
 
-            Ray raycast = new Ray(transform.position, transform.forward);
+            Ray raycast = new Ray(holder.transform.position, holder.transform.forward);
             RaycastHit hit;
             LayerMask layerMask = 1 << interactableLayers;
             bool bHit = Physics.Raycast(raycast, out hit, 10, layerMask);

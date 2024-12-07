@@ -7,6 +7,7 @@ using System.Text;
 using TarkovVR;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
@@ -33,8 +34,8 @@ public class GunInteractionController : MonoBehaviour
     private int lastHitCompIndex = -1;
     private GamePlayerOwner playerOwner;
     private List<ActionsReturnClass> weaponUiLists;
-    private List<Class559> meshList;
-    private List<Class559> malfunctionMeshList;
+    private List<Class620> meshList;
+    private List<Class620> malfunctionMeshList;
     private HighLightMesh meshHighlighter;
     public bool hightlightingMesh = false;
     private int boltIndex = -1;
@@ -45,7 +46,6 @@ public class GunInteractionController : MonoBehaviour
     private Dictionary<Transform, ActionsReturnClass> interactablesDictionary;
     private Dictionary<Transform, ActionsReturnClass> tacDeviceDictionary;
     private Dictionary<Transform, ActionsReturnClass> malfunctionMeshDictionary;
-    private bool test = false;
 
     //private bool
     public void Init()
@@ -58,9 +58,9 @@ public class GunInteractionController : MonoBehaviour
         if (weaponUiLists == null)
             weaponUiLists = new List<ActionsReturnClass>();
         if (meshList == null)
-            meshList = new List<Class559>();
+            meshList = new List<Class620>();
         if (malfunctionMeshList == null)
-            malfunctionMeshList = new List<Class559>();
+            malfunctionMeshList = new List<Class620>();
 
         if (interactablesDictionary == null)
             interactablesDictionary = new Dictionary<Transform, ActionsReturnClass>();
@@ -69,7 +69,8 @@ public class GunInteractionController : MonoBehaviour
         if (malfunctionMeshDictionary == null)
             malfunctionMeshDictionary = new Dictionary<Transform, ActionsReturnClass>();
 
-        transform.localEulerAngles = new Vector3(340, 340, 0);
+         transform.localEulerAngles = new Vector3(340, 340, 0);
+
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void FinishInit() {
@@ -84,6 +85,10 @@ public class GunInteractionController : MonoBehaviour
         }
         transform.localEulerAngles = new Vector3(340, 340, 0);
 
+        //if (VRSettings.GetLeftHandedMode())
+        //    transform.localEulerAngles = new Vector3(340, 40, 0);
+        //else
+        //    transform.localEulerAngles = new Vector3(340, 340, 0);
         prevRot = Vector3.zero;
         prevPos = Vector3.zero;
         prevForward = Vector3.zero;
@@ -95,7 +100,7 @@ public class GunInteractionController : MonoBehaviour
         }
 
         if (VRSettings.GetLeftHandedMode()) { 
-            this.transform.localScale = new Vector3(-1, 1, 1);
+            this.transform.parent.localScale = new Vector3(-1, 1, 1);
             
         }
 
@@ -142,7 +147,7 @@ public class GunInteractionController : MonoBehaviour
     private Vector3 prevPos;
     private Vector3 prevForward;
     private Vector3 prevBodyPos;
-    private int framesAfterEnabled = 0;
+    public int framesAfterEnabled = 0;
     private void Update()
     {
         if (!initialized)
@@ -171,6 +176,9 @@ public class GunInteractionController : MonoBehaviour
         {
             transform.localPosition = Vector3.zero;
             transform.localEulerAngles = new Vector3(340, 340, 0);
+            //if (VRSettings.GetLeftHandedMode())
+            //    transform.localEulerAngles = new Vector3(340, 40, 0);
+            //else
         }
         prevRot = Camera.main.transform.eulerAngles;
         prevForward = Camera.main.transform.forward;
@@ -182,16 +190,20 @@ public class GunInteractionController : MonoBehaviour
         }
 
 
-        if (!VRGlobals.menuOpen && SteamVR_Actions._default.RightGrip.state && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && !VRGlobals.firearmController.IsAiming)
+        if (!VRGlobals.menuOpen && (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftGrip.state : SteamVR_Actions._default.RightGrip.state) && (!VRGlobals.vrPlayer.radialMenu || !VRGlobals.vrPlayer.radialMenu.active) && !VRGlobals.firearmController.IsAiming)
         {
             if (VRGlobals.firearmController.Weapon.MalfState.State != EFT.InventoryLogic.Weapon.EMalfunctionState.None) {
                 if ((!hightlightingMesh || !initMalfunction) && meshHighlighter)
                 {
-                    meshHighlighter.class559_0 = malfunctionMeshList.ToArray();
+                    meshHighlighter.class620_0 = malfunctionMeshList.ToArray();
                     meshHighlighter.enabled = true;
                     hightlightingMesh = true;
                     meshHighlighter.Color = Color.red;
                     initMalfunction = true;
+                    if (VRSettings.GetLeftHandedMode())
+                        VRGlobals.blockLeftJoystick = true;
+                    else
+                        VRGlobals.blockRightJoystick = true;
                     Camera.main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
                 }
 
@@ -221,12 +233,16 @@ public class GunInteractionController : MonoBehaviour
             {
                 if ((!hightlightingMesh || initMalfunction) && meshHighlighter) {
 
-                    meshHighlighter.class559_0 = meshList.ToArray();
+                    meshHighlighter.class620_0 = meshList.ToArray();
                     meshHighlighter.enabled = true;
                     hightlightingMesh = true;
                     meshHighlighter.Color = Color.white;
                     initMalfunction = false;
                     hasExaminedAfterMalfunction = false;
+                    if (VRSettings.GetLeftHandedMode())
+                        VRGlobals.blockLeftJoystick = true;
+                    else
+                        VRGlobals.blockRightJoystick = true;
                     Camera.main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
 
                 }
@@ -270,6 +286,10 @@ public class GunInteractionController : MonoBehaviour
         else if (hightlightingMesh && meshHighlighter) {
             meshHighlighter.enabled = false;
             hightlightingMesh = false;
+            if (VRSettings.GetLeftHandedMode())
+                VRGlobals.blockLeftJoystick = false;
+            else
+                VRGlobals.blockRightJoystick = false;
         }
 
         if (lastHitCompIndex != -1)
@@ -280,16 +300,21 @@ public class GunInteractionController : MonoBehaviour
         }
         if (framesAfterEnabled == 1 && transform.FindChild("RightHandPositioner") && VRGlobals.player._markers.Length > 1)
         {
-            // If the gun is pressed up against something that moves the animator around which will throw off the calculations
-            // when the players stops pressing it against something, so remove any localRotation or localPosition for this frame
-            VRGlobals.firearmController.GunBaseTransform.localPosition = Vector3.zero;
-            VRGlobals.firearmController.GunBaseTransform.localEulerAngles = Vector3.zero;
+            if (!WeaponPatches.grenadeEquipped) { 
+                // If the gun is pressed up against something that moves the animator around which will throw off the calculations
+                // when the players stops pressing it against something, so remove any localRotation or localPosition for this frame
+                VRGlobals.firearmController.GunBaseTransform.localPosition = Vector3.zero;
+                VRGlobals.firearmController.GunBaseTransform.localEulerAngles = Vector3.zero;
+            }
+            if (VRSettings.GetLeftHandedMode())
+                VRGlobals.player._markers[1].transform.localPosition += new Vector3(0,0.04f,0.04f);
             Vector3 differenceBetweenHands = VRGlobals.player._markers[1].transform.position - VRGlobals.weaponHolder.transform.position;
             // Get the difference between the weapon holder and the right hand IK marker then multiply by 1 for some reason
             differenceBetweenHands = (transform.FindChild("RightHandPositioner").InverseTransformDirection(differenceBetweenHands) * -1);
             // Add some extra offset values so it matches up better with the hand
             //VRGlobals.weaponHolder.transform.localPosition = differenceBetweenHands + new Vector3(0.05f,0.04f,-0.05f);
             VRGlobals.weaponHolder.transform.localPosition = differenceBetweenHands + CalculateRightHandPosOffset();
+
             // 50,50 new Vector3(0.05f, 0.02f, -0.02f);
             // 30,30 new Vector3(0.05f,0.04f,-0.05f)
             // 40,50 new Vector3(0.07f,0.03f,-0.06f)
@@ -315,8 +340,11 @@ public class GunInteractionController : MonoBehaviour
             // 30,0 0 +0.06 0
 
         }
+        if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(VRPlayerManager.LEFT_HAND_ANIMATOR_HASH) == 0)
+        {
+            framesAfterEnabled++;
 
-        framesAfterEnabled++;
+        }
     }
 
     //private void LateUpdate()
@@ -353,7 +381,10 @@ public class GunInteractionController : MonoBehaviour
         else if (normalizedVertical < 0)
             adjustedOffset = new Vector3(0.09f, 0.03f, -0.06f) * -normalizedVertical;
 
-        adjustedOffset = new Vector3(adjustedOffset.x, adjustedOffset.y + horizontalY, adjustedOffset.z);   
+        adjustedOffset = new Vector3(adjustedOffset.x, adjustedOffset.y + horizontalY, adjustedOffset.z);
+
+        if (VRSettings.GetLeftHandedMode())
+            adjustedOffset = -adjustedOffset;
 
         return baseOffset + adjustedOffset;
     }
@@ -361,7 +392,7 @@ public class GunInteractionController : MonoBehaviour
     public void SetScopeHighlight(Transform scopeTransform)
     {
 
-        List<Class559> scopeMeshList = new List<Class559>();
+        List<Class620> scopeMeshList = new List<Class620>();
         Renderer[] componentsInChildren = scopeTransform.GetComponentsInChildren<Renderer>(includeInactive: false);
         Renderer[] array = componentsInChildren;
         foreach (Renderer renderer in array)
@@ -369,14 +400,14 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                scopeMeshList.Add(new Class559(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                scopeMeshList.Add(new Class620(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                scopeMeshList.Add(new Class559(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                scopeMeshList.Add(new Class620(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
-        meshHighlighter.class559_0 = scopeMeshList.ToArray();
+        meshHighlighter.class620_0 = scopeMeshList.ToArray();
         meshHighlighter.enabled = true;
     }
     public void RemoveScopeHighlight()
@@ -593,11 +624,11 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                meshList.Add(new Class559(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                meshList.Add(new Class620(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                meshList.Add(new Class559(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                meshList.Add(new Class620(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
     }
@@ -611,11 +642,11 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                malfunctionMeshList.Add(new Class559(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                malfunctionMeshList.Add(new Class620(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                malfunctionMeshList.Add(new Class559(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                malfunctionMeshList.Add(new Class620(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
     }

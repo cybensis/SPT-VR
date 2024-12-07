@@ -10,33 +10,36 @@
 - Play some raids to see if I can get the squiggly text bug
 - Make under barrel grenade launchers work
 
+- Fixed the login screen
+- Fixed some issues with guns in the hideout
+- Hid the gestures UI that shows up to your right side
+- Haven't figured out a way to fix clouds just yet so I'm hiding them for now
+- Fixed grenades not working and also I believe I've fixed the bug with using multiple of the same grenade in a row bugging out
+
+- Added a mostly functional left handed mode that you can swap between in raid
+- Finally got around to fixing the laser pointer position so it lines up better with your controller
+
+- Fix BTR
+- Looking up on factory messes with lighting
+- Left hand radial menu isn't blocking anymore - Isn't anymore in right handed mode
+- Selecting a weapon then putting it away in the hideout makes it so you cant reequip one in left handed mode
+- both radial menus aren't blocking the respective hand in left handed mode, probably right handed mode too
+- Also need to change the position of the mag ammo count
+- Might need to change the left hand world interaction laser
+- Check the UI interactions
+
+- Prevent arms from doing the jump and sprint animations - TRIED DUNNO HOW - SSprint BodyCommonAnimator hhash -399748991
+
+- Weapon positons for left hand are massively off, look at the GunInteractionController positioning code and see why its different from left handed to right handed mode
+- Changing the left to right handed mode in main menu doesn't swap laser
+- Interaction menu blocking the left joystick is cancer so remove that
+- Try setting the scale of the base of the weapon itself to -1,1,1, it flips the hands around but this just might need some rotating around
+-	Looked into it and if I set the hand bone scale to -1 -1 1 it orients correctly but is slightly off from the gun, to change its position it would involve changing the right hand IK marker but even updating it in update and lateUpdate doesn't work as it seems the aniimator on the weapon supercedes it no matter what so figure something out with that maybe or just checkout eft.player.method22 for the hand setting position 
+- Refactor the blockCrouch and blockJump stuff, shouldn't need them at all, just block joystick when menus are open and in the jump input handler just check for if player is crouched
 
 
-- Fixed jittering when moving and looking around physically, I'm not noticing much at all
-- Added a toggle for hands only mode that removes the arms in the VR settings tab
-- Added a toggle to hide the legs in the VR settings tab
-
-
-- Improved VR settings menu layout
-- Added snap turn option
-- Adding graphics setting for different distant shadow methods
-- Fixed issue with walls being see through and models not appearing at a distance, most noticeable indoors on interchange, looks better but tanks performance a bit
-- Fixed bug with swapping weapons causing the camera to be stuck in place for a brief moment
-
-- Fixed hide legs setting causing errors
-- Fixed issue with laser pointer not appearing after coming out of hideout
-- Possibly actually really fixed jittering this time
-- Fixed issue with hands jittering when no weapon is equipped or left hand jittering when not attached to gun
-- Fixed medding/eating disconnecting camera from body
-
-- Improved jittering
-- Hands no longer shift around when entering two handed mode
-- Improved right hand positioning for all weapons
-- Fixed the issue with medding/eating/etc causing the gun to point down
-
-- Prevent arms from doing the jump and sprint animations - TRIED DUNNO HOW
-
-- Fix the right hand laser position already
+- The reticle size of the EOTECH/Scope combo changes when you swap between the scope zoom sizes
+- Turning around while planting a device or something bugs out
 - https://escapefromtarkov.fandom.com/wiki/KMZ_1P59_3-10x_riflescope this scope also not working apparently
 - Fix the VR keyboard not working with open composite
 - As a BEAR the watch is a separate mesh from the arms and shows up when using hands only mode
@@ -101,3 +104,5 @@ Known Compatible Mods List
 - Questing Bots
 - BigBrain
 - FIKA
+
+

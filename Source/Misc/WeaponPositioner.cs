@@ -10,16 +10,17 @@ namespace TarkovVR.Source.Misc
     internal class WeaponPositioner : MonoBehaviour
     {
         private int i = 0;
+        private Vector3 pos;
+        private Vector3 rot;
         private void Update()
         {
-            Plugin.MyLog.LogWarning(VRGlobals.player._markers[0].transform.position.ToString("F4") + "  |  " + i);
+            transform.localPosition = pos;
+            transform.localEulerAngles = rot;
         }
         private void LateUpdate()
         {
-            Plugin.MyLog.LogError(VRGlobals.player._markers[0].transform.position.ToString("F4") + "  |  " + i);
-            i++;
-            if (i > 100)
-                i = 0;
+            transform.localPosition = pos;
+            transform.localEulerAngles = rot;
         }
 
     }

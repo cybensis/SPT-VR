@@ -8,6 +8,7 @@ using System.IO;
 using TarkovVR;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
@@ -29,7 +30,7 @@ public class CircularSegmentUI : MonoBehaviour
     private QuickSlotHandler quickSlotHandler;
     private SelectWeaponHandler selectWeaponHandler;
     private List<EBoundItem> quickSlotOrder;
-    private List<GClass822> iconsList;
+    private List<GClass897> iconsList;
     public void Init()
     {
 
@@ -46,10 +47,7 @@ public class CircularSegmentUI : MonoBehaviour
         selectedMenuSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
 
         gameObject.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
-
-        transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
-        transform.localPosition = new Vector3(-0.0728f, -0.1343f, 0);
-        transform.localEulerAngles = new Vector3(290, 252, 80);
+        transform.localScale = new Vector3(0.001f,0.001f, 0.001f);
     }
 
     private int lastSelectedSegment = -1;
@@ -76,11 +74,20 @@ public class CircularSegmentUI : MonoBehaviour
             selectWeaponHandler = baseHandler as SelectWeaponHandler;
 
         gameObject.active = false;
+        if (VRSettings.GetLeftHandedMode())
+        {
+            transform.localPosition = new Vector3(0.0172f, -0.1143f, -0.03f);
+            transform.localEulerAngles = new Vector3(270, 127, 80);
+        }
+        else
+        {
+            transform.localPosition = new Vector3(-0.0728f, -0.1343f, 0);
+            transform.localEulerAngles = new Vector3(290, 252, 80);
+        }
     }
 
     public void CreateQuickSlotUi()
     {
-        Plugin.MyLog.LogWarning("Creating quick slot radial menu");
         leftHand = true;
         int children = transform.childCount;
         for (int i = 0; i < children; i++)
@@ -92,10 +99,10 @@ public class CircularSegmentUI : MonoBehaviour
         numberOfSegments = quickSlots.Count;
         List<Sprite> newMenuSprites = new List<Sprite>();
         quickSlotOrder = new List<EBoundItem>();
-        iconsList = new List<GClass822>();
+        iconsList = new List<GClass897>();
         foreach (KeyValuePair<EBoundItem, Item> kvp in quickSlots)
         {
-            GClass822 itemIcon = ItemViewFactory.LoadItemIcon(kvp.Value);
+            GClass897 itemIcon = ItemViewFactory.LoadItemIcon(kvp.Value);
             if (itemIcon.Sprite != null)
             {
                 iconsList.Add(itemIcon);    
@@ -111,20 +118,61 @@ public class CircularSegmentUI : MonoBehaviour
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.SelectFastSlot4, out baseHandler);
         if (baseHandler != null)
             quickSlotHandler = baseHandler as QuickSlotHandler;
+        if (VRSettings.GetLeftHandedMode())
+        {
+            transform.localPosition = new Vector3(0.0472f, -0.1043f, 0.01f);
+            transform.localEulerAngles = new Vector3(272, 116, 27);
+        }
+        else {
+            transform.localPosition = new Vector3(-0.0728f, -0.1343f, 0);
+            transform.localEulerAngles = new Vector3(290, 252, 80);
+        }
 
     }
-    private bool first = true;
+
+    private void OnEnable() { 
+        if (leftHand)
+        {
+            if (VRSettings.GetLeftHandedMode())
+                VRGlobals.blockRightJoystick = true;
+            else
+                VRGlobals.blockLeftJoystick = true;
+        }
+        else {
+            if (VRSettings.GetLeftHandedMode())
+                VRGlobals.blockLeftJoystick = true;
+            else
+                VRGlobals.blockRightJoystick = true;
+        }
+    }
+    private void OnDisable()
+    {
+        if (leftHand)
+        {
+            if (VRSettings.GetLeftHandedMode())
+                VRGlobals.blockRightJoystick = false;
+            else
+                VRGlobals.blockLeftJoystick = false;
+        }
+        else
+        {
+            if (VRSettings.GetLeftHandedMode())
+                VRGlobals.blockLeftJoystick = false;
+            else
+                VRGlobals.blockRightJoystick = false;
+        }
+    }
     void Update()
     {
-        if (first) {
-            Plugin.MyLog.LogWarning("First update");
-            first = false;
-        }
         if (numberOfSegments == 0)
             return;
-        Vector2 joystickInput = SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand);
+        bool leftHandedMode = VRSettings.GetLeftHandedMode();
+        bool secondaryGripState = leftHandedMode ? SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand) : SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand);
+        bool primaryGripState = leftHandedMode ? SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand) : SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand);
+        Vector2 joystickInput = leftHandedMode ? SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand) : SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand);
+
         if (leftHand)
-            joystickInput = SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand);
+            joystickInput = leftHandedMode ? SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand) : SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand);
 
 
         if (lastSelectedSegment != -1)
@@ -147,7 +195,7 @@ public class CircularSegmentUI : MonoBehaviour
             lastSelectedSegment = selectedSegment;
         }
 
-        if (!leftHand && !SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand))
+        if (!leftHand && !primaryGripState)
         {
             if (lastSelectedSegment == 0)
                 selectWeaponHandler.TriggerSwapPrimaryWeapon();
@@ -157,11 +205,13 @@ public class CircularSegmentUI : MonoBehaviour
                 selectWeaponHandler.TriggerSwapSidearm();
             else if (lastSelectedSegment == 3)
                 selectWeaponHandler.TriggerSwapToMelee();
+            
+            
             gameObject.active = false;
             // Add additional actions as necessary
         }
 
-        if (leftHand && !SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand))
+        if (leftHand && !secondaryGripState)
         {
             if (quickSlotHandler.GetQuickUseSlot() == 0 && lastSelectedSegment != -1) {
                 quickSlotHandler.TriggerUseQuickSlot(quickSlotOrder[lastSelectedSegment]);
@@ -169,6 +219,8 @@ public class CircularSegmentUI : MonoBehaviour
                 menuSegments[lastSelectedSegment].sprite = defaultMenuSprite;
                 lastSelectedSegment = -1;
             }
+
+
             gameObject.active = false;
         }
     }
@@ -190,7 +242,6 @@ public class CircularSegmentUI : MonoBehaviour
 
         // Calculate the fill amount considering the spacing
         float fillAmount = adjustedAngleStep / 360f;
-        Plugin.MyLog.LogWarning("Create segments");
         for (int i = 0; i < numberOfSegments; i++)
         {
             // Instantiate a new segment from the prefab
@@ -246,14 +297,6 @@ public class CircularSegmentUI : MonoBehaviour
             float x = -0.45f + ((numberOfSegments - 4) * 0.06f);
             float y = -0.5f - ((numberOfSegments - 4) * 0.06f);
             iconRectTransform.localPosition = new Vector3(radius * x, radius * y, 0); // Adjust position as needed
-            //if (numberOfSegments > 4)
-            //{
-            //}
-            //else if (numberOfSegments == 4) {
-            //    float x = -0.45f + ((numberOfSegments - 4) * 0.06f);
-            //    float y = -0.5f - ((numberOfSegments - 4) * 0.06f);
-            //    iconRectTransform.localPosition = new Vector3(radius * x, radius * y, 0); // Adjust position as needed
-            //}
         }
     }
 }

@@ -24,8 +24,8 @@ using EFT.AssetsManager;
 using EFT.Interactive;
 using System.Linq;
 using static CoverPointMaster;
-using static EFT.Player.GrenadeController;
-using static EFT.Player.QuickGrenadeThrowController;
+using static EFT.Player.GrenadeHandsController;
+using static EFT.Player.QuickGrenadeThrowHandsController;
 using static UnityEngine.ParticleSystem.PlaybackState;
 using UnityEngine.UIElements;
 using TarkovVR.Patches.Core.VR;
@@ -52,7 +52,7 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.firearmController = null;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
             if (VRSettings.GetLeftHandedMode())
-                VRGlobals.emptyHands.GetChild(0).localScale = new Vector3(-1, 1, 1);
+                VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             VRGlobals.player = __instance._player;
 
             //if (!__instance.WeaponRoot.parent.GetComponent<GunInteractionController>())
@@ -67,12 +67,18 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
                 VRGlobals.ikManager.rightArmIk.enabled = true;
             }
-            Plugin.MyLog.LogInfo("EmptyHandsController.Spawn: " + __instance);
             if (grenadeEquipped)
                 grenadeEquipped = false;
 
-            VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
-            VRGlobals.player._elbowBends[1] = VRGlobals.rightArmBendGoal;
+            if (VRSettings.GetLeftHandedMode())
+            {
+                VRGlobals.player._elbowBends[0] = VRGlobals.rightArmBendGoal;
+                VRGlobals.player._elbowBends[1] = VRGlobals.leftArmBendGoal;
+            }
+            else {
+                VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
+                VRGlobals.player._elbowBends[1] = VRGlobals.rightArmBendGoal;
+            }
         }
 
         [HarmonyPostfix]
@@ -103,7 +109,7 @@ namespace TarkovVR.Patches.Core.Player
             instance.tacticalRangeFinderController_0._boneToCastRay.parent.FindChild("linza").gameObject.SetActive(false);
             VRGlobals.emptyHands = instance.ControllerGameObject.transform;
             if (VRSettings.GetLeftHandedMode())
-                VRGlobals.emptyHands.GetChild(0).localScale = new Vector3(-1, 1, 1);
+                VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             if (__instance.WeaponRoot.parent.name != "weaponHolder")
             {
                 VRGlobals.oldWeaponHolder = instance.WeaponRoot.parent.gameObject;
@@ -208,8 +214,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GrenadeController), "SetCompassState")]
-        private static void SetCompassEquippedGrenade(GrenadeController __instance, bool active)
+        [HarmonyPatch(typeof(GrenadeHandsController), "SetCompassState")]
+        private static void SetCompassEquippedGrenade(GrenadeHandsController __instance, bool active)
         {
             if (!__instance._player.IsYourPlayer)
                 return;
@@ -296,7 +302,7 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.player = __instance._player;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
             if (VRSettings.GetLeftHandedMode())
-                VRGlobals.emptyHands.GetChild(0).localScale = new Vector3(-1, 1, 1);
+                VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             knifeTransform = VRGlobals.emptyHands;
             VRGlobals.usingItem = false;
             VRPlayerManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[10];
@@ -336,7 +342,7 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.KnifeController), "method_10")]
+        [HarmonyPatch(typeof(EFT.Player.KnifeController), "method_9")]
         private static void UnequipVrKnife(EFT.Player.KnifeController __instance)
         {
             if (!__instance._player.IsYourPlayer)
@@ -353,7 +359,7 @@ namespace TarkovVR.Patches.Core.Player
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_46")]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_49")]
         private static void AddNewMagToInteractionController(EFT.Player.FirearmController __instance)
         {
             if (!__instance._player.IsYourPlayer)
@@ -382,7 +388,7 @@ namespace TarkovVR.Patches.Core.Player
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_43")]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_46")]
         private static void AddNewTacDeviceToInteractionController(EFT.Player.FirearmController __instance)
         {
             if (!__instance._player.IsYourPlayer || __instance.weaponManagerClass == null)
@@ -450,8 +456,6 @@ namespace TarkovVR.Patches.Core.Player
         private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
         {
 
-
-
             if (!__instance._player.IsYourPlayer)
                 return;
 
@@ -466,7 +470,7 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.player = __instance._player;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
             if (VRSettings.GetLeftHandedMode())
-                VRGlobals.emptyHands.GetChild(0).localScale = new Vector3(-1, 1, 1);
+                VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             VRGlobals.usingItem = false;
             VRGlobals.scope = null;
             for (int i = 0; i < __instance.weaponManagerClass.sightModVisualControllers_0.Length; i++)
@@ -534,10 +538,11 @@ namespace TarkovVR.Patches.Core.Player
                         foreach (string magazineMesh in weaponHighlightParts.magazine)
                         {
                             Transform magazineMeshTransform = weaponMeshRoot.FindChildRecursive(magazineMesh);
-                            if (magazineMeshTransform) { 
+                            if (magazineMeshTransform)
+                            {
                                 if (magazineMeshTransform.childCount > 0)
                                     currentGunInteractController.SetMagazine(magazineMeshTransform.GetChild(0), false);
-                                else 
+                                else
                                     currentGunInteractController.SetMagazine(weaponMeshRoot.FindChildRecursive(magazineMesh), false);
                             }
                         }
@@ -612,13 +617,14 @@ namespace TarkovVR.Patches.Core.Player
                 }
                 //__instance.WeaponRoot.transform.parent.GetComponent<Animator>().updateMode = AnimatorUpdateMode.AnimatePhysics;
 
-                __instance.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform,false);
+                __instance.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform, false);
                 //__instance.WeaponRoot.localPosition = Vector3.zero;
                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
 
                 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(__instance.weaponPrefab_0.name, __instance.Weapon.WeapClass);
                 float weaponAngleOffset = VRSettings.GetRightHandVerticalOffset();
-                if (weaponAngleOffset < 50) {
+                if (weaponAngleOffset < 50)
+                {
                     // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
                     float rotOffsetMultiplier = (50 - weaponAngleOffset) / 100;
                     weaponOffset += new Vector3(0.08f, 0, -0.02f) * rotOffsetMultiplier;
@@ -636,6 +642,12 @@ namespace TarkovVR.Patches.Core.Player
 
                 VRGlobals.weaponHolder = __instance.WeaponRoot.parent.FindChild("RightHandPositioner").gameObject;
                 __instance.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform, false);
+            }
+            else if (__instance.WeaponRoot.transform.parent && __instance.WeaponRoot.transform.parent.parent.name == "RightHandPositioner") {
+                //VRGlobals.weaponHolder = __instance.WeaponRoot.transform.parent.gameObject;
+                __instance.WeaponRoot.transform.parent = __instance.WeaponRoot.transform.parent.parent.parent;
+                MoveWeaponToIKHands(__instance);
+                return;
             }
             if (VRGlobals.player)
             {
@@ -750,8 +762,8 @@ namespace TarkovVR.Patches.Core.Player
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GetActionsClass.Class1519), "method_0")]
-        private static bool PreventUsingStationaryWeapon(GetActionsClass.Class1519 __instance)
+        [HarmonyPatch(typeof(GetActionsClass.Class1624), "method_0")]
+        private static bool PreventUsingStationaryWeapon(GetActionsClass.Class1624 __instance)
         {
             return false;
         }
@@ -779,7 +791,7 @@ namespace TarkovVR.Patches.Core.Player
             {
                 component.RegisteredComponentsToClean.Add(val._rigidBody);
             }
-            val._rigidBody.mass = val.item_0.GetSingleItemTotalWeight();
+            val._rigidBody.mass = val.item_0.TotalWeight;
             val._rigidBody.isKinematic = false;
             val._currentPhysicsTime = 0f;
             val.method_1(val._rigidBody.centerOfMass);
@@ -818,7 +830,7 @@ namespace TarkovVR.Patches.Core.Player
             static MethodBase TargetMethod()
             {
                 // Get the method info for the generic method
-                MethodInfo method = typeof(MedsController).GetMethod("smethod_5", BindingFlags.Static | BindingFlags.Public);
+                MethodInfo method = typeof(MedsController).GetMethod("smethod_6", BindingFlags.Static | BindingFlags.Public);
 
                 // Make the generic method
                 MethodInfo genericMethod = method.MakeGenericMethod(typeof(MedsController));
@@ -834,7 +846,7 @@ namespace TarkovVR.Patches.Core.Player
 
                 VRGlobals.emptyHands = __result._controllerObject.transform;
                 if (VRSettings.GetLeftHandedMode())
-                    VRGlobals.emptyHands.GetChild(0).localScale = new Vector3(-1, 1, 1);
+                    VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
                 //VRGlobals.ikManager.rightArmIk.solver.target = null;
                 //VRGlobals.ikManager.leftArmIk.solver.target = null;
                 VRGlobals.usingItem = true;
@@ -855,16 +867,16 @@ namespace TarkovVR.Patches.Core.Player
             {
 
                 // Get the method info for the generic method
-                MethodInfo method = typeof(GrenadeController).GetMethod("smethod_8", BindingFlags.Static | BindingFlags.Public);
+                MethodInfo method = typeof(GrenadeHandsController).GetMethod("smethod_9", BindingFlags.Static | BindingFlags.Public);
 
                 // Make the generic method
-                MethodInfo genericMethod = method.MakeGenericMethod(typeof(GrenadeController));
+                MethodInfo genericMethod = method.MakeGenericMethod(typeof(GrenadeHandsController));
 
                 return genericMethod;
             }
 
             //// Define the prefix method
-            static void Postfix(EFT.Player player, GClass2739 item, GrenadeController __result)
+            static void Postfix(EFT.Player player, ThrowWeapItemClass item, GrenadeHandsController __result)
             {
                 if (!player.IsYourPlayer)
                     return;
@@ -879,7 +891,7 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.player = player;
                 VRGlobals.emptyHands = __result.ControllerGameObject.transform;
                 if (VRSettings.GetLeftHandedMode())
-                    VRGlobals.emptyHands.GetChild(0).localScale = new Vector3(-1, 1, 1);
+                    VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
                 VRGlobals.usingItem = false;
 
                 VRPlayerManager.leftHandGunIK = __result.HandsHierarchy.Transforms[10];
@@ -890,6 +902,7 @@ namespace TarkovVR.Patches.Core.Player
                     if (__result.WeaponRoot.parent.FindChild("RightHandPositioner"))
                     {
                         currentGunInteractController = __result.WeaponRoot.parent.GetComponent<GunInteractionController>();
+                        currentGunInteractController.enabled = true;
                         currentGunInteractController.SetPlayerOwner(__result._player.gameObject.GetComponent<GamePlayerOwner>());
                         VRGlobals.weaponHolder = __result.WeaponRoot.parent.FindChild("RightHandPositioner").GetChild(0).gameObject;
                     }
@@ -897,6 +910,7 @@ namespace TarkovVR.Patches.Core.Player
                     {
                         currentGunInteractController = __result.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
                         currentGunInteractController.Init();
+                        currentGunInteractController.initialized = true;
                         currentGunInteractController.SetPlayerOwner(__result._player.gameObject.GetComponent<GamePlayerOwner>());
 
                         GameObject rightHandPositioner = new GameObject("RightHandPositioner");
@@ -915,6 +929,8 @@ namespace TarkovVR.Patches.Core.Player
                 }
                 else if (__result.WeaponRoot.parent.parent.name == "RightHandPositioner")
                 {
+                    if (__result.WeaponRoot.parent.parent.parent.GetComponent<GunInteractionController>())
+                        __result.WeaponRoot.parent.parent.parent.GetComponent<GunInteractionController>().enabled = true;
                     VRGlobals.weaponHolder = __result.WeaponRoot.parent.gameObject;
                     __result.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform, false);
                 }
@@ -942,8 +958,8 @@ namespace TarkovVR.Patches.Core.Player
         public static bool pinPulled = false;
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseGrenadeController), "method_7")]
-        private static bool RepositionGrenadeThrow(BaseGrenadeController __instance, float timeSinceSafetyLevelRemoved, float lowHighThrow, Vector3 direction, float forcePower, bool lowThrow)
+        [HarmonyPatch(typeof(BaseGrenadeHandsController), "method_9")]
+        private static bool RepositionGrenadeThrow(BaseGrenadeHandsController __instance, ref Vector3? throwPosition, float timeSinceSafetyLevelRemoved, float lowHighThrow, Vector3 direction, float forcePower, bool lowThrow, bool withVelocity)
         {
             if (!__instance._player.IsYourPlayer)
                 return true;
@@ -978,9 +994,10 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 newDirection = VRGlobals.vrPlayer.RightHand.transform.right * -1;
 
             Quaternion rotation = Quaternion.AngleAxis(grenadeOffset, Vector3.up);
-            Quaternion rotation2 = Quaternion.AngleAxis(-10, Vector3.right);
+            Quaternion rotation2 = Quaternion.AngleAxis(10, Vector3.right);
             Quaternion rotation3 = Quaternion.AngleAxis(0, Vector3.forward);
-            newDirection = rotation * rotation2 * rotation3 * newDirection;
+            Quaternion rotation4 = Quaternion.AngleAxis(-35, Vector3.up);
+            newDirection = rotation * rotation2 * rotation3 * rotation4 * newDirection;
             //if (VRGlobals.grenadeOffset.x != 0)
             //    newDirection = InitVRPatches.rightPointerFinger.transform.up * VRGlobals.randomMultiplier;
             //if (VRGlobals.grenadeOffset.y != 0)
@@ -988,19 +1005,13 @@ namespace TarkovVR.Patches.Core.Player
             //if (VRGlobals.grenadeOffset.z != 0)
             //    newDirection = newDirection * -1;
 
-            Vector3 force = newDirection * (forcePower * lowHighThrow) + __instance._player.Velocity;
-            //Vector3 vector = __instance.transform_1.position + __instance.transform_1.rotation * __instance.grenadePrefab_0.GrenadeItself.Offset;
-            //Vector3 vector = VRGlobals.vrPlayer.RightHand.transform.position + VRGlobals.handsInteractionController.grenadeLaser.transform.rotation * __instance.grenadePrefab_0.GrenadeItself.Offset;
-            Vector3 vector = VRGlobals.vrPlayer.RightHand.transform.position;
-            //Quaternion rotation = Quaternion.Euler(VRGlobals.handsInteractionController.grenadeLaser.transform.eulerAngles + new Vector3(0,170,0));
-            //Quaternion rotation = Quaternion.Euler(VRGlobals.handsInteractionController.grenadeLaser.transform.eulerAngles );
-            Vector3 newforce = (VRGlobals.vrPlayer.RightHand.transform.rotation * force) * VRGlobals.randomMultiplier;
+            Vector3 force = newDirection * (forcePower * lowHighThrow);
+            if (withVelocity)
+            {
+                force += __instance._player.Velocity;
+            }
 
-            //if (BaseGrenadeController.CheckHandsToBodyObstacles(__instance._player, vector, out var _, out var correctedPoint))
-            //{
-            //    vector = correctedPoint;
-            //}
-            __instance.vmethod_2(timeSinceSafetyLevelRemoved, vector, VRGlobals.vrPlayer.RightHand.transform.rotation, force, lowThrow);
+            __instance.vmethod_2(timeSinceSafetyLevelRemoved, VRGlobals.vrPlayer.RightHand.transform.position, VRGlobals.vrPlayer.RightHand.transform.rotation, force, lowThrow);
             VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
             InitVRPatches.rightPointerFinger.enabled = false;
             pinPulled = false;
@@ -1008,8 +1019,8 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseGrenadeController), "IEventsConsumerOnWeapOut")]
-        private static bool DisableGrenadeStuffAfterCancel(BaseGrenadeController __instance)
+        [HarmonyPatch(typeof(BaseGrenadeHandsController), "IEventsConsumerOnWeapOut")]
+        private static bool DisableGrenadeStuffAfterCancel(BaseGrenadeHandsController __instance)
         {
             if (!__instance._player.IsYourPlayer)
                 return true;

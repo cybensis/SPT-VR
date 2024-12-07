@@ -93,7 +93,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.backHolster.parent = VRGlobals.camHolder.transform;
                 VRGlobals.backCollider = VRGlobals.backHolster.gameObject.AddComponent<BoxCollider>();
                 VRGlobals.backHolster.localScale = new Vector3(0.2f, 0.2f, 0.2f);
-                VRGlobals.backHolster.localPosition = new Vector3(0.2f, -0.1f, -0.2f);
+                VRGlobals.backHolster.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(-0.2f, -0.1f, -0.2f) : new Vector3(0.2f, -0.1f, -0.2f);
                 VRGlobals.backCollider.isTrigger = true;
                 VRGlobals.backHolster.gameObject.layer = 3;
 
@@ -101,7 +101,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.backpackCollider.parent = VRGlobals.camHolder.transform;
                 VRGlobals.backpackCollider.gameObject.AddComponent<BoxCollider>().isTrigger = true;
                 VRGlobals.backpackCollider.localScale = new Vector3(0.2f, 0.2f, 0.2f);
-                VRGlobals.backpackCollider.localPosition = new Vector3(-0.2f, -0.1f, -0.2f);
+                VRGlobals.backpackCollider.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.2f, -0.1f, -0.2f) : new Vector3(-0.2f, -0.1f, -0.2f);
                 VRGlobals.backpackCollider.gameObject.layer = 3;
 
                 VRGlobals.sidearmHolster = new GameObject("sidearmHolsterCollider").transform;
@@ -160,7 +160,7 @@ namespace TarkovVR.Patches.Core.VR
                 var methodName = method.Name;
 
                 // Check for bot-specific methods
-                if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("GClass732") && methodName.Contains("ActivateBot"))
+                if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("GClass794") && methodName.Contains("ActivateBot"))
                 {
                     isBotPlayer = true;
                     break;
@@ -256,7 +256,6 @@ namespace TarkovVR.Patches.Core.VR
             Camera mainCam = __instance.GetComponent<Camera>();
             if (mainCam.name == "FPS Camera")
             {
-                Plugin.MyLog.LogWarning("\n\nSetting camera \n\n");
                 GameObject uiCamHolder = new GameObject("uiCam");
                 uiCamHolder.transform.parent = __instance.transform;
                 uiCamHolder.transform.localRotation = Quaternion.identity;
@@ -269,7 +268,7 @@ namespace TarkovVR.Patches.Core.VR
                 mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
                 //mainCam.cullingMask = -1;
                 mainCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
-                mainCam.farClipPlane = 1000f;
+                mainCam.farClipPlane = 5000f;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
                 mainCam.useOcclusionCulling = false;
                 if (VRGlobals.vrPlayer) { 

@@ -20,14 +20,14 @@ namespace TarkovVR.Source.Weapons
         public float currentFov;
         private float fovAtStart;
         public bool swapZooms;
-        private ScopeZoomHandler scopeZoomHandler;
+        private InputHandlers.ScopeZoomHandler scopeZoomHandler;
 
         public void Awake() {
             IInputHandler baseHandler;
             VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ChangeScopeMagnification, out baseHandler);
             if (baseHandler != null)
             {
-                scopeZoomHandler = (ScopeZoomHandler)baseHandler;
+                scopeZoomHandler = (InputHandlers.ScopeZoomHandler)baseHandler;
             }
         }
         public void initZoomDial()
@@ -63,13 +63,15 @@ namespace TarkovVR.Source.Weapons
 
 
         public void handleJoystickZoomDial() {
-            if (!scopeCamera || Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) < VRSettings.GetRightStickSensitivity())
+            float primaryHandJoystickYAxis = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftJoystick.axis.y : SteamVR_Actions._default.RightJoystick.axis.y;
+            if (!scopeCamera || Mathf.Abs(primaryHandJoystickYAxis) < VRSettings.GetRightStickSensitivity())
                 return;
+
 
             if (VRGlobals.scope.parent.name == "scope_all_eotech_hhs_1_tan(Clone)")
                 return;
 
-            currentFov -= SteamVR_Actions._default.RightJoystick.axis.y / 2;
+            currentFov -= primaryHandJoystickYAxis / 2;
 
             currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
             if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 || scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
@@ -110,7 +112,7 @@ namespace TarkovVR.Source.Weapons
                 currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
 
                 if (currentFov >= maxFov || currentFov <= minFov)
-                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, SteamVR_Input_Sources.LeftHand);
+                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand)  ;
 
                 if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 || scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
                     if (scopeZoomHandler != null)

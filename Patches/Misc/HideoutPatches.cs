@@ -163,10 +163,10 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
-        private static Vector3 camRootRot;
+        public static Vector3 camRootRot;
         // Occasionally opening the inventory will set camRoot rot to 0,0,0 so get it here and set later
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(InventoryScreen), "Show", new Type[] { typeof(GClass3142) })]
+        [HarmonyPatch(typeof(InventoryScreen), "Show", new Type[] { typeof(GClass3511) })]
         private static bool SetOriginalCamRotOnInvOpen(InventoryScreen __instance)
         {
             camRootRot = VRGlobals.camRoot.transform.eulerAngles;
@@ -206,7 +206,7 @@ namespace TarkovVR.Patches.Misc
 
         ////------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(MainMenuController), "method_19")]
+        [HarmonyPatch(typeof(MainMenuController), "method_21")]
         private static void ReturnFromHideoutThroughPreloader(MainMenuController __instance)
         {
             ReturnToMainMenuFromHideout();
@@ -254,8 +254,8 @@ namespace TarkovVR.Patches.Misc
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Changes to in game when selecting the hideout option in the preloader UI
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(MainMenuController), "method_17")]
-        private static void SetInGameOnReturnToHideout_Preloader(GClass1822 __instance)
+        [HarmonyPatch(typeof(MainMenuController), "method_19")]
+        private static void SetInGameOnReturnToHideout_Preloader(GClass2021 __instance)
         {
             // Only set inGame if the player is set. If this is the first time going to hideout when starting the game
             // we only want inGame set if everythings been loaded, and if player is set then that means the hideout
@@ -343,8 +343,8 @@ namespace TarkovVR.Patches.Misc
         // The UI is closed when the player selects a preloader task bar option twice
         // so close the VR inventory.
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(Class2560), "method_0")]
-        private static void CloseUiOnDoubleClick(Class2560 __instance, bool arg)
+        [HarmonyPatch(typeof(Class2742), "method_0")]
+        private static void CloseUiOnDoubleClick(Class2742 __instance, bool arg)
         {
             if (VRGlobals.inGame && (
                     (!arg && __instance.menuType != EMenuType.Chat && __instance.menuType != EMenuType.MainMenu ) || 

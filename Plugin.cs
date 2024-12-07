@@ -10,145 +10,125 @@ using UnityEngine;
 using UnityEngine.XR.Management;
 using Valve.VR;
 
-
-namespace TarkovVR;
-
-[BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
-public class Plugin : BaseUnityPlugin
+namespace TarkovVR
 {
-    public static ManualLogSource MyLog;
-
-
-    private void Awake()
+    [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
+    public class Plugin : BaseUnityPlugin
     {
-        // Plugin startup logic
-        Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
-        MyLog = Logger;
+        public static ManualLogSource MyLog;
+        private bool vrInitializedSuccessfully = false;
 
-        ApplyPatches("TarkovVR.Patches");
-
-        //Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
-
-
-        SteamVR_Actions.PreInitialize();
-        InitializeConditionalPatches();
-
-        SteamVR_Settings.instance.pauseGameWhenDashboardVisible = true;
-
-        var generalSettings = ScriptableObject.CreateInstance<XRGeneralSettings>();
-        var managerSettings = ScriptableObject.CreateInstance<XRManagerSettings>();
-        var xrLoader = ScriptableObject.CreateInstance<OpenVRLoader>();
-
-
-        var settings = OpenVRSettings.GetSettings();
-        settings.StereoRenderingMode = OpenVRSettings.StereoRenderingModes.MultiPass;
-        generalSettings.Manager = managerSettings;
-
-        managerSettings.loaders.Clear();
-        managerSettings.loaders.Add(xrLoader);
-        managerSettings.InitializeLoaderSync(); ;
-
-        XRGeneralSettings.AttemptInitializeXRSDKOnLoad();
-        XRGeneralSettings.AttemptStartXRSDKOnBeforeSplashScreen();
-        //Application.runInBackground = true;
-        SteamVR.Initialize();
-
-    }
-
-
-    private void InitializeConditionalPatches()
-    {
-
-        string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\kmyuhkyuk-EFTApi\\EFTConfiguration.dll");
-
-        if (File.Exists(modDllPath))
+        private void Awake()
         {
-            // Load the assembly
-            Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+            Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loading!");
+            MyLog = Logger;
 
-            // Check for the required types and methods in the loaded assembly
-            Type configViewType = modAssembly.GetType("EFTConfiguration.Views.EFTConfigurationView");
-            if (configViewType != null)
+            if (!InitializeVR())
             {
-                // Apply conditional patches
-                InstalledMods.EFTApiInstalled = true;
-                ApplyPatches("TarkovVR.ModSupport.EFTApi");
-                MyLog.LogInfo("Dependent mod found and patches applied.");
+                Logger.LogError("VR initialization failed. Skipping the rest of the plugin setup.");
+                return;
+            }
+
+            Logger.LogInfo("VR initialized successfully.");
+            vrInitializedSuccessfully = true;
+
+            ApplyPatches("TarkovVR.Patches");
+            InitializeConditionalPatches();
+        }
+
+        private bool InitializeVR()
+        {
+            try
+            {
+                SteamVR_Actions.PreInitialize();
+                SteamVR_Settings.instance.pauseGameWhenDashboardVisible = true;
+
+                var generalSettings = ScriptableObject.CreateInstance<XRGeneralSettings>();
+                var managerSettings = ScriptableObject.CreateInstance<XRManagerSettings>();
+                var xrLoader = ScriptableObject.CreateInstance<OpenVRLoader>();
+
+                var settings = OpenVRSettings.GetSettings();
+                settings.StereoRenderingMode = OpenVRSettings.StereoRenderingModes.MultiPass;
+                generalSettings.Manager = managerSettings;
+
+                managerSettings.loaders.Clear();
+                managerSettings.loaders.Add(xrLoader);
+                managerSettings.InitializeLoaderSync();
+
+                XRGeneralSettings.AttemptInitializeXRSDKOnLoad();
+                XRGeneralSettings.AttemptStartXRSDKOnBeforeSplashScreen();
+
+                // Initialize SteamVR
+                SteamVR.Initialize();
+
+                // Verify SteamVR is running
+                if (!SteamVR.active)
+                {
+                    Logger.LogError("[SteamVR] Initialization failed. SteamVR is not active.");
+                    return false;
+                }
+
+                // Verify OpenVR initialization
+                if (SteamVR.instance == null || SteamVR.instance.hmd == null)
+                {
+                    Logger.LogError("[OpenVR] HMD not found or OpenVR initialization failed.");
+                    return false;
+                }
+
+                Logger.LogInfo("[VR] Initialization completed successfully.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"[VR Initialization Error] {ex.Message}");
+                return false;
+            }
+        }
+
+
+        private void InitializeConditionalPatches()
+        {
+            if (!vrInitializedSuccessfully)
+                return; // Skip patching if VR failed to initialize
+
+            string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\kmyuhkyuk-EFTApi\\EFTConfiguration.dll");
+            if (File.Exists(modDllPath))
+            {
+                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+                Type configViewType = modAssembly.GetType("EFTConfiguration.Views.EFTConfigurationView");
+                if (configViewType != null)
+                {
+                    InstalledMods.EFTApiInstalled = true;
+                    ApplyPatches("TarkovVR.ModSupport.EFTApi");
+                    MyLog.LogInfo("Dependent mod found and patches applied.");
+                }
+                else
+                {
+                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+                }
             }
             else
             {
-                MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+                MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
             }
-        }
-        else
-        {
-            MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
+
+            // Repeat for other mods (AmandsGraphics, FIKA) as needed
         }
 
-        modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
-
-        if (File.Exists(modDllPath))
+        private void ApplyPatches(string @namespace)
         {
-            // Load the assembly
-            Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+            if (!vrInitializedSuccessfully)
+                return; // Skip patching if VR failed to initialize
 
-            // Check for the required types and methods in the loaded assembly
-            Type configViewType = modAssembly.GetType("AmandsGraphics.AmandsGraphicsClass");
-            if (configViewType != null)
+            var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
+            var assembly = Assembly.GetExecutingAssembly();
+
+            foreach (var type in assembly.GetTypes())
             {
-                // Apply conditional patches
-                InstalledMods.AmandsGraphicsInstalled = true;
-                ApplyPatches("TarkovVR.ModSupport.AmandsGraphics");
-                MyLog.LogInfo("Dependent mod found and patches applied.");
-            }
-            else
-            {
-                MyLog.LogWarning("Required types/methods not found in the dependent mod.");
-            }
-        }
-        else
-        {
-            MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
-        }
-
-        modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Fika.Core.dll");
-
-        if (File.Exists(modDllPath))
-        {
-            // Load the assembly
-            Assembly modAssembly = Assembly.LoadFrom(modDllPath);
-
-            // Check for the required types and methods in the loaded assembly
-            Type configViewType = modAssembly.GetType("MatchMakerUI");
-            if (configViewType != null)
-            {
-                // Apply conditional patches
-                InstalledMods.FIKAInstalled = true;
-                ApplyPatches("TarkovVR.ModSupport.FIKA");
-                MyLog.LogInfo("Dependent mod found and patches applied.");
-            }
-            else
-            {
-                MyLog.LogWarning("Required types/methods not found in the dependent mod.");
-            }
-        }
-        else
-        {
-            MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
-        }
-    }
-
-
-    private void ApplyPatches(string @namespace)
-    {
-        var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
-        var assembly = Assembly.GetExecutingAssembly();
-
-        foreach (var type in assembly.GetTypes())
-        {
-            if (type.Namespace != null && type.Namespace.StartsWith(@namespace))
-            {
-                harmony.CreateClassProcessor(type).Patch();
+                if (type.Namespace != null && type.Namespace.StartsWith(@namespace))
+                {
+                    harmony.CreateClassProcessor(type).Patch();
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 ﻿using Comfort.Common;
 using EFT.CameraControl;
+using EFT.Rendering.Clouds;
 using EFT.UI;
 using HarmonyLib;
 using System;
@@ -237,7 +238,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "GetOutputHeight")]
         private static bool ReturnVROutputHeight(SSAAImpl __instance, ref int __result)
-        {    
+        {
             __result = __instance.GetInputHeight();
             return false;
         }
@@ -376,9 +377,9 @@ namespace TarkovVR.Patches.Visuals
 
         // This also uses Screen width and height so need to fix it
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] {typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
+        [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
         private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
-            {
+        {
             int shaderPass = 0;
             if (__instance.CurrentState == SSAAImpl.SSState.UPSCALE)
             {
@@ -524,7 +525,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(ThermalVision), "method_1")]
         private static void FixThermalsDoubleVision(ThermalVision __instance)
         {
-           __instance.IsMotionBlurred = false;
+            __instance.IsMotionBlurred = false;
         }
 
 
@@ -559,71 +560,260 @@ namespace TarkovVR.Patches.Visuals
                 distantShadow.PreComputeMask = true;
             }
         }
+        //Clouds dont render correctly and haven't found a way to fix them yet so disable it
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CloudController), "OnEnable")]
+        private static void FixClouds(CloudController __instance) {
+            __instance.enabled = false;
+        }
 
-
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
-        private static bool FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
+        //Fog dont render correctly and haven't found a way to fix it yet so disable it
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MBOIT_Scattering), "Start")]
+        private static void DisableMBOIT(CloudController __instance)
         {
-            if (!__instance.CheckSupport(needDepth: true, needHdr: true))
-            {
-                Graphics.Blit(source, destination);
-                return false;
-            }
-
-            // Apply the effect for each eye separately if in VR mode
-            if (UnityEngine.XR.XRSettings.enabled)
-            {
-                __instance.sky.Components.Scattering = __instance;
-                for (int eye = 0; eye < 2; eye++)
-                {
-                    // Update the camera to use the correct eye's perspective
-                    Camera.StereoscopicEye stereoEye = (Camera.StereoscopicEye)eye;
-                    Matrix4x4 identity = CalculateFrustumCorners(Camera.main, stereoEye);
-
-                    __instance.material_0.SetMatrix(TOD_Scattering.int_1, identity);
-                    __instance.material_0.SetTexture(TOD_Scattering.int_2, __instance.DitheringTexture);
-
-                    Vector3 cameraDirection = Camera.main.transform.forward;
-                    float cameraHeight = Camera.main.transform.position.y;
-                    Vector3 adjustedDirection = new Vector3(cameraDirection.x, 0f, cameraDirection.z).normalized;
-
-                    float adjustedHeightFalloff = __instance.HeightFalloff * Mathf.Abs(Vector3.Dot(adjustedDirection, Vector3.up));
-                    float adjustedDensity = __instance.GlobalDensity * (1.0f - Mathf.Abs(cameraDirection.y));
-
-                    if (__instance.FromLevelSettings)
-                    {
-                        LevelSettings instance = Singleton<LevelSettings>.Instance;
-                        if (instance != null)
-                        {
-                            __instance.HeightFalloff = instance.HeightFalloff;
-                            __instance.ZeroLevel = instance.ZeroLevel;
-                        }
-                    }
-
-                    //Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(adjustedHeightFalloff, cameraHeight - __instance.ZeroLevel, adjustedDensity, 0f));
-                    Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(__instance.HeightFalloff, VRGlobals.camRoot.transform.position.y - __instance.ZeroLevel, __instance.GlobalDensity, 0f));
-                    __instance.material_0.SetFloat(TOD_Scattering.int_4, __instance.SunrizeGlow);
-
-                    if (__instance.Lighten)
-                    {
-                        __instance.material_0.EnableKeyword("LIGHTEN");
-                    }
-                    else
-                    {
-                        __instance.material_0.DisableKeyword("LIGHTEN");
-                    }
-
-                    __instance.CustomBlit(source, destination, __instance.material_0);
-                }
-            }
-            else
-            {
-                return true;
-            }
+            __instance.enabled = false;
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(CloudController), "UpdateAmbient")]
+        private static bool FixAmbientErrors(CloudController __instance)
+        {
+            __instance.enabled = false;
             return false;
         }
+
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(CloudController), "OnPreRenderCamera")]
+        //private static bool FixClouds(CloudController __instance, Camera cam)
+        //{
+        //    if (!__instance.IsInitialized || __instance._settings == null)
+        //        return false;
+
+        //    // Check if the camera is a VR camera
+        //    if (!cam.CompareTag("MainCamera") && !cam.CompareTag("OpticCamera") && !cam.stereoEnabled)
+        //        return false;
+
+        //    // Handle each eye separately in VR
+        //    if (cam.stereoEnabled)
+        //    {
+        //        for (Camera.StereoscopicEye eye = Camera.StereoscopicEye.Left; eye <= Camera.StereoscopicEye.Right; eye++)
+        //        {
+        //            CommandBuffer buffer;
+        //            if (eye == Camera.StereoscopicEye.Left)
+        //            {
+        //                __instance.gclass968_0.UpdateOnRenderObject(out buffer); // Shadow buffer
+        //            }
+        //            else
+        //            {
+        //                __instance.gclass968_1.UpdateOnRenderObject(out buffer); // Main buffer
+        //            }
+
+        //            buffer.Clear();
+        //            CloudControllerMethod_1(__instance, __instance.gclass2104_0, cam, buffer, eye);
+        //        }
+        //    }
+        //    else
+        //    {
+        //        __instance.gclass968_0.UpdateOnRenderObject(out var buffer);
+        //        __instance.gclass968_1.UpdateOnRenderObject(out var buffer2);
+        //        buffer.Clear();
+        //        buffer2.Clear();
+        //        CloudControllerMethod_1(__instance, __instance.gclass2104_0, cam, buffer2, Camera.StereoscopicEye.Left); // Default to left eye for non-VR
+        //        __instance.method_0(buffer);
+        //    }
+
+        //    if (__instance.class1665_0.vmethod_0(__instance.gclass2104_0))
+        //    {
+        //        __instance.class1665_0.UpdateTexture(__instance.gclass2104_0);
+        //    }
+        //    return false;
+        //}
+        private static bool test = false;
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(CloudController), "method_1")]
+        //public static bool CloudControllerMethod_1(CloudController __instance, GClass2104 parameters, Camera cam, CommandBuffer buffer)
+        //{
+        //    if (test)
+        //        return true;
+
+        //    int pixelWidth = cam.pixelWidth;
+        //    int pixelHeight = cam.pixelHeight;
+        //    Camera.StereoscopicEye eye = (Camera.StereoscopicEye)Camera.current.stereoActiveEye;
+        //    // Use eye-specific matrices
+        //    Matrix4x4 projectionMatrix = cam.GetStereoProjectionMatrix(eye);
+        //    Matrix4x4 worldToCameraMatrix = cam.GetStereoViewMatrix(eye);
+
+        //    Matrix4x4 matrix = GL.GetGPUProjectionMatrix(projectionMatrix, renderIntoTexture: true);
+        //    Matrix4x4 view = worldToCameraMatrix;
+        //    float aspect = GClass2106.ProjectionMatrixAspect(in matrix);
+        //    Vector4 vector = new Vector4(pixelWidth, pixelHeight, 1f / pixelWidth, 1f / pixelHeight);
+        //    Matrix4x4 pixelCoordToViewDirMatrix = GClass2106.ComputePixelCoordToWorldSpaceViewDirectionMatrix(matrix, view, cam, vector, aspect);
+
+
+        //    parameters.Time = Time.time;
+        //    parameters.IsAnimate = true;
+        //    parameters.PixelCoordToViewDirMatrix = pixelCoordToViewDirMatrix;
+        //    parameters.WorldSpaceCameraPos = cam.transform.position;
+        //    parameters.ViewMatrix = worldToCameraMatrix;
+        //    parameters.ScreenSize = vector;
+        //    parameters.SunLight = __instance._sun;
+        //    parameters.FrameIndex = Time.frameCount;
+        //    parameters.CloudSettings = __instance._settings;
+        //    parameters.CubemapFace = CubemapFace.Unknown;
+        //    parameters.CloudOpacity = default(RenderTargetIdentifier);
+        //    parameters.ExposureMultiplier = 1f;
+        //    parameters.CloudAmbientProbe = __instance.gclass2102_0;
+        //    parameters.CommandBuffer = buffer;
+        //    parameters.ColorBuffer = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
+        //    return false;
+        //}
+
+
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(Class1665), "RenderClouds")]
+        //public static bool RenderCloudsPatch(Class1665 __instance, GClass2104 builtinParams, bool renderForCubemap)
+        //{
+        //    // Skip the patch for cubemap rendering
+        //    if (renderForCubemap)
+        //        return true;
+
+        //    CommandBuffer commandBuffer = builtinParams.CommandBuffer;
+        //    CloudLayer cloudLayer = builtinParams.CloudSettings as CloudLayer;
+        //    if (cloudLayer == null || cloudLayer.Opacity == 0f)
+        //        return false;
+
+        //    float deltaTime = (builtinParams.IsAnimate ? (builtinParams.Time - __instance.float_0) : 0f);
+        //    __instance.float_0 = builtinParams.Time;
+
+        //    // Stereo-aware matrices
+        //    Camera.StereoscopicEye eye = (Camera.StereoscopicEye)Camera.current.stereoActiveEye;
+        //    Matrix4x4 projectionMatrix = Camera.current.GetStereoProjectionMatrix(eye);
+        //    Matrix4x4 viewMatrix = Camera.current.GetStereoViewMatrix(eye);
+
+        //    Matrix4x4 gpuProjectionMatrix = GL.GetGPUProjectionMatrix(projectionMatrix, renderIntoTexture: true);
+        //    Matrix4x4 pixelCoordToViewDirMatrix = GClass2106.ComputePixelCoordToWorldSpaceViewDirectionMatrix(
+        //        gpuProjectionMatrix, viewMatrix, Camera.current,
+        //        new Vector4(Camera.current.pixelWidth, Camera.current.pixelHeight, 1f / Camera.current.pixelWidth, 1f / Camera.current.pixelHeight),
+        //        GClass2106.ProjectionMatrixAspect(in gpuProjectionMatrix)
+        //    );
+
+        //    // Set VR-specific parameters
+        //    builtinParams.PixelCoordToViewDirMatrix = pixelCoordToViewDirMatrix;
+
+        //    // Set material properties
+        //    __instance.material_0.SetTexture(Class1665.int_1, __instance.class1663_0.cloudTextureRT);
+        //    Vector4 flowmapParams = cloudLayer.LayerA.method_0();
+        //    flowmapParams.w = cloudLayer.Opacity;
+        //    __instance.material_0.SetVector(Class1664._FlowmapParam, flowmapParams);
+
+        //    cloudLayer.LayerA.ScrollFactor += cloudLayer.LayerA.ScrollSpeed * deltaTime * 0.277778f;
+
+        //    // Handle sun and lighting
+        //    Color sunColor = builtinParams.SunLight != null ? GClass2106.EvaluateLightColor(builtinParams.SunLight) : Color.black;
+        //    Vector4 params1 = cloudLayer.LayerA.Color_0 * sunColor;
+        //    params1.w = cloudLayer.LayerA.Altitude;
+        //    __instance.material_0.SetVector(Class1664._Params1, params1);
+
+        //    // Ambient probe adjustment
+        //    Vector4 params2 = new Vector4(cloudLayer.LayerA.AmbientProbeDimmer, 0f, 0f, 0f);
+        //    __instance.material_0.SetVector(Class1664._Params2, params2);
+        //    __instance.material_0.SetBuffer(Class1665.int_4, builtinParams.CloudAmbientProbe);
+
+        //    // Render target setup
+        //    commandBuffer.SetGlobalVector(Class1664._PlanetCenterRadius, cloudLayer.PlanetCenterRadius);
+        //    commandBuffer.SetGlobalFloat(Class1664._ExposureMultiplier, builtinParams.ExposureMultiplier);
+        //    __instance.materialPropertyBlock_0.SetMatrix(Class1664._PixelCoordToViewDirWS, builtinParams.PixelCoordToViewDirMatrix);
+
+        //    if (builtinParams.DepthBuffer == default(RenderTargetIdentifier))
+        //    {
+        //        if (builtinParams.CloudOpacity == default(RenderTargetIdentifier))
+        //        {
+        //            GClass2106.SetRenderTarget(commandBuffer, builtinParams.ColorBuffer);
+        //        }
+        //        else
+        //        {
+        //            RenderTargetIdentifier[] rtColor = new RenderTargetIdentifier[2] { builtinParams.ColorBuffer, builtinParams.CloudOpacity };
+        //            GClass2106.SetRenderTarget(commandBuffer, rtColor, default(RenderTargetIdentifier));
+        //        }
+        //    }
+        //    else if (builtinParams.CloudOpacity == default(RenderTargetIdentifier))
+        //    {
+        //        GClass2106.SetRenderTarget(commandBuffer, builtinParams.ColorBuffer, builtinParams.DepthBuffer);
+        //    }
+        //    else
+        //    {
+        //        __instance.MRTToRenderCloudOcclusion[0] = builtinParams.ColorBuffer;
+        //        __instance.MRTToRenderCloudOcclusion[1] = builtinParams.CloudOpacity;
+        //        GClass2106.SetRenderTarget(commandBuffer, __instance.MRTToRenderCloudOcclusion, builtinParams.DepthBuffer);
+        //    }
+
+        //    // Full-screen draw call
+        //    GClass2106.DrawFullScreen(commandBuffer, __instance.material_0, __instance.materialPropertyBlock_0, 1);
+
+        //    return false; // Skip original method
+        //}
+        //[HarmonyPrefix]
+        //[HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
+        //private static bool FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
+        //{
+        //    if (!__instance.CheckSupport(needDepth: true, needHdr: true))
+        //    {
+        //        Graphics.Blit(source, destination);
+        //        return false;
+        //    }
+
+        //    // Apply the effect for each eye separately if in VR mode
+        //    if (UnityEngine.XR.XRSettings.enabled)
+        //    {
+        //        __instance.sky.Components.Scattering = __instance;
+        //        for (int eye = 0; eye < 2; eye++)
+        //        {
+        //            // Update the camera to use the correct eye's perspective
+        //            Camera.StereoscopicEye stereoEye = (Camera.StereoscopicEye)eye;
+        //            Matrix4x4 identity = CalculateFrustumCorners(Camera.main, stereoEye);
+
+        //            __instance.material_0.SetMatrix(TOD_Scattering.int_1, identity);
+        //            __instance.material_0.SetTexture(TOD_Scattering.int_2, __instance.DitheringTexture);
+
+        //            Vector3 cameraDirection = Camera.main.transform.forward;
+        //            float cameraHeight = Camera.main.transform.position.y;
+        //            Vector3 adjustedDirection = new Vector3(cameraDirection.x, 0f, cameraDirection.z).normalized;
+
+        //            float adjustedHeightFalloff = __instance.HeightFalloff * Mathf.Abs(Vector3.Dot(adjustedDirection, Vector3.up));
+        //            float adjustedDensity = __instance.GlobalDensity * (1.0f - Mathf.Abs(cameraDirection.y));
+
+        //            if (__instance.FromLevelSettings)
+        //            {
+        //                LevelSettings instance = Singleton<LevelSettings>.Instance;
+        //                if (instance != null)
+        //                {
+        //                    __instance.HeightFalloff = instance.HeightFalloff;
+        //                    __instance.ZeroLevel = instance.ZeroLevel;
+        //                }
+        //            }
+
+        //            //Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(adjustedHeightFalloff, cameraHeight - __instance.ZeroLevel, adjustedDensity, 0f));
+        //            Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(__instance.HeightFalloff, VRGlobals.camRoot.transform.position.y - __instance.ZeroLevel, __instance.GlobalDensity, 0f));
+        //            __instance.material_0.SetFloat(TOD_Scattering.int_4, __instance.SunrizeGlow);
+
+        //            if (__instance.Lighten)
+        //            {
+        //                __instance.material_0.EnableKeyword("LIGHTEN");
+        //            }
+        //            else
+        //            {
+        //                __instance.material_0.DisableKeyword("LIGHTEN");
+        //            }
+
+        //            __instance.CustomBlit(source, destination, __instance.material_0);
+        //        }
+        //    }
+        //    else
+        //    {
+        //        return true;
+        //    }
+        //    return false;
+        //}
 
         private static Matrix4x4 CalculateFrustumCorners(Camera cam, Camera.StereoscopicEye eye = Camera.StereoscopicEye.Left)
         {

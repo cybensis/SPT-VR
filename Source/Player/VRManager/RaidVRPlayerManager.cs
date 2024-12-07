@@ -1,8 +1,10 @@
 ﻿using EFT;
 using EFT.Hideout;
+using EFT.UI;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 
@@ -23,6 +25,8 @@ namespace TarkovVR.Source.Player.VRManager
         public float downwardOffset = 0.1f;
         private Vector3 interactUiPos;
         private bool raycastHit = false;
+        public bool positionTransitUi;
+        private Quaternion camRotation;
 
 
 
@@ -30,7 +34,22 @@ namespace TarkovVR.Source.Player.VRManager
             base.Update();
             if (interactionUi && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.hightlightingMesh))
             {
-                if (raycastHit && interactionUi.gameObject.active)
+                if (positionTransitUi) {
+                    float yRotationDifference = Mathf.Abs(Quaternion.Angle(Camera.main.transform.localRotation, camRotation));
+
+                    if (yRotationDifference > 30)
+                    {
+
+                        camRotation = Camera.main.transform.localRotation;
+
+                        // Set position not local position so it doesn't inherit rotated position from camRoot
+                        interactionUi.position = Camera.main.transform.position + Camera.main.transform.forward * 0.4f + Camera.main.transform.up * -0.2f + Camera.main.transform.right * 0;
+                        interactionUi.LookAt(Camera.main.transform);
+                        // Need to rotate 180 degrees otherwise it shows up backwards
+                        interactionUi.Rotate(0, 180, 0);
+                    }
+                }
+                else if (raycastHit && interactionUi.gameObject.active)
                 {
                     interactionUi.position = interactUiPos;
                     interactionUi.LookAt(Camera.main.transform);
@@ -39,10 +58,12 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 else if (raycastHit && !interactionUi.gameObject.active)
                     raycastHit = false;
+
             }
-            //else { 
-            //    interactionUi.localPosition = 
-            //}
+            else if (positionTransitUi && !interactionUi.gameObject.active)
+            {
+                positionTransitUi = false;
+            }
         }
 
 
@@ -55,27 +76,29 @@ namespace TarkovVR.Source.Player.VRManager
             // leftwristui localpos = -0.1 0.04 0.035
             // localrot = 304.3265 181 180
 
-            leftWristUi.transform.parent = InitVRPatches.leftWrist;
+            leftWristUi.transform.SetParent(InitVRPatches.leftWrist, false);
             leftWristUi.transform.localPosition = new Vector3(-0.1f, 0.04f, 0.035f);
             leftWristUi.transform.localEulerAngles = new Vector3(304, 180, 180);
 
-            UIPatches.extractionTimerUi.transform.parent = leftWristUi.transform;
-            UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.047f, 0.08f, 0.025f);
-            UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(88, 83, 175);
+            UIPatches.extractionTimerUi.transform.SetParent(leftWristUi.transform, false);
+            UIPatches.extractionTimerUi.transform.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.037f, 0.12f, -0.015f)  : new Vector3(0.047f, 0.08f, 0.025f);
+            UIPatches.extractionTimerUi.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(307, 81, 20) : new Vector3(88, 83, 175);
             UIPatches.extractionTimerUi._mainContainer.localEulerAngles = new Vector3(0, 342, 0);
             UIPatches.extractionTimerUi.transform.localScale = new Vector3(0.0003f, 0.0003f, 0.0003f);
 
-            UIPatches.healthPanel.transform.parent = leftWristUi.transform;
+            UIPatches.healthPanel.transform.SetParent(leftWristUi.transform, false);
             UIPatches.healthPanel.transform.localPosition = Vector3.zero;
-            UIPatches.healthPanel.transform.localEulerAngles = new Vector3(270, 87, 0);
+            UIPatches.healthPanel.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(270, 269, 180) : new Vector3(270, 87, 0);
+            UIPatches.healthPanel.transform.localScale = new Vector3(0.0003f, 0.0003f, 0.0003f);
 
-            UIPatches.stancePanel.transform.parent = leftWristUi.transform;
-            UIPatches.stancePanel.transform.localPosition = new Vector3(0.1f, 0, 0.03f);
-            UIPatches.stancePanel.transform.localEulerAngles = new Vector3(270, 87, 0);
+            UIPatches.stancePanel.transform.SetParent(leftWristUi.transform, false);
+            UIPatches.stancePanel.transform.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.1f, 0, -0.075f) : new Vector3(0.1f, 0, 0.03f);
+            UIPatches.stancePanel.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(90, 93, 180) : new Vector3(270, 87, 0);
+            UIPatches.stancePanel.transform.localScale = new Vector3(0.0004f, 0.0004f, 0.0004f);
 
-            UIPatches.notifierUi.transform.parent = leftWristUi.transform;
-            UIPatches.notifierUi.transform.localPosition = new Vector3(0.12f, 0f, -0.085f);
-            UIPatches.notifierUi.transform.localEulerAngles = new Vector3(272, 163, 283);
+            UIPatches.notifierUi.transform.SetParent(leftWristUi.transform, false);
+            UIPatches.notifierUi.transform.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.1247f, 0f, 0.055f) : new Vector3(0.12f, 0f, -0.085f);
+            UIPatches.notifierUi.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(90, 272, 0) : new Vector3(272, 163, 283);
             UIPatches.notifierUi.transform.localScale = new Vector3(0.0003f, 0.0003f, 0.0003f);
         }
         public void PlaceUiInteracter(RaycastHit hit)
@@ -83,6 +106,8 @@ namespace TarkovVR.Source.Player.VRManager
 
             // Verify if the current hit object is still the same after the delay
             Vector3 rayOrigin = Camera.main.transform.position;
+
+
             //Vector3 rayDirection = Camera.main.transform.forward;
             //RaycastHit hit;
             //rayDirection.y -= downwardOffset;

@@ -54,8 +54,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass1709), "Rotate")]
-        private static bool SetPlayerRotateOnProneStationary(GClass1709 __instance, ref Vector2 deltaRotation)
+        [HarmonyPatch(typeof(ProneIdleState), "Rotate")]
+        private static bool SetPlayerRotateOnProneStationary(ProneIdleState __instance, ref Vector2 deltaRotation)
         {
 
             if (!__instance.MovementContext._player.IsYourPlayer)
@@ -73,8 +73,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass1718), "Rotate")]
-        private static bool SetPlayerRotateOnProneMoving(GClass1718 __instance, ref Vector2 deltaRotation)
+        [HarmonyPatch(typeof(ProneMoveState), "Rotate")]
+        private static bool SetPlayerRotateOnProneMoving(ProneMoveState __instance, ref Vector2 deltaRotation)
         {
             if (!__instance.MovementContext._player.IsYourPlayer)
                 return true;
@@ -177,8 +177,8 @@ namespace TarkovVR.Patches.Core.Player
 
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass2969), "ManualLateUpdate")]
-        private static bool PositionCamera(GClass2969 __instance)
+        [HarmonyPatch(typeof(GClass3328), "ManualLateUpdate")]
+        private static bool PositionCamera(GClass3328 __instance)
         {
             if (!__instance.player_0.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;
@@ -186,8 +186,8 @@ namespace TarkovVR.Patches.Core.Player
             if (VRGlobals.emptyHands && VRGlobals.player.HandsIsEmpty)
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
             else if (VRGlobals.emptyHands && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.enabled)) {
-                Plugin.MyLog.LogWarning("Possitioning hands");
-                VRGlobals.ikManager.MatchLegsToArms();
+                if (!WeaponPatches.currentGunInteractController || WeaponPatches.currentGunInteractController.transform.parent != VRGlobals.emptyHands)
+                    VRGlobals.ikManager.MatchLegsToArms();
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
                 
             }
