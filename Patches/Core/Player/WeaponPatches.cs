@@ -722,6 +722,8 @@ namespace TarkovVR.Patches.Core.Player
                             VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.FindChild("backLens");
                         opticSight.gameObject.layer = 6;
                         scopeCollider = opticSight.GetComponent<BoxCollider>();
+                        if (!scopeCollider)
+                            scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
                     }
                     if (scopeCollider)
                     {
@@ -736,11 +738,16 @@ namespace TarkovVR.Patches.Core.Player
                     VRGlobals.vrOpticController.currentFov = fov;
                 }
 
-                if (opticSight.name.Contains("mode_"))
-                    opticSight.transform.parent.GetComponent<BoxCollider>().enabled = true;
-                else
+                if (opticSight.name.Contains("mode_")) { 
+                    if (opticSight.transform.parent.GetComponent<BoxCollider>())
+                        opticSight.transform.parent.GetComponent<BoxCollider>().enabled = true;
+                    else if (opticSight.transform.parent.parent.GetComponent<BoxCollider>())
+                        opticSight.transform.parent.parent.GetComponent<BoxCollider>().enabled = true;
+                }
+                else if (opticSight.GetComponent<BoxCollider>())
                     opticSight.GetComponent<BoxCollider>().enabled = true;
-
+                else if (opticSight.transform.parent.GetComponent<BoxCollider>())
+                    opticSight.transform.parent.GetComponent<BoxCollider>().enabled = true;
 
 
             }
