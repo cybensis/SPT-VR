@@ -38,8 +38,8 @@ namespace TarkovVR.ModSupport.AmandsGraphics
             return false;
         }
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(AmandsGraphicsmethod_22Patch), "PatchPostFix")]
-        private static bool BlockSomeOtherOpticPatch(AmandsGraphicsmethod_22Patch __instance)
+        [HarmonyPatch(typeof(AmandsGraphicsmethod_25Patch), "PatchPostFix")]
+        private static bool BlockSomeOtherOpticPatch(AmandsGraphicsmethod_25Patch __instance)
         {
             return false;
         }

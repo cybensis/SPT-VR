@@ -92,12 +92,17 @@ namespace TarkovVR
                 return; // Skip patching if VR failed to initialize
 
             string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\kmyuhkyuk-EFTApi\\EFTConfiguration.dll");
+
             if (File.Exists(modDllPath))
             {
+                // Load the assembly
                 Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+
+                // Check for the required types and methods in the loaded assembly
                 Type configViewType = modAssembly.GetType("EFTConfiguration.Views.EFTConfigurationView");
                 if (configViewType != null)
                 {
+                    // Apply conditional patches
                     InstalledMods.EFTApiInstalled = true;
                     ApplyPatches("TarkovVR.ModSupport.EFTApi");
                     MyLog.LogInfo("Dependent mod found and patches applied.");
@@ -112,6 +117,57 @@ namespace TarkovVR
                 MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
             }
 
+            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
+
+            if (File.Exists(modDllPath))
+            {
+                // Load the assembly
+                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+
+                // Check for the required types and methods in the loaded assembly
+                Type configViewType = modAssembly.GetType("AmandsGraphics.AmandsGraphicsClass");
+                if (configViewType != null)
+                {
+                    // Apply conditional patches
+                    InstalledMods.AmandsGraphicsInstalled = true;
+                    ApplyPatches("TarkovVR.ModSupport.AmandsGraphics");
+                    MyLog.LogInfo("Dependent mod found and patches applied.");
+                }
+                else
+                {
+                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+                }
+            }
+            else
+            {
+                MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
+            }
+
+            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Fika.Core.dll");
+
+            if (File.Exists(modDllPath))
+            {
+                // Load the assembly
+                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+
+                // Check for the required types and methods in the loaded assembly
+                Type configViewType = modAssembly.GetType("MatchMakerUI");
+                if (configViewType != null)
+                {
+                    // Apply conditional patches
+                    InstalledMods.FIKAInstalled = true;
+                    ApplyPatches("TarkovVR.ModSupport.FIKA");
+                    MyLog.LogInfo("Dependent mod found and patches applied.");
+                }
+                else
+                {
+                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+                }
+            }
+            else
+            {
+                MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
+            }
             // Repeat for other mods (AmandsGraphics, FIKA) as needed
         }
 
