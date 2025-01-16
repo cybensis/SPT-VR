@@ -114,7 +114,7 @@ namespace TarkovVR
             }
             else
             {
-                MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
+                MyLog.LogWarning("EFT API dll not found, support patches will not be applied.");
             }
 
             modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
@@ -131,7 +131,7 @@ namespace TarkovVR
                     // Apply conditional patches
                     InstalledMods.AmandsGraphicsInstalled = true;
                     ApplyPatches("TarkovVR.ModSupport.AmandsGraphics");
-                    MyLog.LogInfo("Dependent mod found and patches applied.");
+                    MyLog.LogInfo("AmandsGraphics found and patches applied.");
                 }
                 else
                 {
@@ -140,7 +140,7 @@ namespace TarkovVR
             }
             else
             {
-                MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
+                MyLog.LogWarning("AmandsGraphics dll not found, support patches will not be applied.");
             }
 
             modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Fika.Core.dll");
@@ -166,7 +166,7 @@ namespace TarkovVR
             }
             else
             {
-                MyLog.LogWarning("Dependent mod DLL not found. Some functionality will be disabled.");
+                MyLog.LogWarning("FIKA Core dll not found, support patches will not be applied.");
             }
             // Repeat for other mods (AmandsGraphics, FIKA) as needed
         }

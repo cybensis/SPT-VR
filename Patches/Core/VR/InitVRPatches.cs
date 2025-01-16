@@ -68,8 +68,18 @@ namespace TarkovVR.Patches.Core.VR
                     collider.isTrigger = true;
 
                     VRGlobals.camHolder.layer = 7;
-                    VRGlobals.menuVRManager.enabled = false;
-                    VRGlobals.menuOpen = false;
+                    if (!ModSupport.InstalledMods.FIKAInstalled)
+                    {
+                        VRGlobals.menuVRManager.enabled = false;
+                        VRGlobals.menuOpen = false;
+                    }
+                    else {
+                        VRGlobals.vrPlayer.enabled = false;
+                        VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
+                        VRGlobals.vrOffsetter.transform.localPosition = Camera.main.transform.localPosition * -1;
+                        VRGlobals.menuOpen = true;
+                        VRGlobals.menuVRManager.OnEnable();
+                    }
                     if (UIPatches.quickSlotUi == null)
                     {
                         GameObject quickSlotHolder = new GameObject("quickSlotUi");
@@ -179,8 +189,13 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.transform.parent.parent.FindChild("weapon_holster1"))
                 __instance.transform.parent.parent.FindChild("weapon_holster1").gameObject.active = false;
 
-            if (__instance.transform.parent.parent.GetComponent<IKManager>() == null)
+            if (__instance.transform.parent.parent.GetComponent<IKManager>() == null) { 
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
+                if (ModSupport.InstalledMods.FIKAInstalled) {
+                    VRGlobals.ikManager.enabled = false;
+                    VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
+                }
+            }
 
             if (__instance.name == "Base HumanLCollarbone") {
                 VRGlobals.ikManager.leftArmIk = __instance.transform.GetComponent<LimbIK>();

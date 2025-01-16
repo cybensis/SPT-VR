@@ -18,6 +18,7 @@ using static HighLightMesh;
 using static System.Net.Mime.MediaTypeNames;
 using static TarkovVR.Source.Controls.InputHandlers;
 
+
 public class GunInteractionController : MonoBehaviour
 {
     public Transform magazine;
@@ -29,7 +30,8 @@ public class GunInteractionController : MonoBehaviour
     private List<Transform> tacDevices;
     private List<Transform> interactables;
     private GameObject gunRaycastReciever;
-    private Vector3 rotOffset = new Vector3(0,-0.12f,0);
+    private Vector3 rotOffset = new Vector3(-0.02f, 0, 0.1f);
+    private Vector3 rotOffset2 = new Vector3(0.06f, 0.03f, -0.06f);
     public bool initialized = false;
     private int lastHitCompIndex = -1;
     private GamePlayerOwner playerOwner;
@@ -306,8 +308,8 @@ public class GunInteractionController : MonoBehaviour
                 VRGlobals.firearmController.GunBaseTransform.localPosition = Vector3.zero;
                 VRGlobals.firearmController.GunBaseTransform.localEulerAngles = Vector3.zero;
             }
-            if (VRSettings.GetLeftHandedMode())
-                VRGlobals.player._markers[1].transform.localPosition += new Vector3(0,0.04f,0.04f);
+            //if (VRSettings.GetLeftHandedMode())
+            //    VRGlobals.player._markers[1].transform.localPosition += new Vector3(0,0.04f,0.04f);
             Vector3 differenceBetweenHands = VRGlobals.player._markers[1].transform.position - VRGlobals.weaponHolder.transform.position;
             // Get the difference between the weapon holder and the right hand IK marker then multiply by 1 for some reason
             differenceBetweenHands = (transform.FindChild("RightHandPositioner").InverseTransformDirection(differenceBetweenHands) * -1);
@@ -359,8 +361,8 @@ public class GunInteractionController : MonoBehaviour
     {
         // Vertical offset setting is a value from 0-100, horizontal starts at 0, the higher the slider, it goes into negative with the max being
         // -50, or slider max to the left is +50, stupid I know, can't possibly explain why I did it this way.
-        float normalizedVertical = VRSettings.GetRightHandVerticalOffset();
-        float normalizedHorizontal = VRSettings.GetRightHandHorizontalOffset() / 50;
+        float normalizedVertical = VRSettings.GetPrimaryHandVertOffset();
+        float normalizedHorizontal = VRSettings.GetPrimaryHandHorOffset() / 50;
         if (normalizedVertical >= 50)
             // Map values from 50 to 100 to the range 0 to 1
             normalizedVertical = (normalizedVertical - 50) / 50;
@@ -368,23 +370,25 @@ public class GunInteractionController : MonoBehaviour
             // Map values from 0 to 50 to the range -1 to 0
             normalizedVertical = (normalizedVertical - 50) / 50;
 
-        Vector3 baseOffset = new Vector3(0.035f, 0.04f, -0.02f);
+        Vector3 baseOffset = (VRSettings.GetLeftHandedMode() ? new Vector3(0.03f, 0.05f, -0.045f) : new Vector3(0.035f, 0.04f, -0.02f));
+        Vector3 vertPositiveOffsetScale = (VRSettings.GetLeftHandedMode() ? new Vector3(0.09f, 0f, -0.1f) : new Vector3(-0.02f, 0, 0.1f));
+        Vector3 vertNeggativeOffsetScale = (VRSettings.GetLeftHandedMode() ? new Vector3(-0.02f, -0.03f, 0.08f) : new Vector3(0.06f, 0.03f, -0.06f));
         Vector3 adjustedOffset = Vector3.zero;
         float horizontalY = 0;
+        if (VRSettings.GetLeftHandedMode())
+            normalizedHorizontal *= -1;
         if (normalizedHorizontal < 0)
             horizontalY = 0.03f * normalizedHorizontal;
         else if (normalizedVertical > 0)
             horizontalY = 0.06f * normalizedHorizontal;
 
         if (normalizedVertical > 0)
-            adjustedOffset = new Vector3(-0.02f, 0, 0.14f) * normalizedVertical;
+            adjustedOffset = vertPositiveOffsetScale * normalizedVertical;
         else if (normalizedVertical < 0)
-            adjustedOffset = new Vector3(0.09f, 0.03f, -0.06f) * -normalizedVertical;
+            adjustedOffset = vertNeggativeOffsetScale * -normalizedVertical;
 
         adjustedOffset = new Vector3(adjustedOffset.x, adjustedOffset.y + horizontalY, adjustedOffset.z);
-
-        if (VRSettings.GetLeftHandedMode())
-            adjustedOffset = -adjustedOffset;
+;
 
         return baseOffset + adjustedOffset;
     }

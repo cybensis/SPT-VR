@@ -192,7 +192,7 @@ namespace TarkovVR.Source.Player.VRManager
         public abstract void PositionLeftWristUi();
         public void SetNotificationUi()
         {
-            if (UIPatches.notifierUi)
+            if (UIPatches.notifierUi && leftWristUi)
             {
                 UIPatches.notifierUi.transform.SetParent(leftWristUi.transform, false);
                 UIPatches.notifierUi.transform.localPosition = new Vector3(0.12f, 0f, -0.085f);
@@ -231,7 +231,7 @@ namespace TarkovVR.Source.Player.VRManager
 
             interactMenuOpen = (interactionUi && interactionUi.GetChild(3) && interactionUi.GetChild(3).gameObject.active);
             if (VRSettings.GetLeftHandedMode())
-                VRGlobals.blockLeftJoystick = interactMenuOpen;
+                VRGlobals.blockLeftJoystick = (radialMenu && radialMenu.active) || (UIPatches.quickSlotUi && UIPatches.quickSlotUi.gameObject.active) || interactMenuOpen && WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh;
             blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0;
             blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen;
 
@@ -241,17 +241,22 @@ namespace TarkovVR.Source.Player.VRManager
                 if (isAmmoCount)
                 {
                     ammoFireModeUi.rotation = WeaponPatches.currentGunInteractController.magazine.rotation;
-                    ammoFireModeUi.Rotate(0, 90, 90);
                     ammoFireModeUi.position = WeaponPatches.currentGunInteractController.magazine.position;
-                    ammoFireModeUi.position += (ammoFireModeUi.right * 0.03f) + (ammoFireModeUi.forward * -0.0175f);
+                    if (VRSettings.GetLeftHandedMode())
+                        ammoFireModeUi.position += (ammoFireModeUi.right * -0.07f) + (ammoFireModeUi.forward * 0.0025f) + (ammoFireModeUi.up * -0.005f);
+                    else
+                        ammoFireModeUi.position += (ammoFireModeUi.right * 0.03f) + (ammoFireModeUi.forward * -0.0175f);
                 }
                 else {
                     ammoFireModeUi.rotation = WeaponPatches.currentGunInteractController.GetFireModeSwitch().rotation;
-                    ammoFireModeUi.Rotate(0, 90, 90);
                     ammoFireModeUi.position = WeaponPatches.currentGunInteractController.GetFireModeSwitch().position;
-                    ammoFireModeUi.position += (ammoFireModeUi.right* 0.03f) + (ammoFireModeUi.forward* -0.0175f);
+                    if (VRSettings.GetLeftHandedMode())
+                        ammoFireModeUi.position += (ammoFireModeUi.right * 0.01f) + (ammoFireModeUi.forward * 0.0025f) + (ammoFireModeUi.up * -0.005f);
+                    else
+                        ammoFireModeUi.position += (ammoFireModeUi.right * 0.03f) + (ammoFireModeUi.forward * -0.0175f);
 
                 }
+                ammoFireModeUi.Rotate(0, 90, 90);
             }
 
             if (showScopeZoom && UIPatches.opticUi && scopeUiPosition) {
@@ -364,7 +369,8 @@ namespace TarkovVR.Source.Player.VRManager
             radialMenu.transform.localPosition = new Vector3(0.0172f, -0.1143f, -0.03f);
             radialMenu.transform.localEulerAngles = new Vector3(270, 127, 80);
 
- 
+            if (WeaponPatches.currentScope)
+                WeaponPatches.currentScope.parent.localScale = new Vector3(-1, 1, 1);
 
             if (VRGlobals.player) { 
                 VRGlobals.player._elbowBends[0] = VRGlobals.rightArmBendGoal;
@@ -414,6 +420,9 @@ namespace TarkovVR.Source.Player.VRManager
 
             radialMenu.transform.localPosition = new Vector3(-0.0728f, -0.1343f, 0);
             radialMenu.transform.localEulerAngles = new Vector3(290, 252, 80);
+
+            if (WeaponPatches.currentScope)
+                WeaponPatches.currentScope.parent.localScale = new Vector3(1, 1, 1);
 
             if (VRGlobals.player)
             {
@@ -557,7 +566,7 @@ namespace TarkovVR.Source.Player.VRManager
 
                 RightHand.transform.localRotation = fromAction.localRotation;
                 RightHand.transform.Rotate(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
-                Vector3 virtualBasePosition = ((fromAction.localPosition) - fromAction.localRotation * Vector3.forward * controllerLength);
+                Vector3 virtualBasePosition = ((fromAction.localPosition + mainHandPosOffset) - fromAction.localRotation * Vector3.forward * controllerLength);
                 RightHand.transform.localPosition = virtualBasePosition;
 
                 if (VRSettings.SmoothWeaponAim() || VRSettings.GetWeaponWeightOn())
@@ -617,7 +626,7 @@ namespace TarkovVR.Source.Player.VRManager
                 RightHand.transform.Rotate(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
 
                 Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength);
-                RightHand.transform.localPosition = virtualBasePosition;
+                RightHand.transform.localPosition = virtualBasePosition + mainHandPosOffset;
 
                 // Smoothing if weight is on
                 if (VRGlobals.firearmController && VRSettings.GetWeaponWeightOn())

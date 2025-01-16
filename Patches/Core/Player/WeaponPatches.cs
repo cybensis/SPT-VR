@@ -41,6 +41,7 @@ namespace TarkovVR.Patches.Core.Player
         private static Transform oldGrenadeHolder;
         public static Transform previousLeftHandMarker;
         public static GunInteractionController currentGunInteractController;
+        public static Transform currentScope;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
@@ -673,7 +674,6 @@ namespace TarkovVR.Patches.Core.Player
             //VRGlobals.weaponHolder.transform.GetChild(0).localPosition = Vector3.zero;
             VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
         }
-        private static Transform currentScope;
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //NOTE:::::::::::::: Height over bore is the reason why close distances shots aren't hitting, but further distance shots SHOULD be fine - test this
         [HarmonyPostfix]
@@ -702,6 +702,8 @@ namespace TarkovVR.Patches.Core.Player
                 else
                 {
                     currentScope = __instance.transform_0;
+                    if (VRSettings.GetLeftHandedMode())
+                        currentScope.parent.localScale = new Vector3(-1,1,1);
                     VRGlobals.vrOpticController.scopeCamera = __instance.camera_0;
                     float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
                     string scopeName = opticSight.name;

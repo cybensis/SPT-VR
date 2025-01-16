@@ -335,7 +335,7 @@ namespace TarkovVR.Source.Controls
                 //if ((!VRSettings.GetLeftHandedMode() && VRGlobals.blockRightJoystick) || !VRGlobals.vrPlayer.interactMenuOpen)
                 if (!VRGlobals.vrPlayer.interactMenuOpen)
                     return;
-                float primaryHandScrollAxis = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftJoystick.axis.y : SteamVR_Actions._default.RightJoystick.axis.y;
+                float primaryHandScrollAxis = (VRSettings.GetLeftHandedMode() && WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) ? SteamVR_Actions._default.LeftJoystick.axis.y : SteamVR_Actions._default.RightJoystick.axis.y;
 
 
                 if (!isScrolling && primaryHandScrollAxis > 0.5f)
@@ -367,8 +367,8 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.ToggleBreathing;
                     isHoldingBreath = true;
-                    if (VRGlobals.scopeSensitivity * 40f > 0)
-                        VRPlayerManager.smoothingFactor = VRGlobals.scopeSensitivity * 40f;
+                    if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
+                        VRPlayerManager.smoothingFactor = VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10);
                 }
                 else if (isHoldingBreath && (secondaryHandTriggerAmount < 0.5f || !isAiming))
                 {

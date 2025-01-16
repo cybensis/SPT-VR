@@ -1,41 +1,26 @@
+NEW FEATURES
+- Added a left hand mode
+- Fixed some issues with not being able to join a FIKA server as a client and not being able to leave the server
+- Arms no longer perform most of the sprint and jump animation
+- Added an extra slider for scope smoothing
 
-- Look into fixing DLSS for VR
-- Look at how the raycast works for filing cabinets
-- Apply offset rotation setting to left hand as well - Causing issues so im leaving it for now
-- Fix inv bug with holding trigger just at the drag item threshold
-- Fix issue with haviing steam overlay open when loading into raid hiding inv
-- BeforeGBuffer WindowsCull_FPS Camera command buffers rendering window light in one eye
-- Weapon mesh highlighting not working with thermals on
-- Maybe add a little icon/circle for you're looking at an interactablee so you know where the raycast hits
-- Play some raids to see if I can get the squiggly text bug
-- Make under barrel grenade launchers work
-
-- Fixed the login screen
-- Fixed some issues with guns in the hideout
-- Hid the gestures UI that shows up to your right side
-- Haven't figured out a way to fix clouds just yet so I'm hiding them for now
-- Fixed grenades not working and also I believe I've fixed the bug with using multiple of the same grenade in a row bugging out
-
-- Added a mostly functional left handed mode that you can swap between in raid
-- Finally got around to fixing the laser pointer position so it lines up better with your controller
-
+THINGS TO DO IN NEW UPDATES
+- Might need to change the left hand world interaction laser
+- Find a way to disable FSR permanently as it causes errors
+- When swapping from left to right hand/vice versa  in the hideout overview it doesnt swap the laser
 - Fix BTR
 - Looking up on factory messes with lighting
-- Left hand radial menu isn't blocking anymore - Isn't anymore in right handed mode
 - Selecting a weapon then putting it away in the hideout makes it so you cant reequip one in left handed mode
-- both radial menus aren't blocking the respective hand in left handed mode, probably right handed mode too
 - Also need to change the position of the mag ammo count
-- Might need to change the left hand world interaction laser
-- Check the UI interactions
 
-- Prevent arms from doing the jump and sprint animations - TRIED DUNNO HOW - SSprint BodyCommonAnimator hhash -399748991
-
-- Weapon positons for left hand are massively off, look at the GunInteractionController positioning code and see why its different from left handed to right handed mode
-- Changing the left to right handed mode in main menu doesn't swap laser
-- Interaction menu blocking the left joystick is cancer so remove that
+GETTING WEAPON IN LEFT HANDED MODE TO NOT BE INVERTED - Don't think its possible, the animations just don't work
+- Need to look into the visual effects when walking into barbed wire or getting hurt as it completely blacked my screen and caused the highlighting mesh to stick to my screen again, might just be a setting though, if it is make sure it is disabled permanently
 - Try setting the scale of the base of the weapon itself to -1,1,1, it flips the hands around but this just might need some rotating around
 -	Looked into it and if I set the hand bone scale to -1 -1 1 it orients correctly but is slightly off from the gun, to change its position it would involve changing the right hand IK marker but even updating it in update and lateUpdate doesn't work as it seems the aniimator on the weapon supercedes it no matter what so figure something out with that maybe or just checkout eft.player.method22 for the hand setting position 
-- Refactor the blockCrouch and blockJump stuff, shouldn't need them at all, just block joystick when menus are open and in the jump input handler just check for if player is crouched
+	- __instance._markers[0].localPosition += new UnityEngine.Vector3(0.11f,0.03f,0.01f);
+	- __instance._markers[0].localEulerAngles += new UnityEngine.Vector3(-30,80,-40);
+	- __instance._markers[1].localPosition += new UnityEngine.Vector3(-0.065f,0,0);
+- - Refactor the blockCrouch and blockJump stuff, shouldn't need them at all, just block joystick when menus are open and in the jump input handler just check for if player is crouched
 
 
 - The reticle size of the EOTECH/Scope combo changes when you swap between the scope zoom sizes
@@ -81,19 +66,24 @@
 - UI was bugging out when I received at item from a trader and I think pressed B to go back which overlayed the preset menu on top of other menus and the Escape from tarkov logo on the main menu was black, also going presets then clicking the hideout button, maybe menu button too will keep the presets menu there
 - Issue with there being a radius of light around you, then everything beyond that radius has a shadow or is just darker. - Disabling the DistantShadows GBuffer made it go away, so its something to do with near shadows?
 - Add an option for using the right joystick for the left handed radial menu
-- Fix TOD Scattering only rendering in one eye, probably just a matrix change - I THINK THE ISSUE IS WHEN LOOKING IN CERTAIN DIRECTIONS, THE FOG CAN BE DARKER IN ONE EYE
+- Fix TOD Scattering only rendering in one eye, probably just a matrix change
 - Make it so the right hand laser is available all the way up until the round is loading
-- Issue on RESERVE in the undergroup area under one of the big barracks some of the walls aren't loading in on that doorway that leads to thee hallway and the stairs up to thee building
 - Fix the right arm bend goal after pulling pin
 - Make it so some components on our gun dont get lit up by our flashlights
 - Add underhand/low grenade throws by holding left grip when throwing
 - Maybe lower some of the flashbang effects as well
 - Add a motion sickness toggle for a lot of the effects
-- Remove all the different UI components that are visible around the character
 - Maybe try and fix the  motion blur for thermal and the main menu, and the other visual stuff on the menu
-- When loading into reserve or probs other maps too, looking up you can see the underside of the map
 - Add removing backpack by holding left grip on shoulder for 1 second
 - Add removing rig by holding left grip on chest for 1 second?
+- - Look into fixing DLSS for VR
+- Look at how the raycast works for filing cabinets
+- Fix issue with haviing steam overlay open when loading into raid hiding inv
+- BeforeGBuffer WindowsCull_FPS Camera command buffers rendering window light in one eye
+- Weapon mesh highlighting not working with thermals on
+- Maybe add a little icon/circle for you're looking at an interactablee so you know where the raycast hits
+- Play some raids to see if I can get the squiggly text bug
+- Make under barrel grenade launchers work
 
 Known Compatible Mods List
 - Amands Graphics

@@ -1,4 +1,5 @@
-﻿using HarmonyLib;
+﻿using EFT;
+using HarmonyLib;
 using System;
 using UnityEngine;
 
@@ -30,7 +31,30 @@ namespace TarkovVR.Patches.Core.Player
             __instance.RibcageScaleCurrent = 1f;
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player), "method_20")]
+        private static bool ReemoveSprintAnimFromHands(EFT.Player __instance)
+        {
+            if (!__instance.IsYourPlayer)
+                return true;
+            if (__instance.HandsIsEmpty)
+                return false;
 
+            if (__instance.IsSprintEnabled || !__instance.MovementContext.IsGrounded)
+            {
+                __instance._markers[1].transform.parent.parent.localPosition = new Vector3(0, 0, 0);
+                __instance._markers[1].transform.parent.parent.localEulerAngles = new Vector3(0, 0, 0);
+            }
+            return true;
+        }
+
+        private static bool test = true;
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GClass1355), "SetAnimator")]
+        private static void ReemoveSprintAnimFromHands(GClass1355 __instance)
+        {
+            __instance.animator_0.SetLayerWeight(4, 0);
+        }
         //[HarmonyPrefix]
         //[HarmonyPatch(typeof(EFT.Player), "method_22")]
         //private static bool SetHandIKPosition(EFT.Player __instance, float distance2Camera)

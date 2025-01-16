@@ -741,7 +741,11 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(BattleUIScreen<EftBattleUIScreen.GClass3505, EEftScreenType>), "ShowAmmoDetails")]
         private static void SetAmmoCountUi(BattleUIScreen<EftBattleUIScreen.GClass3505, EEftScreenType> __instance)
         {
-            __instance._ammoCountPanel.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
+            if (VRSettings.GetLeftHandedMode())
+                __instance._ammoCountPanel.transform.localScale = new Vector3(-0.25f, 0.25f, 0.25f);
+            else
+                __instance._ammoCountPanel.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
+
             if (VRGlobals.vrPlayer)
             {
                 VRGlobals.vrPlayer.SetAmmoFireModeUi(__instance._ammoCountPanel.transform, true);
@@ -754,7 +758,10 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(AmmoCountPanel), "ShowFireMode")]
         private static void SetFireModeUi(AmmoCountPanel __instance)
         {
-            __instance.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
+            if (VRSettings.GetLeftHandedMode())
+                __instance.transform.localScale = new Vector3(-0.25f, 0.25f, 0.25f);
+            else
+                __instance.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
             if (VRGlobals.vrPlayer)
             {
                 VRGlobals.vrPlayer.SetAmmoFireModeUi(__instance.transform, false);

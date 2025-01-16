@@ -17,6 +17,7 @@ using Valve.VR.InteractionSystem;
 using Valve.VR;
 using Comfort.Common;
 using TarkovVR.Source.Settings;
+using Fika.Core.UI;
 
 
 namespace TarkovVR.ModSupport.FIKA
@@ -41,8 +42,12 @@ namespace TarkovVR.ModSupport.FIKA
             UIPatches.gameUi.transform.parent = null;
             UIPatches.HandleCloseInventory();
 
-            if (UIPatches.notifierUi != null)
+            if (UIPatches.notifierUi != null) { 
                 UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
+                UIPatches.notifierUi.transform.localScale = Vector3.one;
+                UIPatches.notifierUi.transform.localPosition = new Vector3(1920, 0, 0);
+                UIPatches.notifierUi.transform.localRotation = Quaternion.identity;
+            }
 
             if (UIPatches.extractionTimerUi != null)
                 UIPatches.extractionTimerUi.transform.parent = UIPatches.gameUi.transform;
@@ -70,7 +75,7 @@ namespace TarkovVR.ModSupport.FIKA
         {
             if (FikaPlugin.ShowExtractMessage.Value)
             {
-                __instance.extractText = Fika.Core.UI.FikaUIUtils.CreateOverlayText("Press 'B' to extract");
+                __instance.extractText = FikaUIGlobals.CreateOverlayText("Press 'B' to extract");
             }
             return true;
         }
@@ -107,12 +112,29 @@ namespace TarkovVR.ModSupport.FIKA
         }
 
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Fika.Core.Coop.GameMode.CoopGame), "CreateStartButton")]
+        private static void AddLaserBackToRaidLoading(Fika.Core.Coop.GameMode.CoopGame __instance) {
+            VRGlobals.menuVRManager.OnEnable();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Fika.Core.Coop.GameMode.CoopGame), "WaitForOtherPlayersToLoad")]
+        private static void RehideLaser(Fika.Core.Coop.GameMode.CoopGame __instance)
+        {
+            VRGlobals.menuVRManager.enabled = false;
+            VRGlobals.vrPlayer.enabled = true;
+            VRGlobals.ikManager.enabled = true;
+            VRGlobals.menuOpen = false;
+        }
+
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Fika.Core.Coop.Components.CoopHandler), "ProcessQuitting")]
         private static bool OverrideExitRaidButton(Fika.Core.Coop.Components.CoopHandler __instance)
         {
             EQuitState quitState = __instance.GetQuitState();
-            if ( (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonY.stateDown : !SteamVR_Actions._default.ButtonB.stateDown) || quitState == EQuitState.NONE || __instance.requestQuitGame)
+            if ( (VRSettings.GetLeftHandedMode() ? !SteamVR_Actions._default.ButtonY.stateDown : !SteamVR_Actions._default.ButtonB.stateDown) || quitState == EQuitState.None || __instance.requestQuitGame)
             {
                 return false;
             }
@@ -120,26 +142,30 @@ namespace TarkovVR.ModSupport.FIKA
             Plugin.MyLog.LogInfo((object)$"{FikaPlugin.ExtractKey.Value} pressed, attempting to extract!");
             __instance.requestQuitGame = true;
             CoopGame coopGame = (CoopGame)Singleton<IFikaGame>.Instance;
-            if (FikaBackendUtils.IsServer)
+            if (!__instance.isClient)
             {
-                if (Singleton<FikaServer>.Instance.NetServer.ConnectedPeersCount > 0 && quitState != EQuitState.NONE)
+                if (coopGame.ExitStatus == ExitStatus.Transit && __instance.HumanPlayers.Count <= 1)
                 {
-                    NotificationManagerClass.DisplayWarningNotification(GClass2069.Localized("F_Client_HostCannotExtract", (string)null), (ENotificationDurationType)0);
+                    coopGame.Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.ExitStatus, coopGame.ExitLocation);
+                }
+                else if (Singleton<FikaServer>.Instance.NetServer.ConnectedPeersCount > 0 && quitState != EQuitState.None)
+                {
+                    NotificationManagerClass.DisplayWarningNotification(GClass2069.Localized("F_Client_HostCannotExtract"));
                     __instance.requestQuitGame = false;
                 }
-                else if (Singleton<FikaServer>.Instance.NetServer.ConnectedPeersCount == 0 && Singleton<FikaServer>.Instance.timeSinceLastPeerDisconnected > DateTime.Now.AddSeconds(-5.0) && Singleton<FikaServer>.Instance.HasHadPeer)
+                else if (Singleton<FikaServer>.Instance.NetServer.ConnectedPeersCount == 0 && Singleton<FikaServer>.Instance.TimeSinceLastPeerDisconnected > DateTime.Now.AddSeconds(-5.0) && Singleton<FikaServer>.Instance.HasHadPeer)
                 {
-                    NotificationManagerClass.DisplayWarningNotification(GClass2069.Localized("F_Client_Wait5Seconds", (string)null), (ENotificationDurationType)0);
+                    NotificationManagerClass.DisplayWarningNotification(GClass2069.Localized("F_Client_Wait5Seconds"));
                     __instance.requestQuitGame = false;
                 }
                 else
                 {
-                    ((BaseLocalGame<EftGamePlayerOwner>)coopGame).Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.MyExitStatus, ((GClass2747<GClass2746>)(object)((EFT.Player)__instance.MyPlayer).ActiveHealthController).IsAlive ? coopGame.MyExitLocation : null, 0f);
+                    coopGame.Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.ExitStatus, __instance.MyPlayer.ActiveHealthController.IsAlive ? coopGame.ExitLocation : null);
                 }
             }
             else
             {
-                ((BaseLocalGame<EftGamePlayerOwner>)coopGame).Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.MyExitStatus, ((GClass2747<GClass2746>)(object)((EFT.Player)__instance.MyPlayer).ActiveHealthController).IsAlive ? coopGame.MyExitLocation : null, 0f);
+                coopGame.Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.ExitStatus, __instance.MyPlayer.ActiveHealthController.IsAlive ? coopGame.ExitLocation : null);
             }
             return false;
         }

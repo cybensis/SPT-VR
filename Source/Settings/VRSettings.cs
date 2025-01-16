@@ -57,6 +57,7 @@ namespace TarkovVR.Source.Settings
             public bool supportGunHoldToggle { get; set; }
             public bool leftHandedMode { get; set; }
             public int smoothingSensitivity { get; set; }
+            public int scopeSmoothingSensitivity { get; set; }
 
             public bool scopeAimSmoothing { get; set; }
             public bool enableSharpen { get; set; }
@@ -83,6 +84,7 @@ namespace TarkovVR.Source.Settings
                 snapToGun = true;
                 supportGunHoldToggle = false;
                 smoothingSensitivity = 1;
+                scopeSmoothingSensitivity = 5;
                 rightHandVerticalAngle = 50;
                 rightHandHorizontalAngle = 20; 
                 leftHandHorizontalAngle = 50;
@@ -114,6 +116,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle supportGunHoldToggle;
         private static SettingToggle weaponWeightToggle;
         private static SettingSelectSlider aimSmoothingSlider;
+        private static SettingSelectSlider scopeSmoothingSlider;
         private static SettingToggle scopeSmoothingToggle;
         private static SettingSelectSlider rightHandVerticalAngleSlider;
         private static SettingSelectSlider rightHandHorizontalAngleSlider;
@@ -266,13 +269,13 @@ namespace TarkovVR.Source.Settings
             emptySpacingSlider.Slider.gameObject.SetActive(false);
             emptySpacingSlider.Text.gameObject.SetActive(false);
 
-            //leftHandedMode = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            //leftHandedMode.BindTo(settingsUi._soundSettingsScreen.gclass1037_0.MusicOnRaidEnd);
-            //leftHandedMode.Toggle.action_0 = SetLeftHandedMode;
-            //leftHandedMode.Text.localizationKey = "Left Handed Mode ";
-            //leftHandedMode.Toggle.UpdateValue(settings.leftHandedMode);
+            leftHandedMode = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            leftHandedMode.BindTo(settingsUi._soundSettingsScreen.gclass1037_0.MusicOnRaidEnd);
+            leftHandedMode.Toggle.action_0 = SetLeftHandedMode;
+            leftHandedMode.Text.localizationKey = "Left Handed Mode ";
+            leftHandedMode.Toggle.UpdateValue(settings.leftHandedMode);
 
-                        snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             snapToGunToggle.BindTo(settingsUi._soundSettingsScreen.gclass1037_0.MusicOnRaidEnd);
             snapToGunToggle.Toggle.action_0 = SetSnapToGun;
             snapToGunToggle.Text.localizationKey = "Turn On Left Hand Snap To Weapon ";
@@ -307,6 +310,12 @@ namespace TarkovVR.Source.Settings
             aimSmoothingSlider.Slider.action_0 = SetSmoothingSensitivity;
             aimSmoothingSlider.Text.localizationKey = "Aim Smoothing Sensitivity:";
             aimSmoothingSlider.Slider.UpdateValue(11 - (settings.smoothingSensitivity / 2));
+
+            scopeSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            scopeSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass1037_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            scopeSmoothingSlider.Slider.action_0 = SetScopeSensitivity;
+            scopeSmoothingSlider.Text.localizationKey = "Scope Smoothing Sensitivity:";
+            scopeSmoothingSlider.Slider.UpdateValue(settings.scopeSmoothingSensitivity);
 
             rightHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             rightHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass1037_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
@@ -436,6 +445,15 @@ namespace TarkovVR.Source.Settings
         private static void SetSmoothingSensitivity(int sensitivity)
         {
             settings.smoothingSensitivity = (11 - sensitivity) * 2;
+        }
+
+        public static int GetScopeSensitivity()
+        {
+            return settings.scopeSmoothingSensitivity;
+        }
+        private static void SetScopeSensitivity(int sensitivity)
+        {
+            settings.scopeSmoothingSensitivity = sensitivity;
         }
         private static void ToggleSmoothingSensitivity(bool turnOn)
         {
