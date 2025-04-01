@@ -169,14 +169,6 @@ A huge thank you to these primary testers who helped shape the mod:
 - **MaTSix**: Offered a lot of helpful ideas which greatly decreased the jankiness of the mod
 - **LiftIsTheWhey**: Thanks for all the videos you've made, the controls guide and helping with testing so checkout [his channel](https://www.youtube.com/@LiftIsTheWhey)
 
----
-
-## **Support the Mod**
-
-Donations are appreciated but not required. All content is free to ensure everyone has the same access, those who still wish to donate can do so using the link below
-
-<a href="https://buymeacoffee.com/cybensis4" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
-
 
 ---
 
