@@ -229,6 +229,7 @@ namespace TarkovVR.Patches.UI
         public static void HandleCloseInventory()
         {
             HideUiScreens();
+            
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = true;
@@ -236,6 +237,7 @@ namespace TarkovVR.Patches.UI
             if (WeaponPatches.currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
                 foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = true;
+            
             //int bitmask = 1 << playerLayer; // 256
             //Camera.main.cullingMask |= bitmask; // -524321 & -257
             VRGlobals.menuOpen = false;
