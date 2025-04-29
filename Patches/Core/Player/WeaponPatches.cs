@@ -30,6 +30,11 @@ using static UnityEngine.ParticleSystem.PlaybackState;
 using UnityEngine.UIElements;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Settings;
+using UnityEngine.Rendering.PostProcessing;
+using static TarkovVR.Source.Controls.InputHandlers;
+using UnityEngine.Rendering;
+using TarkovVR;
+using System.Collections;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -241,6 +246,12 @@ namespace TarkovVR.Patches.Core.Player
             if (!__instance._player.IsYourPlayer)
                 return;
 
+            //If menu is open turn gun renderer off
+            if (VRGlobals.menuOpen)
+                if (currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = false;
+
             // Check if a weapon is currently equipped, if that weapon isn the same as the one trying to be equipped, and that the weaponHolder actually has something there
             if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
             {
@@ -260,9 +271,13 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IEventsConsumerOnWeapIn")]
         private static void FinishMovingWeaponToVrHands(EFT.Player.FirearmController __instance)
         {
-
             if (!__instance._player.IsYourPlayer)
                 return;
+
+            if (VRGlobals.menuOpen)
+                if (currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = false;
 
             if (grenadeEquipped)
                 grenadeEquipped = false;
@@ -291,6 +306,11 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance._player.IsYourPlayer)
                 return;
+
+            if (VRGlobals.menuOpen)
+                if (currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = false;
 
             if (grenadeEquipped)
                 grenadeEquipped = false;
@@ -366,6 +386,10 @@ namespace TarkovVR.Patches.Core.Player
             if (!__instance._player.IsYourPlayer)
                 return;
 
+            if (VRGlobals.menuOpen)
+                if (currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = false;
 
             if (__instance.weaponPrefab_0)
             {
@@ -387,67 +411,97 @@ namespace TarkovVR.Patches.Core.Player
 
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.CameraControl.OpticRetrice), "UpdateTransform")]
+        public static bool UpdateTransform(EFT.CameraControl.OpticRetrice __instance, OpticSight opticSight)
+        {
+            try
+            {
+
+                ScopeReticle reticle = opticSight.ScopeData.Reticle;
+                __instance._renderer.transform.localPosition = reticle.Position;
+                __instance._renderer.transform.localEulerAngles = reticle.Rotation;
+                __instance.float_1 = reticle.Scale * 0.1f;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Plugin.MyLog.LogError($"[UpdateTransform] Failed: {ex.Message}\n{ex.StackTrace}");
+                return true;
+            }
+        }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_46")]
-        private static void AddNewTacDeviceToInteractionController(EFT.Player.FirearmController __instance)
+        public static void AddNewTacDeviceToInteractionController(EFT.Player.FirearmController __instance)
         {
             if (!__instance._player.IsYourPlayer || __instance.weaponManagerClass == null)
                 return;
 
+            if (VRGlobals.menuOpen)
+                if (currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = false;
 
-            if (__instance.weaponManagerClass.tacticalComboVisualController_0 != null) { 
-                for (int i = 0; i < __instance.weaponManagerClass.tacticalComboVisualController_0.Length; i++)
-                {
-                    if (!currentGunInteractController.TacDeviceAlreadyRegistered(__instance.weaponManagerClass.tacticalComboVisualController_0[i].transform))
-                        currentGunInteractController.AddTacticalDevice(__instance.weaponManagerClass.tacticalComboVisualController_0[i].transform, __instance.FirearmsAnimator);
-                }
-            }
-            if (__instance.weaponManagerClass.sightModVisualControllers_0 == null)
-                return;
+            var weaponManager = __instance.weaponManagerClass;
 
+            // Handle tactical devices
+            if (weaponManager.tacticalComboVisualController_0 != null)
+                foreach (var tacDevice in weaponManager.tacticalComboVisualController_0)
+                    if (!currentGunInteractController.TacDeviceAlreadyRegistered(tacDevice.transform))
+                        currentGunInteractController.AddTacticalDevice(tacDevice.transform, __instance.FirearmsAnimator);
 
-            for (int i = 0; i < __instance.weaponManagerClass.sightModVisualControllers_0.Length; i++)
+            // Handle scopes
+            var sightControllers = weaponManager.sightModVisualControllers_0;
+            if (sightControllers == null) return;
+
+            // Find valid scope
+            foreach (var sightController in sightControllers)
             {
+                if (sightController.scopePrefabCache_0 == null) continue;
 
-                //if (__instance.weaponManagerClass.sightModVisualControllers_0[i].name == "scope_all_eotech_hhs_1_tan(Clone)") { 
+                // Find scope camera
+                VRGlobals.scope = sightController.transform.FindChild("mod_aim_camera") ??
+                                 sightController.transform.FindChild("mod_aim_camera_001");
 
-                //}
-                if (__instance.weaponManagerClass.sightModVisualControllers_0[i].scopePrefabCache_0 == null)
-                    continue;
-                VRGlobals.scope = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.FindChild("mod_aim_camera");
-                // Some scopes have more than two modes or something which changes the name to 001, 002 etc,
-                if (!VRGlobals.scope)
-                    VRGlobals.scope = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.FindChild("mod_aim_camera_001");
+                if (VRGlobals.scope == null) continue;
 
-                if (VRGlobals.scope != null) {
-                    SightModVisualControllers visualController = __instance.weaponManagerClass.sightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
-                    if (!visualController)
-                        visualController = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
-                    
-                    if (visualController && VRGlobals.vrOpticController)
-                    {
-                        BoxCollider scopeCollider = visualController.GetComponent<BoxCollider>();
-                     
-                        if (scopeCollider)
-                        {
-                            scopeCollider.gameObject.layer = 6;
-                            scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
-                            scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
-                            scopeCollider.enabled = true;
-                        }
-                    }
-                    break;
+                // Get visual controller
+                var visualController = sightController.GetComponent<SightModVisualControllers>() ??
+                                     sightController.transform.parent.GetComponent<SightModVisualControllers>();
+
+                if (visualController == null || !VRGlobals.vrOpticController) continue;
+
+                // Setup collider
+                if (visualController.TryGetComponent<BoxCollider>(out var collider))
+                {
+                    collider.gameObject.layer = 6;
+                    collider.size = new Vector3(0.09f, 0.04f, 0.02f);
+                    collider.center = new Vector3(-0.04f, 0, -0.075f);
+                    collider.enabled = true;
                 }
+
+                return;
             }
 
-
-
-            //Plugin.MyLog.LogWarning(__instance.transform.root+"\n\n\n");
-            //Plugin.MyLog.LogWarning(new StackTrace());
-
+            VRGlobals.scope = null;
         }
 
+        //Damn nulls... This creates a dummy invisible Material when HighLightMesh is activated. This catches a null that happens with the weapon highlight when entering a raid
+        //MoveWeaponToIKHands adds the HighLightMesh monobehavior component to the camera if it's not detected. This causes the script to run before a material is attached to it
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(HighLightMesh), "Awake")]
+        private static void HandleHighLightMeshAwake(HighLightMesh __instance)
+        {
+
+            if (__instance.Mat == null)
+            {
+                var shader = Shader.Find("Hidden/HighLightMesh");
+                __instance.Mat = new Material(shader);
+                __instance.Mat.SetColor(HighLightMesh.int_2, Color.clear);
+                __instance.Mat.SetTexture(HighLightMesh.int_4, __instance.renderTexture_0);
+            }
+        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public static List<Transform> weaponInteractables;
@@ -460,6 +514,10 @@ namespace TarkovVR.Patches.Core.Player
             if (!__instance._player.IsYourPlayer)
                 return;
 
+            if (VRGlobals.menuOpen)
+                if (currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = false;
 
             if (grenadeEquipped)
                 grenadeEquipped = false;
@@ -525,6 +583,7 @@ namespace TarkovVR.Patches.Core.Player
                     else
                     {
                         HighLightMesh highLightMesh = Camera.main.gameObject.AddComponent<HighLightMesh>();
+                        highLightMesh.enabled = false;
                         highLightMesh.Mat = new Material(Shader.Find("Hidden/HighLightMesh"));
                         highLightMesh.LineWidth = 2;
                         highLightMesh.Always = true;
@@ -644,7 +703,8 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.weaponHolder = __instance.WeaponRoot.parent.FindChild("RightHandPositioner").gameObject;
                 __instance.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform, false);
             }
-            else if (__instance.WeaponRoot.transform.parent && __instance.WeaponRoot.transform.parent.parent.name == "RightHandPositioner") {
+            else if (__instance.WeaponRoot.transform.parent && __instance.WeaponRoot.transform.parent.parent.name == "RightHandPositioner")
+            {
                 //VRGlobals.weaponHolder = __instance.WeaponRoot.transform.parent.gameObject;
                 __instance.WeaponRoot.transform.parent = __instance.WeaponRoot.transform.parent.parent.parent;
                 MoveWeaponToIKHands(__instance);
@@ -656,7 +716,7 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
                 //VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
             }
-            __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f); 
+            __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
             // Don't use canted sights or rear sights
             if (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0 || __instance._player.ProceduralWeaponAnimation.CurrentScope.Bone.parent.name.Contains("rear"))
             {
@@ -674,17 +734,48 @@ namespace TarkovVR.Patches.Core.Player
             //VRGlobals.weaponHolder.transform.GetChild(0).localPosition = Vector3.zero;
             VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
         }
+
+        //This might clean up scopes a bit but it was mainly done to fix an issue with how BSG handles variable scopes
+        //Now we tell LateUpdate to disable effects (I think?) but mainly to just update scope and nothing more
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "LateUpdate")]
+        private static bool FixAdjustableOptic(EFT.CameraControl.OpticComponentUpdater __instance)
+        {
+            if (__instance.MainCamera == null || __instance.transform_0 == null)
+            {
+                return false;
+            }
+            __instance.transform.position = __instance.transform_0.position;
+            __instance.transform.rotation = __instance.transform_0.rotation;
+            //__instance.camera_0.useOcclusionCulling = __instance.MainCamera.useOcclusionCulling;
+            if (__instance.undithering_1 != null && __instance.undithering_0 != null)
+            {
+                __instance.undithering_1.enabled = __instance.undithering_0.enabled;
+                __instance.undithering_1.shader = __instance.undithering_0.shader;
+            }
+            if (__instance.volumetricLightRenderer_1 != null && __instance.volumetricLightRenderer_0 != null)
+            {
+                __instance.volumetricLightRenderer_1.enabled = __instance.volumetricLightRenderer_0.enabled;
+                __instance.volumetricLightRenderer_1.DefaultSpotCookie = __instance.volumetricLightRenderer_0.DefaultSpotCookie;
+                __instance.volumetricLightRenderer_1.Resolution = __instance.volumetricLightRenderer_0.Resolution;
+            }
+            if (__instance.opticSight_0.CameraData.IsAdjustableOptic)
+            {
+                __instance.scopeZoomHandler_0.UpdateScope();
+            }
+            return false;
+        }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //NOTE:::::::::::::: Height over bore is the reason why close distances shots aren't hitting, but further distance shots SHOULD be fine - test this
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
         private static void SetOpticCamFoV(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)
         {
-
             SightModVisualControllers visualController = opticSight.GetComponent<SightModVisualControllers>();
+
             if (!visualController)
                 visualController = opticSight.transform.parent.GetComponent<SightModVisualControllers>();
-            float fov = 27;
+            float fov = 27f;
             if (rangeFinder) { 
                 fov = 3.2f;
                 opticSight.transform.FindChild("linza").gameObject.SetActive(true);
@@ -705,13 +796,16 @@ namespace TarkovVR.Patches.Core.Player
                     if (VRSettings.GetLeftHandedMode())
                         currentScope.parent.localScale = new Vector3(-1,1,1);
                     VRGlobals.vrOpticController.scopeCamera = __instance.camera_0;
+                    
                     float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
                     string scopeName = opticSight.name;
                     // For scopes that have multiple levels of zoom of different zoom effects (e.g. changing sight lines from black to red), opticSight will be stored in 
                     // mode_000, mode_001, etc, and that will be stored in the scope game object, so we need to get parent name for scopes with multiple settings
                     BoxCollider scopeCollider;
-                    if (scopeName.Contains("mode_"))
+                    if (scopeName.Contains("mode"))
                     {
+                        //if (opticSight.CameraData.IsAdjustableOptic)
+                            //opticSight.transform.parent.GetComponent<Camera>().fieldOfView = ((ScopeCameraData)opticSight.CameraData).FieldOfView;
                         if (__instance.transform_0)
                             VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.parent.FindChild("backLens");
                         scopeName = opticSight.transform.parent.name;
@@ -740,7 +834,7 @@ namespace TarkovVR.Patches.Core.Player
                     VRGlobals.vrOpticController.currentFov = fov;
                 }
 
-                if (opticSight.name.Contains("mode_")) { 
+                if (opticSight.name.Contains("mode")) { 
                     if (opticSight.transform.parent.GetComponent<BoxCollider>())
                         opticSight.transform.parent.GetComponent<BoxCollider>().enabled = true;
                     else if (opticSight.transform.parent.parent.GetComponent<BoxCollider>())
@@ -753,7 +847,8 @@ namespace TarkovVR.Patches.Core.Player
 
 
             }
-            __instance.camera_0.fieldOfView = fov;
+
+            //__instance.camera_0.fieldOfView = fov;
 
 
             // The SightModeVisualControllers on the scopes contains sightComponent_0 which has a function GetCurrentOpticZoom which returns the zoom
@@ -848,10 +943,15 @@ namespace TarkovVR.Patches.Core.Player
             }
 
             //// Define the prefix method
-            static void Postfix(EFT.Player player, Item item, EBodyPart bodyPart, float amount, int animationVariant, MedsController __result)
+            static void Postfix(EFT.Player player, Item item, GStruct353<EBodyPart> bodyParts, float amount, int animationVariant, MedsController __result)
             {
                 if (!player.IsYourPlayer)
                     return;
+
+                if (VRGlobals.menuOpen)
+                    if (__result._controllerObject?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                            renderer.enabled = false;
 
                 VRGlobals.emptyHands = __result._controllerObject.transform;
                 if (VRSettings.GetLeftHandedMode())
@@ -890,6 +990,10 @@ namespace TarkovVR.Patches.Core.Player
                 if (!player.IsYourPlayer)
                     return;
 
+                if (VRGlobals.menuOpen)
+                    if (currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                            renderer.enabled = false;
 
                 grenadeEquipped = true;
                 InitVRPatches.rightPointerFinger.enabled = false;

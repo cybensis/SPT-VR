@@ -14,6 +14,15 @@ using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
 using static TarkovVR.Source.Controls.InputHandlers;
+using UnityStandardAssets.ImageEffects;
+using UnityEngine.Rendering.PostProcessing;
+using System.Linq;
+using System.Runtime.Remoting.Contexts;
+using UnityEngine.XR;
+using UnityEngine.Rendering;
+using System.Collections;
+using static Fika.Core.Coop.Components.CoopHandler;
+using TarkovVR.Patches.Visuals;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -30,6 +39,7 @@ namespace TarkovVR.Patches.Core.VR
         private static void AddVR(CharacterControllerSpawner __instance)
         {
             EFT.Player player = __instance.transform.root.GetComponent<EFT.Player>();
+
             if (__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)")
                 return;
 
@@ -92,7 +102,7 @@ namespace TarkovVR.Patches.Core.VR
                     UIPatches.quickSlotUi.gameObject.active = false;
                     //VRGlobals.vrPlayer.radialMenu.active = false;
                     // The camera on interchange doesn't stay turned off like other maps so try and disable it again here.
-                    Camera.main.useOcclusionCulling = false;
+                    //Camera.main.useOcclusionCulling = false;
                 }
             }
 
@@ -262,6 +272,18 @@ namespace TarkovVR.Patches.Core.VR
 
 
         }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PostProcessLayer), "SetupContext")]
+        private static void ForcePPStereo(PostProcessLayer __instance, PostProcessRenderContext context)
+        {
+            if (context != null)
+            {
+                context.stereoActive = true;
+                context.numberOfEyes = 2;
+                context.stereoRenderingMode = PostProcessRenderContext.StereoRenderingMode.SinglePassInstanced;
+            }
+        }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Don't know why I chose this method for setting the main cam but it works so whatever
         [HarmonyPostfix]
@@ -271,6 +293,7 @@ namespace TarkovVR.Patches.Core.VR
             Camera mainCam = __instance.GetComponent<Camera>();
             if (mainCam.name == "FPS Camera")
             {
+                VRGlobals.VRCam = mainCam;
                 GameObject uiCamHolder = new GameObject("uiCam");
                 uiCamHolder.transform.parent = __instance.transform;
                 uiCamHolder.transform.localRotation = Quaternion.identity;
@@ -284,12 +307,15 @@ namespace TarkovVR.Patches.Core.VR
                 //mainCam.cullingMask = -1;
                 mainCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
                 mainCam.farClipPlane = 5000f;
+                mainCam.stereoTargetEye = StereoTargetEyeMask.Both;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
                 mainCam.useOcclusionCulling = false;
-                if (VRGlobals.vrPlayer) { 
+                if (VRGlobals.vrPlayer)
+                {
                     if (VRGlobals.vrPlayer.radialMenu)
-                            VRGlobals.vrPlayer.radialMenu.active = false;
-                    if (VRGlobals.vrPlayer is RaidVRPlayerManager) {
+                        VRGlobals.vrPlayer.radialMenu.active = false;
+                    if (VRGlobals.vrPlayer is RaidVRPlayerManager)
+                    {
                         VRGlobals.menuVRManager.OnDisable();
                     }
                 }
@@ -298,7 +324,6 @@ namespace TarkovVR.Patches.Core.VR
             }
 
         }
-
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerSpring), "Start")]

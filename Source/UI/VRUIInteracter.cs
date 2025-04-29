@@ -28,6 +28,8 @@ namespace TarkovVR.Source.UI
         public Vector3 pressPosition;
         private GameObject pressedObject;
 
+        private float lastClickTime = 0f;
+        private int clickCount = 0;
 
         public bool rotated = false;
         public float rightJoyTimeHeld = 0f;
@@ -119,33 +121,41 @@ namespace TarkovVR.Source.UI
                 }
             }
         }
-
         private void handleButtonClick(Vector2 hitPoint)
         {
-            bool isPointerClick = true;
-            SteamVR_Action_Boolean actionButtton = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.ButtonX : SteamVR_Actions._default.ButtonA;
-            if (hitObject.transform.parent && hitObject.transform.parent && hitObject.name == "Toggle" && hitObject.transform.parent.parent.GetComponent<CategoryView>())
-                hitObject = hitObject.transform.parent.parent.GetComponent<CategoryView>()._toggle.gameObject;
-            else if (hitObject.transform.parent && hitObject.transform.parent.GetComponent<SubcategoryView>())
-                hitObject = hitObject.transform.parent.gameObject;
-            else if (hitObject.transform.parent && hitObject.name == "Main" && hitObject.transform.parent.GetComponent<CategoryView>())
-                hitObject = hitObject.transform.parent.gameObject;
-            else if (hitObject.GetComponent<EmptyItemView>())
-                isPointerClick = false;
+            SteamVR_Action_Boolean actionButton = VRSettings.GetLeftHandedMode()
+                ? SteamVR_Actions._default.ButtonX
+                : SteamVR_Actions._default.ButtonA;
 
+            bool isPointerClick = !hitObject.GetComponent<EmptyItemView>();
 
-            if (actionButtton.stateDown)
+            // Normalize object targeting for specific UI cases
+            if (hitObject.transform.parent)
+            {
+                if (hitObject.name == "Toggle" && hitObject.transform.parent.parent.TryGetComponent(out CategoryView toggleCategory))
+                    hitObject = toggleCategory._toggle.gameObject;
+                else if (hitObject.transform.parent.TryGetComponent(out SubcategoryView _))
+                    hitObject = hitObject.transform.parent.gameObject;
+                else if (hitObject.name == "Main" && hitObject.transform.parent.TryGetComponent(out CategoryView _))
+                    hitObject = hitObject.transform.parent.gameObject;
+            }
+
+            // Track button down
+            if (actionButton.stateDown)
                 pressedObject = hitObject;
 
-            if (actionButtton.state)
+            // Handle right-click (hold)
+            if (actionButton.state)
             {
                 timeAButtonHeld += Time.deltaTime;
-                if (!rightClickTriggered && timeAButtonHeld > 0.25)
+
+                if (!rightClickTriggered && timeAButtonHeld > 0.25f)
                 {
                     rightClickTriggered = true;
                     eventData.pressPosition = hitPoint;
                     pressPosition = eventData.worldPosition;
                     eventData.button = PointerEventData.InputButton.Right;
+                    eventData.clickCount = 1;
                     ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
                 }
             }
@@ -154,10 +164,19 @@ namespace TarkovVR.Source.UI
                 timeAButtonHeld = 0f;
                 rightClickTriggered = false;
             }
-            if (dragObject == null && !rightClickTriggered && actionButtton.stateUp && pressedObject == hitObject)
+
+            // Handle click release (left-click, with double-click logic)
+            if (dragObject == null && !rightClickTriggered && actionButton.stateUp && pressedObject == hitObject)
             {
+                eventData.button = PointerEventData.InputButton.Left;
+
                 if (isPointerClick)
+                {
+                    clickCount = (Time.time - lastClickTime <= 0.25f) ? clickCount + 1 : 1;
+                    lastClickTime = Time.time;
+                    eventData.clickCount = clickCount;
                     ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
+                }
                 else
                     ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerDownHandler);
             }

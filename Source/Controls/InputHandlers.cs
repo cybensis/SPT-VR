@@ -9,7 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TarkovVR.ModSupport;
-using TarkovVR.ModSupport.EFTApi;
+//using TarkovVR.ModSupport.EFTApi;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Player.VRManager;
@@ -34,26 +34,34 @@ namespace TarkovVR.Source.Controls
             private static float TIME_HELD_FOR_VAULT = 0.3f;
             public void UpdateCommand(ref ECommand command)
             {
-                if (!VRGlobals.vrPlayer.blockJump && SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y > 0.925f)
+                // Safety checks
+                if (VRGlobals.vrPlayer == null || SteamVR_Actions._default?.RightJoystick == null)
+                    return;
+
+                float yAxis = SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
+
+                if (!VRGlobals.vrPlayer.blockJump && yAxis > 0.925f)
                 {
                     timeHeld += Time.deltaTime;
-                    if (timeHeld >= TIME_HELD_FOR_VAULT) { 
+                    if (timeHeld >= TIME_HELD_FOR_VAULT)
+                    {
                         command = ECommand.Vaulting;
                         isVaulting = true;
                     }
-                    //command = ECommand.Jump;
                 }
-                else {
+                else
+                {
                     if (VRGlobals.player && VRGlobals.player.IsVaultingPressed)
                     {
                         isVaulting = false;
                         command = ECommand.VaultingEnd;
                     }
-                    else if (timeHeld > 0.05 && timeHeld < TIME_HELD_FOR_VAULT)
+                    else if (timeHeld > 0.05f && timeHeld < TIME_HELD_FOR_VAULT)
+                    {
                         command = ECommand.Jump;
+                    }
                     timeHeld = 0f;
                 }
-
             }
         }
 
@@ -61,34 +69,47 @@ namespace TarkovVR.Source.Controls
         public class CrouchHandler : IInputHandler
         {
             private static float MAX_CROUCH_HEIGHT_DIFF = 0.4f;
+
             public void UpdateCommand(ref ECommand command)
             {
-                if (VRGlobals.vrPlayer.blockCrouch)
+                // Exit early if required objects are not initialized or crouching is blocked
+                if (VRGlobals.vrPlayer == null || VRGlobals.player == null || VRGlobals.vrPlayer.blockCrouch)
                     return;
 
-                if (SteamVR_Actions._default.RightJoystick.axis.y < -0.8)
+                // Ensure movement context and character controller exist
+                var movementContext = VRGlobals.player.MovementContext;
+                if (movementContext == null || movementContext.CharacterController == null)
+                    return;
+
+                float joystickY = SteamVR_Actions._default.RightJoystick.axis.y;
+
+                // When the right joystick is pulled down, lower player pose (crouch)
+                if (joystickY < -0.8f)
                 {
                     float poseDelta = -1.5f * Time.deltaTime;
                     VRGlobals.player.ChangePose(poseDelta);
                     //float poseLevel = VRGlobals.player.MovementContext.PoseLevel + poseDelta;
                     //float poseLevelResult = Mathf.Clamp(poseLevel, 0f, VRGlobals.player.Physical.MaxPoseLevel);
                     //float characterControllerHeight = Mathf.Lerp(1.2f, 1.6f, poseLevelResult);
-                    VRGlobals.vrPlayer.crouchHeightDiff = 1.6f - VRGlobals.player.MovementContext.CharacterController.height;
+                    VRGlobals.vrPlayer.crouchHeightDiff = 1.6f - movementContext.CharacterController.height;
                 }
 
-                if (VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && SteamVR_Actions._default.RightJoystick.axis.y > 0.8)
+                // When the joystick is pushed up and player has crouched, raise pose (stand)
+                if (VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && joystickY > 0.8f)
                 {
                     float poseDelta = 0.05f;
                     VRGlobals.player.ChangePose(poseDelta);
                     //float poseLevel = VRGlobals.player.MovementContext.PoseLevel + poseDelta;
                     //float poseLevelResult = Mathf.Clamp(poseLevel, 0f, VRGlobals.player.Physical.MaxPoseLevel);
                     //float characterControllerHeight = Mathf.Lerp(1.2f, 1.6f, poseLevelResult);
-                    VRGlobals.vrPlayer.crouchHeightDiff = Mathf.Clamp(1.61f - VRGlobals.player.MovementContext.CharacterController.height, 0.01f, 1);
+                    VRGlobals.vrPlayer.crouchHeightDiff = Mathf.Clamp(1.61f - movementContext.CharacterController.height, 0.01f, 1f);
                     //Plugin.MyLog.LogWarning(VRGlobals.player.MovementContext.PoseLevel + "   |  " + poseLevel + "   |  " + poseLevelResult + "  |   " + characterControllerHeight + "   |   " + VRGlobals.vrPlayer.crouchHeightDiff);
                 }
+
                 // Really shit way to do this, but this prevents a jump happening immediately after changing the crouch height diff by 
                 // keeping it at 0.01 until the right joystick Y axis goes down
-                else if (VRGlobals.vrPlayer.crouchHeightDiff ==  0.01f && SteamVR_Actions._default.RightJoystick.axis.y < 0.5) { 
+                else if (VRGlobals.vrPlayer.crouchHeightDiff == 0.01f && joystickY < 0.5f)
+                {
                     VRGlobals.vrPlayer.crouchHeightDiff = 0f;
                 }
             }
@@ -327,16 +348,28 @@ namespace TarkovVR.Source.Controls
         {
             private bool isScrolling = false;
             private bool scrolledLastFrame = false;
+            // When the weapon/item/door/etc interaction menu is open, in right handed mode the player can still rotate left or right since
+            // the menu is just up and down, but in left handed mode it makes less sense to be able to only walk left or right so we only
+            // care if the right joystick has been disabled.
+            //if ((!VRSettings.GetLeftHandedMode() && VRGlobals.blockRightJoystick) || !VRGlobals.vrPlayer.interactMenuOpen)
             public void UpdateCommand(ref ECommand command)
             {
-                // When the weapon/item/door/etc interaction menu is open, in right handed mode the player can still rotate left or right since
-                // the menu is just up and down, but in left handed mode it makes less sense to be able to only walk left or right so we only
-                // care if the right joystick has been disabled.
-                //if ((!VRSettings.GetLeftHandedMode() && VRGlobals.blockRightJoystick) || !VRGlobals.vrPlayer.interactMenuOpen)
-                if (!VRGlobals.vrPlayer.interactMenuOpen)
+                // Early-out if vrPlayer is null
+                if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.interactMenuOpen)
                     return;
-                float primaryHandScrollAxis = (VRSettings.GetLeftHandedMode() && WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) ? SteamVR_Actions._default.LeftJoystick.axis.y : SteamVR_Actions._default.RightJoystick.axis.y;
 
+                float primaryHandScrollAxis = 0f;
+
+                if (VRSettings.GetLeftHandedMode() &&
+                    WeaponPatches.currentGunInteractController != null &&
+                    WeaponPatches.currentGunInteractController.hightlightingMesh)
+                {
+                    primaryHandScrollAxis = SteamVR_Actions._default.LeftJoystick.axis.y;
+                }
+                else
+                {
+                    primaryHandScrollAxis = SteamVR_Actions._default.RightJoystick.axis.y;
+                }
 
                 if (!isScrolling && primaryHandScrollAxis > 0.5f)
                 {
@@ -349,8 +382,10 @@ namespace TarkovVR.Source.Controls
                     isScrolling = true;
                 }
                 else if (primaryHandScrollAxis > -0.5f && primaryHandScrollAxis < 0.5f)
+                {
                     isScrolling = false;
                 }
+            }
 
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -453,16 +488,16 @@ namespace TarkovVR.Source.Controls
         public class ScopeZoomHandler : IInputHandler
         {
             private bool swapZooms = false;
+
             public void UpdateCommand(ref ECommand command)
             {
                 if (!VRGlobals.firearmController)
                     return;
-                if (VRGlobals.firearmController.IsAiming && swapZooms) { 
+                if (VRGlobals.firearmController.IsAiming && swapZooms) {
                     command = ECommand.ChangeScopeMagnification;
                     swapZooms = false;
                 }
             }
-
             public void TriggerSwapZooms()
             {
                 swapZooms = true;
@@ -490,14 +525,23 @@ namespace TarkovVR.Source.Controls
         public class FireModeHandler : IInputHandler
         {
             private bool changeFireMode = false;
+
             public void UpdateCommand(ref ECommand command)
             {
-                bool changeFireModeButtonClick = (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any));
+                bool changeFireModeButtonClick = VRSettings.GetLeftHandedMode()
+                    ? SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any)
+                    : SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
 
-                if (changeFireMode || (VRGlobals.vrPlayer.isSupporting && !VRGlobals.vrPlayer.interactMenuOpen && changeFireModeButtonClick))
+                if (changeFireMode)
                 {
                     command = ECommand.ChangeWeaponMode;
                     changeFireMode = false;
+                    return;
+                }
+
+                if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting && !VRGlobals.vrPlayer.interactMenuOpen && changeFireModeButtonClick)
+                {
+                    command = ECommand.ChangeWeaponMode;
                 }
             }
             public void TriggerChangeFireMode()
@@ -669,7 +713,7 @@ namespace TarkovVR.Source.Controls
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        public class EFTConfigHandler : IInputHandler
+        /*public class EFTConfigHandler : IInputHandler
         {
             public void UpdateCommand(ref ECommand command)
             {
@@ -678,7 +722,7 @@ namespace TarkovVR.Source.Controls
                 if (SteamVR_Actions._default.Start.GetStateDown(SteamVR_Input_Sources.Any))
                     EFTApiSupport.OpenCloseConfigUI();
             }
-        }
+        }*/
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class HeadMountedDeviceHandler : IInputHandler
         {

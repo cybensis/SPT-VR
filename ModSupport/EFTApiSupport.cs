@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
-using EFTConfiguration.Views;
+using KmyTarkovConfiguration.Views;
 using Valve.VR;
 using UnityEngine.EventSystems;
 using UnityEngine.Rendering.PostProcessing;

@@ -104,6 +104,29 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
+        //Used for the backpack - This completely bypasses the pickup animation and puts the loot directly in your bag
+        private void DirectItemTransfer(EFT.Player owner, GInterface398 possibleAction, Item rootItem, IPlayer lootItemLastOwner)
+        {
+            // Handle magazine check if needed
+            MagazineItemClass magazineItemClass = rootItem as MagazineItemClass;
+            if (magazineItemClass != null && possibleAction is GClass3203 && lootItemLastOwner != null && lootItemLastOwner.ProfileId != owner.ProfileId)
+            {
+                owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
+            }
+
+            // Execute the network transaction directly
+            owner.InventoryController.RunNetworkTransaction(possibleAction, result => {
+                // Update interaction if successful
+                if (result.Succeed)
+                {
+                    owner.UpdateInteractionCast();
+                }
+
+                // Handle pickup state cleanup
+                var pickupState = owner.CurrentState as PickupStateClass;
+                pickupState?.Pickup(false, null);
+            });
+        }
 
         public void Update()
         {
@@ -233,7 +256,7 @@ namespace TarkovVR.Source.Player.Interactions
                         float initialDistance = Vector3.Distance(VRGlobals.player.Transform.position, container.transform.position);
                         VRGlobals.player.SetCallbackForInteraction(delegate (Action callback)
                         {
-                            GetActionsClass.smethod_21(VRGlobals.player.GetComponent<GamePlayerOwner>(), callback, container, initialDistance);
+                            GetActionsClass.smethod_22(VRGlobals.player.GetComponent<GamePlayerOwner>(), callback, container, initialDistance);
                         });
                         VRGlobals.player.StartBehaviourTimer(EFTHardSettings.Instance.DelayToOpenContainer, delegate
                         {
@@ -255,7 +278,7 @@ namespace TarkovVR.Source.Player.Interactions
                     if (secondaryHandGrip.stateDown)
                     {
                         Door door = collider.gameObject.GetComponent<Door>();
-                        GetActionsClass.Class1620 doorInteractionClass = new GetActionsClass.Class1620();
+                        GetActionsClass.Class1630 doorInteractionClass = new GetActionsClass.Class1630();
                         doorInteractionClass.door = door;
                         doorInteractionClass.owner = VRGlobals.player.GetComponent<GamePlayerOwner>();
                         if (door.DoorState == EDoorState.Open)
@@ -279,7 +302,7 @@ namespace TarkovVR.Source.Player.Interactions
                     if (secondaryHandGrip.stateDown)
                     {
                         Corpse corpse = collider.transform.root.GetComponent<Corpse>();
-                        GetActionsClass.Class1612 corpseInteractionClass = new GetActionsClass.Class1612();
+                        GetActionsClass.Class1622 corpseInteractionClass = new GetActionsClass.Class1622();
                         corpseInteractionClass.compoundItem = (InventoryEquipment)corpse.Item;
                         corpseInteractionClass.rootItem = (InventoryEquipment)corpse.Item;
                         corpseInteractionClass.lootItemOwner = corpse.ItemOwner;
@@ -300,10 +323,11 @@ namespace TarkovVR.Source.Player.Interactions
                     }
                     if (secondaryHandGrip.stateUp)
                     {
-                        GStruct446<GInterface385> pickUpResult = InteractionsHandlerClass.QuickFindAppropriatePlace(heldItem.Item, VRGlobals.player.InventoryController, VRGlobals.player.InventoryController.Inventory.Equipment.ToEnumerable(), EMoveItemOrder.PickUp, simulate: true);
+                        GStruct455<GInterface398> pickUpResult = InteractionsHandlerClass.QuickFindAppropriatePlace(heldItem.Item, VRGlobals.player.InventoryController, VRGlobals.player.InventoryController.Inventory.Equipment.ToEnumerable(), EMoveItemOrder.PickUp, simulate: true);
                         if (pickUpResult.Succeeded && heldItem.ItemOwner.CanExecute(pickUpResult.Value))
                         {
-                            GetActionsClass.smethod_9(VRGlobals.player, pickUpResult.Value, heldItem.Item, heldItem.LastOwner);
+                            //GetActionsClass.smethod_10(VRGlobals.player, pickUpResult.Value, heldItem.Item, heldItem.LastOwner);
+                            DirectItemTransfer(VRGlobals.player, pickUpResult.Value, heldItem.Item, heldItem.LastOwner);
                             heldItem = null;
                         }
 

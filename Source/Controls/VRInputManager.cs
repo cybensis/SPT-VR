@@ -25,6 +25,8 @@ namespace TarkovVR.Source.Controls
                 { ECommand.ToggleAlternativeShooting, new InputHandlers.AimHandler() },
                 { ECommand.SelectFirstPrimaryWeapon, new InputHandlers.SelectWeaponHandler() },
                 { ECommand.ChangeScopeMagnification, new InputHandlers.ScopeZoomHandler() },
+                { ECommand.ScopeZoomIn, new InputHandlers.ScopeZoomHandler() },
+                { ECommand.ScopeZoomOut, new InputHandlers.ScopeZoomHandler() },
                 { ECommand.CheckAmmo, new InputHandlers.CheckAmmoHandler() },
                 { ECommand.ChangeWeaponMode, new InputHandlers.FireModeHandler() },
                 { ECommand.CheckChamber, new InputHandlers.CheckChamberHandler() },
@@ -37,14 +39,14 @@ namespace TarkovVR.Source.Controls
                 { ECommand.NextWalkPose, new InputHandlers.CrouchHandler() },
                 { ECommand.ToggleProne, new InputHandlers.ProneInputHandler() },
                 { ECommand.LeftStanceToggle, new InputHandlers.ResetHeightHandler() },
-                { ECommand.F12, new InputHandlers.EFTConfigHandler() },
+                //{ ECommand.F12, new InputHandlers.EFTConfigHandler() },
                 { ECommand.ToggleGoggles, new InputHandlers.HeadMountedDeviceHandler() },
                 // Add other command handlers here
             };
             menuInputHandlers = new Dictionary<ECommand, IInputHandler>
             {
                 { ECommand.Escape, new InputHandlers.EscapeHandler() },
-                { ECommand.F12, new InputHandlers.EFTConfigHandler() },
+                //{ ECommand.F12, new InputHandlers.EFTConfigHandler() },
                 // Add other command handlers here
             };
         }

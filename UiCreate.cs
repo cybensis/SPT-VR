@@ -30,7 +30,7 @@ public class CircularSegmentUI : MonoBehaviour
     private QuickSlotHandler quickSlotHandler;
     private SelectWeaponHandler selectWeaponHandler;
     private List<EBoundItem> quickSlotOrder;
-    private List<GClass897> iconsList;
+    private List<GClass907> iconsList;
     public void Init()
     {
 
@@ -99,10 +99,10 @@ public class CircularSegmentUI : MonoBehaviour
         numberOfSegments = quickSlots.Count;
         List<Sprite> newMenuSprites = new List<Sprite>();
         quickSlotOrder = new List<EBoundItem>();
-        iconsList = new List<GClass897>();
+        iconsList = new List<GClass907>();
         foreach (KeyValuePair<EBoundItem, Item> kvp in quickSlots)
         {
-            GClass897 itemIcon = ItemViewFactory.LoadItemIcon(kvp.Value);
+            GClass907 itemIcon = ItemViewFactory.LoadItemIcon(kvp.Value);
             if (itemIcon.Sprite != null)
             {
                 iconsList.Add(itemIcon);    

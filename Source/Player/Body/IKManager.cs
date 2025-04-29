@@ -76,7 +76,8 @@ namespace TarkovVR.Source.Player.VR
 
                 float distanceFromSideOfBody = Vector3.Dot(transform.root.right, directionToHeadset.normalized);
 
-                //Plugin.MyLog.LogWarning(adotProduct + "  |   " + distanceBetweenBodyAndHead + "   |    " + dotProduct);
+                //
+                //.LogWarning(adotProduct + "  |   " + distanceBetweenBodyAndHead + "   |    " + dotProduct);
 
                 float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
                 float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);

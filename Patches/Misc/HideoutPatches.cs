@@ -60,7 +60,7 @@ namespace TarkovVR.Patches.Misc
 
         // Returns the movement controls back to the player after clicking the back button on the inventory screen in hideout
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(InventoryScreen), "method_7")]
+        [HarmonyPatch(typeof(InventoryScreen), "method_9")]
         private static void ReturnControlsOnInventoryBackButton(InventoryScreen __instance)
         {
             if (VRGlobals.inGame)
@@ -108,7 +108,7 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(HideoutScreenOverlay), "method_5")]
+        [HarmonyPatch(typeof(HideoutScreenOverlay), "method_9")]
         private static void OnEnterHideout(HideoutScreenOverlay __instance)
         {
             UIPatches.HideUiScreens();
@@ -166,7 +166,7 @@ namespace TarkovVR.Patches.Misc
         public static Vector3 camRootRot;
         // Occasionally opening the inventory will set camRoot rot to 0,0,0 so get it here and set later
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(InventoryScreen), "Show", new Type[] { typeof(GClass3511) })]
+        [HarmonyPatch(typeof(InventoryScreen), "Show", new Type[] { typeof(GClass3581) })]
         private static bool SetOriginalCamRotOnInvOpen(InventoryScreen __instance)
         {
             camRootRot = VRGlobals.camRoot.transform.eulerAngles;
@@ -185,7 +185,7 @@ namespace TarkovVR.Patches.Misc
                 UIPatches.HandleOpenInventory();
         }
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(HideoutScreenOverlay), "method_7")]
+        [HarmonyPatch(typeof(HideoutScreenOverlay), "method_11")]
         private static bool ReturnFromHideout(HideoutScreenOverlay __instance)
         {
             __instance.action_0?.Invoke();
@@ -206,8 +206,8 @@ namespace TarkovVR.Patches.Misc
 
         ////------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(MainMenuController), "method_21")]
-        private static void ReturnFromHideoutThroughPreloader(MainMenuController __instance)
+        [HarmonyPatch(typeof(MainMenuControllerClass), "method_23")]
+        private static void ReturnFromHideoutThroughPreloader(MainMenuControllerClass __instance)
         {
             ReturnToMainMenuFromHideout();
         }
@@ -254,8 +254,8 @@ namespace TarkovVR.Patches.Misc
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Changes to in game when selecting the hideout option in the preloader UI
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(MainMenuController), "method_19")]
-        private static void SetInGameOnReturnToHideout_Preloader(GClass2021 __instance)
+        [HarmonyPatch(typeof(MainMenuControllerClass), "method_21")]
+        private static void SetInGameOnReturnToHideout_Preloader(GClass2062 __instance)
         {
             // Only set inGame if the player is set. If this is the first time going to hideout when starting the game
             // we only want inGame set if everythings been loaded, and if player is set then that means the hideout
@@ -276,7 +276,7 @@ namespace TarkovVR.Patches.Misc
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Changes to in game when selecting the hideout option in the main menu Common UI
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(MenuScreen), "method_7")]
+        [HarmonyPatch(typeof(MenuScreen), "method_8")]
         private static void SetInGameOnReturnToHideout_Common(MenuScreen __instance, EMenuType menuType)
         {
             if (menuType == EMenuType.Hideout && VRGlobals.player)
@@ -343,8 +343,8 @@ namespace TarkovVR.Patches.Misc
         // The UI is closed when the player selects a preloader task bar option twice
         // so close the VR inventory.
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(Class2742), "method_0")]
-        private static void CloseUiOnDoubleClick(Class2742 __instance, bool arg)
+        [HarmonyPatch(typeof(Class2786), "method_0")]
+        private static void CloseUiOnDoubleClick(Class2786 __instance, bool arg)
         {
             if (VRGlobals.inGame && (
                     (!arg && __instance.menuType != EMenuType.Chat && __instance.menuType != EMenuType.MainMenu ) || 

@@ -54,8 +54,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(ProneIdleState), "Rotate")]
-        private static bool SetPlayerRotateOnProneStationary(ProneIdleState __instance, ref Vector2 deltaRotation)
+        [HarmonyPatch(typeof(ProneIdleStateClass), "Rotate")]
+        private static bool SetPlayerRotateOnProneStationary(ProneIdleStateClass __instance, ref Vector2 deltaRotation)
         {
 
             if (!__instance.MovementContext._player.IsYourPlayer)
@@ -73,8 +73,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(ProneMoveState), "Rotate")]
-        private static bool SetPlayerRotateOnProneMoving(ProneMoveState __instance, ref Vector2 deltaRotation)
+        [HarmonyPatch(typeof(ProneMoveStateClass), "Rotate")]
+        private static bool SetPlayerRotateOnProneMoving(ProneMoveStateClass __instance, ref Vector2 deltaRotation)
         {
             if (!__instance.MovementContext._player.IsYourPlayer)
                 return true;
@@ -177,8 +177,8 @@ namespace TarkovVR.Patches.Core.Player
 
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass3328), "ManualLateUpdate")]
-        private static bool PositionCamera(GClass3328 __instance)
+        [HarmonyPatch(typeof(GClass3407), "ManualLateUpdate")]
+        private static bool PositionCamera(GClass3407 __instance)
         {
             if (!__instance.player_0.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;

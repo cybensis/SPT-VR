@@ -2,6 +2,7 @@
 using HarmonyLib;
 using System;
 using UnityEngine;
+using TarkovVR.Source.Settings;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -40,7 +41,7 @@ namespace TarkovVR.Patches.Core.Player
             if (__instance.HandsIsEmpty)
                 return false;
 
-            if (__instance.IsSprintEnabled || !__instance.MovementContext.IsGrounded)
+            if (__instance.IsSprintEnabled && VRSettings.GetDisableRunAnim() == true|| !__instance.MovementContext.IsGrounded)
             {
                 __instance._markers[1].transform.parent.parent.localPosition = new Vector3(0, 0, 0);
                 __instance._markers[1].transform.parent.parent.localEulerAngles = new Vector3(0, 0, 0);
@@ -50,8 +51,8 @@ namespace TarkovVR.Patches.Core.Player
 
         private static bool test = true;
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GClass1355), "SetAnimator")]
-        private static void ReemoveSprintAnimFromHands(GClass1355 __instance)
+        [HarmonyPatch(typeof(GClass1375), "SetAnimator")]
+        private static void ReemoveSprintAnimFromHands(GClass1375 __instance)
         {
             __instance.animator_0.SetLayerWeight(4, 0);
         }

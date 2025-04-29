@@ -1,5 +1,8 @@
-﻿using EFT.InventoryLogic;
+﻿using EFT.InputSystem;
+using EFT.InventoryLogic;
 using Sirenix.Serialization;
+using System;
+using System.Linq;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;
@@ -34,7 +37,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (scopeCamera)
             {
-                fovAtStart = scopeCamera.fieldOfView;
+                fovAtStart = maxFov;//scopeCamera.fieldOfView;
                 initialHandRot = SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
                 swapZooms = false;
             }
@@ -60,27 +63,80 @@ namespace TarkovVR.Source.Weapons
             //}
             }
         }
+        //Joystick zoom redone to be smooth zoom all the way in and out only with variable scopes
+        //Other scopes like the Elcan will switch between its two zooms
+        public void handleJoystickZoomDial()
+        {
+            // Early return checks
+            if (!scopeCamera) return;
 
+            float primaryHandJoystickYAxis = VRSettings.GetLeftHandedMode() ?
+                SteamVR_Actions._default.LeftJoystick.axis.y :
+                SteamVR_Actions._default.RightJoystick.axis.y;
 
-        public void handleJoystickZoomDial() {
-            float primaryHandJoystickYAxis = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftJoystick.axis.y : SteamVR_Actions._default.RightJoystick.axis.y;
-            if (!scopeCamera || Mathf.Abs(primaryHandJoystickYAxis) < VRSettings.GetRightStickSensitivity())
+            if (Mathf.Abs(primaryHandJoystickYAxis) < VRSettings.GetRightStickSensitivity() ||
+                VRGlobals.scope.parent.name == "scope_all_eotech_hhs_1_tan(Clone)")
                 return;
 
+            // Cache the current camera FOV for threshold checking
+            float previousFov = scopeCamera.fieldOfView;
 
-            if (VRGlobals.scope.parent.name == "scope_all_eotech_hhs_1_tan(Clone)")
-                return;
+            // Check for smooth zoom scope
+            bool isVariableZoomScope = Array.IndexOf(new string[] {
+                "scope_30mm_eotech_vudu_1_6x24(Clone)",
+                "scope_30mm_razor_hd_gen_2_1_6x24(Clone)",
+                "scope_30mm_s&b_pm_ii_1_8x24(Clone)",
+                "scope_34mm_s&b_pm_ii_5_25x56(Clone)",
+                "scope_30mm_burris_fullfield_tac30_1_4x24(Clone)",
+                "scope_30mm_sig_tango6t_1_6x24(Clone)"
+            }, VRGlobals.scope.parent.name) >= 0;
 
-            currentFov -= primaryHandJoystickYAxis / 2;
+            // Deadzone threshold
+            const float deadzone = 0.1f;
+            float variableZoomSensitivity = VRSettings.GetVariableZoomSensitivity();
 
-            currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
-            if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 || scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
+            // Handle smooth zoom scopes
+            if (isVariableZoomScope)
+            {
+                // Only modify FOV when stick movement exceeds threshold
+                if (Mathf.Abs(primaryHandJoystickYAxis) > deadzone)
+                {
+                    // Apply sensitivity to the zoom speed
+                    float zoomDelta = primaryHandJoystickYAxis * variableZoomSensitivity;
+                    currentFov -= zoomDelta;
+                    currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
+                }
+            }
+            // Handle regular scopes
+            else
+            {
+                bool isZoomedIn = (previousFov <= minFov + 0.1f);
+                bool isZoomedOut = (previousFov >= maxFov - 0.1f);
+
+                // Pushing up to zoom in
+                if (primaryHandJoystickYAxis > deadzone && !isZoomedIn)
+                {
+                    currentFov = minFov;
+                }
+                // Pushing down to zoom out
+                else if (primaryHandJoystickYAxis < -deadzone && !isZoomedOut)
+                {
+                    currentFov = maxFov;
+                }
+            }
+
+            // Check for threshold crossing that triggers zoom swap
+            if ((previousFov / maxFov < 0.3 && currentFov / maxFov >= 0.3) ||
+                (previousFov / maxFov >= 0.3 && currentFov / maxFov < 0.3))
+            {
                 if (scopeZoomHandler != null)
                     scopeZoomHandler.TriggerSwapZooms();
+            }
 
+            // Always update the camera's FOV to match current value
             scopeCamera.fieldOfView = currentFov;
-
         }
+
 
         public void handlePhysicalZoomDial()
         {

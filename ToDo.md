@@ -60,13 +60,15 @@ GETTING WEAPON IN LEFT HANDED MODE TO NOT BE INVERTED - Don't think its possible
 - Fix eating food and med'ing so  you can move your right hand
 - Add vibration for shooting
 - Scope with red dot on top prioritizes red dot over scope
-- Issuee with black line of shadows appearing at a certain distance from the player, mostly visible indoors on interchange. Still there after disabling all camera components, increasing near clip plane increases distance from player the line appears, and I tried deleting the command buffers up to AfterForwardOpaqueBuffer
+- Issuee with black line of 
+- s appearing at a certain distance from the player, mostly visible indoors on interchange. Still there after disabling all camera components, increasing near clip plane increases distance from player the line appears, and I tried deleting the command buffers up to AfterForwardOpaqueBuffer
 - Work on matching colliders with physical body more
 - Aiming with a scope on lighthouse, probably other maps, makes grass despawn
 - UI was bugging out when I received at item from a trader and I think pressed B to go back which overlayed the preset menu on top of other menus and the Escape from tarkov logo on the main menu was black, also going presets then clicking the hideout button, maybe menu button too will keep the presets menu there
 - Issue with there being a radius of light around you, then everything beyond that radius has a shadow or is just darker. - Disabling the DistantShadows GBuffer made it go away, so its something to do with near shadows?
 - Add an option for using the right joystick for the left handed radial menu
-- Fix TOD Scattering only rendering in one eye, probably just a matrix change
+- Fix 
+- Scattering only rendering in one eye, probably just a matrix change
 - Make it so the right hand laser is available all the way up until the round is loading
 - Fix the right arm bend goal after pulling pin
 - Make it so some components on our gun dont get lit up by our flashlights

@@ -9,13 +9,23 @@ using System.ComponentModel.Design;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Text;
+using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.XR;
+using Valve.VR;
+using EFT.BlitDebug;
+using UnityStandardAssets.ImageEffects;
+using static HBAO_Core;
 using static UnityEngine.ParticleSystem.PlaybackState;
 using static Val;
+using EFT.Visual;
+using Unity.XR.OpenVR;
+using EFT.Weather;
+using EFT.Settings.Graphics;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -24,6 +34,273 @@ namespace TarkovVR.Patches.Visuals
     {
         private static Camera postProcessingStoogeCamera;
         public static DistantShadow distantShadow;
+        public static readonly HashSet<string> TargetShaders = new HashSet<string>
+        {
+        "Standard",
+        "Standard (Specular setup)",
+        "p0/Reflective/Specular",
+        "p0/Reflective/Bumped Specular",
+        "p0/Reflective/Bumped Specular SMap",
+        "p0/Reflective/Bumped Specular SMap_Decal",
+        "Nature/SpeedTreeEFT",
+        "Custom/Vert",
+        "Decal/Ultra"
+        };
+        //Random attempts to try and reduce specular aliasing, nothing worked
+        //-matsix
+        /*
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CharacterControllerSpawner), "Spawn")]
+        private static void ClampSpecularAliasOnRender(CharacterControllerSpawner __instance)
+        {
+
+
+            var renderers = GameObject.FindObjectsOfType<Renderer>();
+
+            foreach (var renderer in renderers)
+            {
+                var materials = renderer.sharedMaterials;
+
+                var propertyBlock = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(propertyBlock);
+
+                bool modified = false;
+                //string rendererPath = GetGameObjectPath(renderer.gameObject);
+
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    var mat = materials[i];
+                    if (mat == null || mat.shader == null)
+                    {
+                        continue;
+                    }
+
+                    string shaderName = mat.shader.name;
+                    if (!TargetShaders.Contains(shaderName))
+                    {
+                        continue;
+                    }
+
+                    // Clamp NormalScale (Adjust Normal Map Intensity)
+                    if (mat.HasProperty("_NormalScale"))
+                    {
+                        float current = mat.GetFloat("_NormalScale");
+                        float clampedValue = Mathf.Min(current, 0.2f);
+                        if (current != clampedValue)
+                        {
+                            mat.SetFloat("_NormalScale", clampedValue);
+                            modified = true;
+                        }
+                    }
+
+                    // Clamp BumpScale (Adjust Height Map Influence)
+                    if (mat.HasProperty("_BumpScale"))
+                    {
+                        float current = mat.GetFloat("_BumpScale");
+                        float clampedValue = Mathf.Min(current, 0.2f);
+                        if (current != clampedValue)
+                        {
+                            mat.SetFloat("_BumpScale", clampedValue);
+                            modified = true;
+                        }
+                    }
+
+                    // Clamp Smoothness to prevent extreme specular reflections
+                    if (mat.HasProperty("_Smoothness"))
+                    {
+                        float current = mat.GetFloat("_Smoothness");
+                        float clampedValue = Mathf.Min(current, 0.2f);
+                        if (current != clampedValue)
+                        {
+                            mat.SetFloat("_Smoothness", clampedValue);
+                            modified = true;
+                        }
+                    }
+
+                    // Clamp Glossiness (similar to Smoothness)
+                    if (mat.HasProperty("_Glossiness"))
+                    {
+                        float current = mat.GetFloat("_Glossiness");
+                        float clampedValue = Mathf.Min(current, 0.2f);
+                        if (current != clampedValue)
+                        {
+                            mat.SetFloat("_Glossiness", clampedValue);
+                            modified = true;
+                        }
+                    }
+
+                    // Clamp Specular Highlights (helps reduce shimmering artifacts)
+                    if (mat.HasProperty("_SpecularHighlights"))
+                    {
+                        float current = mat.GetFloat("_SpecularHighlights");
+                        float clampedValue = Mathf.Min(current, 0.2f);
+                        if (current != clampedValue)
+                        {
+                            mat.SetFloat("_SpecularHighlights", clampedValue);
+                            modified = true;
+                        }
+                    }
+
+                    // Clamp Reflection Intensity (helps stabilize sharp reflections)
+                    if (mat.HasProperty("_ReflectionIntensity"))
+                    {
+                        float current = mat.GetFloat("_ReflectionIntensity");
+                        float clampedValue = Mathf.Min(current, 0.2f);
+                        if (current != clampedValue)
+                        {
+                            mat.SetFloat("_ReflectionIntensity", clampedValue);
+                            modified = true;
+                        }
+                    }
+                }
+
+                if (modified)
+                {
+                    renderer.SetPropertyBlock(propertyBlock);
+                }
+            }
+        }
+        */
+        /*[HarmonyPostfix]
+        [HarmonyPatch(typeof(LocationScene), "Awake")]
+        private static void ClampNormalIntensityOnRender(LocationScene __instance)
+        {
+            //if (!__instance.name.Contains("Camera")) return;
+
+            foreach (var renderer in GameObject.FindObjectsOfType<Renderer>())
+            {
+                var materials = renderer.sharedMaterials;
+                var propertyBlock = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(propertyBlock);
+
+                bool modified = false;
+
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    var mat = materials[i];
+                    if (mat == null || mat.shader == null)
+                        continue;
+
+                    string shaderName = mat.shader.name;
+                    if (!TargetShaders.Contains(shaderName))
+                        continue;
+
+                    // Clamp NormalScale (Adjust Normal Map Intensity)
+                    if (mat.HasProperty("_NormalScale"))
+                    {
+                        float current = mat.GetFloat("_NormalScale");
+                        float clampedValue = Mathf.Clamp(current, 0.5f, 1.0f);
+                        if (current != clampedValue)
+                        {
+                            propertyBlock.SetFloat("_NormalScale", clampedValue);
+                            modified = true;
+                            Plugin.MyLog.LogError($"Clamped _NormalScale for {mat.name}: {current} -> {clampedValue}");
+                        }
+                    }
+
+                    // Clamp BumpScale (Adjust Height Map Influence)
+                    if (mat.HasProperty("_BumpScale"))
+                    {
+                        float current = mat.GetFloat("_BumpScale");
+                        float clampedValue = Mathf.Clamp(current, 0.5f, 1.0f);
+                        if (current != clampedValue)
+                        {
+                            propertyBlock.SetFloat("_BumpScale", clampedValue);
+                            modified = true;
+                            Plugin.MyLog.LogError($"Clamped _BumpScale for {mat.name}: {current} -> {clampedValue}");
+                        }
+                    }
+                }
+
+                if (modified)
+                {
+                    renderer.SetPropertyBlock(propertyBlock);
+                }
+            }
+        }*/
+
+        /*
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(Camera), nameof(Camera.Render))]
+        private static void ClampSmoothnessOnRender(Camera __instance)
+        {
+            if (!__instance.name.Contains("Camera")) return;
+
+            foreach (var renderer in GameObject.FindObjectsOfType<Renderer>())
+            {
+                var materials = renderer.sharedMaterials;
+                var propertyBlock = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(propertyBlock);
+
+                bool modified = false;
+
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    var mat = materials[i];
+                    if (mat == null || mat.shader == null)
+                        continue;
+
+                    string shaderName = mat.shader.name;
+                    if (!TargetShaders.Contains(shaderName))
+                        continue;
+
+                    if (mat.HasProperty("_Smoothness"))
+                    {
+                        float current = mat.GetFloat("_Smoothness");
+                        if (current > 0.85f)
+                        {
+                            propertyBlock.SetFloat("_Smoothness", 0f);
+                            modified = true;
+                        }
+                    }
+
+                    if (mat.HasProperty("_Glossiness"))
+                    {
+                        float current = mat.GetFloat("_Glossiness");
+                        if (current > 0.85f)
+                        {
+                            propertyBlock.SetFloat("_Glossiness", 0f);
+                            modified = true;
+                        }
+                    }
+                }
+
+                if (modified)
+                {
+                    renderer.SetPropertyBlock(propertyBlock);
+                }
+            }
+        }
+        */
+
+        /*
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PostProcessLayer), "OnEnable")]
+        private static void DestroyPostProcessingLayer(PostProcessLayer __instance)
+        {
+            // First clean up any command buffers
+            Camera camera = __instance.GetComponent<Camera>();
+            if (camera != null)
+            {
+                foreach (CameraEvent evt in System.Enum.GetValues(typeof(CameraEvent)))
+                {
+                    CommandBuffer[] buffers = camera.GetCommandBuffers(evt);
+                    foreach (CommandBuffer buffer in buffers)
+                    {
+                        if (buffer.name.Contains("PostProcess"))
+                        {
+                            camera.RemoveCommandBuffer(evt, buffer);
+                        }
+                    }
+                }
+            }
+
+            // Then destroy the component
+            UnityEngine.Object.Destroy(__instance);
+
+            Plugin.MyLog.LogError("VR Mod: Completely removed PostProcessLayer from " + camera.gameObject.name);
+        }
+        */
 
         // NOTEEEEEE: You can completely delete SSAA and SSAAPropagatorOpaque and the blurriness still occcurs so it must be from SSAAPropagator or SSAAImpl
 
@@ -37,171 +314,302 @@ namespace TarkovVR.Patches.Visuals
             __result = __instance.GetInputWidth();
             return false;
         }
+
+        //Cybensis, im sorry but yes I did throw this through an AI to better understand what the hell is going on here
+        //ive come to the same conclusion though... SSAA is ass and just outputting the native resolution is the best option here
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Holy fuck this actually fixes so many visual problems :)
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
-        private static bool ReturnVROutputWidth(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
+        private static bool ProcessImageRendering(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
         {
+            
             if (__instance._postProcessLayer != null)
             {
                 Graphics.Blit(source, destination);
                 return false;
             }
 
-            // Occlusion culling keeps turning on in Interchange so keep disabling it here
-            if (Camera.main.useOcclusionCulling)
-            {
-                Camera.main.useOcclusionCulling = false;
-            }
+            Camera.main.useOcclusionCulling = false;
 
-
-            __instance._currentDestinationHDR = 0;
-            __instance._currentDestinationLDR = 0;
-            __instance._HDRSourceDestination = true;
+            ResetRenderingState(__instance);
             int width = Camera.main.pixelWidth;
             int height = Camera.main.pixelHeight;
-            if (__instance._resampledColorTargetHDR[0] == null || __instance._resampledColorTargetHDR[0].width != width || __instance._resampledColorTargetHDR[0].height != height || __instance._resampledColorTargetHDR[0].format != RuntimeUtilities.defaultHDRRenderTextureFormat)
+
+            InitializeHDRRenderTargets(__instance, width, height);
+            InitializeLDRRenderTargets(__instance, width, height);
+
+            // Force a higher SSAA ratio specifically for specular highlights
+            float ssRatio = __instance.m_ssaa.GetCurrentSSRatio();
+            float effectiveRatio = Mathf.Max(ssRatio, 2.0f); // Force at least 2x supersampling
+            var rt = __instance.m_ssaa.GetRT();
+
+            // Enhanced quality settings for better specular handling
+            if (rt != null)
             {
-                if (__instance._resampledColorTargetHDR[0] != null)
-                {
-                    __instance._resampledColorTargetHDR[0].Release();
-                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetHDR[0]);
-                    __instance._resampledColorTargetHDR[0] = null;
-                }
-                if (__instance._resampledColorTargetHDR[1] != null)
-                {
-                    __instance._resampledColorTargetHDR[1].Release();
-                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetHDR[1]);
-                    __instance._resampledColorTargetHDR[1] = null;
-                }
-                RenderTextureFormat defaultHDRRenderTextureFormat = RuntimeUtilities.defaultHDRRenderTextureFormat;
-                __instance._resampledColorTargetHDR[0] = new RenderTexture(width, height, 0, defaultHDRRenderTextureFormat);
-                __instance._resampledColorTargetHDR[0].name = "SSAAPropagator0HDR";
-                __instance._resampledColorTargetHDR[0].enableRandomWrite = true;
-                __instance._resampledColorTargetHDR[0].Create();
-                __instance._resampledColorTargetHDR[1] = new RenderTexture(width, height, 0, defaultHDRRenderTextureFormat);
-                __instance._resampledColorTargetHDR[1].name = "SSAAPropagator1HDR";
-                __instance._resampledColorTargetHDR[1].enableRandomWrite = true;
-                __instance._resampledColorTargetHDR[1].Create();
+                source.filterMode = FilterMode.Trilinear;
+                source.wrapMode = TextureWrapMode.Clamp;
+                source.useMipMap = true;           // Enable mipmaps for better specular filtering
+                source.autoGenerateMips = true;    // Automatically generate mipmaps
+                source.anisoLevel = 8;             // Increase anisotropic filtering
             }
-            if (__instance._resampledColorTargetLDR[0] == null || __instance._resampledColorTargetLDR[0].width != width || __instance._resampledColorTargetLDR[0].height != height)
+
+            // Create temporary RT for specular processing
+            RenderTexture tempRT = RenderTexture.GetTemporary(width, height, 0, source.format);
+            tempRT.filterMode = FilterMode.Trilinear;
+            tempRT.wrapMode = TextureWrapMode.Clamp;
+
+            if (effectiveRatio > 1.1f)
             {
-                if (__instance._resampledColorTargetLDR[0] != null)
+                if (rt != null)
                 {
-                    __instance._resampledColorTargetLDR[0].Release();
-                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[0]);
-                    __instance._resampledColorTargetLDR[0] = null;
+                    // Two-pass downsampling for better specular quality
+                    RenderTexture intermediateRT = RenderTexture.GetTemporary(
+                        (int)(width * 1.5f),
+                        (int)(height * 1.5f),
+                        0,
+                        source.format
+                    );
+
+                    // First pass - higher resolution
+                    __instance.m_ssaa.RenderImage(rt, intermediateRT, true, null);
+
+                    // Second pass - careful downsampling
+                    Graphics.Blit(intermediateRT, __instance._resampledColorTargetHDR[0]);
+
+                    RenderTexture.ReleaseTemporary(intermediateRT);
                 }
-                if (__instance._resampledColorTargetLDR[1] != null)
+                else
                 {
-                    __instance._resampledColorTargetLDR[1].Release();
-                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[1]);
-                    __instance._resampledColorTargetLDR[1] = null;
+                    __instance.m_ssaa.RenderImage(source, __instance._resampledColorTargetHDR[0], true, null);
                 }
-                if (__instance._resampledColorTargetLDR[2] != null)
-                {
-                    __instance._resampledColorTargetLDR[2].Release();
-                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[2]);
-                    __instance._resampledColorTargetLDR[2] = null;
-                }
-                RenderTextureFormat format = RenderTextureFormat.ARGB32;
-                __instance._resampledColorTargetLDR[0] = new RenderTexture(width, height, 0, format);
-                __instance._resampledColorTargetLDR[1] = new RenderTexture(width, height, 0, format);
-                __instance._resampledColorTargetLDR[1].name = "SSAAPropagator1LDR";
-                __instance._resampledColorTargetLDR[2] = new RenderTexture(width, height, 0, format);
-                __instance._resampledColorTargetLDR[2].name = "Stub";
-            }
-            if ((double)Mathf.Abs(__instance.m_ssaa.GetCurrentSSRatio() - 1f) < 0.001)
-            {
-                Graphics.Blit(source, __instance._resampledColorTargetHDR[0]);
-            }
-            else if (__instance.m_ssaa.GetCurrentSSRatio() > 1f)
-            {
-                __instance.m_ssaa.RenderImage(__instance.m_ssaa.GetRT(), __instance._resampledColorTargetHDR[0], flipV: true, null);
             }
             else
             {
-                __instance.m_ssaa.RenderImage(source, __instance._resampledColorTargetHDR[0], flipV: true, null);
+                // Enhanced filtering even at base resolution
+                Graphics.Blit(source, tempRT);
+                Graphics.Blit(tempRT, __instance._resampledColorTargetHDR[0]);
             }
+
+            RenderTexture.ReleaseTemporary(tempRT);
+
             if (__instance._cmdBuf == null)
             {
-                __instance._cmdBuf = new CommandBuffer();
-                __instance._cmdBuf.name = "SSAAPropagator";
+                __instance._cmdBuf = new CommandBuffer { name = "SSAAPropagator" };
             }
             __instance._cmdBuf.Clear();
-            if (!__instance._thermalVisionIsOn && (__instance._opticLensRenderer != null || __instance._collimatorRenderer != null))
+
+            if (!__instance._thermalVisionIsOn && HasOpticalRenderers(__instance))
             {
-                if (__instance._resampledDepthTarget == null || __instance._resampledDepthTarget.width != width || __instance._resampledDepthTarget.height != height)
-                {
-                    if (__instance._resampledDepthTarget != null)
-                    {
-                        __instance._resampledDepthTarget.Release();
-                        RuntimeUtilities.SafeDestroy(__instance._resampledDepthTarget);
-                        __instance._resampledDepthTarget = null;
-                    }
-                    __instance._resampledDepthTarget = new RenderTexture(width, height, 24, RenderTextureFormat.Depth);
-                    __instance._resampledDepthTarget.name = "SSAAPropagatorDepth";
-                }
-                __instance._cmdBuf.BeginSample("OutputOptic");
-                __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_TAA);
-                __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
-                __instance._cmdBuf.SetGlobalMatrix(SSAAPropagator.ID_NONJITTEREDPROJ, GL.GetGPUProjectionMatrix(__instance._camera.nonJitteredProjectionMatrix, renderIntoTexture: true));
-                __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
-                __instance._cmdBuf.ClearRenderTarget(clearDepth: true, clearColor: false, Color.black);
-                if (__instance._opticLensRenderer == null && __instance._collimatorRenderer != null)
-                {
-                    __instance._cmdBuf.DrawRenderer(__instance._collimatorRenderer, __instance._collimatorMaterial);
-                }
-                if (__instance._opticLensRenderer != null)
-                {
-                    if (__instance._sightNonLensRenderers != null && __instance._sightNonLensRenderers.Length != 0)
-                    {
-                        __instance._cmdBuf.BeginSample("DEPTH_PREPASS");
-                        __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetLDR[2], __instance._resampledDepthTarget);
-                        __instance._cmdBuf.BeginSample("SIGHT_DEPTH");
-                        for (int i = 0; i < __instance._sightNonLensRenderers.Length; i++)
-                        {
-                            if (__instance._sightNonLensRenderers[i] != null && __instance._sightNonLensRenderersMaterials[i] != null && __instance._sightNonLensRenderers[i].gameObject.activeSelf)
-                            {
-                                __instance._cmdBuf.DrawRenderer(__instance._sightNonLensRenderers[i], __instance._sightNonLensRenderersMaterials[i]);
-                            }
-                        }
-                        __instance._cmdBuf.EndSample("SIGHT_DEPTH");
-                        __instance._cmdBuf.BeginSample("WEAPON_DEPTH");
-                        for (int j = 0; j < __instance._otherWeaponRenderers.Length; j++)
-                        {
-                            if (__instance._otherWeaponRenderers[j] != null && __instance._otherWeaponRenderersMaterials[j] != null && __instance._otherWeaponRenderers[j].gameObject.activeSelf)
-                            {
-                                __instance._cmdBuf.DrawRenderer(__instance._otherWeaponRenderers[j], __instance._otherWeaponRenderersMaterials[j]);
-                            }
-                        }
-                        __instance._cmdBuf.EndSample("WEAPON_DEPTH");
-                        __instance._cmdBuf.EndSample("DEPTH_PREPASS");
-                    }
-                    __instance._cmdBuf.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
-                    __instance._cmdBuf.DrawRenderer(__instance._opticLensRenderer, __instance._opticLensMaterial);
-                }
-                __instance._cmdBuf.SetRenderTarget(destination);
-                __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
-                __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_TAA);
-                __instance._cmdBuf.EndSample("OutputOptic");
+                InitializeDepthRenderTarget(__instance, width, height);
+                RenderOpticalEffects(__instance);
             }
-            if ((bool)__instance._nightVisionMaterial)
+            ApplyVisionEffects(__instance);
+
+            Graphics.ExecuteCommandBuffer(__instance._cmdBuf);
+            return false;
+        }
+
+        private static void ResetRenderingState(SSAAPropagator __instance)
+        {
+            __instance._currentDestinationHDR = 0;
+            __instance._currentDestinationLDR = 0;
+            __instance._HDRSourceDestination = true;
+        }
+
+        // Modify InitializeHDRRenderTargets to include better specular handling
+        private static void InitializeHDRRenderTargets(SSAAPropagator __instance, int width, int height)
+        {
+            bool needsUpdate = __instance._resampledColorTargetHDR[0] == null ||
+                              __instance._resampledColorTargetHDR[0].width != width ||
+                              __instance._resampledColorTargetHDR[0].height != height ||
+                              __instance._resampledColorTargetHDR[0].format != RuntimeUtilities.defaultHDRRenderTextureFormat;
+
+            if (!needsUpdate) return;
+
+            for (int i = 0; i < 2; i++)
+            {
+                if (__instance._resampledColorTargetHDR[i] != null)
+                {
+                    __instance._resampledColorTargetHDR[i].Release();
+                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetHDR[i]);
+                    __instance._resampledColorTargetHDR[i] = null;
+                }
+            }
+
+            var format = RuntimeUtilities.defaultHDRRenderTextureFormat;
+            for (int i = 0; i < 2; i++)
+            {
+                __instance._resampledColorTargetHDR[i] = new RenderTexture(width, height, 0, format)
+                {
+                    name = $"SSAAPropagator{i}HDR",
+                    enableRandomWrite = true,
+                    filterMode = FilterMode.Trilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                    useMipMap = true,
+                    autoGenerateMips = true,
+                    anisoLevel = 8
+                };
+                __instance._resampledColorTargetHDR[i].Create();
+            }
+        }
+
+        private static void InitializeLDRRenderTargets(SSAAPropagator __instance, int width, int height)
+        {
+            bool needsUpdate = __instance._resampledColorTargetLDR[0] == null ||
+                              __instance._resampledColorTargetLDR[0].width != width ||
+                              __instance._resampledColorTargetLDR[0].height != height;
+
+            if (!needsUpdate) return;
+
+            for (int i = 0; i < 3; i++)
+            {
+                if (__instance._resampledColorTargetLDR[i] != null)
+                {
+                    __instance._resampledColorTargetLDR[i].Release();
+                    RuntimeUtilities.SafeDestroy(__instance._resampledColorTargetLDR[i]);
+                    __instance._resampledColorTargetLDR[i] = null;
+                }
+            }
+
+            var format = RenderTextureFormat.ARGB32;
+            __instance._resampledColorTargetLDR[0] = new RenderTexture(width, height, 0, format)
+            {
+                filterMode = FilterMode.Trilinear // Enhanced filtering
+            };
+            __instance._resampledColorTargetLDR[1] = new RenderTexture(width, height, 0, format)
+            {
+                name = "SSAAPropagator1LDR",
+                filterMode = FilterMode.Trilinear // Enhanced filtering
+            };
+            __instance._resampledColorTargetLDR[2] = new RenderTexture(width, height, 0, format)
+            {
+                name = "Stub",
+                filterMode = FilterMode.Trilinear // Enhanced filtering
+            };
+        }
+
+        private static bool HasOpticalRenderers(SSAAPropagator __instance)
+        {
+            return __instance._opticLensRenderer != null || __instance._collimatorRenderer != null;
+        }
+
+        private static void InitializeDepthRenderTarget(SSAAPropagator __instance, int width, int height)
+        {
+            bool needsUpdate = __instance._resampledDepthTarget == null ||
+                              __instance._resampledDepthTarget.width != width ||
+                              __instance._resampledDepthTarget.height != height;
+
+            if (!needsUpdate) return;
+
+            if (__instance._resampledDepthTarget != null)
+            {
+                __instance._resampledDepthTarget.Release();
+                RuntimeUtilities.SafeDestroy(__instance._resampledDepthTarget);
+                __instance._resampledDepthTarget = null;
+            }
+
+            __instance._resampledDepthTarget = new RenderTexture(width, height, 24, RenderTextureFormat.Depth)
+            {
+                name = "SSAAPropagatorDepth"
+            };
+        }
+
+        private static void RenderOpticalEffects(SSAAPropagator __instance)
+        {
+            var cmd = __instance._cmdBuf;
+            cmd.BeginSample("OutputOptic");
+
+            cmd.EnableShaderKeyword(SSAAPropagator.KWRD_TAA);
+            cmd.EnableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
+
+            cmd.SetGlobalMatrix(
+                SSAAPropagator.ID_NONJITTEREDPROJ,
+                GL.GetGPUProjectionMatrix(__instance._camera.nonJitteredProjectionMatrix, true)
+            );
+
+            cmd.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
+            cmd.ClearRenderTarget(true, false, Color.black);
+
+            if (__instance._opticLensRenderer == null && __instance._collimatorRenderer != null)
+            {
+                cmd.DrawRenderer(__instance._collimatorRenderer, __instance._collimatorMaterial);
+            }
+
+            if (__instance._opticLensRenderer != null)
+            {
+                RenderSightComponents(__instance);
+
+                cmd.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
+                cmd.DrawRenderer(__instance._opticLensRenderer, __instance._opticLensMaterial);
+            }
+
+            cmd.DisableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
+            cmd.DisableShaderKeyword(SSAAPropagator.KWRD_TAA);
+            cmd.EndSample("OutputOptic");
+        }
+
+        private static void RenderSightComponents(SSAAPropagator __instance)
+        {
+            if (__instance._sightNonLensRenderers == null || __instance._sightNonLensRenderers.Length == 0) return;
+
+            var cmd = __instance._cmdBuf;
+            cmd.BeginSample("DEPTH_PREPASS");
+            cmd.SetRenderTarget(__instance._resampledColorTargetLDR[2], __instance._resampledDepthTarget);
+
+            // Render sight components
+            cmd.BeginSample("SIGHT_DEPTH");
+            for (int i = 0; i < __instance._sightNonLensRenderers.Length; i++)
+            {
+                if (IsRendererValid(__instance._sightNonLensRenderers[i], __instance._sightNonLensRenderersMaterials[i]))
+                {
+                    cmd.DrawRenderer(__instance._sightNonLensRenderers[i], __instance._sightNonLensRenderersMaterials[i]);
+                }
+            }
+            cmd.EndSample("SIGHT_DEPTH");
+
+            // Render weapon components
+            cmd.BeginSample("WEAPON_DEPTH");
+            for (int i = 0; i < __instance._otherWeaponRenderers.Length; i++)
+            {
+                if (IsRendererValid(__instance._otherWeaponRenderers[i], __instance._otherWeaponRenderersMaterials[i]))
+                {
+                    cmd.DrawRenderer(__instance._otherWeaponRenderers[i], __instance._otherWeaponRenderersMaterials[i]);
+                }
+            }
+            cmd.EndSample("WEAPON_DEPTH");
+
+            cmd.EndSample("DEPTH_PREPASS");
+        }
+
+        private static bool IsRendererValid(Renderer renderer, Material material)
+        {
+            return renderer != null && material != null && renderer.gameObject.activeSelf;
+        }
+
+        private static void ApplyVisionEffects(SSAAPropagator __instance)
+        {
+            if (__instance._nightVisionMaterial)
             {
                 __instance._cmdBuf.EnableShaderKeyword(SSAAPropagator.KWRD_NIGHTVISION_NOISE);
-                __instance._cmdBuf.Blit(__instance._resampledColorTargetHDR[0], __instance._resampledColorTargetHDR[1], __instance._nightVisionMaterial);
+                __instance._cmdBuf.Blit(
+                    __instance._resampledColorTargetHDR[0],
+                    __instance._resampledColorTargetHDR[1],
+                    __instance._nightVisionMaterial
+                );
                 __instance._cmdBuf.DisableShaderKeyword(SSAAPropagator.KWRD_NIGHTVISION_NOISE);
                 __instance._currentDestinationHDR = 1;
             }
             else if (__instance._thermalVisionIsOn && __instance._thermalVisionMaterial != null)
             {
-                int pass = 1;
-                __instance._cmdBuf.Blit(__instance._resampledColorTargetHDR[0], __instance._resampledColorTargetHDR[1], __instance._thermalVisionMaterial, pass);
+                __instance._cmdBuf.Blit(
+                    __instance._resampledColorTargetHDR[0],
+                    __instance._resampledColorTargetHDR[1],
+                    __instance._thermalVisionMaterial,
+                    1
+                );
                 __instance._currentDestinationHDR = 1;
             }
-            Graphics.ExecuteCommandBuffer(__instance._cmdBuf);
-            return false;
         }
 
         // Use a Transpiler to replace the Screen.Width/Height calls to get the camera height and width
@@ -233,7 +641,6 @@ namespace TarkovVR.Patches.Visuals
         //    }
         //}
 
-
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "GetOutputHeight")]
@@ -247,22 +654,25 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(SSAA), "Awake")]
         private static void DisableSSAA(SSAA __instance)
         {
+
             __instance.FlippedV = true;
 
         }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PostProcessLayer), "InitLegacy")]
         private static void FixPostProcessing(PostProcessLayer __instance)
         {
             UnityEngine.Object.Destroy(__instance);
+
             //if (VRGlobals.camHolder && VRGlobals.camHolder.GetComponent<Camera>() == null)
             //{
             //    postProcessingStoogeCamera = VRGlobals.camHolder.AddComponent<Camera>();
             //    postProcessingStoogeCamera.enabled = false;
             //}
             //if (postProcessingStoogeCamera)
-            //    __instance.m_Camera = postProcessingStoogeCamera;
+            //    mainCam = postProcessingStoogeCamera;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -297,7 +707,6 @@ namespace TarkovVR.Patches.Visuals
             }
             return true;
         }
-
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
@@ -374,8 +783,73 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
+        //Attempting to fix DLSS by forcing DLAA. not quite there yet but I think its getting somewhere... Using custom jitter because post processing is disabled for VR
+        //Maybe ill try getting PostProcessing working again...
+        //-matsix
+        private static readonly Vector2[] CustomJitterSequence = new Vector2[]
+        {
+            new Vector2(-0.25f, -0.25f),
+            new Vector2(0.25f, -0.25f),
+            new Vector2(-0.25f, 0.25f),
+            new Vector2(0.25f, 0.25f)
+        };
+        private static int _jitterIndex = 0;
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "TryRenderDLSS", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(CommandBuffer) })]
+        private static bool FixDLAAOnlyRender(SSAAImpl __instance, RenderTexture source, RenderTexture destination, CommandBuffer externalCommandBuffer)
+        {
+            Camera fpsCamera = GameObject.Find("FPS Camera")?.GetComponent<Camera>();
 
-        // This also uses Screen width and height so need to fix it
+            if (!fpsCamera)
+            {
+                return false;
+            }
+
+            if (__instance._dlssWrapper == null)
+            {
+                if (!(__instance._ssaaPropagator != null) || !(__instance._ssaaPropagator.CopyDLSSResources != null) || !(__instance._ssaaPropagator.DLSSDebugOutput != null))
+                {
+                    __instance._failedToInitializeDLSS = true;
+                    return false;
+                }
+                __instance._dlssWrapper = new DLSSWrapper(__instance._ssaaPropagator.CopyDLSSResources, __instance._ssaaPropagator.DLSSDebugOutput);
+            }
+
+            if (__instance._dlssWrapper != null)
+            {
+                __instance._dlssWrapper.DebugMode = __instance.DLSSDebug;
+                __instance._dlssWrapper.DebugDisable = (__instance.DLSSDebugDisable || DLSSWrapper.WantToDebugDLSSViaRenderdoc);
+                __instance._dlssWrapper.Quality = __instance._DLSSCurrentQuality;
+                __instance._dlssWrapper.JitterOffsets = __instance.DLSSJitter;
+                __instance._dlssWrapper.MVScale = __instance.DLSSMVScale;
+            }
+            if (!__instance._dlssWrapper.IsDLSSLibraryLoaded())
+            {
+                DLSSWrapper.InitErrors initErrors = __instance._dlssWrapper.InitializeDLSS();
+                __instance._failedToInitializeDLSS = (initErrors > DLSSWrapper.InitErrors.INIT_SUCCESS);
+                if (initErrors != DLSSWrapper.InitErrors.INIT_SUCCESS)
+                {
+                    return false;
+                }
+            }
+            int nativeWidth = destination ? destination.width : Screen.width;
+            int nativeHeight = destination ? destination.height : Screen.height;
+
+            nativeWidth = Camera.main.pixelWidth;
+            nativeHeight = Camera.main.pixelHeight;
+            DLSSWrapper.SetCreateDLSSFeatureParameters(nativeWidth, nativeHeight, nativeWidth, nativeHeight, 0); // DLAA mode
+
+            __instance._dlssWrapper.CopyDepthMotion(source, destination, __instance.DepthCopyMode, externalCommandBuffer);
+            __instance._dlssWrapper.Sharpness = __instance.DLSSSharpness;
+
+            
+            Vector2 jitter = CustomJitterSequence[_jitterIndex++ % CustomJitterSequence.Length];
+            jitter *= new Vector2(__instance.DLSSJitterXScale, __instance.DLSSJitterYScale);
+
+            __instance._dlssWrapper.OnRenderImage(source, destination, __instance.SwapDLSSUpDown, jitter, externalCommandBuffer);
+            return true;
+        }
+        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
         private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
@@ -393,6 +867,7 @@ namespace TarkovVR.Patches.Visuals
                     return false;
                 }
             }
+
             if (__instance.RenderTextureMaterialBicubic == null)
             {
                 __instance.RenderTextureMaterialBicubic = new Material(Shader.Find("Hidden/BicubicSampling"));
@@ -413,6 +888,7 @@ namespace TarkovVR.Patches.Visuals
             Graphics.ExecuteCommandBuffer(__instance._applyResultCmdBuf);
             return false;
         }
+
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //[HarmonyPrefix]
@@ -464,7 +940,8 @@ namespace TarkovVR.Patches.Visuals
         // MotionVectorsPASS is whats causing the annoying [Error  : Unity Log] Dimensions of color surface does not match dimensions of depth surface    error to occur 
         // but its also needed for grass and maybe other stuff
 
-        // SSAA causes a bunch of issues like thermal/nightvision rendering all fucky, and the scopes also render in 
+        // SSAA causes a bunch of issues like thermal/nightvision rendering all fucky, and the
+        // s also render in 
         // with 2 other lenses on either side of the main lense, Although SSAA is nice for fixing the jagged edges, it 
         // also adds a strong layer of blur over everything so it's definitely best to keep it disabled. Might look into
         // keeping it around later on if I can figure a way to get it to look nice without messing with everything else
@@ -550,7 +1027,8 @@ namespace TarkovVR.Patches.Visuals
             {
                 distantShadow.EnableMultiviewTiles = false;
                 distantShadow.PreComputeMask = true;
-
+                QualitySettings.shadowDistance = 25f;
+                distantShadow.CurrentMaskResolution = DistantShadow.ResolutionState.FULL;
             }
             else if (VRSettings.GetShadowOpts() == VRSettings.ShadowOpt.DisableNearShadows)
             {
@@ -754,69 +1232,293 @@ namespace TarkovVR.Patches.Visuals
 
         //    return false; // Skip original method
         //}
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
-        //private static bool FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
-        //{
-        //    if (!__instance.CheckSupport(needDepth: true, needHdr: true))
-        //    {
-        //        Graphics.Blit(source, destination);
-        //        return false;
-        //    }
+        /*
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
+        private static bool FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
+        {
+            if (!__instance.CheckSupport(needDepth: true, needHdr: true))
+            {
+                Graphics.Blit(source, destination);
+                return false;
+            }
 
-        //    // Apply the effect for each eye separately if in VR mode
-        //    if (UnityEngine.XR.XRSettings.enabled)
-        //    {
-        //        __instance.sky.Components.Scattering = __instance;
-        //        for (int eye = 0; eye < 2; eye++)
-        //        {
-        //            // Update the camera to use the correct eye's perspective
-        //            Camera.StereoscopicEye stereoEye = (Camera.StereoscopicEye)eye;
-        //            Matrix4x4 identity = CalculateFrustumCorners(Camera.main, stereoEye);
+            // Apply the effect for each eye separately if in VR mode
+            if (UnityEngine.XR.XRSettings.enabled)
+            {
+                __instance.sky.Components.Scattering = __instance;
+                for (int eye = 0; eye < 2; eye++)
+                {
+                    // Update the camera to use the correct eye's perspective
+                    Camera.StereoscopicEye stereoEye = (Camera.StereoscopicEye)eye;
+                    Matrix4x4 identity = CalculateFrustumCorners(Camera.main, stereoEye);
 
-        //            __instance.material_0.SetMatrix(TOD_Scattering.int_1, identity);
-        //            __instance.material_0.SetTexture(TOD_Scattering.int_2, __instance.DitheringTexture);
+                    __instance.material_0.SetMatrix(TOD_Scattering.int_1, identity);
+                    __instance.material_0.SetTexture(TOD_Scattering.int_2, __instance.DitheringTexture);
 
-        //            Vector3 cameraDirection = Camera.main.transform.forward;
-        //            float cameraHeight = Camera.main.transform.position.y;
-        //            Vector3 adjustedDirection = new Vector3(cameraDirection.x, 0f, cameraDirection.z).normalized;
+                    Vector3 cameraDirection = Camera.main.transform.forward;
+                    float cameraHeight = Camera.main.transform.position.y;
+                    Vector3 adjustedDirection = new Vector3(cameraDirection.x, 0f, cameraDirection.z).normalized;
 
-        //            float adjustedHeightFalloff = __instance.HeightFalloff * Mathf.Abs(Vector3.Dot(adjustedDirection, Vector3.up));
-        //            float adjustedDensity = __instance.GlobalDensity * (1.0f - Mathf.Abs(cameraDirection.y));
+                    float adjustedHeightFalloff = __instance.HeightFalloff * Mathf.Abs(Vector3.Dot(adjustedDirection, Vector3.up));
+                    float adjustedDensity = __instance.GlobalDensity * (1.0f - Mathf.Abs(cameraDirection.y));
 
-        //            if (__instance.FromLevelSettings)
-        //            {
-        //                LevelSettings instance = Singleton<LevelSettings>.Instance;
-        //                if (instance != null)
-        //                {
-        //                    __instance.HeightFalloff = instance.HeightFalloff;
-        //                    __instance.ZeroLevel = instance.ZeroLevel;
-        //                }
-        //            }
+                    if (__instance.FromLevelSettings)
+                    {
+                        LevelSettings instance = Singleton<LevelSettings>.Instance;
+                        if (instance != null)
+                        {
+                            __instance.HeightFalloff = instance.HeightFalloff;
+                            __instance.ZeroLevel = instance.ZeroLevel;
+                        }
+                    }
 
-        //            //Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(adjustedHeightFalloff, cameraHeight - __instance.ZeroLevel, adjustedDensity, 0f));
-        //            Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(__instance.HeightFalloff, VRGlobals.camRoot.transform.position.y - __instance.ZeroLevel, __instance.GlobalDensity, 0f));
-        //            __instance.material_0.SetFloat(TOD_Scattering.int_4, __instance.SunrizeGlow);
+                    //Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(adjustedHeightFalloff, cameraHeight - __instance.ZeroLevel, adjustedDensity, 0f));
+                    Shader.SetGlobalVector(TOD_Scattering.int_3, new Vector4(__instance.HeightFalloff, VRGlobals.camRoot.transform.position.y - __instance.ZeroLevel, __instance.GlobalDensity, 0f));
+                    __instance.material_0.SetFloat(TOD_Scattering.int_4, __instance.SunrizeGlow);
 
-        //            if (__instance.Lighten)
-        //            {
-        //                __instance.material_0.EnableKeyword("LIGHTEN");
-        //            }
-        //            else
-        //            {
-        //                __instance.material_0.DisableKeyword("LIGHTEN");
-        //            }
+                    if (__instance.Lighten)
+                    {
+                        __instance.material_0.EnableKeyword("LIGHTEN");
+                    }
+                    else
+                    {
+                        __instance.material_0.DisableKeyword("LIGHTEN");
+                    }
 
-        //            __instance.CustomBlit(source, destination, __instance.material_0);
-        //        }
-        //    }
-        //    else
-        //    {
-        //        return true;
-        //    }
-        //    return false;
-        //}
+                    __instance.CustomBlit(source, destination, __instance.material_0);
+                }
+            }
+            else
+            {
+                return true;
+            }
+            return false;
+        }
+        */
 
+        //This replaces the fog system BSG uses and uses the fog from the Prism Post Process effects instead. This does have a drawback though,
+        //fog will appear inside of buildings (I think it's better than no fog at all or broken fog)       
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImage")]
+        private static void FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
+        {
+            __instance.enabled = false;
+        }
+        /*
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WeatherController), "method_9")]
+        private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
+        {
+            static Camera FindCameraByName(string cameraName)
+            {
+                foreach (var cam in GameObject.FindObjectsOfType<Camera>())
+                {
+                    if (!cam.enabled) continue;
+                    if (cam.name == cameraName)
+                        return cam;
+                }
+                return null;
+            }
+
+            Camera fpsCam = FindCameraByName("FPS Camera");
+            Camera opticCam = FindCameraByName("BaseOpticCamera(Clone)");
+
+            if (fpsCam == null)
+                return;
+
+            PrismEffects fpsPrism = fpsCam.GetComponent<PrismEffects>();
+            if (fpsPrism == null)
+            {
+                fpsPrism = fpsCam.gameObject.AddComponent<PrismEffects>();
+            }
+
+            if (VRSettings.GetDisableFog() == true)
+            {
+                fpsPrism.enabled = false;
+                return;
+            }
+
+            if (!fpsPrism.useFog)
+                fpsPrism.useFog = true;
+
+            // Calculate fogDistance based on GlobalDensity
+            float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
+            fpsPrism.fogDistance = fogDistance;
+
+            float fogAlpha = Mathf.Lerp(1.0f, 0.08f, (fogDistance - 100f) / 400f);
+            fpsPrism.fogColor = new Color(1f, 1f, 1f, fogAlpha);
+            fpsPrism.fogEndColor = new Color(1f, 1f, 1f, fogAlpha);
+            //Plugin.MyLog.LogError("FPS Camera FogDistance: " + fpsPrism.fogDistance);
+
+            // If optic camera exists, copy settings
+            if (opticCam != null)
+            {
+                PrismEffects opticPrism = opticCam.GetComponent<PrismEffects>();
+                
+                if (opticPrism == null)
+                    opticPrism = opticCam.gameObject.AddComponent<PrismEffects>();
+
+                if (VRSettings.GetDisableFog() == true)
+                {
+                    opticPrism.useFog = false;
+                    return;
+                }
+
+                if (VRSettings.GetDisablePrismEffects() == true)
+                {
+                    opticPrism.enabled = false;
+                    return;
+                }
+
+                if (!opticPrism.useFog)
+                    opticPrism.useFog = true;
+                opticPrism.fogDistance = fpsPrism.fogDistance;
+                opticPrism.fogColor = fpsPrism.fogColor;
+                opticPrism.fogEndColor = fpsPrism.fogEndColor;
+                //Plugin.MyLog.LogError("BaseOpticCamera(Clone) FogDistance copied: " + opticPrism.fogDistance);
+            }
+        }
+        */
+        /*
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WeatherController), "method_9")]
+        private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
+        {
+            // Helper function to find camera by name
+            static Camera FindCameraByName(string cameraName)
+            {
+                foreach (var cam in GameObject.FindObjectsOfType<Camera>())
+                {
+                    if (!cam.enabled) continue;
+                    if (cam.name == cameraName)
+                        return cam;
+                }
+                return null;
+            }
+
+            // Find the FPS Camera
+            Camera fpsCam = FindCameraByName("FPS Camera");
+            if (fpsCam == null)
+                return;
+
+            // Get or add PrismEffects component to FPS camera
+            PrismEffects fpsPrism = fpsCam.GetComponent<PrismEffects>();
+            if (fpsPrism == null)
+            {
+                fpsPrism = fpsCam.gameObject.AddComponent<PrismEffects>();
+            }
+
+            // Enable fog effect
+            if (VRSettings.GetDisableFog() == true)
+                fpsPrism.useFog = false;
+            else
+                fpsPrism.useFog = true;
+
+            // Calculate fog properties
+            float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
+            float fogAlpha = Mathf.Lerp(1.0f, 0.08f, (fogDistance - 100f) / 400f);
+            Color fogColor = new Color(1f, 1f, 1f, fogAlpha);
+
+            // Apply fog settings to FPS camera
+            fpsPrism.fogDistance = fogDistance;
+            fpsPrism.fogColor = fogColor;
+            fpsPrism.fogEndColor = fogColor;
+            Plugin.MyLog.LogError("FPS Camera FogDistance: " + fpsPrism.fogDistance);
+            // Process optic camera if it exists
+            Camera opticCam = FindCameraByName("BaseOpticCamera(Clone)");
+            if (opticCam != null)
+            {
+                PrismEffects opticPrism = opticCam.GetComponent<PrismEffects>();
+
+                if (opticPrism == null)
+                    opticPrism = opticCam.gameObject.AddComponent<PrismEffects>();
+
+                if (VRSettings.GetDisablePrismEffects())
+                {
+                    opticPrism.enabled = false;
+                    return;
+                }
+
+                // Apply same fog settings to optic camera
+                if (VRSettings.GetDisableFog() == true)
+                    opticPrism.useFog = false;
+                else
+                    opticPrism.useFog = true;
+
+                opticPrism.fogDistance = fpsPrism.fogDistance;
+                opticPrism.fogColor = fpsPrism.fogColor;
+                opticPrism.fogEndColor = fpsPrism.fogEndColor;
+            }
+        }
+        */
+        private static Camera fpsCam;
+        private static Camera opticCam;
+        private static PrismEffects fpsPrism;
+        private static PrismEffects opticPrism;
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WeatherController), "method_9")]
+        private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
+        {
+            // Initialize and cache cameras once
+            if (fpsCam == null)
+            {
+                foreach (var cam in Camera.allCameras)
+                {
+                    if (cam.name == "FPS Camera")
+                        fpsCam = cam;
+                    else if (cam.name == "BaseOpticCamera(Clone)")
+                        opticCam = cam;
+                }
+            }
+
+            if (fpsCam == null)
+                return;
+
+            if (fpsPrism == null)
+                fpsPrism = fpsCam.GetComponent<PrismEffects>() ?? fpsCam.gameObject.AddComponent<PrismEffects>();
+
+            // Enable/disable fog effect
+            if (VRSettings.GetDisableFog())
+                fpsPrism.useFog = false;
+            else
+                fpsPrism.useFog = true;
+
+            // Calculate fog properties
+            float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
+            float fogAlpha = Mathf.Lerp(1.0f, 0.08f, (fogDistance - 100f) / 400f);
+            Color fogColor = new Color(1f, 1f, 1f, fogAlpha);
+
+            // Apply fog settings to FPS camera
+            fpsPrism.fogDistance = fogDistance;
+            fpsPrism.fogColor = fogColor;
+            fpsPrism.fogEndColor = fogColor;
+
+            //Plugin.MyLog.LogError("FPS Camera FogDistance: " + fpsPrism.fogDistance + " - " + __instance.tod_Scattering_0.GlobalDensity);
+            // Process optic camera if it exists
+            if (opticCam != null)
+            {
+                if (opticPrism == null)
+                    opticPrism = opticCam.GetComponent<PrismEffects>() ?? opticCam.gameObject.AddComponent<PrismEffects>();
+
+                if (VRSettings.GetDisablePrismEffects())
+                {
+                    opticPrism.enabled = false;
+                    return;
+                }
+                
+                if (VRSettings.GetDisableFog())
+                    opticPrism.useFog = false;
+                else
+                    opticPrism.useFog = true;
+
+                opticPrism.enabled = true;
+                opticPrism.fogDistance = fogDistance;
+                opticPrism.fogColor = fogColor;
+                opticPrism.fogEndColor = fogColor;
+            }
+        }
         private static Matrix4x4 CalculateFrustumCorners(Camera cam, Camera.StereoscopicEye eye = Camera.StereoscopicEye.Left)
         {
             float nearClipPlane = cam.nearClipPlane;

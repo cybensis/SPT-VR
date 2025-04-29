@@ -17,6 +17,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="ModSupport\EFTApiSupport.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="TAA.shader" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\taashader" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.*" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
@@ -56,13 +68,16 @@
       <HintPath>libs\Managed\CommonExtensions.dll</HintPath>
     </Reference>
     <Reference Include="EFTConfiguration">
-      <HintPath>libs\Managed\EFTConfiguration.dll</HintPath>
+      <HintPath>libs\ModSupport\KmyTarkovConfiguration.dll</HintPath>
     </Reference>
     <Reference Include="Fika.Core">
       <HintPath>libs\ModSupport\Fika.Core.dll</HintPath>
     </Reference>
     <Reference Include="ItemComponent.Types">
       <HintPath>libs\Managed\ItemComponent.Types.dll</HintPath>
+    </Reference>
+    <Reference Include="KmyTarkovConfiguration">
+      <HintPath>C:\Users\lilma\Downloads\SPT-VR-main\SPT-VR-main\libs\ModSupport\KmyTarkovConfiguration.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>libs\Managed\Newtonsoft.Json.dll</HintPath>

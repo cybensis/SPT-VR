@@ -5,10 +5,13 @@ using System;
 using System.IO;
 using System.Reflection;
 using TarkovVR.ModSupport;
+using TarkovVR.Patches.Visuals;
 using Unity.XR.OpenVR;
 using UnityEngine;
 using UnityEngine.XR.Management;
 using Valve.VR;
+using static TarkovVR.Patches.Visuals.VisualPatches;
+using UnityEngine.XR;
 
 namespace TarkovVR
 {
@@ -17,6 +20,7 @@ namespace TarkovVR
     {
         public static ManualLogSource MyLog;
         private bool vrInitializedSuccessfully = false;
+        public static GameObject WeaponModdingAnchor { get; set; }
 
         private void Awake()
         {
@@ -41,14 +45,14 @@ namespace TarkovVR
             try
             {
                 SteamVR_Actions.PreInitialize();
-                SteamVR_Settings.instance.pauseGameWhenDashboardVisible = true;
+                SteamVR_Settings.instance.pauseGameWhenDashboardVisible = false;
 
                 var generalSettings = ScriptableObject.CreateInstance<XRGeneralSettings>();
                 var managerSettings = ScriptableObject.CreateInstance<XRManagerSettings>();
                 var xrLoader = ScriptableObject.CreateInstance<OpenVRLoader>();
-
                 var settings = OpenVRSettings.GetSettings();
-                settings.StereoRenderingMode = OpenVRSettings.StereoRenderingModes.MultiPass;
+                settings.StereoRenderingMode = OpenVRSettings.StereoRenderingModes.SinglePassInstanced;
+
                 generalSettings.Manager = managerSettings;
 
                 managerSettings.loaders.Clear();
@@ -64,34 +68,33 @@ namespace TarkovVR
                 // Verify SteamVR is running
                 if (!SteamVR.active)
                 {
-                    Logger.LogError("[SteamVR] Initialization failed. SteamVR is not active.");
+                    Plugin.MyLog.LogError("[SteamVR] Initialization failed. SteamVR is not active.");
                     return false;
                 }
 
                 // Verify OpenVR initialization
                 if (SteamVR.instance == null || SteamVR.instance.hmd == null)
                 {
-                    Logger.LogError("[OpenVR] HMD not found or OpenVR initialization failed.");
+                    Plugin.MyLog.LogError("[OpenVR] HMD not found or OpenVR initialization failed.");
                     return false;
                 }
 
-                Logger.LogInfo("[VR] Initialization completed successfully.");
+                Plugin.MyLog.LogError("[VR] Initialization completed successfully with Single Pass Instanced.");
                 return true;
             }
             catch (Exception ex)
             {
-                Logger.LogError($"[VR Initialization Error] {ex.Message}");
+                Plugin.MyLog.LogError($"[VR Initialization Error] {ex.Message}");
                 return false;
             }
         }
-
 
         private void InitializeConditionalPatches()
         {
             if (!vrInitializedSuccessfully)
                 return; // Skip patching if VR failed to initialize
 
-            string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\kmyuhkyuk-EFTApi\\EFTConfiguration.dll");
+            /*string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\kmyuhkyuk-KmyTarkovApi\\KmyTarkovConfiguration.dll");
 
             if (File.Exists(modDllPath))
             {
@@ -115,9 +118,9 @@ namespace TarkovVR
             else
             {
                 MyLog.LogWarning("EFT API dll not found, support patches will not be applied.");
-            }
+            }*/
 
-            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
+            string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
 
             if (File.Exists(modDllPath))
             {
