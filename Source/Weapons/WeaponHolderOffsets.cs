@@ -36,6 +36,7 @@ namespace TarkovVR.Source.Weapons
             weaponOffsets.Add("weapon_izhmash_sv-98_762x54r_container(Clone)", new Vector3(0.29f, -0.11f, -0.18f));
             weaponOffsets.Add("weapon_molot_vpo_215_366tkm_container(Clone)", new Vector3(0.27f, -0.11f, -0.15f));
             weaponOffsets.Add("weapon_izhmash_mosin_rifle_762x54_container(Clone)", new Vector3(0.27f, -0.11f, -0.15f));
+            weaponOffsets.Add("weapon_izhmash_mosin_infantry_762x54_container(Clone)", new Vector3(0.27f, -0.11f, -0.15f));
             // Machine guns
             weaponOffsets.Add("weapon_izhmash_rpk16_545x39_container(Clone)", new Vector3(0.23f, -0.11f, -0.15f));
             weaponOffsets.Add("weapon_zid_rpdn_762x39_container(Clone)", new Vector3(0.24f, -0.11f, -0.15f));

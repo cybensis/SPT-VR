@@ -10,9 +10,24 @@ namespace TarkovVR.Source.Player.VR
     internal class IKManager : MonoBehaviour
     {
 
-        private float moveSpeed = 5;
         private bool matchingHeadToBody = false;
         private Vector3 upperArmPos = new Vector3(-0.1f, 0.1f, 0);
+        private float forwardThreshold = 0.40f;    // Distance forward before body follows
+        private float backwardThreshold = 0.10f; // Distance backward before body follows
+        private float sideThreshold = 0.50f;      // Distance to sides before body follows
+        private float emergencyThreshold = 0.8f;  // Distance for emergency repositioning
+        private float followSpeed = 2.5f;         // How quickly body follows head
+        private float movementMultiplier = 0.8f;  // Additional follow speed when moving
+        private AnimationCurve followCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); // Smoothing curve
+        private float headLeadDistance = 0.2f;    // How far ahead the head stays from body
+        private float minHeadLeadDistance = 0.1f; // Minimum lead distance even when stationary
+
+        private Vector3 velocitySmoothing = Vector3.zero;
+        private float smoothTime = 0.1f;
+        private Vector3 lastHeadPosition;
+        private float stopSmoothingTime = 1.0f; // Time to smoothly transition when stopping
+        private float stopTimer = 0f; // Timer to track stopping transition
+        private bool wasMoving = false; // Track if we were moving last frame
 
         private Transform leftUpperArm;
         private Transform rightUpperArm;
@@ -41,90 +56,287 @@ namespace TarkovVR.Source.Player.VR
             }
         }
 
-        public void MatchLegsToArms() {
-
-            // Can't remember what this is for, I'm guessing to check if the player height and position is initialized properly
+        public void MatchLegsToArms()
+        {
+            // Skip if not initialized
             if (VRGlobals.vrPlayer.initPos.y == 0)
                 return;
 
-            if (VRGlobals.inGame && VRGlobals.player && VRGlobals.player.PointOfView == EPointOfView.FirstPerson && name == "Base HumanSpine3")
+            if (VRGlobals.inGame && VRGlobals.player &&
+                VRGlobals.player.PointOfView == EPointOfView.FirstPerson &&
+                name == "Base HumanSpine3")
             {
-                // Position the player torso under the head
-                // Set the position of the spin under the camera and a little bit backwards so it matches with the camera better
-                //Vector3 cameraPosition = Camera.main.transform.position + new Vector3(0, -0.5f, 0);
-                //transform.position = cameraPosition + Camera.main.transform.forward * -0.3f;
-
-                //// Set the spine rotation to have x and z static but y (left and right) to the camera + offset to face forward
-                //Vector3 cameraEulerAngles = new Vector3(0, Camera.main.transform.eulerAngles.y + 280, -105);
-                //transform.eulerAngles = cameraEulerAngles;
-
-
-
-                Vector3 headsetPos = Camera.main.transform.position;
-                // Set the position of the body forward and to the right a bit because the actual center of the body kind of leans back too far
-                Vector3 playerBodyPos = transform.root.position + transform.root.forward * 0.12f + transform.root.right * 0.05f;
-                headsetPos.y = 0;
-                playerBodyPos.y = 0;
-                float distanceBetweenBodyAndHead = Vector3.Distance(playerBodyPos, headsetPos);
-
-                // Calculate the direction from the body to the headset
-                Vector3 directionToHeadset = headsetPos - transform.root.position;
-
-                // Determine if the headset is behind the body, we do this because the body stretches weirdly when leaning back, so try to always
-                // keep the body and head in the same place if they're leaning backwards.
-                float dotProduct = Vector3.Dot(transform.root.forward, directionToHeadset.normalized);
-
-                float distanceFromSideOfBody = Vector3.Dot(transform.root.right, directionToHeadset.normalized);
-
-                //
-                //.LogWarning(adotProduct + "  |   " + distanceBetweenBodyAndHead + "   |    " + dotProduct);
-
-                float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
-                float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
-                bool matchToBodyWhenMoving = (xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity()) && distanceBetweenBodyAndHead > 0.135f;
-
-
-                bool shouldMatchToBody = distanceBetweenBodyAndHead >= 0.25 || dotProduct < -0.5f;
-                if (Mathf.Abs(distanceFromSideOfBody) > 0.8)
-                    shouldMatchToBody = distanceBetweenBodyAndHead >= 0.35 || dotProduct < -0.5f;
-                bool stillNeedsToMatchToBody = matchingHeadToBody && distanceBetweenBodyAndHead > 0.135f;
-
-                // If the distance to the body is >= 0.25f, or if its currently being matched to the body, or if the head is behind the body
-                if (matchToBodyWhenMoving || shouldMatchToBody || stillNeedsToMatchToBody)
-                {
-
-                    if (distanceBetweenBodyAndHead > 1)
-                    {
-                        // The head shouldn't ever naturally be this far away from the body, so just set the camera to the body.
-                        VRGlobals.vrPlayer.initPos = Camera.main.transform.localPosition;
-                        VRGlobals.camRoot.transform.position = transform.root.position;
-
-                    }
-                    else
-                    {
-                        // We start moving the body towards the head if they aren't near each other, then offset that distance from the 
-                        // initPos because the camRoot and player pos are linked, so any movements to the player are made to camRoot and
-                        // need to be offset via vrOffsetter/initPos so the headset doesn't move with the camRoot.
-                        matchingHeadToBody = true;
-                        headsetPos.y = transform.root.position.y;
-                        Vector3 newPosition = Vector3.MoveTowards(transform.root.position, headsetPos, Time.deltaTime);
-                        Vector3 movementDelta = newPosition - transform.root.position; // The actual movement vector
-
-                        transform.root.position = newPosition;
-                        // Now, counteract this movement for vrOffsetter to keep the camera stable in world space
-                        Vector3 localMovementDelta = VRGlobals.vrOffsetter.transform.parent.InverseTransformVector(movementDelta);
-                        localMovementDelta.y = 0;
-                        VRGlobals.vrPlayer.initPos += localMovementDelta; // Apply inverse local movement to vrOffsetter
-                    }
-                }
-                else
-                    matchingHeadToBody = false;
+                AdaptiveBodySync();
             }
             else
             {
+                // Reset position for non-spine bones or when not in first-person VR
                 transform.localPosition = Vector3.zero;
             }
         }
+
+        private void AdaptiveBodySync()
+        {
+            // Get current positions
+            Vector3 headPos = Camera.main.transform.position;
+            Vector3 bodyPos = transform.root.position;
+            Quaternion headRot = Camera.main.transform.rotation;
+
+            // Calculate current state
+            Vector3 headPosFlat = FlattenVector(headPos);
+
+            // Calculate head offset relative to body orientation
+            Vector3 localHeadOffset = transform.root.InverseTransformPoint(headPosFlat);
+
+            // Calculate facing angle difference (horizontal plane only)
+            Vector3 headForward = FlattenVector(headRot * Vector3.forward).normalized;
+            Vector3 bodyForward = FlattenVector(transform.root.forward).normalized;
+            float angleDiff = Vector3.SignedAngle(bodyForward, headForward, Vector3.up);
+
+            // Extract leaning values
+            float forwardLean = localHeadOffset.z;
+            float sideLean = localHeadOffset.x;
+            float totalLeanDistance = new Vector2(forwardLean, sideLean).magnitude;
+
+            // Check if moving - only using joystick movement now
+            bool isUsingMovementControls = IsUsingMovementControls();
+            bool isPhysicallyMoving = IsPhysicallyMoving(headPosFlat, lastHeadPosition); // Keep for debugging
+            bool isMoving = isUsingMovementControls; // Only consider joystick movement
+
+            // Calculate adaptive thresholds
+            float adaptiveForwardThreshold = isUsingMovementControls ? forwardThreshold * 0.7f : forwardThreshold;
+            float adaptiveBackwardThreshold = isUsingMovementControls ? backwardThreshold * 0.7f : backwardThreshold;
+            float adaptiveSideThreshold = isUsingMovementControls ? sideThreshold * 0.7f : sideThreshold;
+            // Determine if body should follow head based on joystick input only
+            bool forwardLeanTriggered = forwardLean > adaptiveForwardThreshold;
+            bool backwardLeanTriggered = forwardLean < -adaptiveBackwardThreshold;
+            bool sideLeanTriggered = Mathf.Abs(sideLean) > adaptiveSideThreshold;
+
+            bool shouldStartFollowing = forwardLeanTriggered || backwardLeanTriggered || sideLeanTriggered || isUsingMovementControls;
+
+            // Check if still in the process of returning to neutral
+            bool shouldContinueFollowing = matchingHeadToBody &&
+                (Mathf.Abs(angleDiff) > 10f);
+
+            // Handle movement state transitions
+            if (isMoving)
+            {
+                // Reset stop timer when moving
+                stopTimer = 0f;
+                wasMoving = true;
+            }
+            else if (wasMoving)
+            {
+                // Just stopped moving - start the timer
+                stopTimer += Time.deltaTime;
+
+                // Force continue following during stop transition period
+                if (stopTimer < stopSmoothingTime)
+                {
+                    shouldContinueFollowing = true;
+                }
+                else
+                {
+                    // Transition complete
+                    wasMoving = false;
+                    stopTimer = 0f;
+                }
+            }
+
+            // Apply body movement
+            if (shouldStartFollowing || shouldContinueFollowing)
+            {
+                
+                if (totalLeanDistance > emergencyThreshold)
+                {
+                    // Emergency snap when leaned too far
+                    EmergencySnapToHead(headPosFlat);
+                }
+                else
+                {
+                
+                // Gradual movement with smoothing
+                float currentSpeed = followSpeed;
+
+                // Increase follow speed when using movement controls
+                if (isUsingMovementControls)
+                {
+                    currentSpeed *= movementMultiplier;
+                }
+
+                // If we're in the stopping transition, gradually reduce movement speed
+                if (!isMoving && wasMoving)
+                {
+                    float stopProgress = stopTimer / stopSmoothingTime;
+                    currentSpeed *= (1.0f - stopProgress * 0.7f); // Don't completely reduce to zero
+                }
+
+                // Calculate how aggressively to follow based on how far the lean is
+                float followIntensity = Mathf.Clamp01(totalLeanDistance / emergencyThreshold * 2);
+                followIntensity = followCurve.Evaluate(followIntensity);
+
+                SmartFollowHead(headPosFlat, headRot, currentSpeed, followIntensity, isMoving);
+                }
+            }
+            else
+            {
+                matchingHeadToBody = false;
+            }
+
+            // Update position tracking for next frame
+            lastHeadPosition = headPosFlat;
+        }
+
+        private Vector3 FlattenVector(Vector3 vector)
+        {
+            return new Vector3(vector.x, 0, vector.z);
+        }
+
+        private bool IsUsingMovementControls()
+        {
+            float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
+            float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
+            float threshold = VRSettings.GetLeftStickSensitivity();
+            return (xAxis > threshold || yAxis > threshold);
+        }
+
+        private bool IsPhysicallyMoving(Vector3 currentHeadPos, Vector3 lastHeadPos)
+        {
+            // This function is now only used for debugging purposes
+            // It is no longer used to determine if the body should follow the head
+            if (lastHeadPos == Vector3.zero) return false;
+
+            // Check if head has moved significantly since last frame
+            float moveDelta = Vector3.Distance(currentHeadPos, lastHeadPos);
+            return moveDelta > (Time.deltaTime * 0.3f); // Adjust threshold as needed
+        }
+
+        private void EmergencySnapToHead(Vector3 headPosFlat)
+        {
+            VRGlobals.vrPlayer.initPos = Camera.main.transform.localPosition;
+            VRGlobals.camRoot.transform.position = transform.root.position;
+            matchingHeadToBody = false; // Reset state after emergency snap
+        }
+
+        private void SmartFollowHead(Vector3 headPosFlat, Quaternion headRot, float speed, float intensity, bool isActivelyMoving)
+        {
+
+            if (transform == null)
+            {
+                Plugin.MyLog.LogError("SmartFollowHead: transform is null");
+                return;
+            }
+
+            if (transform.root == null)
+            {
+                Plugin.MyLog.LogError("SmartFollowHead: transform.root is null");
+                return;
+            }
+
+            if (VRGlobals.vrPlayer == null)
+            {
+                Plugin.MyLog.LogError("SmartFollowHead: vrPlayer is null");
+                return;
+            }
+
+            if (VRGlobals.vrOffsetter == null)
+            {
+                Plugin.MyLog.LogError("SmartFollowHead: vrOffsetter is null");
+                return;
+            }
+
+            if (VRGlobals.vrOffsetter.transform == null)
+            {
+                Plugin.MyLog.LogError("SmartFollowHead: vrOffsetter.transform is null");
+                return;
+            }
+
+            if (VRGlobals.vrOffsetter.transform.parent == null)
+            {
+                Plugin.MyLog.LogError("SmartFollowHead: vrOffsetter.transform.parent is null");
+                return;
+            }
+
+            matchingHeadToBody = true;
+
+            // Calculate current velocity of head movement
+            Vector3 headVelocity = (headPosFlat - lastHeadPosition) / Time.deltaTime;
+            float headSpeed = headVelocity.magnitude;
+
+            // Get local head velocity relative to body orientation
+            Vector3 localHeadVelocity = transform.root.InverseTransformDirection(headVelocity);
+
+            // Create target position
+            Vector3 targetPos;
+
+            if (isActivelyMoving)
+            {
+                
+                // Only apply lag when moving in forward direction or forward diagonals
+                // Check if there's significant forward component (Z > 0.1f)
+                bool hasForwardComponent = localHeadVelocity.z > 0.1f;
+
+                //Commented out the isAiming check, there was an issue where aiming while walking was causing bad jitter because of the body lag I added.
+                //I just reduced the body lag and that got rid of the jitter.
+                if (headSpeed > 0.1f && hasForwardComponent) //&& !VRGlobals.firearmController.IsAiming) 
+                {
+                    // Calculate dynamic lead distance based on head movement speed
+                    float dynamicLeadDistance = Mathf.Lerp(
+                        minHeadLeadDistance,  // Minimum distance when slow
+                        headLeadDistance,     // Maximum distance at full speed
+                        Mathf.Clamp01(headSpeed / 2.0f)  // Normalized speed factor
+                    );
+
+                    // Use actual movement direction for lead calculation
+                    targetPos = headPosFlat - (headVelocity.normalized * dynamicLeadDistance);
+                }
+                else
+                {
+                    float dynamicLeadDistance = Mathf.Lerp(
+                        minHeadLeadDistance,  // Minimum distance when slow
+                        headLeadDistance,     // Maximum distance at full speed
+                        Mathf.Clamp01(headSpeed / 2.0f)  // Normalized speed factor
+                    );
+                    // When moving backward, sideways, or not moving significantly,
+                    // target exact head position
+                    targetPos = headPosFlat + (headVelocity.normalized * dynamicLeadDistance) * 0.2f;
+                }
+            }
+            else
+            {
+
+                // When stopping movement, position the body slightly behind the head
+                // for a more natural standing pose
+                float behindDistance = 0.25f; // Distance behind the head (in meters)
+                Vector3 headForward = FlattenVector(headRot * Vector3.forward).normalized;
+                targetPos = headPosFlat - (headForward * behindDistance);
+            }
+
+            // Maintain body Y position
+            targetPos.y = transform.root.position.y;
+
+            // Calculate smooth movement - use SmoothDamp for more natural motion
+            Vector3 newPosition = Vector3.SmoothDamp(
+                transform.root.position,
+                targetPos,
+                ref velocitySmoothing,
+                isActivelyMoving ? smoothTime : smoothTime * 2.0f, // Use longer smoothing time when stopping
+                speed * intensity
+            );
+
+            // Calculate movement delta
+            Vector3 movementDelta = newPosition - transform.root.position;
+
+            // Apply movement to root
+            transform.root.position = newPosition;
+
+            // Don't handle rotation - it's managed elsewhere
+            // Just adjust VR origin offset to compensate for body movement
+            Vector3 localDelta = VRGlobals.vrOffsetter.transform.parent.InverseTransformVector(movementDelta);
+            localDelta.y = 0; // Only apply horizontal movement
+            VRGlobals.vrPlayer.initPos += localDelta;
+        }
+
 
         // NOTE: I tried extending the arms but that offsets the hands from the gun, so instead set the local position of
         // the upper arm, or the collarbone, for the upper arm the +y value goes forward
@@ -140,10 +352,11 @@ namespace TarkovVR.Source.Player.VR
             if (rightUpperArm)
                 rightUpperArm.localPosition = upperArmPos;
 
-            if (!VRGlobals.emptyHands || VRGlobals.player.HandsIsEmpty) { 
+            if (!VRGlobals.emptyHands || VRGlobals.player.HandsIsEmpty)
+            {
                 MatchLegsToArms();
             }
-           
+
 
 
         }

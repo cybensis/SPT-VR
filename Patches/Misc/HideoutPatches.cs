@@ -320,6 +320,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(SelectItemContextMenu), "method_1")]
         private static bool PositionItemContainerList(SelectItemContextMenu __instance, RectTransform parentPosition, Vector2 offset, EContextPriorDirection direction)
         {
+            
             Transform parent = __instance.RectTransform.parent;
 
             if (parent != null)
@@ -333,13 +334,19 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+        //BSG... Why make coroutine for this?
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SelectItemContextMenu), "GetItem")]
         private static void SetItemContainerListPos(SelectItemContextMenu __instance)
         {
-            __instance._container.localPosition = Vector3.zero;
+            __instance.WaitOneFrame(() =>
+            {
+                foreach (Transform child in __instance.gameObject.transform)
+                {
+                    child.localPosition = Vector3.zero;
+                }
+            });
         }
-
         // The UI is closed when the player selects a preloader task bar option twice
         // so close the VR inventory.
         [HarmonyPrefix]

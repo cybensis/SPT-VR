@@ -176,12 +176,7 @@ namespace TarkovVR.Patches.UI
         {
             Cursor.lockState = CursorLockMode.Locked;
             ShowUiScreens();
-            //int bitmask = 1 << playerLayer; // 256
-            //Camera.main.cullingMask &= ~bitmask; // -524321 & -257 
-            
-            //New way to handle hiding gun and body in inventory. Old method was disabling GameObjects which would break things like scopes
-            //As an example, when you were in your inventory and switched scopes, since the GameObj was disabled, it couldn't process that scope change properly
-            //Now it just disables the renderer's so the gameObj is still active
+
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = false;
@@ -190,31 +185,34 @@ namespace TarkovVR.Patches.UI
                 foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = false;
 
-            lastCamRootYRot = VRGlobals.camRoot.transform.eulerAngles.y;
-            float initialCameraYRotation = Camera.main.transform.eulerAngles.y;
-            VRGlobals.camRoot.transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
-            float newCameraYRotation = Camera.main.transform.eulerAngles.y;
-            float rotationDifference = initialCameraYRotation - newCameraYRotation;
-            VRGlobals.vrOffsetter.transform.localRotation = Quaternion.Euler(0, rotationDifference, 0);
             VRGlobals.menuOpen = true;
             VRGlobals.blockRightJoystick = true;
             VRGlobals.blockLeftJoystick = true;
             VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
-            VRGlobals.commonUi.parent = VRGlobals.camRoot.transform;
-            VRGlobals.commonUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
-            VRGlobals.commonUi.localPosition = new Vector3(-0.8f, -0.5f - VRGlobals.vrPlayer.crouchHeightDiff, 0.8f);
-            VRGlobals.commonUi.localEulerAngles = Vector3.zero;
+
+            Transform head = Camera.main.transform;
+            Vector3 forward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
+            Vector3 right = Vector3.ProjectOnPlane(head.right, Vector3.up).normalized;
+
+            float distance = 0.8f;
+            float heightOffset = -0.5f;
+            float horizontalOffset = -0.7f; // Move UI slightly to the left
+
+            Transform ui = VRGlobals.commonUi;
+            ui.SetParent(VRGlobals.camRoot.transform);
+            ui.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+            ui.position = head.position + forward * distance + right * horizontalOffset + new Vector3(0, heightOffset, 0);
+            ui.rotation = Quaternion.LookRotation(forward, Vector3.up);
+
             if (VRGlobals.preloaderUi)
             {
-
-                VRGlobals.preloaderUi.transform.parent = VRGlobals.camRoot.transform;
-                VRGlobals.preloaderUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
-                VRGlobals.preloaderUi.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
-
-                VRGlobals.preloaderUi.localPosition = new Vector3(-0.03f, -0.1f - VRGlobals.vrPlayer.crouchHeightDiff, 0.8f);
-
-                VRGlobals.preloaderUi.localRotation = Quaternion.identity;
+                Transform preloader = VRGlobals.preloaderUi;
+                preloader.SetParent(VRGlobals.camRoot.transform);
+                preloader.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+                preloader.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
+                preloader.position = head.position + forward * distance + right * -0.2f + new Vector3(0, -0.1f - VRGlobals.vrPlayer.crouchHeightDiff, 0);
+                preloader.rotation = Quaternion.LookRotation(forward, Vector3.up);
 
                 if (UIPatches.notifierUi)
                 {
@@ -225,7 +223,6 @@ namespace TarkovVR.Patches.UI
                 }
             }
         }
-
         public static void HandleCloseInventory()
         {
             HideUiScreens();
@@ -250,8 +247,8 @@ namespace TarkovVR.Patches.UI
             VRGlobals.preloaderUi.parent = null;
             VRGlobals.preloaderUi.position = new Vector3(1000, 1000, 1000);
             VRGlobals.vrPlayer.SetNotificationUi();
-            VRGlobals.vrOffsetter.transform.localRotation = Quaternion.identity;
-            VRGlobals.camRoot.transform.eulerAngles = new Vector3(0, lastCamRootYRot, 0);
+            //VRGlobals.vrOffsetter.transform.localRotation = Quaternion.identity;
+            //VRGlobals.camRoot.transform.eulerAngles = new Vector3(0, lastCamRootYRot, 0);
 
         }
         [HarmonyPostfix]
@@ -296,7 +293,7 @@ namespace TarkovVR.Patches.UI
         private static void SetTransmitInteractionMenuActive(ActionPanel __instance, [CanBeNull] ActionsReturnClass interactionState)
         {
             if (VRGlobals.vrPlayer && VRGlobals.vrPlayer is RaidVRPlayerManager) {
-                if (interactionState != null && interactionState.SelectedAction.Name.Contains("Transit")) {
+                if (interactionState != null && interactionState.SelectedAction.Name.Contains("Transit") && VRGlobals.vrPlayer.interactionUi != null) {
 
                     // Set position not local position so it doesn't inherit rotated position from camRoot
                     VRGlobals.vrPlayer.interactionUi.position = Camera.main.transform.position + Camera.main.transform.forward * 0.4f + Camera.main.transform.up * -0.2f + Camera.main.transform.right * 0;
@@ -567,6 +564,7 @@ namespace TarkovVR.Patches.UI
                     }
                 }
             }
+            
             else if (interactableObject is LootItem lootItem)
             {
                 if (lootItem.Item is Weapon { IsOneOff: not false } weapon && weapon.Repairable.Durability == 0f)
@@ -607,7 +605,7 @@ namespace TarkovVR.Patches.UI
                 }
                 var eventInfo = typeof(Player).GetEvent("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
                 var field = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-                var eventDelegate = (Action)field.GetValue(__instance);
+                var eventDelegate = (Action)field?.GetValue(__instance);
                 eventDelegate?.Invoke();
             }
             if (player != __instance.InteractablePlayer || __instance._nextCastHasForceEvent)
@@ -1058,37 +1056,19 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(PlaceItemTrigger), "TriggerEnter")]
         private static void PlaceItemPositionUi(PlaceItemTrigger __instance)
         {
-            // Check VRGlobals.vrPlayer
-            if (VRGlobals.vrPlayer == null)
+            if (VRGlobals.vrPlayer.interactionUi != null)
             {
-                Plugin.MyLog.LogError("VRGlobals.vrPlayer is null");
-                return;
+                // Set position not local position so it doesn't inherit rotated position from camRoot
+                VRGlobals.vrPlayer.interactionUi.position = Camera.main.transform.position +
+                                                           Camera.main.transform.forward * 0.4f +
+                                                           Camera.main.transform.up * -0.2f +
+                                                           Camera.main.transform.right * 0;
+
+                VRGlobals.vrPlayer.interactionUi.LookAt(Camera.main.transform);
+
+                // Need to rotate 180 degrees otherwise it shows up backwards
+                VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);
             }
-
-            // Check interactionUi
-            if (VRGlobals.vrPlayer.interactionUi == null)
-            {
-                Plugin.MyLog.LogError("VRGlobals.vrPlayer.interactionUi is null");
-                return;
-            }
-
-            // Check Camera.main
-            if (Camera.main == null)
-            {
-                Plugin.MyLog.LogError("Camera.main is null");
-                return;
-            }
-
-            // Set position not local position so it doesn't inherit rotated position from camRoot
-            VRGlobals.vrPlayer.interactionUi.position = Camera.main.transform.position +
-                                                       Camera.main.transform.forward * 0.4f +
-                                                       Camera.main.transform.up * -0.2f +
-                                                       Camera.main.transform.right * 0;
-
-            VRGlobals.vrPlayer.interactionUi.LookAt(Camera.main.transform);
-
-            // Need to rotate 180 degrees otherwise it shows up backwards
-            VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);
         }
 
         [HarmonyPrefix]

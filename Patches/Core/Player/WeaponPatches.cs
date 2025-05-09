@@ -35,6 +35,10 @@ using static TarkovVR.Source.Controls.InputHandlers;
 using UnityEngine.Rendering;
 using TarkovVR;
 using System.Collections;
+using System.Security.Cryptography.X509Certificates;
+using TarkovVR.ModSupport.FIKA;
+using Fika.Core;
+using Fika.Core.Coop.Utils;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -494,7 +498,7 @@ namespace TarkovVR.Patches.Core.Player
         private static void HandleHighLightMeshAwake(HighLightMesh __instance)
         {
 
-            if (__instance.Mat == null)
+            if (Camera.main.stereoEnabled && __instance.Mat == null && VRGlobals.player && (VRGlobals.vrPlayer is HideoutVRPlayerManager || VRGlobals.vrPlayer is RaidVRPlayerManager))
             {
                 var shader = Shader.Find("Hidden/HighLightMesh");
                 __instance.Mat = new Material(shader);
@@ -511,7 +515,7 @@ namespace TarkovVR.Patches.Core.Player
         private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
         {
 
-            if (!__instance._player.IsYourPlayer)
+            if (!__instance._player.IsYourPlayer || __instance._player == null)
                 return;
 
             if (VRGlobals.menuOpen)
@@ -578,9 +582,10 @@ namespace TarkovVR.Patches.Core.Player
                 {
                     currentGunInteractController = __instance.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
                     currentGunInteractController.Init();
+
                     if (Camera.main.gameObject.GetComponent<HighLightMesh>())
                         currentGunInteractController.SetHighlightComponent(Camera.main.gameObject.GetComponent<HighLightMesh>());
-                    else
+                    else if (Camera.main.stereoEnabled)
                     {
                         HighLightMesh highLightMesh = Camera.main.gameObject.AddComponent<HighLightMesh>();
                         highLightMesh.enabled = false;
@@ -592,9 +597,16 @@ namespace TarkovVR.Patches.Core.Player
                     }
                     currentGunInteractController.SetPlayerOwner(__instance._player.gameObject.GetComponent<GamePlayerOwner>());
                     WeaponMeshParts weaponHighlightParts = WeaponMeshList.GetWeaponMeshList(__instance.WeaponRoot.transform.root.name);
+                    //Plugin.MyLog.LogError($"[InitBallisticCalculator] weaponHighlightParts is {(weaponHighlightParts == null ? "null" : "not null")} for weapon: {__instance.WeaponRoot.transform.root.name}");
                     Transform weaponMeshRoot = __instance.GunBaseTransform.GetChild(0);
                     if (weaponHighlightParts != null)
                     {
+                        //Plugin.MyLog.LogError($"Firing mode switch count: {weaponHighlightParts.firingModeSwitch.Count}");
+                        foreach (var switchName in weaponHighlightParts.firingModeSwitch)
+                        {
+                            var found = weaponMeshRoot.FindChildRecursive(switchName);
+                            //Plugin.MyLog.LogError($"Trying to find fire mode switch '{switchName}': {(found ? "found" : "not found")}");
+                        }
                         foreach (string magazineMesh in weaponHighlightParts.magazine)
                         {
                             Transform magazineMeshTransform = weaponMeshRoot.FindChildRecursive(magazineMesh);
@@ -611,6 +623,7 @@ namespace TarkovVR.Patches.Core.Player
                             if (weaponMeshRoot.FindChildRecursive(chamberMesh))
                                 currentGunInteractController.SetChargingHandleOrBolt(weaponMeshRoot.FindChildRecursive(chamberMesh), false);
                         }
+                        
                         foreach (string firingModeSwitch in weaponHighlightParts.firingModeSwitch)
                         {
                             if (weaponMeshRoot.FindChildRecursive(firingModeSwitch))
@@ -696,6 +709,7 @@ namespace TarkovVR.Patches.Core.Player
                     weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier;
                 }
                 VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
+                //Plugin.MyLog.LogError($"[MoveWeaponToIKHands] Final weapon offset: {weaponOffset}");
             }
             else if (__instance.WeaponRoot.parent.FindChild("RightHandPositioner"))
             {
@@ -718,14 +732,30 @@ namespace TarkovVR.Patches.Core.Player
             }
             __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
             // Don't use canted sights or rear sights
-            if (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0 || __instance._player.ProceduralWeaponAnimation.CurrentScope.Bone.parent.name.Contains("rear"))
+            if (__instance._player?.ProceduralWeaponAnimation?.CurrentScope?.Bone?.parent?.name?.Contains("rear") == true || __instance._player?.ProceduralWeaponAnimation?._targetScopeRotationDeg != 0)
             {
                 int i = 0;
-                int firstScope = __instance.Item.AimIndex.Value;
-                __instance.ChangeAimingMode();
-                while (__instance.Item.AimIndex.Value != firstScope && (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0 || __instance._player.ProceduralWeaponAnimation.CurrentScope.Bone.parent.name.Contains("rear")))
+                int firstScope = __instance.Item?.AimIndex ?? -1;
+
+                if (firstScope == -1)
+                {
+                    UnityEngine.Debug.LogError("MoveWeaponToIKHands: Invalid AimIndex. Aborting aiming mode change.");
+                    return;
+                }
+
+                try
                 {
                     __instance.ChangeAimingMode();
+                    while (__instance.Item?.AimIndex != firstScope
+                        && (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0
+                        || (__instance._player.ProceduralWeaponAnimation.CurrentScope?.Bone?.parent?.name?.Contains("rear") == true)))
+                    {
+                        __instance.ChangeAimingMode();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogError($"MoveWeaponToIKHands: Error while changing aiming mode - {ex.Message}");
                 }
             }
             //VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(340, 340, 0);
@@ -765,95 +795,94 @@ namespace TarkovVR.Patches.Core.Player
             }
             return false;
         }
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        //NOTE:::::::::::::: Height over bore is the reason why close distances shots aren't hitting, but further distance shots SHOULD be fine - test this
+
+        //New scope zoom handler, this patch waits for vrOpticController to be created before going forward with the CopyComponentFromOptic method
+        static SightModVisualControllers visualController;
+        static float zoomLevel;
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
+        private static void WaitForVROpticController(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)
+        {
+            if (!VRGlobals.vrOpticController)
+                return;
+        }
+
+        //This actually handles the scope zoom
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
         private static void SetOpticCamFoV(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)
         {
-            SightModVisualControllers visualController = opticSight.GetComponent<SightModVisualControllers>();
+            float fov;
 
             if (!visualController)
                 visualController = opticSight.transform.parent.GetComponent<SightModVisualControllers>();
-            float fov = 27f;
-            if (rangeFinder) { 
+
+            if (rangeFinder)
+            {
                 fov = 3.2f;
                 opticSight.transform.FindChild("linza").gameObject.SetActive(true);
             }
 
-
             if (visualController && VRGlobals.vrOpticController)
             {
+                float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
+                VRGlobals.vrOpticController.scopeCamera = __instance.camera_0;
                 VRGlobals.scopeSensitivity = visualController.sightComponent_0.GetCurrentSensitivity;
-                // Check if it's the scope we're using then just assign the current fov to it
-                if (currentScope == __instance.transform_0)
+                string scopeName = opticSight.name;
+                BoxCollider scopeCollider;
+
+                currentScope = __instance.transform_0;
+                if (VRSettings.GetLeftHandedMode())
+                    currentScope.parent.localScale = new Vector3(-1, 1, 1);
+
+                // For scopes that have multiple levels of zoom of different zoom effects (e.g. changing sight lines from black to red), opticSight will be stored in 
+                // mode_000, mode_001, etc, and that will be stored in the scope game object, so we need to get parent name for scopes with multiple settings
+
+                if (scopeName.Contains("mode"))
                 {
-                    fov = VRGlobals.vrOpticController.currentFov;
+                    if (__instance.transform_0)
+                        VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.parent.FindChild("backLens");
+                    scopeName = opticSight.transform.parent.name;
+                    opticSight.transform.parent.gameObject.layer = 6;
+                    scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
                 }
                 else
                 {
-                    currentScope = __instance.transform_0;
-                    if (VRSettings.GetLeftHandedMode())
-                        currentScope.parent.localScale = new Vector3(-1,1,1);
-                    VRGlobals.vrOpticController.scopeCamera = __instance.camera_0;
-                    
-                    float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
-                    string scopeName = opticSight.name;
-                    // For scopes that have multiple levels of zoom of different zoom effects (e.g. changing sight lines from black to red), opticSight will be stored in 
-                    // mode_000, mode_001, etc, and that will be stored in the scope game object, so we need to get parent name for scopes with multiple settings
-                    BoxCollider scopeCollider;
-                    if (scopeName.Contains("mode"))
-                    {
-                        //if (opticSight.CameraData.IsAdjustableOptic)
-                            //opticSight.transform.parent.GetComponent<Camera>().fieldOfView = ((ScopeCameraData)opticSight.CameraData).FieldOfView;
-                        if (__instance.transform_0)
-                            VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.parent.FindChild("backLens");
-                        scopeName = opticSight.transform.parent.name;
-                        opticSight.transform.parent.gameObject.layer = 6;
+                    if (__instance.transform_0)
+                        VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.FindChild("backLens");
+                    opticSight.gameObject.layer = 6;
+                    scopeCollider = opticSight.GetComponent<BoxCollider>();
+                    if (!scopeCollider)
                         scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
-                    }
-                    else
-                    {
-                        if (__instance.transform_0)
-                            VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.FindChild("backLens");
-                        opticSight.gameObject.layer = 6;
-                        scopeCollider = opticSight.GetComponent<BoxCollider>();
-                        if (!scopeCollider)
-                            scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
-                    }
-                    if (scopeCollider)
-                    {
-                        scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
-                        scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
-                        scopeCollider.isTrigger = true;
-                        scopeCollider.enabled = true;
-                    }
-                    fov = ScopeManager.GetFOV(scopeName, zoomLevel);
-                    VRGlobals.vrOpticController.minFov = ScopeManager.GetMinFOV(scopeName);
-                    VRGlobals.vrOpticController.maxFov = ScopeManager.GetMaxFOV(scopeName);
-                    VRGlobals.vrOpticController.currentFov = fov;
                 }
+                if (scopeCollider)
+                {
+                    scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
+                    scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
+                    scopeCollider.isTrigger = true;
+                    scopeCollider.enabled = true;
+                }
+                VRGlobals.vrOpticController.minFov = ScopeManager.GetMinFOV(scopeName);
+                VRGlobals.vrOpticController.maxFov = ScopeManager.GetMaxFOV(scopeName);
+                VRGlobals.vrOpticController.currentFov = VRGlobals.vrOpticController.scopeCamera.fieldOfView;
 
-                if (opticSight.name.Contains("mode")) { 
-                    if (opticSight.transform.parent.GetComponent<BoxCollider>())
-                        opticSight.transform.parent.GetComponent<BoxCollider>().enabled = true;
-                    else if (opticSight.transform.parent.parent.GetComponent<BoxCollider>())
-                        opticSight.transform.parent.parent.GetComponent<BoxCollider>().enabled = true;
+
+                if (scopeName.Contains("mode"))
+                {
+                    var parent = opticSight.transform.parent;
+                    var collider = parent.GetComponent<BoxCollider>() ?? parent.parent.GetComponent<BoxCollider>();
+                    if (collider) collider.enabled = true;
                 }
-                else if (opticSight.GetComponent<BoxCollider>())
-                    opticSight.GetComponent<BoxCollider>().enabled = true;
-                else if (opticSight.transform.parent.GetComponent<BoxCollider>())
-                    opticSight.transform.parent.GetComponent<BoxCollider>().enabled = true;
+                else
+                {
+                    var collider = opticSight.GetComponent<BoxCollider>() ?? opticSight.transform.parent.GetComponent<BoxCollider>();
+                    if (collider) collider.enabled = true;
+                }
 
 
             }
-
-            //__instance.camera_0.fieldOfView = fov;
-
-
-            // The SightModeVisualControllers on the scopes contains sightComponent_0 which has a function GetCurrentOpticZoom which returns the zoom
-
         }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Collimators try to do some stupid shit which stops them from displaying so disable it here
         //[HarmonyPrefix]
@@ -967,11 +996,12 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-
+        
         [HarmonyPatch]
         public class GrenadeHandsControllerPatch
         {
             //// This method is called to dynamically determine the method to patch
+            
             static MethodBase TargetMethod()
             {
 
@@ -989,11 +1019,6 @@ namespace TarkovVR.Patches.Core.Player
             {
                 if (!player.IsYourPlayer)
                     return;
-
-                if (VRGlobals.menuOpen)
-                    if (currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
-                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
-                            renderer.enabled = false;
 
                 grenadeEquipped = true;
                 InitVRPatches.rightPointerFinger.enabled = false;
@@ -1062,7 +1087,7 @@ namespace TarkovVR.Patches.Core.Player
                 //VRGlobals.ikManager.leftArmIk.solver.target = null;
             }
         }
-
+        
         // 1. Create a list of GClass2804 with names and actions
         // 2. Create a GClass2805 and assign the list to Actions
         // 3. Run HideoutPlayerOwner.AvailableInteractionState.set_Value(Gclass2805)
@@ -1123,7 +1148,6 @@ namespace TarkovVR.Patches.Core.Player
             {
                 force += __instance._player.Velocity;
             }
-
             __instance.vmethod_2(timeSinceSafetyLevelRemoved, VRGlobals.vrPlayer.RightHand.transform.position, VRGlobals.vrPlayer.RightHand.transform.rotation, force, lowThrow);
             VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
             InitVRPatches.rightPointerFinger.enabled = false;
@@ -1131,6 +1155,7 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.emptyHands = null;
             return false;
         }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BaseGrenadeHandsController), "IEventsConsumerOnWeapOut")]
         private static bool DisableGrenadeStuffAfterCancel(BaseGrenadeHandsController __instance)

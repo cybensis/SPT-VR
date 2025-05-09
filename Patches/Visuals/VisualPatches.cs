@@ -26,6 +26,8 @@ using EFT.Visual;
 using Unity.XR.OpenVR;
 using EFT.Weather;
 using EFT.Settings.Graphics;
+using System.IO;
+using Unity.Audio;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -786,12 +788,17 @@ namespace TarkovVR.Patches.Visuals
         //Attempting to fix DLSS by forcing DLAA. not quite there yet but I think its getting somewhere... Using custom jitter because post processing is disabled for VR
         //Maybe ill try getting PostProcessing working again...
         //-matsix
-        private static readonly Vector2[] CustomJitterSequence = new Vector2[]
-        {
-            new Vector2(-0.25f, -0.25f),
-            new Vector2(0.25f, -0.25f),
-            new Vector2(-0.25f, 0.25f),
-            new Vector2(0.25f, 0.25f)
+        /*
+        private static readonly Vector2[] ImprovedJitterSequence = new Vector2[]
+{
+            new Vector2(0.125f, -0.375f),
+            new Vector2(-0.375f, 0.125f),
+            new Vector2(0.375f, 0.125f),
+            new Vector2(-0.125f, -0.375f),
+            new Vector2(-0.125f, 0.375f),
+            new Vector2(0.375f, -0.125f),
+            new Vector2(-0.375f, -0.125f),
+            new Vector2(0.125f, 0.375f)
         };
         private static int _jitterIndex = 0;
         [HarmonyPrefix]
@@ -805,16 +812,23 @@ namespace TarkovVR.Patches.Visuals
                 return false;
             }
 
+            // DLSS Wrapper initialization
             if (__instance._dlssWrapper == null)
             {
-                if (!(__instance._ssaaPropagator != null) || !(__instance._ssaaPropagator.CopyDLSSResources != null) || !(__instance._ssaaPropagator.DLSSDebugOutput != null))
+                if (!(__instance._ssaaPropagator != null) ||
+                    !(__instance._ssaaPropagator.CopyDLSSResources != null) ||
+                    !(__instance._ssaaPropagator.DLSSDebugOutput != null))
                 {
                     __instance._failedToInitializeDLSS = true;
                     return false;
                 }
-                __instance._dlssWrapper = new DLSSWrapper(__instance._ssaaPropagator.CopyDLSSResources, __instance._ssaaPropagator.DLSSDebugOutput);
+                __instance._dlssWrapper = new DLSSWrapper(
+                    __instance._ssaaPropagator.CopyDLSSResources,
+                    __instance._ssaaPropagator.DLSSDebugOutput
+                );
             }
 
+            // Configure DLSS wrapper
             if (__instance._dlssWrapper != null)
             {
                 __instance._dlssWrapper.DebugMode = __instance.DLSSDebug;
@@ -823,38 +837,54 @@ namespace TarkovVR.Patches.Visuals
                 __instance._dlssWrapper.JitterOffsets = __instance.DLSSJitter;
                 __instance._dlssWrapper.MVScale = __instance.DLSSMVScale;
             }
+
+            // Check DLSS library initialization
             if (!__instance._dlssWrapper.IsDLSSLibraryLoaded())
             {
                 DLSSWrapper.InitErrors initErrors = __instance._dlssWrapper.InitializeDLSS();
                 __instance._failedToInitializeDLSS = (initErrors > DLSSWrapper.InitErrors.INIT_SUCCESS);
                 if (initErrors != DLSSWrapper.InitErrors.INIT_SUCCESS)
                 {
+                    Plugin.MyLog.LogError($"Failed to initialize DLSS library: {initErrors}");
                     return false;
                 }
             }
-            int nativeWidth = destination ? destination.width : Screen.width;
-            int nativeHeight = destination ? destination.height : Screen.height;
 
-            nativeWidth = Camera.main.pixelWidth;
-            nativeHeight = Camera.main.pixelHeight;
-            DLSSWrapper.SetCreateDLSSFeatureParameters(nativeWidth, nativeHeight, nativeWidth, nativeHeight, 0); // DLAA mode
+            // In SinglePassInstanced, we need to handle the combined eye texture
+            // This is critical - get combined eye resolution, not just single eye
+            int renderWidth = XRSettings.eyeTextureWidth;
+            int renderHeight = XRSettings.eyeTextureHeight;
 
+            // For SinglePassInstanced, we might need to handle the combined texture differently
+            // Force DLAA mode (0) by setting input and output resolutions to be the same
+            DLSSWrapper.SetCreateDLSSFeatureParameters(renderWidth, renderHeight, renderWidth, renderHeight, 0);
+
+            // Copy depth and motion vectors
             __instance._dlssWrapper.CopyDepthMotion(source, destination, __instance.DepthCopyMode, externalCommandBuffer);
             __instance._dlssWrapper.Sharpness = __instance.DLSSSharpness;
 
-            
-            Vector2 jitter = CustomJitterSequence[_jitterIndex++ % CustomJitterSequence.Length];
+            // Get jitter from our improved sequence
+            Vector2 jitter = ImprovedJitterSequence[_jitterIndex++ % ImprovedJitterSequence.Length];
+
+            // Scale jitter appropriately - may need adjustment for SinglePassInstanced
             jitter *= new Vector2(__instance.DLSSJitterXScale, __instance.DLSSJitterYScale);
 
+            // For SinglePassInstanced, the jitter needs to be applied consistently across both eyes
+            // to prevent discomfort and visual artifacts
+
+            // Render with our calculated jitter
             __instance._dlssWrapper.OnRenderImage(source, destination, __instance.SwapDLSSUpDown, jitter, externalCommandBuffer);
+
             return true;
         }
-        
+        */
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
         private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
         {
             int shaderPass = 0;
+
 
             if (__instance.CurrentState == SSAAImpl.SSState.UPSCALE)
             {
@@ -867,7 +897,7 @@ namespace TarkovVR.Patches.Visuals
                     return false;
                 }
             }
-
+            
             if (__instance.RenderTextureMaterialBicubic == null)
             {
                 __instance.RenderTextureMaterialBicubic = new Material(Shader.Find("Hidden/BicubicSampling"));
@@ -1305,153 +1335,7 @@ namespace TarkovVR.Patches.Visuals
         {
             __instance.enabled = false;
         }
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeatherController), "method_9")]
-        private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
-        {
-            static Camera FindCameraByName(string cameraName)
-            {
-                foreach (var cam in GameObject.FindObjectsOfType<Camera>())
-                {
-                    if (!cam.enabled) continue;
-                    if (cam.name == cameraName)
-                        return cam;
-                }
-                return null;
-            }
 
-            Camera fpsCam = FindCameraByName("FPS Camera");
-            Camera opticCam = FindCameraByName("BaseOpticCamera(Clone)");
-
-            if (fpsCam == null)
-                return;
-
-            PrismEffects fpsPrism = fpsCam.GetComponent<PrismEffects>();
-            if (fpsPrism == null)
-            {
-                fpsPrism = fpsCam.gameObject.AddComponent<PrismEffects>();
-            }
-
-            if (VRSettings.GetDisableFog() == true)
-            {
-                fpsPrism.enabled = false;
-                return;
-            }
-
-            if (!fpsPrism.useFog)
-                fpsPrism.useFog = true;
-
-            // Calculate fogDistance based on GlobalDensity
-            float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
-            fpsPrism.fogDistance = fogDistance;
-
-            float fogAlpha = Mathf.Lerp(1.0f, 0.08f, (fogDistance - 100f) / 400f);
-            fpsPrism.fogColor = new Color(1f, 1f, 1f, fogAlpha);
-            fpsPrism.fogEndColor = new Color(1f, 1f, 1f, fogAlpha);
-            //Plugin.MyLog.LogError("FPS Camera FogDistance: " + fpsPrism.fogDistance);
-
-            // If optic camera exists, copy settings
-            if (opticCam != null)
-            {
-                PrismEffects opticPrism = opticCam.GetComponent<PrismEffects>();
-                
-                if (opticPrism == null)
-                    opticPrism = opticCam.gameObject.AddComponent<PrismEffects>();
-
-                if (VRSettings.GetDisableFog() == true)
-                {
-                    opticPrism.useFog = false;
-                    return;
-                }
-
-                if (VRSettings.GetDisablePrismEffects() == true)
-                {
-                    opticPrism.enabled = false;
-                    return;
-                }
-
-                if (!opticPrism.useFog)
-                    opticPrism.useFog = true;
-                opticPrism.fogDistance = fpsPrism.fogDistance;
-                opticPrism.fogColor = fpsPrism.fogColor;
-                opticPrism.fogEndColor = fpsPrism.fogEndColor;
-                //Plugin.MyLog.LogError("BaseOpticCamera(Clone) FogDistance copied: " + opticPrism.fogDistance);
-            }
-        }
-        */
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeatherController), "method_9")]
-        private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
-        {
-            // Helper function to find camera by name
-            static Camera FindCameraByName(string cameraName)
-            {
-                foreach (var cam in GameObject.FindObjectsOfType<Camera>())
-                {
-                    if (!cam.enabled) continue;
-                    if (cam.name == cameraName)
-                        return cam;
-                }
-                return null;
-            }
-
-            // Find the FPS Camera
-            Camera fpsCam = FindCameraByName("FPS Camera");
-            if (fpsCam == null)
-                return;
-
-            // Get or add PrismEffects component to FPS camera
-            PrismEffects fpsPrism = fpsCam.GetComponent<PrismEffects>();
-            if (fpsPrism == null)
-            {
-                fpsPrism = fpsCam.gameObject.AddComponent<PrismEffects>();
-            }
-
-            // Enable fog effect
-            if (VRSettings.GetDisableFog() == true)
-                fpsPrism.useFog = false;
-            else
-                fpsPrism.useFog = true;
-
-            // Calculate fog properties
-            float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
-            float fogAlpha = Mathf.Lerp(1.0f, 0.08f, (fogDistance - 100f) / 400f);
-            Color fogColor = new Color(1f, 1f, 1f, fogAlpha);
-
-            // Apply fog settings to FPS camera
-            fpsPrism.fogDistance = fogDistance;
-            fpsPrism.fogColor = fogColor;
-            fpsPrism.fogEndColor = fogColor;
-            Plugin.MyLog.LogError("FPS Camera FogDistance: " + fpsPrism.fogDistance);
-            // Process optic camera if it exists
-            Camera opticCam = FindCameraByName("BaseOpticCamera(Clone)");
-            if (opticCam != null)
-            {
-                PrismEffects opticPrism = opticCam.GetComponent<PrismEffects>();
-
-                if (opticPrism == null)
-                    opticPrism = opticCam.gameObject.AddComponent<PrismEffects>();
-
-                if (VRSettings.GetDisablePrismEffects())
-                {
-                    opticPrism.enabled = false;
-                    return;
-                }
-
-                // Apply same fog settings to optic camera
-                if (VRSettings.GetDisableFog() == true)
-                    opticPrism.useFog = false;
-                else
-                    opticPrism.useFog = true;
-
-                opticPrism.fogDistance = fpsPrism.fogDistance;
-                opticPrism.fogColor = fpsPrism.fogColor;
-                opticPrism.fogEndColor = fpsPrism.fogEndColor;
-            }
-        }
-        */
         private static Camera fpsCam;
         private static Camera opticCam;
         private static PrismEffects fpsPrism;
@@ -1461,7 +1345,6 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(WeatherController), "method_9")]
         private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
         {
-            // Initialize and cache cameras once
             if (fpsCam == null)
             {
                 foreach (var cam in Camera.allCameras)
@@ -1487,7 +1370,7 @@ namespace TarkovVR.Patches.Visuals
 
             // Calculate fog properties
             float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
-            float fogAlpha = Mathf.Lerp(1.0f, 0.08f, (fogDistance - 100f) / 400f);
+            float fogAlpha = Mathf.Lerp(0.7f, 0.08f, (fogDistance - 100f) / 400f);
             Color fogColor = new Color(1f, 1f, 1f, fogAlpha);
 
             // Apply fog settings to FPS camera

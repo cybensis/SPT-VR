@@ -1423,7 +1423,7 @@ namespace TarkovVR.Patches.Misc
         {
             VRSettings.SaveSettings();
             Camera.main.farClipPlane = 5000f;
-
+            
             if (VRGlobals.weaponHolder && VRGlobals.firearmController) {
                 Vector3 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(VRGlobals.firearmController.weaponPrefab_0.name, VRGlobals.firearmController.Weapon.WeapClass);
                 float weaponAngleOffset = VRSettings.GetRightHandVerticalOffset();
@@ -1437,10 +1437,13 @@ namespace TarkovVR.Patches.Misc
                 {
                     // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
                     float rotOffsetMultiplier = (weaponAngleOffset - 50) / 100;
-                    weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier;
+                    weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier; 
                 }
+                weaponOffset += new Vector3(0.05f, 0, -0.05f);
                 VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
-            }
+                //Plugin.MyLog.LogError($"[OffsetApply] Final weapon offset: {weaponOffset}");
+            }    
+            
         }
 
         [HarmonyPostfix]
@@ -1512,10 +1515,8 @@ namespace TarkovVR.Patches.Misc
         {
             VRGlobals.menuUi = __instance.transform.root;
             PositionMainMenuUi();
-        }
-
+        }      
     }
-
 }
 
 

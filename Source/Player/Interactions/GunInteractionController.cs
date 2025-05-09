@@ -118,24 +118,29 @@ public class GunInteractionController : MonoBehaviour
         framesAfterEnabled = 0;
 
     }
+
     public void OnDisable()
     {
-        if (initialized)
-            gunRaycastReciever.GetComponent<BoxCollider>().enabled = false;
-
-        Transform rightHandsPositioner = transform.FindChild("RightHandPositioner");
-
-        if (rightHandsPositioner && rightHandsPositioner.GetComponent<HandsPositioner>())
+        // Check if gunRaycastReciever exists before using it
+        if (initialized && gunRaycastReciever != null && gunRaycastReciever.GetComponent<BoxCollider>() != null)
         {
-            rightHandsPositioner.GetComponent<HandsPositioner>().enabled = false;
+            gunRaycastReciever.GetComponent<BoxCollider>().enabled = false;
+        }
+
+        // Use transform.Find instead of FindChild (which is deprecated)
+        // Also, null check transform first
+        if (transform != null)
+        {
+            Transform rightHandsPositioner = transform.Find("RightHandPositioner");
+            if (rightHandsPositioner != null && rightHandsPositioner.GetComponent<HandsPositioner>() != null)
+            {
+                rightHandsPositioner.GetComponent<HandsPositioner>().enabled = false;
+            }
         }
 
         prevRot = Vector3.zero;
         prevPos = Vector3.zero;
         prevForward = Vector3.zero;
-
-
-
     }
     public void SetHighlightComponent(HighLightMesh meshHighlighter) { 
         this.meshHighlighter = meshHighlighter;

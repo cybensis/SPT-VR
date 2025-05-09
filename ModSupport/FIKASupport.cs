@@ -23,6 +23,12 @@ using Fika.Core.Coop.Players;
 using System.Collections.Generic;
 using TMPro;
 using System.Linq;
+using static Fika.Core.Networking.FirearmSubPackets;
+using static Fika.Core.Networking.SubPacket;
+using static UnityEngine.ParticleSystem.PlaybackState;
+using UnityEngine.UIElements;
+using TarkovVR.Patches.Core.VR;
+
 
 
 namespace TarkovVR.ModSupport.FIKA
@@ -44,9 +50,19 @@ namespace TarkovVR.ModSupport.FIKA
         [HarmonyPatch(typeof(TarkovApplication), "method_49")]
         private static bool FixExitRaid(TarkovApplication __instance)
         {
+            UIPatches.HideUiScreens();
+            VRGlobals.menuOpen = false;
+            VRGlobals.blockRightJoystick = false;
+            VRGlobals.blockLeftJoystick = false;
+            VRGlobals.vrPlayer.enabled = true;
+            VRGlobals.menuVRManager.enabled = false;
+            VRGlobals.commonUi.parent = null;
+            VRGlobals.commonUi.position = new Vector3(1000, 1000, 1000);
+            VRGlobals.preloaderUi.parent = null;
+            VRGlobals.preloaderUi.position = new Vector3(1000, 1000, 1000);
+            VRGlobals.vrPlayer.SetNotificationUi();
             UIPatches.gameUi.transform.parent = null;
-            UIPatches.HandleCloseInventory();
-
+            
             if (UIPatches.notifierUi != null) { 
                 UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
                 UIPatches.notifierUi.transform.localScale = Vector3.one;

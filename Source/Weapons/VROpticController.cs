@@ -21,6 +21,7 @@ namespace TarkovVR.Source.Weapons
         public float maxScopeTurnDegree = 80f;
         private Quaternion initialHandRot;
         public float currentFov;
+        public string currentScope;
         private float fovAtStart;
         public bool swapZooms;
         private InputHandlers.ScopeZoomHandler scopeZoomHandler;
@@ -37,7 +38,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (scopeCamera)
             {
-                fovAtStart = maxFov;//scopeCamera.fieldOfView;
+                fovAtStart = scopeCamera.fieldOfView;
                 initialHandRot = SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
                 swapZooms = false;
             }

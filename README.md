@@ -44,7 +44,8 @@ Use LiftIsTheWhey's YouTube video for a visual controls guide - https://www.yout
 ### **Movement**
 - **Walking:** Left joystick.
 - **Look around:** Right joystick.
-- **Sprint:** Click the left joystick.
+- **
+:** Click the left joystick.
 - **Jump:** Push the right joystick up.
 - **Vault:** Hold the right joystick up at a ledge.
 - **Crouch:** Pull down on the right joystick, physically crouch, or do both.

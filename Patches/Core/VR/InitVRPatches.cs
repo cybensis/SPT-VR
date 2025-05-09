@@ -23,6 +23,7 @@ using UnityEngine.Rendering;
 using System.Collections;
 using static Fika.Core.Coop.Components.CoopHandler;
 using TarkovVR.Patches.Visuals;
+using Valve.VR.InteractionSystem;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -31,6 +32,7 @@ namespace TarkovVR.Patches.Core.VR
     {
         private static Transform originalLeftHandMarker;
         private static Transform originalRightHandMarker;
+        public static Transform quickSlot;
         public static Transform rigCollider;
         public static Transform leftWrist;
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -132,7 +134,6 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.sidearmHolster.transform.localPosition = new Vector3(0, 0.1f, 0.1f);
                 VRGlobals.sidearmHolster.transform.localRotation = Quaternion.identity;
                 VRGlobals.sidearmHolster.gameObject.layer = 3;
-
             }
 
             //if (VRGlobals.leftArmBendGoal == null) {
@@ -329,18 +330,29 @@ namespace TarkovVR.Patches.Core.VR
         [HarmonyPatch(typeof(PlayerSpring), "Start")]
         private static void SetRigAndSidearmHolsters(PlayerSpring __instance)
         {
-            if ((__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)") || __instance.name != "Base HumanRibcage" || rigCollider != null)
+            if ((__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)") || __instance.name != "Base HumanRibcage") //|| quickSlot != null)
                 return;
-
+            
             rigCollider = new GameObject("rigCollider").transform;
             BoxCollider collider = rigCollider.gameObject.AddComponent<BoxCollider>();
+
             rigCollider.parent = __instance.transform.parent;
             rigCollider.localEulerAngles = Vector3.zero;
-            rigCollider.localPosition = Vector3.zero;
+            rigCollider.localPosition = new Vector3(0.2f, -0.05f, 0f);
             rigCollider.gameObject.layer = 3;
-            collider.isTrigger = true;
-            collider.size = new Vector3(0.1f, 0.1f, 0.1f);
 
+            collider.isTrigger = true;
+            collider.size = new Vector3(0.04f, 0.1f, 0.2f);
+
+            //debug for collider
+            /*
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.transform.SetParent(rigCollider);
+            cube.transform.localPosition = Vector3.zero;
+            cube.transform.localRotation = Quaternion.identity;
+            cube.transform.localScale = collider.size;
+            cube.GetComponent<Collider>().enabled = false;
+            */
             if (VRGlobals.sidearmHolster)
                 VRGlobals.sidearmHolster.gameObject.layer = 3;
         }

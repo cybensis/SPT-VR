@@ -135,6 +135,13 @@ namespace TarkovVR.Source.Weapons
             mk17.firingModeSwitch.Add("mod_selector");
             weaponMeshDictionary.Add("weapon_fn_mk17_762x51_fde_container(Clone)", mk17);
 
+            WeaponMeshParts x17 = new WeaponMeshParts();
+            x17.magazine.Add("mod_magazine");
+            x17.chamber.Add("weapon_bolt");
+            x17.stock.Add("mod_stock");
+            x17.firingModeSwitch.Add("mod_selector");
+            weaponMeshDictionary.Add("weapon_x_products_x17_scar_17_762x51_container(Clone)", x17);
+
             WeaponMeshParts hk = new WeaponMeshParts();
             hk.magazine.Add("mod_magazine");
             hk.chamber.Add("mod_charge");
@@ -282,15 +289,30 @@ namespace TarkovVR.Source.Weapons
             aks74u.firingModeSwitch.Add("weapon_selector");
             weaponMeshDictionary.Add("weapon_izhmash_aks74u_545x39_container(Clone)", aks74u);
 
+            WeaponMeshParts aklys = new WeaponMeshParts();
+            aklys.magazine.Add("mod_magazine");
+            aklys.chamber.Add("weapon_bolt");
+            aklys.stock.Add("mod_stock");
+            aklys.firingModeSwitch.Add("weapon_selector");
+            weaponMeshDictionary.Add("weapon_aklys_defense_velociraptor_762x35_container(Clone)", aklys);
+
             WeaponMeshParts auga1 = new WeaponMeshParts();
             auga1.magazine.Add("mod_magazine");
             auga1.chamber.Add("mod_charge");
+            auga1.firingModeSwitch.Add("weapon_safety");
             weaponMeshDictionary.Add("weapon_steyr_aug_a1_556x45_container(Clone)", auga1);
 
             WeaponMeshParts auga3 = new WeaponMeshParts();
             auga3.magazine.Add("mod_magazine");
             auga3.chamber.Add("mod_charge");
+            auga3.firingModeSwitch.Add("weapon_safety");
             weaponMeshDictionary.Add("weapon_steyr_aug_a3_m1_556x45_container(Clone)", auga3);
+
+            WeaponMeshParts auga3blk = new WeaponMeshParts();
+            auga3blk.magazine.Add("mod_magazine");
+            auga3blk.chamber.Add("mod_charge");
+            auga3blk.firingModeSwitch.Add("weapon_safety");
+            weaponMeshDictionary.Add("weapon_steyr_aug_a3_m1_556x45_blk_container(Clone)", auga3blk);
 
             WeaponMeshParts mcx = new WeaponMeshParts();
             mcx.magazine.Add("mod_magazine");
@@ -321,6 +343,11 @@ namespace TarkovVR.Source.Weapons
 
 
             // ---------------- BOLT ACTION RIFLES ----------------
+            WeaponMeshParts sako = new WeaponMeshParts();
+            sako.magazine.Add("mod_magazine");
+            sako.chamber.Add("mod_charge");
+            weaponMeshDictionary.Add("weapon_sako_trg_m10_86x70_container(Clone)", sako);
+
             WeaponMeshParts mosinSniper = new WeaponMeshParts();
             mosinSniper.magazine.Add("mod_magazine");
             mosinSniper.chamber.Add("weapon_bolt");
@@ -374,6 +401,21 @@ namespace TarkovVR.Source.Weapons
             rpdn.magazine.Add("mod_magazine");
             rpdn.chamber.Add("weapon_charge");
             weaponMeshDictionary.Add("weapon_zid_rpdn_762x39_container(Clone)", rpdn);
+
+            WeaponMeshParts m60e6 = new WeaponMeshParts();
+            m60e6.magazine.Add("mod_magazine");
+            m60e6.chamber.Add("weapon_charge");
+            weaponMeshDictionary.Add("weapon_usord_m60e6_v1_762x51_container(Clone)", m60e6);
+
+            WeaponMeshParts m60e6fde = new WeaponMeshParts();
+            m60e6fde.magazine.Add("mod_magazine");
+            m60e6fde.chamber.Add("weapon_charge");
+            weaponMeshDictionary.Add("weapon_usord_m60e6_v1_762x51_fde_container(Clone)", m60e6fde);
+
+            WeaponMeshParts m60e4 = new WeaponMeshParts();
+            m60e4.magazine.Add("mod_magazine");
+            m60e4.chamber.Add("weapon_charge");
+            weaponMeshDictionary.Add("weapon_usord_m60e4_v1_762x51_container(Clone)", m60e4);
             // ----------------  MARKSMAN RIFLE ----------------
 
             WeaponMeshParts g28 = new WeaponMeshParts();
@@ -423,6 +465,31 @@ namespace TarkovVR.Source.Weapons
             weaponMeshDictionary.Add("weapon_sig_mcx_spear_68x51_container(Clone)", spear);
 
             // ----------------  PISTOLS ----------------
+            WeaponMeshParts deaglel59x33 = new WeaponMeshParts();
+            deaglel59x33.magazine.Add("mod_magazine");
+            deaglel59x33.chamber.Add("mod_reciever");
+            weaponMeshDictionary.Add("weapon_magnum_research_desert_eagle_l5_9x33r_container(Clone)", deaglel59x33);
+
+            WeaponMeshParts deaglel5127x33 = new WeaponMeshParts();
+            deaglel5127x33.magazine.Add("mod_magazine");
+            deaglel5127x33.chamber.Add("mod_reciever");
+            weaponMeshDictionary.Add("weapon_magnum_research_desert_eagle_l5_127x33_container(Clone)", deaglel5127x33);
+
+            WeaponMeshParts deaglel6 = new WeaponMeshParts();
+            deaglel6.magazine.Add("mod_magazine");
+            deaglel6.chamber.Add("mod_reciever");
+            weaponMeshDictionary.Add("weapon_magnum_research_desert_eagle_l6_127x33_container(Clone)", deaglel6);
+
+            WeaponMeshParts deaglel6tiger = new WeaponMeshParts();
+            deaglel6tiger.magazine.Add("mod_magazine");
+            deaglel6tiger.chamber.Add("mod_reciever");
+            weaponMeshDictionary.Add("weapon_magnum_research_desert_eagle_l6_tiger_127x33_container(Clone)", deaglel6tiger);
+
+            WeaponMeshParts deaglemk19 = new WeaponMeshParts();
+            deaglemk19.magazine.Add("mod_magazine");
+            deaglemk19.chamber.Add("mod_reciever");
+            weaponMeshDictionary.Add("weapon_magnum_research_desert_eagle_mk19_127x33_container(Clone)", deaglemk19);
+
             WeaponMeshParts apb = new WeaponMeshParts();
             apb.magazine.Add("mod_magazine");
             apb.chamber.Add("weapon_slide");
@@ -544,6 +611,27 @@ namespace TarkovVR.Source.Weapons
 
 
             // ----------------  SUBMACHINE GUNS ----------------
+            WeaponMeshParts uzipistol = new WeaponMeshParts();
+            uzipistol.magazine.Add("mod_magazine");
+            uzipistol.chamber.Add("weapon_bolt");
+            uzipistol.stock.Add("mod_stock");
+            uzipistol.firingModeSwitch.Add("weapon_selector");
+            weaponMeshDictionary.Add("weapon_iwi_uzi_pro_pistol_9x19_container(Clone)", uzipistol);
+
+            WeaponMeshParts uzismg = new WeaponMeshParts();
+            uzismg.magazine.Add("mod_magazine");
+            uzismg.chamber.Add("weapon_bolt");
+            uzismg.stock.Add("mod_stock");
+            uzismg.firingModeSwitch.Add("weapon_selector");
+            weaponMeshDictionary.Add("weapon_iwi_uzi_pro_smg_9x19_container(Clone)", uzismg);
+
+            WeaponMeshParts uzi = new WeaponMeshParts();
+            uzi.magazine.Add("mod_magazine");
+            uzi.chamber.Add("weapon_bolt");
+            uzi.stock.Add("mod_stock");
+            uzi.firingModeSwitch.Add("weapon_selector");
+            weaponMeshDictionary.Add("weapon_iwi_uzi_9x19_container(Clone)", uzi);
+
             WeaponMeshParts mp9 = new WeaponMeshParts();
             mp9.magazine.Add("mod_magazine");
             mp9.chamber.Add("mod_charge");
@@ -594,7 +682,7 @@ namespace TarkovVR.Source.Weapons
             WeaponMeshParts pp19 = new WeaponMeshParts();
             pp19.magazine.Add("mod_magazine");
             pp19.chamber.Add("weapon_bolt");
-            pp19.firingModeSwitch.Add("weapon_selector");
+            pp19.firingModeSwitch.Add("mod_selector");
             pp19.stock.Add("mod_stock");
             weaponMeshDictionary.Add("weapon_izhmash_pp-19-01_9x19_container(Clone)", pp19);
 
@@ -665,6 +753,13 @@ namespace TarkovVR.Source.Weapons
             sr2m.firingModeSwitch.Add("weapon_selector");
             sr2m.stock.Add("mod_stock");
             weaponMeshDictionary.Add("weapon_tochmash_sr2m_veresk_9x21_container(Clone)", sr2m);
+
+            WeaponMeshParts sr3m = new WeaponMeshParts();
+            sr3m.magazine.Add("mod_magazine");
+            sr3m.chamber.Add("weapon_bolt");
+            sr3m.firingModeSwitch.Add("weapon_selector");
+            sr3m.stock.Add("mod_stock");
+            weaponMeshDictionary.Add("weapon_tochmash_sr3m_9x39_container(Clone)", sr3m);
 
             WeaponMeshParts stm9 = new WeaponMeshParts();
             stm9.magazine.Add("mod_magazine");

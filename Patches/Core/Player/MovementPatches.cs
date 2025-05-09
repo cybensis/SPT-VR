@@ -1,10 +1,17 @@
 ﻿using EFT;
+using EFT.Animations;
 using EFT.UI;
 using HarmonyLib;
+using RootMotion.FinalIK;
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Drawing.Printing;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using TarkovVR.Source.Settings;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Valve.VR;
 using Valve.VR.InteractionSystem;
 
@@ -17,9 +24,11 @@ namespace TarkovVR.Patches.Core.Player
         private static float lastYRot = 0f;
         private static float timeSinceLastLookRot = 0f;
         private static bool leftJoystickLastUsed = false;
-
-
-
+        private static bool isRotatingToHead = false;
+        private static float rotationStartY = 0f;
+        private static float rotationTargetY = 0f;
+        private static float rotationProgress = 0f;
+        
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MovementContext), "InitComponents")]
@@ -30,7 +39,6 @@ namespace TarkovVR.Patches.Core.Player
             __instance.TrunkRotationLimit = 0;
 
         }
-
 
         // Found in Player object under CurrentState variable, and is inherited by Gclass1573
         // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
@@ -129,15 +137,31 @@ namespace TarkovVR.Patches.Core.Player
             }
             else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.20f && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y))
                 lastYRot = headY;
-
-
-
+            
+            else
+            {
+                lastYRot = Mathf.LerpAngle(lastYRot, headY, Time.deltaTime * 10f); // Smooth follow
+            }
+            
             // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 75 degrees, and if they haven't already rotated recently, and they've stopped rotating around
-            else if (Mathf.Abs(rotDiff) > 75 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
+            /*
+            else if (Mathf.Abs(rotDiff) > 25 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
             {
                 lastYRot = headY;
                 timeSinceLastLookRot = 0;
             }
+            */
+            /*
+            // Trigger smooth body alignment if looking past threshold
+            if (!isRotatingToHead && Mathf.Abs(rotDiff) > 75 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15f)
+            {
+                isRotatingToHead = true;
+                rotationStartY = lastYRot;
+                rotationTargetY = headY;
+                rotationProgress = 0f;
+                timeSinceLastLookRot = 0;
+            }
+            */
             timeSinceLastLookRot += Time.deltaTime;
             //Plugin.MyLog.LogWarning(SteamVR_Actions._default.RightJoystick.axis + "  |  " + lastYRot + "   |   " + new Vector2(deltaRotation.x + lastYRot, 0) + "  |  " + VRGlobals.player.Transform.localRotation.eulerAngles);
             
@@ -148,10 +172,21 @@ namespace TarkovVR.Patches.Core.Player
             else
                 VRGlobals.player.MovementContext._relativeSpeed = xAxis;
             VRGlobals.player.MovementContext.SetCharacterMovementSpeed(VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed);
+            /*
+            // Smoothly interpolate body rotation after threshold
+            if (isRotatingToHead)
+            {
+                rotationProgress += Time.deltaTime / 0.25f; // 0.25 seconds to complete turn (adjust to taste)
+                lastYRot = Mathf.LerpAngle(rotationStartY, rotationTargetY, rotationProgress);
+
+                if (rotationProgress >= 1f)
+                    isRotatingToHead = false;
+            }
+            */
         }
 
 
-        // GClass1854 inherits MovementState and its version of ProcessUpperbodyRotation is ran when the player is moving, this ensures 
+        // GClass1854 inherits MovementState and its version of ProcessUpperbodyRotation is ran when the player is moving, __instance ensures 
         // the rotation when not moving is similar to that when moving otherwise the player can rotate their camera faster than the body
         // can rotate
         [HarmonyPrefix]
@@ -180,8 +215,10 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(GClass3407), "ManualLateUpdate")]
         private static bool PositionCamera(GClass3407 __instance)
         {
+            
             if (!__instance.player_0.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;
+
             // When medding or eating, we need to rely on this code to position the upper body, and it will set the empty hands but the current gun interaction controller should be disabled
             if (VRGlobals.emptyHands && VRGlobals.player.HandsIsEmpty)
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);

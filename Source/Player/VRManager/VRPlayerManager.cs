@@ -218,13 +218,13 @@ namespace TarkovVR.Source.Player.VRManager
 
 
         public Quaternion handsRotation;
+
         protected virtual void Update()
         {
             if (Camera.main == null)
                 return;
             if (initPos.y == 0)
                 initPos = Camera.main.transform.localPosition;
-
             Vector3 newLocalPos = initPos * -1 + headOffset;
             newLocalPos.y -= crouchHeightDiff;
             VRGlobals.vrOffsetter.transform.localPosition = newLocalPos;
@@ -234,7 +234,6 @@ namespace TarkovVR.Source.Player.VRManager
                 VRGlobals.blockLeftJoystick = (radialMenu && radialMenu.active) || (UIPatches.quickSlotUi && UIPatches.quickSlotUi.gameObject.active) || interactMenuOpen && WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh;
             blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0;
             blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen;
-
 
             if (ammoFireModeUi != null)
             {
@@ -248,8 +247,11 @@ namespace TarkovVR.Source.Player.VRManager
                         ammoFireModeUi.position += (ammoFireModeUi.right * 0.03f) + (ammoFireModeUi.forward * -0.0175f);
                 }
                 else {
-                    ammoFireModeUi.rotation = WeaponPatches.currentGunInteractController.GetFireModeSwitch().rotation;
-                    ammoFireModeUi.position = WeaponPatches.currentGunInteractController.GetFireModeSwitch().position;
+                    if (WeaponPatches.currentGunInteractController.GetFireModeSwitch() != null)
+                    {
+                        ammoFireModeUi.rotation = WeaponPatches.currentGunInteractController.GetFireModeSwitch().rotation;
+                        ammoFireModeUi.position = WeaponPatches.currentGunInteractController.GetFireModeSwitch().position;
+                    }
                     if (VRSettings.GetLeftHandedMode())
                         ammoFireModeUi.position += (ammoFireModeUi.right * 0.01f) + (ammoFireModeUi.forward * 0.0025f) + (ammoFireModeUi.up * -0.005f);
                     else
@@ -306,10 +308,17 @@ namespace TarkovVR.Source.Player.VRManager
                 //Plugin.MyLog.LogError("Crouch Level:  " + crouchLevel  + "   |   " + VRGlobals.player.PoseLevel + "   |   " + ( 1 - VRGlobals.vrPlayer.crouchHeightDiff / 0.4));
                 //Plugin.MyLog.LogError("Crouch Level: " + crouchLevel + "   | " + normalizedHeightPosition + "  |   " + VRGlobals.player.PoseLevel);
                 //VRGlobals.player.ChangePose(-1.5f * Time.deltaTime);
-
+                if (VRGlobals.player.MovementContext.IsInPronePose && VRGlobals.origArmsModel.transform.parent.gameObject.activeSelf)
+                {
+                    VRGlobals.origArmsModel.transform.parent.gameObject.SetActive(false);
+                    VRGlobals.handsOnlyModel.transform.parent.gameObject.SetActive(true);    
+                }
+                else if (!VRGlobals.player.MovementContext.IsInPronePose && !VRGlobals.origArmsModel.transform.parent.gameObject.activeSelf && !VRSettings.GetHideArms())
+                {
+                    VRGlobals.origArmsModel.transform.parent.gameObject.SetActive(true);
+                    VRGlobals.handsOnlyModel.transform.parent.gameObject.SetActive(false);
+                }
             }
-
-
         }
         // localpos 0.12 0 -0.085
         // Rot 272.0235 163.5639 283.3635
@@ -458,9 +467,11 @@ namespace TarkovVR.Source.Player.VRManager
             }
         }
 
-        private void LateUpdate() { 
+        private void LateUpdate() {
             if (VRGlobals.emptyHands && VRGlobals.player && VRGlobals.player.HandsIsEmpty)
+            {
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
+            }
         }
 
         public Quaternion initialCombinedRotation;

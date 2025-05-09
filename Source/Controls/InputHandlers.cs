@@ -539,7 +539,7 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
-                if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting && !VRGlobals.vrPlayer.interactMenuOpen && changeFireModeButtonClick)
+                if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting && !VRGlobals.vrPlayer.interactMenuOpen && changeFireModeButtonClick && WeaponPatches.currentGunInteractController.GetFireModeSwitch() != null)
                 {
                     command = ECommand.ChangeWeaponMode;
                 }
