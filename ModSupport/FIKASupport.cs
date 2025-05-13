@@ -136,7 +136,7 @@ namespace TarkovVR.ModSupport.FIKA
         private static void AddLaserBackToRaidLoading(Fika.Core.Coop.GameMode.CoopGame __instance) {
             VRGlobals.menuVRManager.OnEnable();
         }
-
+        /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Fika.Core.Coop.GameMode.CoopGame), "WaitForOtherPlayersToLoad")]
         private static void RehideLaser(Fika.Core.Coop.GameMode.CoopGame __instance)
@@ -153,6 +153,29 @@ namespace TarkovVR.ModSupport.FIKA
                 if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
                     foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = true;
+            }
+            VRGlobals.menuOpen = false;
+        }
+        */
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Fika.Core.Coop.GameMode.CoopGame), "WaitForOtherPlayersToLoad")]
+        private static void RehideLaser(Fika.Core.Coop.GameMode.CoopGame __instance)
+        {
+            VRGlobals.menuVRManager.enabled = false;
+            VRGlobals.vrPlayer.enabled = true;
+            VRGlobals.ikManager.enabled = true;
+            if (VRGlobals.menuOpen)
+            {
+                if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
+                    foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = true;
+                if (WeaponPatches.currentGunInteractController != null)
+                {
+                    if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                            renderer.enabled = true;
+                }
             }
             VRGlobals.menuOpen = false;
         }

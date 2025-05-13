@@ -180,11 +180,12 @@ namespace TarkovVR.Patches.UI
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = false;
-
-            if (WeaponPatches.currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
-                foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
-                    renderer.enabled = false;
-
+            if (WeaponPatches.currentGunInteractController != null)
+            {
+                if (WeaponPatches.currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = false;
+            }
             VRGlobals.menuOpen = true;
             VRGlobals.blockRightJoystick = true;
             VRGlobals.blockLeftJoystick = true;
@@ -230,11 +231,12 @@ namespace TarkovVR.Patches.UI
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = true;
-
-            if (WeaponPatches.currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
-                foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
-                    renderer.enabled = true;
-            
+            if (WeaponPatches.currentGunInteractController != null)
+            {
+                if (WeaponPatches.currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = true;
+            }
             //int bitmask = 1 << playerLayer; // 256
             //Camera.main.cullingMask |= bitmask; // -524321 & -257
             VRGlobals.menuOpen = false;
@@ -287,7 +289,7 @@ namespace TarkovVR.Patches.UI
             gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.48f);
             gameUi.transform.localEulerAngles = new Vector3(29.7315f, 0.4971f, 0f);
         }
-
+        /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ActionPanel), "method_0")]
         private static void SetTransmitInteractionMenuActive(ActionPanel __instance, [CanBeNull] ActionsReturnClass interactionState)
@@ -306,6 +308,62 @@ namespace TarkovVR.Patches.UI
                     (VRGlobals.vrPlayer as RaidVRPlayerManager).positionTransitUi = false;
             }
         }
+        */
+        
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ActionPanel), "method_0")]
+        private static void SetTransmitInteractionMenuActive(ActionPanel __instance, [CanBeNull] ActionsReturnClass interactionState)
+        {
+            try
+            {
+                // Check if VR player and UI are properly set up
+                if (VRGlobals.vrPlayer == null || !(VRGlobals.vrPlayer is RaidVRPlayerManager manager))
+                {
+                    return;
+                }
+
+                if (interactionState == null)
+                {
+                    manager.positionTransitUi = false;
+                    return;
+                }
+
+                // Check if SelectedAction or Name is null
+                if (interactionState.SelectedAction == null || string.IsNullOrEmpty(interactionState.SelectedAction.Name))
+                {
+                    manager.positionTransitUi = false;
+                    return;
+                }
+
+                // Check for the transit interaction and if the UI is available
+                if (interactionState.SelectedAction.Name.Contains("Transit") && VRGlobals.vrPlayer.interactionUi != null)
+                {
+                    if (Camera.main == null)
+                    {
+                        manager.positionTransitUi = false;
+                        return;
+                    }
+
+                    // Set the UI position and rotation
+                    VRGlobals.vrPlayer.interactionUi.position = Camera.main.transform.position +
+                        Camera.main.transform.forward * 0.4f +
+                        Camera.main.transform.up * -0.2f;
+
+                    VRGlobals.vrPlayer.interactionUi.LookAt(Camera.main.transform);
+                    VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);
+                    manager.positionTransitUi = true;
+                }
+                else
+                {
+                    manager.positionTransitUi = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.MyLog.LogError($"Error in SetTransmitInteractionMenuActive: {ex.Message}");
+            }
+        }
+        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TransferItemsInRaidScreen), "Show", new Type[] { typeof(TransferItemsInRaidScreen.GClass3603) })]
         private static void ShowTransitTransferMenu(TransferItemsInRaidScreen __instance) {
@@ -642,18 +700,22 @@ namespace TarkovVR.Patches.UI
         }
 
 
-        //Disables checking item distance when looting - not sure why but 3.11 broke this and it thinks you're too far when you pick up loose loot
+        //Disables checking item distance when looting - not sure why but 3.11 broke this and it thinks you're too far when you pick up loose loot        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GetActionsClass.Class1624), "method_0")]
         private static bool DisableLootDistanceCheck(GetActionsClass.Class1624 __instance)
         {
             MagazineItemClass magazineItemClass = __instance.rootItem as MagazineItemClass;
-            if (magazineItemClass != null && __instance.possibleAction is GClass3203 && __instance.lootItemLastOwner != null && __instance.lootItemLastOwner.ProfileId != __instance.owner.ProfileId)
-                __instance.owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
-            __instance.owner.InventoryController.RunNetworkTransaction(__instance.possibleAction, new Callback(__instance.method_1));
-            return false;
+            if (__instance.owner.IsYourPlayer)
+            {
+                if (magazineItemClass != null && __instance.possibleAction is GClass3203 && __instance.lootItemLastOwner != null && __instance.lootItemLastOwner.ProfileId != __instance.owner.ProfileId)
+                    __instance.owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
+                __instance.owner.InventoryController.RunNetworkTransaction(__instance.possibleAction, new Callback(__instance.method_1));
+                return false;
+            }
+            return true;
         }
-
+        
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]

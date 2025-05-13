@@ -45,6 +45,13 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(HideoutController), "method_7")]
+        private static bool DisableHighlightMesh(HideoutController __instance)
+        {
+            return false;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HideoutScreenRear), "Update")]
         private static void PositionHideoutUiCamera(HideoutScreenRear __instance)
@@ -341,10 +348,13 @@ namespace TarkovVR.Patches.Misc
         {
             __instance.WaitOneFrame(() =>
             {
+                /*
                 foreach (Transform child in __instance.gameObject.transform)
                 {
                     child.localPosition = Vector3.zero;
                 }
+                */
+                __instance._parent.localPosition = Vector3.zero;
             });
         }
         // The UI is closed when the player selects a preloader task bar option twice

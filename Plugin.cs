@@ -12,6 +12,8 @@ using UnityEngine.XR.Management;
 using Valve.VR;
 using static TarkovVR.Patches.Visuals.VisualPatches;
 using UnityEngine.XR;
+using Fika.Core.Networking;
+using Fika.Core.Coop.Utils;
 
 namespace TarkovVR
 {
@@ -28,12 +30,12 @@ namespace TarkovVR
             MyLog = Logger;
 
             if (!InitializeVR())
-            {
+            {             
                 Logger.LogError("VR initialization failed. Skipping the rest of the plugin setup.");
                 return;
             }
 
-            Logger.LogInfo("VR initialized successfully.");
+            Logger.LogInfo("SPTVR initialized successfully.");
             vrInitializedSuccessfully = true;
 
             ApplyPatches("TarkovVR.Patches");
@@ -44,6 +46,7 @@ namespace TarkovVR
         {
             try
             {
+                
                 SteamVR_Actions.PreInitialize();
                 SteamVR_Settings.instance.pauseGameWhenDashboardVisible = false;
 
@@ -78,7 +81,7 @@ namespace TarkovVR
                     Plugin.MyLog.LogError("[OpenVR] HMD not found or OpenVR initialization failed.");
                     return false;
                 }
-
+                
                 Plugin.MyLog.LogError("[VR] Initialization completed successfully with Single Pass Instanced.");
                 return true;
             }

@@ -31,7 +31,7 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)", 1, 15);
             AddScope("scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)", 2, 4);
             AddScope("scope_all_torrey_pines_logic_t12_w_30hz(Clone)", 1, 15);
-            AddScope("scope_30mm_eotech_vudu_1_6x24(Clone)", 1, 26);
+            AddScope("scope_30mm_eotech_vudu_1_6x24(Clone)", 1, 25);
             AddScope("scope_30mm_eotech_vudu_1_6x24(Clone)", 6, 3.2f);
             AddScope("scope_30mm_burris_fullfield_tac30_1_4x24(Clone)", 1, 6);
             AddScope("scope_30mm_burris_fullfield_tac30_1_4x24(Clone)", 4, 27);
@@ -75,10 +75,10 @@ namespace TarkovVR.Source.Weapons
             AddScope("scope_all_eotech_hhs_1(Clone)", 3f, 7.3f);
             AddScope("scope_dovetail_belomo_pso_1_4x24(Clone)",4f, 6);
             AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 6f, 3.2f);
-            AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 1f, 26.5f);
+            AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 1f, 25f);
             AddScope("scope_dovetail_belomo_pso_1m2_4x24(Clone)", 4f, 6);
             AddScope("scope_30mm_sig_tango6t_1_6x24(Clone)", 6f, 3.2f);
-            AddScope("scope_30mm_sig_tango6t_1_6x24(Clone)", 1f, 26.5f);
+            AddScope("scope_30mm_sig_tango6t_1_6x24(Clone)", 1f, 25f);
         }
 
         public static void AddScope(string name, float zoomLevel, float fov)

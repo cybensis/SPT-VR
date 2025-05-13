@@ -28,6 +28,8 @@ using EFT.Weather;
 using EFT.Settings.Graphics;
 using System.IO;
 using Unity.Audio;
+using Newtonsoft.Json;
+using EFT;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -1071,12 +1073,14 @@ namespace TarkovVR.Patches.Visuals
             }
         }
         //Clouds dont render correctly and haven't found a way to fix them yet so disable it
+        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CloudController), "OnEnable")]
         private static void FixClouds(CloudController __instance) {
             __instance.enabled = false;
         }
-
+        
+        
         //Fog dont render correctly and haven't found a way to fix it yet so disable it
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MBOIT_Scattering), "Start")]
@@ -1084,6 +1088,7 @@ namespace TarkovVR.Patches.Visuals
         {
             __instance.enabled = false;
         }
+        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(CloudController), "UpdateAmbient")]
         private static bool FixAmbientErrors(CloudController __instance)
@@ -1091,7 +1096,7 @@ namespace TarkovVR.Patches.Visuals
             __instance.enabled = false;
             return false;
         }
-
+        
         //[HarmonyPrefix]
         //[HarmonyPatch(typeof(CloudController), "OnPreRenderCamera")]
         //private static bool FixClouds(CloudController __instance, Camera cam)
@@ -1356,7 +1361,7 @@ namespace TarkovVR.Patches.Visuals
                 }
             }
 
-            if (fpsCam == null)
+            if (fpsCam == null || __instance.tod_Scattering_0 == null)
                 return;
 
             if (fpsPrism == null)
