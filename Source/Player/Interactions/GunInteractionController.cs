@@ -76,6 +76,9 @@ public class GunInteractionController : MonoBehaviour
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void FinishInit() {
+        if (!Camera.main.stereoEnabled)
+            return;
+
         Camera.main.gameObject.GetComponent<HighLightMesh>().enabled = true;
         meshHighlighter.Awake();
         initialized = true;
@@ -136,6 +139,20 @@ public class GunInteractionController : MonoBehaviour
             {
                 rightHandsPositioner.GetComponent<HandsPositioner>().enabled = false;
             }
+        }
+
+        if (hightlightingMesh && meshHighlighter)
+        {
+            if (Camera.main != null && meshHighlighter.commandBuffer_0 != null)
+            {
+                Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+            }
+            meshHighlighter.enabled = false;
+            hightlightingMesh = false;
+            if (VRSettings.GetLeftHandedMode())
+                VRGlobals.blockLeftJoystick = false;
+            else
+                VRGlobals.blockRightJoystick = false;
         }
 
         prevRot = Vector3.zero;
@@ -396,9 +413,9 @@ public class GunInteractionController : MonoBehaviour
         adjustedOffset = new Vector3(adjustedOffset.x, adjustedOffset.y + horizontalY, adjustedOffset.z);
 ;
 
-        return baseOffset + adjustedOffset;
+        return baseOffset + adjustedOffset + new Vector3(0f, 0.01f, VRSettings.GetHandPosOffset());
     }
-
+    /*
     public void SetScopeHighlight(Transform scopeTransform)
     {
 
@@ -424,14 +441,72 @@ public class GunInteractionController : MonoBehaviour
     {
         meshHighlighter.enabled = false;
     }
+    */
+    public void SetScopeHighlight(Transform scopeTransform)
+    {
+        // Add null check for meshHighlighter
+        if (meshHighlighter == null)
+        {
+            // Try to get or recreate the highlighter if it's null
+            meshHighlighter = Camera.main?.gameObject.GetComponent<HighLightMesh>();
 
+            // If we still don't have a highlighter, log and return
+            if (meshHighlighter == null)
+            {
+                UnityEngine.Debug.LogWarning("SetScopeHighlight: meshHighlighter is null");
+                return;
+            }
+        }
+
+        List<Class614> scopeMeshList = new List<Class614>();
+        Renderer[] componentsInChildren = scopeTransform?.GetComponentsInChildren<Renderer>(includeInactive: false);
+
+        // Null check for the renderers array
+        if (componentsInChildren != null)
+        {
+            foreach (Renderer renderer in componentsInChildren)
+            {
+                // Null check for each renderer
+                if (renderer == null) continue;
+
+                SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
+                if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
+                {
+                    scopeMeshList.Add(new Class614(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                }
+                else if (renderer is MeshRenderer && renderer.enabled &&
+                         renderer.GetComponent<MeshFilter>() != null &&
+                         renderer.GetComponent<MeshFilter>().sharedMesh != null)
+                {
+                    scopeMeshList.Add(new Class614(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                }
+            }
+        }
+
+        // Only proceed if we have items in the list and the highlighter is valid
+        if (scopeMeshList.Count > 0 && meshHighlighter != null)
+        {
+            meshHighlighter.class614_0 = scopeMeshList.ToArray();
+            meshHighlighter.enabled = true;
+        }
+    }
+
+    public void RemoveScopeHighlight()
+    {
+        // Add null check
+        if (meshHighlighter != null)
+        {
+            meshHighlighter.enabled = false;
+        }
+    }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private int FindClosestTransform(Vector3 hitPoint)
     {
         int index = -1;
         float closestDistanceSqr = Mathf.Infinity;
 
-        for (int i = 0; i < interactables.Count; i++) { 
+        for (int i = 0; i < interactables.Count; i++) {
+            if (interactables[i] == null) continue;
             Vector3 directionToTarget = interactables[i].position - hitPoint;
             float dSqrToTarget = directionToTarget.sqrMagnitude; // Avoids the cost of calculating the square root
 

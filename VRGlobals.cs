@@ -27,7 +27,7 @@ namespace TarkovVR
         public static Camera VRCam;
         public static GameObject camHolder;
         public static GameObject vrOffsetter;
-        public static GameObject camRoot;
+        public static GameObject camRoot;        
 
         public Transform playerCam;
         public static Transform emptyHands;
@@ -58,6 +58,7 @@ namespace TarkovVR
         public static SkinnedMeshRenderer origArmsModel;
         public static SkinnedMeshRenderer legsModel;
         public static AssetBundle handsBundle;
+        public static GameObject cloudPrefab;
 
         public static GameObject weaponHolder;
         public static GameObject oldWeaponHolder;

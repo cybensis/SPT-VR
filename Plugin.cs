@@ -14,6 +14,7 @@ using static TarkovVR.Patches.Visuals.VisualPatches;
 using UnityEngine.XR;
 using Fika.Core.Networking;
 using Fika.Core.Coop.Utils;
+using System.Text;
 
 namespace TarkovVR
 {
@@ -81,14 +82,121 @@ namespace TarkovVR
                     Plugin.MyLog.LogError("[OpenVR] HMD not found or OpenVR initialization failed.");
                     return false;
                 }
-                
-                Plugin.MyLog.LogError("[VR] Initialization completed successfully with Single Pass Instanced.");
+
+                // Make sure SteamVR input is initialized
+                SteamVR_Input.Initialize();
+
+                // Check for controller presence and log controller types
+                DetectAndLogControllers();
+
+                // Initialize action sets - important for different controller types
+                InitializeActionSets();
+
+                Plugin.MyLog.LogInfo("[VR] Initialization completed successfully with Single Pass Instanced.");
                 return true;
             }
             catch (Exception ex)
             {
                 Plugin.MyLog.LogError($"[VR Initialization Error] {ex.Message}");
                 return false;
+            }
+        }
+
+        private void DetectAndLogControllers()
+        {
+            try
+            {
+                if (SteamVR.instance == null || SteamVR.instance.hmd == null)
+                {
+                    Plugin.MyLog.LogError("[Controller Detection] SteamVR not initialized properly.");
+                    return;
+                }
+
+                // Get active controllers
+                var system = OpenVR.System;
+                if (system == null)
+                {
+                    Plugin.MyLog.LogError("[Controller Detection] OpenVR.System is null");
+                    return;
+                }
+
+                // Log all connected devices
+                Plugin.MyLog.LogInfo("[Controller Detection] Checking for connected devices...");
+
+                for (uint deviceIndex = 0; deviceIndex < OpenVR.k_unMaxTrackedDeviceCount; deviceIndex++)
+                {
+                    if (system.IsTrackedDeviceConnected(deviceIndex))
+                    {
+                        ETrackedDeviceClass deviceClass = system.GetTrackedDeviceClass(deviceIndex);
+                        if (deviceClass == ETrackedDeviceClass.Controller)
+                        {
+                            // Get controller type
+                            ETrackedPropertyError error = new ETrackedPropertyError();
+                            StringBuilder modelNumber = new StringBuilder(64);
+                            system.GetStringTrackedDeviceProperty(deviceIndex, ETrackedDeviceProperty.Prop_ModelNumber_String, modelNumber, 64, ref error);
+
+                            string controllerType = "Unknown";
+                            if (modelNumber.ToString().Contains("Vive Controller"))
+                            {
+                                controllerType = "Vive Wand";
+                            }
+                            else if (modelNumber.ToString().Contains("Knuckles"))
+                            {
+                                controllerType = "Valve Index Knuckles";
+                            }
+                            else if (modelNumber.ToString().Contains("Oculus Touch"))
+                            {
+                                controllerType = "Oculus Touch";
+                            }
+
+                            Plugin.MyLog.LogInfo($"[Controller Detection] Found controller ({deviceIndex}): {modelNumber} ({controllerType})");
+
+                            // Log controller role (left/right)
+                            ETrackedControllerRole role = system.GetControllerRoleForTrackedDeviceIndex(deviceIndex);
+                            Plugin.MyLog.LogInfo($"[Controller Detection] Controller role: {role}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.MyLog.LogError($"[Controller Detection Error] {ex.Message}");
+            }
+        }
+
+        private void InitializeActionSets()
+        {
+            try
+            {
+                // Make sure actions are initialized and updated
+                SteamVR_ActionSet[] actionSets = SteamVR_Input.actionSets;
+                if (actionSets != null && actionSets.Length > 0)
+                {
+                    foreach (var actionSet in actionSets)
+                    {
+                        Plugin.MyLog.LogInfo($"[ActionSet] Initializing action set: {actionSet.GetShortName()}");
+                        actionSet.Activate();
+                    }
+
+                    // Explicitly activate the default action set if it exists
+                    var defaultActionSet = SteamVR_Input.GetActionSet("default");
+                    if (defaultActionSet != null)
+                    {
+                        defaultActionSet.Activate();
+                        Plugin.MyLog.LogInfo("[ActionSet] Default action set activated");
+                    }
+                }
+                else
+                {
+                    Plugin.MyLog.LogWarning("[ActionSet] No action sets found to initialize");
+                }
+
+                // Force SteamVR Input update to ensure controllers are recognized
+                SteamVR_Input.Update();
+            }
+            catch (Exception ex)
+            {
+                Plugin.MyLog.LogError($"[ActionSet Initialization Error] {ex.Message}");
             }
         }
 

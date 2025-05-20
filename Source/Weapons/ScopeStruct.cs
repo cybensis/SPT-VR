@@ -1,5 +1,8 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
 
 
 namespace TarkovVR.Source.Weapons
@@ -22,64 +25,36 @@ namespace TarkovVR.Source.Weapons
     public static class ScopeManager
     {
         private static List<Scope> scopes = new List<Scope>();
+        private static readonly string configPath = Path.Combine(BepInEx.Paths.PluginPath, "sptvr", "Configs", "scopes.json");
 
         static ScopeManager()
         {
-            // Name - Zoom Level - FoV
-            AddScope("scope_30mm_s&b_pm_ii_1_8x24(Clone)", 1, 27);
-            AddScope("scope_30mm_s&b_pm_ii_1_8x24(Clone)", 8f, 3);
-            AddScope("scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)", 1, 15);
-            AddScope("scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)", 2, 4);
-            AddScope("scope_all_torrey_pines_logic_t12_w_30hz(Clone)", 1, 15);
-            AddScope("scope_30mm_eotech_vudu_1_6x24(Clone)", 1, 25);
-            AddScope("scope_30mm_eotech_vudu_1_6x24(Clone)", 6, 3.2f);
-            AddScope("scope_30mm_burris_fullfield_tac30_1_4x24(Clone)", 1, 6);
-            AddScope("scope_30mm_burris_fullfield_tac30_1_4x24(Clone)", 4, 27);
-            AddScope("scope_g36_hensoldt_hkv_single_optic_carry_handle_1,5x(Clone)", 1.5f, 18);
-            AddScope("scope_aug_steyr_rail_optic_1,5x(Clone)", 1.5f, 14);
-            AddScope("scope_aug_steyr_stg77_optic_1,5x", 1.5f, 15);
-            AddScope("scope_all_monstrum_compact_prism_scope_2x32(Clone)", 2, 11);
-            AddScope("scope_g36_hensoldt_hkv_carry_handle_3x(Clone)", 3, 7.5f);
-            AddScope("3", 3, 7.5f);
-            AddScope("scope_base_kmz_1p59_3_10x(Clone)", 3, 7.6f);
-            AddScope("scope_base_kmz_1p59_3_10x(Clone)", 10f, 2.5f);
-            AddScope("scope_all_ncstar_advance_dual_optic_3_9x_42(Clone)", 3, 7.6f);
-            AddScope("scope_all_ncstar_advance_dual_optic_3_9x_42(Clone)", 9f, 2.9f);
-            AddScope("scope_base_npz_1p78_1_2,8x24(Clone)", 3, 9);
-            AddScope("scope_34mm_s&b_pm_ii_3_12x50(Clone)", 3, 12);
-            AddScope("scope_34mm_s&b_pm_ii_3_12x50(Clone)", 12f, 1.9f);
-            AddScope("scope_base_progress_pu_3,5x(Clone)", 3.5f, 6);
-            AddScope("scope_dovetail_npz_nspum_3,5x(Clone)", 3.5f, 6.5f);
-            AddScope("scope_all_swampfox_trihawk_prism_scope_3x30(Clone)", 3.5f, 7.5f);
-            AddScope("scope_base_trijicon_acog_ta11_3,5x35(Clone)", 3.5f, 7);
-            AddScope("", 6f, 3.2f);
-            AddScope("", 16f, 1.2f);
-            AddScope("scope_34mm_nightforce_atacr_7_35x56(Clone)", 16f, 1);
-            AddScope("scope_34mm_nightforce_atacr_7_35x56(Clone)", 7f, 1.6f);
-            AddScope("scope_base_primary_arms_compact_prism_scope_2,5x(Clone)", 2.5f, 10);
-            AddScope("scope_30mm_leupold_mark4_lr_6,5_20x50(Clone)", 20f, 1.5f);
-            AddScope("scope_34mm_s&b_pm_ii_5_25x56(Clone)", 5f, 3.6f);
-            AddScope("scope_34mm_s&b_pm_ii_5_25x56(Clone)", 25f, 1.9f);
-            AddScope("scope_25_4mm_vomz_pilad_4x32m(Clone)", 4f, 6);
-            AddScope("scope_all_leupold_mark4_hamr(Clone)", 4f, 6);
-            AddScope("scope_all_sig_bravo4_4x30(Clone)", 4f, 6);
-            AddScope("scope_34mm_hensoldt_zf_4_16x56_ff(Clone)", 4f, 6f);
-            AddScope("scope_34mm_hensoldt_zf_4_16x56_ff(Clone)", 16f, 1.2f);
-            AddScope("scope_dovetail_npz_1p29_4x(Clone)", 4f, 6f);
-            AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 4f, 6f);
-            AddScope("scope_all_elcan_specter_dr_1-4_fde(Clone)", 1f, 27);
-            AddScope("scope_all_elcan_specter_dr_1-4(Clone)", 4f, 6f);
-            AddScope("scope_all_elcan_specter_dr_1-4(Clone)", 1f, 27);
-            AddScope("scope_base_trijicon_acog_ta01nsn_4x32_tan(Clone)", 4f, 6);
-            AddScope("scope_all_eotech_hhs_1_tan(Clone)", 3f, 7.3f);
-            AddScope("scope_all_eotech_hhs_1(Clone)", 3f, 7.3f);
-            AddScope("scope_dovetail_belomo_pso_1_4x24(Clone)",4f, 6);
-            AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 6f, 3.2f);
-            AddScope("scope_30mm_razor_hd_gen_2_1_6x24(Clone)", 1f, 25f);
-            AddScope("scope_dovetail_belomo_pso_1m2_4x24(Clone)", 4f, 6);
-            AddScope("scope_30mm_sig_tango6t_1_6x24(Clone)", 6f, 3.2f);
-            AddScope("scope_30mm_sig_tango6t_1_6x24(Clone)", 1f, 25f);
+            LoadScopes();
         }
+
+        private static void LoadScopes()
+        {
+            try
+            {
+                // Check if the config file exists
+                if (!File.Exists(configPath))
+                {
+                    Plugin.MyLog.LogWarning($"Scope configuration file not found: {configPath}");
+                    return;
+                }
+
+                // Read the file and deserialize it into the list of scopes
+                string json = File.ReadAllText(configPath);
+                scopes = JsonConvert.DeserializeObject<List<Scope>>(json);
+
+                Plugin.MyLog.LogInfo($"Loaded {scopes.Count} scopes from {configPath}");
+            }
+            catch (Exception ex)
+            {
+                Plugin.MyLog.LogError($"Failed to load scopes: {ex.Message}");
+            }
+        }
+
 
         public static void AddScope(string name, float zoomLevel, float fov)
         {

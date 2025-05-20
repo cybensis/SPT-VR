@@ -65,6 +65,7 @@ namespace TarkovVR.Source.Settings
             public int rightHandHorizontalAngle { get; set; }
             public int leftHandHorizontalAngle { get; set; }
             public int leftHandVerticalAngle { get; set; }
+            public float handPosOffset { get; set; }
             public bool weaponWeight { get; set; }
             public bool hideArms { get; set; }
             public bool hideLegs { get; set; }
@@ -94,6 +95,7 @@ namespace TarkovVR.Source.Settings
                 rightHandHorizontalAngle = 20; 
                 leftHandHorizontalAngle = 50;
                 leftHandVerticalAngle = 50;
+                handPosOffset = 0.0f;
 
                 enableSharpen = true;
                 weaponWeight = false;
@@ -102,7 +104,7 @@ namespace TarkovVR.Source.Settings
                 disableRunAnimation = false;
                 disablePrismEffects = false;
                 disableFog = false;
-                shadowOpt = ShadowOpt.Normal;
+                shadowOpt = ShadowOpt.IncreaseLighting;
             }
             // Add more settings as needed
         }
@@ -130,6 +132,7 @@ namespace TarkovVR.Source.Settings
         private static SettingSelectSlider rightHandHorizontalAngleSlider;
         private static SettingSelectSlider leftHandHorizontalAngleSlider;
         private static SettingSelectSlider leftHandVerticalAngleSlider;
+        private static SettingSelectSlider handPosOffsetSlider;
         private static SettingSelectSlider variableZoomSensitivitySlider;
 
         // Graphics Settings
@@ -360,6 +363,31 @@ namespace TarkovVR.Source.Settings
             leftHandHorizontalAngleSlider.Text.localizationKey = "Left hand horizontal rot offset:";
             leftHandHorizontalAngleSlider.Slider.UpdateValue((50 - settings.leftHandHorizontalAngle) / 10);
 
+            handPosOffsetSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            handPosOffsetSlider.BindIndexTo(
+                settingsUi._soundSettingsScreen.gclass1050_0.OverallVolume,
+                settingsUi._soundSettingsScreen.readOnlyCollection_0,
+                (sliderIndex) =>
+                {
+                    float normalizedValue = sliderIndex / 100f; // Convert to 0-1 range
+                    float displayValue = (normalizedValue * 0.20f) - 0.10f; // Map to -0.10 to 0.10
+                    return displayValue.ToString("F2"); // Format to 2 decimal places
+                }
+            );
+            handPosOffsetSlider.Slider.action_0 = SetHandPosOffset;
+            handPosOffsetSlider.Text.localizationKey = "Hand position offset (up/down):";
+            int sliderValue;
+            if (settings.handPosOffset <= -0.10f)
+                sliderValue = 1;
+            else if (settings.handPosOffset >= 0.10f)
+                sliderValue = 10;
+            else
+            {
+                float normalizedValue = (settings.handPosOffset + 0.10f) / 0.20f;
+                sliderValue = Mathf.RoundToInt(normalizedValue * 9f + 1f);
+            }
+            handPosOffsetSlider.Slider.UpdateValue(sliderValue);
+
 
             hideArmsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             hideArmsToggle.BindTo(settingsUi._soundSettingsScreen.gclass1050_0.MusicOnRaidEnd);
@@ -569,6 +597,19 @@ namespace TarkovVR.Source.Settings
         private static void SetRightHandVerticalOffset(int offset)
         {
             settings.rightHandVerticalAngle = offset * 10;
+        }
+        public static float GetHandPosOffset()
+        {
+            return settings.handPosOffset;
+        }
+        private static void SetHandPosOffset(int sliderValue)
+        {
+            sliderValue = Mathf.Clamp(sliderValue, 1, 10);
+
+            float normalizedValue = (sliderValue - 1f) / 9f;
+            float newValue = (normalizedValue * 0.20f) - 0.10f;
+
+            settings.handPosOffset = newValue;
         }
 
         public static bool GetSnapToGun()

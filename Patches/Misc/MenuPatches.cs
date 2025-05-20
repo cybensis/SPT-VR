@@ -1454,6 +1454,15 @@ namespace TarkovVR.Patches.Misc
                 VRSettings.ShowVRSettings();
 
             Camera.main.useOcclusionCulling = false;
+            //Camera.main.useOcclusionCulling = true;
+            Camera.main.layerCullSpherical = true;
+            float[] distances = new float[32];
+            for (int i = 0; i < distances.Length; i++)
+            {
+                distances[i] = 1000f; // Adjust as needed
+            }
+            Camera.main.layerCullDistances = distances;
+
             Camera.main.farClipPlane = 5000f;
         }
 

@@ -530,6 +530,25 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
+        [HarmonyPrefix]
+        private static void CleanupHighlightMesh()
+        {
+            // Clean up any existing highlight mesh before switching weapons
+            if (Camera.main != null)
+            {
+                HighLightMesh existingHighlight = Camera.main.gameObject.GetComponent<HighLightMesh>();
+                if (existingHighlight != null)
+                {
+                    // Remove any command buffers
+                    if (existingHighlight.commandBuffer_0 != null)
+                    {
+                        Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight.commandBuffer_0);
+                    }
+                }
+            }
+        }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public static List<Transform> weaponInteractables;
         public static Transform gunCollider;
@@ -611,9 +630,7 @@ namespace TarkovVR.Patches.Core.Player
                     currentGunInteractController = __instance.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
                     currentGunInteractController.Init();
 
-                    if (Camera.main.gameObject.GetComponent<HighLightMesh>())
-                        currentGunInteractController.SetHighlightComponent(Camera.main.gameObject.GetComponent<HighLightMesh>());
-                    else if (Camera.main.stereoEnabled)
+                    if (Camera.main.stereoEnabled)
                     {
                         HighLightMesh highLightMesh = Camera.main.gameObject.AddComponent<HighLightMesh>();
                         highLightMesh.enabled = false;
@@ -624,7 +641,7 @@ namespace TarkovVR.Patches.Core.Player
                         currentGunInteractController.SetHighlightComponent(highLightMesh);
                     }
                     currentGunInteractController.SetPlayerOwner(__instance._player.gameObject.GetComponent<GamePlayerOwner>());
-                    WeaponMeshParts weaponHighlightParts = WeaponMeshList.GetWeaponMeshList(__instance.WeaponRoot.transform.root.name);
+                    WeaponMeshParts weaponHighlightParts = WeaponMeshList.GetWeaponMeshList(__instance.WeaponRoot);
                     //Plugin.MyLog.LogError($"[InitBallisticCalculator] weaponHighlightParts is {(weaponHighlightParts == null ? "null" : "not null")} for weapon: {__instance.WeaponRoot.transform.root.name}");
                     Transform weaponMeshRoot = __instance.GunBaseTransform.GetChild(0);
                     if (weaponHighlightParts != null)

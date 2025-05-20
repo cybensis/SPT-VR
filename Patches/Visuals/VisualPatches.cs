@@ -335,6 +335,14 @@ namespace TarkovVR.Patches.Visuals
             }
 
             Camera.main.useOcclusionCulling = false;
+            //Camera.main.useOcclusionCulling = true;
+            Camera.main.layerCullSpherical = true;
+            float[] distances = new float[32];
+            for (int i = 0; i < distances.Length; i++)
+            {
+                distances[i] = 1000f; // Adjust as needed
+            }
+            Camera.main.layerCullDistances = distances;
 
             ResetRenderingState(__instance);
             int width = Camera.main.pixelWidth;
@@ -1072,22 +1080,6 @@ namespace TarkovVR.Patches.Visuals
                 distantShadow.PreComputeMask = true;
             }
         }
-        //Clouds dont render correctly and haven't found a way to fix them yet so disable it
-        
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(CloudController), "OnEnable")]
-        private static void FixClouds(CloudController __instance) {
-            __instance.enabled = false;
-        }
-        
-        
-        //Fog dont render correctly and haven't found a way to fix it yet so disable it
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MBOIT_Scattering), "Start")]
-        private static void DisableMBOIT(CloudController __instance)
-        {
-            __instance.enabled = false;
-        }
         
         [HarmonyPrefix]
         [HarmonyPatch(typeof(CloudController), "UpdateAmbient")]
@@ -1332,81 +1324,6 @@ namespace TarkovVR.Patches.Visuals
         }
         */
 
-        //This replaces the fog system BSG uses and uses the fog from the Prism Post Process effects instead. This does have a drawback though,
-        //fog will appear inside of buildings (I think it's better than no fog at all or broken fog)       
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImage")]
-        private static void FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
-        {
-            __instance.enabled = false;
-        }
-
-        private static Camera fpsCam;
-        private static Camera opticCam;
-        private static PrismEffects fpsPrism;
-        private static PrismEffects opticPrism;
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeatherController), "method_9")]
-        private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
-        {
-            if (fpsCam == null)
-            {
-                foreach (var cam in Camera.allCameras)
-                {
-                    if (cam.name == "FPS Camera")
-                        fpsCam = cam;
-                    else if (cam.name == "BaseOpticCamera(Clone)")
-                        opticCam = cam;
-                }
-            }
-
-            if (fpsCam == null || __instance.tod_Scattering_0 == null)
-                return;
-
-            if (fpsPrism == null)
-                fpsPrism = fpsCam.GetComponent<PrismEffects>() ?? fpsCam.gameObject.AddComponent<PrismEffects>();
-
-            // Enable/disable fog effect
-            if (VRSettings.GetDisableFog())
-                fpsPrism.useFog = false;
-            else
-                fpsPrism.useFog = true;
-
-            // Calculate fog properties
-            float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
-            float fogAlpha = Mathf.Lerp(0.7f, 0.08f, (fogDistance - 100f) / 400f);
-            Color fogColor = new Color(1f, 1f, 1f, fogAlpha);
-
-            // Apply fog settings to FPS camera
-            fpsPrism.fogDistance = fogDistance;
-            fpsPrism.fogColor = fogColor;
-            fpsPrism.fogEndColor = fogColor;
-
-            //Plugin.MyLog.LogError("FPS Camera FogDistance: " + fpsPrism.fogDistance + " - " + __instance.tod_Scattering_0.GlobalDensity);
-            // Process optic camera if it exists
-            if (opticCam != null)
-            {
-                if (opticPrism == null)
-                    opticPrism = opticCam.GetComponent<PrismEffects>() ?? opticCam.gameObject.AddComponent<PrismEffects>();
-
-                if (VRSettings.GetDisablePrismEffects())
-                {
-                    opticPrism.enabled = false;
-                    return;
-                }
-                
-                if (VRSettings.GetDisableFog())
-                    opticPrism.useFog = false;
-                else
-                    opticPrism.useFog = true;
-
-                opticPrism.enabled = true;
-                opticPrism.fogDistance = fogDistance;
-                opticPrism.fogColor = fogColor;
-                opticPrism.fogEndColor = fogColor;
-            }
-        }
         private static Matrix4x4 CalculateFrustumCorners(Camera cam, Camera.StereoscopicEye eye = Camera.StereoscopicEye.Left)
         {
             float nearClipPlane = cam.nearClipPlane;

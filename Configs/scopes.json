@@ -1,0 +1,207 @@
+[
+    {
+        "Name": "scope_30mm_s&b_pm_ii_1_8x24(Clone)",
+        "ZoomLevel": 1,
+        "FOV": 27
+    },
+    {
+        "Name": "scope_30mm_s&b_pm_ii_1_8x24(Clone)",
+        "ZoomLevel": 8,
+        "FOV": 3
+    },
+    {
+        "Name": "scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)",
+        "ZoomLevel": 1,
+        "FOV": 15
+    },
+    {
+        "Name": "scope_all_sig_sauer_echo1_thermal_reflex_sight_1_2x_30hz(Clone)",
+        "ZoomLevel": 2,
+        "FOV": 4
+    },
+    {
+        "Name": "scope_all_torrey_pines_logic_t12_w_30hz(Clone)",
+        "ZoomLevel": 1,
+        "FOV": 15
+    },
+    {
+        "Name": "scope_30mm_eotech_vudu_1_6x24(Clone)",
+        "ZoomLevel": 1,
+        "FOV": 25
+    },
+    {
+        "Name": "scope_30mm_eotech_vudu_1_6x24(Clone)",
+        "ZoomLevel": 6,
+        "FOV": 3.2
+    },
+    {
+        "Name": "scope_30mm_burris_fullfield_tac30_1_4x24(Clone)",
+        "ZoomLevel": 1,
+        "FOV": 6
+    },
+    {
+        "Name": "scope_30mm_burris_fullfield_tac30_1_4x24(Clone)",
+        "ZoomLevel": 4,
+        "FOV": 27
+    },
+    {
+        "Name": "scope_g36_hensoldt_hkv_single_optic_carry_handle_1,5x(Clone)",
+        "ZoomLevel": 1.5,
+        "FOV": 18
+    },
+    {
+        "Name": "scope_aug_steyr_rail_optic_1,5x(Clone)",
+        "ZoomLevel": 1.5,
+        "FOV": 14
+    },
+    {
+        "Name": "scope_aug_steyr_stg77_optic_1,5x",
+        "ZoomLevel": 1.5,
+        "FOV": 15
+    },
+    {
+        "Name": "scope_all_monstrum_compact_prism_scope_2x32(Clone)",
+        "ZoomLevel": 2,
+        "FOV": 11
+    },
+    {
+        "Name": "scope_g36_hensoldt_hkv_carry_handle_3x(Clone)",
+        "ZoomLevel": 3,
+        "FOV": 7.5
+    },
+    {
+        "Name": "3",
+        "ZoomLevel": 3,
+        "FOV": 7.5
+    },
+    {
+        "Name": "scope_base_kmz_1p59_3_10x(Clone)",
+        "ZoomLevel": 3,
+        "FOV": 7.6
+    },
+    {
+        "Name": "scope_base_kmz_1p59_3_10x(Clone)",
+        "ZoomLevel": 10,
+        "FOV": 2.5
+    },
+    {
+        "Name": "scope_all_ncstar_advance_dual_optic_3_9x_42(Clone)",
+        "ZoomLevel": 3,
+        "FOV": 7.6
+    },
+    {
+        "Name": "scope_all_ncstar_advance_dual_optic_3_9x_42(Clone)",
+        "ZoomLevel": 9,
+        "FOV": 2.9
+    },
+    {
+        "Name": "scope_base_npz_1p78_1_2,8x24(Clone)",
+        "ZoomLevel": 3,
+        "FOV": 9
+    },
+    {
+        "Name": "scope_34mm_s&b_pm_ii_3_12x50(Clone)",
+        "ZoomLevel": 3,
+        "FOV": 12
+    },
+    {
+        "Name": "scope_34mm_s&b_pm_ii_3_12x50(Clone)",
+        "ZoomLevel": 12,
+        "FOV": 1.9
+    },
+    {
+        "Name": "scope_base_progress_pu_3,5x(Clone)",
+        "ZoomLevel": 3.5,
+        "FOV": 6
+    },
+    {
+        "Name": "scope_dovetail_npz_nspum_3,5x(Clone)",
+        "ZoomLevel": 3.5,
+        "FOV": 6.5
+    },
+    {
+        "Name": "scope_all_swampfox_trihawk_prism_scope_3x30(Clone)",
+        "ZoomLevel": 3.5,
+        "FOV": 7.5
+    },
+    {
+        "Name": "scope_base_trijicon_acog_ta11_3,5x35(Clone)",
+        "ZoomLevel": 3.5,
+        "FOV": 7
+    },
+    {
+        "Name": "scope_34mm_nightforce_atacr_7_35x56(Clone)",
+        "ZoomLevel": 16,
+        "FOV": 1
+    },
+    {
+        "Name": "scope_34mm_nightforce_atacr_7_35x56(Clone)",
+        "ZoomLevel": 7,
+        "FOV": 1.6
+    },
+    {
+        "Name": "scope_base_primary_arms_compact_prism_scope_2,5x(Clone)",
+        "ZoomLevel": 2.5,
+        "FOV": 10
+    },
+    {
+        "Name": "scope_30mm_leupold_mark4_lr_6,5_20x50(Clone)",
+        "ZoomLevel": 20,
+        "FOV": 1.5
+    },
+    {
+        "Name": "scope_34mm_s&b_pm_ii_5_25x56(Clone)",
+        "ZoomLevel": 5,
+        "FOV": 3.6
+    },
+    {
+        "Name": "scope_34mm_s&b_pm_ii_5_25x56(Clone)",
+        "ZoomLevel": 25,
+        "FOV": 1.9
+    },
+    {
+        "Name": "scope_25_4mm_vomz_pilad_4x32m(Clone)",
+        "ZoomLevel": 4,
+        "FOV": 6
+    },
+    {
+        "Name": "scope_dovetail_npz_1p29_4x(Clone)",
+        "ZoomLevel": 4,
+        "FOV": 6
+    },
+    {
+        "Name": "scope_all_elcan_specter_dr_1-4_fde(Clone)",
+        "ZoomLevel": 4,
+        "FOV": 6
+    },
+    {
+        "Name": "scope_all_elcan_specter_dr_1-4(Clone)",
+        "ZoomLevel": 4,
+        "FOV": 6
+    },
+    {
+        "Name": "scope_base_trijicon_acog_ta01nsn_4x32_tan(Clone)",
+        "ZoomLevel": 4,
+        "FOV": 6
+    },
+    {
+        "Name": "scope_all_eotech_hhs_1_tan(Clone)",
+        "ZoomLevel": 3,
+        "FOV": 7.3
+    },
+    {
+        "Name": "scope_dovetail_belomo_pso_1m2_4x24(Clone)",
+        "ZoomLevel": 4,
+        "FOV": 6
+    },
+    {
+        "Name": "scope_30mm_razor_hd_gen_2_1_6x24(Clone)",
+        "ZoomLevel": 6,
+        "FOV": 3.2
+    },
+    {
+        "Name": "scope_30mm_razor_hd_gen_2_1_6x24(Clone)",
+        "ZoomLevel": 1,
+        "FOV": 25
+    }
+]

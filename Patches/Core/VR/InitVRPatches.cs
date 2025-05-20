@@ -24,6 +24,8 @@ using System.Collections;
 using static Fika.Core.Coop.Components.CoopHandler;
 using TarkovVR.Patches.Visuals;
 using Valve.VR.InteractionSystem;
+using System.IO;
+using System;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -311,6 +313,14 @@ namespace TarkovVR.Patches.Core.VR
                 mainCam.stereoTargetEye = StereoTargetEyeMask.Both;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
                 mainCam.useOcclusionCulling = false;
+                //mainCam.useOcclusionCulling = true;
+                mainCam.layerCullSpherical = true;
+                float[] distances = new float[32];
+                for (int i = 0; i < distances.Length; i++)
+                {
+                    distances[i] = 1000f; // Adjust as needed
+                }
+                mainCam.layerCullDistances = distances;
                 if (VRGlobals.vrPlayer)
                 {
                     if (VRGlobals.vrPlayer.radialMenu)
