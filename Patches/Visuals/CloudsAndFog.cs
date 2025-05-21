@@ -106,6 +106,7 @@ namespace TarkovVR.Patches.Visuals
                 opticPrism.fogEndColor = fogColor;
             }
         }
+        private static GameObject cloudInstance;
 
         //This is the custom cloud system that replaces the BSG clouds. It uses a custom shader and a prefab to render the clouds and uses the weather system to control the density and color of the clouds.
         [HarmonyPostfix]
@@ -113,7 +114,7 @@ namespace TarkovVR.Patches.Visuals
         private static void SpawnClouds(CharacterControllerSpawner __instance)
         {
             EFT.Player player = __instance.transform.root.GetComponent<EFT.Player>();
-
+           
             if (player is not HideoutPlayer)
             {
                 if (VRGlobals.cloudPrefab == null)
@@ -139,9 +140,9 @@ namespace TarkovVR.Patches.Visuals
                 }
 
                 // Instantiate the cloud prefab
-                if (VRGlobals.cloudPrefab != null)
+                if (VRGlobals.cloudPrefab != null && cloudInstance == null)
                 {
-                    GameObject cloudInstance = GameObject.Instantiate(VRGlobals.cloudPrefab);
+                    cloudInstance = GameObject.Instantiate(VRGlobals.cloudPrefab);
                     cloudInstance.transform.position = new Vector3(0, -70, 0);  // Adjust as needed
                     cloudInstance.transform.localScale = new Vector3(10f, 10f, 10f); // Adjust as needed
                     Plugin.MyLog.LogInfo("Cloud prefab instantiated.");
