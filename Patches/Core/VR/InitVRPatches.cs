@@ -106,7 +106,7 @@ namespace TarkovVR.Patches.Core.VR
                     UIPatches.quickSlotUi.gameObject.active = false;
                     //VRGlobals.vrPlayer.radialMenu.active = false;
                     // The camera on interchange doesn't stay turned off like other maps so try and disable it again here.
-                    //Camera.main.useOcclusionCulling = false;
+                    Camera.main.useOcclusionCulling = false;
                 }
             }
 
@@ -264,6 +264,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.leftArmBendGoal.parent = __instance.transform.root.transform;
                 VRGlobals.leftArmBendGoal.localEulerAngles = Vector3.zero;
                 VRGlobals.leftArmBendGoal.localPosition = new Vector3(-1, -0.5f, -0.8f);
+                //VRGlobals.leftArmBendGoal.localPosition = new Vector3(-0.5f, -0.3f, -0.4f);
             }
             if (VRGlobals.rightArmBendGoal == null)
             {

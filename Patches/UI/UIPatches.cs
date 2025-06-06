@@ -35,6 +35,10 @@ using JetBrains.Annotations;
 using static RootMotion.FinalIK.InteractionTrigger.Range;
 using EFT.Rendering.Clouds;
 using EFT.UI.Gestures;
+using System.Collections;
+using TarkovVR.Source.Player.Interactions;
+using Aki.Reflection.Utils;
+using TarkovVR.Patches.Visuals;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -170,19 +174,31 @@ namespace TarkovVR.Patches.UI
 
         }
 
-
         private static float lastCamRootYRot = 0;
         public static void HandleOpenInventory()
         {
+            if (VRGlobals.vrPlayer is RaidVRPlayerManager)
+            {
+                MemoryControllerClass.Collect();
+            }
+            else
+            {
+                MemoryControllerClass.GCEnabled = true;
+                MemoryControllerClass.Collect();
+            }
+            if (MemoryControllerClass.Settings.OverrideRamCleanerSettings ? MemoryControllerClass.Settings.RamCleanerEnabled : ((bool)Singleton<SharedGameSettingsClass>.Instance.Game.Settings.AutoEmptyWorkingSet))
+            {
+                MemoryControllerClass.EmptyWorkingSet();
+            }
+            VisualPatches.ClearRenderTargetPool();
             Cursor.lockState = CursorLockMode.Locked;
             ShowUiScreens();
-
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = false;
             if (WeaponPatches.currentGunInteractController != null)
             {
-                if (WeaponPatches.currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
                     foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = false;
             }
@@ -193,18 +209,42 @@ namespace TarkovVR.Patches.UI
             VRGlobals.menuVRManager.enabled = true;
 
             Transform head = Camera.main.transform;
-            Vector3 forward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
-            Vector3 right = Vector3.ProjectOnPlane(head.right, Vector3.up).normalized;
+            // Use horizontal forward/right
+            Vector3 flatForward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
+            Quaternion flatRotation = Quaternion.LookRotation(flatForward, Vector3.up);
+            Vector3 flatRight = Vector3.Cross(Vector3.up, flatForward).normalized;
 
-            float distance = 0.8f;
-            float heightOffset = -0.5f;
+            float distance = 0.9f;
+            float heightOffset = -0.4f;
             float horizontalOffset = -0.7f; // Move UI slightly to the left
+            float extraYOffset = 0f;
+
+            Vector3 basePos = VRGlobals.camRoot.transform.position; // stable world anchor
+
+            if (VRGlobals.player.IsInPronePose)
+                extraYOffset -= 1.5f;
+            else
+            {
+                float poseLevel = VRGlobals.player.MovementContext._poseLevel;
+                float crouchOffset = (1 - poseLevel) * 0.6f; // 0.6f can be adjusted to change position of menu based on crouch
+                extraYOffset -= crouchOffset;
+            }
 
             Transform ui = VRGlobals.commonUi;
             ui.SetParent(VRGlobals.camRoot.transform);
             ui.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
-            ui.position = head.position + forward * distance + right * horizontalOffset + new Vector3(0, heightOffset, 0);
-            ui.rotation = Quaternion.LookRotation(forward, Vector3.up);
+            ui.position = VRGlobals.camRoot.transform.position + flatForward * distance + flatRight * horizontalOffset + new Vector3(0, heightOffset + extraYOffset, 0);
+            ui.localEulerAngles = Vector3.zero;
+            ui.rotation = flatRotation;
+
+            if (VRGlobals.menuUi)
+            {
+                Transform menuUi = VRGlobals.menuUi;
+                menuUi.SetParent(VRGlobals.camRoot.transform);
+                menuUi.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
+                menuUi.position = VRGlobals.camRoot.transform.position + flatForward * distance + flatRight * 0.05f + new Vector3(0, -0.05f + extraYOffset, 0);
+                menuUi.rotation = flatRotation;
+            }
 
             if (VRGlobals.preloaderUi)
             {
@@ -212,8 +252,8 @@ namespace TarkovVR.Patches.UI
                 preloader.SetParent(VRGlobals.camRoot.transform);
                 preloader.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
                 preloader.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
-                preloader.position = head.position + forward * distance + right * -0.2f + new Vector3(0, -0.1f - VRGlobals.vrPlayer.crouchHeightDiff, 0);
-                preloader.rotation = Quaternion.LookRotation(forward, Vector3.up);
+                preloader.position = VRGlobals.camRoot.transform.position + flatForward * distance + flatRight * 0.05f + new Vector3(0, -0.15f + extraYOffset, 0);
+                preloader.rotation = flatRotation;
 
                 if (UIPatches.notifierUi)
                 {
@@ -233,7 +273,7 @@ namespace TarkovVR.Patches.UI
                     renderer.enabled = true;
             if (WeaponPatches.currentGunInteractController != null)
             {
-                if (WeaponPatches.currentGunInteractController?.transform.FindChild("RightHandPositioner") is Transform rightHand)
+                if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
                     foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = true;
             }
@@ -289,26 +329,6 @@ namespace TarkovVR.Patches.UI
             gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.48f);
             gameUi.transform.localEulerAngles = new Vector3(29.7315f, 0.4971f, 0f);
         }
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(ActionPanel), "method_0")]
-        private static void SetTransmitInteractionMenuActive(ActionPanel __instance, [CanBeNull] ActionsReturnClass interactionState)
-        {
-            if (VRGlobals.vrPlayer && VRGlobals.vrPlayer is RaidVRPlayerManager) {
-                if (interactionState != null && interactionState.SelectedAction.Name.Contains("Transit") && VRGlobals.vrPlayer.interactionUi != null) {
-
-                    // Set position not local position so it doesn't inherit rotated position from camRoot
-                    VRGlobals.vrPlayer.interactionUi.position = Camera.main.transform.position + Camera.main.transform.forward * 0.4f + Camera.main.transform.up * -0.2f + Camera.main.transform.right * 0;
-                    VRGlobals.vrPlayer.interactionUi.LookAt(Camera.main.transform);
-                    // Need to rotate 180 degrees otherwise it shows up backwards
-                    VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);
-                    (VRGlobals.vrPlayer as RaidVRPlayerManager).positionTransitUi = true;
-                }
-                else
-                    (VRGlobals.vrPlayer as RaidVRPlayerManager).positionTransitUi = false;
-            }
-        }
-        */
         
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ActionPanel), "method_0")]
@@ -501,6 +521,7 @@ namespace TarkovVR.Patches.UI
 
         // This code is somehow responsible for determining which items in the stash/inv grid are shown and it shits the bed if
         // the CommonUI rotation isn't 0,0,0 so set it to that before running this code then set it back
+        /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridViewMagnifier), "method_1")]
         private static bool StopGridFromHidingItemsWhenUiRotated(GridViewMagnifier __instance, bool calculate, bool forceMagnify)
@@ -533,8 +554,70 @@ namespace TarkovVR.Patches.UI
             __instance.transform.root.eulerAngles = originalRot;
             return false;
         }
+        */
+        //This sorta does the same thing as above but works better for how I'm now handling the inventory. This targets the method that directly handles the culling of items in stash.
+        //For some reason, items cull when turning head 90+ degrees from front of playspace, but doesn't cull if you turn using the joystick
+        private static Dictionary<GridView, (Vector3 rot, Vector3 pos, Quaternion quat)> _originalTransforms = new Dictionary<GridView, (Vector3, Vector3, Quaternion)>();
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GridView), "MagnifyIfPossible", new Type[] { typeof(Rect), typeof(bool) })]
+        private static bool FixMagnifyWithRotationHandling(GridView __instance, ref Rect rect, bool force)
+        {
+            // Add null checks
+            if (__instance == null || __instance.transform == null || __instance.transform.root == null)
+                return true;
 
+            Vector3 currentRotation = __instance.transform.root.eulerAngles;
+
+            // Only apply fix if there's rotation
+            if (currentRotation != Vector3.zero)
+            {
+                // Make sure dictionary is initialized
+                if (_originalTransforms == null)
+                    _originalTransforms = new Dictionary<GridView, (Vector3, Vector3, Quaternion)>();
+
+                // Store original transform values
+                _originalTransforms[__instance] = (
+                    __instance.transform.root.eulerAngles,
+                    __instance.transform.root.position,
+                    __instance.transform.root.rotation
+                );
+
+                // Temporarily reset transform for calculation
+                __instance.transform.root.eulerAngles = Vector3.zero;
+                __instance.transform.root.position = Vector3.zero;
+                __instance.transform.root.rotation = Quaternion.identity;
+
+                // Use moderate rect for VR
+                rect = new Rect(-1024f, -1024f, 2048f, 2048f);
+            }
+            return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GridView), "MagnifyIfPossible", new Type[] { typeof(Rect), typeof(bool) })]
+        private static async void RestoreTransformAfterMagnify(GridView __instance, Task __result)
+        {
+            // Check if we stored transforms for this instance
+            if (_originalTransforms.TryGetValue(__instance, out var originalTransform))
+            {
+                // Wait for the magnify operation to complete
+                if (__result != null)
+                {
+                    await __result;
+                }
+
+                // Restore original transform
+                __instance.transform.root.eulerAngles = originalTransform.rot;
+                __instance.transform.root.position = originalTransform.pos;
+                __instance.transform.root.rotation = originalTransform.quat;
+
+                // Clean up stored data
+                _originalTransforms.Remove(__instance);
+            }
+        }
+
+        private static readonly FieldInfo PossibleInteractionsChangedField = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "InteractionRaycast")]
         private static bool Raycaster(EFT.Player __instance)
@@ -625,7 +708,11 @@ namespace TarkovVR.Patches.UI
             
             else if (interactableObject is LootItem lootItem)
             {
-                if (lootItem.Item is Weapon { IsOneOff: not false } weapon && weapon.Repairable.Durability == 0f)
+                if (VRGlobals.handsInteractionController.heldItem != null)
+                {
+                    interactableObject = null;
+                }
+                else if (lootItem.Item != null && lootItem.Item is Weapon { IsOneOff: not false } weapon && weapon.Repairable?.Durability == 0f)
                 {
                     interactableObject = null;
                 }
@@ -661,9 +748,7 @@ namespace TarkovVR.Patches.UI
                 {
                     __instance._lastInteractionState = stationaryWeapon2.State;
                 }
-                var eventInfo = typeof(Player).GetEvent("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-                var field = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-                var eventDelegate = (Action)field?.GetValue(__instance);
+                var eventDelegate = (Action)PossibleInteractionsChangedField?.GetValue(__instance);
                 eventDelegate?.Invoke();
             }
             if (player != __instance.InteractablePlayer || __instance._nextCastHasForceEvent)
@@ -674,9 +759,7 @@ namespace TarkovVR.Patches.UI
                 {
                     UnityEngine.Debug.LogWarning(__instance.Profile.Nickname + " wants to interact to himself");
                 }
-                var eventInfo = typeof(Player).GetEvent("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-                var field = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
-                var eventDelegate = (Action)field.GetValue(__instance);
+                var eventDelegate = (Action)PossibleInteractionsChangedField?.GetValue(__instance);
                 eventDelegate?.Invoke();
             }
             if (player == null && interactableObject == null)
@@ -740,7 +823,8 @@ namespace TarkovVR.Patches.UI
                 }
                 if (__instance._beaconDummy != null)
                 {
-                    if (Physics.Raycast(new Ray(Camera.main.transform.position + Camera.main.transform.forward / 2f, Camera.main.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
+                    //if (Physics.Raycast(new Ray(Camera.main.transform.position + Camera.main.transform.forward / 2f, Camera.main.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
+                    if (Physics.Raycast(new Ray(VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward / 2f, VRGlobals.VRCam.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
                     {
                         __instance._beaconDummy.transform.position = hitInfo.point;
                         __instance._beaconDummy.transform.rotation = Quaternion.LookRotation(hitInfo.normal);
@@ -754,7 +838,8 @@ namespace TarkovVR.Patches.UI
                     }
                     else
                     {
-                        __instance._beaconDummy.transform.position = Camera.main.transform.position + Camera.main.transform.forward;
+                        //__instance._beaconDummy.transform.position = Camera.main.transform.position + Camera.main.transform.forward;
+                        __instance._beaconDummy.transform.position = VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward;
                         __instance._beaconDummy.transform.rotation = Quaternion.identity;
                         __instance._beaconMaterialSetter.SetAvailable(isAvailable: false);
                         __instance.AllowToPlantBeacon = false;
@@ -787,7 +872,7 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(MatchMakerPlayerPreview), "Show")]
         private static void SetLoadRaidPlayerViewCamFoV(MatchMakerPlayerPreview __instance)
         {
-            Transform camHolder = __instance._playerModelView.transform.FindChild("Camera_acceptScreen");
+            Transform camHolder = __instance._playerModelView.transform.Find("Camera_acceptScreen");
             if (camHolder)
                 camHolder.GetComponent<Camera>().fieldOfView = 20;
         }

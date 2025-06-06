@@ -233,43 +233,44 @@ public class CircularSegmentUI : MonoBehaviour
 
     // leftwristui localpos = -0.1 0.04 0.035
     // localrot = 304.3265 181 180
-
     void CreateSegments()
     {
-        // Calculate the angle between each segment, including spacing
+        if (menuSegments == null || menuSegments.Length < numberOfSegments)
+            menuSegments = new Image[numberOfSegments];
+
+        if (menuSprites == null || menuSprites.Length < numberOfSegments)
+        {
+            Debug.LogError($"menuSprites is null or too short! Expected at least {numberOfSegments}, got {(menuSprites == null ? "null" : menuSprites.Length.ToString())}");
+            return; // Bail early to avoid crash
+        }
+
         float angleStep = 360f / numberOfSegments;
         float adjustedAngleStep = angleStep - segmentSpacing;
-
-        // Calculate the fill amount considering the spacing
         float fillAmount = adjustedAngleStep / 360f;
+
         for (int i = 0; i < numberOfSegments; i++)
         {
-            // Instantiate a new segment from the prefab
             GameObject newSegment = new GameObject("radialSegment_" + i);
-
             newSegment.transform.parent = transform;
             newSegment.transform.localScale = Vector3.one;
+
             Image segmentImage = newSegment.AddComponent<Image>();
             menuSegments[i] = segmentImage;
 
-            // Configure the segment's image properties
             segmentImage.sprite = defaultMenuSprite;
             segmentImage.type = Image.Type.Filled;
             segmentImage.fillMethod = Image.FillMethod.Radial360;
             segmentImage.fillOrigin = (int)Image.Origin360.Bottom;
             segmentImage.fillAmount = fillAmount;
 
-            // Set the size and position of the segment
             RectTransform rectTransform = newSegment.GetComponent<RectTransform>();
             rectTransform.sizeDelta = new Vector2(radius * 2, radius * 2);
             rectTransform.localPosition = Vector3.zero;
             segmentImage.color = new Color(1f, 1f, 1f, 0.3f);
 
-            // Rotate the segment to the correct angle
             float angle = (i * angleStep) + (angleStep / 2);
             rectTransform.localRotation = Quaternion.Euler(0, 0, -angle);
 
-            // Create and configure the menu option icon
             GameObject menuOption = new GameObject("menuOption_" + i);
             menuOption.transform.parent = newSegment.transform;
             menuOption.transform.localPosition = Vector3.zero;
@@ -278,25 +279,17 @@ public class CircularSegmentUI : MonoBehaviour
             if (leftHand)
                 newRot.z += 90;
             menuOption.transform.localEulerAngles = newRot;
-            
-            menuOption.transform.localScale = Vector3.one;
-            if (leftHand)
-                menuOption.transform.localScale = new Vector3(1.25f, 1.25f, 1.25f);
+            menuOption.transform.localScale = leftHand ? new Vector3(1.25f, 1.25f, 1.25f) : Vector3.one;
 
             Image optionIcon = menuOption.AddComponent<Image>();
-
-
-           
-
-            // Assign the loaded sprite to the target image
-            optionIcon.sprite = menuSprites[i];
+            optionIcon.sprite = i < menuSprites.Length ? menuSprites[i] : null;
             optionIcon.color = new Color(1f, 1f, 1f, 1f);
 
             RectTransform iconRectTransform = menuOption.GetComponent<RectTransform>();
-            iconRectTransform.sizeDelta = new Vector2(radius * 0.5f, radius * 0.5f); // Adjust size as needed
+            iconRectTransform.sizeDelta = new Vector2(radius * 0.5f, radius * 0.5f);
             float x = -0.45f + ((numberOfSegments - 4) * 0.06f);
             float y = -0.5f - ((numberOfSegments - 4) * 0.06f);
-            iconRectTransform.localPosition = new Vector3(radius * x, radius * y, 0); // Adjust position as needed
+            iconRectTransform.localPosition = new Vector3(radius * x, radius * y, 0);
         }
     }
 }

@@ -60,8 +60,8 @@ namespace TarkovVR.Source.Player.VRManager
         private bool showingHealthUi = false;
         private bool showingExtractionUi = false;
         private bool handLock = false;
-        public bool blockJump = true;
-        public bool blockCrouch = true;
+        public bool blockJump = false;
+        public bool blockCrouch = false;
         public bool interactMenuOpen = false;
         public static int LEFT_HAND_ANIMATOR_HASH = UnityEngine.Animator.StringToHash("ReloadFloat");
         private Transform ammoFireModeUi;
@@ -74,8 +74,20 @@ namespace TarkovVR.Source.Player.VRManager
         public bool isWeapPistol = false;
         public int framesAfterSwitching = 0;
 
+        // Cache these at class level - add to your class fields
+        private bool cachedLeftHandedMode;
+        private int leftHandedModeCheckFrame = -1;
+        private Vector3 lastLocalPos = Vector3.zero;
+        private bool lastProneState = false;
+        private bool lastOrigArmsActive = true;
+        private GunInteractionController cachedCurrentGunController;
+        private int gunControllerCacheFrame = -1;
+        private Transform cachedAmmoFireModeUi;
+        private bool lastInteractMenuOpen = false;
 
-        public void SetAmmoFireModeUi(Transform uiObject, bool isAmmoCount) {
+
+        public void SetAmmoFireModeUi(Transform uiObject, bool isAmmoCount)
+        {
             if (uiObject == null && ammoFireModeUi != null)
                 ammoFireModeUi.position = Vector3.zero;
             this.isAmmoCount = isAmmoCount;
@@ -89,7 +101,7 @@ namespace TarkovVR.Source.Player.VRManager
         private int maxVelocitySamples = 5;
         private Vector3 lastRightHandPosition;
 
-        private void TrackVelocity(Transform handTransform)
+        public void TrackVelocity(Transform handTransform)
         {
             //Vector3 currentVelocity = (handTransform.localPosition - lastRightHandPosition) / Time.deltaTime;
             //lastRightHandPosition = handTransform.localPosition;
@@ -127,8 +139,10 @@ namespace TarkovVR.Source.Player.VRManager
         protected virtual void Awake()
         {
             SpawnHands();
+            VRGlobals.VRCam = Camera.main;
             x.x = 0.075f;
-            if (RightHand) { 
+            if (RightHand)
+            {
                 RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
                 if (!radialMenu)
                 {
@@ -138,13 +152,15 @@ namespace TarkovVR.Source.Player.VRManager
                     CircularSegmentUI uiComp = radialMenu.AddComponent<CircularSegmentUI>();
                     uiComp.Init();
                     //uiComp.CreateGunUi(new string[] { "reload.png", "checkAmmo.png", "inspect.png", "fixMalfunction.png", "fireMode_burst.png" });
-                    uiComp.CreateGunUi(new string[] { "firstPrimary.png", "secondPrimary.png", "pistol.png", "knife.png"});
+                    uiComp.CreateGunUi(new string[] { "firstPrimary.png", "secondPrimary.png", "pistol.png", "knife.png" });
                     radialMenu.active = false;
                 }
             }
-            if (LeftHand) { 
+            if (LeftHand)
+            {
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
-                if (!leftWristUi) {
+                if (!leftWristUi)
+                {
                     leftWristUi = new GameObject("leftWristUi");
                     leftWristUi.layer = 5;
                     leftWristUi.transform.parent = LeftHand.transform;
@@ -169,17 +185,19 @@ namespace TarkovVR.Source.Player.VRManager
             if (!VRGlobals.player || !VRGlobals.ikManager)
                 return;
 
-            if (VRGlobals.player.HandsIsEmpty) { 
+            if (VRGlobals.player.HandsIsEmpty)
+            {
                 VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
                 VRGlobals.ikManager.leftArmIk.enabled = true;
                 VRGlobals.ikManager.rightArmIk.solver.target = RightHand.transform;
                 VRGlobals.ikManager.rightArmIk.enabled = true;
             }
-            else { 
+            else
+            {
                 VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
                 VRGlobals.ikManager.leftArmIk.enabled = true;
             }
-            
+
             SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.Any);
             SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.Any);
             if (VRSettings.GetLeftHandedMode())
@@ -218,105 +236,142 @@ namespace TarkovVR.Source.Player.VRManager
 
 
         public Quaternion handsRotation;
-
         protected virtual void Update()
         {
-            if (Camera.main == null)
+            //if (Camera.main == null)
+            if (VRGlobals.VRCam == null)
                 return;
+
             if (initPos.y == 0)
-                initPos = Camera.main.transform.localPosition;
+                initPos = VRGlobals.VRCam.transform.localPosition;
+                //initPos = Camera.main.transform.localPosition;
+
+            // Cache expensive calls
+            if (leftHandedModeCheckFrame != Time.frameCount)
+            {
+                cachedLeftHandedMode = VRSettings.GetLeftHandedMode();
+                leftHandedModeCheckFrame = Time.frameCount;
+            }
+
+            if (gunControllerCacheFrame != Time.frameCount)
+            {
+                cachedCurrentGunController = WeaponPatches.currentGunInteractController;
+                gunControllerCacheFrame = Time.frameCount;
+            }
+
+            // Only update position if changed significantly
             Vector3 newLocalPos = initPos * -1 + headOffset;
             newLocalPos.y -= crouchHeightDiff;
-            VRGlobals.vrOffsetter.transform.localPosition = newLocalPos;
 
-            interactMenuOpen = (interactionUi && interactionUi.GetChild(3) && interactionUi.GetChild(3).gameObject.active);
-            if (VRSettings.GetLeftHandedMode())
-                VRGlobals.blockLeftJoystick = (radialMenu && radialMenu.active) || (UIPatches.quickSlotUi && UIPatches.quickSlotUi.gameObject.active) || interactMenuOpen && WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.hightlightingMesh;
+            if (Vector3.Distance(newLocalPos, lastLocalPos) > 0.001f)
+            {
+                VRGlobals.vrOffsetter.transform.localPosition = newLocalPos;
+                lastLocalPos = newLocalPos;
+            }
+
+            bool currentInteractMenuOpen = (interactionUi && interactionUi.GetChild(3) && interactionUi.GetChild(3).gameObject.active);
+
+            // Only update these if interact menu state changed
+            if (currentInteractMenuOpen != lastInteractMenuOpen)
+            {
+                interactMenuOpen = currentInteractMenuOpen;
+                lastInteractMenuOpen = currentInteractMenuOpen;
+                var gunWithHighlight = cachedCurrentGunController as GunInteractionController; // Replace with real type
+
+                bool hasHighlightingMesh = gunWithHighlight != null && gunWithHighlight.highlightingMesh;
+
+                if (cachedLeftHandedMode)
+                    VRGlobals.blockLeftJoystick = (radialMenu && radialMenu.active) || (UIPatches.quickSlotUi && UIPatches.quickSlotUi.gameObject.active) || interactMenuOpen && cachedCurrentGunController && cachedCurrentGunController.GetComponent<MonoBehaviour>() && hasHighlightingMesh;                            
+            }
+
             blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0;
             blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen;
+            // Cache ammoFireModeUi reference
+            if (cachedAmmoFireModeUi != ammoFireModeUi)
+                cachedAmmoFireModeUi = ammoFireModeUi;
 
-            if (ammoFireModeUi != null)
+            var gun = cachedCurrentGunController as GunInteractionController;
+
+            if (cachedAmmoFireModeUi != null && gun != null && VRGlobals.player?.HandsController != null && !WeaponPatches.grenadeEquipped)
             {
                 if (isAmmoCount)
                 {
-                    ammoFireModeUi.rotation = WeaponPatches.currentGunInteractController.magazine.rotation;
-                    ammoFireModeUi.position = WeaponPatches.currentGunInteractController.magazine.position;
-                    if (VRSettings.GetLeftHandedMode())
-                        ammoFireModeUi.position += (ammoFireModeUi.right * -0.07f) + (ammoFireModeUi.forward * 0.0025f) + (ammoFireModeUi.up * -0.005f);
-                    else
-                        ammoFireModeUi.position += (ammoFireModeUi.right * 0.03f) + (ammoFireModeUi.forward * -0.0175f);
-                }
-                else {
-                    if (WeaponPatches.currentGunInteractController.GetFireModeSwitch() != null)
-                    {
-                        ammoFireModeUi.rotation = WeaponPatches.currentGunInteractController.GetFireModeSwitch().rotation;
-                        ammoFireModeUi.position = WeaponPatches.currentGunInteractController.GetFireModeSwitch().position;
-                    }
-                    if (VRSettings.GetLeftHandedMode())
-                        ammoFireModeUi.position += (ammoFireModeUi.right * 0.01f) + (ammoFireModeUi.forward * 0.0025f) + (ammoFireModeUi.up * -0.005f);
-                    else
-                        ammoFireModeUi.position += (ammoFireModeUi.right * 0.03f) + (ammoFireModeUi.forward * -0.0175f);
+                    var magazine = gun.magazine;
+                    cachedAmmoFireModeUi.rotation = magazine.rotation;
+                    cachedAmmoFireModeUi.position = magazine.position;
 
+                    if (cachedLeftHandedMode)
+                        cachedAmmoFireModeUi.position += (cachedAmmoFireModeUi.right * -0.07f) + (cachedAmmoFireModeUi.forward * 0.0025f) + (cachedAmmoFireModeUi.up * -0.005f);
+                    else
+                        cachedAmmoFireModeUi.position += (cachedAmmoFireModeUi.right * 0.03f) + (cachedAmmoFireModeUi.forward * -0.0175f);
                 }
-                ammoFireModeUi.Rotate(0, 90, 90);
+                else
+                {
+                    var fireModeSwitch = gun.GetFireModeSwitch();
+                    if (fireModeSwitch != null)
+                    {
+                        cachedAmmoFireModeUi.rotation = fireModeSwitch.rotation;
+                        cachedAmmoFireModeUi.position = fireModeSwitch.position;
+                    }
+
+                    if (cachedLeftHandedMode)
+                        cachedAmmoFireModeUi.position += (cachedAmmoFireModeUi.right * 0.01f) + (cachedAmmoFireModeUi.forward * 0.0025f) + (cachedAmmoFireModeUi.up * -0.005f);
+                    else
+                        cachedAmmoFireModeUi.position += (cachedAmmoFireModeUi.right * 0.03f) + (cachedAmmoFireModeUi.forward * -0.0175f);
+                }
+                cachedAmmoFireModeUi.Rotate(0, 90, 90);
             }
 
-            if (showScopeZoom && UIPatches.opticUi && scopeUiPosition) {
+            if (showScopeZoom && UIPatches.opticUi && scopeUiPosition)
+            {
                 UIPatches.opticUi.transform.rotation = scopeUiPosition.rotation;
-                UIPatches.opticUi.transform.Rotate(90,0,0);
+                UIPatches.opticUi.transform.Rotate(90, 0, 0);
                 UIPatches.opticUi.transform.position = scopeUiPosition.position;
                 UIPatches.opticUi.transform.position += (scopeUiPosition.right * 0.05f) + (scopeUiPosition.forward * -0.01f);
             }
 
-
-
-
-            // Append whatever physical crouch value you get thats between 0 and 1 and add it to (1 - (VRGlobals.vrPlayer.crouchHeightDiff / 0.4)) 
-            // then clamp it to 0 and 1
-
-            if (VRGlobals.player)
+            if (VRGlobals.player != null && VRGlobals.player.HandsController != null && VRGlobals.player.HandsController.ControllerGameObject != null && VRGlobals.player.PlayerBones != null && VRGlobals.player.PlayerBones.Ribcage != null && VRGlobals.player.PlayerBones.Ribcage.Original != null)
             {
-                //VRGlobals.ikManager.MatchLegsToArms();
                 handsRotation = VRGlobals.player.HandsRotation;
                 VRGlobals.player.HandsController.ControllerGameObject.transform.SetPositionAndRotation(VRGlobals.player.PlayerBones.Ribcage.Original.position, handsRotation);
-                //VRGlobals.player.CameraContainer.transform.rotation = handsRotation;
 
                 // Base Height - the height at which crouching begins.
                 float baseHeight = initPos.y * 0.90f; // 90% of init height
-                                                                         // Floor Height - the height at which full prone is achieved.
+                                                      // Floor Height - the height at which full prone is achieved.
                 float floorHeight = initPos.y * 0.50f; // Significant crouch/prone
 
                 // Current height position normalized between baseHeight and floorHeight.
-                float normalizedHeightPosition = (Camera.main.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
+                //float normalizedHeightPosition = (Camera.main.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
+                float normalizedHeightPosition = (VRGlobals.VRCam.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
 
                 // Ensure the normalized height is within 0 (full crouch/prone) and 1 (full stand).
                 float crouchLevel = 1 - Mathf.Clamp(normalizedHeightPosition, 0, 1);
-                
+
                 // crouchHeightDiff at max will be 0.4 when the joystick is used to crouch which will return a value between 0 and 1 which when subtracted from 1 
                 // will return a value that can be used to subtract the physical crouch value from and will combine the physical and joystick crouching
-                crouchLevel = Mathf.Clamp((1 - crouchHeightDiff / 0.4f) - crouchLevel,0,1);
+                crouchLevel = Mathf.Clamp((1 - crouchHeightDiff / 0.4f) - crouchLevel, 0, 1);
 
                 VRGlobals.player.MovementContext._poseLevel = crouchLevel;
 
-                // Handling prone based on crouchLevel instead of raw height differences.
-                //if (normalizedHeightPosition < -0.2 && VRGlobals.player.MovementContext.CanProne) // Example threshold for prone
-                //    VRGlobals.player.MovementContext.IsInPronePose = true;
-                //else
-                //    VRGlobals.player.MovementContext.IsInPronePose = false;
+                // Only change GameObject active states when prone state actually changes
+                bool currentProneState = VRGlobals.player.MovementContext.IsInPronePose;
+                bool currentOrigArmsActive = VRGlobals.origArmsModel.transform.parent.gameObject.activeSelf;
 
-                // Debug or apply the crouch level
-                //Plugin.MyLog.LogError("Crouch Level:  " + crouchLevel  + "   |   " + VRGlobals.player.PoseLevel + "   |   " + ( 1 - VRGlobals.vrPlayer.crouchHeightDiff / 0.4));
-                //Plugin.MyLog.LogError("Crouch Level: " + crouchLevel + "   | " + normalizedHeightPosition + "  |   " + VRGlobals.player.PoseLevel);
-                //VRGlobals.player.ChangePose(-1.5f * Time.deltaTime);
-                if (VRGlobals.player.MovementContext.IsInPronePose && VRGlobals.origArmsModel.transform.parent.gameObject.activeSelf)
+                if (currentProneState != lastProneState || currentOrigArmsActive != lastOrigArmsActive)
                 {
-                    VRGlobals.origArmsModel.transform.parent.gameObject.SetActive(false);
-                    VRGlobals.handsOnlyModel.transform.parent.gameObject.SetActive(true);    
-                }
-                else if (!VRGlobals.player.MovementContext.IsInPronePose && !VRGlobals.origArmsModel.transform.parent.gameObject.activeSelf && !VRSettings.GetHideArms())
-                {
-                    VRGlobals.origArmsModel.transform.parent.gameObject.SetActive(true);
-                    VRGlobals.handsOnlyModel.transform.parent.gameObject.SetActive(false);
+                    if (currentProneState && currentOrigArmsActive)
+                    {
+                        VRGlobals.origArmsModel.transform.parent.gameObject.SetActive(false);
+                        VRGlobals.handsOnlyModel.transform.parent.gameObject.SetActive(true);
+                    }
+                    else if (!currentProneState && !currentOrigArmsActive && !VRSettings.GetHideArms())
+                    {
+                        VRGlobals.origArmsModel.transform.parent.gameObject.SetActive(true);
+                        VRGlobals.handsOnlyModel.transform.parent.gameObject.SetActive(false);
+                    }
+
+                    lastProneState = currentProneState;
+                    lastOrigArmsActive = !currentOrigArmsActive; // Will be flipped after SetActive calls
                 }
             }
         }
@@ -360,7 +415,8 @@ namespace TarkovVR.Source.Player.VRManager
             }
         }
 
-        public void LeftHandedMode() {
+        public void LeftHandedMode()
+        {
             SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
             SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
@@ -381,7 +437,8 @@ namespace TarkovVR.Source.Player.VRManager
             if (WeaponPatches.currentScope)
                 WeaponPatches.currentScope.parent.localScale = new Vector3(-1, 1, 1);
 
-            if (VRGlobals.player) { 
+            if (VRGlobals.player)
+            {
                 VRGlobals.player._elbowBends[0] = VRGlobals.rightArmBendGoal;
                 VRGlobals.player._elbowBends[1] = VRGlobals.leftArmBendGoal;
             }
@@ -396,17 +453,20 @@ namespace TarkovVR.Source.Player.VRManager
             if (VRGlobals.backHolster)
                 VRGlobals.backHolster.localPosition = new Vector3(-0.2f, -0.1f, -0.2f);
 
-            if (UIPatches.stancePanel) {
+            if (UIPatches.stancePanel)
+            {
                 UIPatches.stancePanel.transform.localPosition = new Vector3(0.1f, 0, -0.075f);
-                UIPatches.stancePanel.transform.localEulerAngles =  new Vector3(90, 93, 180);
+                UIPatches.stancePanel.transform.localEulerAngles = new Vector3(90, 93, 180);
             }
             if (UIPatches.healthPanel)
                 UIPatches.healthPanel.transform.localEulerAngles = new Vector3(270, 269, 180);
-            if (UIPatches.extractionTimerUi) {
+            if (UIPatches.extractionTimerUi)
+            {
                 UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.037f, 0.12f, -0.015f);
                 UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(307, 61, 20);
             }
-            if (UIPatches.notifierUi) {
+            if (UIPatches.notifierUi)
+            {
                 UIPatches.notifierUi.transform.localPosition = new Vector3(0.1247f, 0f, 0.055f);
                 UIPatches.notifierUi.transform.localEulerAngles = new Vector3(90, 272, 0);
             }
@@ -452,22 +512,25 @@ namespace TarkovVR.Source.Player.VRManager
             if (UIPatches.stancePanel)
             {
                 UIPatches.stancePanel.transform.localPosition = new Vector3(0.1f, 0, 0.03f);
-                UIPatches.stancePanel.transform.localEulerAngles =  new Vector3(270, 87, 0);
+                UIPatches.stancePanel.transform.localEulerAngles = new Vector3(270, 87, 0);
             }
             if (UIPatches.healthPanel)
                 UIPatches.healthPanel.transform.localEulerAngles = new Vector3(270, 87, 0);
 
-            if (UIPatches.extractionTimerUi) {
+            if (UIPatches.extractionTimerUi)
+            {
                 UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.047f, 0.08f, 0.025f);
                 UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(88, 83, 175);
             }
-            if (UIPatches.notifierUi) {
+            if (UIPatches.notifierUi)
+            {
                 UIPatches.notifierUi.transform.localPosition = new Vector3(0.12f, 0f, -0.085f);
                 UIPatches.notifierUi.transform.localEulerAngles = new Vector3(272, 163, 283);
             }
         }
 
-        private void LateUpdate() {
+        private void LateUpdate()
+        {
             if (VRGlobals.emptyHands && VRGlobals.player && VRGlobals.player.HandsIsEmpty)
             {
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
@@ -480,7 +543,7 @@ namespace TarkovVR.Source.Player.VRManager
         {
             if (!RightHand)
                 return;
-            if (VRGlobals.emptyHands)
+            if (VRGlobals.emptyHands != null)
                 initialCombinedRotation = VRGlobals.emptyHands.rotation;
             SteamVR_Action_Boolean primaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.LeftGrip : SteamVR_Actions._default.RightGrip;
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockLeftJoystick : VRGlobals.blockRightJoystick;
@@ -489,14 +552,15 @@ namespace TarkovVR.Source.Player.VRManager
             if (blockJoystick && !primaryGripState.state)
             {
                 Vector2 joystickInput = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.LeftJoystick.axis : SteamVR_Actions._default.RightJoystick.axis;
-                if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2) {
+                if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
+                {
                     if (VRSettings.GetLeftHandedMode())
                         VRGlobals.blockLeftJoystick = false;
                     else
                         VRGlobals.blockRightJoystick = false;
                 }
             }
-            
+
 
             if (VRGlobals.firearmController && isSupporting && !isWeapPistol)
             {
@@ -509,7 +573,8 @@ namespace TarkovVR.Source.Player.VRManager
                     else
                         VRGlobals.blockRightJoystick = true;
                 }
-                else {
+                else
+                {
                     if (VRSettings.GetLeftHandedMode())
                         VRGlobals.blockLeftJoystick = false;
                     else
@@ -566,7 +631,8 @@ namespace TarkovVR.Source.Player.VRManager
                     rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothing * Time.deltaTime);
                 }
                 // If no smoothing is applied, then just use the regular rotation
-                else { 
+                else
+                {
                     rawRightHand.transform.rotation = combinedRotation;
                     // Now we apply our offset so the rotation matches the rotation from when you were one handing
                     rawRightHand.transform.localRotation *= rightHandRotationOffset;
@@ -599,7 +665,8 @@ namespace TarkovVR.Source.Player.VRManager
 
                 // The first 2 frames after swapping to or from two handed mode are slow to update for some reason so the gun will appear at a very weird angle
                 // just for a moment, so just manually set the weaponholder pos and rotation here.
-                if (framesAfterSwitching < 2) { 
+                if (framesAfterSwitching < 2)
+                {
                     VRGlobals.weaponHolder.transform.parent.position = rawRightHand.transform.position;
                     VRGlobals.weaponHolder.transform.parent.rotation = rawRightHand.transform.rotation;
                     framesAfterSwitching++;
@@ -607,7 +674,8 @@ namespace TarkovVR.Source.Player.VRManager
             }
             else
             {
-                if (isWeapPistol && isSupporting && !isEnteringTwoHandedMode) {
+                if (isWeapPistol && isSupporting && !isEnteringTwoHandedMode)
+                {
                     // Disable other left hand IK tracking
                     VRGlobals.ikManager.leftArmIk.solver.target = null;
                     VRGlobals.ikManager.leftArmIk.enabled = false;
@@ -695,7 +763,7 @@ namespace TarkovVR.Source.Player.VRManager
                 }
             }
 
-            if (!LeftHand || (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && secondaryGripState.state)) 
+            if (!LeftHand || (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && secondaryGripState.state))
                 return;
 
 
@@ -710,10 +778,12 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 return;
             }
-            else if (leftHandInAnimation) {
+            else if (leftHandInAnimation)
+            {
                 if (isSupporting)
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
-                else {
+                else
+                {
                     VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
                     VRGlobals.ikManager.leftArmIk.enabled = true;
                     VRGlobals.player._markers[0] = LeftHand.transform;
@@ -742,7 +812,7 @@ namespace TarkovVR.Source.Player.VRManager
                         isSupporting = true;
                         if (UIPatches.stancePanel)
                             UIPatches.stancePanel.AnimatedHide();
-                        if (UIPatches.healthPanel)    
+                        if (UIPatches.healthPanel)
                             UIPatches.healthPanel.AnimatedHide();
                         // Stance panel is stubborn and still doesn't go away after AnimatedHide sometimes so set it to inactive
                         if (UIPatches.stancePanel)
@@ -761,7 +831,8 @@ namespace TarkovVR.Source.Player.VRManager
                     {
                         if (!isSupporting && secondaryGripState.stateDown)
                             handLock = true;
-                        else if (isSupporting && secondaryGripState.stateDown) {
+                        else if (isSupporting && secondaryGripState.stateDown)
+                        {
                             isSupporting = false;
                             //VRGlobals.player._markers[0] = LeftHand.transform;
                             ////VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
@@ -776,7 +847,8 @@ namespace TarkovVR.Source.Player.VRManager
                         Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + secondaryHandPosOffset;
                         LeftHand.transform.localPosition = virtualBasePosition;
                     }
-                    else {
+                    else
+                    {
                         //Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
                         //LeftHand.transform.localPosition = virtualBasePosition;
                         LeftHand.transform.localPosition = fromAction.localPosition;
@@ -807,7 +879,8 @@ namespace TarkovVR.Source.Player.VRManager
 
                 }
             }
-            else {
+            else
+            {
                 Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + secondaryHandPosOffset;
                 LeftHand.transform.localPosition = virtualBasePosition;
                 LeftHand.transform.localRotation = fromAction.localRotation;
@@ -847,7 +920,8 @@ namespace TarkovVR.Source.Player.VRManager
                         showingHealthUi = false;
                     }
                 }
-                else if (showingHealthUi) {
+                else if (showingHealthUi)
+                {
                     UIPatches.stancePanel.AnimatedHide();
                     UIPatches.healthPanel.AnimatedHide();
                     showingHealthUi = false;
@@ -855,7 +929,8 @@ namespace TarkovVR.Source.Player.VRManager
             }
             if (UIPatches.extractionTimerUi)
             {
-                if (!isSupporting) { 
+                if (!isSupporting)
+                {
                     RaycastHit hit;
                     LayerMask mask = 1 << 7;
                     if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * 1, out hit, 2, mask) && hit.collider.name == "camHolder")
@@ -873,7 +948,8 @@ namespace TarkovVR.Source.Player.VRManager
                         showingExtractionUi = false;
                     }
                 }
-                else if (showingExtractionUi) { 
+                else if (showingExtractionUi)
+                {
                     UIPatches.extractionTimerUi.Hide();
                     showingExtractionUi = false;
                 }
@@ -887,7 +963,8 @@ namespace TarkovVR.Source.Player.VRManager
             if (!LeftHand && VRGlobals.menuVRManager.LeftHand)
                 LeftHand = VRGlobals.menuVRManager.LeftHand;
 
-            if (!rawRightHand) { 
+            if (!rawRightHand)
+            {
 
                 rawRightHand = new GameObject("rawRightHand").transform;
                 rawRightHand.transform.parent = VRGlobals.vrOffsetter.transform;

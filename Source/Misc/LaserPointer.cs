@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using EFT;
+using UnityEngine;
 using Valve.VR;
 
 
@@ -27,6 +28,7 @@ namespace TarkovVR.Source.Misc
         public event PointerEventHandler PointerClick;
         public int interactableLayers = 5;  // Add this field
         Transform previousContact = null;
+        private MeshRenderer pointerRenderer;
 
 
         private void Start()
@@ -39,7 +41,7 @@ namespace TarkovVR.Source.Misc
             if (interactWithUI == null)
                 Debug.LogError("No ui interaction action has been set on this component.");
 
-
+            
             holder = new GameObject();
             holder.transform.parent = transform;
             holder.transform.localPosition = Vector3.zero;
@@ -70,7 +72,9 @@ namespace TarkovVR.Source.Misc
             }
             Material newMaterial = new Material(Shader.Find("Unlit/Color"));
             newMaterial.SetColor("_Color", color);
-            pointer.GetComponent<MeshRenderer>().material = newMaterial;
+            //pointer.GetComponent<MeshRenderer>().material = newMaterial;
+            pointerRenderer = pointer.GetComponent<MeshRenderer>();
+            pointerRenderer.material = newMaterial;
         }
 
         public virtual void OnPointerIn(PointerEventArgs e)
@@ -149,12 +153,12 @@ namespace TarkovVR.Source.Misc
             if (interactWithUI != null && interactWithUI.GetState(pose.inputSource))
             {
                 pointer.transform.localScale = new Vector3(thickness * 5f, thickness * 5f, dist);
-                pointer.GetComponent<MeshRenderer>().material.color = clickColor;
+                pointerRenderer.material.color = clickColor;
             }
             else
             {
                 pointer.transform.localScale = new Vector3(thickness, thickness, dist);
-                pointer.GetComponent<MeshRenderer>().material.color = color;
+                pointerRenderer.material.color = color;
             }
             pointer.transform.localPosition = new Vector3(0f, 0f, dist / 2f);
         }

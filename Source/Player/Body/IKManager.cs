@@ -39,6 +39,7 @@ namespace TarkovVR.Source.Player.VR
 
         private void Awake()
         {
+            VRGlobals.VRCam = Camera.main;
             for (int i = 0; i < transform.childCount; i++)
             {
                 Transform child = transform.GetChild(i);
@@ -78,9 +79,11 @@ namespace TarkovVR.Source.Player.VR
         private void AdaptiveBodySync()
         {
             // Get current positions
-            Vector3 headPos = Camera.main.transform.position;
+            //Vector3 headPos = Camera.main.transform.position;
+            Vector3 headPos = VRGlobals.VRCam.transform.position;
             Vector3 bodyPos = transform.root.position;
-            Quaternion headRot = Camera.main.transform.rotation;
+            //Quaternion headRot = Camera.main.transform.rotation;
+            Quaternion headRot = VRGlobals.VRCam.transform.rotation;
 
             // Calculate current state
             Vector3 headPosFlat = FlattenVector(headPos);
@@ -213,7 +216,8 @@ namespace TarkovVR.Source.Player.VR
 
         private void EmergencySnapToHead(Vector3 headPosFlat)
         {
-            VRGlobals.vrPlayer.initPos = Camera.main.transform.localPosition;
+            //VRGlobals.vrPlayer.initPos = Camera.main.transform.localPosition;
+            VRGlobals.vrPlayer.initPos = VRGlobals.VRCam.transform.localPosition;
             VRGlobals.camRoot.transform.position = transform.root.position;
             matchingHeadToBody = false; // Reset state after emergency snap
         }
@@ -221,41 +225,8 @@ namespace TarkovVR.Source.Player.VR
         private void SmartFollowHead(Vector3 headPosFlat, Quaternion headRot, float speed, float intensity, bool isActivelyMoving)
         {
 
-            if (transform == null)
-            {
-                Plugin.MyLog.LogError("SmartFollowHead: transform is null");
+            if (transform == null || transform.root == null || VRGlobals.vrPlayer == null || VRGlobals.vrOffsetter?.transform?.parent == null || VRGlobals.firearmController == null)
                 return;
-            }
-
-            if (transform.root == null)
-            {
-                Plugin.MyLog.LogError("SmartFollowHead: transform.root is null");
-                return;
-            }
-
-            if (VRGlobals.vrPlayer == null)
-            {
-                Plugin.MyLog.LogError("SmartFollowHead: vrPlayer is null");
-                return;
-            }
-
-            if (VRGlobals.vrOffsetter == null)
-            {
-                Plugin.MyLog.LogError("SmartFollowHead: vrOffsetter is null");
-                return;
-            }
-
-            if (VRGlobals.vrOffsetter.transform == null)
-            {
-                Plugin.MyLog.LogError("SmartFollowHead: vrOffsetter.transform is null");
-                return;
-            }
-
-            if (VRGlobals.vrOffsetter.transform.parent == null)
-            {
-                Plugin.MyLog.LogError("SmartFollowHead: vrOffsetter.transform.parent is null");
-                return;
-            }
 
             matchingHeadToBody = true;
 
@@ -272,13 +243,11 @@ namespace TarkovVR.Source.Player.VR
             if (isActivelyMoving)
             {
                 
-                // Only apply lag when moving in forward direction or forward diagonals
-                // Check if there's significant forward component (Z > 0.1f)
+                // Only apply lag when moving in forward direction
                 bool hasForwardComponent = localHeadVelocity.z > 0.1f;
 
-                //Commented out the isAiming check, there was an issue where aiming while walking was causing bad jitter because of the body lag I added.
-                //I just reduced the body lag and that got rid of the jitter.
-                if (headSpeed > 0.1f && hasForwardComponent) //&& !VRGlobals.firearmController.IsAiming) 
+                //IsAiming check can be removed here but it helps keep aim stabilized when moving. It becomes more unstable the higher the lead distance is.
+                if (headSpeed > 0.1f && hasForwardComponent && !VRGlobals.firearmController.IsAiming) 
                 {
                     // Calculate dynamic lead distance based on head movement speed
                     float dynamicLeadDistance = Mathf.Lerp(
@@ -330,8 +299,7 @@ namespace TarkovVR.Source.Player.VR
             // Apply movement to root
             transform.root.position = newPosition;
 
-            // Don't handle rotation - it's managed elsewhere
-            // Just adjust VR origin offset to compensate for body movement
+            // Adjust VR origin offset to compensate for body movement
             Vector3 localDelta = VRGlobals.vrOffsetter.transform.parent.InverseTransformVector(movementDelta);
             localDelta.y = 0; // Only apply horizontal movement
             VRGlobals.vrPlayer.initPos += localDelta;

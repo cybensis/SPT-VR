@@ -19,7 +19,7 @@ namespace TarkovVR.Source.Player.VRManager
         protected override void Update()
         {
             base.Update();
-            if (interactionUi && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.hightlightingMesh))
+            if (interactionUi && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.highlightingMesh))
             {
 
                 float yRotationDifference = Mathf.Abs(Quaternion.Angle(Camera.main.transform.localRotation, camRotation));

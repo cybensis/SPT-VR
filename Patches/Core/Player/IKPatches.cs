@@ -3,6 +3,8 @@ using HarmonyLib;
 using System;
 using UnityEngine;
 using TarkovVR.Source.Settings;
+using static EFT.Player;
+using EFT.Animations;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -32,21 +34,55 @@ namespace TarkovVR.Patches.Core.Player
             __instance.RibcageScaleCurrent = 1f;
         }
 
+        //Leaving this here for reference
+        /*
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(PlayerAnimator), nameof(PlayerAnimator.EnableSprint))]
+        private static bool DisableSprintAnimation(PlayerAnimator __instance, ref bool enabled)
+        {
+            if (VRSettings.GetDisableRunAnim())
+            {
+                enabled = false;
+            }
+            return true;
+        }
+        */
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "method_20")]
         private static bool ReemoveSprintAnimFromHands(EFT.Player __instance)
         {
             if (!__instance.IsYourPlayer)
                 return true;
+
             if (__instance.HandsIsEmpty)
                 return false;
 
-            if (__instance.IsSprintEnabled && VRSettings.GetDisableRunAnim() == true|| !__instance.MovementContext.IsGrounded)
+            Vector3 surfaceNormal = __instance.MovementContext.SurfaceNormal;
+            bool onSlope = surfaceNormal.y < 1.00f;
+
+            bool disableAnim =
+                (__instance.IsSprintEnabled && VRSettings.GetDisableRunAnim()) ||
+                (!__instance.MovementContext.IsGrounded && !onSlope);
+
+            if (disableAnim)
             {
-                __instance._markers[1].transform.parent.parent.localPosition = new Vector3(0, 0, 0);
-                __instance._markers[1].transform.parent.parent.localEulerAngles = new Vector3(0, 0, 0);
+                var ik = __instance._markers[1].transform.parent.parent;
+                ik.localPosition = Vector3.zero;
+                ik.localEulerAngles = Vector3.zero;
             }
+
             return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PlayerAnimator), "EnableSprint")]
+        private static void DisableLayer1DuringSprint(PlayerAnimator __instance)
+        {
+            if (VRSettings.GetDisableRunAnim()) // Or your own condition
+            {
+                __instance.Animator.SetLayerWeight(1, 0f); // Layer 1: likely upper body
+            }
         }
 
         private static bool test = true;

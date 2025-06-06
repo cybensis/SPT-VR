@@ -16,6 +16,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using static EFT.Player;
 
 namespace TarkovVR.Source.Controls
 {
@@ -362,7 +363,7 @@ namespace TarkovVR.Source.Controls
 
                 if (VRSettings.GetLeftHandedMode() &&
                     WeaponPatches.currentGunInteractController != null &&
-                    WeaponPatches.currentGunInteractController.hightlightingMesh)
+                    WeaponPatches.currentGunInteractController.highlightingMesh)
                 {
                     primaryHandScrollAxis = SteamVR_Actions._default.LeftJoystick.axis.y;
                 }
@@ -652,10 +653,9 @@ namespace TarkovVR.Source.Controls
                     {
                         if (VRGlobals.player.HandsController as EFT.Player.GrenadeHandsController && (VRGlobals.player.HandsController as EFT.Player.GrenadeHandsController).WaitingForHighThrow) {
 
-                            // You can't hold these smoke grenades after "pulling the pin" so don't set the laser to true
                             if (VRGlobals.player.HandsController.HandsHierarchy.name != "weapon_grenade_rdg2.generated(Clone)") {
-                                InitVRPatches.rightPointerFinger.enabled = true;
-                                //VRGlobals.handsInteractionController.grenadeLaser.active = true;
+                                //InitVRPatches.rightPointerFinger.enabled = true;
+                                //VRGlobals.handsInteractionController.grenadeLaser.SetActive(true);
                                 VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1f, -0.43f, -0.25f);
                             }
                             if (VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_m7920.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_rgo.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_rgn.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_m18.generated(Clone)") { 
@@ -675,8 +675,24 @@ namespace TarkovVR.Source.Controls
                 }
                 else if (!shootingToggled && grenadePinPulled)
                 {
-                    command = ECommand.FinishHighThrow;
+                    //Trigger throwing grenade, check if pin is actually pulled before initiatiating
+                    if (VRGlobals.player.HandsController is BaseGrenadeHandsController grenadeController)
+                    {
+                        grenadeController.method_9(
+                            null, // throwPosition
+                            0f,   // timeSinceSafetyLevelRemoved (tune this if needed)
+                            1f,   // lowHighThrow
+                            Vector3.zero, // direction (ignored in your patch)
+                            1f,   // forcePower
+                            false, // lowThrow
+                            true   // withVelocity
+                        );
+                    }
+
+                    //This command isn't needed as I finish the command by triggering the throw animation in method_9
+                    //command = ECommand.FinishHighThrow;
                     grenadePinPulled = false;
+                    
                 }
 
             }

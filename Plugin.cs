@@ -15,6 +15,7 @@ using UnityEngine.XR;
 using Fika.Core.Networking;
 using Fika.Core.Coop.Utils;
 using System.Text;
+using Fika.Core.Modding.Events;
 
 namespace TarkovVR
 {
@@ -41,6 +42,7 @@ namespace TarkovVR
 
             ApplyPatches("TarkovVR.Patches");
             InitializeConditionalPatches();
+            
         }
 
         private bool InitializeVR()
@@ -56,6 +58,7 @@ namespace TarkovVR
                 var xrLoader = ScriptableObject.CreateInstance<OpenVRLoader>();
                 var settings = OpenVRSettings.GetSettings();
                 settings.StereoRenderingMode = OpenVRSettings.StereoRenderingModes.SinglePassInstanced;
+                
 
                 generalSettings.Manager = managerSettings;
 
@@ -69,6 +72,7 @@ namespace TarkovVR
                 // Initialize SteamVR
                 SteamVR.Initialize();
 
+                Plugin.MyLog.LogError("StereoRenderingMode: " + XRSettings.stereoRenderingMode);
                 // Verify SteamVR is running
                 if (!SteamVR.active)
                 {

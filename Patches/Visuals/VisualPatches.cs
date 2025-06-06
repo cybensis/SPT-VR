@@ -30,6 +30,8 @@ using System.IO;
 using Unity.Audio;
 using Newtonsoft.Json;
 using EFT;
+using System.Security.Cryptography;
+using Microsoft.SqlServer.Server;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -319,10 +321,14 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
-        //Cybensis, im sorry but yes I did throw this through an AI to better understand what the hell is going on here
-        //ive come to the same conclusion though... SSAA is ass and just outputting the native resolution is the best option here
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Holy fuck this actually fixes so many visual problems :)
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PostProcessLayer), "InitLegacy")]
+        private static void FixPostProcessing(PostProcessLayer __instance)
+        {
+            UnityEngine.Object.Destroy(__instance);
+        }
+        /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
         private static bool ProcessImageRendering(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
@@ -334,76 +340,18 @@ namespace TarkovVR.Patches.Visuals
                 return false;
             }
 
-            Camera.main.useOcclusionCulling = false;
-            //Camera.main.useOcclusionCulling = true;
-            Camera.main.layerCullSpherical = true;
-            float[] distances = new float[32];
-            for (int i = 0; i < distances.Length; i++)
-            {
-                distances[i] = 1000f; // Adjust as needed
-            }
-            Camera.main.layerCullDistances = distances;
-
+            //int width = Camera.main.pixelWidth;
+            //int height = Camera.main.pixelHeight;
+            int width = VRGlobals.VRCam.pixelWidth;
+            int height = VRGlobals.VRCam.pixelHeight;
+            VRGlobals.VRCam.useOcclusionCulling = false;
             ResetRenderingState(__instance);
-            int width = Camera.main.pixelWidth;
-            int height = Camera.main.pixelHeight;
+            
 
             InitializeHDRRenderTargets(__instance, width, height);
             InitializeLDRRenderTargets(__instance, width, height);
 
-            // Force a higher SSAA ratio specifically for specular highlights
-            float ssRatio = __instance.m_ssaa.GetCurrentSSRatio();
-            float effectiveRatio = Mathf.Max(ssRatio, 2.0f); // Force at least 2x supersampling
-            var rt = __instance.m_ssaa.GetRT();
-
-            // Enhanced quality settings for better specular handling
-            if (rt != null)
-            {
-                source.filterMode = FilterMode.Trilinear;
-                source.wrapMode = TextureWrapMode.Clamp;
-                source.useMipMap = true;           // Enable mipmaps for better specular filtering
-                source.autoGenerateMips = true;    // Automatically generate mipmaps
-                source.anisoLevel = 8;             // Increase anisotropic filtering
-            }
-
-            // Create temporary RT for specular processing
-            RenderTexture tempRT = RenderTexture.GetTemporary(width, height, 0, source.format);
-            tempRT.filterMode = FilterMode.Trilinear;
-            tempRT.wrapMode = TextureWrapMode.Clamp;
-
-            if (effectiveRatio > 1.1f)
-            {
-                if (rt != null)
-                {
-                    // Two-pass downsampling for better specular quality
-                    RenderTexture intermediateRT = RenderTexture.GetTemporary(
-                        (int)(width * 1.5f),
-                        (int)(height * 1.5f),
-                        0,
-                        source.format
-                    );
-
-                    // First pass - higher resolution
-                    __instance.m_ssaa.RenderImage(rt, intermediateRT, true, null);
-
-                    // Second pass - careful downsampling
-                    Graphics.Blit(intermediateRT, __instance._resampledColorTargetHDR[0]);
-
-                    RenderTexture.ReleaseTemporary(intermediateRT);
-                }
-                else
-                {
-                    __instance.m_ssaa.RenderImage(source, __instance._resampledColorTargetHDR[0], true, null);
-                }
-            }
-            else
-            {
-                // Enhanced filtering even at base resolution
-                Graphics.Blit(source, tempRT);
-                Graphics.Blit(tempRT, __instance._resampledColorTargetHDR[0]);
-            }
-
-            RenderTexture.ReleaseTemporary(tempRT);
+            __instance.m_ssaa.RenderImage(source, __instance._resampledColorTargetHDR[0], true, null);
 
             if (__instance._cmdBuf == null)
             {
@@ -417,11 +365,9 @@ namespace TarkovVR.Patches.Visuals
                 RenderOpticalEffects(__instance);
             }
             ApplyVisionEffects(__instance);
-
             Graphics.ExecuteCommandBuffer(__instance._cmdBuf);
             return false;
         }
-
         private static void ResetRenderingState(SSAAPropagator __instance)
         {
             __instance._currentDestinationHDR = 0;
@@ -623,6 +569,9 @@ namespace TarkovVR.Patches.Visuals
                 __instance._currentDestinationHDR = 1;
             }
         }
+        */
+
+        
 
         // Use a Transpiler to replace the Screen.Width/Height calls to get the camera height and width
         //[HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
@@ -671,21 +620,6 @@ namespace TarkovVR.Patches.Visuals
 
         }
 
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(PostProcessLayer), "InitLegacy")]
-        private static void FixPostProcessing(PostProcessLayer __instance)
-        {
-            UnityEngine.Object.Destroy(__instance);
-
-            //if (VRGlobals.camHolder && VRGlobals.camHolder.GetComponent<Camera>() == null)
-            //{
-            //    postProcessingStoogeCamera = VRGlobals.camHolder.AddComponent<Camera>();
-            //    postProcessingStoogeCamera.enabled = false;
-            //}
-            //if (postProcessingStoogeCamera)
-            //    mainCam = postProcessingStoogeCamera;
-        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The volumetric light was only using the projection matrix for one eye which made it appear
@@ -696,15 +630,20 @@ namespace TarkovVR.Patches.Visuals
         {
             if (UnityEngine.XR.XRSettings.enabled && __instance.camera_0 != null)
             {
-                __instance.method_3();
+                var currentEye = Camera.current.stereoActiveEye;
+                if (currentEye == Camera.MonoOrStereoscopicEye.Mono)
+                    return true;
 
-                Camera.StereoscopicEye eye = (Camera.StereoscopicEye)Camera.current.stereoActiveEye;
+                Camera.StereoscopicEye eye = (Camera.StereoscopicEye)currentEye;
+
+                __instance.method_3();
 
                 Matrix4x4 viewMatrix = __instance.camera_0.GetStereoViewMatrix(eye);
                 Matrix4x4 projMatrix = __instance.camera_0.GetStereoProjectionMatrix(eye);
                 projMatrix = GL.GetGPUProjectionMatrix(projMatrix, renderIntoTexture: true);
                 Matrix4x4 combinedMatrix = projMatrix * viewMatrix;
                 __instance.matrix4x4_0 = combinedMatrix;
+
                 __instance.method_4();
                 __instance.method_6();
 
@@ -712,6 +651,7 @@ namespace TarkovVR.Patches.Visuals
                 {
                     VolumetricLightRenderer.list_0[i].VolumetricLightPreRender(__instance, __instance.matrix4x4_0);
                 }
+
                 __instance.commandBuffer_0.SetRenderTarget(BuiltinRenderTextureType.CameraTarget, BuiltinRenderTextureType.CameraTarget);
                 __instance.method_5();
 
@@ -719,7 +659,6 @@ namespace TarkovVR.Patches.Visuals
             }
             return true;
         }
-
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(InventoryBlur), "Enable")]
@@ -888,47 +827,7 @@ namespace TarkovVR.Patches.Visuals
             return true;
         }
         */
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
-        private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
-        {
-            int shaderPass = 0;
-
-
-            if (__instance.CurrentState == SSAAImpl.SSState.UPSCALE)
-            {
-                bool flag = ((__instance.EnableDLSS && !__instance._failedToInitializeDLSS && !__instance.NeedToApplySwitch()) || (__instance.EnableDLSS && (__instance.DLSSDebugDisable || DLSSWrapper.WantToDebugDLSSViaRenderdoc))) && !__instance.InventoryBlurIsEnabled;
-                // Attempting to use FSR is causing massive issues and neither scaling option works anyway so just disable it
-                //bool flag2 = __instance.EnableFSR && !__instance._failedToInitializeFSR && !flag && !__instance.NeedToApplySwitch();
-                //bool flag3 = __instance.EnableFSR2 && !__instance._failedToInitializeFSR2 && !flag && !__instance.NeedToApplySwitch();
-                if ((flag && __instance.TryRenderDLSS(source, destination, externalCommandBuffer)))
-                {
-                    return false;
-                }
-            }
-            
-            if (__instance.RenderTextureMaterialBicubic == null)
-            {
-                __instance.RenderTextureMaterialBicubic = new Material(Shader.Find("Hidden/BicubicSampling"));
-            }
-            int num = (destination ? destination.width : Screen.width);
-            int num2 = (destination ? destination.height : Screen.height);
-            if (Camera.main != null)
-            {
-                num = Camera.main.pixelWidth;
-                num2 = Camera.main.pixelHeight;
-            }
-            __instance._applyResultCmdBuf.Clear();
-            __instance._applyResultCmdBuf.SetRenderTarget(destination);
-            __instance._applyResultCmdBuf.SetViewport(new Rect(0f, 0f, num, num2));
-            Mesh mesh = (flipV ? __instance.FullScreenYFlippedMesh : __instance.FullScreenMesh);
-            __instance._applyResultCmdBuf.DrawMesh(mesh, Matrix4x4.identity, __instance.RenderTextureMaterialBicubic, 0, shaderPass);
-            __instance.RenderTextureMaterialBicubic.SetTexture("_MainTex", source);
-            Graphics.ExecuteCommandBuffer(__instance._applyResultCmdBuf);
-            return false;
-        }
-
+        
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //[HarmonyPrefix]
@@ -967,37 +866,6 @@ namespace TarkovVR.Patches.Visuals
 
         //    return false;
         //}
-
-
-        //NOTEEEEEEEEEEEE: Removing the SSAApropagator (i think) from the PostProcessingLayer/Volume will restore some visual fidelity but still not as good as no ssaa
-
-        //ANOTHER NOTE: I'm pretty sure if you delete or disable the SSAA shit you still get all the nice visual effects from the post processing without the blur,
-        // its just the night vision doessn't work, so maybe only enable SSAA when enabling night/thermal vision
-
-        // FIGURED IT OUT Delete the SSAAPropagator, SSAA, and SSAAImpl and it just works
-
-        // Also remove the distant shadows command buffer from the camera
-        // MotionVectorsPASS is whats causing the annoying [Error  : Unity Log] Dimensions of color surface does not match dimensions of depth surface    error to occur 
-        // but its also needed for grass and maybe other stuff
-
-        // SSAA causes a bunch of issues like thermal/nightvision rendering all fucky, and the
-        // s also render in 
-        // with 2 other lenses on either side of the main lense, Although SSAA is nice for fixing the jagged edges, it 
-        // also adds a strong layer of blur over everything so it's definitely best to keep it disabled. Might look into
-        // keeping it around later on if I can figure a way to get it to look nice without messing with everything else
-
-        // In hideout, don't notice any real fps difference when changing object LOD quality and overall visibility
-
-        // anti aliasing is off or on FXAA - no FPS difference noticed - seems like scopes won't work without it
-        // Resampling x1 OFF 
-        // DLSS and FSR OFF
-        // HBAO - Looks better but takes a massive hit on performance - off gets about around 10-20 fps increase
-        // SSR - turning low to off raises FPS by about 2-5, turning ultra to off raises fps by about 5ish. I don't know if it looks better but it seems like if you have it on, you may as well go to ultra
-        // Anistrophic filtering - per texture or on maybe cos it looks bettter, or just off - No real FPS difference
-        // Sharpness at 1-1.5 I think it the gain falls off after around 1.5+
-        // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
-        // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
-        // POST FX - Turning it off gains about 8-10 FPS
 
         // When aiming a lot of stuff gets culled do to the lowered LodBiasFactor, so set this to a minimum of 1 which is whats normal
         [HarmonyPostfix]

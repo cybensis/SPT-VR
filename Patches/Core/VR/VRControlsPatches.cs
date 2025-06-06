@@ -118,7 +118,7 @@ namespace TarkovVR.Patches.Core.VR
 
             // Check conditions that disable turning
             bool disableTurn = (WeaponPatches.currentGunInteractController && 
-                               WeaponPatches.currentGunInteractController.hightlightingMesh) || 
+                               WeaponPatches.currentGunInteractController.highlightingMesh) || 
                                Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) >= JUMP_OR_STAND_CLAMP_RANGE || 
                                VRGlobals.blockRightJoystick;
             

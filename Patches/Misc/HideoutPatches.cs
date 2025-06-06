@@ -143,7 +143,7 @@ namespace TarkovVR.Patches.Misc
                 collider.isTrigger = true;
 
                 Camera.main.clearFlags = CameraClearFlags.SolidColor;
-
+                
                 if (UIPatches.quickSlotUi == null)
                 {
                     GameObject quickSlotHolder = new GameObject("quickSlotUi");
@@ -348,12 +348,6 @@ namespace TarkovVR.Patches.Misc
         {
             __instance.WaitOneFrame(() =>
             {
-                /*
-                foreach (Transform child in __instance.gameObject.transform)
-                {
-                    child.localPosition = Vector3.zero;
-                }
-                */
                 __instance._parent.localPosition = Vector3.zero;
             });
         }

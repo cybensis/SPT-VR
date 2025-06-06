@@ -79,6 +79,9 @@
     <Reference Include="KmyTarkovConfiguration">
       <HintPath>C:\Users\lilma\Downloads\SPT-VR-main\SPT-VR-main\libs\ModSupport\KmyTarkovConfiguration.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.CSharp">
+      <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\Microsoft.CSharp.dll</HintPath>
+    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>libs\Managed\Newtonsoft.Json.dll</HintPath>
     </Reference>
