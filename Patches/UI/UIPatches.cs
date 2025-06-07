@@ -175,8 +175,9 @@ namespace TarkovVR.Patches.UI
         }
 
         private static float lastCamRootYRot = 0;
+        private static bool initializeUnload = false;
         public static void HandleOpenInventory()
-        {
+        {          
             if (VRGlobals.vrPlayer is RaidVRPlayerManager)
             {
                 MemoryControllerClass.Collect();
@@ -190,7 +191,7 @@ namespace TarkovVR.Patches.UI
             {
                 MemoryControllerClass.EmptyWorkingSet();
             }
-            VisualPatches.ClearRenderTargetPool();
+            Rendering.ClearRenderTargetPool();
             Cursor.lockState = CursorLockMode.Locked;
             ShowUiScreens();
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)

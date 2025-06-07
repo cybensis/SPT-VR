@@ -11,6 +11,7 @@ using System.IO;
 
 namespace TarkovVR.Patches.Visuals
 {
+    [HarmonyPatch]
     internal class Rendering
     {
         private static Dictionary<string, Queue<RenderTexture>> _renderTargetPool = new Dictionary<string, Queue<RenderTexture>>();

@@ -635,8 +635,8 @@ public class GunInteractionController : MonoBehaviour
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void SetChargingHandleOrBolt(Transform chargeOrBoltTransform, bool isBolt) {
-        if (chargingHandle || bolt)
-            return;
+        //if (chargingHandle || bolt)
+           // return;
         if (isBolt)
             bolt = chargeOrBoltTransform;
         else
