@@ -7,6 +7,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;
+using TarkovVR.Patches.Core.Equippables;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -117,8 +118,8 @@ namespace TarkovVR.Patches.Core.VR
             }
 
             // Check conditions that disable turning
-            bool disableTurn = (WeaponPatches.currentGunInteractController && 
-                               WeaponPatches.currentGunInteractController.highlightingMesh) || 
+            bool disableTurn = (EquippablesShared.currentGunInteractController && 
+                               EquippablesShared.currentGunInteractController.highlightingMesh) || 
                                Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) >= JUMP_OR_STAND_CLAMP_RANGE || 
                                VRGlobals.blockRightJoystick;
             

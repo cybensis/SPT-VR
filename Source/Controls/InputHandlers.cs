@@ -263,20 +263,20 @@ namespace TarkovVR.Source.Controls
             private float z = 1;
             public void UpdateCommand(ref ECommand command)
             { 
-                if (VRGlobals.firearmController == null && !WeaponPatches.rangeFinder)
+                if (VRGlobals.firearmController == null && !EquippablesShared.rangeFinder)
                     return;
 
                 float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
-                if (WeaponPatches.rangeFinder)
+                if (EquippablesShared.rangeFinder)
                 {
-                    if (primaryHandTriggerAmount > 0.5f && !WeaponPatches.rangeFinder.IsAiming)
+                    if (primaryHandTriggerAmount > 0.5f && !EquippablesShared.rangeFinder.IsAiming)
                     {
-                        WeaponPatches.rangeFinder.ToggleAim();
+                        EquippablesShared.rangeFinder.ToggleAim();
                         VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.13f, -0.1711f, -0.24f);
                         VRGlobals.weaponHolder.transform.localEulerAngles = new Vector3(12, 308, 90);
                     }
-                    else if (primaryHandTriggerAmount < 0.5f && WeaponPatches.rangeFinder.IsAiming) {
-                        WeaponPatches.rangeFinder.ToggleAim();
+                    else if (primaryHandTriggerAmount < 0.5f && EquippablesShared.rangeFinder.IsAiming) {
+                        EquippablesShared.rangeFinder.ToggleAim();
                         VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(37, 267, 55);
                         VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.23f, 0.0689f, -0.23f);
                     }
@@ -326,7 +326,7 @@ namespace TarkovVR.Source.Controls
             private bool isShooting = false;
             public void UpdateCommand(ref ECommand command)
             {
-                if (WeaponPatches.grenadeEquipped)
+                if (EquippablesShared.grenadeEquipped)
                     return;
 
                 float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
@@ -362,8 +362,8 @@ namespace TarkovVR.Source.Controls
                 float primaryHandScrollAxis = 0f;
 
                 if (VRSettings.GetLeftHandedMode() &&
-                    WeaponPatches.currentGunInteractController != null &&
-                    WeaponPatches.currentGunInteractController.highlightingMesh)
+                    EquippablesShared.currentGunInteractController != null &&
+                    EquippablesShared.currentGunInteractController.highlightingMesh)
                 {
                     primaryHandScrollAxis = SteamVR_Actions._default.LeftJoystick.axis.y;
                 }
@@ -428,9 +428,9 @@ namespace TarkovVR.Source.Controls
                     return;
                 bool cancelGrenadeButtonClick = (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any));
 
-                if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.grenadeEquipped && cancelGrenadeButtonClick))
+                if ((swapPrimaryWeapon) || swapWeapon || (EquippablesShared.grenadeEquipped && cancelGrenadeButtonClick))
                 {
-                    if (VRGlobals.player.ActiveSlot == null || WeaponPatches.rangeFinder)
+                    if (VRGlobals.player.ActiveSlot == null || EquippablesShared.rangeFinder)
                         // If the first weapon slot is null then attempt select secondary
                         if (VRGlobals.player.Equipment._cachedSlots[0].ContainedItem != null)
                             command = ECommand.SelectFirstPrimaryWeapon;
@@ -438,12 +438,12 @@ namespace TarkovVR.Source.Controls
                             command = ECommand.SelectSecondPrimaryWeapon;
 
                     else if (VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
-                        if (WeaponPatches.grenadeEquipped)
+                        if (EquippablesShared.grenadeEquipped)
                             command = ECommand.SelectFirstPrimaryWeapon;
                         else
                             command = ECommand.SelectSecondPrimaryWeapon;
                     else
-                        if (WeaponPatches.grenadeEquipped)
+                        if (EquippablesShared.grenadeEquipped)
                             command = ECommand.SelectSecondPrimaryWeapon;
                         else
                             command = ECommand.SelectFirstPrimaryWeapon;
@@ -540,7 +540,7 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
-                if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting && !VRGlobals.vrPlayer.interactMenuOpen && changeFireModeButtonClick && WeaponPatches.currentGunInteractController.GetFireModeSwitch() != null)
+                if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting && !VRGlobals.vrPlayer.interactMenuOpen && changeFireModeButtonClick && EquippablesShared.currentGunInteractController.GetFireModeSwitch() != null)
                 {
                     command = ECommand.ChangeWeaponMode;
                 }
@@ -561,7 +561,7 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.CheckChamber;
                     checkChamber = false;
-                    WeaponPatches.currentGunInteractController.hasExaminedAfterMalfunction = false;
+                    EquippablesShared.currentGunInteractController.hasExaminedAfterMalfunction = false;
                 }
             }
             public void TriggerCheckChamber()
@@ -635,7 +635,7 @@ namespace TarkovVR.Source.Controls
             private bool releaseGrenade = false;
             public void UpdateCommand(ref ECommand command)
             {
-                if (!WeaponPatches.grenadeEquipped)
+                if (!EquippablesShared.grenadeEquipped)
                     return;
                 float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
 
@@ -662,10 +662,10 @@ namespace TarkovVR.Source.Controls
                                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(30, 273, 116);
                                 VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.05f, -0.43f, -0.15f);
                             }
-                            WeaponPatches.pinPulled = true;
+                            EquippablesShared.pinPulled = true;
                             // Do this to recalculate hand position
-                            if (WeaponPatches.currentGunInteractController != null)
-                                WeaponPatches.currentGunInteractController.framesAfterEnabled = 0;
+                            if (EquippablesShared.currentGunInteractController != null)
+                                EquippablesShared.currentGunInteractController.framesAfterEnabled = 0;
                         }
                     });
                 }
@@ -720,7 +720,7 @@ namespace TarkovVR.Source.Controls
                 if (examineWeapon) { 
                     command = ECommand.ExamineWeapon;
                     examineWeapon = false;
-                    WeaponPatches.currentGunInteractController.hasExaminedAfterMalfunction = true;
+                    EquippablesShared.currentGunInteractController.hasExaminedAfterMalfunction = true;
                 }
             }
 

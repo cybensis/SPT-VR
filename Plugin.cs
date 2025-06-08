@@ -305,5 +305,27 @@ namespace TarkovVR
                 }
             }
         }
+
+
+    }
+
+    public static class GameObjectExtensions
+    {
+        public static Transform FindChildRecursive(this Transform parent, string childName)
+        {
+            foreach (Transform child in parent)
+            {
+                if (child.name.Equals(childName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return child;
+                }
+                Transform found = child.FindChildRecursive(childName);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
     }
 }

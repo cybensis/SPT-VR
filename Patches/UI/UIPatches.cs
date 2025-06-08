@@ -197,9 +197,9 @@ namespace TarkovVR.Patches.UI
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = false;
-            if (WeaponPatches.currentGunInteractController != null)
+            if (EquippablesShared.currentGunInteractController != null)
             {
-                if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                if (EquippablesShared.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
                     foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = false;
             }
@@ -272,9 +272,9 @@ namespace TarkovVR.Patches.UI
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = true;
-            if (WeaponPatches.currentGunInteractController != null)
+            if (EquippablesShared.currentGunInteractController != null)
             {
-                if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                if (EquippablesShared.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
                     foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = true;
             }

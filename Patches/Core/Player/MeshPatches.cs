@@ -14,6 +14,7 @@ namespace TarkovVR.Patches.Core.Player
     [HarmonyPatch]
     internal class MeshPatches
     {
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerBody), "UpdatePlayerRenders")]
         private static void LoadNoArmsModel(PlayerBody __instance, EPointOfView pointOfView)

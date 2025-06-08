@@ -1,25 +1,16 @@
 ﻿using Cinemachine;
 using EFT;
 using EFT.Hideout;
-using EFT.InventoryLogic;
 using EFT.UI;
 using EFT.UI.DragAndDrop;
 using HarmonyLib;
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Reflection;
-using System.Reflection.Emit;
-using System.Threading.Tasks;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
-using UnityEngine.UI;
 using Valve.VR;
-using static EFT.Hideout.SelectItemContextMenu;
 using static EFT.UI.InventoryScreen;
 using static EFT.UI.MenuTaskBar;
 
@@ -30,6 +21,7 @@ namespace TarkovVR.Patches.Misc
     {
         private static Camera hideoutUiCam;
         private static bool hideoutOverlayActive = false;
+        public static Vector3 camRootRot;
 
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -45,6 +37,8 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HideoutController), "method_7")]
         private static bool DisableHighlightMesh(HideoutController __instance)
@@ -52,6 +46,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HideoutScreenRear), "Update")]
         private static void PositionHideoutUiCamera(HideoutScreenRear __instance)
@@ -65,6 +61,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Returns the movement controls back to the player after clicking the back button on the inventory screen in hideout
         [HarmonyPostfix]
         [HarmonyPatch(typeof(InventoryScreen), "method_9")]
@@ -76,6 +73,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HideoutScreenOverlay), "Show")]
         private static void HandleHideoutOverlay(HideoutScreenOverlay __instance)
@@ -114,6 +112,8 @@ namespace TarkovVR.Patches.Misc
             //VRGlobals.menuVRManager.enabled = false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HideoutScreenOverlay), "method_9")]
         private static void OnEnterHideout(HideoutScreenOverlay __instance)
@@ -170,7 +170,8 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
-        public static Vector3 camRootRot;
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Occasionally opening the inventory will set camRoot rot to 0,0,0 so get it here and set later
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InventoryScreen), "Show", new Type[] { typeof(GClass3581) })]
@@ -180,6 +181,8 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Position inventory in front of player
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
@@ -191,6 +194,9 @@ namespace TarkovVR.Patches.Misc
             if (VRGlobals.player && !VRGlobals.menuOpen)
                 UIPatches.HandleOpenInventory();
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HideoutScreenOverlay), "method_11")]
         private static bool ReturnFromHideout(HideoutScreenOverlay __instance)
@@ -200,6 +206,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The pointer on exit is fucked up so remove it altogether
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HoverTrigger), "Init")]
@@ -258,6 +266,8 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.menuUi.transform.localRotation = Quaternion.identity;
             VRGlobals.menuUi.GetChild(0).localScale = new Vector3(1.4f, 1.4f, 1.4f);
         }
+
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Changes to in game when selecting the hideout option in the preloader UI
         [HarmonyPrefix]
@@ -280,6 +290,8 @@ namespace TarkovVR.Patches.Misc
                 VRGlobals.menuVRManager.enabled = false;
             }
         }
+
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Changes to in game when selecting the hideout option in the main menu Common UI
         [HarmonyPrefix]
@@ -299,6 +311,8 @@ namespace TarkovVR.Patches.Misc
                 VRGlobals.menuVRManager.enabled = false;
             }
         }
+
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Changes to in game when selecting the hideout option in the main menu Common UI
         [HarmonyPostfix]
@@ -312,6 +326,8 @@ namespace TarkovVR.Patches.Misc
                 Camera.main.farClipPlane = 1f;
             }
         }
+
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Position the fuel container list on the generator 
         private static Vector3 listPosition = Vector3.zero;
@@ -322,6 +338,8 @@ namespace TarkovVR.Patches.Misc
             listPosition = __instance.transform.position;
             return true;
         }
+
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SelectItemContextMenu), "method_1")]
@@ -341,6 +359,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //BSG... Why make coroutine for this?
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SelectItemContextMenu), "GetItem")]
@@ -351,6 +371,9 @@ namespace TarkovVR.Patches.Misc
                 __instance._parent.localPosition = Vector3.zero;
             });
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The UI is closed when the player selects a preloader task bar option twice
         // so close the VR inventory.
         [HarmonyPrefix]
@@ -363,6 +386,8 @@ namespace TarkovVR.Patches.Misc
                 ))
                 UIPatches.HandleCloseInventory();
         }
+
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TemplatedGridsView), "Show")]

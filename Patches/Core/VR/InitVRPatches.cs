@@ -14,18 +14,8 @@ using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
 using static TarkovVR.Source.Controls.InputHandlers;
-using UnityStandardAssets.ImageEffects;
 using UnityEngine.Rendering.PostProcessing;
-using System.Linq;
-using System.Runtime.Remoting.Contexts;
-using UnityEngine.XR;
-using UnityEngine.Rendering;
-using System.Collections;
-using static Fika.Core.Coop.Components.CoopHandler;
-using TarkovVR.Patches.Visuals;
-using Valve.VR.InteractionSystem;
-using System.IO;
-using System;
+
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -37,6 +27,8 @@ namespace TarkovVR.Patches.Core.VR
         public static Transform quickSlot;
         public static Transform rigCollider;
         public static Transform leftWrist;
+        public static GrenadeFingerPositioner rightPointerFinger;
+        public static Transform leftPalm;
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CharacterControllerSpawner), "Spawn")]
@@ -138,29 +130,13 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.sidearmHolster.gameObject.layer = 3;
             }
 
-            //if (VRGlobals.leftArmBendGoal == null) {
-            //    VRGlobals.leftArmBendGoal = new GameObject("leftArmBendGoal").transform;
-            //    VRGlobals.leftArmBendGoal.parent = VRGlobals.vrOffsetter.transform;
-            //    VRGlobals.leftArmBendGoal.localEulerAngles = Vector3.zero;
-            //    VRGlobals.leftArmBendGoal.localPosition = new Vector3(-1,-0.5f,-0.8f);
-            //}
-            //if (VRGlobals.rightArmBendGoal == null)
-            //{
-            //    VRGlobals.rightArmBendGoal = new GameObject("rightArmBendGoal").transform;
-            //    VRGlobals.rightArmBendGoal.parent = VRGlobals.vrOffsetter.transform;
-            //    VRGlobals.rightArmBendGoal.localEulerAngles = Vector3.zero;
-            //    VRGlobals.rightArmBendGoal.localPosition = new Vector3(1, -0.5f, 0.8f);
-            //}
-
 
             VRGlobals.inGame = true;
         }
 
+
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-        public static GrenadeFingerPositioner rightPointerFinger;
-        public static Transform leftPalm;
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SolverManager), "OnDisable")]
         private static void SetupIK(LimbIK __instance)
@@ -247,14 +223,6 @@ namespace TarkovVR.Patches.Core.VR
                 }
                     
             }
-            // parent is HumanLForearm3
-
-            // Timer panel localpos: 0.047 0.08 0.025
-            // local rot = 88.5784 83.1275 174.7802
-            // child(0).localeuler = 0 342.1273 0
-
-            // leftwristui localpos = -0.1 0.04 0.035
-            // localrot = 304.3265 181 180
 
             //GameObject.Destroy(__instance);
 
@@ -276,6 +244,9 @@ namespace TarkovVR.Patches.Core.VR
 
 
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PostProcessLayer), "SetupContext")]
         private static void ForcePPStereo(PostProcessLayer __instance, PostProcessRenderContext context)
@@ -287,6 +258,7 @@ namespace TarkovVR.Patches.Core.VR
                 context.stereoRenderingMode = PostProcessRenderContext.StereoRenderingMode.SinglePassInstanced;
             }
         }
+
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Don't know why I chose this method for setting the main cam but it works so whatever
@@ -336,6 +308,8 @@ namespace TarkovVR.Patches.Core.VR
             }
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerSpring), "Start")]
         private static void SetRigAndSidearmHolsters(PlayerSpring __instance)

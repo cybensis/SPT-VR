@@ -9,6 +9,7 @@ using System.ComponentModel.Design;
 using System.Drawing.Printing;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using TarkovVR.Patches.Core.Equippables;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -28,11 +29,12 @@ namespace TarkovVR.Patches.Core.Player
         private static float rotationStartY = 0f;
         private static float rotationTargetY = 0f;
         private static float rotationProgress = 0f;
-        
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MovementContext), "InitComponents")]
-        private static void SetPlayerRotate(MovementContext __instance)
+        private static void RestrictTrunkRotation(MovementContext __instance)
         {
             if (!__instance._player.IsYourPlayer)
                 return;
@@ -40,12 +42,30 @@ namespace TarkovVR.Patches.Core.Player
 
         }
 
-        // Found in Player object under CurrentState variable, and is inherited by Gclass1573
-        // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //------------------------------------------------------- PLAYER BODY ROTATION -------------------------------------------------------------------------------
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementState), "Rotate")]
         private static bool SetPlayerRotate(MovementState __instance, ref Vector2 deltaRotation)
         {
+            return PlayerRotationHandler(__instance, ref deltaRotation);
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ProneIdleStateClass), "Rotate")]
+        private static bool SetPlayerRotateOnProneStationary(ProneIdleStateClass __instance, ref Vector2 deltaRotation)
+        {
+            return PlayerRotationHandler(__instance, ref deltaRotation);
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ProneMoveStateClass), "Rotate")]
+        private static bool SetPlayerRotateOnProneMoving(ProneMoveStateClass __instance, ref Vector2 deltaRotation)
+        {
+            return PlayerRotationHandler(__instance, ref deltaRotation);
+        }
+
+        private static bool PlayerRotationHandler(MovementState __instance, ref Vector2 deltaRotation) {
             if (!__instance.MovementContext._player.IsYourPlayer)
                 return true;
 
@@ -53,43 +73,6 @@ namespace TarkovVR.Patches.Core.Player
                 return false;
 
             // Normally you'd stand with your left foot forward and right foot back, which doesn't feel natural in VR so rotate 28 degrees to have both feet in front when standing still
-            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
-            GetBodyRotation(bodyForward, ref deltaRotation);
-
-            __instance.MovementContext.Rotation = deltaRotation;
-           
-            return false;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(ProneIdleStateClass), "Rotate")]
-        private static bool SetPlayerRotateOnProneStationary(ProneIdleStateClass __instance, ref Vector2 deltaRotation)
-        {
-
-            if (!__instance.MovementContext._player.IsYourPlayer)
-                return true;
-
-            if (VRGlobals.menuOpen || !VRGlobals.inGame)
-                return false;
-
-            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
-            GetBodyRotation(bodyForward, ref deltaRotation);
-
-            __instance.MovementContext.Rotation = deltaRotation;
-            
-            return false;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(ProneMoveStateClass), "Rotate")]
-        private static bool SetPlayerRotateOnProneMoving(ProneMoveStateClass __instance, ref Vector2 deltaRotation)
-        {
-            if (!__instance.MovementContext._player.IsYourPlayer)
-                return true;
-
-            if (VRGlobals.menuOpen || !VRGlobals.inGame)
-                return false;
-
             Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
             GetBodyRotation(bodyForward, ref deltaRotation);
 
@@ -121,11 +104,7 @@ namespace TarkovVR.Patches.Core.Player
             float dotProduct = Vector3.Dot(Camera.main.transform.up, Vector3.up);
             float headY = (dotProduct < 0) ? (Camera.main.transform.eulerAngles.y - 180) : Camera.main.transform.eulerAngles.y;
             float rotDiff = CalculateYawDifference(headY, VRGlobals.player.Transform.rotation.eulerAngles.y) * -1;
-            //Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
-            //// Normalize the angle to the range [-180, 180]
-            //float pitch = headEulerAngles.x;
-            //if (pitch > 180)
-            //    pitch -= 360;
+
 
             if (leftJoystickUsed)
             {
@@ -135,7 +114,7 @@ namespace TarkovVR.Patches.Core.Player
                     lastYRot = VRGlobals.vrPlayer.leftHandYRotation + VRGlobals.vrOffsetter.transform.eulerAngles.y;
 
             }
-            else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.highlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.20f && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y))
+            else if (!(EquippablesShared.currentGunInteractController && EquippablesShared.currentGunInteractController.highlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.20f && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y))
                 lastYRot = headY;
             
             else
@@ -143,27 +122,7 @@ namespace TarkovVR.Patches.Core.Player
                 lastYRot = Mathf.LerpAngle(lastYRot, headY, Time.deltaTime * 10f); // Smooth follow
             }
             
-            // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 75 degrees, and if they haven't already rotated recently, and they've stopped rotating around
-            /*
-            else if (Mathf.Abs(rotDiff) > 25 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
-            {
-                lastYRot = headY;
-                timeSinceLastLookRot = 0;
-            }
-            */
-            /*
-            // Trigger smooth body alignment if looking past threshold
-            if (!isRotatingToHead && Mathf.Abs(rotDiff) > 75 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15f)
-            {
-                isRotatingToHead = true;
-                rotationStartY = lastYRot;
-                rotationTargetY = headY;
-                rotationProgress = 0f;
-                timeSinceLastLookRot = 0;
-            }
-            */
             timeSinceLastLookRot += Time.deltaTime;
-            //Plugin.MyLog.LogWarning(SteamVR_Actions._default.RightJoystick.axis + "  |  " + lastYRot + "   |   " + new Vector2(deltaRotation.x + lastYRot, 0) + "  |  " + VRGlobals.player.Transform.localRotation.eulerAngles);
             
             deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
             leftJoystickLastUsed = leftJoystickUsed;
@@ -172,30 +131,16 @@ namespace TarkovVR.Patches.Core.Player
             else
                 VRGlobals.player.MovementContext._relativeSpeed = xAxis;
             VRGlobals.player.MovementContext.SetCharacterMovementSpeed(VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed);
-            /*
-            // Smoothly interpolate body rotation after threshold
-            if (isRotatingToHead)
-            {
-                rotationProgress += Time.deltaTime / 0.25f; // 0.25 seconds to complete turn (adjust to taste)
-                lastYRot = Mathf.LerpAngle(rotationStartY, rotationTargetY, rotationProgress);
 
-                if (rotationProgress >= 1f)
-                    isRotatingToHead = false;
-            }
-            */
         }
 
 
-        // GClass1854 inherits MovementState and its version of ProcessUpperbodyRotation is ran when the player is moving, __instance ensures 
-        // the rotation when not moving is similar to that when moving otherwise the player can rotate their camera faster than the body
-        // can rotate
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // When the player is stationary and uses joysticks to rotate, this ensures the bodies rotates with the camera instead of the body only rotating every 45 degrees or so with a camera turn
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementState), "ProcessUpperbodyRotation")]
-        private static bool FixBodyRotation(MovementState __instance, float deltaTime)
+        private static bool MatchBodyToCameraOnInputTurn(MovementState __instance, float deltaTime)
         {
-            //float y = Mathf.Abs(__instance.MovementContext.TransformRotation.eulerAngles.y - camRoot.transform.eulerAngles.y);
-            //if (y > 20)
-            //    __instance.MovementContext.ApplyRotation(Quaternion.Lerp(__instance.MovementContext.TransformRotation, __instance.MovementContext.TransformRotation * Quaternion.Euler(0f, y, 0f), 30f * deltaTime));
             if (!__instance.MovementContext._player.IsYourPlayer || !VRGlobals.inGame)
                 return true;
 
@@ -210,7 +155,9 @@ namespace TarkovVR.Patches.Core.Player
              
         }
 
-        // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Positions the camera in line with the body in a manner better suited for VR
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GClass3407), "ManualLateUpdate")]
         private static bool PositionCamera(GClass3407 __instance)
@@ -222,8 +169,8 @@ namespace TarkovVR.Patches.Core.Player
             // When medding or eating, we need to rely on this code to position the upper body, and it will set the empty hands but the current gun interaction controller should be disabled
             if (VRGlobals.emptyHands && VRGlobals.player.HandsIsEmpty)
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
-            else if (VRGlobals.emptyHands && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.enabled)) {
-                if (!WeaponPatches.currentGunInteractController || WeaponPatches.currentGunInteractController.transform.parent != VRGlobals.emptyHands)
+            else if (VRGlobals.emptyHands && (!EquippablesShared.currentGunInteractController || !EquippablesShared.currentGunInteractController.enabled)) {
+                if (!EquippablesShared.currentGunInteractController || EquippablesShared.currentGunInteractController.transform.parent != VRGlobals.emptyHands)
                     VRGlobals.ikManager.MatchLegsToArms();
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
                 

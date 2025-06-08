@@ -255,7 +255,7 @@ namespace TarkovVR.Source.Player.VRManager
 
             if (gunControllerCacheFrame != Time.frameCount)
             {
-                cachedCurrentGunController = WeaponPatches.currentGunInteractController;
+                cachedCurrentGunController = EquippablesShared.currentGunInteractController;
                 gunControllerCacheFrame = Time.frameCount;
             }
 
@@ -292,7 +292,7 @@ namespace TarkovVR.Source.Player.VRManager
 
             var gun = cachedCurrentGunController as GunInteractionController;
 
-            if (cachedAmmoFireModeUi != null && gun != null && VRGlobals.player?.HandsController != null && !WeaponPatches.grenadeEquipped)
+            if (cachedAmmoFireModeUi != null && gun != null && VRGlobals.player?.HandsController != null && !EquippablesShared.grenadeEquipped)
             {
                 if (isAmmoCount)
                 {
@@ -434,8 +434,8 @@ namespace TarkovVR.Source.Player.VRManager
             radialMenu.transform.localPosition = new Vector3(0.0172f, -0.1143f, -0.03f);
             radialMenu.transform.localEulerAngles = new Vector3(270, 127, 80);
 
-            if (WeaponPatches.currentScope)
-                WeaponPatches.currentScope.parent.localScale = new Vector3(-1, 1, 1);
+            if (EquippablesShared.currentScope)
+                EquippablesShared.currentScope.parent.localScale = new Vector3(-1, 1, 1);
 
             if (VRGlobals.player)
             {
@@ -490,8 +490,8 @@ namespace TarkovVR.Source.Player.VRManager
             radialMenu.transform.localPosition = new Vector3(-0.0728f, -0.1343f, 0);
             radialMenu.transform.localEulerAngles = new Vector3(290, 252, 80);
 
-            if (WeaponPatches.currentScope)
-                WeaponPatches.currentScope.parent.localScale = new Vector3(1, 1, 1);
+            if (EquippablesShared.currentScope)
+                EquippablesShared.currentScope.parent.localScale = new Vector3(1, 1, 1);
 
             if (VRGlobals.player)
             {
@@ -591,7 +591,7 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.ikManager.leftArmIk.solver.target = null;
                     VRGlobals.ikManager.leftArmIk.enabled = false;
                     // Set the left hand IK back to the original gun position
-                    VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                    VRGlobals.player._markers[0] = EquippablesShared.previousLeftHandMarker;
                     isEnteringTwoHandedMode = true;
                     // First we get the current right hands local rotation
                     initialRightHandRotation = RightHand.transform.localRotation;
@@ -695,7 +695,7 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
                     VRGlobals.ikManager.leftArmIk.enabled = true;
                     //VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
-                    //VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
+                    //VRGlobals.weaponHolder.transform.localPosition = EquippablesShared.weaponOffset;
                     //VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
                     //VRGlobals.firearmController.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
                     rawRightHand.transform.rotation = RightHand.transform.rotation;
@@ -733,7 +733,7 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     rawRightHand.transform.position = RightHand.transform.position;
 
-                if ((VRGlobals.firearmController || WeaponPatches.grenadeEquipped || WeaponPatches.rangeFinder) && framesAfterSwitching < 2)
+                if ((VRGlobals.firearmController || EquippablesShared.grenadeEquipped || EquippablesShared.rangeFinder) && framesAfterSwitching < 2)
                 {
                     VRGlobals.weaponHolder.transform.parent.position = rawRightHand.transform.position;
                     VRGlobals.weaponHolder.transform.parent.rotation = rawRightHand.transform.rotation;
@@ -773,7 +773,7 @@ namespace TarkovVR.Source.Player.VRManager
                 {
                     VRGlobals.ikManager.leftArmIk.solver.target = null;
                     VRGlobals.ikManager.leftArmIk.enabled = false;
-                    VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                    VRGlobals.player._markers[0] = EquippablesShared.previousLeftHandMarker;
                     leftHandInAnimation = true;
                 }
                 return;
@@ -781,7 +781,7 @@ namespace TarkovVR.Source.Player.VRManager
             else if (leftHandInAnimation)
             {
                 if (isSupporting)
-                    VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                    VRGlobals.player._markers[0] = EquippablesShared.previousLeftHandMarker;
                 else
                 {
                     VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
@@ -805,10 +805,10 @@ namespace TarkovVR.Source.Player.VRManager
                     if (!isSupporting && (!VRSettings.GetSnapToGun() || handLock))
                     {
                         if (isWeapPistol)
-                            VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                            VRGlobals.player._markers[0] = EquippablesShared.previousLeftHandMarker;
                         initialRightHandRotation = rawRightHand.transform.rotation;
                         // Set left hand target to the original left hand target
-                        //VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+                        //VRGlobals.player._markers[0] = EquippablesShared.previousLeftHandMarker;
                         isSupporting = true;
                         if (UIPatches.stancePanel)
                             UIPatches.stancePanel.AnimatedHide();
@@ -865,7 +865,7 @@ namespace TarkovVR.Source.Player.VRManager
                             VRGlobals.player._markers[0] = LeftHand.transform;
                         //VRGlobals.player._markers[0] = LeftHand.transform;
                         ////VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
-                        //VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
+                        //VRGlobals.weaponHolder.transform.localPosition = EquippablesShared.weaponOffset;
                         //VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
                         //VRGlobals.firearmController.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
 

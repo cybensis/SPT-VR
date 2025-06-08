@@ -343,7 +343,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 isInRange = false;
                 scopeTransform = null;
-                WeaponPatches.currentGunInteractController.RemoveScopeHighlight();
+                EquippablesShared.currentGunInteractController.RemoveScopeHighlight();
                 hasEnteredScope = false;
             }
 
@@ -633,7 +633,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (!secondaryHandGrip.state)
             {
-                WeaponPatches.DropObject(heldItem, true);
+                EquippablesShared.DropObject(heldItem, true);
                 heldItem = null;
             }
         }
@@ -664,7 +664,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!secondaryHandGrip.state)
             {
                 isItemInitialized = false;
-                WeaponPatches.DropObject(heldItem, true);
+                EquippablesShared.DropObject(heldItem, true);
                 heldItem = null;               
                 cachedRigidbody = null;
                 cachedHand = null;
@@ -713,9 +713,9 @@ namespace TarkovVR.Source.Player.Interactions
                     SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (VRSettings.GetLeftHandedMode()) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                     hasEnteredScope = true;
                 }
-                if (WeaponPatches.currentGunInteractController != null && scopeTransform != null)
+                if (EquippablesShared.currentGunInteractController != null && scopeTransform != null)
                 {
-                    WeaponPatches.currentGunInteractController.SetScopeHighlight(scopeTransform);
+                    EquippablesShared.currentGunInteractController.SetScopeHighlight(scopeTransform);
                 }
             }
 

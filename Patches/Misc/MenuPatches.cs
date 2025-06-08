@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using Valve.VR;
 using UnityEngine;
 using EFT.UI;
-using UnityEngine.Rendering.PostProcessing;
 using CW2.Animations;
 using UnityStandardAssets.ImageEffects;
 using static EFT.UI.PixelPerfectSpriteScaler;
@@ -12,44 +11,28 @@ using EFT.UI.DragAndDrop;
 using UnityEngine.EventSystems;
 using EFT.InventoryLogic;
 using EFT.UI.WeaponModding;
-using EFT.Hideout;
 using EFT;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.UI;
-using System.Reflection.Emit;
-using System.Linq;
-using System.Reflection;
-using System.Collections;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using TMPro;
 using System.Text;
 using EFT.UI.Ragfair;
-using UnityEngine.SceneManagement;
 using static EFT.UI.PlayerProfilePreview;
-using UnityEngine.XR;
 using static EFT.UI.MenuScreen;
-using static EFT.UI.BattleUiVoipPanel;
 using EFT.UI.Screens;
 using TarkovVR.Patches.UI;
-using UnityEngine.UIElements;
 using static EFT.UI.WeaponModding.WeaponModdingScreen;
 using EFT.UI.SessionEnd;
-using static EFT.UI.SessionEnd.SessionResultExitStatus;
-using static EFT.UI.TraderDialogScreen;
 using EFT.UI.Settings;
 using static EFT.UI.ScreenPositionAnchor;
-using System.Runtime.InteropServices;
 using UnityEngine.UI;
 using TarkovVR.Source.Settings;
-using static EFT.BaseLocalGame<EFT.HideoutPlayerOwner>;
 using EFT.UI.Matchmaker;
 using EFT.UI.Builds;
 using EFT.UI.Insurance;
 using TarkovVR.Source.Weapons;
-using Comfort.Common;
-using TarkovVR.Patches.Core.Player;
-using GPUInstancer;
+
 
 
 
@@ -66,6 +49,7 @@ namespace TarkovVR.Patches.Misc
 
         public static VRUIInteracter vrUiInteracter;
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
         private static bool FixMenuImagesScaling(PixelPerfectSpriteScaler __instance)
@@ -107,44 +91,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-
-
-        //[HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
-        //public static class FixMenuImagesScaling
-        //{
-        //    static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
-        //    {
-        //        var codes = new List<CodeInstruction>(instructions);
-
-        //        for (int i = 0; i < codes.Count; i++)
-        //        {
-        //            // Find the call to get_lossyScale and Math.Min
-        //            if (codes[i].opcode == OpCodes.Callvirt && codes[i].operand is MethodInfo methodInfo && methodInfo.Name == "get_lossyScale")
-        //            {
-        //                // Replace the call to get_lossyScale with the constant value 1.333
-        //                codes[i] = new CodeInstruction(OpCodes.Ldc_R4, 1.333f); // Load constant 1.333
-        //                                                                        // Remove the instructions that load x and y and call Math.Min
-        //                //codes.RemoveAt(i - 1); // Remove stloc.0
-        //                //codes.RemoveAt(i); // Remove stloc.0
-        //                codes.RemoveAt(i + 1); // Remove stloc.0
-        //                codes.RemoveAt(i + 1); // Remove ldloc.0
-        //                codes.RemoveAt(i + 1); // Remove ldfld float32 x
-        //                codes.RemoveAt(i + 1); // Remove ldloc.0
-        //                codes.RemoveAt(i + 1); // Remove ldfld float32 y
-        //                codes.RemoveAt(i + 1); // Remove call Math.Min
-        //                codes.Insert(i + 1, new CodeInstruction(OpCodes.Stloc_1)); // Store the constant into num (stloc.1)
-        //                break;
-        //            }
-        //        }
-
-        //        return codes.AsEnumerable();
-        //    }
-        //}
-
-
-
-
-
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MainMenuControllerClass), "method_5")]
         private static void AddAndFixMenuVRCam(MainMenuControllerClass __instance)
@@ -339,7 +286,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EnvironmentUI), "RefreshEnvironmentAsync")]
         public static void PositionMenuPropsAfterRefresh(Task __result)
@@ -375,6 +322,8 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridView), "CalculateItemLocation")]
         private static bool FixDragHighlighting(GridView __instance, ItemContextClass itemContext, ref LocationInGrid __result)
@@ -415,13 +364,16 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EnvironmentUIRoot), "RandomRotate")]
         private static bool PreventMenuOptionSelectCamRotation(EnvironmentUIRoot __instance)
         {
             return false;
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EnvironmentUIRoot), "method_2")]
         private static bool PreventMenuReturnCamRotatiown(EnvironmentUIRoot __instance)
@@ -429,6 +381,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EnvironmentUIRoot), "Init")]
         private static void RepositionEnvironmentAfterChange(EnvironmentUIRoot __instance, Camera alignmentCamera, IReadOnlyCollection<EEventType> events, bool isMain)
@@ -440,7 +394,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-        
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SimpleContextMenu), "CorrectPosition")]
         private static bool FixContextMenuPositioning(SimpleContextMenu __instance)
@@ -481,8 +435,9 @@ namespace TarkovVR.Patches.Misc
 
             return false;
         }
-        
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(DraggedItemView), "method_6")]
         private static bool RotateInventoryItem(DraggedItemView __instance)
@@ -504,6 +459,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(UIInputNode), "CorrectPosition")]
         private static bool PreventMenuOptionSelectCamRotation(UIInputNode __instance)
@@ -512,6 +469,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //possible cause of preloaderui moving
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ItemUiContext), "EditTag")]
@@ -521,7 +480,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(StretchArea), "Init")]
         private static void DisableItemDisplayWindowStretchComponents(UIDragComponent __instance)
@@ -530,6 +489,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Some piece of code keeps repositioning this shit and I can't figure out what 
         // so just wait a frame and set it. This is for the delete/confirm windows
         [HarmonyPostfix]
@@ -541,6 +501,9 @@ namespace TarkovVR.Patches.Misc
                 __instance.WindowTransform.localPosition = Vector3.zero;
             });
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(RepairWindow), "Show")]
         private static void DisplayDialogWindow(RepairWindow __instance)
@@ -552,6 +515,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(WeaponPreview), "method_2")]
         private static bool FixWeaponPreviewCamera(WeaponPreview __instance)
@@ -564,6 +528,8 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ItemView), "OnClick")]
         private static bool HandleItemClick(ItemView __instance, PointerEventData.InputButton button, Vector2 position, bool doubleClick)
@@ -655,6 +621,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TraderScreensGroup), "Awake")]
         private static void PositionTraderSeparatorBars(TraderScreensGroup __instance)
@@ -673,7 +640,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(DraggedItemView), "OnDrag")]
         private static void PositionDraggedItemIcon(DraggedItemView __instance, PointerEventData eventData)
@@ -686,6 +653,8 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SlotView), "Start")]
         private static void AddBoxColliderToSlotComponents(SlotView __instance)
@@ -695,6 +664,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Stupid hover thingy blocks the autofill from being selected
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HoverTooltipArea), "Show")]
@@ -709,7 +679,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ItemInfoWindowLabels), "method_4")]
         private static bool ApplyItemDetailWindowViewerRotate(ItemInfoWindowLabels __instance, PointerEventData pointerData)
@@ -734,6 +704,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(UIDragComponent), "UnityEngine.EventSystems.IDragHandler.OnDrag")]
         private static bool FixItemDetailWindowDrag(UIDragComponent __instance, PointerEventData eventData)
@@ -763,6 +735,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ScrollRectNoDrag), "OnEnable")]
         private static void WidenScrollbars(ScrollRectNoDrag __instance)
@@ -771,6 +744,9 @@ namespace TarkovVR.Patches.Misc
                 __instance.verticalScrollbar.transform.localScale = new Vector3(1.5f, __instance.verticalScrollbar.transform.localScale.y, __instance.verticalScrollbar.transform.localScale.z);
 
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         /*
         //Inspect window position fix, doesn't seem needed anymore
         [HarmonyPrefix]
@@ -809,6 +785,8 @@ namespace TarkovVR.Patches.Misc
         }
         */
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ItemView), "Update")]
         private static bool FixDragAndDropButton(ItemView __instance)
@@ -837,7 +815,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BaseDropDownBox), "ToggleMenu")]
         private static bool PositionHeadVoiceDropdownMenus(BaseDropDownBox __instance)
@@ -851,6 +829,8 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerProfilePreview), "ChangeCameraPosition", new Type[] { typeof(ECameraViewType), typeof(float) })]
         private static void PositionLoginPlayerModelPreview(PlayerProfilePreview __instance, ECameraViewType viewType, float duration)
@@ -863,6 +843,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerModelView), "Show", new Type[] { typeof(GClass1952), typeof(InventoryController), typeof(Action), typeof(float), typeof(Vector3), typeof(bool) })]
         private static void PositionRaidPlayerModelPreview(PlayerModelView __instance, Task __result)
@@ -915,8 +896,9 @@ namespace TarkovVR.Patches.Misc
             }, TaskScheduler.FromCurrentSynchronizationContext());
 
         }
-        // 0 20.9346 0
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TMP_InputField), "OnPointerClick")]
         private static void OpenVRKeyboard(TMP_InputField __instance)
@@ -936,6 +918,8 @@ namespace TarkovVR.Patches.Misc
             keyboardDoneAction.enabled = true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(AddOfferWindow), "method_17")]
         private static void PositionOfferWindow(AddOfferWindow __instance)
@@ -948,6 +932,8 @@ namespace TarkovVR.Patches.Misc
 
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //Not needed anymore with the new way I'm handling opening inventory. I take that back, maybe is needed but now checking if you're in game/hideout, if so skip    
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TransferItemsScreen), "Show", new Type[] { typeof(TransferItemsScreen.GClass3604) })]
@@ -959,8 +945,10 @@ namespace TarkovVR.Patches.Misc
             {
                 VRGlobals.camRoot.transform.rotation = Quaternion.identity;
             });
-        }       
+        }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(RagfairFilterWindow), "Show")]
         private static void PositionFleaMarketFilterWindow(RagfairFilterWindow __instance)
@@ -968,6 +956,8 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.localPosition = Vector3.zero;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //Dunno what this is for
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Window<GClass3542>), "Show")]
@@ -977,6 +967,8 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.GetChild(0).localPosition = Vector3.zero;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WelcomeScreen<EftWelcomeScreen.GClass3617, EEftScreenType>), "Show", new Type[] { typeof(EftWelcomeScreen.GClass3617) })]
         private static void PositionLoginWelcomeScreen(WelcomeScreen<EftWelcomeScreen.GClass3617, EEftScreenType> __instance)
@@ -1007,6 +999,8 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(AccountSideSelectionScreen<EftAccountSideSelectionScreen.GClass3615, EEftScreenType>), "Awake")]
         private static void PositionLoginWelcomeScreen(AccountSideSelectionScreen<EftAccountSideSelectionScreen.GClass3615, EEftScreenType> __instance)
@@ -1037,6 +1031,8 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GClass3590), "ShowAction")]
         private static void PositionInRaidMenu(GClass3590 __instance)
@@ -1065,6 +1061,8 @@ namespace TarkovVR.Patches.Misc
             
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(UserInterfaceClass<EFT.UI.Screens.EEftScreenType>.GClass3572<EFT.UI.MenuScreen.GClass3587, EFT.UI.MenuScreen>), "CloseScreen")]
         private static void CloseOverlayWindows(UserInterfaceClass<EFT.UI.Screens.EEftScreenType>.GClass3572<EFT.UI.MenuScreen.GClass3587, EFT.UI.MenuScreen> __instance)
@@ -1078,6 +1076,8 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.VRCam.enabled = true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SettingsScreen), "Close")]
         private static void CloseSettingsInGame(SettingsScreen __instance)
@@ -1093,6 +1093,8 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.VRCam.enabled = true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //[HarmonyPostfix]
         //[HarmonyPatch(typeof(ReconnectionScreen), "method_5")]
         //private static void CloseInGameMenuFromDisconnectWindow(ReconnectionScreen __instance)
@@ -1111,6 +1113,7 @@ namespace TarkovVR.Patches.Misc
         //}
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ModdingScreenSlotView), "Start")]
         private static void ActivateWeaponModdingDropDown(ModdingScreenSlotView __instance)
@@ -1118,6 +1121,8 @@ namespace TarkovVR.Patches.Misc
             __instance._dropDownButton.gameObject.SetActive(true); 
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ModdingScreenSlotView), "method_1")]
         private static bool PreventHidingDropDownMethod1(ModdingScreenSlotView __instance)
@@ -1131,6 +1136,9 @@ namespace TarkovVR.Patches.Misc
             __instance.ginterface453_0.HideModHighlight(overriding: true);
             return false;
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ModdingScreenSlotView), "method_5")]
         private static bool PreventHidingDropDownMethod5(ModdingScreenSlotView __instance, ModdingScreenSlotView slotView)
@@ -1139,6 +1147,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ModdingScreenSlotView), "CheckVisibility")]
         private static bool PreventHidingDropDownCheckVisibility(ModdingScreenSlotView __instance, EModClass visibleClasses)
@@ -1153,6 +1163,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(DropDownMenu), "method_1")]
         private static bool FixWeaponModdingDropDownPosition(DropDownMenu __instance)
@@ -1161,6 +1173,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CharacteristicsPanel), "Show")]
         private static void FixWeapCharactericsPanel(CharacteristicsPanel __instance)
@@ -1170,6 +1184,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CharacteristicsPanel), "Close")]
         private static void FixWeapCharactericsPanelOnClose(CharacteristicsPanel __instance)
@@ -1177,6 +1192,8 @@ namespace TarkovVR.Patches.Misc
                 __instance.transform.localPosition = new Vector3(-950, 381, 0);
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CharacteristicsPanel), "method_3")]
         private static void FixWeapCharactericsPanelOnClick(CharacteristicsPanel __instance, bool expanded)
@@ -1187,6 +1204,8 @@ namespace TarkovVR.Patches.Misc
                 __instance.transform.localPosition = new Vector3(-950, 381, 0);
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ModdingScreenSlotView), "Show")]
         private static void HideModdingLines(ModdingScreenSlotView __instance)
@@ -1194,6 +1213,8 @@ namespace TarkovVR.Patches.Misc
             __instance._boneIcon.gameObject.SetActive(false);
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         //Redid the way WeaponModdingScreen and EditBuildScreen weapon previews work for SPT 3.11 - old way caused camera freeze
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WeaponModdingScreen), "Show", new Type[] { typeof(GClass3632) })]
@@ -1218,6 +1239,8 @@ namespace TarkovVR.Patches.Misc
             __instance._weaponPreview.Rotator.localScale = Vector3.one * 1.5f;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EditBuildScreen), "Show", new Type[] { typeof(EditBuildScreen.GClass3591) })]
         private static void PositionWeaponModdingCamera(EditBuildScreen __instance, EditBuildScreen.GClass3591 controller)
@@ -1241,6 +1264,8 @@ namespace TarkovVR.Patches.Misc
             __instance._weaponPreview.Rotator.localScale = Vector3.one * 1.5f;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1513), "method_0")]
         private static bool SetUiOnExtractOrDeath(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1513 __instance)
@@ -1276,6 +1301,8 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1512), "method_0")]
         private static bool SetUiOnExtractOrDeathOther(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1512 __instance)
@@ -1316,6 +1343,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SessionEndUI), "Awake")]
         private static void SetSessionEndUI(SessionEndUI __instance)
@@ -1333,6 +1361,8 @@ namespace TarkovVR.Patches.Misc
             VRGlobals.menuOpen = true;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ScavengerInventoryScreen), "method_6")]
         private static void ResetRotOnScavInvScreen(ScavengerInventoryScreen __instance)
@@ -1340,6 +1370,8 @@ namespace TarkovVR.Patches.Misc
             HideoutPatches.camRootRot = Vector3.zeroVector;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(RagfairOfferItemView), "Show")]
         private static void ResetOfferImageRotation(RagfairOfferItemView __instance)
@@ -1347,6 +1379,8 @@ namespace TarkovVR.Patches.Misc
             __instance.MainImage.transform.localRotation = Quaternion.Euler(0, 0, __instance.MainImage.transform.localEulerAngles.z);
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Icons get rotated when loading mags and other stuff
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GridItemView), "OnRefreshItem")]
@@ -1356,6 +1390,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ScreenPositionAnchor), "Update")]
         private static bool FixMenuPropsPositioning(ScreenPositionAnchor __instance)
@@ -1406,6 +1441,8 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SettingsScreen), "Show", new Type[] { })]
         private static void SetVRSettings(SettingsScreen __instance)
@@ -1414,6 +1451,9 @@ namespace TarkovVR.Patches.Misc
                 VRSettings.initVrSettings(__instance);
             }
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SettingsScreen), "method_8")]
         private static void CloseVRSettings(SettingsScreen __instance)
@@ -1421,6 +1461,8 @@ namespace TarkovVR.Patches.Misc
             VRSettings.CloseVRSettings();
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SettingsScreen), "method_12")]
         private static void SaveVRSettings(SettingsScreen __instance)
@@ -1450,6 +1492,8 @@ namespace TarkovVR.Patches.Misc
             
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ToggleGroup), "NotifyToggleOn")]
         private static void SaveVRSettings(ToggleGroup __instance, UnityEngine.UI.Toggle toggle, bool sendCallback = true)
@@ -1471,6 +1515,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(RaidSettingsWindow), "Show")]
         private static void SaveVRSettings(RaidSettingsWindow __instance)
@@ -1478,6 +1523,8 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.localPosition = new Vector3(0, 520, 0);
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TasksPanel), "Show")]
         private static void HideDefaultTaskDesc(TasksPanel __instance)
@@ -1485,6 +1532,8 @@ namespace TarkovVR.Patches.Misc
             __instance._notesTaskDescription.active = false;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(OpenBuildWindow), "Show")]
         private static void ShowBuildWindowWeaponSelector(OpenBuildWindow __instance)
@@ -1492,6 +1541,8 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.localPosition = new UnityEngine.Vector3(638, -167, 0);
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EditBuildNameWindow), "Show")]
         private static void ShowBuildWindowSave(EditBuildNameWindow __instance)
@@ -1499,6 +1550,8 @@ namespace TarkovVR.Patches.Misc
             __instance.WindowTransform.localPosition = Vector3.zero;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(OverallScreen), "Show")]
         private static void FixOverallScreenPlayerSize(OverallScreen __instance)
@@ -1507,6 +1560,9 @@ namespace TarkovVR.Patches.Misc
                 __instance.PlayerModelWithStatsWindow._playerModelView.transform.Find("Camera_inventory").GetComponent<Camera>().fieldOfView = 35;
             });
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(AchievementsScreen), "Show")]
         private static void FixAchievementsScreenPlayerSize(AchievementsScreen __instance)
@@ -1515,6 +1571,9 @@ namespace TarkovVR.Patches.Misc
                 __instance.PlayerModelWithStatsWindow._playerModelView.transform.Find("Camera_inventory").GetComponent<Camera>().fieldOfView = 35;
             });
         }
+
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(InsuranceWindow), "Show")]
         private static void FixInsuranceWindowPosition(InsuranceWindow __instance)
@@ -1522,6 +1581,8 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.localPosition = Vector3.zero;
         }
 
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MatchmakerTimeHasCome), "Show", new Type[] { typeof(MatchmakerTimeHasCome.TimeHasComeScreenClass) })]
         private static void PositionMenuAfterTransit(MatchmakerTimeHasCome __instance)
@@ -1531,8 +1592,3 @@ namespace TarkovVR.Patches.Misc
         }      
     }
 }
-
-
-// In game menu CommonUI pos -0.0795 -999.9302 0.4915 rot 0,0,0, same for preloaddergggg
-
-

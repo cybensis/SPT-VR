@@ -424,7 +424,7 @@ public class GunInteractionController : MonoBehaviour
 
     private void UpdateWeaponPosition(bool isLeftHanded)
     {
-        if (!WeaponPatches.grenadeEquipped)
+        if (!EquippablesShared.grenadeEquipped)
         {
             // If the gun is pressed up against something that moves the animator around
             VRGlobals.firearmController.GunBaseTransform.localPosition = Vector3.zero;

@@ -4,30 +4,16 @@ using HarmonyLib;
 using TarkovVR.Patches.UI;
 using UnityEngine;
 using TarkovVR.Patches.Misc;
-using BepInEx.Configuration;
 using Fika.Core;
-using EFT.Communications;
 using Fika.Core.Coop.GameMode;
-using Fika.Core.Coop.Utils;
 using Fika.Core.Networking;
-using static EFT.HealthSystem.ActiveHealthController;
 using static Fika.Core.Coop.Components.CoopHandler;
 using System;
-using Valve.VR.InteractionSystem;
 using Valve.VR;
 using Comfort.Common;
 using TarkovVR.Source.Settings;
 using Fika.Core.UI;
-using TarkovVR.Patches.Core.Player;
-using Fika.Core.Coop.Players;
-using System.Collections.Generic;
-using TMPro;
-using System.Linq;
-using static Fika.Core.Networking.FirearmSubPackets;
-using static Fika.Core.Networking.SubPacket;
-using static UnityEngine.ParticleSystem.PlaybackState;
-using UnityEngine.UIElements;
-using TarkovVR.Patches.Core.VR;
+using TarkovVR.Patches.Core.Equippables;
 
 
 
@@ -150,7 +136,7 @@ namespace TarkovVR.ModSupport.FIKA
                     foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = true;
 
-                if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                if (EquippablesShared.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
                     foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = true;
             }
@@ -170,9 +156,9 @@ namespace TarkovVR.ModSupport.FIKA
                 if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                     foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = true;
-                if (WeaponPatches.currentGunInteractController != null)
+                if (EquippablesShared.currentGunInteractController != null)
                 {
-                    if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                    if (EquippablesShared.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
                         foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                             renderer.enabled = true;
                 }
