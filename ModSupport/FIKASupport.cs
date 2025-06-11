@@ -14,6 +14,7 @@ using Comfort.Common;
 using TarkovVR.Source.Settings;
 using Fika.Core.UI;
 using TarkovVR.Patches.Core.Equippables;
+using static TarkovVR.Patches.UI.UIPatchShared;
 
 
 
@@ -71,7 +72,7 @@ namespace TarkovVR.ModSupport.FIKA
             VRGlobals.inGame = false;
             VRGlobals.menuOpen = true;
 
-            MenuPatches.PositionMainMenuUi();
+            MainMenuUIPatches.PositionMainMenuUi();
             return true;
         }
 

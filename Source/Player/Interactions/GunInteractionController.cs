@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
 using TarkovVR;
+using TarkovVR.Patches.Core.Equippables;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.VRManager;
@@ -424,7 +425,7 @@ public class GunInteractionController : MonoBehaviour
 
     private void UpdateWeaponPosition(bool isLeftHanded)
     {
-        if (!EquippablesShared.grenadeEquipped)
+        if (!GrenadePatches.grenadeEquipped)
         {
             // If the gun is pressed up against something that moves the animator around
             VRGlobals.firearmController.GunBaseTransform.localPosition = Vector3.zero;

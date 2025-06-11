@@ -1,8 +1,10 @@
-﻿using TarkovVR.Patches.Core.Player;
+﻿using TarkovVR.Patches.Core.Equippables;
+using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Settings;
 using UnityEngine;
+using static TarkovVR.Patches.UI.UIPatchShared;
 
 namespace TarkovVR.Source.Player.VRManager
 {

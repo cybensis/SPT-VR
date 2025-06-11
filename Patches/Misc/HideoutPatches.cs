@@ -13,6 +13,7 @@ using UnityEngine;
 using Valve.VR;
 using static EFT.UI.InventoryScreen;
 using static EFT.UI.MenuTaskBar;
+using static TarkovVR.Patches.UI.UIPatchShared;
 
 namespace TarkovVR.Patches.Misc
 {
@@ -248,14 +249,14 @@ namespace TarkovVR.Patches.Misc
                     VRGlobals.vrPlayer.interactionUi.parent = UIPatches.battleScreenUi.ActionPanel.transform;
             }
             VRGlobals.menuVRManager.enabled = true;
-            MenuPatches.PositionMainMenuUi();
+            MainMenuUIPatches.PositionMainMenuUi();
             MenuPatches.FixMainMenuCamera();
             //VRGlobals.ikManager.leftArmIk.solver.target = null;
             //VRGlobals.ikManager.rightArmIk.solver.target = null;
             VRGlobals.menuOpen = false;
             VRGlobals.camRoot.transform.eulerAngles = Vector3.zero;
             Camera.main.farClipPlane = 500f;
-            MenuPatches.PositionMenuEnvironmentProps();
+            MainMenuUIPatches.PositionMenuEnvironmentProps();
         }
 
         private static void PositionMenuUiHideout()

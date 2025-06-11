@@ -4,8 +4,10 @@ using Open.Nat;
 using Sirenix.Serialization;
 using System.Collections.Generic;
 using TarkovVR;
+using TarkovVR.Patches.Core.Equippables;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
+using TarkovVR.Patches.Core.WeaponMods;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
@@ -14,6 +16,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
 using static RootMotion.FinalIK.FBIKChain;
+using static TarkovVR.Patches.UI.UIPatchShared;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -292,7 +295,7 @@ namespace TarkovVR.Source.Player.VRManager
 
             var gun = cachedCurrentGunController as GunInteractionController;
 
-            if (cachedAmmoFireModeUi != null && gun != null && VRGlobals.player?.HandsController != null && !EquippablesShared.grenadeEquipped)
+            if (cachedAmmoFireModeUi != null && gun != null && VRGlobals.player?.HandsController != null && !GrenadePatches.grenadeEquipped)
             {
                 if (isAmmoCount)
                 {
@@ -434,8 +437,8 @@ namespace TarkovVR.Source.Player.VRManager
             radialMenu.transform.localPosition = new Vector3(0.0172f, -0.1143f, -0.03f);
             radialMenu.transform.localEulerAngles = new Vector3(270, 127, 80);
 
-            if (EquippablesShared.currentScope)
-                EquippablesShared.currentScope.parent.localScale = new Vector3(-1, 1, 1);
+            if (OpticPatches.currentScope)
+                OpticPatches.currentScope.parent.localScale = new Vector3(-1, 1, 1);
 
             if (VRGlobals.player)
             {
@@ -490,8 +493,8 @@ namespace TarkovVR.Source.Player.VRManager
             radialMenu.transform.localPosition = new Vector3(-0.0728f, -0.1343f, 0);
             radialMenu.transform.localEulerAngles = new Vector3(290, 252, 80);
 
-            if (EquippablesShared.currentScope)
-                EquippablesShared.currentScope.parent.localScale = new Vector3(1, 1, 1);
+            if (OpticPatches.currentScope)
+                OpticPatches.currentScope.parent.localScale = new Vector3(1, 1, 1);
 
             if (VRGlobals.player)
             {
@@ -733,7 +736,7 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     rawRightHand.transform.position = RightHand.transform.position;
 
-                if ((VRGlobals.firearmController || EquippablesShared.grenadeEquipped || EquippablesShared.rangeFinder) && framesAfterSwitching < 2)
+                if ((VRGlobals.firearmController || GrenadePatches.grenadeEquipped || EquippablesShared.rangeFinder) && framesAfterSwitching < 2)
                 {
                     VRGlobals.weaponHolder.transform.parent.position = rawRightHand.transform.position;
                     VRGlobals.weaponHolder.transform.parent.rotation = rawRightHand.transform.rotation;

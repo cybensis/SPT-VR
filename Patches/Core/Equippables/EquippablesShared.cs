@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using EFT;
+using UnityEngine;
 
 namespace TarkovVR.Patches.Core.Equippables
 {
@@ -9,7 +10,7 @@ namespace TarkovVR.Patches.Core.Equippables
         public static GunInteractionController currentGunInteractController;
         public static Transform previousLeftHandMarker;
         public static Vector3 weaponOffset = Vector3.zero;
-
+        public static PortableRangeFinderController rangeFinder;
 
 
         //------------------------------------------------------   EQUIPPABLES SHARED METHODS  --------------------------------------------------------------------

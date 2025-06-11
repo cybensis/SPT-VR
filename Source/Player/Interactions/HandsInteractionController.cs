@@ -21,6 +21,8 @@ using Fika.Core.Networking;
 using Fika.Core.Networking;
 using Comfort.Common;
 using LiteNetLib;
+using static TarkovVR.Patches.UI.UIPatchShared;
+using TarkovVR.Patches.Core.Equippables;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -664,7 +666,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!secondaryHandGrip.state)
             {
                 isItemInitialized = false;
-                EquippablesShared.DropObject(heldItem, true);
+                PickupAndThrowables.DropObject(heldItem, true);
                 heldItem = null;               
                 cachedRigidbody = null;
                 cachedHand = null;

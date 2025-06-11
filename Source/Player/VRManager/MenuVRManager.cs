@@ -5,6 +5,7 @@ using TarkovVR.Source.Misc;
 using TarkovVR.Source.UI;
 using System.Reflection;
 using TarkovVR.Source.Settings;
+using static TarkovVR.Patches.UI.UIPatchShared;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -52,7 +53,7 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 pointer.enabled = false;
                 pointer.holder.active = false;
-                MenuPatches.vrUiInteracter.enabled = false;
+                UIPatches.vrUiInteracter.enabled = false;
                 SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
                 SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
                 SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
@@ -65,7 +66,7 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 pointer.enabled = true;
                 pointer.holder.active = true;
-                MenuPatches.vrUiInteracter.enabled = true;
+                UIPatches.vrUiInteracter.enabled = true;
                 if (VRSettings.GetLeftHandedMode())
                 {
                     SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
@@ -155,7 +156,7 @@ namespace TarkovVR.Source.Player.VRManager
                 RightHand.AddComponent<SteamVR_Behaviour_Pose>();
                 //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
                 RightHand.transform.parent = VRGlobals.camHolder.transform.parent;
-                MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
+                UIPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
                 pointer = RightHand.AddComponent<LaserPointer>();
                 pointer.color = Color.cyan;
 

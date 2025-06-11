@@ -1,12 +1,14 @@
 ﻿using EFT;
 using EFT.Hideout;
 using EFT.UI;
+using TarkovVR.Patches.Core.Equippables;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using static TarkovVR.Patches.UI.UIPatchShared;
 
 namespace TarkovVR.Source.Player.VRManager
 {

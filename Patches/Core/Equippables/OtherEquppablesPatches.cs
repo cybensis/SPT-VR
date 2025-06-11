@@ -15,8 +15,6 @@ namespace TarkovVR.Patches.Core.Equippables
     [HarmonyPatch]
     internal class OtherEquppablesPatches
     {
-        public static PortableRangeFinderController rangeFinder;
-
 
         //------------------------------------------------------- EMPTY HANDS PATCHES-------------------------------------------------------------------------------
         //-----------------------------------------------------------------------------------------------------------------
@@ -82,7 +80,7 @@ namespace TarkovVR.Patches.Core.Equippables
             if (!__instance._player.IsYourPlayer || !(__instance as PortableRangeFinderController))
                 return;
             PortableRangeFinderController instance = (PortableRangeFinderController)__instance;
-            rangeFinder = instance;
+            EquippablesShared.rangeFinder = instance;
             instance.tacticalRangeFinderController_0._boneToCastRay.parent.Find("linza").gameObject.SetActive(false);
             VRGlobals.emptyHands = instance.ControllerGameObject.transform;
             if (VRSettings.GetLeftHandedMode())
@@ -146,7 +144,7 @@ namespace TarkovVR.Patches.Core.Equippables
                 VRGlobals.oldWeaponHolder = null;
                 VRGlobals.emptyHands = null;
             }
-            rangeFinder = null;
+            EquippablesShared.rangeFinder = null;
         }
 
 

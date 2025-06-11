@@ -98,7 +98,7 @@ namespace TarkovVR.Patches.Core.WeaponMods
             if (!visualController)
                 visualController = opticSight.transform.parent.GetComponent<SightModVisualControllers>();
 
-            if (OtherEquppablesPatches.rangeFinder)
+            if (EquippablesShared.rangeFinder)
             {
                 fov = 3.2f;
                 opticSight.transform.Find("linza").gameObject.SetActive(true);

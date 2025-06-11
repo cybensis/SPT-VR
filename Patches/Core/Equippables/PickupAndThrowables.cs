@@ -161,4 +161,3 @@ namespace TarkovVR.Patches.Core.Equippables
 
     }
 }
-}

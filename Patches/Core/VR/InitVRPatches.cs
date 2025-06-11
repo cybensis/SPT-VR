@@ -15,6 +15,7 @@ using UnityEngine;
 using Valve.VR;
 using static TarkovVR.Source.Controls.InputHandlers;
 using UnityEngine.Rendering.PostProcessing;
+using static TarkovVR.Patches.UI.UIPatchShared;
 
 
 namespace TarkovVR.Patches.Core.VR
@@ -47,7 +48,7 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
                     VRGlobals.camRoot = new GameObject("camRoot");
                     if (UIPatches.gameUi)
-                        UIPatches.PositionGameUi(UIPatches.gameUi);
+                        HUDPatches.PositionGameUi(UIPatches.gameUi);
 
                     VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
                     //Camera.main.transform.parent = vrOffsetter.transform;
