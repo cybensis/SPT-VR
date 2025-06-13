@@ -157,6 +157,53 @@ namespace TarkovVR.Patches.Core.VR
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Don't know why I chose this method for setting the main cam but it works so whatever
+        
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BloodOnScreen), "Start")]
+        private static void SetMainCamParent(BloodOnScreen __instance)
+        {
+            Camera mainCam = __instance.GetComponent<Camera>();
+            if (mainCam.name == "FPS Camera")
+            {
+                VRGlobals.VRCam = mainCam;
+                GameObject uiCamHolder = new GameObject("uiCam");
+                uiCamHolder.transform.parent = __instance.transform;
+                uiCamHolder.transform.localRotation = Quaternion.identity;
+                uiCamHolder.transform.localPosition = Vector3.zero;
+                Camera uiCam = uiCamHolder.AddComponent<Camera>();
+                uiCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
+                uiCam.depth = 1;
+                uiCam.cullingMask = 32;
+                uiCam.clearFlags = CameraClearFlags.Depth;
+                mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
+                mainCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
+                mainCam.farClipPlane = 5000f;
+                mainCam.stereoTargetEye = StereoTargetEyeMask.Both;
+                mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
+                mainCam.useOcclusionCulling = false;
+                //mainCam.useOcclusionCulling = true;
+                mainCam.layerCullSpherical = true;
+                float[] distances = new float[32];
+                for (int i = 0; i < distances.Length; i++)
+                {
+                    distances[i] = 1000f; // Adjust as needed
+                }
+                mainCam.layerCullDistances = distances;
+                if (VRGlobals.vrPlayer)
+                {
+                    if (VRGlobals.vrPlayer.radialMenu)
+                        VRGlobals.vrPlayer.radialMenu.active = false;
+                    if (VRGlobals.vrPlayer is RaidVRPlayerManager)
+                    {
+                        VRGlobals.menuVRManager.OnDisable();
+                    }
+                }
+                //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
+                //cameraManager.initPos = VRCam.transform.localPosition;
+            }
+        }
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
         public static GrenadeFingerPositioner rightPointerFinger;
@@ -276,66 +323,7 @@ namespace TarkovVR.Patches.Core.VR
 
 
         }
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(PostProcessLayer), "SetupContext")]
-        private static void ForcePPStereo(PostProcessLayer __instance, PostProcessRenderContext context)
-        {
-            if (context != null)
-            {
-                context.stereoActive = true;
-                context.numberOfEyes = 2;
-                context.stereoRenderingMode = PostProcessRenderContext.StereoRenderingMode.SinglePassInstanced;
-            }
-        }
-
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Don't know why I chose this method for setting the main cam but it works so whatever
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(BloodOnScreen), "Start")]
-        private static void SetMainCamParent(BloodOnScreen __instance)
-        {
-            Camera mainCam = __instance.GetComponent<Camera>();
-            if (mainCam.name == "FPS Camera")
-            {
-                VRGlobals.VRCam = mainCam;
-                GameObject uiCamHolder = new GameObject("uiCam");
-                uiCamHolder.transform.parent = __instance.transform;
-                uiCamHolder.transform.localRotation = Quaternion.identity;
-                uiCamHolder.transform.localPosition = Vector3.zero;
-                Camera uiCam = uiCamHolder.AddComponent<Camera>();
-                uiCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
-                uiCam.depth = 1;
-                uiCam.cullingMask = 32;
-                uiCam.clearFlags = CameraClearFlags.Depth;
-                mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
-                //mainCam.cullingMask = -1;
-                mainCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
-                mainCam.farClipPlane = 5000f;
-                mainCam.stereoTargetEye = StereoTargetEyeMask.Both;
-                mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
-                mainCam.useOcclusionCulling = false;
-                //mainCam.useOcclusionCulling = true;
-                mainCam.layerCullSpherical = true;
-                float[] distances = new float[32];
-                for (int i = 0; i < distances.Length; i++)
-                {
-                    distances[i] = 1000f; // Adjust as needed
-                }
-                mainCam.layerCullDistances = distances;
-                if (VRGlobals.vrPlayer)
-                {
-                    if (VRGlobals.vrPlayer.radialMenu)
-                        VRGlobals.vrPlayer.radialMenu.active = false;
-                    if (VRGlobals.vrPlayer is RaidVRPlayerManager)
-                    {
-                        VRGlobals.menuVRManager.OnDisable();
-                    }
-                }
-                //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
-                //cameraManager.initPos = VRCam.transform.localPosition;
-            }
-        }
-
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerSpring), "Start")]
         private static void SetRigAndSidearmHolsters(PlayerSpring __instance)

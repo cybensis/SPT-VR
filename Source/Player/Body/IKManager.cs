@@ -1,5 +1,6 @@
 ﻿using EFT;
 using RootMotion.FinalIK;
+using System.Threading;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -12,20 +13,22 @@ namespace TarkovVR.Source.Player.VR
 
         private bool matchingHeadToBody = false;
         private Vector3 upperArmPos = new Vector3(-0.1f, 0.1f, 0);
-        private float forwardThreshold = 0.40f;    // Distance forward before body follows
-        private float backwardThreshold = 0.10f; // Distance backward before body follows
-        private float sideThreshold = 0.50f;      // Distance to sides before body follows
-        private float emergencyThreshold = 0.8f;  // Distance for emergency repositioning
-        private float followSpeed = 2.5f;         // How quickly body follows head
-        private float movementMultiplier = 0.8f;  // Additional follow speed when moving
-        private AnimationCurve followCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); // Smoothing curve
-        private float headLeadDistance = 0.2f;    // How far ahead the head stays from body
-        private float minHeadLeadDistance = 0.1f; // Minimum lead distance even when stationary
+        private readonly float forwardThreshold = 0.50f;    // Distance forward before body follows
+        private readonly float backwardThreshold = 0.15f; // Distance backward before body follows
+        private readonly float sideThreshold = 0.50f;      // Distance to sides before body follows
+        private readonly float emergencyThreshold = 0.6f;  // Distance for emergency repositioning
+        private readonly float followSpeed = 2.5f;         // How quickly body follows head
+        private readonly float movementMultiplier = 0.8f;  // Additional follow speed when moving
+        private readonly AnimationCurve followCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); // Smoothing curve
+        private readonly float headLeadDistance = 0.2f;    // How far ahead the head stays from body
+        private readonly float minHeadLeadDistance = 0.15f; // Minimum lead distance even when stationary
+        private readonly float idleOffsetZ = 0.20f; // The actual idle z offset since the legs move back a bit when idle
 
         private Vector3 velocitySmoothing = Vector3.zero;
-        private float smoothTime = 0.1f;
+        private Vector3 smoothedTargetPos;
+        private readonly float smoothTime = 0.1f;
         private Vector3 lastHeadPosition;
-        private float stopSmoothingTime = 1.0f; // Time to smoothly transition when stopping
+        private readonly float stopSmoothingTime = 1.0f; // Time to smoothly transition when stopping
         private float stopTimer = 0f; // Timer to track stopping transition
         private bool wasMoving = false; // Track if we were moving last frame
 
@@ -81,7 +84,7 @@ namespace TarkovVR.Source.Player.VR
             // Get current positions
             //Vector3 headPos = Camera.main.transform.position;
             Vector3 headPos = VRGlobals.VRCam.transform.position;
-            Vector3 bodyPos = transform.root.position;
+
             //Quaternion headRot = Camera.main.transform.rotation;
             Quaternion headRot = VRGlobals.VRCam.transform.rotation;
 
@@ -97,15 +100,14 @@ namespace TarkovVR.Source.Player.VR
             float angleDiff = Vector3.SignedAngle(bodyForward, headForward, Vector3.up);
 
             // Extract leaning values
-            float forwardLean = localHeadOffset.z;
+            //float forwardLean = localHeadOffset.z;
+            float forwardLean = localHeadOffset.z - idleOffsetZ;
             float sideLean = localHeadOffset.x;
             float totalLeanDistance = new Vector2(forwardLean, sideLean).magnitude;
 
             // Check if moving - only using joystick movement now
             bool isUsingMovementControls = IsUsingMovementControls();
-            bool isPhysicallyMoving = IsPhysicallyMoving(headPosFlat, lastHeadPosition); // Keep for debugging
-            bool isMoving = isUsingMovementControls; // Only consider joystick movement
-
+           
             // Calculate adaptive thresholds
             float adaptiveForwardThreshold = isUsingMovementControls ? forwardThreshold * 0.7f : forwardThreshold;
             float adaptiveBackwardThreshold = isUsingMovementControls ? backwardThreshold * 0.7f : backwardThreshold;
@@ -115,12 +117,17 @@ namespace TarkovVR.Source.Player.VR
             bool backwardLeanTriggered = forwardLean < -adaptiveBackwardThreshold;
             bool sideLeanTriggered = Mathf.Abs(sideLean) > adaptiveSideThreshold;
 
-            bool shouldStartFollowing = forwardLeanTriggered || backwardLeanTriggered || sideLeanTriggered || isUsingMovementControls;
+            //Check movement type            
+            bool isMoving = isUsingMovementControls;
+            bool isLeaning = !isMoving && (forwardLeanTriggered || backwardLeanTriggered || sideLeanTriggered);
+
+            //Check if we should start following the head
+            bool shouldStartFollowing = isMoving || forwardLeanTriggered || backwardLeanTriggered || sideLeanTriggered;
 
             // Check if still in the process of returning to neutral
             bool shouldContinueFollowing = matchingHeadToBody &&
                 (Mathf.Abs(angleDiff) > 10f);
-
+            //Plugin.MyLog.LogError($"isLeaning: {isLeaning} - forwardLeanTiggered: {forwardLeanTriggered} - backwardLeanTriggered: {backwardLeanTriggered} - FowardLean: {forwardLean}");
             // Handle movement state transitions
             if (isMoving)
             {
@@ -149,36 +156,39 @@ namespace TarkovVR.Source.Player.VR
             // Apply body movement
             if (shouldStartFollowing || shouldContinueFollowing)
             {
-                
-                if (totalLeanDistance > emergencyThreshold)
+
+                if (totalLeanDistance > emergencyThreshold + 0.2f)
                 {
                     // Emergency snap when leaned too far
                     EmergencySnapToHead(headPosFlat);
                 }
                 else
                 {
-                
-                // Gradual movement with smoothing
-                float currentSpeed = followSpeed;
 
-                // Increase follow speed when using movement controls
-                if (isUsingMovementControls)
-                {
-                    currentSpeed *= movementMultiplier;
-                }
+                    // Gradual movement with smoothing
+                    float currentSpeed = followSpeed;
 
-                // If we're in the stopping transition, gradually reduce movement speed
-                if (!isMoving && wasMoving)
-                {
-                    float stopProgress = stopTimer / stopSmoothingTime;
-                    currentSpeed *= (1.0f - stopProgress * 0.7f); // Don't completely reduce to zero
-                }
+                    // Increase follow speed when using movement controls
+                    if (isUsingMovementControls)
+                    {
+                        currentSpeed *= movementMultiplier;
+                    }
 
-                // Calculate how aggressively to follow based on how far the lean is
-                float followIntensity = Mathf.Clamp01(totalLeanDistance / emergencyThreshold * 2);
-                followIntensity = followCurve.Evaluate(followIntensity);
+                    // If we're in the stopping transition, gradually reduce movement speed
+                    if (!isMoving && wasMoving)
+                    {
+                        float stopProgress = stopTimer / stopSmoothingTime;
+                        currentSpeed *= (1.0f - stopProgress * 0.7f); // Don't completely reduce to zero
+                    }
 
-                SmartFollowHead(headPosFlat, headRot, currentSpeed, followIntensity, isMoving);
+                    // Calculate how aggressively to follow based on how far the lean is
+                    float forwardIntensity = Mathf.Clamp01(Mathf.Abs(forwardLean) / emergencyThreshold * 2f);
+                    float sideIntensity = Mathf.Clamp01(Mathf.Abs(sideLean) / emergencyThreshold * 2f);
+
+                    float followIntensity = followCurve.Evaluate(Mathf.Max(forwardIntensity, sideIntensity));
+                    //followIntensity = followCurve.Evaluate(followIntensity);
+
+                    SmartFollowHead(headPosFlat, headRot, currentSpeed, followIntensity, isMoving, isLeaning);
                 }
             }
             else
@@ -199,33 +209,22 @@ namespace TarkovVR.Source.Player.VR
         {
             float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
             float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
-            float threshold = VRSettings.GetLeftStickSensitivity();
-            return (xAxis > threshold || yAxis > threshold);
-        }
-
-        private bool IsPhysicallyMoving(Vector3 currentHeadPos, Vector3 lastHeadPos)
-        {
-            // This function is now only used for debugging purposes
-            // It is no longer used to determine if the body should follow the head
-            if (lastHeadPos == Vector3.zero) return false;
-
-            // Check if head has moved significantly since last frame
-            float moveDelta = Vector3.Distance(currentHeadPos, lastHeadPos);
-            return moveDelta > (Time.deltaTime * 0.3f); // Adjust threshold as needed
+            return (xAxis > 0 || yAxis > 0);
         }
 
         private void EmergencySnapToHead(Vector3 headPosFlat)
         {
-            //VRGlobals.vrPlayer.initPos = Camera.main.transform.localPosition;
-            VRGlobals.vrPlayer.initPos = VRGlobals.VRCam.transform.localPosition;
+            Vector3 localPos = VRGlobals.VRCam.transform.localPosition;
+            localPos.y = VRGlobals.vrPlayer.initPos.y; // Keep previous height
+            VRGlobals.vrPlayer.initPos = localPos;
             VRGlobals.camRoot.transform.position = transform.root.position;
             matchingHeadToBody = false; // Reset state after emergency snap
         }
-
-        private void SmartFollowHead(Vector3 headPosFlat, Quaternion headRot, float speed, float intensity, bool isActivelyMoving)
+        
+        private void SmartFollowHead(Vector3 headPosFlat, Quaternion headRot, float speed, float intensity, bool isActivelyMoving, bool isLeaning)
         {
 
-            if (transform == null || transform.root == null || VRGlobals.vrPlayer == null || VRGlobals.vrOffsetter?.transform?.parent == null || VRGlobals.firearmController == null)
+            if (transform == null || transform.root == null || VRGlobals.vrPlayer == null || VRGlobals.vrOffsetter == null || VRGlobals.vrOffsetter.transform == null || VRGlobals.vrOffsetter.transform.parent == null || VRGlobals.firearmController == null)
                 return;
 
             matchingHeadToBody = true;
@@ -234,57 +233,71 @@ namespace TarkovVR.Source.Player.VR
             Vector3 headVelocity = (headPosFlat - lastHeadPosition) / Time.deltaTime;
             float headSpeed = headVelocity.magnitude;
 
-            // Get local head velocity relative to body orientation
-            Vector3 localHeadVelocity = transform.root.InverseTransformDirection(headVelocity);
-
             // Create target position
             Vector3 targetPos;
 
             if (isActivelyMoving)
             {
-                
-                // Only apply lag when moving in forward direction
-                bool hasForwardComponent = localHeadVelocity.z > 0.1f;
 
-                //IsAiming check can be removed here but it helps keep aim stabilized when moving. It becomes more unstable the higher the lead distance is.
-                if (headSpeed > 0.1f && hasForwardComponent && !VRGlobals.firearmController.IsAiming) 
-                {
-                    // Calculate dynamic lead distance based on head movement speed
-                    float dynamicLeadDistance = Mathf.Lerp(
-                        minHeadLeadDistance,  // Minimum distance when slow
-                        headLeadDistance,     // Maximum distance at full speed
-                        Mathf.Clamp01(headSpeed / 2.0f)  // Normalized speed factor
-                    );
+                float dynamicLeadDistance = Mathf.Lerp(
+                    minHeadLeadDistance,
+                    headLeadDistance,
+                    Mathf.Clamp01(headSpeed / 2.0f)
+                );
 
-                    // Use actual movement direction for lead calculation
-                    targetPos = headPosFlat - (headVelocity.normalized * dynamicLeadDistance);
-                }
-                else
-                {
-                    float dynamicLeadDistance = Mathf.Lerp(
-                        minHeadLeadDistance,  // Minimum distance when slow
-                        headLeadDistance,     // Maximum distance at full speed
-                        Mathf.Clamp01(headSpeed / 2.0f)  // Normalized speed factor
-                    );
-                    // When moving backward, sideways, or not moving significantly,
-                    // target exact head position
-                    targetPos = headPosFlat + (headVelocity.normalized * dynamicLeadDistance) * 0.2f;
-                }
+                // Always move the legs backward relative to where the head is looking,
+                // not in the direction of movement
+                Vector3 headForward = FlattenVector(headRot * Vector3.forward).normalized;
+                targetPos = headPosFlat - (headForward * dynamicLeadDistance);
             }
             else
             {
+                if (isLeaning)
+                {
+                    Vector3 toHead = headPosFlat - transform.root.position;
+                    Vector3 localOffset = transform.root.InverseTransformVector(toHead);
 
-                // When stopping movement, position the body slightly behind the head
-                // for a more natural standing pose
-                float behindDistance = 0.25f; // Distance behind the head (in meters)
-                Vector3 headForward = FlattenVector(headRot * Vector3.forward).normalized;
-                targetPos = headPosFlat - (headForward * behindDistance);
+                    float adjustedLocalZ = localOffset.z - idleOffsetZ;
+
+                    //float forwardOver = Mathf.Max(0f, localOffset.z - forwardThreshold);
+                    //float backwardOver = Mathf.Max(0f, -localOffset.z - backwardThreshold);
+                    float forwardOver = Mathf.Max(0f, adjustedLocalZ - forwardThreshold);
+                    float backwardOver = Mathf.Max(0f, -adjustedLocalZ - backwardThreshold - 0.1f);
+                    float sideOver = Mathf.Max(0f, Mathf.Abs(localOffset.x) - sideThreshold);
+
+                    
+                    float offsetZ = localOffset.z > 0 ? forwardOver : -backwardOver;
+                    float offsetX = Mathf.Sign(localOffset.x) * sideOver;
+
+                    Vector3 clampedLocalOffset = new Vector3(offsetX, 0f, offsetZ);
+                    Vector3 clampedWorldOffset = transform.root.TransformVector(clampedLocalOffset);
+
+                    float normalizedLeanDistance = Mathf.Clamp01(clampedLocalOffset.magnitude / 0.4f);
+                    float dynamicIntensity = Mathf.Lerp(0.2f, 1f, normalizedLeanDistance);
+
+                    Vector3 desiredPos = transform.root.position + clampedWorldOffset * dynamicIntensity;
+
+                    //float leanLerpSpeed = Mathf.Lerp(10f, 20f, normalizedLeanDistance); // tune these values
+                    //targetPos = Vector3.Lerp(transform.root.position, desiredPos, Time.deltaTime * leanLerpSpeed);
+                    targetPos = desiredPos;
+                }
+                else if (!isActivelyMoving && wasMoving)
+                {
+                    //When you stop moving with joystick legs will position themselves a bit behind the head
+                    float behindDistance = 0.30f;
+                    Vector3 headForward = FlattenVector(headRot * Vector3.forward).normalized;
+                    targetPos = headPosFlat - (headForward * behindDistance);
+                }
+                else
+                {
+                    // Do nothing special — hold still
+                    targetPos = transform.root.position;
+                }
             }
 
             // Maintain body Y position
             targetPos.y = transform.root.position.y;
-
-            // Calculate smooth movement - use SmoothDamp for more natural motion
+            
             Vector3 newPosition = Vector3.SmoothDamp(
                 transform.root.position,
                 targetPos,
@@ -292,7 +305,7 @@ namespace TarkovVR.Source.Player.VR
                 isActivelyMoving ? smoothTime : smoothTime * 2.0f, // Use longer smoothing time when stopping
                 speed * intensity
             );
-
+            
             // Calculate movement delta
             Vector3 movementDelta = newPosition - transform.root.position;
 

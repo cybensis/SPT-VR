@@ -85,6 +85,8 @@ namespace TarkovVR.Source.Player.VRManager
         private Transform cachedAmmoFireModeUi;
         private bool lastInteractMenuOpen = false;
 
+        private Vector3 lastHeadPosition;
+
 
         public void SetAmmoFireModeUi(Transform uiObject, bool isAmmoCount)
         {
@@ -140,6 +142,8 @@ namespace TarkovVR.Source.Player.VRManager
         {
             SpawnHands();
             VRGlobals.VRCam = Camera.main;
+            if (VRGlobals.VRCam != null)
+                lastHeadPosition = VRGlobals.VRCam.transform.position;
             x.x = 0.075f;
             if (RightHand)
             {
@@ -200,11 +204,11 @@ namespace TarkovVR.Source.Player.VRManager
 
             SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.Any);
             SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.Any);
+            
             if (VRSettings.GetLeftHandedMode())
                 LeftHandedMode();
             else
-                RightHandedMode();
-
+                RightHandedMode();           
         }
 
         public abstract void PositionLeftWristUi();
@@ -227,11 +231,12 @@ namespace TarkovVR.Source.Player.VRManager
         }
         public void OnEnable()
         {
+            
             if (VRSettings.GetLeftHandedMode())
                 LeftHandedMode();
             else
                 RightHandedMode();
-
+            
         }
 
 
@@ -478,6 +483,7 @@ namespace TarkovVR.Source.Player.VRManager
             SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
             SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
             SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+
             if (VRGlobals.emptyHands)
                 VRGlobals.emptyHands.transform.localScale = new Vector3(1, 1, 1);
             if (VRGlobals.ikManager && VRGlobals.ikManager.leftArmIk)
@@ -543,6 +549,7 @@ namespace TarkovVR.Source.Player.VRManager
         {
             if (!RightHand)
                 return;
+
             if (VRGlobals.emptyHands != null)
                 initialCombinedRotation = VRGlobals.emptyHands.rotation;
             SteamVR_Action_Boolean primaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.LeftGrip : SteamVR_Actions._default.RightGrip;
@@ -662,7 +669,6 @@ namespace TarkovVR.Source.Player.VRManager
                 else
                     rawRightHand.transform.position = RightHand.transform.position;
 
-
                 // The first 2 frames after swapping to or from two handed mode are slow to update for some reason so the gun will appear at a very weird angle
                 // just for a moment, so just manually set the weaponholder pos and rotation here.
                 if (framesAfterSwitching < 2)
@@ -740,7 +746,6 @@ namespace TarkovVR.Source.Player.VRManager
                     framesAfterSwitching++;
                 }
             }
-
         }
 
         private void UpdateLeftHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)

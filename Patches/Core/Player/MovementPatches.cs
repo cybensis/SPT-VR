@@ -113,76 +113,63 @@ namespace TarkovVR.Patches.Core.Player
 
             return difference;
         }
+
         private static void GetBodyRotation(Vector3 bodyForward, ref Vector2 deltaRotation) {
             float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
             float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
+            float rightYAxis = Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y);
             bool leftJoystickUsed = xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity();
+            bool rightJoystickUsed = rightYAxis > 0;
 
             float dotProduct = Vector3.Dot(Camera.main.transform.up, Vector3.up);
             float headY = (dotProduct < 0) ? (Camera.main.transform.eulerAngles.y - 180) : Camera.main.transform.eulerAngles.y;
+
+            // Get head pitch
+            float headPitch = VRGlobals.VRCam.transform.eulerAngles.x;
+            float pitchThreshold = 50f;
+
+            // Normalize pitch to -180 to 180 range
+            if (headPitch > 180) headPitch -= 360;
+            
             float rotDiff = CalculateYawDifference(headY, VRGlobals.player.Transform.rotation.eulerAngles.y) * -1;
-            //Vector3 headEulerAngles = Camera.main.transform.localEulerAngles;
-            //// Normalize the angle to the range [-180, 180]
-            //float pitch = headEulerAngles.x;
-            //if (pitch > 180)
-            //    pitch -= 360;
 
             if (leftJoystickUsed)
             {
                 if (VRSettings.GetMovementMode() == VRSettings.MovementMode.HeadBased)
+                {
                     lastYRot = headY;
+                }
+                else if (VRSettings.GetMovementMode() == VRSettings.MovementMode.JoyStickOnly)
+                {
+                    // If the right joystick is used, or the head is rotated more than 80 degrees, or you are aiming down sight, set the legs to rotate based on head Y axis
+                    if (rightJoystickUsed || Mathf.Abs(rotDiff) > 80 || (VRGlobals.firearmController != null && VRGlobals.firearmController.IsAiming))
+                        lastYRot = headY;
+                }
                 else
                     lastYRot = VRGlobals.vrPlayer.leftHandYRotation + VRGlobals.vrOffsetter.transform.eulerAngles.y;
 
             }
             else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.highlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.20f && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y))
                 lastYRot = headY;
-            
-            else
-            {
-                lastYRot = Mathf.LerpAngle(lastYRot, headY, Time.deltaTime * 10f); // Smooth follow
-            }
-            
-            // Rotate the player body to match the camera if the player isn't looking down, if the rotation from the body is greater than 75 degrees, and if they haven't already rotated recently, and they've stopped rotating around
-            /*
-            else if (Mathf.Abs(rotDiff) > 25 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15)
-            {
+            // If head is not looking down lerp the rotation of the legs based on head direction
+            else if (headPitch < pitchThreshold || (VRGlobals.firearmController != null && VRGlobals.firearmController.IsAiming))
                 lastYRot = headY;
-                timeSinceLastLookRot = 0;
-            }
-            */
-            /*
-            // Trigger smooth body alignment if looking past threshold
-            if (!isRotatingToHead && Mathf.Abs(rotDiff) > 75 && timeSinceLastLookRot > 0.25f && Camera.main.velocity.magnitude < 0.15f)
-            {
-                isRotatingToHead = true;
-                rotationStartY = lastYRot;
-                rotationTargetY = headY;
-                rotationProgress = 0f;
-                timeSinceLastLookRot = 0;
-            }
-            */
-            timeSinceLastLookRot += Time.deltaTime;
-            //Plugin.MyLog.LogWarning(SteamVR_Actions._default.RightJoystick.axis + "  |  " + lastYRot + "   |   " + new Vector2(deltaRotation.x + lastYRot, 0) + "  |  " + VRGlobals.player.Transform.localRotation.eulerAngles);
-            
-            deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
+            // If head is looking down lerp the rotation of the legs smoother (2f) only when you turn your head more than 60 degrees
+            else if (Mathf.Abs(rotDiff) > 60)
+                lastYRot = Mathf.LerpAngle(lastYRot, headY, Time.deltaTime * 2f);           
+
+            // Scale and clamp to -90 to 90 range (less jarring/buggy than 180)
+            headPitch = Mathf.Clamp(headPitch / 2, -90, 90);
+            deltaRotation = new Vector2(deltaRotation.x + lastYRot, headPitch);
+
             leftJoystickLastUsed = leftJoystickUsed;
+
             if (yAxis > xAxis)
                 VRGlobals.player.MovementContext._relativeSpeed = yAxis;
             else
                 VRGlobals.player.MovementContext._relativeSpeed = xAxis;
-            VRGlobals.player.MovementContext.SetCharacterMovementSpeed(VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed);
-            /*
-            // Smoothly interpolate body rotation after threshold
-            if (isRotatingToHead)
-            {
-                rotationProgress += Time.deltaTime / 0.25f; // 0.25 seconds to complete turn (adjust to taste)
-                lastYRot = Mathf.LerpAngle(rotationStartY, rotationTargetY, rotationProgress);
 
-                if (rotationProgress >= 1f)
-                    isRotatingToHead = false;
-            }
-            */
+            VRGlobals.player.MovementContext.SetCharacterMovementSpeed(VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed);
         }
 
 

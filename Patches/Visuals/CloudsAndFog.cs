@@ -23,17 +23,6 @@ namespace TarkovVR.Patches.Visuals
         private static Material lowMaterial;
         private static Material highMaterial;
 
-        // Timing controls for expensive operations only
-        private static float lastExpensiveUpdateTime = 0f;
-        private static readonly float EXPENSIVE_UPDATE_INTERVAL = 0.1f; // Only for heavy calculations
-
-        // Cache for last values to avoid unnecessary updates
-        private static float lastFogDistance = -1f;
-        private static Color lastFogColor = Color.clear;
-        private static float lastCloudDensity = -1f;
-        private static Color lastCloudColor = Color.clear;
-        private static Vector2 lastWindVector = Vector2.zero;
-
         // Wind system state
         public static float lastWind = 0.0f;
         public static Vector2 cloudOffset = Vector2.zero;
@@ -60,6 +49,14 @@ namespace TarkovVR.Patches.Visuals
         private static void FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
         {
             __instance.enabled = false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(CloudController), "UpdateAmbient")]
+        private static bool FixAmbientErrors(CloudController __instance)
+        {
+            __instance.enabled = false;
+            return false;
         }
 
         [HarmonyPostfix]
@@ -190,6 +187,8 @@ namespace TarkovVR.Patches.Visuals
 
             if (lowCloud != null)
             {
+                lowCloud.gameObject.layer = 28;
+
                 lowRenderer = lowCloud.GetComponent<Renderer>();
                 if (lowRenderer != null)
                 {
@@ -200,6 +199,8 @@ namespace TarkovVR.Patches.Visuals
 
             if (highCloud != null)
             {
+                highCloud.gameObject.layer = 28;
+
                 highRenderer = highCloud.GetComponent<Renderer>();
                 if (highRenderer != null)
                 {

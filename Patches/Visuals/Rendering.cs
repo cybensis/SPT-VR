@@ -8,6 +8,8 @@ using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.Rendering;
 using UnityEngine;
 using System.IO;
+using UnityEngine.XR;
+using EFT.Visual;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -47,6 +49,37 @@ namespace TarkovVR.Patches.Visuals
         // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
         // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
         // POST FX - Turning it off gains about 8-10 FPS
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // These two functions would return the screen resolution setting and would result in the game
+        // being very blurry
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "GetOutputHeight")]
+        private static bool ReturnVROutputHeight(SSAAImpl __instance, ref int __result)
+        {
+            __result = __instance.GetInputHeight();
+            return false;
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "GetOutputWidth")]
+        private static bool ReturnVROutputWidth(SSAAImpl __instance, ref int __result)
+        {
+            __result = __instance.GetInputWidth();
+            return false;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SSAA), "Awake")]
+        private static void DisableSSAA(SSAA __instance)
+        {
+
+            __instance.FlippedV = true;
+
+        }               
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
@@ -378,6 +411,8 @@ namespace TarkovVR.Patches.Visuals
             }
         }
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+
         private static void LoadFXAAShader()
         {
             if (_fxaaMat != null) return;
@@ -431,6 +466,313 @@ namespace TarkovVR.Patches.Visuals
             }
             Graphics.Blit(source, destination, _fxaaMat);
             return false;
+        }
+
+        //Attempting to fix DLSS by forcing DLAA. not quite there yet but I think its getting somewhere... Using custom jitter because post processing is disabled for VR
+        //Maybe ill try getting PostProcessing working again...
+        //-matsix
+        /*
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
+        private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
+        {
+            __instance.Switch(1.0f); // DLAA mode
+
+            __instance.EnableDLSS = true;
+
+            if (__instance.TryRenderDLSS(source, destination, externalCommandBuffer))
+            {
+                //Plugin.MyLog.LogInfo("DLAA via native TryRenderDLSS successful.");
+                return false;
+            }
+
+            Plugin.MyLog.LogWarning("DLSS DLAA failed — falling back to FXAA.");
+
+            // === FXAA Fallback ===
+            LoadFXAAShader();
+            if (_fxaaMat != null)
+            {
+                int width = destination != null ? destination.width : Screen.width;
+                int height = destination != null ? destination.height : Screen.height;
+
+                if (VRGlobals.VRCam != null)
+                {
+                    width = VRGlobals.VRCam.pixelWidth;
+                    height = VRGlobals.VRCam.pixelHeight;
+                }
+
+                Graphics.Blit(source, destination, _fxaaMat);
+                Plugin.MyLog.LogWarning("DLSS unavailable — fallback to FXAA.");
+            }
+            else
+            {
+                Graphics.Blit(source, destination); // pass-through
+                Plugin.MyLog.LogError("FXAA material missing. Pass-through blit.");
+            }
+
+            return false; // skip original method
+        }
+        */
+
+        /*
+        private static readonly Vector2[] ImprovedJitterSequence = new Vector2[]
+{
+            new Vector2(0.125f, -0.375f),
+            new Vector2(-0.375f, 0.125f),
+            new Vector2(0.375f, 0.125f),
+            new Vector2(-0.125f, -0.375f),
+            new Vector2(-0.125f, 0.375f),
+            new Vector2(0.375f, -0.125f),
+            new Vector2(-0.375f, -0.125f),
+            new Vector2(0.125f, 0.375f)
+        };
+        private static int _jitterIndex = 0;
+        
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "TryRenderDLSS", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(CommandBuffer) })]
+        private static bool FixDLAAOnlyRender(SSAAImpl __instance, RenderTexture source, RenderTexture destination, CommandBuffer externalCommandBuffer)
+        {
+            //Camera fpsCamera = GameObject.Find("FPS Camera")?.GetComponent<Camera>();
+
+            if (!VRGlobals.VRCam)
+            {
+                return false;
+            }
+
+            // DLSS Wrapper initialization
+            if (__instance._dlssWrapper == null)
+            {
+                if (!(__instance._ssaaPropagator != null) ||
+                    !(__instance._ssaaPropagator.CopyDLSSResources != null) ||
+                    !(__instance._ssaaPropagator.DLSSDebugOutput != null))
+                {
+                    __instance._failedToInitializeDLSS = true;
+                    return false;
+                }
+                __instance._dlssWrapper = new DLSSWrapper(
+                    __instance._ssaaPropagator.CopyDLSSResources,
+                    __instance._ssaaPropagator.DLSSDebugOutput
+                );
+            }
+            // Configure DLSS wrapper
+            if (__instance._dlssWrapper != null)
+            {
+                __instance._dlssWrapper.DebugMode = __instance.DLSSDebug;
+                __instance._dlssWrapper.DebugDisable = (__instance.DLSSDebugDisable || DLSSWrapper.WantToDebugDLSSViaRenderdoc);
+                __instance._dlssWrapper.Quality = __instance._DLSSCurrentQuality;
+                __instance._dlssWrapper.JitterOffsets = __instance.DLSSJitter;
+                __instance._dlssWrapper.MVScale = __instance.DLSSMVScale;
+            }
+
+            // Check DLSS library initialization
+            if (!__instance._dlssWrapper.IsDLSSLibraryLoaded())
+            {
+                DLSSWrapper.InitErrors initErrors = __instance._dlssWrapper.InitializeDLSS();
+                __instance._failedToInitializeDLSS = (initErrors > DLSSWrapper.InitErrors.INIT_SUCCESS);
+                if (initErrors != DLSSWrapper.InitErrors.INIT_SUCCESS)
+                {
+                    Plugin.MyLog.LogError($"Failed to initialize DLSS library: {initErrors}");
+                    return false;
+                }
+            }
+
+            // In SinglePassInstanced, we need to handle the combined eye texture
+            // This is critical - get combined eye resolution, not just single eye
+            //int renderWidth = XRSettings.eyeTextureWidth;
+            //int renderHeight = XRSettings.eyeTextureHeight;
+            int renderWidth = VRGlobals.VRCam.pixelWidth;
+            int renderHeight = VRGlobals.VRCam.pixelHeight;
+
+            // For SinglePassInstanced, we might need to handle the combined texture differently
+            // Force DLAA mode (0) by setting input and output resolutions to be the same
+            DLSSWrapper.SetCreateDLSSFeatureParameters(renderWidth, renderHeight, renderWidth, renderHeight, 0);
+
+            // Copy depth and motion vectors
+            __instance._dlssWrapper.CopyDepthMotion(source, destination, __instance.DepthCopyMode, externalCommandBuffer);
+            __instance._dlssWrapper.Sharpness = __instance.DLSSSharpness;
+
+            // Get jitter from our improved sequence
+            Vector2 jitter = ImprovedJitterSequence[_jitterIndex++ % ImprovedJitterSequence.Length];
+
+            // Scale jitter appropriately - may need adjustment for SinglePassInstanced
+            //jitter *= new Vector2(__instance.DLSSJitterXScale, __instance.DLSSJitterYScale);
+            Camera cam = Camera.main;
+            Vector2 jitterUV = new Vector2(
+                jitter.x / cam.pixelWidth,
+                jitter.y / cam.pixelHeight
+            );
+            Matrix4x4 originalProjection = cam.projectionMatrix;
+            Matrix4x4 proj = cam.projectionMatrix;
+            proj.m02 += jitterUV.x * 2f;
+            proj.m12 += jitterUV.y * 2f;
+            cam.projectionMatrix = proj;
+            Plugin.MyLog.LogError("Before OnRenderImage");
+            //__instance._dlssWrapper.OnRenderImage(source, destination, __instance.SwapDLSSUpDown, jitterUV, externalCommandBuffer);
+            //__instance._dlssWrapper.OnRenderImage(source, destination, __instance.SwapDLSSUpDown, jitter, externalCommandBuffer);
+            RenderDLSS(__instance._dlssWrapper, source, destination, __instance.SwapDLSSUpDown, jitterUV, externalCommandBuffer);
+            cam.projectionMatrix = originalProjection;
+            return true;
+        }
+
+        public static void RenderDLSS(DLSSWrapper dlssWrapper, RenderTexture src, RenderTexture dest, bool flipOutputUpDown, Vector2 jitterOffset, CommandBuffer externalCommandBuffer)
+        {
+            // Initialize resources if needed
+            dlssWrapper.InitializeResourcesIfNeeded(src, dest);
+
+            // Prepare command buffer
+            if (dlssWrapper._cmdBufEvaluate == null)
+            {
+                dlssWrapper._cmdBufEvaluate = new CommandBuffer();
+                dlssWrapper._cmdBufEvaluate.name = "DLSSEvaluate";
+            }
+            dlssWrapper._cmdBufEvaluate.Clear();
+            CommandBuffer commandBuffer = (externalCommandBuffer == null) ? dlssWrapper._cmdBufEvaluate : externalCommandBuffer;
+
+            // Cleanup released handles
+            if (dlssWrapper._dlssHandlesToRelease.Count > 0)
+            {
+                foreach (int item in dlssWrapper._dlssHandlesToRelease)
+                {
+                    DLSSWrapper.ReleaseHandleInt(item, out var _);
+                }
+                dlssWrapper._dlssHandlesToRelease.Clear();
+            }
+
+            // Setup DLSS if needed
+            if (!dlssWrapper.DebugDisable && !DLSSWrapper.WantToDebugDLSSViaRenderdoc)
+            {
+                if (dlssWrapper._dlssHandle == -1)
+                {
+                   DLSSWrapper.SetCreateDLSSFeatureParameters(dlssWrapper._featureInWidth, dlssWrapper._featureInHeight, dlssWrapper._featureOutWidth, dlssWrapper._featureOutHeight, dlssWrapper._featureQuality);
+                    dlssWrapper._dlssHandle = DLSSWrapper.PrepareHandle();
+                }
+
+                // Validate texture sizes
+                if (src.width != dlssWrapper._featureInWidth || src.height != dlssWrapper._featureInHeight ||
+                    dlssWrapper._motionVectorsCopy.width != dlssWrapper._featureInWidth || dlssWrapper._motionVectorsCopy.height != dlssWrapper._featureInHeight ||
+                    dlssWrapper._srcCopyUAV.width != dlssWrapper._featureInWidth || dlssWrapper._srcCopyUAV.height != dlssWrapper._featureInHeight)
+                {
+                    Plugin.MyLog.LogErrorError("Wrong DLSS SIZE!");
+                }
+
+                // Configure DLSS evaluation
+                DLSSWrapper.SetDLSSEvaluateParametersExtInt(
+                    dlssWrapper._srcCopyUAVPtr,
+                    dlssWrapper._textureBufferPtr,
+                    dlssWrapper._depthCopyPtr,
+                    dlssWrapper._motionVectorsCopyPtr,
+                    0,
+                    src.width,
+                    src.height,
+                    dlssWrapper.Sharpness,
+                    -dlssWrapper._motionVectorsCopy.width,
+                    dlssWrapper._motionVectorsCopy.height,
+                    jitterOffset.x,
+                    jitterOffset.y,
+                    dlssWrapper._dlssHandle
+                );
+
+                commandBuffer.IssuePluginEvent(DLSSWrapper.GetDLSSEvaluateFuncExtInt(), dlssWrapper._dlssHandle);
+            }
+
+            // Configure shader keywords and rendering
+            bool shouldFlipVertically = DLSSWrapper.IsDLSSLoaded();
+            if (flipOutputUpDown)
+            {
+                shouldFlipVertically = !shouldFlipVertically;
+            }
+
+            if (shouldFlipVertically)
+            {
+                commandBuffer.EnableShaderKeyword("UPDOWN");
+            }
+            else
+            {
+                commandBuffer.DisableShaderKeyword("UPDOWN");
+            }
+
+            // Setup render target
+            int width = (dest != null) ? dest.width : Screen.width;
+            int height = (dest != null) ? dest.height : Screen.height;
+            commandBuffer.SetRenderTarget(dest);
+            commandBuffer.SetViewport(new Rect(0f, 0f, width, height));
+
+            // Render final output
+            if (!dlssWrapper.DebugMode)
+            {
+                if (dlssWrapper._propertiesOut == null)
+                {
+                    dlssWrapper._propertiesOut = new MaterialPropertyBlock();
+                }
+
+                if (!dlssWrapper.DebugDisable && !DLSSWrapper.WantToDebugDLSSViaRenderdoc)
+                {
+                    dlssWrapper._propertiesOut.SetTexture("_MainTex", dlssWrapper._textureBuffer);
+                }
+                else
+                {
+                    dlssWrapper._propertiesOut.SetTexture("_MainTex", src);
+                }
+
+                commandBuffer.DrawMesh(dlssWrapper._mesh, Matrix4x4.identity, dlssWrapper._matCopySources, 0, 1, dlssWrapper._propertiesOut);
+            }
+            else
+            {
+                MaterialPropertyBlock debugProperties = new MaterialPropertyBlock();
+                debugProperties.SetTexture("_MainTex", dlssWrapper._textureBuffer);
+                debugProperties.SetTexture("_DepthTex", dlssWrapper._depthCopy);
+                debugProperties.SetTexture("_MotionVectorsTex", dlssWrapper._motionVectorsCopy);
+                debugProperties.SetTexture("_SrcColorTex", dlssWrapper._srcCopyUAV);
+                commandBuffer.DrawMesh(dlssWrapper._mesh, Matrix4x4.identity, dlssWrapper._debugMaterial, 0, 0, debugProperties);
+            }
+
+            // Execute command buffer if no external one was provided
+            if (externalCommandBuffer == null)
+            {
+                Graphics.ExecuteCommandBuffer(commandBuffer);
+            }
+        }
+
+        */
+        //---------------------------------------------------------------------------------------------------------------------------------------------------------------
+        private static float[] TarkovLayers()
+        {
+            float[] distances = new float[32];
+
+            distances[0] = 200f;   // Default
+            distances[1] = 150f;   // TransparentFX
+            distances[2] = 50f;    // Ignore Raycast
+            distances[3] = 0f;     // <unused>
+            distances[4] = 300f;   // Water
+            distances[5] = 5f;     // UI
+            distances[6] = 0f;     // <unused>
+            distances[7] = 0f;     // <unused>
+            distances[8] = 400f;   // Player
+            distances[9] = 100f;   // DoorLowPolyCollider
+            distances[10] = 150f;  // PlayerCollisionTest
+            distances[11] = 500f;  // Terrain
+            distances[12] = 200f;  // HighPolyCollider
+            distances[13] = 100f;  // Triggers
+            distances[14] = 300f;  // DisablerCullingObject
+            distances[15] = 150f;  // Loot
+            distances[16] = 300f;  // HitCollider
+            distances[17] = 400f;  // PlayerRenderers
+            distances[18] = 150f;  // LowPolyCollider
+            distances[19] = 10f;   // Weapon Preview
+            distances[20] = 50f;   // Shells
+            distances[21] = 250f;  // CullingMask
+            distances[22] = 100f;  // Interactive
+            distances[23] = 200f;  // Deadbody
+            distances[24] = 30f;   // RainDrops
+            distances[25] = 100f;  // Menu Environment
+            distances[26] = 150f;  // Foliage
+            distances[27] = 50f;   // PlayerSpiritAura
+            distances[28] = 1000f; // Sky
+            distances[29] = 800f;  // LevelBorder
+            distances[30] = 100f;  // TransparentCollider
+            distances[31] = 100f;  // Grass
+
+            return distances;
         }
     }
 }

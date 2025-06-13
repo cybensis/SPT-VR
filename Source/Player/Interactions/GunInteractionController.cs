@@ -92,9 +92,9 @@ public class GunInteractionController : MonoBehaviour
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
             gunRaycastReciever.GetComponent<BoxCollider>().enabled = true;
         }
-        if (Camera.main != null && meshHighlighter != null && meshHighlighter.commandBuffer_0 != null)
+        if (VRGlobals.VRCam != null && meshHighlighter != null && meshHighlighter.commandBuffer_0 != null)
         {
-            Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+            VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
         }
         transform.localEulerAngles = new Vector3(340, 340, 0);
 
@@ -151,9 +151,9 @@ public class GunInteractionController : MonoBehaviour
 
         if (highlightingMesh && meshHighlighter)
         {
-            if (Camera.main != null && meshHighlighter.commandBuffer_0 != null)
+            if (VRGlobals.VRCam != null && meshHighlighter.commandBuffer_0 != null)
             {
-                Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+                VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
             }
             meshHighlighter.enabled = false;
             highlightingMesh = false;

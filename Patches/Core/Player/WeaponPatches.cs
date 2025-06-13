@@ -557,15 +557,15 @@ namespace TarkovVR.Patches.Core.Player
         private static void CleanupHighlightMesh()
         {
             // Clean up any existing highlight mesh before switching weapons
-            if (Camera.main != null)
+            if (VRGlobals.VRCam != null)
             {
-                HighLightMesh existingHighlight = Camera.main.gameObject.GetComponent<HighLightMesh>();
+                HighLightMesh existingHighlight = VRGlobals.VRCam.gameObject.GetComponent<HighLightMesh>();
                 if (existingHighlight != null)
                 {
                     // Remove any command buffers
                     if (existingHighlight.commandBuffer_0 != null)
                     {
-                        Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight.commandBuffer_0);
+                        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight.commandBuffer_0);
                     }
                 }
             }
@@ -1086,6 +1086,24 @@ namespace TarkovVR.Patches.Core.Player
             {
                 val.method_10(isVisible: false);
                 val.StartCoroutine(val.method_11(makeVisibleAfterDelay));
+            }
+        }
+        [HarmonyPatch(typeof(MedsController), "Spawn")]
+        [HarmonyPrefix]
+        private static void CleanupHighlightMeshMeds()
+        {
+            // Clean up any existing highlight mesh before switching weapons
+            if (VRGlobals.VRCam != null)
+            {
+                HighLightMesh existingHighlight = VRGlobals.VRCam.gameObject.GetComponent<HighLightMesh>();
+                if (existingHighlight != null)
+                {
+                    // Remove any command buffers
+                    if (existingHighlight.commandBuffer_0 != null)
+                    {
+                        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight.commandBuffer_0);
+                    }
+                }
             }
         }
 

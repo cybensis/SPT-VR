@@ -23,6 +23,7 @@ namespace TarkovVR.Source.Settings
         {
             HeadBased = 0,
             WandBased = 1,
+            JoyStickOnly = 2,
         }
 
         public enum SnapTurnAmount
@@ -214,14 +215,16 @@ namespace TarkovVR.Source.Settings
             }
             GameObject.Destroy(newSoundSettings._togglesSection.gameObject);
             GameObject.Destroy(newSoundSettings._slidersSection.parent.FindChild("VoipSection").gameObject);
-            ReadOnlyCollection<string> movementMethods = new ReadOnlyCollection<string>(new List<string> { "Head-based movement", "Wand-based movement" });
+            ReadOnlyCollection<string> movementMethods = new ReadOnlyCollection<string>(new List<string> { "Head-based movement", "Wand-based movement", "JoyStick only movement" });
             movementMethod = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
             movementMethod.BindTo(settingsUi._soundSettingsScreen.gclass1050_0.VoipDevice, movementMethods, (x) => !(x == "Head-based movement") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
             movementMethod.Text.localizationKey = "Movement method: ";
             if (settings.movementType == MovementMode.HeadBased)
                 movementMethod.DropDown.SetLabelText("Head-based movement");
-            else
+            else if (settings.movementType == MovementMode.WandBased)
                 movementMethod.DropDown.SetLabelText("Wand-based movement");
+            else
+                movementMethod.DropDown.SetLabelText("JoyStick only movement");
 
             movementMethod.DropDown.onEventClass.action_0 = ChangeMovementMode;
 
@@ -470,8 +473,10 @@ namespace TarkovVR.Source.Settings
             settings.movementType = (MovementMode)mode;
             if (settings.movementType == MovementMode.HeadBased)
                 movementMethod.DropDown.SetLabelText("Head-based movement");
-            else
+            else if (settings.movementType == MovementMode.WandBased)
                 movementMethod.DropDown.SetLabelText("Wand-based movement");
+            else
+                movementMethod.DropDown.SetLabelText("JoyStick only movement");
         }
 
         public static void ShowVRSettings()
