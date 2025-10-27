@@ -27,7 +27,7 @@ namespace TarkovVR.Patches.Visuals
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        
+        /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PostProcessLayer), "SetupContext")]
         private static void ForcePPStereo(PostProcessLayer __instance, PostProcessRenderContext context)
@@ -36,9 +36,9 @@ namespace TarkovVR.Patches.Visuals
             {
                 context.stereoActive = true;
                 context.numberOfEyes = 2;
-                context.stereoRenderingMode = PostProcessRenderContext.StereoRenderingMode.MultiPass;
+                context.stereoRenderingMode = PostProcessRenderContext.StereoRenderingMode.SinglePassInstanced;
             }
         }
-        
+        */
     }
 }

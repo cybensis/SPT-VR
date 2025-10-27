@@ -136,11 +136,11 @@ namespace TarkovVR.Patches.UI
                 return;
             if (command.IsCommand(ECommand.Escape))
             {
-                if (!__instance.Boolean_0)
-                {
+                //if (!__instance.Boolean_0)
+                //{
                     // If the menu is closed get rid of it, there would be better ways to do this but oh well 
                     HandleCloseInventory();
-                }
+                //}
             }
             if (command.IsCommand(ECommand.ToggleInventory))
             {
@@ -166,7 +166,7 @@ namespace TarkovVR.Patches.UI
                     }
                     else if (lootItem != null)
                     {
-                        __instance._simpleStashPanel.Show(lootItem, __instance.inventoryController_0, sourceContext.CreateChild(lootItem), inRaid, __instance.inventoryController_0, __instance.eitemsTab_0);
+                        __instance._simpleStashPanel.Show(lootItem, __instance.inventoryController_0, sourceContext.CreateChild(lootItem), inRaid, __instance.inventoryController_0.Inventory.SortingTable, SimpleStashPanel.EStashSearchAvailability.StashOnly, null, __instance.eitemsTab_0);
                         __instance.UI.AddDisposable(__instance._simpleStashPanel);
                     }
                 }
@@ -174,24 +174,8 @@ namespace TarkovVR.Patches.UI
 
         }
 
-        private static float lastCamRootYRot = 0;
-        private static bool initializeUnload = false;
         public static void HandleOpenInventory()
         {          
-            if (VRGlobals.vrPlayer is RaidVRPlayerManager)
-            {
-                MemoryControllerClass.Collect();
-            }
-            else
-            {
-                MemoryControllerClass.GCEnabled = true;
-                MemoryControllerClass.Collect();
-            }
-            if (MemoryControllerClass.Settings.OverrideRamCleanerSettings ? MemoryControllerClass.Settings.RamCleanerEnabled : ((bool)Singleton<SharedGameSettingsClass>.Instance.Game.Settings.AutoEmptyWorkingSet))
-            {
-                MemoryControllerClass.EmptyWorkingSet();
-            }
-            Rendering.ClearRenderTargetPool();
             Cursor.lockState = CursorLockMode.Locked;
             ShowUiScreens();
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
@@ -226,7 +210,7 @@ namespace TarkovVR.Patches.UI
                 extraYOffset -= 1.5f;
             else
             {
-                float poseLevel = VRGlobals.player.MovementContext._poseLevel;
+                float poseLevel = VRGlobals.player.MovementContext.PoseLevel_1;
                 float crouchOffset = (1 - poseLevel) * 0.6f; // 0.6f can be adjusted to change position of menu based on crouch
                 extraYOffset -= crouchOffset;
             }
@@ -386,7 +370,7 @@ namespace TarkovVR.Patches.UI
         }
         
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(TransferItemsInRaidScreen), "Show", new Type[] { typeof(TransferItemsInRaidScreen.GClass3603) })]
+        [HarmonyPatch(typeof(TransferItemsInRaidScreen), "Show", new Type[] { typeof(TransferItemsInRaidScreen.GClass3893) })]
         private static void ShowTransitTransferMenu(TransferItemsInRaidScreen __instance) {
             UIPatches.HandleOpenInventory();
         }
@@ -415,7 +399,7 @@ namespace TarkovVR.Patches.UI
             return false;
         }
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(EftBattleUIScreen.GClass3575), "ShowAmmoCountZeroingPanel")]
+        [HarmonyPatch(typeof(EftBattleUIScreen.GClass3865), "ShowAmmoCountZeroingPanel")]
         private static bool HideZeroingUI(InventoryScreenQuickAccessPanel __instance)
         {
             return false;
@@ -456,8 +440,8 @@ namespace TarkovVR.Patches.UI
         // When in hideout the stash panel also gets shown which causes the UI to reposition/rotate so only rely
         // on this patch if its in raid, for hideout use PositionInHideoutInventory()
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GClass3521), "Show")]
-        private static void PositionInRaidInventory(GClass3521 __instance)
+        [HarmonyPatch(typeof(GClass3808), "Show")]
+        private static void PositionInRaidInventory(GClass3808 __instance)
         {
             // Dont open inv if not in game, player is in hideout, game player isn't set and the menu isn't already open
             if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager || !VRGlobals.player || VRGlobals.menuOpen)
@@ -490,7 +474,7 @@ namespace TarkovVR.Patches.UI
             itemView.MainImage.transform.localEulerAngles = new Vector3(0, 0, itemView.MainImage.transform.localEulerAngles.z);
         }
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(SlotView), "method_5")]
+        [HarmonyPatch(typeof(SlotView), "method_4")]
         private static void PreventOffAxisSlotItemsViews(SlotView __instance)
         {
             __instance.itemView_0.transform.localEulerAngles = Vector3.zero;
@@ -786,13 +770,13 @@ namespace TarkovVR.Patches.UI
 
         //Disables checking item distance when looting - not sure why but 3.11 broke this and it thinks you're too far when you pick up loose loot        
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GetActionsClass.Class1624), "method_0")]
-        private static bool DisableLootDistanceCheck(GetActionsClass.Class1624 __instance)
+        [HarmonyPatch(typeof(GetActionsClass.Class1750), "method_0")]
+        private static bool DisableLootDistanceCheck(GetActionsClass.Class1750 __instance)
         {
             MagazineItemClass magazineItemClass = __instance.rootItem as MagazineItemClass;
             if (__instance.owner.IsYourPlayer)
             {
-                if (magazineItemClass != null && __instance.possibleAction is GClass3203 && __instance.lootItemLastOwner != null && __instance.lootItemLastOwner.ProfileId != __instance.owner.ProfileId)
+                if (magazineItemClass != null && __instance.possibleAction is GClass3411 && __instance.lootItemLastOwner != null && __instance.lootItemLastOwner.ProfileId != __instance.owner.ProfileId)
                     __instance.owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
                 __instance.owner.InventoryController.RunNetworkTransaction(__instance.possibleAction, new Callback(__instance.method_1));
                 return false;
@@ -906,8 +890,8 @@ namespace TarkovVR.Patches.UI
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(BattleUIScreen<EftBattleUIScreen.GClass3575, EEftScreenType>), "ShowAmmoDetails")]
-        private static void SetAmmoCountUi(BattleUIScreen<EftBattleUIScreen.GClass3575, EEftScreenType> __instance)
+        [HarmonyPatch(typeof(BattleUIScreen<EftBattleUIScreen.GClass3865, EEftScreenType>), "ShowAmmoDetails")]
+        private static void SetAmmoCountUi(BattleUIScreen<EftBattleUIScreen.GClass3865, EEftScreenType> __instance)
         {
             if (VRSettings.GetLeftHandedMode())
                 __instance._ammoCountPanel.transform.localScale = new Vector3(-0.25f, 0.25f, 0.25f);
@@ -1028,7 +1012,7 @@ namespace TarkovVR.Patches.UI
         private static async Task AcceptItemModified(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, bool flag)
         {
             // Your modified version of the AcceptItem method
-            if (!__instance.CanAccept(itemContext, targetItemContext, out var operation) || !(await GClass3539.TryShowDestroyItemsDialog(operation.Value)))
+            if (!__instance.CanAccept(itemContext, targetItemContext, out var operation) || !(await GClass3826.TryShowDestroyItemsDialog(operation.Value)))
             {
                 return;
             }
@@ -1080,17 +1064,17 @@ namespace TarkovVR.Patches.UI
                 {
                     goto IL_0327;
                 }
-                if (!(value is GClass3216 gClass))
+                if (!(value is GClass3424 gClass))
                 {
-                    if (!(value is GClass3217 gClass2))
+                    if (!(value is GClass3425 gClass2))
                     {
                         goto IL_0327;
                     }
-                    GClass3217 gClass3 = gClass2;
+                    GClass3425 gClass3 = gClass2;
                     itemContext.DragCancelled();
                     if (gClass3.Count > 1 && flag)
                     {
-                        __instance.itemUiContext_0.SplitDialog.Show(GClass2112.Localized("Transfer"), gClass3.Count, itemContext.CursorPosition, delegate (int count)
+                        __instance.itemUiContext_0.SplitDialog.Show(GClass2348.Localized("Transfer"), gClass3.Count, itemContext.CursorPosition, delegate (int count)
                         {
                             __instance.itemUiContext_0.SplitDialog.Hide();
                             __instance._itemController.TryRunNetworkTransaction(gClass3.ExecuteWithNewCount(count, simulate: true));
@@ -1106,11 +1090,11 @@ namespace TarkovVR.Patches.UI
                 }
                 else
                 {
-                    GClass3216 gClass4 = gClass;
+                    GClass3424 gClass4 = gClass;
                     itemContext.DragCancelled();
                     if (gClass4.Count > 1 && flag)
                     {
-                        __instance.itemUiContext_0.SplitDialog.Show(GClass2112.Localized("Split"), gClass4.Count, itemContext.CursorPosition, delegate (int count)
+                        __instance.itemUiContext_0.SplitDialog.Show(GClass2348.Localized("Split"), gClass4.Count, itemContext.CursorPosition, delegate (int count)
                         {
                             __instance.itemUiContext_0.SplitDialog.Hide();
                             gClass4.ExecuteWithNewCount(__instance._itemController, count);
@@ -1137,14 +1121,14 @@ namespace TarkovVR.Patches.UI
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridView), "CanAccept")]
-        private static bool FixCanAccept(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, out GStruct454 operation, ref bool __result)
+        private static bool FixCanAccept(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, out GStruct153 operation, ref bool __result)
         {
             if (!__instance.SourceContext.DragAvailable)
             {
-                operation = new GClass3790(itemContext.Item);
+                operation = new GClass1550(itemContext.Item);
                 return false;
             }
-            operation = default(GStruct454);
+            operation = default(GStruct153);
             if (__instance.Grid == null)
             {
                 return false;
@@ -1156,7 +1140,7 @@ namespace TarkovVR.Patches.UI
             Item item = itemContext.Item;
             LocationInGrid locationInGrid = __instance.CalculateItemLocation(itemContext);
             Item item2 = __instance.method_8(targetItemContext);
-            GClass3186 gClass = __instance.Grid.CreateItemAddress(locationInGrid);
+            GClass3393 gClass = __instance.Grid.CreateItemAddress(locationInGrid);
             ItemAddress itemAddress = itemContext.ItemAddress;
             if (itemAddress == null)
             {
@@ -1164,7 +1148,7 @@ namespace TarkovVR.Patches.UI
             }
             if (targetItemContext != null && !targetItemContext.ModificationAvailable)
             {
-                operation = new StashGridClass.GClass3787(__instance.Grid);
+                operation = new StashGridClass.GClass1547(__instance.Grid);
                 return false;
             }
             if (itemAddress.Container == __instance.Grid && __instance.Grid.GetItemLocation(item) == locationInGrid)
@@ -1180,7 +1164,7 @@ namespace TarkovVR.Patches.UI
             {
                 return false;
             }
-            operation = ((item2 != null) ? __instance._itemController.ExecutePossibleAction(itemContext, item2, partialTransferOnly, simulate: true) : __instance._itemController.ExecutePossibleAction(itemContext, __instance.SourceContext, gClass, partialTransferOnly, simulate: true));
+            operation = ((item2 != null) ? __instance._itemController.ExecutePossibleAction(itemContext, item2, partialTransferOnly, simulate: true) : __instance._itemController.ExecutePossibleAction(itemContext, gClass, partialTransferOnly, simulate: true));
             __result = operation.Succeeded;
 
             return false;

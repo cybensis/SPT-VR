@@ -13,7 +13,7 @@ using Valve.VR;
 using static TarkovVR.Patches.Visuals.VisualPatches;
 using UnityEngine.XR;
 using Fika.Core.Networking;
-using Fika.Core.Coop.Utils;
+using Fika.Core.Main.Utils;
 using System.Text;
 using Fika.Core.Modding.Events;
 
@@ -28,7 +28,7 @@ namespace TarkovVR
 
         private void Awake()
         {
-            Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loading!");
+            Logger.LogInfo($"Plugin SPT-VR is loading!");
             MyLog = Logger;
 
             if (!InitializeVR())
@@ -261,7 +261,7 @@ namespace TarkovVR
                 MyLog.LogWarning("AmandsGraphics dll not found, support patches will not be applied.");
             }
 
-            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Fika.Core.dll");
+            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Fika\\Fika.Core.dll");
 
             if (File.Exists(modDllPath))
             {

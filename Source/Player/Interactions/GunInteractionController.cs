@@ -37,8 +37,8 @@ public class GunInteractionController : MonoBehaviour
     public int lastHitCompIndex = -1;
     private GamePlayerOwner playerOwner;
     private List<ActionsReturnClass> weaponUiLists;
-    private List<Class614> meshList;
-    private List<Class614> malfunctionMeshList;
+    private List<Class617> meshList;
+    private List<Class617> malfunctionMeshList;
     private HighLightMesh meshHighlighter;
     public bool highlightingMesh = false;
     private int boltIndex = -1;
@@ -61,9 +61,9 @@ public class GunInteractionController : MonoBehaviour
         if (weaponUiLists == null)
             weaponUiLists = new List<ActionsReturnClass>();
         if (meshList == null)
-            meshList = new List<Class614>();
+            meshList = new List<Class617>();
         if (malfunctionMeshList == null)
-            malfunctionMeshList = new List<Class614>();
+            malfunctionMeshList = new List<Class617>();
 
         if (interactablesDictionary == null)
             interactablesDictionary = new Dictionary<Transform, ActionsReturnClass>();
@@ -266,8 +266,8 @@ public class GunInteractionController : MonoBehaviour
     }
 
     // Cache these arrays to avoid ToArray() calls every frame
-    private Class614[] cachedMalfunctionMeshArray;
-    private Class614[] cachedMeshArray;
+    private Class617[] cachedMalfunctionMeshArray;
+    private Class617[] cachedMeshArray;
     private bool malfunctionMeshArrayDirty = true;
     private bool meshArrayDirty = true;
 
@@ -301,7 +301,7 @@ public class GunInteractionController : MonoBehaviour
                 malfunctionMeshArrayDirty = false;
             }
 
-            meshHighlighter.class614_0 = cachedMalfunctionMeshArray;
+            meshHighlighter.class617_0 = cachedMalfunctionMeshArray;
             EnableHighlighting(Color.red);
             initMalfunction = true;
             SetJoystickBlock(isLeftHanded, true);
@@ -319,7 +319,7 @@ public class GunInteractionController : MonoBehaviour
                 meshArrayDirty = false;
             }
 
-            meshHighlighter.class614_0 = cachedMeshArray;
+            meshHighlighter.class617_0 = cachedMeshArray;
             EnableHighlighting(Color.white);
             initMalfunction = false;
             hasExaminedAfterMalfunction = false;
@@ -523,7 +523,7 @@ public class GunInteractionController : MonoBehaviour
             }
         }
 
-        List<Class614> scopeMeshList = new List<Class614>();
+        List<Class617> scopeMeshList = new List<Class617>();
         Renderer[] componentsInChildren = scopeTransform?.GetComponentsInChildren<Renderer>(includeInactive: false);
 
         // Null check for the renderers array
@@ -537,13 +537,13 @@ public class GunInteractionController : MonoBehaviour
                 SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
                 if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
                 {
-                    scopeMeshList.Add(new Class614(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                    scopeMeshList.Add(new Class617(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
                 }
                 else if (renderer is MeshRenderer && renderer.enabled &&
                          renderer.GetComponent<MeshFilter>() != null &&
                          renderer.GetComponent<MeshFilter>().sharedMesh != null)
                 {
-                    scopeMeshList.Add(new Class614(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                    scopeMeshList.Add(new Class617(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
                 }
             }
         }
@@ -551,7 +551,7 @@ public class GunInteractionController : MonoBehaviour
         // Only proceed if we have items in the list and the highlighter is valid
         if (scopeMeshList.Count > 0 && meshHighlighter != null)
         {
-            meshHighlighter.class614_0 = scopeMeshList.ToArray();
+            meshHighlighter.class617_0 = scopeMeshList.ToArray();
             meshHighlighter.enabled = true;
         }
     }
@@ -626,7 +626,7 @@ public class GunInteractionController : MonoBehaviour
             if (magazine.GetComponent<MeshRenderer>())
                 magazine.GetChild(0).position = magazine.GetComponent<MeshRenderer>().bounds.center;
             else if (meshList.Count > meshListLengthBeforeMags)
-                interactables[interactables.Count - 1].localPosition = meshList[meshListLengthBeforeMags].mesh_0.bounds.center;
+                interactables[interactables.Count - 1].localPosition = meshList[meshListLengthBeforeMags].Mesh_0.bounds.center;
         }
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -777,11 +777,11 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                meshList.Add(new Class614(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                meshList.Add(new Class617(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                meshList.Add(new Class614(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                meshList.Add(new Class617(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
     }
@@ -795,11 +795,11 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                malfunctionMeshList.Add(new Class614(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                malfunctionMeshList.Add(new Class617(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                malfunctionMeshList.Add(new Class614(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                malfunctionMeshList.Add(new Class617(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
     }

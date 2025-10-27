@@ -15,12 +15,12 @@ using TarkovVR.Source.Settings;
 using EFT.InventoryLogic;
 using static EFT.Interactive.WorldInteractiveObject;
 using System.Collections.Generic;
-using LiteNetLib.Utils;
-using Fika.Core.Coop.Utils;
+//using LiteNetLib.Utils;
+using Fika.Core.Main.Utils;
 using Fika.Core.Networking;
 using Fika.Core.Networking;
 using Comfort.Common;
-using LiteNetLib;
+//using LiteNetLib;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -151,12 +151,12 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //Used for the backpack - This completely bypasses the pickup animation and puts the loot directly in your bag
-        private void DirectItemTransfer(EFT.Player owner, GInterface398 possibleAction, Item rootItem, IPlayer lootItemLastOwner)
+        private void DirectItemTransfer(EFT.Player owner, GInterface424 possibleAction, Item rootItem, IPlayer lootItemLastOwner)
         {
             isItemInitialized = false;
             // Handle magazine check if needed
             MagazineItemClass magazineItemClass = rootItem as MagazineItemClass;
-            if (magazineItemClass != null && possibleAction is GClass3203 && lootItemLastOwner != null && lootItemLastOwner.ProfileId != owner.ProfileId)
+            if (magazineItemClass != null && possibleAction is GClass3411 && lootItemLastOwner != null && lootItemLastOwner.ProfileId != owner.ProfileId)
             {
                 owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
             }
@@ -297,7 +297,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (secondaryHandGrip.stateUp)
                 {
-                    GStruct455<GInterface398> pickUpResult = InteractionsHandlerClass.QuickFindAppropriatePlace(
+                    GStruct154<GInterface424> pickUpResult = InteractionsHandlerClass.QuickFindAppropriatePlace(
                         heldItem.Item,
                         VRGlobals.player.InventoryController,
                         VRGlobals.player.InventoryController.Inventory.Equipment.ToEnumerable(),
@@ -583,7 +583,7 @@ namespace TarkovVR.Source.Player.Interactions
             else if (leftHandState.door != null)
             {
                 var door = leftHandState.door;
-                GetActionsClass.Class1630 doorInteractionClass = new GetActionsClass.Class1630();
+                GetActionsClass.Class1757 doorInteractionClass = new GetActionsClass.Class1757();
                 doorInteractionClass.door = door;
                 doorInteractionClass.owner = PlayerOwner;
 
@@ -597,7 +597,7 @@ namespace TarkovVR.Source.Player.Interactions
             else if (leftHandState.corpse != null)
             {
                 var corpse = leftHandState.corpse;
-                GetActionsClass.Class1622 corpseInteractionClass = new GetActionsClass.Class1622();
+                GetActionsClass.Class1748 corpseInteractionClass = new GetActionsClass.Class1748();
                 corpseInteractionClass.compoundItem = (InventoryEquipment)corpse.Item;
                 corpseInteractionClass.rootItem = (InventoryEquipment)corpse.Item;
                 corpseInteractionClass.lootItemOwner = corpse.ItemOwner;

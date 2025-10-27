@@ -38,7 +38,7 @@ using System.Collections;
 using System.Security.Cryptography.X509Certificates;
 using TarkovVR.ModSupport.FIKA;
 using Fika.Core;
-using Fika.Core.Coop.Utils;
+using Fika.Core.Main.Utils;
 using static FirearmsAnimator;
 using Comfort.Common;
 using Valve.VR;
@@ -108,8 +108,6 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.ikManager.rightArmIk.enabled = false;
             }
         }
-
-
 
         public static PortableRangeFinderController rangeFinder;
 
@@ -495,13 +493,13 @@ namespace TarkovVR.Patches.Core.Player
             var weaponManager = __instance.weaponManagerClass;
 
             // Handle tactical devices
-            if (weaponManager.tacticalComboVisualController_0 != null)
-                foreach (var tacDevice in weaponManager.tacticalComboVisualController_0)
+            if (weaponManager.TacticalComboVisualController_0 != null)
+                foreach (var tacDevice in weaponManager.TacticalComboVisualController_0)
                     if (!currentGunInteractController.TacDeviceAlreadyRegistered(tacDevice.transform))
                         currentGunInteractController.AddTacticalDevice(tacDevice.transform, __instance.FirearmsAnimator);
 
             // Handle scopes
-            var sightControllers = weaponManager.sightModVisualControllers_0;
+            var sightControllers = weaponManager.SightModVisualControllers_0;
             if (sightControllers == null) return;
 
             // Find valid scope
@@ -607,20 +605,20 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             VRGlobals.usingItem = false;
             VRGlobals.scope = null;
-            for (int i = 0; i < __instance.weaponManagerClass.sightModVisualControllers_0.Length; i++)
+            for (int i = 0; i < __instance.weaponManagerClass.SightModVisualControllers_0.Length; i++)
             {
-                VRGlobals.scope = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.Find("mod_aim_camera");
-                if (__instance.weaponManagerClass.sightModVisualControllers_0[i].scopePrefabCache_0 == null)
+                VRGlobals.scope = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera");
+                if (__instance.weaponManagerClass.SightModVisualControllers_0[i].scopePrefabCache_0 == null)
                     continue;
                 // Some scopes have more than two modes or something which changes the name to 001, 002 etc,
                 if (!VRGlobals.scope)
-                    VRGlobals.scope = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.Find("mod_aim_camera_001");
+                    VRGlobals.scope = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera_001");
 
                 if (VRGlobals.scope != null)
                 {
-                    SightModVisualControllers visualController = __instance.weaponManagerClass.sightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
+                    SightModVisualControllers visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
                     if (!visualController)
-                        visualController = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
+                        visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
 
                     if (visualController && VRGlobals.vrOpticController)
                     {
@@ -695,21 +693,21 @@ namespace TarkovVR.Patches.Core.Player
                             if (weaponMeshRoot.FindChildRecursive(firingModeSwitch))
                                 currentGunInteractController.SetFireModeSwitch(weaponMeshRoot.FindChildRecursive(firingModeSwitch));
                         }
-                        for (int i = 0; i < __instance.weaponManagerClass.sightModVisualControllers_0.Length; i++)
+                        for (int i = 0; i < __instance.weaponManagerClass.SightModVisualControllers_0.Length; i++)
                         {
-                            if (__instance.weaponManagerClass.sightModVisualControllers_0[i].scopePrefabCache_0 == null)
+                            if (__instance.weaponManagerClass.SightModVisualControllers_0[i].scopePrefabCache_0 == null)
                                 continue;
-                            VRGlobals.scope = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.Find("mod_aim_camera");
+                            VRGlobals.scope = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera");
 
                             // Some scopes have more than two modes or something which changes the name to 001, 002 etc,
                             if (!VRGlobals.scope)
-                                VRGlobals.scope = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.Find("mod_aim_camera_001");
+                                VRGlobals.scope = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera_001");
 
                             if (VRGlobals.scope != null)
                             {
-                                SightModVisualControllers visualController = __instance.weaponManagerClass.sightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
+                                SightModVisualControllers visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
                                 if (!visualController)
-                                    visualController = __instance.weaponManagerClass.sightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
+                                    visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
 
                                 if (visualController && VRGlobals.vrOpticController)
                                 {
@@ -728,11 +726,11 @@ namespace TarkovVR.Patches.Core.Player
                             }
                         }
                     }
-                    if (__instance.weaponManagerClass != null && __instance.weaponManagerClass.tacticalComboVisualController_0 != null)
+                    if (__instance.weaponManagerClass != null && __instance.weaponManagerClass.TacticalComboVisualController_0 != null)
                     {
-                        for (int i = 0; i < __instance.weaponManagerClass.tacticalComboVisualController_0.Length; i++)
+                        for (int i = 0; i < __instance.weaponManagerClass.TacticalComboVisualController_0.Length; i++)
                         {
-                            currentGunInteractController.AddTacticalDevice(__instance.weaponManagerClass.tacticalComboVisualController_0[i].transform, __instance.FirearmsAnimator);
+                            currentGunInteractController.AddTacticalDevice(__instance.weaponManagerClass.TacticalComboVisualController_0[i].transform, __instance.FirearmsAnimator);
                         }
                     }
 
@@ -941,8 +939,8 @@ namespace TarkovVR.Patches.Core.Player
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GetActionsClass.Class1624), "method_0")]
-        private static bool PreventUsingStationaryWeapon(GetActionsClass.Class1624 __instance)
+        [HarmonyPatch(typeof(GetActionsClass.Class1750), "method_0")]
+        private static bool PreventUsingStationaryWeapon(GetActionsClass.Class1750 __instance)
         {
             return false;
         }
@@ -957,8 +955,8 @@ namespace TarkovVR.Patches.Core.Player
             if (__instance._rigidBody != null)
             {
                 Rigidbody rigidBody = __instance._rigidBody;
-                GClass812 visibilityChecker = __instance.GetVisibilityChecker();
-                EFTPhysicsClass.GClass723.SupportRigidbody(rigidBody, __instance.PhysicsQuality, visibilityChecker);
+                GClass833 visibilityChecker = __instance.GetVisibilityChecker();
+                EFTPhysicsClass.GClass745.SupportRigidbody(rigidBody, __instance.PhysicsQuality, visibilityChecker);
                 __instance.ienumerator_0 = __instance.method_4();
                 if(VRGlobals.handsInteractionController.heldItem == null)
                     __instance.StartCoroutine(__instance.ienumerator_0);

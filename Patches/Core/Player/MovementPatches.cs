@@ -165,11 +165,11 @@ namespace TarkovVR.Patches.Core.Player
             leftJoystickLastUsed = leftJoystickUsed;
 
             if (yAxis > xAxis)
-                VRGlobals.player.MovementContext._relativeSpeed = yAxis;
+                VRGlobals.player.MovementContext.RelativeSpeed = yAxis;
             else
-                VRGlobals.player.MovementContext._relativeSpeed = xAxis;
+                VRGlobals.player.MovementContext.RelativeSpeed = xAxis;
 
-            VRGlobals.player.MovementContext.SetCharacterMovementSpeed(VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed);
+            VRGlobals.player.MovementContext.SetCharacterMovementSpeed(VRGlobals.player.MovementContext.RelativeSpeed * VRGlobals.player.MovementContext.MaxSpeed);
         }
 
 
@@ -199,11 +199,11 @@ namespace TarkovVR.Patches.Core.Player
 
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass3407), "ManualLateUpdate")]
-        private static bool PositionCamera(GClass3407 __instance)
+        [HarmonyPatch(typeof(FirstPersonCameraOperationClass), "ManualLateUpdate")]
+        private static bool PositionCamera(FirstPersonCameraOperationClass __instance)
         {
             
-            if (!__instance.player_0.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
+            if (!__instance.Player_0.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;
 
             // When medding or eating, we need to rely on this code to position the upper body, and it will set the empty hands but the current gun interaction controller should be disabled
@@ -216,7 +216,7 @@ namespace TarkovVR.Patches.Core.Player
                 
             }
             else if (!VRGlobals.emptyHands)
-                VRGlobals.camRoot.transform.position = new Vector3(__instance.player_0.Transform.position.x, __instance.player_0.Transform.position.y + 1.5f, __instance.player_0.Transform.position.z);
+                VRGlobals.camRoot.transform.position = new Vector3(__instance.Player_0.Transform.position.x, __instance.Player_0.Transform.position.y + 1.5f, __instance.Player_0.Transform.position.z);
 
             return false;
         }

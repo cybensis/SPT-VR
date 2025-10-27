@@ -1,6 +1,6 @@
 ﻿using EFT.InventoryLogic;
 using Newtonsoft.Json.Linq;
-using Open.Nat;
+//using Open.Nat;
 using Sirenix.Serialization;
 using System.Collections.Generic;
 using TarkovVR;
@@ -356,7 +356,7 @@ namespace TarkovVR.Source.Player.VRManager
                 // will return a value that can be used to subtract the physical crouch value from and will combine the physical and joystick crouching
                 crouchLevel = Mathf.Clamp((1 - crouchHeightDiff / 0.4f) - crouchLevel, 0, 1);
 
-                VRGlobals.player.MovementContext._poseLevel = crouchLevel;
+                VRGlobals.player.MovementContext.PoseLevel_1 = crouchLevel;
 
                 // Only change GameObject active states when prone state actually changes
                 bool currentProneState = VRGlobals.player.MovementContext.IsInPronePose;

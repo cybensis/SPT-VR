@@ -149,6 +149,7 @@ namespace TarkovVR.Patches.Visuals
             try
             {
                 string bundlePath = Path.Combine(BepInEx.Paths.PluginPath, "sptvr", "Assets", "customclouds");
+                Plugin.MyLog.LogError($"Loading cloud AssetBundle from: {bundlePath}");
                 AssetBundle cloudBundle = AssetBundle.LoadFromFile(bundlePath);
                 if (cloudBundle == null)
                 {
@@ -228,7 +229,7 @@ namespace TarkovVR.Patches.Visuals
             // Weather parameters
             float cloudiness = __instance.WeatherCurve.Cloudiness;
             float rain = __instance.WeatherCurve.Rain;
-            float timeOfDay = __instance.TOD_Sky_0.Cycle.Hour;
+            float timeOfDay = GClass4.Instance.Cycle.Hour;
             Vector2 windVector = __instance.WeatherCurve.Wind;
 
             UpdateWindSystem(windVector);

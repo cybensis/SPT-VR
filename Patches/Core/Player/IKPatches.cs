@@ -47,7 +47,7 @@ namespace TarkovVR.Patches.Core.Player
             return true;
         }
         */
-
+        /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "method_20")]
         private static bool ReemoveSprintAnimFromHands(EFT.Player __instance)
@@ -74,7 +74,65 @@ namespace TarkovVR.Patches.Core.Player
 
             return true;
         }
+        */
+        // Static variables to track grounded state with hysteresis
+        // Hysteresis state
+        private const float groundedThreshold = 0.2f; // seconds before considering ungrounded
+        private static bool wasGrounded = true;
+        private static float ungroundedStartTime = 0f;
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player), "method_20")]
+        private static bool RemoveSprintAnimFromHands(EFT.Player __instance)
+        {
+            if (!__instance.IsYourPlayer)
+                return true;
+            if (__instance.HandsIsEmpty)
+                return false;           
 
+            bool isGroundedNow = __instance.MovementContext.IsGrounded;
+            float currentTime = Time.time;
+
+            bool stableGrounded;
+
+            if (isGroundedNow)
+            {
+                // Immediately treat as grounded
+                stableGrounded = true;
+                ungroundedStartTime = 0f; // reset
+            }
+            else
+            {
+                if (wasGrounded)
+                {
+                    // Just became ungrounded
+                    if (ungroundedStartTime == 0f)
+                        ungroundedStartTime = currentTime;
+
+                    // Only treat as ungrounded if time threshold has passed
+                    stableGrounded = (currentTime - ungroundedStartTime) < groundedThreshold;
+                }
+                else
+                {
+                    // Already ungrounded
+                    stableGrounded = false;
+                }
+            }
+
+            wasGrounded = stableGrounded;
+
+            bool disableAnim =
+                (__instance.IsSprintEnabled && VRSettings.GetDisableRunAnim()) ||
+                !stableGrounded;
+
+            if (disableAnim && __instance._markers.Length > 1 && __instance._markers[1]?.transform?.parent?.parent != null)
+            {
+                var ik = __instance._markers[1].transform.parent.parent;
+                ik.localPosition = Vector3.zero;
+                ik.localEulerAngles = Vector3.zero;
+            }
+
+            return true;
+        }
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PlayerAnimator), "EnableSprint")]
         private static void DisableLayer1DuringSprint(PlayerAnimator __instance)
@@ -87,10 +145,10 @@ namespace TarkovVR.Patches.Core.Player
 
         private static bool test = true;
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GClass1375), "SetAnimator")]
-        private static void ReemoveSprintAnimFromHands(GClass1375 __instance)
+        [HarmonyPatch(typeof(GClass1446), "SetAnimator")]
+        private static void ReemoveSprintAnimFromHands(GClass1446 __instance)
         {
-            __instance.animator_0.SetLayerWeight(4, 0);
+            __instance.Animator_0.SetLayerWeight(4, 0);
         }
         //[HarmonyPrefix]
         //[HarmonyPatch(typeof(EFT.Player), "method_22")]
