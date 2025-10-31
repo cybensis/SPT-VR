@@ -16,7 +16,7 @@ using System.Text;
 
 namespace TarkovVR
 {
-    [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.1.0")]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
@@ -69,7 +69,7 @@ namespace TarkovVR
                 // Initialize SteamVR
                 SteamVR.Initialize();
 
-                Plugin.MyLog.LogError("StereoRenderingMode: " + XRSettings.stereoRenderingMode);
+                Plugin.MyLog.LogError("StereoRenderingMode:" + XRSettings.stereoRenderingMode);
                 // Verify SteamVR is running
                 if (!SteamVR.active)
                 {
