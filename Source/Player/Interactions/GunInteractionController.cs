@@ -1,6 +1,7 @@
 ﻿using EFT;
 using EFT.UI.Ragfair;
 using JetBrains.Annotations;
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -83,7 +84,11 @@ public class GunInteractionController : MonoBehaviour
                 return;
             Camera.main.gameObject.GetComponent<HighLightMesh>().enabled = true;
         }
-        meshHighlighter.Awake();
+        if (meshHighlighter == null)
+            meshHighlighter = GetComponentInChildren<HighLightMesh>();
+        else
+            meshHighlighter.Awake();
+        //meshHighlighter.Awake();
         initialized = true;
     }
 
@@ -184,6 +189,92 @@ public class GunInteractionController : MonoBehaviour
 
     private void Update()
     {
+        if (!initialized) //|| VRGlobals.firearmController == null)
+            return;
+
+        // Cache frequently accessed values
+        bool isLeftHanded = VRSettings.GetLeftHandedMode();
+        bool gripPressed = isLeftHanded ? SteamVR_Actions._default.LeftGrip.state : SteamVR_Actions._default.RightGrip.state;
+        bool menuOpen = VRGlobals.menuOpen;      
+        bool radialMenuActive = VRGlobals.vrPlayer.radialMenu.active;
+
+        //bool isAiming = VRGlobals.firearmController.IsAiming;
+        // Make firearmController optional - default to false if null
+        bool isAiming = VRGlobals.firearmController?.IsAiming ?? false;
+
+        // Cache camera transform references
+        Transform cameraTransform = VRGlobals.VRCam.transform;
+        Vector3 cameraPosition = cameraTransform.position;
+        Vector3 cameraForward = cameraTransform.forward;
+        Vector3 cameraEulerAngles = cameraTransform.eulerAngles;
+
+        // Force cleanup if we're in a state where highlight should not be active
+        bool shouldShowHighlight = !menuOpen && gripPressed && !radialMenuActive && !isAiming && !WeaponPatches.grenadeEquipped;
+        if (!shouldShowHighlight && highlightingMesh)
+            ForceCleanupHighlight();
+
+        // Use cached values for player state
+        bool isSprintEnabled = VRGlobals.player.IsSprintEnabled;
+        bool isInPronePose = VRGlobals.player.IsInPronePose;
+
+        // Use this to keep the upper arms positioned under the players camera if they're not prone or sprinting
+        if (!isSprintEnabled && !isInPronePose)
+        {
+            transform.position = cameraPosition + new Vector3(0, -0.12f, 0) + (cameraForward * -0.175f);
+        }
+        else
+        {
+            transform.localPosition = Vector3.zero;
+            transform.localEulerAngles = new Vector3(340, 340, 0);
+        }
+
+        // Cache previous values
+        prevRot = cameraEulerAngles;
+        prevForward = cameraForward;
+        prevPos = cameraPosition;
+
+        if (menuOpen && highlightingMesh)
+        {
+            DisableHighlighting();
+            return; // Early exit when menu is open
+        }
+
+        if (shouldShowHighlight)
+        {
+            HandleWeaponInteraction(cameraPosition, cameraForward, isLeftHanded);
+        }
+        else if (lastHitCompIndex != -1)
+        {
+            ClearInteraction();
+        }
+        else if (highlightingMesh && meshHighlighter)
+        {
+            DisableHighlighting();
+            SetJoystickBlock(isLeftHanded, false);
+        }
+
+        // Update UI position if we have an active interaction
+        if (lastHitCompIndex != -1)
+        {
+            UpdateInteractionUI(cameraTransform);
+        }
+
+        // Handle weapon positioning (only when needed)
+        if (framesAfterEnabled == 1 && ShouldUpdateWeaponPosition())
+        {
+            UpdateWeaponPosition(isLeftHanded);
+        }
+
+        // Update frame counter
+        if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(VRPlayerManager.LEFT_HAND_ANIMATOR_HASH) == 0)
+        {
+            framesAfterEnabled++;
+        }
+    }
+
+    /*
+    private void Update()
+    {
         if (!initialized)
             return;
 
@@ -264,7 +355,7 @@ public class GunInteractionController : MonoBehaviour
             framesAfterEnabled++;
         }
     }
-
+    */
     // Cache these arrays to avoid ToArray() calls every frame
     private Class617[] cachedMalfunctionMeshArray;
     private Class617[] cachedMeshArray;

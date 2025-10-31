@@ -652,8 +652,7 @@ namespace TarkovVR.Source.Controls
                     PreloaderUI.Instance.WaitSeconds(1.25f, delegate
                     {
                         if (VRGlobals.player.HandsController as EFT.Player.GrenadeHandsController && (VRGlobals.player.HandsController as EFT.Player.GrenadeHandsController).WaitingForHighThrow) {
-
-                            if (VRGlobals.player.HandsController.HandsHierarchy.name != "weapon_grenade_rdg2.generated(Clone)") {
+                            if (VRGlobals.player.HandsController.HandsHierarchy.name != "weapon_grenade_rdg2.generated(Clone)") {                               
                                 //InitVRPatches.rightPointerFinger.enabled = true;
                                 //VRGlobals.handsInteractionController.grenadeLaser.SetActive(true);
                                 VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1f, -0.43f, -0.25f);
@@ -680,9 +679,9 @@ namespace TarkovVR.Source.Controls
                     {
                         grenadeController.method_9(
                             null, // throwPosition
-                            0f,   // timeSinceSafetyLevelRemoved (tune this if needed)
+                            0f,   // timeSinceSafetyLevelRemoved
                             1f,   // lowHighThrow
-                            Vector3.zero, // direction (ignored in your patch)
+                            Vector3.zero, // direction
                             1f,   // forcePower
                             false, // lowThrow
                             true   // withVelocity

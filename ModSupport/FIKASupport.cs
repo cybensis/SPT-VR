@@ -35,30 +35,14 @@ using EFT.UI.Matchmaker;
 
 namespace TarkovVR.ModSupport.FIKA
 {
-
-    public class FollowTarget : MonoBehaviour
-    {
-        public Transform target;
-        void Update()
-        {
-            if (target != null)
-                transform.position = target.position;
-        }
-    }
-
     [HarmonyPatch]
     internal static class FIKASupport
     {
-        
+        /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MatchMakerUI), "Awake")]
         private static void SetMatchMakerUI(MatchMakerUI __instance)
         {
-            /*
-            __instance.transform.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
-            __instance.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
-            __instance.transform.localPosition = new Vector3(0.117f, -999.7602f, 0.9748f);
-            */
             __instance.WaitOneFrame(delegate
             {
                 __instance.transform.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
@@ -66,7 +50,19 @@ namespace TarkovVR.ModSupport.FIKA
                 __instance.transform.localScale = new Vector3(1, 1, 1);
             });
         }
-
+        */
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MatchMakerUI), "Awake")]
+        private static void SetMatchMakerUI(MatchMakerUI __instance)
+        {
+            Transform transform = __instance.transform; // Capture only the Transform, not MatchMakerUI
+            __instance.WaitOneFrame(delegate
+            {
+                transform.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+                transform.localPosition = new Vector3(0, 700, 0);
+                transform.localScale = new Vector3(1, 1, 1);
+            });
+        }
         [HarmonyPrefix]
         [HarmonyPatch(typeof(TarkovApplication), "method_53")]
         private static bool FixExitRaid(TarkovApplication __instance)
@@ -184,12 +180,13 @@ namespace TarkovVR.ModSupport.FIKA
         */
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(Fika.Core.Main.GameMode.ClientGameController), "WaitForOtherPlayersToLoad")]
-        private static void RehideLaser(Fika.Core.Main.GameMode.ClientGameController __instance)
+        [HarmonyPatch(typeof(Fika.Core.Main.GameMode.HostGameController), "WaitForOtherPlayersToLoad")]
+        private static void RehideLaserHost(Fika.Core.Main.GameMode.ClientGameController __instance)
         {
             VRGlobals.menuVRManager.enabled = false;
             VRGlobals.vrPlayer.enabled = true;
             VRGlobals.ikManager.enabled = true;
+            
             if (VRGlobals.menuOpen)
             {
                 if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
@@ -202,6 +199,31 @@ namespace TarkovVR.ModSupport.FIKA
                             renderer.enabled = true;
                 }
             }
+            
+            VRGlobals.menuOpen = false;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Fika.Core.Main.GameMode.ClientGameController), "WaitForOtherPlayersToLoad")]
+        private static void RehideLaserClient(Fika.Core.Main.GameMode.ClientGameController __instance)
+        {
+            VRGlobals.menuVRManager.enabled = false;
+            VRGlobals.vrPlayer.enabled = true;
+            VRGlobals.ikManager.enabled = true;
+
+            if (VRGlobals.menuOpen)
+            {
+                if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
+                    foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = true;
+                if (WeaponPatches.currentGunInteractController != null)
+                {
+                    if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                            renderer.enabled = true;
+                }
+            }
+
             VRGlobals.menuOpen = false;
         }
         /*

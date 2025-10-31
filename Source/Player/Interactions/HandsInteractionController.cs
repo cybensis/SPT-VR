@@ -16,9 +16,6 @@ using EFT.InventoryLogic;
 using static EFT.Interactive.WorldInteractiveObject;
 using System.Collections.Generic;
 //using LiteNetLib.Utils;
-using Fika.Core.Main.Utils;
-using Fika.Core.Networking;
-using Fika.Core.Networking;
 using Comfort.Common;
 //using LiteNetLib;
 

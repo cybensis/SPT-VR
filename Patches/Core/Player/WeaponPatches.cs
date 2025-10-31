@@ -37,12 +37,9 @@ using TarkovVR;
 using System.Collections;
 using System.Security.Cryptography.X509Certificates;
 using TarkovVR.ModSupport.FIKA;
-using Fika.Core;
-using Fika.Core.Main.Utils;
 using static FirearmsAnimator;
 using Comfort.Common;
 using Valve.VR;
-using Fika.Core.Modding.Events;
 
 namespace TarkovVR.Patches.Core.Player
 {

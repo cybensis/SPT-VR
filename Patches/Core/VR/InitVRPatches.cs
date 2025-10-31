@@ -21,7 +21,6 @@ using System.Runtime.Remoting.Contexts;
 using UnityEngine.XR;
 using UnityEngine.Rendering;
 using System.Collections;
-using static Fika.Core.Main.Components.CoopHandler;
 using TarkovVR.Patches.Visuals;
 using Valve.VR.InteractionSystem;
 using System.IO;

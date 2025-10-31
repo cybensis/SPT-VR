@@ -12,10 +12,7 @@ using UnityEngine.XR.Management;
 using Valve.VR;
 using static TarkovVR.Patches.Visuals.VisualPatches;
 using UnityEngine.XR;
-using Fika.Core.Networking;
-using Fika.Core.Main.Utils;
 using System.Text;
-using Fika.Core.Modding.Events;
 
 namespace TarkovVR
 {

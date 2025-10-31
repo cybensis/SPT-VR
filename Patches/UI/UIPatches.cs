@@ -601,7 +601,7 @@ namespace TarkovVR.Patches.UI
                 _originalTransforms.Remove(__instance);
             }
         }
-
+        
         private static readonly FieldInfo PossibleInteractionsChangedField = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "InteractionRaycast")]
@@ -693,7 +693,7 @@ namespace TarkovVR.Patches.UI
             
             else if (interactableObject is LootItem lootItem)
             {
-                if (VRGlobals.handsInteractionController.heldItem != null)
+                if (lootItem.Item == null || VRGlobals.handsInteractionController.heldItem != null)
                 {
                     interactableObject = null;
                 }
@@ -766,6 +766,7 @@ namespace TarkovVR.Patches.UI
             }
             return false;
         }
+        
 
 
         //Disables checking item distance when looting - not sure why but 3.11 broke this and it thinks you're too far when you pick up loose loot        

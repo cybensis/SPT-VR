@@ -817,7 +817,13 @@ namespace TarkovVR.Patches.Misc
             if (__instance != null && __instance.gameObject != null && __instance.pointerEventData_0 != null && (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis) < 0.7)
             {
                 vrUiInteracter.EndDrop();
-                __instance.OnEndDrag(__instance.pointerEventData_0);
+                var eventData = __instance.pointerEventData_0;
+
+                if (eventData.pointerEnter != null && eventData.pointerEnter.gameObject == null)
+                {
+                    eventData.pointerEnter = null;
+                }
+                __instance.OnEndDrag(eventData);
             }
             if (__instance.IsSearched)
             {

@@ -121,6 +121,7 @@ namespace TarkovVR.Source.UI
                 }
             }
         }
+        /*
         private void handleButtonClick(Vector2 hitPoint)
         {
             SteamVR_Action_Boolean actionButton = VRSettings.GetLeftHandedMode()
@@ -181,7 +182,73 @@ namespace TarkovVR.Source.UI
                     ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerDownHandler);
             }
         }
+        */
+        private void handleButtonClick(Vector2 hitPoint)
+        {
+            SteamVR_Action_Boolean actionButton = VRSettings.GetLeftHandedMode()
+                ? SteamVR_Actions._default.ButtonX
+                : SteamVR_Actions._default.ButtonA;
 
+            bool isPointerClick = !hitObject.GetComponent<EmptyItemView>();
+
+            // Normalize object targeting for specific UI cases
+            if (hitObject.transform.parent)
+            {
+                if (hitObject.name == "Toggle" && hitObject.transform.parent.parent.TryGetComponent(out CategoryView toggleCategory))
+                    hitObject = toggleCategory._toggle.gameObject;
+                else if (hitObject.transform.parent.TryGetComponent(out SubcategoryView _))
+                    hitObject = hitObject.transform.parent.gameObject;
+                else if (hitObject.name == "Main" && hitObject.transform.parent.TryGetComponent(out CategoryView _))
+                    hitObject = hitObject.transform.parent.gameObject;
+            }
+
+            // Track button down and send OnPointerDown event
+            if (actionButton.stateDown)
+            {
+                pressedObject = hitObject;
+                eventData.button = PointerEventData.InputButton.Left;
+                ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerDownHandler);
+            }
+
+            // Handle right-click (hold)
+            if (actionButton.state)
+            {
+                timeAButtonHeld += Time.deltaTime;
+
+                if (!rightClickTriggered && timeAButtonHeld > 0.25f)
+                {
+                    rightClickTriggered = true;
+                    eventData.pressPosition = hitPoint;
+                    pressPosition = eventData.worldPosition;
+                    eventData.button = PointerEventData.InputButton.Right;
+                    eventData.clickCount = 1;
+                    ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
+                }
+            }
+            else
+            {
+                timeAButtonHeld = 0f;
+                rightClickTriggered = false;
+            }
+
+            // Handle button release - send OnPointerUp event
+            if (dragObject == null && !rightClickTriggered && actionButton.stateUp && pressedObject == hitObject)
+            {
+                eventData.button = PointerEventData.InputButton.Left;
+
+                // Send OnPointerUp first (this triggers the toggle)
+                ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerUpHandler);
+
+                // Then send click event for other UI elements that need it
+                if (isPointerClick)
+                {
+                    clickCount = (Time.time - lastClickTime <= 0.25f) ? clickCount + 1 : 1;
+                    lastClickTime = Time.time;
+                    eventData.clickCount = clickCount;
+                    ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
+                }
+            }
+        }
         private void handleUIScrollwheel()
         {
             float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftJoystick.axis.y : SteamVR_Actions._default.RightJoystick.axis.y;
