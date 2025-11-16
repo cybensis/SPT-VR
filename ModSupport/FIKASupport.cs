@@ -38,24 +38,11 @@ namespace TarkovVR.ModSupport.FIKA
     [HarmonyPatch]
     internal static class FIKASupport
     {
-        /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MatchMakerUI), "Awake")]
         private static void SetMatchMakerUI(MatchMakerUI __instance)
         {
-            __instance.WaitOneFrame(delegate
-            {
-                __instance.transform.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
-                __instance.transform.localPosition = new Vector3(0, 700, 0);
-                __instance.transform.localScale = new Vector3(1, 1, 1);
-            });
-        }
-        */
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(MatchMakerUI), "Awake")]
-        private static void SetMatchMakerUI(MatchMakerUI __instance)
-        {
-            Transform transform = __instance.transform; // Capture only the Transform, not MatchMakerUI
+            Transform transform = __instance.transform;
             __instance.WaitOneFrame(delegate
             {
                 transform.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
@@ -63,6 +50,60 @@ namespace TarkovVR.ModSupport.FIKA
                 transform.localScale = new Vector3(1, 1, 1);
             });
         }
+        
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Fika.Core.UI.Custom.MainMenuUIScript), "OnEnable")]
+        private static void SetMainMenuUI(Fika.Core.UI.Custom.MainMenuUIScript __instance)
+        {
+            if (__instance == null)
+                return;
+
+            if (__instance._mainMenuUI == null)
+                return;
+
+            Transform mainMenuUiChild = __instance._mainMenuUI.transform;
+            if (mainMenuUiChild == null)
+                return;
+
+
+            // Add null checks inside the delegate too, since it's called later
+            if (mainMenuUiChild == null || mainMenuUiChild.childCount == 0)
+                return;
+
+            Transform firstChild = mainMenuUiChild.GetChild(0);
+            if (firstChild == null)
+                return;
+
+            Canvas canvas = firstChild.GetComponent<Canvas>();
+            if (canvas == null)
+                return;
+
+            canvas.renderMode = RenderMode.WorldSpace;
+            
+            mainMenuUiChild.GetChild(0).localPosition = new Vector3(0, 0, 0);
+            mainMenuUiChild.localPosition = new Vector3(900, -100, 0);
+            mainMenuUiChild.localScale = new Vector3(0.8f, 0.8f, 0.8f);
+            __instance.WaitOneFrame(delegate
+            {
+                mainMenuUiChild.GetChild(0).GetChild(0).localPosition = new Vector3(0, 0, 0);
+            });          
+        }
+        
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SendItemUI), "Awake")]
+        private static void SetSendItemUI(SendItemUI __instance)
+        {
+            Transform transform = __instance.transform;
+            __instance.WaitOneFrame(delegate
+            {
+                transform.GetChild(0).GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+                transform.localPosition = new Vector3(-1000, -800, 0);
+                transform.localScale = new Vector3(1, 1, 1);
+            });
+        }
+
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(TarkovApplication), "method_53")]
         private static bool FixExitRaid(TarkovApplication __instance)
@@ -150,125 +191,41 @@ namespace TarkovVR.ModSupport.FIKA
             return true;
         }
 
-
-        [HarmonyPostfix]
+        
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(Fika.Core.Main.GameMode.BaseGameController), "CreateStartButton")]
         private static void AddLaserBackToRaidLoading(Fika.Core.Main.GameMode.BaseGameController __instance)
         {
             VRGlobals.menuVRManager.OnEnable();
         }
-        /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(Fika.Core.Coop.GameMode.CoopGame), "WaitForOtherPlayersToLoad")]
-        private static void RehideLaser(Fika.Core.Coop.GameMode.CoopGame __instance)
-        {
-            VRGlobals.menuVRManager.enabled = false;
-            VRGlobals.vrPlayer.enabled = true;
-            VRGlobals.ikManager.enabled = true;
-            if (VRGlobals.menuOpen)
-            {
-                if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
-                    foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
-                        renderer.enabled = true;
-
-                if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
-                    foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
-                        renderer.enabled = true;
-            }
-            VRGlobals.menuOpen = false;
-        }
-        */
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(Fika.Core.Main.GameMode.HostGameController), "WaitForOtherPlayersToLoad")]
-        private static void RehideLaserHost(Fika.Core.Main.GameMode.ClientGameController __instance)
+        [HarmonyPatch(typeof(PreloaderUI), "ShowRaidStartInfo")]
+        private static void DisableLaser(PreloaderUI __instance)
         {
-            VRGlobals.menuVRManager.enabled = false;
-            VRGlobals.vrPlayer.enabled = true;
-            VRGlobals.ikManager.enabled = true;
-            
-            if (VRGlobals.menuOpen)
+            if (ModSupport.InstalledMods.FIKAInstalled)
             {
-                if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
-                    foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
-                        renderer.enabled = true;
-                if (WeaponPatches.currentGunInteractController != null)
+                VRGlobals.menuVRManager.enabled = false;
+                VRGlobals.vrPlayer.enabled = true;
+                VRGlobals.ikManager.enabled = true;
+
+                if (VRGlobals.menuOpen)
                 {
-                    if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
-                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                    if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
+                        foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                             renderer.enabled = true;
+                    if (WeaponPatches.currentGunInteractController != null)
+                    {
+                        if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                            foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                                renderer.enabled = true;
+                    }
                 }
+
+                VRGlobals.menuOpen = false;
             }
-            
-            VRGlobals.menuOpen = false;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(Fika.Core.Main.GameMode.ClientGameController), "WaitForOtherPlayersToLoad")]
-        private static void RehideLaserClient(Fika.Core.Main.GameMode.ClientGameController __instance)
-        {
-            VRGlobals.menuVRManager.enabled = false;
-            VRGlobals.vrPlayer.enabled = true;
-            VRGlobals.ikManager.enabled = true;
-
-            if (VRGlobals.menuOpen)
-            {
-                if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
-                    foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
-                        renderer.enabled = true;
-                if (WeaponPatches.currentGunInteractController != null)
-                {
-                    if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
-                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
-                            renderer.enabled = true;
-                }
-            }
-
-            VRGlobals.menuOpen = false;
-        }
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(Fika.Core.Main.Components.CoopHandler), "ProcessQuitting")]
-        private static bool OverrideExitRaidButton(Fika.Core.Main.Components.CoopHandler __instance)
-        {
-            EQuitState quitState = __instance.GetQuitState();
-
-            if ((VRSettings.GetLeftHandedMode() ? !SteamVR_Actions._default.ButtonY.stateDown : !SteamVR_Actions._default.ButtonB.stateDown) || quitState == EQuitState.None || __instance.requestQuitGame)
-            {
-                return false;
-            }
-            ConsoleScreen.Log($"{FikaPlugin.ExtractKey.Value} pressed, attempting to extract!");
-            Plugin.MyLog.LogInfo((object)$"{FikaPlugin.ExtractKey.Value} pressed, attempting to extract!");
-            __instance.requestQuitGame = true;
-            CoopGame coopGame = CoopGame.Instance;
-            if (!__instance.isClient)
-            {
-                if (coopGame.ExitStatus == ExitStatus.Transit && __instance.HumanPlayers.Count <= 1)
-                {
-                    coopGame.Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.ExitStatus, coopGame.ExitLocation);
-                }
-                else if (Singleton<FikaServer>.Instance.NetServer.ConnectedPeersCount > 0 && quitState != EQuitState.None)
-                {
-                    NotificationManagerClass.DisplayWarningNotification(GClass2348.Localized("F_Client_HostCannotExtract"));
-                    __instance.requestQuitGame = false;
-                }
-                else if (Singleton<FikaServer>.Instance.NetServer.ConnectedPeersCount == 0 && Singleton<FikaServer>.Instance.TimeSinceLastPeerDisconnected > DateTime.Now.AddSeconds(-5.0) && Singleton<FikaServer>.Instance.HasHadPeer)
-                {
-                    NotificationManagerClass.DisplayWarningNotification(GClass2348.Localized("F_Client_Wait5Seconds"));
-                    __instance.requestQuitGame = false;
-                }
-                else
-                {
-                    coopGame.Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.ExitStatus, __instance.MyPlayer.ActiveHealthController.IsAlive ? coopGame.ExitLocation : null);
-                }
-            }
-            else
-            {
-                coopGame.Stop(Singleton<GameWorld>.Instance.MainPlayer.ProfileId, coopGame.ExitStatus, __instance.MyPlayer.ActiveHealthController.IsAlive ? coopGame.ExitLocation : null);
-            }
-            return false;
-        }
-        */
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Fika.Core.Main.Components.CoopHandler), "ProcessQuitting")]
         private static bool OverrideExitRaidButton(Fika.Core.Main.Components.CoopHandler __instance)

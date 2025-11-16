@@ -1,4 +1,5 @@
-﻿using EFT;
+﻿using Comfort.Common;
+using EFT;
 using EFT.Animations;
 using EFT.UI;
 using HarmonyLib;
@@ -14,6 +15,9 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Valve.VR;
 using Valve.VR.InteractionSystem;
+using static PlayerPhysicalClass;
+using static RootMotion.FinalIK.AimPoser;
+using static UnityEngine.UIElements.VisualElement;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -142,7 +146,7 @@ namespace TarkovVR.Patches.Core.Player
                 else if (VRSettings.GetMovementMode() == VRSettings.MovementMode.JoyStickOnly)
                 {
                     // If the right joystick is used, or the head is rotated more than 80 degrees, or you are aiming down sight, set the legs to rotate based on head Y axis
-                    if (rightJoystickUsed || Mathf.Abs(rotDiff) > 80 || (VRGlobals.firearmController != null && VRGlobals.firearmController.IsAiming))
+                    if (rightJoystickUsed || Mathf.Abs(rotDiff) > 80 || (VRGlobals.firearmController != null && VRGlobals.firearmController.IsAiming && Mathf.Abs(rotDiff) > 50))
                         lastYRot = headY;
                 }
                 else
@@ -160,7 +164,9 @@ namespace TarkovVR.Patches.Core.Player
 
             // Scale and clamp to -90 to 90 range (less jarring/buggy than 180)
             headPitch = Mathf.Clamp(headPitch / 2, -90, 90);
-            deltaRotation = new Vector2(deltaRotation.x + lastYRot, headPitch);
+            if (VRGlobals.usingItem)
+                headPitch = 0;
+            deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
 
             leftJoystickLastUsed = leftJoystickUsed;
 
@@ -196,7 +202,7 @@ namespace TarkovVR.Patches.Core.Player
             return false;
              
         }
-
+        
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FirstPersonCameraOperationClass), "ManualLateUpdate")]
@@ -217,8 +223,9 @@ namespace TarkovVR.Patches.Core.Player
             }
             else if (!VRGlobals.emptyHands)
                 VRGlobals.camRoot.transform.position = new Vector3(__instance.Player_0.Transform.position.x, __instance.Player_0.Transform.position.y + 1.5f, __instance.Player_0.Transform.position.z);
-
+            //Plugin.MyLog.LogError($"playerY={__instance.Player_0.Transform.position.y:F5}, camRootY={VRGlobals.camRoot.transform.position.y:F5}, rightHandY={VRGlobals.vrPlayer.RightHand.transform.position.y:F5}");
             return false;
         }
+
     }
 }

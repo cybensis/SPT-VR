@@ -192,12 +192,14 @@ namespace TarkovVR.Source.Player.Interactions
                 SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any);
 
             // Handle laser pointer (only update when state changes)
+            /*
             bool shouldShowLaser = secondaryHandTriggerAxis > 0.5f && !VRGlobals.vrPlayer.isSupporting;
             if (useLeftHandForRaycast != shouldShowLaser)
             {
                 useLeftHandForRaycast = shouldShowLaser;
                 laser.SetActive(shouldShowLaser);
             }
+            */
 
             ProcessInputStates();
 
@@ -278,9 +280,11 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         private void ProcessLeftHandInputs()
-        {           
+        {
+            float secondaryHandTriggerAmount = cachedLeftHandedMode ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
+
             // Handle rig interactions with cached state
-            if (leftHandState.inRigCollider)
+            if (leftHandState.inBackpack)
             {
                 if (UIPatches.quickSlotUi && secondaryHandGrip.stateDown)
                 {
@@ -314,6 +318,21 @@ namespace TarkovVR.Source.Player.Interactions
                 }
             }
 
+            if (leftHandState.inBackpack && !heldItem)
+            {             
+                if (secondaryHandTriggerAmount > 0.5f)
+                {
+                    IInputHandler baseHandler;
+                    VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.DropBackpack, out baseHandler);
+                    if (baseHandler != null)
+                    {
+                        DropBackpackHandler dropBackpackHandler = baseHandler as DropBackpackHandler;
+                        dropBackpackHandler.TriggerDropBackpack();
+                    }
+
+                }
+            }
+
             // Handle headGear interactions with cached state
             if (leftHandState.inHeadGear)
             {
@@ -326,6 +345,17 @@ namespace TarkovVR.Source.Player.Interactions
                         HeadMountedDeviceHandler heeadMountDeviceHandler = baseHandler as HeadMountedDeviceHandler;
                         heeadMountDeviceHandler.TriggerHHeadMount();
                     }
+                }
+                if (secondaryHandTriggerAmount > 0.5f)
+                {
+                    IInputHandler baseHandler;
+                    VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ToggleHeadLight, out baseHandler);
+                    if (baseHandler != null)
+                    {
+                        HeadLightHandler headLightHandler = baseHandler as HeadLightHandler;
+                        headLightHandler.TriggerHeadLight();
+                    }
+
                 }
             }
 
@@ -455,21 +485,21 @@ namespace TarkovVR.Source.Player.Interactions
                             leftHandState.inRigCollider = true;
                             if (!previousState.inRigCollider)
                             {
-                                SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, secondaryInputSource);
+                                //SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, secondaryInputSource);
                                 hasEnteredRigCollider = true;
                             }
                             break;
 
                         case InteractableType.BackpackCollider:
-                            if (heldItem)
-                            {
+                            //if (heldItem)
+                            //{
                                 leftHandState.inBackpack = true;
                                 if (!previousState.inBackpack)
                                 {
                                     SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, secondaryInputSource);
                                     hasEnteredBackpack = true;
                                 }
-                            }
+                            //}
                             break;
 
                         case InteractableType.HeadGearCollider:
@@ -702,6 +732,9 @@ namespace TarkovVR.Source.Player.Interactions
         {
             SteamVR_Action_Boolean secondaryHandGrip = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
 
+            if (VRGlobals.menuOpen)
+                return;
+
             if (!isInRange)
             {
                 isInRange = true;
@@ -710,10 +743,12 @@ namespace TarkovVR.Source.Player.Interactions
                     SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (VRSettings.GetLeftHandedMode()) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                     hasEnteredScope = true;
                 }
+                /*
                 if (WeaponPatches.currentGunInteractController != null && scopeTransform != null)
                 {
                     WeaponPatches.currentGunInteractController.SetScopeHighlight(scopeTransform);
                 }
+                */
             }
 
             if (secondaryHandGrip.state)

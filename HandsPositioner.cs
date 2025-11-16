@@ -40,10 +40,7 @@ namespace TarkovVR
             {
                 VRGlobals.emptyHands.rotation = VRGlobals.vrPlayer.handsRotation;
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
-            }
-
+            }                               
         }
-
-
     }
 }

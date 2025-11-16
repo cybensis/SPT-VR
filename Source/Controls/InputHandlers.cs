@@ -2,6 +2,7 @@
 using EFT.InputSystem;
 using EFT.InventoryLogic;
 using EFT.UI;
+using RootMotion.FinalIK;
 using System;
 using System.CodeDom;
 using System.Collections.Generic;
@@ -12,6 +13,7 @@ using TarkovVR.ModSupport;
 //using TarkovVR.ModSupport.EFTApi;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
+using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -147,6 +149,7 @@ namespace TarkovVR.Source.Controls
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        /*
         public class ResetHeightHandler : IInputHandler
         {
             float timeHeld = 0f;
@@ -206,6 +209,34 @@ namespace TarkovVR.Source.Controls
                 this.leftForearm = leftForearm;
             }
         }
+        */
+        
+        public class ResetHeightHandler : IInputHandler
+        {
+            float timeHeld = 0f;
+            public static float HEIGH_RESET_TIME_THRESHOLD = 0.5f;
+            private bool heightReset = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+
+                if (SteamVR_Actions._default.ClickRightJoystick.state && !heightReset)
+                {
+                    timeHeld += Time.deltaTime;
+                    if (timeHeld > HEIGH_RESET_TIME_THRESHOLD)
+                    {
+                        VRGlobals.vrPlayer.initPos = VRGlobals.VRCam.transform.localPosition;
+
+                        heightReset = true;
+                    }
+                }
+                else
+                {
+                    timeHeld = 0f;
+                    heightReset = false;
+                }
+            }
+        }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class SprintInputHandler : IInputHandler
         {
@@ -258,66 +289,158 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class AimHandler : IInputHandler
         {
-            private float x = 0;
-            private float y = 0;
-            private float z = 1;
+            // Hysteresis thresholds to prevent spam toggling
+            private const float SCOPE_ENTER_ANGLE = 20f;
+            private const float SCOPE_EXIT_ANGLE = 30f;
+            private const float IRONS_ENTER_ANGLE_TO = 15f;
+            private const float IRONS_EXIT_ANGLE_TO = 30f;
+            private const float IRONS_ENTER_ANGLE_FROM = 17.5f;
+            private const float IRONS_EXIT_ANGLE_FROM = 32.5f;
+
+            // Distance check to prevent scope activation when too far
+            private const float MAX_SCOPE_DISTANCE = 0.45f;
+
+            // Cooldown to prevent rapid toggling
+            private const float TOGGLE_COOLDOWN = 0.2f;
+            private float lastToggleTime = 0f;
+
             public void UpdateCommand(ref ECommand command)
-            { 
+            {
                 if (VRGlobals.firearmController == null && !WeaponPatches.rangeFinder)
                     return;
 
-                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
+                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode()
+                    ? SteamVR_Actions._default.LeftTrigger.axis
+                    : SteamVR_Actions._default.RightTrigger.axis;
+
+                // Handle rangefinder special case
                 if (WeaponPatches.rangeFinder)
                 {
-                    if (primaryHandTriggerAmount > 0.5f && !WeaponPatches.rangeFinder.IsAiming)
-                    {
-                        WeaponPatches.rangeFinder.ToggleAim();
-                        VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.13f, -0.1711f, -0.24f);
-                        VRGlobals.weaponHolder.transform.localEulerAngles = new Vector3(12, 308, 90);
-                    }
-                    else if (primaryHandTriggerAmount < 0.5f && WeaponPatches.rangeFinder.IsAiming) {
-                        WeaponPatches.rangeFinder.ToggleAim();
-                        VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(37, 267, 55);
-                        VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.23f, 0.0689f, -0.23f);
-                    }
+                    HandleRangefinder(primaryHandTriggerAmount);
                     return;
                 }
 
                 bool isAiming = VRGlobals.firearmController.IsAiming;
-                if (VRGlobals.scope != null)
+                float currentTime = Time.time;
+
+                // Prevent rapid toggling
+                if (currentTime - lastToggleTime < TOGGLE_COOLDOWN)
+                    return;
+
+                // Handle scope or iron sight aiming
+                if (HasValidScope())
                 {
-                    Vector3 directionToScope = (VRGlobals.scope.transform.position + (VRGlobals.scope.transform.forward * -0.25f)) - VRGlobals.camHolder.transform.position;
-                    directionToScope = directionToScope.normalized;
-                    float angleToScope = Vector3.Angle(VRGlobals.scope.transform.forward * -1, directionToScope);
-                    float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
-                    //Plugin.MyLog.LogWarning("Aiming deets: " + angleToScope + "   |   " + angleFromScope + "   |   " + isAiming);
-                    if (!isAiming && angleToScope <= 25f && angleFromScope <= 25f)
-                        command = ECommand.ToggleAlternativeShooting;
-                    else if (isAiming && (angleToScope > 25f || angleFromScope > 25f))
-                    {
-                        command = ECommand.EndAlternativeShooting;
-                        VRPlayerManager.smoothingFactor = 50f;
-                    }
+                    HandleScopeAiming(ref command, isAiming, currentTime);
                 }
-                else {
-                    Vector3 direction = VRGlobals.vrPlayer.RightHand.transform.right * -1;
-                    Vector3 directionToGun = (VRGlobals.vrPlayer.RightHand.transform.position + direction) - VRGlobals.camHolder.transform.position;
-                    directionToGun = directionToGun.normalized;
-                    float angleToScope = Vector3.Angle(direction, directionToGun);
-                    float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToGun);
-                    //Plugin.MyLog.LogWarning("Aiming deets: " + angleToScope + "   |   " + angleFromScope + "   |   " + isAiming);
-                    if (!isAiming && angleToScope <= 25f && angleFromScope <= 27.5f)
-                        command = ECommand.ToggleAlternativeShooting;
-                    else if (isAiming && (angleToScope > 25f || angleFromScope > 27.5f))
-                    {
-                        command = ECommand.EndAlternativeShooting;
-                        VRPlayerManager.smoothingFactor = 50f;
-                    }
+                else
+                {
+                    HandleIronSightAiming(ref command, isAiming, currentTime);
                 }
 
+                // Adjust player rotation when entering aim mode while supporting weapon
                 if (command == ECommand.ToggleAlternativeShooting && VRGlobals.vrPlayer.isSupporting)
-                        VRGlobals.player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+                {
+                    VRGlobals.player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+                }
+            }
 
+            private void HandleRangefinder(float triggerAmount)
+            {
+                const float TRIGGER_THRESHOLD = 0.5f;
+
+                if (triggerAmount > TRIGGER_THRESHOLD && !WeaponPatches.rangeFinder.IsAiming)
+                {
+                    WeaponPatches.rangeFinder.ToggleAim();
+                    VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.13f, -0.1711f, -0.24f);
+                    VRGlobals.weaponHolder.transform.localEulerAngles = new Vector3(12, 308, 90);
+                }
+                else if (triggerAmount < TRIGGER_THRESHOLD && WeaponPatches.rangeFinder.IsAiming)
+                {
+                    WeaponPatches.rangeFinder.ToggleAim();
+                    VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(37, 267, 55);
+                    VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.23f, 0.0689f, -0.23f);
+                }
+            }
+
+            private bool HasValidScope()
+            {
+                return VRGlobals.scopes != null && VRGlobals.scopes.Count > 0;
+            }
+
+            private void HandleScopeAiming(ref ECommand command, bool isAiming, float currentTime)
+            {
+                Transform activeScope = VRGlobals.scopes.FirstOrDefault(s => s != null && s.parent != null);
+                if (activeScope == null)
+                    return;
+
+                float distanceAdd = 0f;
+                // Check if the deep child exists and is named "mod_aim_camera_000"
+                if (activeScope.childCount > 1)
+                {
+                    Transform child1 = activeScope.GetChild(1);
+                    if (child1 != null && child1.childCount > 0)
+                    {
+                        Transform child1_0 = child1.GetChild(0);
+                        if (child1_0 != null && child1_0.childCount > 2)
+                        {
+                            Transform child1_0_2 = child1_0.Find("mod_aim_camera_000");
+                            //Plugin.MyLog.LogError("Found deep scope child: " + (child1_0_2 != null ? child1_0_2.name : "null"));
+                            if (child1_0_2 != null && child1_0_2.name == "mod_aim_camera_000")
+                            {
+                                activeScope = child1_0_2;
+                            }
+                        }
+                    }
+                }
+
+                Vector3 scopeTargetPosition = activeScope.position + (activeScope.forward * -0.25f);
+                Vector3 headPosition = VRGlobals.camHolder.transform.position;
+                Vector3 directionToScope = scopeTargetPosition - headPosition;
+                float distanceToScope = directionToScope.magnitude;
+                directionToScope.Normalize();
+                float angleToScope = Vector3.Angle(activeScope.forward * -1f, directionToScope);
+                float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
+
+                // Check if within distance and angle thresholds
+                if (!isAiming &&
+                    distanceToScope <= MAX_SCOPE_DISTANCE &&
+                    angleToScope <= SCOPE_ENTER_ANGLE &&
+                    angleFromScope <= SCOPE_ENTER_ANGLE)
+                {
+                    command = ECommand.ToggleAlternativeShooting;
+                    lastToggleTime = currentTime;
+                }
+                else if (isAiming && (angleToScope > SCOPE_EXIT_ANGLE ||
+                                      angleFromScope > SCOPE_EXIT_ANGLE ||
+                                      distanceToScope > MAX_SCOPE_DISTANCE))
+                {
+                    command = ECommand.EndAlternativeShooting;
+                    VRPlayerManager.smoothingFactor = 50f;
+                    lastToggleTime = currentTime;
+                }
+            }
+
+            private void HandleIronSightAiming(ref ECommand command, bool isAiming, float currentTime)
+            {
+                Vector3 direction = VRGlobals.vrPlayer.RightHand.transform.right * -1;
+                Vector3 directionToGun = (VRGlobals.vrPlayer.RightHand.transform.position + direction) - VRGlobals.camHolder.transform.position;
+                float distanceToGun = directionToGun.magnitude;
+                directionToGun = directionToGun.normalized;               
+                float angleToScope = Vector3.Angle(direction, directionToGun);
+                float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToGun);
+
+                // Use different thresholds based on current state (hysteresis)
+                if (!isAiming && angleToScope <= IRONS_ENTER_ANGLE_TO && angleFromScope <= IRONS_ENTER_ANGLE_FROM)
+                {
+                    command = ECommand.ToggleAlternativeShooting;
+                    lastToggleTime = currentTime;
+                }
+                else if (isAiming && (angleToScope > IRONS_EXIT_ANGLE_TO || angleFromScope > IRONS_EXIT_ANGLE_FROM))
+                {
+                    command = ECommand.EndAlternativeShooting;
+                    VRPlayerManager.smoothingFactor = 50f;
+                    lastToggleTime = currentTime;
+                }
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -414,6 +537,7 @@ namespace TarkovVR.Source.Controls
                 }
             }
         }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class SelectWeaponHandler : IInputHandler
         {
@@ -422,11 +546,20 @@ namespace TarkovVR.Source.Controls
             private bool swapSecondaryWeapon = false;
             private bool swapSidearm = false;
             private bool swapToMelee = false;
+
+            private float UBGLButtonDownTime = 0f;
+            private bool UBGLButtonWasDown = false;
+            private bool commandExecuted = false;
+            private const float HOLD_DURATION = 0f;
+          
             public void UpdateCommand(ref ECommand command)
             {
                 if (!VRGlobals.player)
                     return;
+                SteamVR_Action_Boolean UBGLButtonAction = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonA : SteamVR_Actions._default.ButtonX;
+                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
                 bool cancelGrenadeButtonClick = (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any));
+                bool UBGLButtonDown = UBGLButtonAction.state;
 
                 if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.grenadeEquipped && cancelGrenadeButtonClick))
                 {
@@ -465,6 +598,48 @@ namespace TarkovVR.Source.Controls
                     command = ECommand.SelectKnife;
                     swapToMelee = false;
                 }
+
+                //Handle UBGL weapon swapping
+                if (secondaryHandTriggerAmount >= 0.5f)
+                {
+
+                    // Button just pressed
+                    if (UBGLButtonDown && !UBGLButtonWasDown)
+                    {
+                        UBGLButtonDownTime = Time.time;
+                        commandExecuted = false;
+                    }
+
+                    // Button is being held
+                    if (UBGLButtonDown)
+                    {
+                        float holdTime = Time.time - UBGLButtonDownTime;
+
+                        // Execute command after holding for HOLD_DURATION
+                        if (holdTime >= HOLD_DURATION && !commandExecuted)
+                        {
+                            // Only execute if we have a valid active weapon
+                            if (VRGlobals.player.ActiveSlot != null && !WeaponPatches.rangeFinder)
+                            {
+                                if (VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")
+                                    command = ECommand.SelectFirstPrimaryWeapon;
+                                else
+                                    command = ECommand.SelectSecondPrimaryWeapon;
+                            }
+
+                            commandExecuted = true;
+                        }
+                    }
+                }
+                else
+                {
+                    if (UBGLButtonWasDown)
+                    {
+                        commandExecuted = false;
+                    }
+                }
+
+                UBGLButtonWasDown = UBGLButtonDown;
             }
 
             public void TriggerSwapOtherPrimary() {
@@ -622,8 +797,9 @@ namespace TarkovVR.Source.Controls
             public void UpdateCommand(ref ECommand command)
             {
                 bool inventoryButtonUp = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonA.GetStateUp(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonX.GetStateUp(SteamVR_Input_Sources.Any);
+                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
 
-                if (inventoryButtonUp)
+                if (inventoryButtonUp && secondaryHandTriggerAmount < 0.1f)
                     command = ECommand.ToggleInventory;
             }
         }
@@ -696,6 +872,56 @@ namespace TarkovVR.Source.Controls
 
             }
         }
+
+        public class TacticalHandler : IInputHandler
+        {
+            private float tacticalButtonDownTime = 0f;
+            private bool tacticalButtonWasDown = false;
+            private bool commandExecuted = false;
+            private const float HOLD_DURATION = 0.3f;
+
+            public void UpdateCommand(ref ECommand command)
+            {
+                SteamVR_Action_Boolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
+                SteamVR_Action_Boolean tacticalButtonAction = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonB : SteamVR_Actions._default.ButtonY;
+
+                bool tacticalButtonDown = tacticalButtonAction.state && secondaryGripState.state;
+
+                // Button just pressed
+                if (tacticalButtonDown && !tacticalButtonWasDown)
+                {
+                    tacticalButtonDownTime = Time.time;
+                    commandExecuted = false;
+                }
+
+                // Button is being held
+                if (tacticalButtonDown)
+                {
+                    float holdTime = Time.time - tacticalButtonDownTime;
+
+                    // Execute next device after holding for HOLD_DURATION
+                    if (holdTime >= HOLD_DURATION && !commandExecuted)
+                    {
+                        command = ECommand.NextTacticalDevice;
+                        commandExecuted = true;
+                    }
+                }
+
+                // Button just released
+                if (!tacticalButtonDown && tacticalButtonWasDown)
+                {
+                    float holdTime = Time.time - tacticalButtonDownTime;
+
+                    // If released before 1 second and command wasn't already executed, toggle device
+                    if (holdTime < HOLD_DURATION && !commandExecuted)
+                    {
+                        command = ECommand.ToggleTacticalDevice;
+                    }
+                }
+
+                tacticalButtonWasDown = tacticalButtonDown;
+            }
+        }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class EscapeHandler : IInputHandler
         {
@@ -703,7 +929,10 @@ namespace TarkovVR.Source.Controls
             {
                 bool escapeButtonUp = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any);
                 bool backButtonUp = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
+                SteamVR_Action_Boolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
 
+                if (secondaryGripState.state && !VRGlobals.menuOpen)
+                    return;
                 if (escapeButtonUp)
                     command = ECommand.Escape;
                 else if ((VRGlobals.menuOpen || !VRGlobals.inGame) && backButtonUp)
@@ -752,6 +981,42 @@ namespace TarkovVR.Source.Controls
 
             public void TriggerHHeadMount() {
                 toggleHeadMountedDevice = true;
+            }
+        }
+
+        public class HeadLightHandler : IInputHandler
+        {
+            private bool toggleHeadLight = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (toggleHeadLight)
+                {
+                    command = ECommand.ToggleHeadLight;
+                    toggleHeadLight = false;
+                }
+            }
+
+            public void TriggerHeadLight()
+            {
+                toggleHeadLight = true;
+            }
+        }
+
+        public class DropBackpackHandler : IInputHandler
+        {
+            private bool dropBackpack = false;
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (dropBackpack)
+                {
+                    command = ECommand.DropBackpack;
+                    dropBackpack = false;
+                }
+            }
+
+            public void TriggerDropBackpack()
+            {
+                dropBackpack = true;
             }
         }
     }

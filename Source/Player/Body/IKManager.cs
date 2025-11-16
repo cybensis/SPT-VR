@@ -14,13 +14,13 @@ namespace TarkovVR.Source.Player.VR
         private bool matchingHeadToBody = false;
         private Vector3 upperArmPos = new Vector3(-0.1f, 0.1f, 0);
         private readonly float forwardThreshold = 0.50f;    // Distance forward before body follows
-        private readonly float backwardThreshold = 0.15f; // Distance backward before body follows
-        private readonly float sideThreshold = 0.50f;      // Distance to sides before body follows
+        private readonly float backwardThreshold = 0.20f; // Distance backward before body follows
+        private readonly float sideThreshold = 0.40f;      // Distance to sides before body follows
         private readonly float emergencyThreshold = 0.6f;  // Distance for emergency repositioning
         private readonly float followSpeed = 2.5f;         // How quickly body follows head
         private readonly float movementMultiplier = 0.8f;  // Additional follow speed when moving
         private readonly AnimationCurve followCurve = AnimationCurve.EaseInOut(0, 0, 1, 1); // Smoothing curve
-        private readonly float headLeadDistance = 0.2f;    // How far ahead the head stays from body
+        private readonly float headLeadDistance = 0.15f;    // How far ahead the head stays from body
         private readonly float minHeadLeadDistance = 0.15f; // Minimum lead distance even when stationary
         private readonly float idleOffsetZ = 0.20f; // The actual idle z offset since the legs move back a bit when idle
 
@@ -31,6 +31,7 @@ namespace TarkovVR.Source.Player.VR
         private readonly float stopSmoothingTime = 1.0f; // Time to smoothly transition when stopping
         private float stopTimer = 0f; // Timer to track stopping transition
         private bool wasMoving = false; // Track if we were moving last frame
+        private Vector3 idleAnchorPosition;
 
         private Transform leftUpperArm;
         private Transform rightUpperArm;
@@ -38,8 +39,19 @@ namespace TarkovVR.Source.Player.VR
         public GameObject rightHandIK;
         public LimbIK leftArmIk;
         public LimbIK rightArmIk;
+        // ADD THESE:
+        private Transform leftForearm;
+        private Transform rightForearm;
+        public static float armLengthScale = 1.0f; // Current arm scale
 
+        // ADD THESE: Store original scales
+        private Vector3 leftUpperArmOriginalScale = Vector3.one;
+        private Vector3 rightUpperArmOriginalScale = Vector3.one;
+        private Vector3 leftForearmOriginalScale = Vector3.one;
+        private Vector3 rightForearmOriginalScale = Vector3.one;
+        private bool scalesInitialized = false;
 
+        
         private void Awake()
         {
             VRGlobals.VRCam = Camera.main;
@@ -59,6 +71,7 @@ namespace TarkovVR.Source.Player.VR
                 }
             }
         }
+        
 
         public void MatchLegsToArms()
         {
@@ -78,7 +91,7 @@ namespace TarkovVR.Source.Player.VR
                 transform.localPosition = Vector3.zero;
             }
         }
-
+        
         private void AdaptiveBodySync()
         {
             // Get current positions
@@ -199,6 +212,7 @@ namespace TarkovVR.Source.Player.VR
             // Update position tracking for next frame
             lastHeadPosition = headPosFlat;
         }
+        
 
         private Vector3 FlattenVector(Vector3 vector)
         {
@@ -284,7 +298,7 @@ namespace TarkovVR.Source.Player.VR
                 else if (!isActivelyMoving && wasMoving)
                 {
                     //When you stop moving with joystick legs will position themselves a bit behind the head
-                    float behindDistance = 0.30f;
+                    float behindDistance = 0.20f;
                     Vector3 headForward = FlattenVector(headRot * Vector3.forward).normalized;
                     targetPos = headPosFlat - (headForward * behindDistance);
                 }
@@ -317,7 +331,7 @@ namespace TarkovVR.Source.Player.VR
             localDelta.y = 0; // Only apply horizontal movement
             VRGlobals.vrPlayer.initPos += localDelta;
         }
-
+        
 
         // NOTE: I tried extending the arms but that offsets the hands from the gun, so instead set the local position of
         // the upper arm, or the collarbone, for the upper arm the +y value goes forward
@@ -332,14 +346,19 @@ namespace TarkovVR.Source.Player.VR
                 leftUpperArm.localPosition = upperArmPos;
             if (rightUpperArm)
                 rightUpperArm.localPosition = upperArmPos;
-
+            
             if (!VRGlobals.emptyHands || VRGlobals.player.HandsIsEmpty)
             {
                 MatchLegsToArms();
             }
-
-
-
         }
     }
 }
+
+
+
+
+
+
+
+

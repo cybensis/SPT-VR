@@ -735,7 +735,7 @@ namespace TarkovVR.Patches.Visuals
 
         */
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------
-        private static float[] TarkovLayers()
+        public static float[] TarkovLayers()
         {
             float[] distances = new float[32];
 

@@ -2,7 +2,9 @@
 using EFT.InventoryLogic;
 using Sirenix.Serialization;
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;
@@ -25,6 +27,8 @@ namespace TarkovVR.Source.Weapons
         private float fovAtStart;
         public bool swapZooms;
         private InputHandlers.ScopeZoomHandler scopeZoomHandler;
+        private bool hasToggledZoom = false;
+        private GameObject sightRaycastReciever;
 
         public void Awake() {
             IInputHandler baseHandler;
@@ -34,8 +38,21 @@ namespace TarkovVR.Source.Weapons
                 scopeZoomHandler = (InputHandlers.ScopeZoomHandler)baseHandler;
             }
         }
+
+        private bool IsVariableZoomScope()
+        {
+            foreach (Transform scope in VRGlobals.scopes)
+            {
+                //Plugin.MyLog.LogInfo($"Checking scope: {scope?.parent.name}");
+                if (scope != null && scope.parent != null && (ScopeManager.IsVariableZoom(scope.parent.name) || ScopeManager.IsVariableZoom(scope.parent.parent.name)))
+                    return true;
+            }
+            return false;
+        }
+
         public void initZoomDial()
         {
+
             if (scopeCamera)
             {
                 fovAtStart = scopeCamera.fieldOfView;
@@ -46,22 +63,50 @@ namespace TarkovVR.Source.Weapons
 
         }
 
+        public void changeScopeMode()
+        {
+            // Check if we have any scopes
+            if (VRGlobals.scopes == null || VRGlobals.scopes.Count == 0)
+                return;
 
-        public void changeScopeMode() {
-            if (VRGlobals.scope && VRGlobals.scope.parent.GetComponent<SightModVisualControllers>() != null)
+            // Find all scopes that have multiple modes
+            List<FirearmScopeStateStruct> scopeStates = new List<FirearmScopeStateStruct>();
+
+            foreach (Transform scope in VRGlobals.scopes)
             {
-                SightComponent sightComponent = VRGlobals.scope.parent.GetComponent<SightModVisualControllers>().sightComponent_0;
+                if (scope == null || scope.parent == null)
+                    continue;
+
+                var visualController = scope.parent.GetComponent<SightModVisualControllers>();
+                if (visualController == null)
+                    continue;
+
+                SightComponent sightComponent = visualController.sightComponent_0;
+                if (sightComponent == null)
+                    continue;
+
                 int scopeIndex = sightComponent.SelectedScopeIndex;
                 int maxScopeModes = sightComponent.GetScopeModesCount(scopeIndex);
-                int nextScopeMode = (sightComponent.SelectedScopeMode + 1) % maxScopeModes;
-                FirearmScopeStateStruct scopeState = new FirearmScopeStateStruct();
-                scopeState.ScopeMode = nextScopeMode;
-                scopeState.Id = sightComponent.Item.Id;
 
-                VRGlobals.firearmController.SetScopeMode(new FirearmScopeStateStruct[] { scopeState });
-            //if (VRGlobals.scope.name == "scope_all_eotech_hhs_1_tan(Clone)" && VRGlobals.scope.GetComponent<SightModVisualControllers>().sightComponent_0.SelectedScopeMode == 1)
-            //{
-            //}
+                // Only change mode if the scope has multiple modes
+                if (maxScopeModes > 1)
+                {
+                    int nextScopeMode = (sightComponent.SelectedScopeMode + 1) % maxScopeModes;
+
+                    FirearmScopeStateStruct scopeState = new FirearmScopeStateStruct
+                    {
+                        ScopeMode = nextScopeMode,
+                        Id = sightComponent.Item.Id
+                    };
+
+                    scopeStates.Add(scopeState);
+                }
+            }
+
+            // Apply all scope mode changes at once
+            if (scopeStates.Count > 0)
+            {
+                VRGlobals.firearmController.SetScopeMode(scopeStates.ToArray());
             }
         }
         //Joystick zoom redone to be smooth zoom all the way in and out only with variable scopes
@@ -76,28 +121,19 @@ namespace TarkovVR.Source.Weapons
                 SteamVR_Actions._default.RightJoystick.axis.y;
 
             if (Mathf.Abs(primaryHandJoystickYAxis) < VRSettings.GetRightStickSensitivity() ||
-                VRGlobals.scope.parent.name == "scope_all_eotech_hhs_1_tan(Clone)")
+                VRGlobals.scopes.Any(s => s != null && s.parent != null && s.parent.name.Contains("scope_all_eotech_hhs_1")))
                 return;
-
             // Cache the current camera FOV for threshold checking
             float previousFov = scopeCamera.fieldOfView;
 
-            // Check for smooth zoom scope
-            bool isVariableZoomScope = Array.IndexOf(new string[] {
-                "scope_30mm_eotech_vudu_1_6x24(Clone)",
-                "scope_30mm_razor_hd_gen_2_1_6x24(Clone)",
-                "scope_30mm_s&b_pm_ii_1_8x24(Clone)",
-                "scope_34mm_s&b_pm_ii_5_25x56(Clone)",
-                "scope_30mm_burris_fullfield_tac30_1_4x24(Clone)",
-                "scope_30mm_sig_tango6t_1_6x24(Clone)"
-            }, VRGlobals.scope.parent.name) >= 0;
+            
 
             // Deadzone threshold
             const float deadzone = 0.1f;
             float variableZoomSensitivity = VRSettings.GetVariableZoomSensitivity();
 
             // Handle smooth zoom scopes
-            if (isVariableZoomScope)
+            if (IsVariableZoomScope())
             {
                 // Only modify FOV when stick movement exceeds threshold
                 if (Mathf.Abs(primaryHandJoystickYAxis) > deadzone)
@@ -137,30 +173,31 @@ namespace TarkovVR.Source.Weapons
             // Always update the camera's FOV to match current value
             scopeCamera.fieldOfView = currentFov;
         }
-
-
         public void handlePhysicalZoomDial()
         {
-            if (scopeCamera)
+            if (VRGlobals.scopes.Any(s => s != null && s.parent != null && s.parent.name.Contains("scope_all_eotech_hhs_1")))
+                return;
+
+            if (!scopeCamera)
+                return;
+
+            if (IsVariableZoomScope())
             {
+                Quaternion relativeRotation = Quaternion.Inverse(initialHandRot) *
+                    SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
 
-                Quaternion relativeRotation = Quaternion.Inverse(initialHandRot) * SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
                 float degreesHandTurned = relativeRotation.eulerAngles.z;
-                // Convert to signed angle (-180 to 180)
-                if (degreesHandTurned > 180)
-                {
-                    degreesHandTurned -= 360;
-                }
-
-                degreesHandTurned = Mathf.Clamp(degreesHandTurned, maxScopeTurnDegree * -1, maxScopeTurnDegree);
+                if (degreesHandTurned > 180) degreesHandTurned -= 360;
+                degreesHandTurned = Mathf.Clamp(degreesHandTurned, -maxScopeTurnDegree, maxScopeTurnDegree);
 
                 float fovScaler = degreesHandTurned / maxScopeTurnDegree;
+
                 if (degreesHandTurned > 0)
                 {
                     float fovDif = maxFov - fovAtStart;
                     currentFov = fovAtStart + fovDif * fovScaler;
                 }
-                if (degreesHandTurned < 0)
+                else if (degreesHandTurned < 0)
                 {
                     float fovDif = fovAtStart - minFov;
                     currentFov = fovAtStart + fovDif * fovScaler;
@@ -169,23 +206,67 @@ namespace TarkovVR.Source.Weapons
                 currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
 
                 if (currentFov >= maxFov || currentFov <= minFov)
-                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand)  ;
+                {
+                    SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f,
+                        VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
+                }
 
-                if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 || scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
-                    if (scopeZoomHandler != null)
-                        scopeZoomHandler.TriggerSwapZooms();
+                if (scopeCamera.fieldOfView / maxFov < 0.5 && currentFov / maxFov >= 0.5 ||
+                    scopeCamera.fieldOfView / maxFov >= 0.5 && currentFov / maxFov < 0.5)
+                {
+                    scopeZoomHandler?.TriggerSwapZooms();
+                }
 
-                if (!VRGlobals.vrPlayer.isSupporting) { 
+                if (!VRGlobals.vrPlayer.isSupporting)
+                {
                     float normalizedValue = Mathf.InverseLerp(minFov, maxFov, currentFov);
                     float rotation = Mathf.Lerp(30, -30, normalizedValue);
                     VRGlobals.vrPlayer.LeftHand.transform.rotation = VRGlobals.handsInteractionController.scopeTransform.rotation;
                     VRGlobals.vrPlayer.LeftHand.transform.Rotate(rotation, 160, -40);
                     VRGlobals.vrPlayer.LeftHand.transform.position = VRGlobals.handsInteractionController.scopeTransform.position;
-                    VRGlobals.vrPlayer.LeftHand.transform.position += (VRGlobals.handsInteractionController.scopeTransform.right * -0.17f) + (VRGlobals.handsInteractionController.scopeTransform.up * -0.02f) + (VRGlobals.handsInteractionController.scopeTransform.forward * -0.05f);
+                    VRGlobals.vrPlayer.LeftHand.transform.position +=
+                        (VRGlobals.handsInteractionController.scopeTransform.right * -0.17f) +
+                        (VRGlobals.handsInteractionController.scopeTransform.up * -0.02f) +
+                        (VRGlobals.handsInteractionController.scopeTransform.forward * -0.05f);
                 }
+
                 scopeCamera.fieldOfView = currentFov;
-                //if (UIPatches.opticUi)
-                //    UIPatches.opticUi.Show($"{(int)currentFov}x");
+            }
+            else
+            {
+                Quaternion relativeRotation = Quaternion.Inverse(initialHandRot) *
+                    SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
+
+                float degreesHandTurned = relativeRotation.eulerAngles.z;
+                if (degreesHandTurned > 180) degreesHandTurned -= 360;
+
+                const float TOGGLE_THRESHOLD = 20f;
+
+                if (!hasToggledZoom)
+                {
+                    if (degreesHandTurned > TOGGLE_THRESHOLD)
+                    {
+                        scopeCamera.fieldOfView = minFov; // zoom in
+                        hasToggledZoom = true;
+                        SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f,
+                            VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
+                        scopeZoomHandler?.TriggerSwapZooms();
+                    }
+                    else if (degreesHandTurned < -TOGGLE_THRESHOLD)
+                    {
+                        scopeCamera.fieldOfView = maxFov; // zoom out
+                        hasToggledZoom = true;
+                        SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.4f,
+                            VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
+                        scopeZoomHandler?.TriggerSwapZooms();
+                    }
+                }
+                else
+                {
+                    // Reset toggle once hand returns near center
+                    if (Mathf.Abs(degreesHandTurned) < 10f)
+                        hasToggledZoom = false;
+                }
             }
         }
     }

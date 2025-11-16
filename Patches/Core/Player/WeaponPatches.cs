@@ -53,6 +53,130 @@ namespace TarkovVR.Patches.Core.Player
         public static GunInteractionController currentGunInteractController;
         public static Transform currentScope;
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(FirearmController.GClass2029), "method_13")]
+        private static void UnlockHand(FirearmController.GClass2029 __instance)
+        {
+            if (!__instance.Player_0.IsYourPlayer)
+                return;
+
+            if (__instance.Weapon_0.MalfState.State != 0)
+                VRGlobals.vrPlayer.ForceUnlockHand();
+        }
+
+
+
+        private static readonly Dictionary<EFT.Player.FirearmController, PlayerPhysicalClass.GClass773> activeConsumptions =
+        new Dictionary<EFT.Player.FirearmController, PlayerPhysicalClass.GClass773>();
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "IsAiming", MethodType.Setter)]
+        private static bool BypassADSAnimation(EFT.Player.FirearmController __instance, ref bool value)
+        {
+            if (!value)
+            {
+                __instance._player.Physical.HoldBreath(enable: false);
+            }
+            // Keep only the functional aiming logic and removes the ADS animation
+            __instance._isAiming = value;
+
+            __instance._player.Skills.FastAimTimer.Target = value ? 0f : 2f;
+            __instance._player.MovementContext.SetAimingSlowdown(value, 0.33f + __instance.gclass2250_0.AimMovementSpeed);
+
+            __instance.weaponManagerClass.SetAiming(value);
+            //__instance.UpdateSensitivity();
+            __instance.AimingChanged(value);
+
+            var handsStamina = __instance._player.Physical.HandsStamina;
+
+            if (value)
+            {
+                if (!activeConsumptions.ContainsKey(__instance))
+                {
+                    var player = __instance._player;
+                    var movementContext = player.MovementContext;
+                    var staminaParams = player.Physical.StaminaParameters;
+
+                    var consumption = new PlayerPhysicalClass.GClass773(PlayerPhysicalClass.EConsumptionType.Aim)
+                    {
+                        PrimaryTarget = PlayerPhysicalClass.EConsumptionTarget.Hands,
+                        Delta = new GClass849<float>(() =>
+                        {
+                            // Arm damage multiplier
+                            float armDamageMultiplier = 1f;
+                            if (movementContext.PhysicalConditionIs(EPhysicalCondition.OnPainkillers))
+                            {
+                                armDamageMultiplier = 1f;
+                            }
+                            else if (movementContext.PhysicalConditionIs(EPhysicalCondition.LeftArmDamaged | EPhysicalCondition.RightArmDamaged))
+                            {
+                                armDamageMultiplier = 2f; // Both arms damaged
+                            }
+                            else if (movementContext.PhysicalConditionContainsAny(EPhysicalCondition.LeftArmDamaged | EPhysicalCondition.RightArmDamaged))
+                            {
+                                armDamageMultiplier = 1.5f; // One arm damaged
+                            }
+
+                            // Base drain rate
+                            float baseDrainRate = staminaParams.AimDrainRate;
+                            if (player.HandsController is PortableRangeFinderController)
+                            {
+                                baseDrainRate = staminaParams.AimRangeFinderDrainRate;
+                            }
+
+                            // Mounting multiplier
+                            float mountingMultiplier = 1f;
+                            if (movementContext.IsInMountedState && __instance is EFT.Player.FirearmController firearmController)
+                            {
+                                if (movementContext.PlayerMountingPointData.MountPointData.MountSideDirection != 0)
+                                {
+                                    mountingMultiplier = staminaParams.MountingVerticalAimDrainRateMultiplier;
+                                }
+                                else if (firearmController.BipodState)
+                                {
+                                    mountingMultiplier = staminaParams.BipodAimDrainRateMultiplier;
+                                }
+                                else
+                                {
+                                    mountingMultiplier = staminaParams.MountingHorizontalAimDrainRateMultiplier;
+                                }
+                            }
+
+                            float weaponWeight = __instance.ErgonomicWeight;
+
+                            // Pose multiplier (you'd need to find Float_6 array - likely different values per pose)
+                            float[] aimConsumptionByPose = GClass2298.ToArray(Singleton<BackendConfigSettingsClass>.Instance.Stamina.AimConsumptionByPose);
+
+                            float poseMultiplier = aimConsumptionByPose[(int)movementContext.PoseToInt];
+
+                            // Strength skill reduction
+                            float strengthReduction = 1f - (float)player.Skills.StrengthBuffAimFatigue;
+
+                            float hydrationMultiplier = Singleton<BackendConfigSettingsClass>.Instance.StaminaDrain.GetAt(__instance._player.HealthController.Hydration.Normalized); ;
+
+                            return weaponWeight * baseDrainRate * armDamageMultiplier * poseMultiplier *
+                                   strengthReduction * hydrationMultiplier * mountingMultiplier;
+                        }),
+                        Requires = PlayerPhysicalClass.EConsumptionTarget.None,
+                        AllowsRestoration = false,
+                        Downtime = 0f
+                    };
+
+                    handsStamina.AddConsumption(consumption);
+                    activeConsumptions[__instance] = consumption;
+                }
+            }
+            else // Stopped aiming
+            {
+                if (activeConsumptions.TryGetValue(__instance, out var consumption))
+                {
+                    handsStamina.RemoveConsumption(consumption);
+                    activeConsumptions.Remove(__instance);
+                }
+            }
+            return false;
+        }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Spawn")]
@@ -296,7 +420,7 @@ namespace TarkovVR.Patches.Core.Player
                 grenadeEquipped = false;
 
             pinPulled = false;
-
+            VRGlobals.switchingWeapon = false;
             if (currentGunInteractController)
             {
                 if (!currentGunInteractController.initialized)
@@ -305,8 +429,7 @@ namespace TarkovVR.Patches.Core.Player
             }
 
             __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
-
-
+          
             VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
             VRGlobals.player._elbowBends[1] = VRGlobals.rightArmBendGoal;
 
@@ -336,12 +459,13 @@ namespace TarkovVR.Patches.Core.Player
                 grenadeEquipped = false;
 
             pinPulled = false;
+            VRGlobals.switchingWeapon = true;
 
             if (currentGunInteractController != null) { 
                 currentGunInteractController.enabled = false;
                 currentGunInteractController = null;
             }
-
+            
             VRGlobals.player = __instance._player;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
             if (VRSettings.GetLeftHandedMode())
@@ -469,7 +593,7 @@ namespace TarkovVR.Patches.Core.Player
                 return true;
             }
         }
-
+        /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_46")]
         public static void AddNewTacDeviceToInteractionController(EFT.Player.FirearmController __instance)
@@ -488,12 +612,6 @@ namespace TarkovVR.Patches.Core.Player
             }
 
             var weaponManager = __instance.weaponManagerClass;
-
-            // Handle tactical devices
-            if (weaponManager.TacticalComboVisualController_0 != null)
-                foreach (var tacDevice in weaponManager.TacticalComboVisualController_0)
-                    if (!currentGunInteractController.TacDeviceAlreadyRegistered(tacDevice.transform))
-                        currentGunInteractController.AddTacticalDevice(tacDevice.transform, __instance.FirearmsAnimator);
 
             // Handle scopes
             var sightControllers = weaponManager.SightModVisualControllers_0;
@@ -530,7 +648,69 @@ namespace TarkovVR.Patches.Core.Player
 
             VRGlobals.scope = null;
         }
+        */
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_46")]
+        public static void AddNewTacDeviceToInteractionController(EFT.Player.FirearmController __instance)
+        {
+            if (!__instance._player.IsYourPlayer || __instance.weaponManagerClass == null)
+                return;
+            if (VRGlobals.menuOpen)
+            {
+                if (WeaponPatches.currentGunInteractController != null)
+                {
+                    if (currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                            renderer.enabled = false;
+                }
+            }
+            var weaponManager = __instance.weaponManagerClass;
 
+            // Handle scopes
+            var sightControllers = weaponManager.SightModVisualControllers_0;
+            if (sightControllers == null)
+            {
+                VRGlobals.scopes.Clear();
+                return;
+            }
+
+            // Clear previous scopes and collect all valid scopes
+            VRGlobals.scopes.Clear();
+
+            foreach (var sightController in sightControllers)
+            {
+                if (sightController.scopePrefabCache_0 == null) continue;
+
+                // Find scope camera
+                Transform scopeTransform = sightController.transform.Find("mod_aim_camera") ??
+                                           sightController.transform.Find("mod_aim_camera_001") ?? sightController.transform.GetChild(0)?.GetChild(1)?.GetChild(0)?.Find("mod_aim_camera_000");
+                
+                if (scopeTransform == null) continue;
+
+                Transform deepScopeChild = sightController.transform.GetChild(0)?.GetChild(1)?.GetChild(0)?.Find("mod_aim_camera_000");
+
+                if (scopeTransform == deepScopeChild && deepScopeChild != null)
+                    scopeTransform = sightController.transform.GetChild(0);
+
+                // Add to the list of all scopes
+                VRGlobals.scopes.Add(scopeTransform);
+
+                // Get visual controller
+                var visualController = sightController.GetComponent<SightModVisualControllers>() ??
+                                     sightController.transform.parent.GetComponent<SightModVisualControllers>();
+                if (visualController == null || !VRGlobals.vrOpticController) continue;
+
+                // Setup collider
+                if (visualController.TryGetComponent<BoxCollider>(out var collider))
+                {
+                    collider.gameObject.layer = 6;
+                    collider.size = new Vector3(0.09f, 0.04f, 0.02f);
+                    collider.center = new Vector3(-0.04f, 0, -0.075f);
+                    collider.isTrigger = true;
+                    collider.enabled = true;
+                }
+            }
+        }
         //Damn nulls... This creates a dummy invisible Material when HighLightMesh is activated. This catches a null that happens with the weapon highlight when entering a raid
         //MoveWeaponToIKHands adds the HighLightMesh monobehavior component to the camera if it's not detected. This causes the script to run before a material is attached to it
         [HarmonyPrefix]
@@ -591,6 +771,7 @@ namespace TarkovVR.Patches.Core.Player
                 grenadeEquipped = false;
 
             pinPulled = false;
+            VRGlobals.switchingWeapon = true;
 
             if (currentGunInteractController != null)
                 currentGunInteractController.enabled = false;
@@ -601,38 +782,71 @@ namespace TarkovVR.Patches.Core.Player
             if (VRSettings.GetLeftHandedMode())
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             VRGlobals.usingItem = false;
-            VRGlobals.scope = null;
+
+            VRGlobals.scopes.Clear();
+
             for (int i = 0; i < __instance.weaponManagerClass.SightModVisualControllers_0.Length; i++)
             {
-                VRGlobals.scope = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera");
                 if (__instance.weaponManagerClass.SightModVisualControllers_0[i].scopePrefabCache_0 == null)
                     continue;
-                // Some scopes have more than two modes or something which changes the name to 001, 002 etc,
-                if (!VRGlobals.scope)
-                    VRGlobals.scope = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera_001");
 
-                if (VRGlobals.scope != null)
+                Transform baseTransform = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform;
+
+                // Try to find in direct children
+                Transform scopeTransform = baseTransform.Find("mod_aim_camera") ?? baseTransform.Find("mod_aim_camera_001");
+
+                // Only check deep scope child if the hierarchy exists
+                Transform deepScopeChild = null;
+                if (baseTransform.childCount > 0)
                 {
-                    SightModVisualControllers visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
-                    if (!visualController)
-                        visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
-
-                    if (visualController && VRGlobals.vrOpticController)
+                    Transform child0 = baseTransform.GetChild(0);
+                    if (child0 != null && child0.childCount > 1)
                     {
-                        BoxCollider scopeCollider = visualController.GetComponent<BoxCollider>();
-
-                        if (scopeCollider)
+                        Transform child1 = child0.GetChild(1);
+                        if (child1 != null && child1.childCount > 0)
                         {
-                            scopeCollider.gameObject.layer = 6;
-                            scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
-                            scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
-                            scopeCollider.isTrigger = true;
-                            scopeCollider.enabled = true;
+                            Transform child2 = child1.GetChild(0);
+                            if (child2 != null)
+                            {
+                                deepScopeChild = child2.Find("mod_aim_camera_000");
+                            }
                         }
                     }
-                    break;
+                }
+
+                // Only reassign if we found a valid deep scope child AND it matches
+                if (deepScopeChild != null) //&& scopeTransform == deepScopeChild)
+                    scopeTransform = baseTransform.GetChild(0);
+
+                // If not found, try in the first child's children
+                if (scopeTransform == null && baseTransform.childCount > 0)
+                {
+                    Transform firstChild = baseTransform.GetChild(0);
+                    scopeTransform = firstChild.Find("mod_aim_camera") ?? firstChild.Find("mod_aim_camera_001");
+                }
+
+                if (scopeTransform == null)
+                    continue;
+
+                VRGlobals.scopes.Add(scopeTransform);
+                SightModVisualControllers visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
+                if (!visualController)
+                    visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
+
+                if (visualController && VRGlobals.vrOpticController)
+                {
+                    BoxCollider scopeCollider = visualController.GetComponent<BoxCollider>();
+                    if (scopeCollider)
+                    {
+                        scopeCollider.gameObject.layer = 6;
+                        scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
+                        scopeCollider.center = new Vector3(-0.04f, 0, -0.075f);
+                        scopeCollider.isTrigger = true;
+                        scopeCollider.enabled = true;
+                    }
                 }
             }
+
             VRPlayerManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[10];
 
             if (__instance.WeaponRoot.parent.name != "weaponHolder")
@@ -690,22 +904,23 @@ namespace TarkovVR.Patches.Core.Player
                             if (weaponMeshRoot.FindChildRecursive(firingModeSwitch))
                                 currentGunInteractController.SetFireModeSwitch(weaponMeshRoot.FindChildRecursive(firingModeSwitch));
                         }
+                        /*
                         for (int i = 0; i < __instance.weaponManagerClass.SightModVisualControllers_0.Length; i++)
                         {
+                            Transform scopeTransform = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera");
                             if (__instance.weaponManagerClass.SightModVisualControllers_0[i].scopePrefabCache_0 == null)
                                 continue;
-                            VRGlobals.scope = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera");
 
-                            // Some scopes have more than two modes or something which changes the name to 001, 002 etc,
-                            if (!VRGlobals.scope)
-                                VRGlobals.scope = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera_001");
+                            if (!scopeTransform)
+                                scopeTransform = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.Find("mod_aim_camera_001");
 
-                            if (VRGlobals.scope != null)
+                            if (scopeTransform != null)
                             {
+                                VRGlobals.scopes.Add(scopeTransform);
                                 SightModVisualControllers visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
                                 if (!visualController)
                                     visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
-
+                                
                                 if (visualController && VRGlobals.vrOpticController)
                                 {
                                     BoxCollider scopeCollider = visualController.GetComponent<BoxCollider>();
@@ -719,10 +934,11 @@ namespace TarkovVR.Patches.Core.Player
                                         scopeCollider.enabled = true;
                                     }
                                 }
-                                break;
                             }
                         }
+                        */
                     }
+                    /*
                     if (__instance.weaponManagerClass != null && __instance.weaponManagerClass.TacticalComboVisualController_0 != null)
                     {
                         for (int i = 0; i < __instance.weaponManagerClass.TacticalComboVisualController_0.Length; i++)
@@ -730,7 +946,7 @@ namespace TarkovVR.Patches.Core.Player
                             currentGunInteractController.AddTacticalDevice(__instance.weaponManagerClass.TacticalComboVisualController_0[i].transform, __instance.FirearmsAnimator);
                         }
                     }
-
+                    */
 
                     GameObject rightHandPositioner = new GameObject("RightHandPositioner");
                     rightHandPositioner.transform.SetParent(__instance.WeaponRoot.transform.parent, false);
@@ -776,33 +992,49 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
             }
             __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
-            // Don't use canted sights or rear sights
-            if (__instance._player?.ProceduralWeaponAnimation?.CurrentScope?.Bone?.parent?.name?.Contains("rear") == true || __instance._player?.ProceduralWeaponAnimation?._targetScopeRotationDeg != 0)
+
+            // Handle scope selection - if there are multiple sights, prefer optics
+            if (__instance.weaponManagerClass?.SightModVisualControllers_0 != null &&
+                __instance.weaponManagerClass.SightModVisualControllers_0.Length > 1)
             {
-                int i = 0;
-                int firstScope = __instance.Item?.AimIndex ?? -1;
-
-                if (firstScope == -1)
-                {
-                    UnityEngine.Debug.LogError("MoveWeaponToIKHands: Invalid AimIndex. Aborting aiming mode change.");
-                    return;
-                }
-
                 try
                 {
-                    __instance.ChangeAimingMode();
-                    while (__instance.Item?.AimIndex != firstScope
-                        && (__instance._player.ProceduralWeaponAnimation._targetScopeRotationDeg != 0
-                        || (__instance._player.ProceduralWeaponAnimation.CurrentScope?.Bone?.parent?.name?.Contains("rear") == true)))
+                    int startingAimIndex = __instance.Item?.AimIndex ?? -1;
+                    if (startingAimIndex == -1)
+                        return;
+
+                    if (__instance._player?.ProceduralWeaponAnimation == null)
+                        return;
+
+                    // Check each sight to find an optic
+                    bool foundOptic = false;
+                    int sightCount = __instance.weaponManagerClass.SightModVisualControllers_0.Length;
+
+                    for (int i = 0; i < sightCount; i++)
                     {
-                        __instance.ChangeAimingMode();
+                        // Directly set the aim index and check if it's an optic
+                        __instance.ChangeAimingMode(i);
+
+                        // Check if this scope is an optic
+                        if (__instance._player.ProceduralWeaponAnimation.CurrentScope != null &&
+                            __instance._player.ProceduralWeaponAnimation.CurrentScope.IsOptic)
+                        {
+                            foundOptic = true;
+                            break;
+                        }
                     }
+
+                    // If no optic found, revert to original index
+                    if (!foundOptic)
+                        __instance.ChangeAimingMode(startingAimIndex);
                 }
                 catch (Exception ex)
                 {
-                    UnityEngine.Debug.LogError($"MoveWeaponToIKHands: Error while changing aiming mode - {ex.Message}");
+                    Plugin.MyLog.LogError($"MoveWeaponToIKHands: Error while changing aiming mode - {ex.Message}");
+                    Plugin.MyLog.LogError($"Stack trace: {ex.StackTrace}");
                 }
             }
+
             VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
         }
 
@@ -857,6 +1089,8 @@ namespace TarkovVR.Patches.Core.Player
 
             if (!visualController)
                 visualController = opticSight.transform.parent.GetComponent<SightModVisualControllers>();
+            if (!visualController)
+                visualController = opticSight.transform.parent.parent.GetComponent<SightModVisualControllers>();
 
             if (rangeFinder)
             {
@@ -879,18 +1113,24 @@ namespace TarkovVR.Patches.Core.Player
                 // For scopes that have multiple levels of zoom of different zoom effects (e.g. changing sight lines from black to red), opticSight will be stored in 
                 // mode_000, mode_001, etc, and that will be stored in the scope game object, so we need to get parent name for scopes with multiple settings
 
-                if (scopeName.Contains("mode"))
+                if (scopeName.Contains("mode") || scopeName.Contains("Mode"))
                 {
-                    if (__instance.transform_0)
-                        VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.parent.Find("backLens");
+                    if (currentScope)
+                        VRGlobals.vrPlayer.scopeUiPosition = currentScope.parent.Cast<Transform>().FirstOrDefault(child => child.name.Equals("backLens", StringComparison.OrdinalIgnoreCase));
+                    //VRGlobals.vrPlayer.scopeUiPosition = currentScope.parent.Find("backLens");
                     scopeName = opticSight.transform.parent.name;
+
+                    //This check is for Epic's AIO support
+                    if (!scopeName.Contains("(Clone)"))
+                        scopeName = opticSight.transform.parent.parent.name;
+
                     opticSight.transform.parent.gameObject.layer = 6;
                     scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
                 }
                 else
                 {
-                    if (__instance.transform_0)
-                        VRGlobals.vrPlayer.scopeUiPosition = __instance.transform_0.Find("backLens");
+                    if (currentScope)
+                        VRGlobals.vrPlayer.scopeUiPosition = currentScope.Cast<Transform>().FirstOrDefault(child => child.name.Equals("backLens", StringComparison.OrdinalIgnoreCase));
                     opticSight.gameObject.layer = 6;
                     scopeCollider = opticSight.GetComponent<BoxCollider>();
                     if (!scopeCollider)
@@ -903,12 +1143,12 @@ namespace TarkovVR.Patches.Core.Player
                     scopeCollider.isTrigger = true;
                     scopeCollider.enabled = true;
                 }
+                //Plugin.MyLog.LogInfo($"Scope Name: {scopeName}");
                 VRGlobals.vrOpticController.minFov = ScopeManager.GetMinFOV(scopeName);
                 VRGlobals.vrOpticController.maxFov = ScopeManager.GetMaxFOV(scopeName);
                 VRGlobals.vrOpticController.currentFov = VRGlobals.vrOpticController.scopeCamera.fieldOfView;
 
-
-                if (scopeName.Contains("mode"))
+                if (scopeName.Contains("mode") || scopeName.Contains("Mode"))
                 {
                     var parent = opticSight.transform.parent;
                     var collider = parent.GetComponent<BoxCollider>() ?? parent.parent.GetComponent<BoxCollider>();
@@ -1136,7 +1376,7 @@ namespace TarkovVR.Patches.Core.Player
                     if (VRSettings.GetLeftHandedMode())
                         VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
                 }
-
+                /*
                 if (VRGlobals.ikManager != null)
                 {
                     VRGlobals.ikManager.rightArmIk.solver.target = null;
@@ -1144,7 +1384,7 @@ namespace TarkovVR.Patches.Core.Player
                     VRGlobals.ikManager.leftArmIk.solver.target = null;
                     VRGlobals.ikManager.leftArmIk.enabled = false;
                 }
-
+                */
                 VRGlobals.usingItem = true;
 
                 // Safely handle player marker
@@ -1171,6 +1411,7 @@ namespace TarkovVR.Patches.Core.Player
 
             grenadeEquipped = true;
             pinPulled = false;
+            VRGlobals.switchingWeapon = true;
             InitVRPatches.rightPointerFinger.enabled = false;
 
             if (currentGunInteractController != null)

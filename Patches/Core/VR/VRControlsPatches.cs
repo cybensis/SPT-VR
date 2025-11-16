@@ -143,7 +143,9 @@ namespace TarkovVR.Patches.Core.VR
             // Apply rotation to camera root
             if (VRGlobals.camRoot != null)
             {
-                VRGlobals.camRoot.transform.Rotate(0, axis[axisIndex], 0);
+                //VRGlobals.camRoot.transform.Rotate(0, axis[axisIndex], 0);
+                float rotationSpeed = VRSettings.GetRotationSensitivity() * 5;
+                VRGlobals.camRoot.transform.Rotate(0, axis[axisIndex] * rotationSpeed * Time.deltaTime, 0);
             }
         }
         

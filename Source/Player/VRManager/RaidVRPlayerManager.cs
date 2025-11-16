@@ -86,8 +86,10 @@ namespace TarkovVR.Source.Player.VRManager
             leftWristUi.transform.localEulerAngles = new Vector3(304, 180, 180);
 
             UIPatches.extractionTimerUi.transform.SetParent(leftWristUi.transform, false);
-            UIPatches.extractionTimerUi.transform.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.037f, 0.12f, -0.015f)  : new Vector3(0.047f, 0.08f, 0.025f);
-            UIPatches.extractionTimerUi.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(307, 81, 20) : new Vector3(88, 83, 175);
+            //UIPatches.extractionTimerUi.transform.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.037f, 0.12f, -0.015f)  : new Vector3(0.047f, 0.08f, 0.025f);
+            //UIPatches.extractionTimerUi.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(307, 81, 20) : new Vector3(88, 83, 175);
+            UIPatches.extractionTimerUi.transform.localPosition = (VRSettings.GetLeftHandedMode()) ? new Vector3(0.037f, 0.12f, -0.015f) : new Vector3(0.01f, 0.12f, -0.05f);
+            UIPatches.extractionTimerUi.transform.localEulerAngles = (VRSettings.GetLeftHandedMode()) ? new Vector3(307, 81, 20) : new Vector3(18, 183, 285);
             UIPatches.extractionTimerUi._mainContainer.localEulerAngles = new Vector3(0, 342, 0);
             UIPatches.extractionTimerUi.transform.localScale = new Vector3(0.0003f, 0.0003f, 0.0003f);
 

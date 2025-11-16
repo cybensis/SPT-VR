@@ -134,13 +134,12 @@ namespace TarkovVR.Patches.Misc
 
                 GameObject headGearCollider = new GameObject("headGearCollider");
                 headGearCollider.transform.parent = VRGlobals.camHolder.transform;
-                headGearCollider.transform.localPosition = Vector3.zero;
+                headGearCollider.transform.localPosition = new Vector3(0.05f, 0f, 0.05f); // Right 0.05, Forward 0.05
                 headGearCollider.transform.localRotation = Quaternion.identity;
                 headGearCollider.layer = 3;
                 collider = headGearCollider.AddComponent<SphereCollider>();
                 collider.radius = 0.075f;
                 collider.isTrigger = true;
-
                 Camera.main.clearFlags = CameraClearFlags.SolidColor;
                 
                 if (UIPatches.quickSlotUi == null)

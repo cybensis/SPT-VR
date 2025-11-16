@@ -1,5 +1,6 @@
 ﻿using EFT.UI;
 using EFT.Visual;
+using System.Collections.Generic;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
@@ -27,7 +28,8 @@ namespace TarkovVR
         public static Camera VRCam;
         public static GameObject camHolder;
         public static GameObject vrOffsetter;
-        public static GameObject camRoot;        
+        public static GameObject camRoot;
+        public static float camRootY;
 
         public Transform playerCam;
         public static Transform emptyHands;
@@ -51,7 +53,8 @@ namespace TarkovVR
         public static BoxCollider backCollider;
         public static FirearmController firearmController;
         public static float scopeSensitivity = 0;
-        public static Transform scope;
+        //public static Transform scope;
+        public static List<Transform> scopes = new List<Transform>();
         public static IKManager ikManager;
 
         public static SkinnedMeshRenderer handsOnlyModel;
@@ -67,6 +70,7 @@ namespace TarkovVR
         public static bool checkMagazine = false;
         public static bool changeFireMode = false;
         public static bool usingItem = false;
+        public static bool switchingWeapon = false;
         public static int quickSlot = -1;
 
         public static bool blockRightJoystick = false;

@@ -236,94 +236,10 @@ public class GunInteractionController : MonoBehaviour
         if (menuOpen && highlightingMesh)
         {
             DisableHighlighting();
-            return; // Early exit when menu is open
-        }
-
-        if (shouldShowHighlight)
-        {
-            HandleWeaponInteraction(cameraPosition, cameraForward, isLeftHanded);
-        }
-        else if (lastHitCompIndex != -1)
-        {
-            ClearInteraction();
-        }
-        else if (highlightingMesh && meshHighlighter)
-        {
-            DisableHighlighting();
-            SetJoystickBlock(isLeftHanded, false);
-        }
-
-        // Update UI position if we have an active interaction
-        if (lastHitCompIndex != -1)
-        {
-            UpdateInteractionUI(cameraTransform);
-        }
-
-        // Handle weapon positioning (only when needed)
-        if (framesAfterEnabled == 1 && ShouldUpdateWeaponPosition())
-        {
-            UpdateWeaponPosition(isLeftHanded);
-        }
-
-        // Update frame counter
-        if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(VRPlayerManager.LEFT_HAND_ANIMATOR_HASH) == 0)
-        {
-            framesAfterEnabled++;
-        }
-    }
-
-    /*
-    private void Update()
-    {
-        if (!initialized)
             return;
-
-        // Cache frequently accessed values
-        bool isLeftHanded = VRSettings.GetLeftHandedMode();
-        bool gripPressed = isLeftHanded ? SteamVR_Actions._default.LeftGrip.state : SteamVR_Actions._default.RightGrip.state;
-        bool menuOpen = VRGlobals.menuOpen;
-        bool radialMenuActive = VRGlobals.vrPlayer.radialMenu && VRGlobals.vrPlayer.radialMenu.active;
-        bool isAiming = VRGlobals.firearmController.IsAiming;
-
-        // Cache camera transform references
-        Transform cameraTransform = VRGlobals.VRCam.transform;//Camera.main.transform;
-        Vector3 cameraPosition = cameraTransform.position;
-        Vector3 cameraForward = cameraTransform.forward;
-        Vector3 cameraEulerAngles = cameraTransform.eulerAngles;
-
-        // Force cleanup if we're in a state where highlight should not be active
-        bool shouldShowHighlight = !menuOpen && gripPressed && !radialMenuActive && !isAiming;
-
-        if (!shouldShowHighlight && highlightingMesh)
-            ForceCleanupHighlight();
-
-        // Use cached values for player state
-        bool isSprintEnabled = VRGlobals.player.IsSprintEnabled;
-        bool isInPronePose = VRGlobals.player.IsInPronePose;
-
-        // Use this to keep the upper arms positioned under the players camera if they're not prone or sprinting
-        if (!isSprintEnabled && !isInPronePose)
-        {
-            transform.position = cameraPosition + new Vector3(0, -0.12f, 0) + (cameraForward * -0.175f);
-        }
-        else
-        {
-            transform.localPosition = Vector3.zero;
-            transform.localEulerAngles = new Vector3(340, 340, 0);
         }
 
-        // Cache previous values
-        prevRot = cameraEulerAngles;
-        prevForward = cameraForward;
-        prevPos = cameraPosition;
-
-        if (menuOpen && highlightingMesh)
-        {
-            DisableHighlighting();
-            return; // Early exit when menu is open
-        }
-
-        if (shouldShowHighlight)
+        if (shouldShowHighlight && isLeftHanded != null)
         {
             HandleWeaponInteraction(cameraPosition, cameraForward, isLeftHanded);
         }
@@ -355,8 +271,7 @@ public class GunInteractionController : MonoBehaviour
             framesAfterEnabled++;
         }
     }
-    */
-    // Cache these arrays to avoid ToArray() calls every frame
+
     private Class617[] cachedMalfunctionMeshArray;
     private Class617[] cachedMeshArray;
     private bool malfunctionMeshArrayDirty = true;
@@ -425,8 +340,6 @@ public class GunInteractionController : MonoBehaviour
         meshHighlighter.Color = color;
 
         // Only manipulate command buffer when needed
-        //Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
-        //Camera.main.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
         VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
         VRGlobals.VRCam.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
     }
@@ -515,6 +428,13 @@ public class GunInteractionController : MonoBehaviour
 
     private void UpdateWeaponPosition(bool isLeftHanded)
     {
+        if (cachedRightHandPositioner == null)
+        {
+            cachedRightHandPositioner = transform.Find("RightHandPositioner");
+            if (cachedRightHandPositioner == null)
+                return;
+        }
+
         if (!WeaponPatches.grenadeEquipped)
         {
             // If the gun is pressed up against something that moves the animator around
@@ -538,7 +458,7 @@ public class GunInteractionController : MonoBehaviour
     // Add this method to your GunInteractionController class
     private void ForceCleanupHighlight()
     {
-        if (meshHighlighter?.commandBuffer_0 != null && Camera.main != null)
+        if (meshHighlighter?.commandBuffer_0 != null && VRGlobals.VRCam != null)
         {
             //Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
             VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
@@ -792,6 +712,7 @@ public class GunInteractionController : MonoBehaviour
     public Transform GetFireModeSwitch() { return this.fireModeSwitch; }
     
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
+    /*
     public void AddTacticalDevice(Transform tacDevice, FirearmsAnimator animator) {
         CreateInteractableMarker(tacDevice, "tacDeviceMarker");
         GetMesh(tacDevice);
@@ -810,7 +731,7 @@ public class GunInteractionController : MonoBehaviour
         weaponUiLists.Add(fireModList);
         this.tacDevices.Add(tacDevice);
     }
-    
+    */
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     private void CreateInteractableMarker(Transform parent, string name)
     {

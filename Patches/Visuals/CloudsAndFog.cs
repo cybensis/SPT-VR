@@ -149,7 +149,6 @@ namespace TarkovVR.Patches.Visuals
             try
             {
                 string bundlePath = Path.Combine(BepInEx.Paths.PluginPath, "sptvr", "Assets", "customclouds");
-                Plugin.MyLog.LogError($"Loading cloud AssetBundle from: {bundlePath}");
                 AssetBundle cloudBundle = AssetBundle.LoadFromFile(bundlePath);
                 if (cloudBundle == null)
                 {

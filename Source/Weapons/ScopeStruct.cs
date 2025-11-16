@@ -2,22 +2,26 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 
 
 namespace TarkovVR.Source.Weapons
 {
-
     public class Scope
     {
         public string Name { get; set; }
-        public float ZoomLevel { get; set; }
-        public float FOV { get; set; }
+        public bool IsVariableZoom { get; set; }
+        public float MinFOV { get; set; }
+        public float MaxFOV { get; set; }
+        public float FOV { get; set; } // For fixed zoom scopes
 
-        public Scope(string name, float zoomLevel, float fov)
+        public Scope(string name, bool isVariableZoom, float minFov, float maxFov, float fov)
         {
             Name = name;
-            ZoomLevel = zoomLevel;
+            IsVariableZoom = isVariableZoom;
+            MinFOV = minFov;
+            MaxFOV = maxFov;
             FOV = fov;
         }
     }
@@ -36,14 +40,12 @@ namespace TarkovVR.Source.Weapons
         {
             try
             {
-                // Check if the config file exists
                 if (!File.Exists(configPath))
                 {
                     Plugin.MyLog.LogWarning($"Scope configuration file not found: {configPath}");
                     return;
                 }
 
-                // Read the file and deserialize it into the list of scopes
                 string json = File.ReadAllText(configPath);
                 scopes = JsonConvert.DeserializeObject<List<Scope>>(json);
 
@@ -55,49 +57,31 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-
-        public static void AddScope(string name, float zoomLevel, float fov)
+        public static Scope GetScope(string name)
         {
-            scopes.Add(new Scope(name, zoomLevel, fov));
+            return scopes.FirstOrDefault(s => s.Name == name);
         }
 
-        public static float GetFOV(string name, float zoomLevel)
+        public static bool IsVariableZoom(string name)
         {
-            foreach (var scope in scopes)
-            {
-                if (scope.Name == name && Math.Abs(scope.ZoomLevel - zoomLevel) < 0.01f)
-                {
-                    return scope.FOV;
-                }
-            }
-            // If the scope with the specified name and zoom level is not found, return a default FOV
-            return -1f; 
+            var scope = GetScope(name);
+            return scope != null && scope.IsVariableZoom;
         }
 
         public static float GetMinFOV(string name)
         {
-            float minFOV = float.MaxValue;
-            foreach (var scope in scopes)
-            {
-                if (scope.Name == name && scope.FOV < minFOV)
-                {
-                    minFOV = scope.FOV;
-                }
-            }
-            return minFOV;
+            var scope = GetScope(name);
+            if (scope == null) return float.MaxValue;
+
+            return scope.MinFOV > 0 ? scope.MinFOV : scope.FOV;
         }
 
         public static float GetMaxFOV(string name)
         {
-            float maxFOV = float.MinValue;
-            foreach (var scope in scopes)
-            {
-                if (scope.Name == name && scope.FOV > maxFOV)
-                {
-                    maxFOV = scope.FOV;
-                }
-            }
-            return maxFOV;
+            var scope = GetScope(name);
+            if (scope == null) return float.MinValue;
+
+            return scope.MaxFOV > 0 ? scope.MaxFOV : scope.FOV;
         }
     }
 }

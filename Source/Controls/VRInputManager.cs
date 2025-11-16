@@ -12,6 +12,56 @@ namespace TarkovVR.Source.Controls
     {
         public static Dictionary<ECommand, IInputHandler> inputHandlers;
         public static Dictionary<ECommand, IInputHandler> menuInputHandlers;
+
+        private static Dictionary<ECommand, float> lastExecutionTime = new Dictionary<ECommand, float>();
+
+        private static float lastCooldownCommandTime = 0f;
+
+        // Cooldown system setup to avoid busy hands bug, bag and headlight collider were pretty close and if they were toggled too quickly together, busy hands would trigger
+        // Commands not listed here will have no cooldown
+        private static Dictionary<ECommand, float> commandCooldowns = new Dictionary<ECommand, float>
+        {
+            { ECommand.ToggleGoggles, 1.5f },
+            { ECommand.ToggleHeadLight, 1.5f },
+            { ECommand.DropBackpack, 1.5f }
+        };
+
+        private static float GetCooldown(ECommand command)
+        {
+            return commandCooldowns.ContainsKey(command) ? commandCooldowns[command] : 0f;
+        }
+
+        private static bool IsOnCooldown(ECommand command, float currentTime)
+        {
+            float cooldown = GetCooldown(command);
+
+            // If this command has no cooldown, it can always fire
+            if (cooldown <= 0f)
+                return false;
+
+            // Check if cooldown was triggered
+            if ((currentTime - lastCooldownCommandTime) < cooldown)
+                return true;
+
+            // Also check individual command cooldown
+            if (lastExecutionTime.ContainsKey(command) &&
+                (currentTime - lastExecutionTime[command]) < cooldown)
+                return true;
+
+            return false;
+        }
+
+        private static void RecordExecution(ECommand command, float currentTime)
+        {
+            lastExecutionTime[command] = currentTime;
+
+            // Only update shared cooldown timer if this command has a cooldown
+            if (GetCooldown(command) > 0f)
+            {
+                lastCooldownCommandTime = currentTime;
+            }
+        }
+
         static VRInputManager()
         {
             inputHandlers = new Dictionary<ECommand, IInputHandler>
@@ -35,24 +85,26 @@ namespace TarkovVR.Source.Controls
                 { ECommand.ToggleInventory, new InputHandlers.InventoryHandler() },
                 { ECommand.TryHighThrow, new InputHandlers.GrenadeHandler() },
                 { ECommand.Escape, new InputHandlers.EscapeHandler() },
+                { ECommand.ToggleTacticalDevice, new InputHandlers.TacticalHandler() },
                 { ECommand.ExamineWeapon, new InputHandlers.ExamineWeaponHandler() },
                 { ECommand.NextWalkPose, new InputHandlers.CrouchHandler() },
                 { ECommand.ToggleProne, new InputHandlers.ProneInputHandler() },
                 { ECommand.LeftStanceToggle, new InputHandlers.ResetHeightHandler() },
-                //{ ECommand.F12, new InputHandlers.EFTConfigHandler() },
                 { ECommand.ToggleGoggles, new InputHandlers.HeadMountedDeviceHandler() },
-                // Add other command handlers here
+                { ECommand.ToggleHeadLight, new InputHandlers.HeadLightHandler() },
+                { ECommand.DropBackpack, new InputHandlers.DropBackpackHandler() },
             };
+
             menuInputHandlers = new Dictionary<ECommand, IInputHandler>
             {
                 { ECommand.Escape, new InputHandlers.EscapeHandler() },
-                //{ ECommand.F12, new InputHandlers.EFTConfigHandler() },
-                // Add other command handlers here
             };
         }
 
         public static void UpdateCommands(ref List<ECommand> commands)
         {
+            float currentTime = UnityEngine.Time.time;
+
             if (VRGlobals.inGame && !VRGlobals.menuOpen)
             {
                 foreach (var kvp in inputHandlers)
@@ -60,26 +112,36 @@ namespace TarkovVR.Source.Controls
                     ECommand command = 0;
                     IInputHandler handler = kvp.Value;
                     handler.UpdateCommand(ref command);
-                    if (command != 0) // Ensure to check for a valid command
+
+                    if (command != 0)
                     {
-                        commands.Add(command);
+                        if (!IsOnCooldown(command, currentTime))
+                        {
+                            commands.Add(command);
+                            RecordExecution(command, currentTime);
+                        }
                     }
                 }
             }
-            else {
+            else
+            {
                 foreach (var kvp in menuInputHandlers)
                 {
                     ECommand command = 0;
                     IInputHandler handler = kvp.Value;
                     handler.UpdateCommand(ref command);
-                    if (command != 0) // Ensure to check for a valid command
+
+                    if (command != 0)
                     {
-                        commands.Add(command);
+                        if (!IsOnCooldown(command, currentTime))
+                        {
+                            commands.Add(command);
+                            RecordExecution(command, currentTime);
+                        }
                     }
                 }
             }
         }
-
     }
 }
 //0: LeanLockRight

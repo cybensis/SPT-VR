@@ -53,6 +53,7 @@ namespace TarkovVR.Source.Player.VRManager
 
 
         public bool isSupporting = false;
+        //private bool secondaryGripHeld = false;
         public bool wasSupporting = false;
         private float timeHeld = 0;
         public Transform interactionUi;
@@ -222,23 +223,22 @@ namespace TarkovVR.Source.Player.VRManager
                 UIPatches.notifierUi.transform.localScale = new Vector3(0.0003f, 0.0003f, 0.0003f);
             }
         }
-
+       
         public void OnDisable()
         {
             SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
             SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
 
         }
+        
         public void OnEnable()
-        {
-            
+        {          
             if (VRSettings.GetLeftHandedMode())
                 LeftHandedMode();
             else
                 RightHandedMode();
-            
         }
-
+        
 
         public Quaternion handsRotation;
         protected virtual void Update()
@@ -386,7 +386,7 @@ namespace TarkovVR.Source.Player.VRManager
         private float controllerLength = 0.175f;
         private Quaternion initialRightHandRotation;
         private Quaternion rotDiff;
-        private bool isEnteringTwoHandedMode = false;
+        public bool isEnteringTwoHandedMode = false;
         public Transform rawRightHand;
 
         private Vector3 inertiaVelocity;
@@ -467,8 +467,10 @@ namespace TarkovVR.Source.Player.VRManager
                 UIPatches.healthPanel.transform.localEulerAngles = new Vector3(270, 269, 180);
             if (UIPatches.extractionTimerUi)
             {
-                UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.037f, 0.12f, -0.015f);
-                UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(307, 61, 20);
+                //UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.037f, 0.12f, -0.015f);
+                //UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(307, 61, 20);
+                UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.017f, 0.12f, -0.015f);
+                UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(307, 67, 20);
             }
             if (UIPatches.notifierUi)
             {
@@ -525,8 +527,10 @@ namespace TarkovVR.Source.Player.VRManager
 
             if (UIPatches.extractionTimerUi)
             {
-                UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.047f, 0.08f, 0.025f);
-                UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(88, 83, 175);
+                //UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.047f, 0.08f, 0.025f);
+                //UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(88, 83, 175);
+                UIPatches.extractionTimerUi.transform.localPosition = new Vector3(0.01f, 0.12f, -0.05f);
+                UIPatches.extractionTimerUi.transform.localEulerAngles = new Vector3(18, 183, 285);
             }
             if (UIPatches.notifierUi)
             {
@@ -754,6 +758,7 @@ namespace TarkovVR.Source.Player.VRManager
             SteamVR_Action_Boolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
 
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockRightJoystick : VRGlobals.blockLeftJoystick;
+
             // If the joystick is being blocked but the right grip isn't down, keep the joystick blocked until they stop pushing it beyond a certain threshold so the player
             // doesn't immediately move forward after selecting something from the radial menu
             if (blockJoystick && !secondaryGripState.state)
@@ -768,7 +773,7 @@ namespace TarkovVR.Source.Player.VRManager
                 }
             }
 
-            if (!LeftHand || (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && secondaryGripState.state))
+            if (VRGlobals.menuOpen || !LeftHand || (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && secondaryGripState.state))
                 return;
 
 
@@ -825,6 +830,7 @@ namespace TarkovVR.Source.Player.VRManager
                         if (UIPatches.extractionTimerUi)
                             UIPatches.extractionTimerUi.Hide();
                     }
+
                     if (VRSettings.GetSupportGunHoldToggle())
                     {
                         if (secondaryGripState.state)
@@ -845,6 +851,7 @@ namespace TarkovVR.Source.Player.VRManager
                             handLock = false;
                         }
                     }
+
                     // This condition should only even happen if snapping to the gun is disabled
                     if (!isSupporting)
                     {
@@ -904,7 +911,7 @@ namespace TarkovVR.Source.Player.VRManager
 
                     RaycastHit hit;
                     LayerMask mask = 1 << 7;
-                    if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
+                    if (Physics.SphereCast(LeftHand.transform.position, 0.15f, LeftHand.transform.up * -1, out hit, 2, mask) && hit.collider.name == "camHolder")
                     {
                         if (!showingHealthUi)
                         {
@@ -938,7 +945,7 @@ namespace TarkovVR.Source.Player.VRManager
                 {
                     RaycastHit hit;
                     LayerMask mask = 1 << 7;
-                    if (Physics.Raycast(LeftHand.transform.position, LeftHand.transform.up * 1, out hit, 2, mask) && hit.collider.name == "camHolder")
+                    if (Physics.SphereCast(LeftHand.transform.position, 0.15f, LeftHand.transform.up, out hit, 2, mask) && hit.collider.name == "camHolder")
                     {
                         if (!showingExtractionUi)
                         {
@@ -959,6 +966,16 @@ namespace TarkovVR.Source.Player.VRManager
                     showingExtractionUi = false;
                 }
             }
+        }
+
+        public void ForceUnlockHand()
+        {
+            handLock = false;
+            isSupporting = false;
+            //secondaryGripHeld = true;
+
+            if (isWeapPistol)
+                VRGlobals.player._markers[0] = LeftHand.transform;
         }
 
         protected void SpawnHands()

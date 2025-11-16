@@ -141,10 +141,7 @@ namespace TarkovVR.Patches.Misc
         //    }
         //}
 
-
-
-
-
+        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MainMenuControllerClass), "method_5")]
         private static void AddAndFixMenuVRCam(MainMenuControllerClass __instance)
@@ -245,9 +242,11 @@ namespace TarkovVR.Patches.Misc
                     BoxCollider menuCollider = menuUIObject.gameObject.AddComponent<BoxCollider>();
                     menuCollider.extents = new Vector3(2560, 1440, 0.5f);
                 }
-                else if (!VRGlobals.inGame) {
+                else if (!VRGlobals.inGame)
+                {
                     // Someetimes when coming out of a raid the colliders bounds is way off so fix it here,
-                    PreloaderUI.Instance.WaitOneFrame(delegate {
+                    PreloaderUI.Instance.WaitOneFrame(delegate
+                    {
                         BoxCollider menuCollider = menuUIObject.gameObject.GetComponent<BoxCollider>();
                         menuCollider.enabled = false;
                         menuCollider.enabled = true;
@@ -323,14 +322,13 @@ namespace TarkovVR.Patches.Misc
                 camContainer.GetComponent<CameraMotionBlur>().enabled = false;
                 if (VRGlobals.camRoot == null)
                 {
-                    //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");
+                    //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");                   
                     VRGlobals.camHolder = new GameObject("camHolder");
                     VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
                     VRGlobals.camRoot = new GameObject("camRoot");
                     VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
                     VRGlobals.vrOffsetter.transform.parent = VRGlobals.camRoot.transform;
                     VRGlobals.vrOffsetter.transform.localRotation = camHolderRot;
-
                     VRGlobals.menuVRManager = VRGlobals.camHolder.AddComponent<MenuVRManager>();
                 }
                 VRGlobals.camRoot.transform.position = camContainer.transform.parent.position;
@@ -338,6 +336,25 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MatchmakerTimeHasCome), "Update")]
+        private static void KeepLaserOnLoad(MatchmakerTimeHasCome __instance)
+        {
+            if (VRGlobals.camRoot == null)
+            {
+                VRGlobals.camRoot = new GameObject("camRoot");
+                VRGlobals.camHolder = new GameObject("camHolder");
+                VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
+                VRGlobals.camHolder.transform.parent = VRGlobals.vrOffsetter.transform;
+                VRGlobals.vrOffsetter.transform.parent = VRGlobals.camRoot.transform;
+
+
+                VRGlobals.menuVRManager = VRGlobals.camHolder.AddComponent<MenuVRManager>();
+                VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
+                VRGlobals.menuVRManager.RightHand.transform.parent = Camera.main.transform.parent;
+                //Camera.main.transform.parent.localPosition = Camera.main.transform.localPosition * -1;
+            }
+        }
 
 
         [HarmonyPostfix]
@@ -478,7 +495,7 @@ namespace TarkovVR.Patches.Misc
             });
             //newPos.z = 0;
             __instance.transform.localPosition = newPos;
-
+            __instance.transform.localScale = new Vector3(1.3f, 1.3f, 1f);
             return false;
         }
         
@@ -1063,7 +1080,7 @@ namespace TarkovVR.Patches.Misc
             __instance.transform.parent.gameObject.layer = 5;
             if (VRGlobals.camRoot == null)
             {
-                //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");
+                //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");            
                 VRGlobals.camRoot = new GameObject("camRoot");
                 VRGlobals.camHolder = new GameObject("camHolder");
                 VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
@@ -1094,6 +1111,7 @@ namespace TarkovVR.Patches.Misc
             if (VRGlobals.camRoot == null)
             {
                 //Plugin.MyLog.LogWarning("\n\n CharacterControllerSpawner Spawn " + __instance.gameObject + "\n");
+                GameObject.Destroy(VRGlobals.camRoot);
                 VRGlobals.camRoot = new GameObject("camRoot");
                 VRGlobals.camHolder = new GameObject("camHolder");
                 VRGlobals.vrOffsetter = new GameObject("vrOffsetter");
@@ -1123,7 +1141,7 @@ namespace TarkovVR.Patches.Misc
             PositionMenuEnvironmentProps();
             PositionMainMenuUi();
             UIPatches.ShowUiScreens();
-            VRGlobals.vrPlayer.enabled = false;
+            //VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
             VRGlobals.menuOpen = true;
             // Move the right hand over so its synced up with the env UI cam
@@ -1144,7 +1162,7 @@ namespace TarkovVR.Patches.Misc
         private static void CloseOverlayWindows(UserInterfaceClass<EFT.UI.Screens.EEftScreenType>.GClass3860<EFT.UI.MenuScreen.GClass3877, EFT.UI.MenuScreen> __instance)
         {
             UIPatches.HideUiScreens();
-            VRGlobals.vrPlayer.enabled = true;
+            //VRGlobals.vrPlayer.enabled = true;
             VRGlobals.menuVRManager.enabled = false;
             VRGlobals.menuOpen = false;
             VRGlobals.vrPlayer.RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
@@ -1159,7 +1177,7 @@ namespace TarkovVR.Patches.Misc
             if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager)
                 return;
             UIPatches.HideUiScreens();
-            VRGlobals.vrPlayer.enabled = true;
+            //VRGlobals.vrPlayer.enabled = true;
             VRGlobals.menuVRManager.enabled = false;
             VRGlobals.menuOpen = false;
             VRGlobals.vrPlayer.RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
@@ -1239,7 +1257,6 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(CharacteristicsPanel), "Show")]
         private static void FixWeapCharactericsPanel(CharacteristicsPanel __instance)
         {
-            Plugin.MyLog.LogError($"[TarkovVR] FixWeapCharactericsPanel: {__instance.name}");
             __instance.transform.localPosition = new Vector3(-1050, 381, 0);
         }
 
@@ -1501,7 +1518,11 @@ namespace TarkovVR.Patches.Misc
         {
             VRSettings.SaveSettings();
             Camera.main.farClipPlane = 5000f;
-            
+            if (VRGlobals.leftArmBendGoal != null && VRGlobals.rightArmBendGoal != null)
+            {
+                VRGlobals.leftArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(1, -0.5f, -0.8f) : new Vector3(-1, -0.5f, -0.8f);
+                VRGlobals.rightArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(-1, -0.5f, -0.8f) : new Vector3(1, -0.5f, -0.8f);
+            }
             if (VRGlobals.weaponHolder && VRGlobals.firearmController) {
                 Vector3 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(VRGlobals.firearmController.weaponPrefab_0.name, VRGlobals.firearmController.Weapon.WeapClass);
                 float weaponAngleOffset = VRSettings.GetRightHandVerticalOffset();
@@ -1517,7 +1538,7 @@ namespace TarkovVR.Patches.Misc
                     float rotOffsetMultiplier = (weaponAngleOffset - 50) / 100;
                     weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier; 
                 }
-                weaponOffset += new Vector3(0.05f, 0, -0.05f);
+                //weaponOffset += new Vector3(0.05f, 0, -0.05f);
                 VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
                 //Plugin.MyLog.LogError($"[OffsetApply] Final weapon offset: {weaponOffset}");
             }    
@@ -1657,7 +1678,8 @@ namespace TarkovVR.Patches.Misc
         {
             VRGlobals.menuUi = __instance.transform.root;
             PositionMainMenuUi();
-        }      
+        }
+
     }
 }
 

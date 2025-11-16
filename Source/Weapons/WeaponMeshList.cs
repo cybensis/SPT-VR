@@ -49,73 +49,7 @@ namespace TarkovVR.Source.Weapons
 
             return weaponMeshDictionary[weaponName];//newWeaponMeshParts;
         }
-        /*
-        private static void GatherWeaponParts(Transform root, WeaponMeshParts newWeaponMeshParts)
-        {
-            foreach (Transform child in root)
-            {
-                //Plugin.MyLog.LogInfo($"Child name: {child.name}");
-                string partName = child.name.ToLower();
-                if (partName.Contains("magazine") || partName.Contains("weapon_cylinder_axis") || partName.Contains("feeder") || partName.Contains("ejector_mp18_762x54r") || partName.Contains("weapon_switch") || partName.Contains("weapon_crane")) newWeaponMeshParts.magazine.Add(child.name);
-                else if (partName.Contains("chamber") || partName.Contains("bolt") || partName.Contains("charge") || partName.Contains("slide") || partName.Contains("reciever") || partName.Contains("weapon_charghing_rail")) newWeaponMeshParts.chamber.Add(child.name);
-                else if (partName.Contains("stock")) newWeaponMeshParts.stock.Add(child.name);
-                else if (partName.Contains("selector") || partName.Contains("safety")) newWeaponMeshParts.firingModeSwitch.Add(child.name);
 
-                // Recursively process nested children
-                GatherWeaponParts(child, newWeaponMeshParts);
-            }
-        }
-        */
-        /*
-        private static void GatherWeaponParts(Transform root, WeaponMeshParts newWeaponMeshParts)
-        {
-            bool foundMagazine = newWeaponMeshParts.magazine.Count > 0;
-            bool foundChamber = newWeaponMeshParts.chamber.Count > 0;
-            bool foundStock = newWeaponMeshParts.stock.Count > 0;
-            bool foundFiringSwitch = newWeaponMeshParts.firingModeSwitch.Count > 0;
-
-            if (foundMagazine && foundChamber && foundStock && foundFiringSwitch)
-                return;
-
-            foreach (Transform child in root)
-            {
-                string partName = child.name.ToLower();
-                if (!foundMagazine &&
-                    (partName.Contains("weapon_cylinder_axis") || partName.Contains("weapon_switch") || partName.Contains("ejector_mp18_762x54r") || partName.Contains("weapon_crane") || partName.Contains("magazine") || partName.Contains("feeder")))
-                {
-                    newWeaponMeshParts.magazine.Add(child.name);
-                    foundMagazine = true;
-                }
-                else if (!foundChamber &&
-                    (partName.Contains("chamber") || partName.Contains("bolt") || partName.Contains("charge") || partName.Contains("slide") || partName.Contains("reciever") || partName.Contains("weapon_charghing_rail")))
-                {
-                    newWeaponMeshParts.chamber.Add(child.name);
-                    foundChamber = true;
-                }
-                else if (!foundStock && partName.Contains("stock"))
-                {
-                    newWeaponMeshParts.stock.Add(child.name);
-                    foundStock = true;
-                }
-                else if (!foundFiringSwitch && (partName.Contains("selector") || partName.Contains("safety")))
-                {
-                    newWeaponMeshParts.firingModeSwitch.Add(child.name);
-                    foundFiringSwitch = true;
-                }
-
-                if (!(foundMagazine && foundChamber && foundStock && foundFiringSwitch))
-                {
-                    GatherWeaponParts(child, newWeaponMeshParts);
-
-                    if (newWeaponMeshParts.magazine.Count > 0 &&
-                        newWeaponMeshParts.chamber.Count > 0 &&
-                        newWeaponMeshParts.stock.Count > 0 &&
-                        newWeaponMeshParts.firingModeSwitch.Count > 0)
-                        return;
-                }
-            }
-        }
-        */
         private static void GatherWeaponParts(Transform root, WeaponMeshParts newWeaponMeshParts)
         {
             //Order of the strings do matter here, reason being that some of the partnames are children of others. For example "weapon_cylinder_axis" is a child of "magazine"

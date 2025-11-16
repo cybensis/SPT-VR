@@ -174,10 +174,43 @@ namespace TarkovVR.Patches.UI
 
         }
 
+        public static void ResyncWeaponToIK(EFT.Player.FirearmController controller)
+        {
+            if (controller == null || controller.WeaponRoot == null || !controller._player.IsYourPlayer)
+                return;
+
+            // Re-parent weapon under existing VR holder if available
+            if (VRGlobals.weaponHolder == null)
+            {
+                // fallback: try to find the holder
+                Transform rightHandPos = controller.WeaponRoot.parent.Find("RightHandPositioner");
+                if (rightHandPos != null)
+                    VRGlobals.weaponHolder = rightHandPos.GetChild(0).gameObject;
+                else
+                    return; // no valid holder found
+            }
+
+            // Make sure weapon is parented correctly again
+            controller.WeaponRoot.SetParent(VRGlobals.weaponHolder.transform, false);
+
+            // Apply default local offset/rotation
+            controller.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
+            VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
+
+            // Refresh VR hand references
+            if (controller._player)
+            {
+                VRGlobals.player = controller._player;
+                VRPlayerManager.leftHandGunIK = controller.HandsHierarchy.Transforms[10];
+                VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
+            }
+        }
+
         public static void HandleOpenInventory()
-        {          
+        {
             Cursor.lockState = CursorLockMode.Locked;
             ShowUiScreens();
+            
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = false;
@@ -187,10 +220,11 @@ namespace TarkovVR.Patches.UI
                     foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                         renderer.enabled = false;
             }
+            
             VRGlobals.menuOpen = true;
             VRGlobals.blockRightJoystick = true;
             VRGlobals.blockLeftJoystick = true;
-            VRGlobals.vrPlayer.enabled = false;
+            //VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
 
             Transform head = Camera.main.transform;
@@ -252,7 +286,6 @@ namespace TarkovVR.Patches.UI
         public static void HandleCloseInventory()
         {
             HideUiScreens();
-            
             if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
                 foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
                     renderer.enabled = true;
@@ -267,7 +300,7 @@ namespace TarkovVR.Patches.UI
             VRGlobals.menuOpen = false;
             VRGlobals.blockRightJoystick = false;
             VRGlobals.blockLeftJoystick = false;
-            VRGlobals.vrPlayer.enabled = true;
+            //VRGlobals.vrPlayer.enabled = true;
             VRGlobals.menuVRManager.enabled = false;
             VRGlobals.commonUi.parent = null;
             VRGlobals.commonUi.position = new Vector3(1000, 1000, 1000);
@@ -301,7 +334,7 @@ namespace TarkovVR.Patches.UI
         {
             gameUi.transform.parent = VRGlobals.player.gameObject.transform;
             gameUi.transform.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
-            gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.48f);
+            gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.7f);
             gameUi.transform.localEulerAngles = new Vector3(29.7315f, 0.4971f, 0f);
         }
 
@@ -311,10 +344,20 @@ namespace TarkovVR.Patches.UI
         {
             gameUi.transform.parent = VRGlobals.player.gameObject.transform;
             gameUi.transform.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
-            gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.48f);
+            gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.7f);
             gameUi.transform.localEulerAngles = new Vector3(29.7315f, 0.4971f, 0f);
         }
-        
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BattleUIPanelExtraction), "Show", new Type[] { typeof(string), typeof(float) })]
+        private static void PositionPlaceItemUI(BattleUIPanelExtraction __instance)
+        {
+            gameUi.transform.parent = VRGlobals.player.gameObject.transform;
+            gameUi.transform.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
+            gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.7f);
+            gameUi.transform.localEulerAngles = new Vector3(29.7315f, 0.4971f, 0f);
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ActionPanel), "method_0")]
         private static void SetTransmitInteractionMenuActive(ActionPanel __instance, [CanBeNull] ActionsReturnClass interactionState)
@@ -380,16 +423,6 @@ namespace TarkovVR.Patches.UI
         private static void HideTransitTransferMenu(TransferItemsInRaidScreen __instance)
         {
             UIPatches.HandleCloseInventory();
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(BattleUIPanelExtraction), "Show", new Type[] { typeof(string), typeof(float) })]
-        private static void PositionPlaceItemUI(BattleUIPanelExtraction __instance)
-        {
-            gameUi.transform.parent = VRGlobals.player.gameObject.transform;
-            gameUi.transform.localScale = new Vector3(0.0008f, 0.0008f, 0.0008f);
-            gameUi.transform.localPosition = new Vector3(0.02f, 1.7f, 0.48f);
-            gameUi.transform.localEulerAngles = new Vector3(29.7315f, 0.4971f, 0f);
         }
 
         [HarmonyPrefix]
@@ -603,6 +636,7 @@ namespace TarkovVR.Patches.UI
         }
         
         private static readonly FieldInfo PossibleInteractionsChangedField = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
+        private const float InteractionRayRadius = 0.03f;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "InteractionRaycast")]
         private static bool Raycaster(EFT.Player __instance)
@@ -624,7 +658,7 @@ namespace TarkovVR.Patches.UI
                 {
                     Vector3 rayDirection = VRGlobals.handsInteractionController.laser.transform.forward;
                     Vector3 rayOrigin = VRGlobals.vrPlayer.LeftHand.transform.position;
-                    if (Physics.Raycast(rayOrigin, rayDirection, out hit, 0.66f, EFT.GameWorld.int_0))
+                    if (Physics.SphereCast(rayOrigin, InteractionRayRadius, rayDirection, out hit, 0.66f, EFT.GameWorld.int_0))
                     {
                         gameObject = hit.collider.gameObject;
                         if (!__instance.InteractableObject || __instance.InteractableObject.gameObject != gameObject)
@@ -638,8 +672,7 @@ namespace TarkovVR.Patches.UI
                     Vector3 rayDirection = Quaternion.Euler(-5, 0, 0) * Camera.main.transform.forward;
                     float adjustedRayDistance = manager.rayDistance * manager.GetDistanceMultiplier(rayDirection);
 
-
-                    if (Physics.Raycast(rayOrigin, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld.int_0))
+                    if (Physics.SphereCast(rayOrigin, InteractionRayRadius, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld.int_0))
                     {
                         gameObject = hit.collider.gameObject;
                         if (!__instance.InteractableObject || __instance.InteractableObject.gameObject != gameObject)
@@ -865,6 +898,8 @@ namespace TarkovVR.Patches.UI
 
         public static void HideUiScreens()
         {
+            if (VRGlobals.vrPlayer != null)
+                VRGlobals.vrPlayer.ForceUnlockHand();
             if (VRGlobals.menuUi)
                 VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = false;
             VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = false;
@@ -872,6 +907,8 @@ namespace TarkovVR.Patches.UI
         }
         public static void ShowUiScreens()
         {
+            if (VRGlobals.vrPlayer != null)
+                VRGlobals.vrPlayer.ForceUnlockHand();
             if (VRGlobals.menuUi)
                 VRGlobals.menuUi.GetChild(0).GetComponent<Canvas>().enabled = true;
             VRGlobals.commonUi.GetChild(0).GetComponent<Canvas>().enabled = true;
@@ -1227,6 +1264,23 @@ namespace TarkovVR.Patches.UI
             __instance.enabled = false;
             return false;
         }
+
+        // Fixes BTR Dialog menu
+        
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TraderDialogScreen), "Show")]
+        private static void BTROpenDialogUI(TraderDialogScreen __instance)
+        {
+            UIPatches.HandleOpenInventory();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TraderDialogScreen), "Close")]
+        private static void BTRCloseDialogUI(TraderDialogScreen __instance)
+        {
+            UIPatches.HandleCloseInventory();
+        }
+
         //[HarmonyPrefix]
         //[HarmonyPatch(typeof(ScrollRect), "OnBeginDrag")]
         //private static bool PlaceItemPositwionUi(ScrollRect __instance, PointerEventData eventData)
