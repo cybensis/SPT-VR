@@ -3,16 +3,20 @@
   "WorkspaceRootPath": "F:\\SPT-VR-development\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\plugin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:plugin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\ikpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\ikpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\weaponpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\weaponpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\body\\ikmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\body\\ikmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\plugin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:plugin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\ui\\vruiinteracter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -47,10 +51,6 @@
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\controls\\vrinputmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\ikpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\ikpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\vr\\initvrpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\vr\\initvrpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -66,11 +66,11 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 9,
+          "SelectedChildIndex": 1,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
               "Title": "IKManager.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Body\\IKManager.cs",
               "RelativeDocumentMoniker": "Source\\Player\\Body\\IKManager.cs",
@@ -83,20 +83,20 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 0,
               "Title": "Plugin.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Plugin.cs",
               "RelativeDocumentMoniker": "Plugin.cs",
               "ToolTip": "F:\\SPT-VR-development\\Plugin.cs",
               "RelativeToolTip": "Plugin.cs",
-              "ViewState": "AgIAADYAAAAAAAAAAAAcwFcAAAArAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABgAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-16T22:00:19.251Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 4,
               "Title": "VRUIInteracter.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\UI\\VRUIInteracter.cs",
               "RelativeDocumentMoniker": "Source\\UI\\VRUIInteracter.cs",
@@ -109,7 +109,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 7,
               "Title": "UIPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\UI\\UIPatches.cs",
               "RelativeDocumentMoniker": "Patches\\UI\\UIPatches.cs",
@@ -122,7 +122,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 6,
               "Title": "MenuPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Misc\\MenuPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Misc\\MenuPatches.cs",
@@ -135,7 +135,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 8,
               "Title": "HideoutPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Misc\\HideoutPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Misc\\HideoutPatches.cs",
@@ -148,7 +148,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 9,
               "Title": "HandsInteractionController.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.cs",
               "RelativeDocumentMoniker": "Source\\Player\\Interactions\\HandsInteractionController.cs",
@@ -161,7 +161,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 10,
               "Title": "FIKASupport.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\FIKASupport.cs",
               "RelativeDocumentMoniker": "ModSupport\\FIKASupport.cs",
@@ -187,33 +187,33 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 2,
               "Title": "WeaponPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Core\\Player\\WeaponPatches.cs",
               "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
               "RelativeToolTip": "Patches\\Core\\Player\\WeaponPatches.cs",
-              "ViewState": "AgIAAHMEAAAAAAAAAAAowGUEAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAGQEAAAAAAAAAAAowIUEAAARAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-16T20:02:44.123Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
+              "DocumentIndex": 1,
               "Title": "IKPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Core\\Player\\IKPatches.cs",
               "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
               "RelativeToolTip": "Patches\\Core\\Player\\IKPatches.cs",
-              "ViewState": "AgIAAEIBAAAAAAAAAAAhwF0BAAA2AAAAAAAAAA==",
+              "ViewState": "AgIAABkAAAAAAAAAAAAgwDUAAAAcAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-11-16T19:54:38.269Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 5,
               "Title": "InputHandlers.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Controls\\InputHandlers.cs",
               "RelativeDocumentMoniker": "Source\\Controls\\InputHandlers.cs",
@@ -239,7 +239,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 11,
               "Title": "VRInputManager.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Controls\\VRInputManager.cs",
               "RelativeDocumentMoniker": "Source\\Controls\\VRInputManager.cs",

@@ -48,7 +48,11 @@ namespace TarkovVR.Patches.Core.Player
             if (__instance == null || __instance.Shoulders_Anim == null || __instance.Shoulders_Anim.Length < 2 ||
                 __instance.Player == null || !__instance.Player.IsYourPlayer ||
                 VRGlobals.switchingWeapon || VRGlobals.usingItem ||
-                VRGlobals.vrPlayer == null || VRGlobals.ikManager == null || VRSettings.GetLeftHandedMode())
+                VRGlobals.vrPlayer == null || VRGlobals.ikManager == null)
+                return true;
+
+            // Skip shoulder adjustments in left-handed mode for now until it's fixed
+            if (VRSettings.GetLeftHandedMode())
                 return true;
 
             // Start with the animated shoulder positions
