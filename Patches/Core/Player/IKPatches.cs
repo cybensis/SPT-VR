@@ -13,15 +13,7 @@ namespace TarkovVR.Patches.Core.Player
 {
     [HarmonyPatch]
     internal class IKPatches
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(MotionEffector), "Process")]
-        private static bool RemoveGunTilt1(MotionEffector __instance)
-        {
-            // Skip all processing that moves/tilts the weapon
-            return false;
-
-        }
+    {       
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "HeightInterpolation")]
@@ -40,6 +32,15 @@ namespace TarkovVR.Patches.Core.Player
             return false;
 
         }
+        /*
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(PlayerAnimator), "EnableSprint")]
+        private static bool DisableSprintAnim(PlayerAnimator __instance, ref bool enabled)
+        {
+            enabled = false;
+            return true;
+        }
+        */
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PlayerBones), "SetShoulders")]
@@ -55,7 +56,8 @@ namespace TarkovVR.Patches.Core.Player
             if (VRSettings.GetLeftHandedMode())
                 return true;
 
-            // Start with the animated shoulder positions
+            bool sprintAnimDisabled = __instance.Player.IsSprintEnabled && VRSettings.GetDisableRunAnim();
+
             Vector3 leftShoulderPos = __instance.Shoulders_Anim[0].position;
             Vector3 rightShoulderPos = __instance.Shoulders_Anim[1].position;
 
@@ -65,30 +67,27 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 forwardYawOnly = yawOnlyRotation * Vector3.forward;
             Vector3 rightYawOnly = yawOnlyRotation * Vector3.right;
 
-
-            // Adjust these values to position shoulders
-            Vector3 offsetLeft = forwardYawOnly * (VRSettings.GetLeftHandedMode() ? -0.08f : -0.06f)     // Forward/backward
+            Vector3 offsetLeft = forwardYawOnly * (sprintAnimDisabled ? -0.17f : -0.095f)   // Forward/backward
                                 + rightYawOnly * (VRSettings.GetLeftHandedMode() ? 0.05f : -0.05f)      // Left/right
-                                + Vector3.up * -0.08f;        // Up/down
+                                + Vector3.up * (sprintAnimDisabled ? 0.23f : -0.09f);        // Up/down
             leftShoulderPos += offsetLeft;
 
-            Vector3 offsetRight = forwardYawOnly * 0.08f      // Forward/backward
+            Vector3 offsetRight = forwardYawOnly * (sprintAnimDisabled ? -0.15f : 0.065f)      // Forward/backward
                                  + rightYawOnly * (VRSettings.GetLeftHandedMode() ? -0.07f : 0.05f)       // Left/right
-                                  + Vector3.up * -0.08f;       // Up/down
+                                  + Vector3.up * (sprintAnimDisabled ? 0.23f : -0.09f);       // Up/down
             rightShoulderPos += offsetRight;
 
-            // Apply the offset positions
             TransformHelperClass.LerpPositionAndRotation(
                 __instance.Shoulders[0],
                 leftShoulderPos,
                 __instance.Shoulders_Anim[0].rotation,
-                0.65f);
+                0.60f);
 
             TransformHelperClass.LerpPositionAndRotation(
                 __instance.Shoulders[1],
                 rightShoulderPos,
                 __instance.Shoulders_Anim[1].rotation,
-                0.65f);
+                0.60f);
 
             return false;
         }
@@ -282,12 +281,12 @@ namespace TarkovVR.Patches.Core.Player
             return true;
         }
         */
-        // Static variables to track grounded state with hysteresis
-        // Hysteresis state
+
         // This can also be used to disable hand animations when needed
-        private const float groundedThreshold = 0.2f; // seconds before considering ungrounded
-        private static bool wasGrounded = true;
-        private static float ungroundedStartTime = 0f;
+        private static float zeroOutEndTime = 0f;
+        private const float ZERO_OUT_DURATION = 1f;
+        private static bool wasSprinting = false;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "method_20")]
         private static bool RemoveSprintAnimFromHands(EFT.Player __instance)
@@ -295,44 +294,26 @@ namespace TarkovVR.Patches.Core.Player
             if (!__instance.IsYourPlayer)
                 return true;
             if (__instance.HandsIsEmpty)
-                return false;           
+                return false;
 
-            bool isGroundedNow = __instance.MovementContext.IsGrounded;
+            float fallingValue = __instance.MovementContext.PlayerAnimator_1.Animator.GetFloat(
+                PlayerAnimator.FALLINGDOWN_FLOAT_PARAM_HASH
+            );
+
+            bool stableGrounded = fallingValue < 0.6f;
+
+            bool disableAnim = (__instance.IsSprintEnabled && VRSettings.GetDisableRunAnim()) || !stableGrounded;
+
             float currentTime = Time.time;
 
-            bool stableGrounded;
+            if (wasSprinting && !disableAnim)
+                zeroOutEndTime = currentTime + ZERO_OUT_DURATION;
 
-            if (isGroundedNow)
-            {
-                // Immediately treat as grounded
-                stableGrounded = true;
-                ungroundedStartTime = 0f; // reset
-            }
-            else
-            {
-                if (wasGrounded)
-                {
-                    // Just became ungrounded
-                    if (ungroundedStartTime == 0f)
-                        ungroundedStartTime = currentTime;
+            wasSprinting = disableAnim;
 
-                    // Only treat as ungrounded if time threshold has passed
-                    stableGrounded = (currentTime - ungroundedStartTime) < groundedThreshold;
-                }
-                else
-                {
-                    // Already ungrounded
-                    stableGrounded = false;
-                }
-            }
+            bool shouldStayZeroed = disableAnim || (currentTime < zeroOutEndTime);
 
-            wasGrounded = stableGrounded;
-
-            bool disableAnim =               
-                (__instance.IsSprintEnabled && VRSettings.GetDisableRunAnim()) ||
-                !stableGrounded;
-            
-            if (disableAnim && __instance._markers.Length > 1 && __instance._markers[1]?.transform?.parent?.parent != null)
+            if (shouldStayZeroed && __instance._markers.Length > 1 && __instance._markers[1]?.transform?.parent?.parent != null)
             {
                 var ik = __instance._markers[1].transform.parent.parent;
                 ik.localPosition = Vector3.zero;
@@ -341,18 +322,17 @@ namespace TarkovVR.Patches.Core.Player
 
             return true;
         }
-
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementState), "OnStateEnter")]
         private static void DisableHandAnimationOnEnter(MovementState __instance)
         {
-
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MovementState), "OnStateExit")]
         private static void DisableHandAnimationOnExit(MovementState __instance)
         {
+
         }
 
         [HarmonyPostfix]
@@ -419,6 +399,5 @@ namespace TarkovVR.Patches.Core.Player
         //{
         //    return false;
         //}
-
     }
 }

@@ -290,12 +290,12 @@ namespace TarkovVR.Source.Controls
         public class AimHandler : IInputHandler
         {
             // Hysteresis thresholds to prevent spam toggling
-            private const float SCOPE_ENTER_ANGLE = 20f;
-            private const float SCOPE_EXIT_ANGLE = 30f;
+            private const float SCOPE_ENTER_ANGLE = 15f;
+            private const float SCOPE_EXIT_ANGLE = 25f;
             private const float IRONS_ENTER_ANGLE_TO = 15f;
-            private const float IRONS_EXIT_ANGLE_TO = 30f;
-            private const float IRONS_ENTER_ANGLE_FROM = 17.5f;
-            private const float IRONS_EXIT_ANGLE_FROM = 32.5f;
+            private const float IRONS_EXIT_ANGLE_TO = 25f;
+            private const float IRONS_ENTER_ANGLE_FROM = 15.5f;
+            private const float IRONS_EXIT_ANGLE_FROM = 28.5f;
 
             // Distance check to prevent scope activation when too far
             private const float MAX_SCOPE_DISTANCE = 0.45f;
@@ -337,10 +337,10 @@ namespace TarkovVR.Source.Controls
                     HandleIronSightAiming(ref command, isAiming, currentTime);
                 }
 
-                // Adjust player rotation when entering aim mode while supporting weapon
+                // Adjust player rotation when entering aim mode while supporting weapon - disabled this, what was this for? it causes jitter when adsing
                 if (command == ECommand.ToggleAlternativeShooting && VRGlobals.vrPlayer.isSupporting)
                 {
-                    VRGlobals.player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+                    //VRGlobals.player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
                 }
             }
 
@@ -367,31 +367,37 @@ namespace TarkovVR.Source.Controls
                 return VRGlobals.scopes != null && VRGlobals.scopes.Count > 0;
             }
 
+            private Transform FindAimCamera(Transform parent, int maxDepth = 3, int currentDepth = 0)
+            {
+                if (currentDepth > maxDepth)
+                    return null;
+
+                // Check if current transform is a camera
+                if (parent.name == "mod_aim_camera" ||
+                    parent.name == "mod_aim_camera_000" ||
+                    parent.name == "mod_aim_camera_001")
+                    return parent;
+
+                // If parent not camera, search children (likely modded scope)
+                foreach (Transform child in parent)
+                {
+                    Transform result = FindAimCamera(child, maxDepth, currentDepth + 1);
+                    if (result != null)
+                        return result;
+                }
+
+                return null;
+            }
             private void HandleScopeAiming(ref ECommand command, bool isAiming, float currentTime)
             {
                 Transform activeScope = VRGlobals.scopes.FirstOrDefault(s => s != null && s.parent != null);
                 if (activeScope == null)
                     return;
 
-                float distanceAdd = 0f;
-                // Check if the deep child exists and is named "mod_aim_camera_000"
-                if (activeScope.childCount > 1)
-                {
-                    Transform child1 = activeScope.GetChild(1);
-                    if (child1 != null && child1.childCount > 0)
-                    {
-                        Transform child1_0 = child1.GetChild(0);
-                        if (child1_0 != null && child1_0.childCount > 2)
-                        {
-                            Transform child1_0_2 = child1_0.Find("mod_aim_camera_000");
-                            //Plugin.MyLog.LogError("Found deep scope child: " + (child1_0_2 != null ? child1_0_2.name : "null"));
-                            if (child1_0_2 != null && child1_0_2.name == "mod_aim_camera_000")
-                            {
-                                activeScope = child1_0_2;
-                            }
-                        }
-                    }
-                }
+                // Try to find the aim camera, use activeScope if not found
+                Transform aimCamera = FindAimCamera(activeScope);
+                if (aimCamera != null)
+                    activeScope = aimCamera;
 
                 Vector3 scopeTargetPosition = activeScope.position + (activeScope.forward * -0.25f);
                 Vector3 headPosition = VRGlobals.camHolder.transform.position;
@@ -401,9 +407,7 @@ namespace TarkovVR.Source.Controls
                 float angleToScope = Vector3.Angle(activeScope.forward * -1f, directionToScope);
                 float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
 
-                // Check if within distance and angle thresholds
                 if (!isAiming &&
-                    distanceToScope <= MAX_SCOPE_DISTANCE &&
                     angleToScope <= SCOPE_ENTER_ANGLE &&
                     angleFromScope <= SCOPE_ENTER_ANGLE)
                 {
@@ -411,8 +415,7 @@ namespace TarkovVR.Source.Controls
                     lastToggleTime = currentTime;
                 }
                 else if (isAiming && (angleToScope > SCOPE_EXIT_ANGLE ||
-                                      angleFromScope > SCOPE_EXIT_ANGLE ||
-                                      distanceToScope > MAX_SCOPE_DISTANCE))
+                                      angleFromScope > SCOPE_EXIT_ANGLE))
                 {
                     command = ECommand.EndAlternativeShooting;
                     VRPlayerManager.smoothingFactor = 50f;
@@ -449,7 +452,7 @@ namespace TarkovVR.Source.Controls
             private bool isShooting = false;
             public void UpdateCommand(ref ECommand command)
             {
-                if (WeaponPatches.grenadeEquipped)
+                if (WeaponPatches.grenadeEquipped || VRGlobals.switchingWeapon)
                     return;
 
                 float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
@@ -603,22 +606,18 @@ namespace TarkovVR.Source.Controls
                 if (secondaryHandTriggerAmount >= 0.5f)
                 {
 
-                    // Button just pressed
                     if (UBGLButtonDown && !UBGLButtonWasDown)
                     {
                         UBGLButtonDownTime = Time.time;
                         commandExecuted = false;
                     }
 
-                    // Button is being held
                     if (UBGLButtonDown)
                     {
                         float holdTime = Time.time - UBGLButtonDownTime;
 
-                        // Execute command after holding for HOLD_DURATION
                         if (holdTime >= HOLD_DURATION && !commandExecuted)
                         {
-                            // Only execute if we have a valid active weapon
                             if (VRGlobals.player.ActiveSlot != null && !WeaponPatches.rangeFinder)
                             {
                                 if (VRGlobals.player.ActiveSlot.ID == "FirstPrimaryWeapon")

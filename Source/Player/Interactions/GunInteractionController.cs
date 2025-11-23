@@ -262,7 +262,7 @@ public class GunInteractionController : MonoBehaviour
         // Handle weapon positioning (only when needed)
         if (framesAfterEnabled == 1 && ShouldUpdateWeaponPosition())
         {
-            UpdateWeaponPosition(isLeftHanded);
+            UpdateWeaponPosition();
         }
 
         // Update frame counter
@@ -426,7 +426,7 @@ public class GunInteractionController : MonoBehaviour
         return cachedRightHandPositioner && VRGlobals.player._markers.Length > 1;
     }
 
-    private void UpdateWeaponPosition(bool isLeftHanded)
+    private void UpdateWeaponPosition()
     {
         if (cachedRightHandPositioner == null)
         {
@@ -435,7 +435,10 @@ public class GunInteractionController : MonoBehaviour
                 return;
         }
 
-        if (!WeaponPatches.grenadeEquipped)
+        if (VRGlobals.weaponHolder == null || VRGlobals.player == null)
+            return;
+
+        if (!WeaponPatches.grenadeEquipped && VRGlobals.firearmController != null)
         {
             // If the gun is pressed up against something that moves the animator around
             VRGlobals.firearmController.GunBaseTransform.localPosition = Vector3.zero;
@@ -453,9 +456,7 @@ public class GunInteractionController : MonoBehaviour
         malfunctionMeshArrayDirty = true;
         meshArrayDirty = true;
     }
-    //end of optimized code
 
-    // Add this method to your GunInteractionController class
     private void ForceCleanupHighlight()
     {
         if (meshHighlighter?.commandBuffer_0 != null && VRGlobals.VRCam != null)

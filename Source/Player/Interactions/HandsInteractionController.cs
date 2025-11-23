@@ -481,6 +481,7 @@ namespace TarkovVR.Source.Player.Interactions
 
                     switch (cachedInteractable.Type)
                     {
+                        // Disabled but left 
                         case InteractableType.RigCollider:
                             leftHandState.inRigCollider = true;
                             if (!previousState.inRigCollider)
@@ -491,15 +492,12 @@ namespace TarkovVR.Source.Player.Interactions
                             break;
 
                         case InteractableType.BackpackCollider:
-                            //if (heldItem)
-                            //{
-                                leftHandState.inBackpack = true;
-                                if (!previousState.inBackpack)
-                                {
-                                    SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, secondaryInputSource);
-                                    hasEnteredBackpack = true;
-                                }
-                            //}
+                            leftHandState.inBackpack = true;
+                            if (!previousState.inBackpack)
+                            {
+                                SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, secondaryInputSource);
+                                hasEnteredBackpack = true;
+                            }
                             break;
 
                         case InteractableType.HeadGearCollider:

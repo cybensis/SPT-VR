@@ -24,14 +24,12 @@ namespace TarkovVR.Patches.Core.VR
         {
             UpdateBaseInputs(__instance);
             
-            // Clear and update commands
             if (__instance.Gclass2408_0 != null)
             {
                 commands.Clear();
                 VRInputManager.UpdateCommands(ref commands);
             }
-            
-            // Reset axis values
+
             ResetAxisValues(axis);
             
             if (__instance.Gclass2409_1 == null)
@@ -39,7 +37,6 @@ namespace TarkovVR.Patches.Core.VR
                 return false;
             }
             
-            // Process VR-specific input when in game and menu is closed
             if (VRGlobals.inGame && !VRGlobals.menuOpen)
             {
                 ProcessAxisInputs(__instance, ref axis);

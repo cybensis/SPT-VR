@@ -30,6 +30,7 @@ namespace TarkovVR
         public static GameObject vrOffsetter;
         public static GameObject camRoot;
         public static float camRootY;
+        public static string vrControllerType;
 
         public Transform playerCam;
         public static Transform emptyHands;

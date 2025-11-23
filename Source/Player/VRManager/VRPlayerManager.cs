@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Linq;
 //using Open.Nat;
 using Sirenix.Serialization;
+using System.Collections;
 using System.Collections.Generic;
 using TarkovVR;
 using TarkovVR.Patches.Core.Player;
@@ -74,8 +75,8 @@ namespace TarkovVR.Source.Player.VRManager
         public Transform scopeUiPosition;
         public bool isWeapPistol = false;
         public int framesAfterSwitching = 0;
+        private bool hapticTriggered = false;
 
-        // Cache these at class level - add to your class fields
         private bool cachedLeftHandedMode;
         private int leftHandedModeCheckFrame = -1;
         private Vector3 lastLocalPos = Vector3.zero;
@@ -84,7 +85,7 @@ namespace TarkovVR.Source.Player.VRManager
         private GunInteractionController cachedCurrentGunController;
         private int gunControllerCacheFrame = -1;
         private Transform cachedAmmoFireModeUi;
-        private bool lastInteractMenuOpen = false;
+        private bool lastInteractMenuOpen = false; 
 
         private Vector3 lastHeadPosition;
 
@@ -805,6 +806,16 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 bool withinDistance = Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.1f;
 
+                if (withinDistance)
+                {
+                    if (!hapticTriggered)
+                    {
+                        hapticTriggered = true;
+                        SteamVR_Actions._default.Haptic.Execute(0, 0.25f, 1, 0.4f, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);                       
+                    }
+                }
+                else if (!isSupporting)
+                    hapticTriggered = false;
 
                 // If the player is already in support position with snap enabled and they aren't holding grip, check for the position similar to above 
                 // but give the distance between hand and IK position some tolerance so the hand doesn't rapidly swap between support pos and non-support pos
@@ -852,10 +863,9 @@ namespace TarkovVR.Source.Player.VRManager
                         }
                     }
 
-                    // This condition should only even happen if snapping to the gun is disabled
+                    // This condition should only ever happen if snapping to the gun is disabled
                     if (!isSupporting)
                     {
-                        SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.1f, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                         Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + secondaryHandPosOffset;
                         LeftHand.transform.localPosition = virtualBasePosition;
                     }

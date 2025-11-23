@@ -139,14 +139,17 @@ namespace TarkovVR
                             string controllerType = "Unknown";
                             if (modelNumber.ToString().Contains("Vive Controller"))
                             {
+                                VRGlobals.vrControllerType = "vive";
                                 controllerType = "Vive Wand";
                             }
                             else if (modelNumber.ToString().Contains("Knuckles"))
                             {
+                                VRGlobals.vrControllerType = "index";
                                 controllerType = "Valve Index Knuckles";
                             }
                             else if (modelNumber.ToString().Contains("Oculus Touch"))
                             {
+                                VRGlobals.vrControllerType = "oculus";
                                 controllerType = "Oculus Touch";
                             }
 

@@ -14,6 +14,7 @@ using Newtonsoft.Json;
 using static HBAO_Core;
 using EFT.UI.Ragfair;
 using TarkovVR.Patches.Visuals;
+using UnityEngine.UI;
 
 namespace TarkovVR.Source.Settings
 {
@@ -68,6 +69,7 @@ namespace TarkovVR.Source.Settings
             public int leftHandVerticalAngle { get; set; }
             public float handPosOffset { get; set; }
             public bool weaponWeight { get; set; }
+            public bool weaponInertia { get; set; }
             public bool hideArms { get; set; }
             public bool hideLegs { get; set; }
             public bool disableRunAnimation { get; set; }
@@ -100,9 +102,10 @@ namespace TarkovVR.Source.Settings
 
                 enableSharpen = true;
                 weaponWeight = false;
+                weaponInertia = false;
                 hideArms = false;
                 hideLegs = false;
-                disableRunAnimation = false;
+                disableRunAnimation = true;
                 disablePrismEffects = false;
                 disableFog = false;
                 shadowOpt = ShadowOpt.IncreaseLighting;
@@ -126,6 +129,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle snapToGunToggle;
         private static SettingToggle supportGunHoldToggle;
         private static SettingToggle weaponWeightToggle;
+        private static SettingToggle weaponInertiaToggle;
         private static SettingSelectSlider aimSmoothingSlider;
         private static SettingSelectSlider scopeSmoothingSlider;
         private static SettingToggle scopeSmoothingToggle;
@@ -281,11 +285,12 @@ namespace TarkovVR.Source.Settings
             emptySpacingSlider.Slider.gameObject.SetActive(false);
             emptySpacingSlider.Text.gameObject.SetActive(false);
 
-
+            /*
             emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             emptySpacingSlider.Slider.gameObject.SetActive(false);
             emptySpacingSlider.Text.gameObject.SetActive(false);
+            */
 
             leftHandedMode = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             leftHandedMode.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
@@ -322,6 +327,12 @@ namespace TarkovVR.Source.Settings
             weaponWeightToggle.Toggle.action_0 = SetWeaponWeightOn;
             weaponWeightToggle.Text.localizationKey = "Turn On Weapon Weight";
             weaponWeightToggle.Toggle.UpdateValue(settings.weaponWeight);
+
+            weaponInertiaToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            weaponInertiaToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            weaponInertiaToggle.Toggle.action_0 = SetWeaponInertiaOn;
+            weaponInertiaToggle.Text.localizationKey = "Turn On EFT Weapon Inertia";
+            weaponInertiaToggle.Toggle.UpdateValue(settings.weaponInertia);
 
             aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
@@ -444,13 +455,59 @@ namespace TarkovVR.Source.Settings
             sharpenToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             sharpenToggle.Toggle.action_0 = SetSharpen;
             sharpenToggle.Text.localizationKey = "Enable Sharpen ";
-            sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);
+            sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);           
 
+            //SetupScrollbar(vrSettings);
 
             vrSettingsObject = newSoundSettings.gameObject;
             UnityEngine.Object.Destroy(newSoundSettings);
         }
 
+        private static void SetupScrollbar(GameObject vrSettings)
+        {
+            // Find or add ScrollRect component
+            var scrollRect = vrSettings.GetComponentInChildren<ScrollRect>();
+
+            if (scrollRect == null)
+            {
+                // If no ScrollRect exists, we need to find the content parent and set it up
+                // The slidersPanel should be inside a viewport that has a ScrollRect
+                Transform viewport = null;
+
+                // Try to find the viewport by looking for a common structure
+                // Usually it's: Settings -> Viewport -> Content (slidersPanel)
+                var soundSettings = settingsUi._soundSettingsScreen;
+                if (soundSettings != null)
+                {
+                    // Look for the parent of the sliders section which should be inside a viewport
+                    Transform contentParent = soundSettings._slidersSection.parent;
+                    if (contentParent != null)
+                    {
+                        viewport = contentParent.parent;
+                        if (viewport != null)
+                        {
+                            scrollRect = viewport.GetComponent<ScrollRect>();
+                        }
+                    }
+                }
+            }
+
+            // If we found or can access a ScrollRect, enable and configure it
+            if (scrollRect != null)
+            {
+                scrollRect.enabled = true;
+                scrollRect.vertical = true;
+                scrollRect.horizontal = false;
+                scrollRect.movementType = ScrollRect.MovementType.Clamped;
+                scrollRect.scrollSensitivity = 20f;
+
+                // Make sure the scrollbar is visible if it exists
+                if (scrollRect.verticalScrollbar != null)
+                {
+                    scrollRect.verticalScrollbar.gameObject.SetActive(true);
+                }
+            }
+        }
 
         private static void ChangeRotationSensitivity(int sensitivity)
         {
@@ -548,6 +605,15 @@ namespace TarkovVR.Source.Settings
         public static bool GetWeaponWeightOn()
         {
             return settings.weaponWeight;
+        }
+
+        private static void SetWeaponInertiaOn(bool turnOn)
+        {
+            settings.weaponInertia = turnOn;
+        }
+        public static bool GetWeaponInertiaOn()
+        {
+            return settings.weaponInertia;
         }
 
         public static bool SmoothScopeAim()
