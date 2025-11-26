@@ -313,13 +313,13 @@ namespace TarkovVR.Source.Settings
             scopeSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             scopeSmoothingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             scopeSmoothingToggle.Toggle.action_0 = ToggleScopeSmoothingSensitivity;
-            scopeSmoothingToggle.Text.localizationKey = "Turn On Scope Aim Smoothing ";
+            scopeSmoothingToggle.Text.localizationKey = "Turn On Hold Breath Sensitivity ";
             scopeSmoothingToggle.Toggle.UpdateValue(settings.scopeAimSmoothing);
 
             aimSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             aimSmoothingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             aimSmoothingToggle.Toggle.action_0 = ToggleSmoothingSensitivity;
-            aimSmoothingToggle.Text.localizationKey = "Turn On Weapon Aim Smoothing ";
+            aimSmoothingToggle.Text.localizationKey = "Turn On Weapon Smoothing ";
             aimSmoothingToggle.Toggle.UpdateValue(settings.weaponAimSmoothing);
 
             weaponWeightToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
@@ -337,13 +337,13 @@ namespace TarkovVR.Source.Settings
             aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             aimSmoothingSlider.Slider.action_0 = SetSmoothingSensitivity;
-            aimSmoothingSlider.Text.localizationKey = "Aim Smoothing Sensitivity:";
+            aimSmoothingSlider.Text.localizationKey = "Weapon Smoothing Strength:";
             aimSmoothingSlider.Slider.UpdateValue(11 - (settings.smoothingSensitivity / 2));
 
             scopeSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             scopeSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             scopeSmoothingSlider.Slider.action_0 = SetScopeSensitivity;
-            scopeSmoothingSlider.Text.localizationKey = "Scope Smoothing Sensitivity:";
+            scopeSmoothingSlider.Text.localizationKey = "Hold Breath Sensitivity:";
             scopeSmoothingSlider.Slider.UpdateValue(settings.scopeSmoothingSensitivity);
 
             variableZoomSensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);

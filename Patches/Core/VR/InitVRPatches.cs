@@ -651,7 +651,7 @@ namespace TarkovVR.Patches.Core.VR
                 VRGlobals.rightArmBendGoal = new GameObject("rightArmBendGoal").transform;
                 VRGlobals.rightArmBendGoal.parent = __instance.transform.root.transform;
                 VRGlobals.rightArmBendGoal.localEulerAngles = Vector3.zero;
-                VRGlobals.rightArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(-1, -0.5f, -0.8f) : new Vector3(1, -0.5f, -0.8f);
+                VRGlobals.rightArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(-1.5f, -0.6f, -1.2f) : new Vector3(1.5f, -0.6f, -1.2f);
                 //VRGlobals.rightArmBendGoal.localPosition = new Vector3(2, -0.9f, -0.8f);
             }
             if (VRGlobals.rightArmBendGoal != null && VRGlobals.leftArmBendGoal != null)

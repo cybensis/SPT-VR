@@ -53,7 +53,7 @@ namespace TarkovVR
         public static Transform sidearmHolster;
         public static BoxCollider backCollider;
         public static FirearmController firearmController;
-        public static float scopeSensitivity = 0;
+        public static float scopeSensitivity = 0.1f;
         //public static Transform scope;
         public static List<Transform> scopes = new List<Transform>();
         public static IKManager ikManager;

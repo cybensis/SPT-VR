@@ -619,12 +619,18 @@ namespace TarkovVR.Source.Player.VRManager
                 // to be wiped over further down
                 RightHand.transform.rotation = combinedRotation;
                 RightHand.transform.localRotation *= rightHandRotationOffset;
-                // If you're using scopes and holding your breath then the smoothing factor will be below 50 to make it easier to aim with greater zoom levels
-                if (smoothingFactor < 50)
+
+                if (InputHandlers.BreathingHandler.isHoldingBreath)
                 {
                     // Only apply the smoothing if the option is enabled though, otherwise just use the normal rotation
                     if (VRSettings.SmoothScopeAim())
+                    {
+                        if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
+                            smoothingFactor = VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10);
+                        else
+                            smoothingFactor = 0.1f * (VRSettings.GetScopeSensitivity() * 10);
                         rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothingFactor * Time.deltaTime);
+                    }
                     else
                     {
                         rawRightHand.transform.rotation = combinedRotation;
@@ -635,11 +641,11 @@ namespace TarkovVR.Source.Player.VRManager
                 // For non-scoped weapons when the smoothing is still on or weapon weight is on
                 else if (VRSettings.SmoothWeaponAim() || VRSettings.GetWeaponWeightOn())
                 {
-                    float smoothing = smoothingFactor;
+                    float smoothing = 50;
                     if (VRSettings.SmoothWeaponAim())
                         smoothing = VRSettings.GetSmoothingSensitivity();
                     if (VRSettings.GetWeaponWeightOn())
-                        smoothing = smoothingFactor / VRGlobals.firearmController.ErgonomicWeight;
+                        smoothing = 50 / VRGlobals.firearmController.ErgonomicWeight;
                     rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothing * Time.deltaTime);
                 }
                 // If no smoothing is applied, then just use the regular rotation
@@ -664,7 +670,7 @@ namespace TarkovVR.Source.Player.VRManager
                     if (VRSettings.SmoothWeaponAim())
                         smoothing = VRSettings.GetSmoothingSensitivity();
                     if (VRSettings.GetWeaponWeightOn())
-                        smoothing = smoothingFactor / VRGlobals.firearmController.ErgonomicWeight;
+                        smoothing = 50 / VRGlobals.firearmController.ErgonomicWeight;
 
                     Vector3 pos = rawRightHand.transform.position - (inertiaVelocity / inertiaDamping);
 
@@ -718,7 +724,6 @@ namespace TarkovVR.Source.Player.VRManager
                 Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength);
                 RightHand.transform.localPosition = virtualBasePosition + mainHandPosOffset;
 
-                // Smoothing if weight is on
                 if (VRGlobals.firearmController && VRSettings.GetWeaponWeightOn())
                 {
                     float smoothing = smoothingFactor;

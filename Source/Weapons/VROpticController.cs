@@ -49,7 +49,59 @@ namespace TarkovVR.Source.Weapons
             }
             return false;
         }
+        /*
+        private bool SetScopeSensitivity()
+        {
+            foreach (Transform scope in VRGlobals.scopes)
+            {
+                if (scope != null && scope.parent != null)
+                {
+                    var visualController = scope.parent.GetComponent<SightModVisualControllers>();
+                    if (visualController != null)
+                    {
+                        SightComponent sightComponent = visualController.sightComponent_0;
+                        if (sightComponent != null)
+                        {
+                            VRGlobals.scopeSensitivity = sightComponent.GetCurrentSensitivity;
+                            Plugin.MyLog.LogError($"Setting scope sensitivity to {VRGlobals.scopeSensitivity} for scope {scope.parent.name}");
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        */
+        public bool SetScopeSensitivity()
+        {
+            foreach (Transform scope in VRGlobals.scopes)
+            {
+                if (scope != null && scope.parent != null)
+                {
+                    var visualController = scope.parent.GetComponent<SightModVisualControllers>();
+                    if (visualController != null)
+                    {
+                        SightComponent sightComponent = visualController.sightComponent_0;
+                        if (sightComponent != null)
+                        {
+                            float zoomRatio = Mathf.InverseLerp(minFov, maxFov, currentFov);
 
+                            float magnificationFactor = maxFov / minFov;
+
+                            float minSensitivity = 0.1f / Mathf.Sqrt(magnificationFactor);
+                            float maxSensitivity = 0.1f;
+                            if (VRSettings.SmoothScopeAim())
+                                VRGlobals.scopeSensitivity = Mathf.Lerp(minSensitivity, maxSensitivity, zoomRatio * zoomRatio);
+                            else
+                                VRGlobals.scopeSensitivity = visualController.sightComponent_0.GetCurrentSensitivity;
+                            //Plugin.MyLog.LogError($"Setting scope sensitivity to {VRGlobals.scopeSensitivity} for scope {scope.parent.name} (FOV: {currentFov}/{minFov}-{maxFov}, Mag: {magnificationFactor:F1}x, Ratio: {zoomRatio:F2})");
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
         public void initZoomDial()
         {
 
@@ -87,7 +139,7 @@ namespace TarkovVR.Source.Weapons
 
                 int scopeIndex = sightComponent.SelectedScopeIndex;
                 int maxScopeModes = sightComponent.GetScopeModesCount(scopeIndex);
-
+                
                 // Only change mode if the scope has multiple modes
                 if (maxScopeModes > 1)
                 {
@@ -169,7 +221,7 @@ namespace TarkovVR.Source.Weapons
                 if (scopeZoomHandler != null)
                     scopeZoomHandler.TriggerSwapZooms();
             }
-
+            SetScopeSensitivity();
             // Always update the camera's FOV to match current value
             scopeCamera.fieldOfView = currentFov;
         }
@@ -268,6 +320,7 @@ namespace TarkovVR.Source.Weapons
                         hasToggledZoom = false;
                 }
             }
+            SetScopeSensitivity();
         }
     }
 }

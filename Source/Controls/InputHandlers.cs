@@ -18,6 +18,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using Valve.VR.InteractionSystem;
 using static EFT.Player;
 
 namespace TarkovVR.Source.Controls
@@ -419,6 +420,7 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.EndAlternativeShooting;
                     VRPlayerManager.smoothingFactor = 50f;
+                    VRGlobals.scopeSensitivity = 0;
                     lastToggleTime = currentTime;
                 }
             }
@@ -442,6 +444,7 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.EndAlternativeShooting;
                     VRPlayerManager.smoothingFactor = 50f;
+                    VRGlobals.scopeSensitivity = 0;
                     lastToggleTime = currentTime;
                 }
             }
@@ -515,16 +518,28 @@ namespace TarkovVR.Source.Controls
             }
 
         }
+        
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class BreathingHandler : IInputHandler
         {
-            private bool isHoldingBreath = false;
+            public static bool isHoldingBreath = false;
             public void UpdateCommand(ref ECommand command)
             {
                 if (!VRGlobals.firearmController)
                     return;
                 float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
                 bool isAiming = VRGlobals.firearmController.IsAiming;
+                var physical = VRGlobals.player.Physical;
+
+                if (physical != null)
+                {
+                    if (isHoldingBreath && !physical.HoldingBreath)
+                    {
+                        isHoldingBreath = false;
+                        VRPlayerManager.smoothingFactor = 50f; // reset to your default
+                    }
+                }
+
                 if (!isHoldingBreath && isAiming && secondaryHandTriggerAmount > 0.5f)
                 {
                     command = ECommand.ToggleBreathing;

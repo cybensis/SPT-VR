@@ -157,7 +157,7 @@ namespace TarkovVR.Patches.Visuals
                         rt.wrapMode = TextureWrapMode.Clamp;
                         rt.useMipMap = false;
                         rt.autoGenerateMips = false;
-                        rt.anisoLevel = 1;
+                        rt.anisoLevel = 16;
                     }
                 );
             }
@@ -244,7 +244,7 @@ namespace TarkovVR.Patches.Visuals
                 wrapMode = TextureWrapMode.Clamp,
                 useMipMap = false,
                 autoGenerateMips = false,
-                anisoLevel = 1
+                anisoLevel = 16
             };
 
             configure?.Invoke(newRT);

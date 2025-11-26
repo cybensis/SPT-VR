@@ -67,14 +67,14 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 forwardYawOnly = yawOnlyRotation * Vector3.forward;
             Vector3 rightYawOnly = yawOnlyRotation * Vector3.right;
 
-            Vector3 offsetLeft = forwardYawOnly * (sprintAnimDisabled ? -0.17f : -0.095f)   // Forward/backward
-                                + rightYawOnly * (VRSettings.GetLeftHandedMode() ? 0.05f : -0.05f)      // Left/right
-                                + Vector3.up * (sprintAnimDisabled ? 0.23f : -0.09f);        // Up/down
+            Vector3 offsetLeft = forwardYawOnly * (sprintAnimDisabled ? -0.25f : -0.1f)   // Forward/backward
+                                + rightYawOnly * (sprintAnimDisabled ? 0f : -0.03f)      // Left/right
+                                + Vector3.up * (sprintAnimDisabled ? 0.23f : -0.07f);        // Up/down
             leftShoulderPos += offsetLeft;
 
-            Vector3 offsetRight = forwardYawOnly * (sprintAnimDisabled ? -0.15f : 0.065f)      // Forward/backward
-                                 + rightYawOnly * (VRSettings.GetLeftHandedMode() ? -0.07f : 0.05f)       // Left/right
-                                  + Vector3.up * (sprintAnimDisabled ? 0.23f : -0.09f);       // Up/down
+            Vector3 offsetRight = forwardYawOnly * (sprintAnimDisabled ? -0.25f : 0.05f)      // Forward/backward
+                                 + rightYawOnly * (sprintAnimDisabled ? 0f : 0.03f)       // Left/right
+                                  + Vector3.up * (sprintAnimDisabled ? 0.23f : -0.07f);       // Up/down
             rightShoulderPos += offsetRight;
 
             TransformHelperClass.LerpPositionAndRotation(

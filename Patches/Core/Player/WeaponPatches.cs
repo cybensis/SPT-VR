@@ -41,6 +41,7 @@ using static FirearmsAnimator;
 using Comfort.Common;
 using Valve.VR;
 using EFT.InputSystem;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -79,33 +80,51 @@ namespace TarkovVR.Patches.Core.Player
         private static readonly Dictionary<EFT.Player.FirearmController, PlayerPhysicalClass.GClass773> activeConsumptions =
         new Dictionary<EFT.Player.FirearmController, PlayerPhysicalClass.GClass773>();
 
+        // The Action returned by HandsStamina.AddConsumption (so we can remove it cleanly)
+        private static readonly Dictionary<EFT.Player.FirearmController, Action> removeFromHandsActions
+            = new Dictionary<EFT.Player.FirearmController, Action>();
+
+        // The handler we attach to HandsStamina.OnExpired (so we can unsubscribe)
+        private static readonly Dictionary<EFT.Player.FirearmController, Action> handsExpiredHandlers
+            = new Dictionary<EFT.Player.FirearmController, Action>();
+
+        // To avoid double-promoting if expired fires more than once
+        private static readonly HashSet<EFT.Player.FirearmController> promotedToBaseOxygen
+            = new HashSet<EFT.Player.FirearmController>();
+        //Leaving this, can be used for custom stamina drain if needed in future for better VR support
+        /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IsAiming", MethodType.Setter)]
         private static bool BypassADSAnimation(EFT.Player.FirearmController __instance, ref bool value)
         {
+            var player = __instance._player;
+            if (player == null)
+                return true;
+
             if (!value)
             {
-                __instance._player.Physical.HoldBreath(enable: false);
+                player.Physical.HoldBreath(enable: false);
             }
-            // Keep only the functional aiming logic and removes the ADS animation
+
+            // Keep only the functional aiming logic and remove ADS animation
             __instance._isAiming = value;
 
-            __instance._player.Skills.FastAimTimer.Target = value ? 0f : 2f;
-            __instance._player.MovementContext.SetAimingSlowdown(value, 0.33f + __instance.gclass2250_0.AimMovementSpeed);
+            player.Skills.FastAimTimer.Target = value ? 0f : 2f;
+            player.MovementContext.SetAimingSlowdown(value, 0.33f + __instance.gclass2250_0.AimMovementSpeed);
 
             __instance.weaponManagerClass.SetAiming(value);
             __instance.UpdateSensitivity();
             __instance.AimingChanged(value);
 
-            var handsStamina = __instance._player.Physical.HandsStamina;
-            
+            var physical = player.Physical;
+            var handsStamina = physical.HandsStamina;
+
             if (value)
             {
                 if (!activeConsumptions.ContainsKey(__instance))
                 {
-                    var player = __instance._player;
                     var movementContext = player.MovementContext;
-                    var staminaParams = player.Physical.StaminaParameters;
+                    var staminaParams = physical.StaminaParameters;
 
                     var consumption = new PlayerPhysicalClass.GClass773(PlayerPhysicalClass.EConsumptionType.Aim)
                     {
@@ -154,15 +173,16 @@ namespace TarkovVR.Patches.Core.Player
 
                             float weaponWeight = __instance.ErgonomicWeight;
 
-                            // Pose multiplier (you'd need to find Float_6 array - likely different values per pose)
-                            float[] aimConsumptionByPose = GClass2298.ToArray(Singleton<BackendConfigSettingsClass>.Instance.Stamina.AimConsumptionByPose);
+                            float[] aimConsumptionByPose =
+                                GClass2298.ToArray(Singleton<BackendConfigSettingsClass>.Instance.Stamina.AimConsumptionByPose);
 
                             float poseMultiplier = aimConsumptionByPose[(int)movementContext.PoseToInt];
 
-                            // Strength skill reduction
                             float strengthReduction = 1f - (float)player.Skills.StrengthBuffAimFatigue;
 
-                            float hydrationMultiplier = Singleton<BackendConfigSettingsClass>.Instance.StaminaDrain.GetAt(__instance._player.HealthController.Hydration.Normalized); ;
+                            float hydrationMultiplier =
+                                Singleton<BackendConfigSettingsClass>.Instance.StaminaDrain
+                                    .GetAt(player.HealthController.Hydration.Normalized);
 
                             return weaponWeight * baseDrainRate * armDamageMultiplier * poseMultiplier *
                                    strengthReduction * hydrationMultiplier * mountingMultiplier;
@@ -172,22 +192,101 @@ namespace TarkovVR.Patches.Core.Player
                         Downtime = 0f
                     };
 
-                    handsStamina.AddConsumption(consumption);
+                    Action removeFromHands = handsStamina.AddConsumption(consumption);
                     activeConsumptions[__instance] = consumption;
+                    removeFromHandsActions[__instance] = removeFromHands;
+
+                    void PromoteToBaseAndOxygen()
+                    {
+                        if (promotedToBaseOxygen.Contains(__instance))
+                            return;
+
+                        promotedToBaseOxygen.Add(__instance);
+
+                        physical.Stamina.AddConsumption(consumption);
+                        physical.Oxygen.AddConsumption(consumption);
+
+                        if (handsExpiredHandlers.TryGetValue(__instance, out var handler))
+                        {
+                            handsStamina.OnExpired -= handler;
+                            handsExpiredHandlers.Remove(__instance);
+                        }
+                    }
+
+                    if (handsStamina.Current <= 0f)
+                    {
+                        PromoteToBaseAndOxygen();
+                    }
+                    else
+                    {
+                        Action expiredHandler = PromoteToBaseAndOxygen;
+                        handsExpiredHandlers[__instance] = expiredHandler;
+                        handsStamina.OnExpired += expiredHandler;
+                    }
                 }
             }
-            else // Stopped aiming
+            else
             {
+
                 if (activeConsumptions.TryGetValue(__instance, out var consumption))
                 {
-                    handsStamina.RemoveConsumption(consumption);
+                    if (removeFromHandsActions.TryGetValue(__instance, out var removeFromHands))
+                    {
+                        removeFromHands?.Invoke();
+                        removeFromHandsActions.Remove(__instance);
+                    }
+                    else
+                    {
+                        handsStamina.RemoveConsumption(consumption);
+                    }
+
+                    if (promotedToBaseOxygen.Contains(__instance))
+                    {
+                        physical.Stamina.RemoveConsumption(consumption);
+                        physical.Oxygen.RemoveConsumption(consumption);
+                        promotedToBaseOxygen.Remove(__instance);
+                    }
+
+                    if (handsExpiredHandlers.TryGetValue(__instance, out var handler))
+                    {
+                        handsStamina.OnExpired -= handler;
+                        handsExpiredHandlers.Remove(__instance);
+                    }
+
                     activeConsumptions.Remove(__instance);
                 }
             }
-            
+
             return false;
         }
+        */
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), "IsAiming", MethodType.Setter)]
+        private static bool BypassADSAnimation(EFT.Player.FirearmController __instance, ref bool value)
+        {
+            var player = __instance._player;
+            if (player == null)
+                return true;
 
+            if (!value)
+            {
+                player.Physical.HoldBreath(false);
+            }
+
+            __instance._isAiming = value;
+
+            player.Skills.FastAimTimer.Target = value ? 0f : 2f;
+            player.MovementContext.SetAimingSlowdown(value, 0.33f + __instance.gclass2250_0.AimMovementSpeed);
+
+            float mass = (!value || player.MovementContext.StationaryWeapon != null) ? 0f : __instance.ErgonomicWeight;
+            player.Physical.Aim(mass);
+
+            __instance.weaponManagerClass.SetAiming(value);
+            __instance.UpdateSensitivity();
+            __instance.AimingChanged(value);
+
+            return false;
+        }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Spawn")]
@@ -677,6 +776,49 @@ namespace TarkovVR.Patches.Core.Player
                     collider.enabled = true;
                 }
             }
+
+            // This goes through all the sights currently on your gun and selects the first optic it finds as the selected sight
+            // It ensures that a sight using the camera will always be the active sight
+            if (__instance.weaponManagerClass?.SightModVisualControllers_0 != null &&
+                __instance.weaponManagerClass.SightModVisualControllers_0.Length > 1)
+            {
+                try
+                {
+                    int startingAimIndex = __instance.Item?.AimIndex ?? -1;
+                    if (startingAimIndex == -1)
+                        return;
+
+                    if (__instance._player?.ProceduralWeaponAnimation == null)
+                        return;
+
+                    // Check each sight to find an optic
+                    bool foundOptic = false;
+                    int sightCount = __instance.weaponManagerClass.SightModVisualControllers_0.Length;
+
+                    for (int i = 0; i < sightCount; i++)
+                    {
+                        // Directly set the aim index and check if it's an optic
+                        __instance.ChangeAimingMode(i);
+
+                        // Check if this scope is an optic
+                        if (__instance._player.ProceduralWeaponAnimation.CurrentScope != null &&
+                            __instance._player.ProceduralWeaponAnimation.CurrentScope.IsOptic)
+                        {
+                            foundOptic = true;
+                            break;
+                        }
+                    }
+
+                    // If no optic found, revert to first sight
+                    if (!foundOptic)
+                        __instance.ChangeAimingMode(startingAimIndex);
+                }
+                catch (Exception ex)
+                {
+                    Plugin.MyLog.LogError($"MoveWeaponToIKHands: Error while changing aiming mode - {ex.Message}");
+                    Plugin.MyLog.LogError($"Stack trace: {ex.StackTrace}");
+                }
+            }
         }
 
         private static Transform GetChildSafe(Transform parent, int index)
@@ -1060,7 +1202,8 @@ namespace TarkovVR.Patches.Core.Player
             {
                 float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
                 VRGlobals.vrOpticController.scopeCamera = __instance.camera_0;
-                VRGlobals.scopeSensitivity = visualController.sightComponent_0.GetCurrentSensitivity;
+                //VRGlobals.scopeSensitivity = visualController.sightComponent_0.GetCurrentSensitivity;
+                
                 string scopeName = opticSight.name;
                 BoxCollider scopeCollider;
 
@@ -1105,6 +1248,7 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.vrOpticController.minFov = ScopeManager.GetMinFOV(scopeName);
                 VRGlobals.vrOpticController.maxFov = ScopeManager.GetMaxFOV(scopeName);
                 VRGlobals.vrOpticController.currentFov = VRGlobals.vrOpticController.scopeCamera.fieldOfView;
+                VRGlobals.vrOpticController.SetScopeSensitivity();
 
                 if (scopeName.Contains("mode") || scopeName.Contains("Mode"))
                 {
