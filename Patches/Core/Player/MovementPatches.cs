@@ -32,8 +32,8 @@ namespace TarkovVR.Patches.Core.Player
         private static float rotationStartY = 0f;
         private static float rotationTargetY = 0f;
         private static float rotationProgress = 0f;
-        
 
+        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MovementContext), "InitComponents")]
         private static void SetPlayerRotate(MovementContext __instance)
@@ -43,7 +43,25 @@ namespace TarkovVR.Patches.Core.Player
             __instance.TrunkRotationLimit = 0;
 
         }
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Prone2StandStateClass), "Exit")]
+        private static void SetPlayerRotateOnTransition2Stand(Prone2StandStateClass __instance)
+        {
 
+            if (!__instance.MovementContext._player.IsYourPlayer)
+                return;
+            __instance.MovementContext.TrunkRotationLimit = 0;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Transit2ProneStateClass), "Enter")]
+        private static void SetPlayerRotateOnTransition2Prone(Transit2ProneStateClass __instance)
+        {
+
+            if (!__instance.MovementContext._player.IsYourPlayer)
+                return;
+            __instance.MovementContext.TrunkRotationLimit = 0;
+        }
         // Found in Player object under CurrentState variable, and is inherited by Gclass1573
         // Can access MovementContext and probably state through player object->HideoutPlayer->MovementContext
         [HarmonyPrefix]
@@ -59,7 +77,6 @@ namespace TarkovVR.Patches.Core.Player
             // Normally you'd stand with your left foot forward and right foot back, which doesn't feel natural in VR so rotate 28 degrees to have both feet in front when standing still
             Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
             GetBodyRotation(bodyForward, ref deltaRotation);
-
             __instance.MovementContext.Rotation = deltaRotation;
            
             return false;
@@ -100,7 +117,7 @@ namespace TarkovVR.Patches.Core.Player
             __instance.MovementContext.Rotation = deltaRotation;
 
             return false;
-        }
+        }      
         private static float CalculateYawDifference(float yawA, float yawB)
         {
             float difference = yawB - yawA;
@@ -202,7 +219,7 @@ namespace TarkovVR.Patches.Core.Player
             return false;
              
         }
-        
+
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FirstPersonCameraOperationClass), "ManualLateUpdate")]
