@@ -58,7 +58,7 @@ namespace TarkovVR.Patches.Visuals
             __instance.enabled = false;
             return false;
         }
-
+        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WeatherController), "method_9")]
         private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
@@ -75,10 +75,10 @@ namespace TarkovVR.Patches.Visuals
             // Initialize fog effects only once
             if (fpsPrism == null)
                 fpsPrism = fpsCam.GetComponent<PrismEffects>() ?? fpsCam.gameObject.AddComponent<PrismEffects>();
-
+            //Plugin.MyLog.LogError("Density: " + __instance.tod_Scattering_0.GlobalDensity);
             // Calculate fog properties every frame for smoothness
             float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
-            float fogAlpha = Mathf.Lerp(0.7f, 0.08f, (fogDistance - 100f) / 400f);
+            float fogAlpha = Mathf.Lerp(0.7f, 0.2f, (fogDistance - 100f) / 400f);
             Color fogColor = new Color(1f, 1f, 1f, fogAlpha);
 
             fpsPrism.useFog = !VRSettings.GetDisableFog();

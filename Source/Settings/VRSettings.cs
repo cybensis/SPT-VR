@@ -58,6 +58,7 @@ namespace TarkovVR.Source.Settings
             public bool snapToGun { get; set; }
             public bool supportGunHoldToggle { get; set; }
             public bool leftHandedMode { get; set; }
+            public bool seatedMode { get; set; }
             public int smoothingSensitivity { get; set; }
             public int scopeSmoothingSensitivity { get; set; }
             public float variableZoomSensitivity { get; set; }
@@ -75,9 +76,9 @@ namespace TarkovVR.Source.Settings
             public bool disableRunAnimation { get; set; }
             public bool disablePrismEffects { get; set; }
             public bool disableFog { get; set; }
-
             public ShadowOpt shadowOpt { get; set; }
-
+            public bool disableOccCulling { get; set; }
+            public bool disableFrusCulling { get; set; }
             public ModSettings()
             {
                 rotationSensitivity = 4;
@@ -88,6 +89,7 @@ namespace TarkovVR.Source.Settings
                 snapTurnAmount = SnapTurnAmount.fourtyFive;
                 weaponAimSmoothing = false;
                 scopeAimSmoothing = true;
+                seatedMode = false;
                 leftHandedMode = false;
                 snapToGun = true;
                 supportGunHoldToggle = false;
@@ -107,8 +109,10 @@ namespace TarkovVR.Source.Settings
                 hideLegs = false;
                 disableRunAnimation = true;
                 disablePrismEffects = false;
-                disableFog = false;
+                disableFog = false;               
                 shadowOpt = ShadowOpt.IncreaseLighting;
+                disableOccCulling = false;
+                disableFrusCulling = false;
             }
             // Add more settings as needed
         }
@@ -142,6 +146,8 @@ namespace TarkovVR.Source.Settings
 
         // Graphics Settings
         private static SettingToggle sharpenToggle;
+        private static SettingToggle occCullingToggle;
+        private static SettingToggle frusCullingToggle;
         private static SettingDropDown shadowOptsToggle;
         private static SettingToggle disablePrismEffectsToggle;
         private static SettingToggle disableFogToggle;
@@ -150,6 +156,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle hideArmsToggle;
         private static SettingToggle hideLegsToggle;
         private static SettingToggle disableRunAnimationToggle;
+        private static SettingToggle seatedModeToggle;
 
 
 
@@ -280,11 +287,6 @@ namespace TarkovVR.Source.Settings
             //rightStickDriftSlider.transform.localPosition = new Vector3(0, -120, 0);
 
 
-            SettingSelectSlider emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            emptySpacingSlider.Slider.gameObject.SetActive(false);
-            emptySpacingSlider.Text.gameObject.SetActive(false);
-
             /*
             emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
@@ -292,10 +294,16 @@ namespace TarkovVR.Source.Settings
             emptySpacingSlider.Text.gameObject.SetActive(false);
             */
 
+            seatedModeToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            seatedModeToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            seatedModeToggle.Toggle.action_0 = SetSeatedMode;
+            seatedModeToggle.Text.localizationKey = "Seated Mode - Reset your height after setting";
+            seatedModeToggle.Toggle.UpdateValue(settings.seatedMode);
+
             leftHandedMode = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             leftHandedMode.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             leftHandedMode.Toggle.action_0 = SetLeftHandedMode;
-            leftHandedMode.Text.localizationKey = "Left Handed Mode ";
+            leftHandedMode.Text.localizationKey = "Left Handed Mode (VERY experimental) ";
             leftHandedMode.Toggle.UpdateValue(settings.leftHandedMode);
 
             snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
@@ -451,12 +459,24 @@ namespace TarkovVR.Source.Settings
 
             shadowOptsToggle.DropDown.gclass1626_0.Action_0 = ChangeShadowOpts;
 
+            
             sharpenToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             sharpenToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             sharpenToggle.Toggle.action_0 = SetSharpen;
             sharpenToggle.Text.localizationKey = "Enable Sharpen ";
             sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);           
+            
+            occCullingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            occCullingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            occCullingToggle.Toggle.action_0 = SetOccCulling;
+            occCullingToggle.Text.localizationKey = "Disable Occlusion Culling ";
+            occCullingToggle.Toggle.UpdateValue(settings.enableSharpen);
 
+            frusCullingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            frusCullingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            frusCullingToggle.Toggle.action_0 = SetFrusCulling;
+            frusCullingToggle.Text.localizationKey = "Disable Frustum Culling ";
+            frusCullingToggle.Toggle.UpdateValue(settings.enableSharpen);
             //SetupScrollbar(vrSettings);
 
             vrSettingsObject = newSoundSettings.gameObject;
@@ -691,7 +711,14 @@ namespace TarkovVR.Source.Settings
         {
             settings.snapToGun = turnOn;
         }
-
+        private static void SetSeatedMode(bool turnOn)
+        {        
+            settings.seatedMode = turnOn;
+        }
+        public static bool GetSeatedMode()
+        {
+            return settings.seatedMode;
+        }
         public static bool GetSupportGunHoldToggle()
         {
             return settings.snapToGun;
@@ -830,6 +857,26 @@ namespace TarkovVR.Source.Settings
         private static void SetDisableFog(bool turnOff)
         {
             settings.disableFog = turnOff;
+        }
+
+        public static bool GetOccCulling()
+        {
+            return settings.disableOccCulling;
+        }
+
+        private static void SetOccCulling(bool turnOff)
+        {
+            settings.disableOccCulling = turnOff;
+        }
+
+        public static bool GetFrusCulling()
+        {
+            return settings.disableFrusCulling;
+        }
+
+        private static void SetFrusCulling(bool turnOff)
+        {
+            settings.disableFrusCulling = turnOff;
         }
 
         private static void ChangeShadowOpts(int mode)

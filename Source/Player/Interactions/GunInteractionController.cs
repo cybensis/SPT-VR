@@ -260,12 +260,11 @@ public class GunInteractionController : MonoBehaviour
         }
 
         // Handle weapon positioning (only when needed)
-        if (framesAfterEnabled == 1 && ShouldUpdateWeaponPosition())
+        if (ShouldUpdateWeaponPosition())
         {
             UpdateWeaponPosition();
         }
 
-        // Update frame counter
         if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(VRPlayerManager.LEFT_HAND_ANIMATOR_HASH) == 0)
         {
             framesAfterEnabled++;
@@ -277,7 +276,6 @@ public class GunInteractionController : MonoBehaviour
     private bool malfunctionMeshArrayDirty = true;
     private bool meshArrayDirty = true;
 
-    // Cache the right hand positioner transform
     private Transform cachedRightHandPositioner;
 
     private void HandleWeaponInteraction(Vector3 cameraPosition, Vector3 cameraForward, bool isLeftHanded)
@@ -300,7 +298,6 @@ public class GunInteractionController : MonoBehaviour
     {
         if ((!highlightingMesh || !initMalfunction) && meshHighlighter)
         {
-            // Use cached array to avoid ToArray() call
             if (malfunctionMeshArrayDirty)
             {
                 cachedMalfunctionMeshArray = malfunctionMeshList.ToArray();
@@ -318,7 +315,6 @@ public class GunInteractionController : MonoBehaviour
     {
         if ((!highlightingMesh || initMalfunction) && meshHighlighter)
         {
-            // Use cached array to avoid ToArray() call
             if (meshArrayDirty)
             {
                 cachedMeshArray = meshList.ToArray();
@@ -339,7 +335,6 @@ public class GunInteractionController : MonoBehaviour
         highlightingMesh = true;
         meshHighlighter.Color = color;
 
-        // Only manipulate command buffer when needed
         VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
         VRGlobals.VRCam.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
     }
@@ -406,7 +401,6 @@ public class GunInteractionController : MonoBehaviour
         playerOwner.AvailableInteractionState.method_0(null);
         lastHitCompIndex = -1;
         VRGlobals.vrPlayer.interactionUi.localScale = Vector3.one;
-        //Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
         VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
     }
 
@@ -419,7 +413,6 @@ public class GunInteractionController : MonoBehaviour
 
     private bool ShouldUpdateWeaponPosition()
     {
-        // Cache the FindChild result
         if (cachedRightHandPositioner == null)
             cachedRightHandPositioner = transform.Find("RightHandPositioner");
 
@@ -461,7 +454,6 @@ public class GunInteractionController : MonoBehaviour
     {
         if (meshHighlighter?.commandBuffer_0 != null && VRGlobals.VRCam != null)
         {
-            //Camera.main.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
             VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
         }
 
@@ -474,13 +466,6 @@ public class GunInteractionController : MonoBehaviour
         VRGlobals.blockLeftJoystick = false;
         VRGlobals.blockRightJoystick = false;
     }
-
-    //private void LateUpdate()
-    //{
-    //    //VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
-    //    VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
-    //    VRGlobals.ikManager.MatchLegsToArms();
-    //}
 
     // Different right handed rotation values in the VR settings can cause the position of the right hand to change, so this helps adjust that
     public Vector3 CalculateRightHandPosOffset()
@@ -496,7 +481,7 @@ public class GunInteractionController : MonoBehaviour
             // Map values from 0 to 50 to the range -1 to 0
             normalizedVertical = (normalizedVertical - 50) / 50;
 
-        Vector3 baseOffset = (VRSettings.GetLeftHandedMode() ? new Vector3(0.03f, 0.05f, -0.045f) : new Vector3(0.035f, 0.04f, -0.02f));
+        Vector3 baseOffset = (VRSettings.GetLeftHandedMode() ? new Vector3(0.03f, 0.05f, -0.045f) : new Vector3(0.025f, 0.04f, -0.02f));
         Vector3 vertPositiveOffsetScale = (VRSettings.GetLeftHandedMode() ? new Vector3(0.09f, 0f, -0.1f) : new Vector3(-0.02f, 0, 0.1f));
         Vector3 vertNeggativeOffsetScale = (VRSettings.GetLeftHandedMode() ? new Vector3(-0.02f, -0.03f, 0.08f) : new Vector3(0.06f, 0.03f, -0.06f));
         Vector3 adjustedOffset = Vector3.zero;
@@ -514,18 +499,16 @@ public class GunInteractionController : MonoBehaviour
             adjustedOffset = vertNeggativeOffsetScale * -normalizedVertical;
 
         adjustedOffset = new Vector3(adjustedOffset.x, adjustedOffset.y + horizontalY, adjustedOffset.z);
-;
 
         return baseOffset + adjustedOffset + new Vector3(0f, 0.01f, VRSettings.GetHandPosOffset());
     }
 
     public void SetScopeHighlight(Transform scopeTransform)
     {
-        // Add null check for meshHighlighter
         if (meshHighlighter == null)
         {
             // Try to get or recreate the highlighter if it's null
-            meshHighlighter = VRGlobals.VRCam?.gameObject.GetComponent<HighLightMesh>();//Camera.main?.gameObject.GetComponent<HighLightMesh>();
+            meshHighlighter = VRGlobals.VRCam?.gameObject.GetComponent<HighLightMesh>();
 
             // If we still don't have a highlighter, log and return
             if (meshHighlighter == null)
@@ -570,7 +553,6 @@ public class GunInteractionController : MonoBehaviour
 
     public void RemoveScopeHighlight()
     {
-        // Add null check
         if (meshHighlighter != null)
         {
             meshHighlighter.enabled = false;

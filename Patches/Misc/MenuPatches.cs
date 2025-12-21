@@ -582,6 +582,64 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPrefix]
+        [HarmonyPatch(typeof(TradingItemView), "OnClick")]
+        private static bool HandleTradingItemClick(TradingItemView __instance, PointerEventData.InputButton button, Vector2 position, bool doubleClick)
+        {
+            bool flag = SteamVR_Actions._default.RightGrip.state || UnityEngine.Input.GetKey(KeyCode.LeftControl) || UnityEngine.Input.GetKey(KeyCode.RightControl);
+
+            ETradingItemViewType viewType = __instance.etradingItemViewType_0;
+            ETradeMode tradeMode = __instance.etradeMode_0;
+            TraderAssortmentControllerClass traderController = __instance.traderAssortmentControllerClass;
+
+            switch (button)
+            {
+                case PointerEventData.InputButton.Left:
+                    {
+                        if (viewType == ETradingItemViewType.TradingTable)
+                        {
+                            if (flag && tradeMode == ETradeMode.Sale)
+                            {
+                                __instance.HideTooltip();
+                                traderController.UnprepareSellItem(__instance.Item);
+                            }
+                        }
+                        else if (!(!flag && doubleClick) || !__instance.NewContextInteractions.ExecuteInteraction(EItemInfoButton.Inspect))
+                        {
+                            if (flag && tradeMode == ETradeMode.Sale && traderController.QuickFindTradingAppropriatePlace(__instance.Item))
+                            {
+                                __instance.ItemContext.CloseDependentWindows();
+                                __instance.HideTooltip();
+                                Comfort.Common.Singleton<GUISounds>.Instance.PlayItemSound(__instance.Item.ItemSound, EInventorySoundType.pickup);
+                            }
+                            if (__instance.bool_8)
+                            {
+                                traderController.SelectItem(__instance.Item);
+                            }
+                            else if (!flag)
+                            {
+                                __instance.OnClick(button, position, doubleClick);
+                            }
+                        }
+                        break;
+                    }
+                case PointerEventData.InputButton.Right:
+                    if (viewType != ETradingItemViewType.TradingTable)
+                    {
+                        __instance.ShowContextMenu(position);
+                        break;
+                    }
+                    __instance.HideTooltip();
+                    traderController.UnprepareSellItem(__instance.Item);
+                    break;
+                case PointerEventData.InputButton.Middle:
+                    __instance.ExecuteMiddleClick();
+                    break;
+            }
+
+            return false;
+        }
+
+        [HarmonyPrefix]
         [HarmonyPatch(typeof(ItemView), "OnClick")]
         private static bool HandleItemClick(ItemView __instance, PointerEventData.InputButton button, Vector2 position, bool doubleClick)
         {
@@ -1551,7 +1609,7 @@ namespace TarkovVR.Patches.Misc
         {
             if (toggle.name == "vrSettingsToggle")
                 VRSettings.ShowVRSettings();
-
+           
             Camera.main.useOcclusionCulling = false;
             //Camera.main.useOcclusionCulling = true;
             Camera.main.layerCullSpherical = true;

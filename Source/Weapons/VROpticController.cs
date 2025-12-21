@@ -49,29 +49,7 @@ namespace TarkovVR.Source.Weapons
             }
             return false;
         }
-        /*
-        private bool SetScopeSensitivity()
-        {
-            foreach (Transform scope in VRGlobals.scopes)
-            {
-                if (scope != null && scope.parent != null)
-                {
-                    var visualController = scope.parent.GetComponent<SightModVisualControllers>();
-                    if (visualController != null)
-                    {
-                        SightComponent sightComponent = visualController.sightComponent_0;
-                        if (sightComponent != null)
-                        {
-                            VRGlobals.scopeSensitivity = sightComponent.GetCurrentSensitivity;
-                            Plugin.MyLog.LogError($"Setting scope sensitivity to {VRGlobals.scopeSensitivity} for scope {scope.parent.name}");
-                            return true;
-                        }
-                    }
-                }
-            }
-            return false;
-        }
-        */
+
         public bool SetScopeSensitivity()
         {
             foreach (Transform scope in VRGlobals.scopes)
@@ -85,13 +63,15 @@ namespace TarkovVR.Source.Weapons
                         if (sightComponent != null)
                         {
                             float zoomRatio = Mathf.InverseLerp(minFov, maxFov, currentFov);
-
                             float magnificationFactor = maxFov / minFov;
-
                             float minSensitivity = 0.1f / Mathf.Sqrt(magnificationFactor);
                             float maxSensitivity = 0.1f;
                             if (VRSettings.SmoothScopeAim())
-                                VRGlobals.scopeSensitivity = Mathf.Lerp(minSensitivity, maxSensitivity, zoomRatio * zoomRatio);
+                            {
+                                // Use a cubic curve for faster ramp-up at higher zoom
+                                // Lower zoom ratio = more zoomed in = more smoothing (lower sensitivity)
+                                VRGlobals.scopeSensitivity = Mathf.Lerp(minSensitivity, maxSensitivity, zoomRatio * zoomRatio * zoomRatio);
+                            }
                             else
                                 VRGlobals.scopeSensitivity = visualController.sightComponent_0.GetCurrentSensitivity;
                             //Plugin.MyLog.LogError($"Setting scope sensitivity to {VRGlobals.scopeSensitivity} for scope {scope.parent.name} (FOV: {currentFov}/{minFov}-{maxFov}, Mag: {magnificationFactor:F1}x, Ratio: {zoomRatio:F2})");
@@ -117,7 +97,6 @@ namespace TarkovVR.Source.Weapons
 
         public void changeScopeMode()
         {
-            // Check if we have any scopes
             if (VRGlobals.scopes == null || VRGlobals.scopes.Count == 0)
                 return;
 
@@ -155,7 +134,6 @@ namespace TarkovVR.Source.Weapons
                 }
             }
 
-            // Apply all scope mode changes at once
             if (scopeStates.Count > 0)
             {
                 VRGlobals.firearmController.SetScopeMode(scopeStates.ToArray());
@@ -165,7 +143,6 @@ namespace TarkovVR.Source.Weapons
         //Other scopes like the Elcan will switch between its two zooms
         public void handleJoystickZoomDial()
         {
-            // Early return checks
             if (!scopeCamera) return;
 
             float primaryHandJoystickYAxis = VRSettings.GetLeftHandedMode() ?
@@ -175,19 +152,16 @@ namespace TarkovVR.Source.Weapons
             if (Mathf.Abs(primaryHandJoystickYAxis) < VRSettings.GetRightStickSensitivity() ||
                 VRGlobals.scopes.Any(s => s != null && s.parent != null && s.parent.name.Contains("scope_all_eotech_hhs_1")))
                 return;
-            // Cache the current camera FOV for threshold checking
-            float previousFov = scopeCamera.fieldOfView;
 
-            
+            // Cache the current camera FOV for scope crosshair trigger
+            float previousFov = scopeCamera.fieldOfView;            
 
-            // Deadzone threshold
             const float deadzone = 0.1f;
             float variableZoomSensitivity = VRSettings.GetVariableZoomSensitivity();
 
             // Handle smooth zoom scopes
             if (IsVariableZoomScope())
             {
-                // Only modify FOV when stick movement exceeds threshold
                 if (Mathf.Abs(primaryHandJoystickYAxis) > deadzone)
                 {
                     // Apply sensitivity to the zoom speed
@@ -196,7 +170,7 @@ namespace TarkovVR.Source.Weapons
                     currentFov = Mathf.Clamp(currentFov, minFov, maxFov);
                 }
             }
-            // Handle regular scopes
+            // Handle non-smooth zoom scopes
             else
             {
                 bool isZoomedIn = (previousFov <= minFov + 0.1f);
@@ -214,7 +188,7 @@ namespace TarkovVR.Source.Weapons
                 }
             }
 
-            // Check for threshold crossing that triggers zoom swap
+            // Check for threshold crossing that triggers zoom swap (changes crosshair if scope has different one)
             if ((previousFov / maxFov < 0.3 && currentFov / maxFov >= 0.3) ||
                 (previousFov / maxFov >= 0.3 && currentFov / maxFov < 0.3))
             {

@@ -251,32 +251,13 @@ namespace TarkovVR.Patches.Visuals
             newRT.Create();
             return newRT;
         }
-
         private static void ReturnToPool(RenderTexture rt)
         {
             if (rt == null) return;
 
-            string key = $"{rt.width}x{rt.height}_{rt.depth}_{rt.format}";
-
-            if (!_renderTargetPool.ContainsKey(key))
-            {
-                _renderTargetPool[key] = new Queue<RenderTexture>();
-            }
-
-            var pool = _renderTargetPool[key];
-            if (pool.Count < MAX_POOLED_TARGETS)
-            {
-                rt.name = "Pooled_" + key;
-                pool.Enqueue(rt);
-            }
-            else
-            {
-                // Pool is full, destroy the render texture
-                rt.Release();
-                RuntimeUtilities.SafeDestroy(rt);
-            }
+            rt.Release();
+            RuntimeUtilities.SafeDestroy(rt);
         }
-
         public static void ClearRenderTargetPool()
         {
             foreach (var pool in _renderTargetPool.Values)
@@ -444,7 +425,134 @@ namespace TarkovVR.Patches.Visuals
                 Plugin.MyLog.LogError($"Error loading FXAA shader: {ex.Message}");
             }
         }
+        private static Material _smaaMat;
+        private static Texture2D _smaaAreaTex;
+        private static Texture2D _smaaSearchTex;
 
+        private static readonly int _MetricsID = Shader.PropertyToID("_Metrics");
+        private static readonly int _AreaTexID = Shader.PropertyToID("_AreaTex");
+        private static readonly int _SearchTexID = Shader.PropertyToID("_SearchTex");
+        private static readonly int _BlendTexID = Shader.PropertyToID("_BlendTex");
+        private static readonly int _Params1ID = Shader.PropertyToID("_Params1");
+        private static readonly int _Params2ID = Shader.PropertyToID("_Params2");
+        private static readonly int _Params3ID = Shader.PropertyToID("_Params3");
+
+        private static void LoadSMAAShader()
+        {
+            if (_smaaMat != null) return;
+
+            try
+            {
+                string bundlePath = Path.Combine(BepInEx.Paths.PluginPath, "sptvr", "Assets", "smaa");
+                AssetBundle smaaBundle = AssetBundle.LoadFromFile(bundlePath);
+                if (smaaBundle == null)
+                {
+                    Plugin.MyLog.LogError("Failed to load SMAA AssetBundle.");
+                    return;
+                }
+
+                _smaaMat = smaaBundle.LoadAsset<Material>("smaaMat");
+                _smaaAreaTex = smaaBundle.LoadAsset<Texture2D>("AreaTex");
+                _smaaSearchTex = smaaBundle.LoadAsset<Texture2D>("SearchTex");
+
+                if (_smaaMat == null)
+                {
+                    Plugin.MyLog.LogError("SMAA Material not found in bundle.");
+                    return;
+                }
+                if (_smaaAreaTex == null || _smaaSearchTex == null)
+                {
+                    Plugin.MyLog.LogError("SMAA LUT textures (AreaTex/SearchTex) not found in bundle.");
+                    return;
+                }
+
+                _smaaAreaTex.wrapMode = TextureWrapMode.Clamp;
+                _smaaSearchTex.wrapMode = TextureWrapMode.Clamp;
+
+                _smaaMat.SetTexture(_AreaTexID, _smaaAreaTex);
+                _smaaMat.SetTexture(_SearchTexID, _smaaSearchTex);
+
+                // More aggressive edge detection and higher quality
+                // _Params1: SMAA_THRESHOLD, SMAA_DEPTH_THRESHOLD, SMAA_MAX_SEARCH_STEPS, SMAA_MAX_SEARCH_STEPS_DIAG
+                _smaaMat.SetVector(_Params1ID, new Vector4(0.05f, 0.01f, 32f, 16f));  // Lower threshold, more search steps
+
+                // _Params2: SMAA_CORNER_ROUNDING, SMAA_LOCAL_CONTRAST_ADAPTATION_FACTOR
+                _smaaMat.SetVector(_Params2ID, new Vector2(25f, 2.0f));
+
+                // _Params3: SMAA_PREDICATION_THRESHOLD, SMAA_PREDICATION_SCALE, SMAA_PREDICATION_STRENGTH
+                _smaaMat.SetVector(_Params3ID, new Vector3(0.01f, 2.0f, 0.4f));
+                _smaaMat.EnableKeyword("USE_DIAG_SEARCH");
+                _smaaMat.EnableKeyword("USE_CORNER_DETECTION");
+
+                Plugin.MyLog.LogInfo("SMAA Material + LUTs loaded successfully.");
+
+                smaaBundle.Unload(false);
+            }
+            catch (Exception ex)
+            {
+                Plugin.MyLog.LogError($"Error loading SMAA shader: {ex.Message}");
+            }
+        }
+        private static void ApplySMAA(RenderTexture source, RenderTexture destination)
+        {
+            LoadSMAAShader();
+            if (_smaaMat == null)
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
+            int width = source.width;
+            int height = source.height;
+
+            _smaaMat.SetVector(_MetricsID, new Vector4(
+                1.0f / width,
+                1.0f / height,
+                width,
+                height
+            ));
+
+            var rtEdges = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf);
+            var rtBlend = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf);
+
+            rtEdges.filterMode = FilterMode.Bilinear;
+            rtBlend.filterMode = FilterMode.Bilinear;
+
+            // Pass 1: Luma Edge Detection (or use Pass 2 for Color Edge Detection)
+            Graphics.Blit(source, rtEdges, _smaaMat, 2);
+
+            // Pass 4: Blending Weight Calculation
+            Graphics.Blit(rtEdges, rtBlend, _smaaMat, 4);
+
+            // Pass 5: Neighborhood Blending (final output)
+            _smaaMat.SetTexture(_BlendTexID, rtBlend);
+            Graphics.Blit(source, destination, _smaaMat, 5);
+
+            RenderTexture.ReleaseTemporary(rtEdges);
+            RenderTexture.ReleaseTemporary(rtBlend);
+        }
+
+        private static void ApplyFXAA(RenderTexture source, RenderTexture destination)
+        {
+            LoadFXAAShader();
+            if (_fxaaMat == null)
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
+            int width = destination != null ? destination.width : Screen.width;
+            int height = destination != null ? destination.height : Screen.height;
+
+            if (VRGlobals.VRCam != null)
+            {
+                width = VRGlobals.VRCam.pixelWidth;
+                height = VRGlobals.VRCam.pixelHeight;
+            }
+            Graphics.Blit(source, destination, _fxaaMat);
+        }
+
+        /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
         private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
@@ -467,7 +575,23 @@ namespace TarkovVR.Patches.Visuals
             Graphics.Blit(source, destination, _fxaaMat);
             return false;
         }
+        */
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
+        private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
+        {
+            if (source == null || destination == null)
+            {
+                Graphics.Blit(source, destination);
+                return false;
+            }
+            //SMAA in testing
+            //ApplySMAA(source, destination);
+            ApplyFXAA(source, destination);
+            return false;
+
+        }
         //Attempting to fix DLSS by forcing DLAA. not quite there yet but I think its getting somewhere... Using custom jitter because post processing is disabled for VR
         //Maybe ill try getting PostProcessing working again...
         //-matsix

@@ -172,18 +172,14 @@ namespace TarkovVR.Patches.Core.Player
             }
             else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.highlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.20f && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y))
                 lastYRot = headY;
-            // If head is not looking down lerp the rotation of the legs based on head direction
-            else if (headPitch < pitchThreshold || (VRGlobals.firearmController != null && VRGlobals.firearmController.IsAiming))
-                lastYRot = headY;
-            // If head is looking down lerp the rotation of the legs smoother (2f) only when you turn your head more than 60 degrees
-            else if (Mathf.Abs(rotDiff) > 60)
-                lastYRot = Mathf.LerpAngle(lastYRot, headY, Time.deltaTime * 2f);           
+            else if (Mathf.Abs(rotDiff) > 10)
+                lastYRot = Mathf.LerpAngle(lastYRot, headY, Time.deltaTime * 3f);   
 
             // Scale and clamp to -90 to 90 range (less jarring/buggy than 180)
             headPitch = Mathf.Clamp(headPitch / 2, -90, 90);
             if (VRGlobals.usingItem)
                 headPitch = 0;
-            deltaRotation = new Vector2(deltaRotation.x + lastYRot, 0);
+            deltaRotation = new Vector2(deltaRotation.x + lastYRot, headPitch);
 
             leftJoystickLastUsed = leftJoystickUsed;
 
@@ -221,6 +217,7 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FirstPersonCameraOperationClass), "ManualLateUpdate")]
         private static bool PositionCamera(FirstPersonCameraOperationClass __instance)

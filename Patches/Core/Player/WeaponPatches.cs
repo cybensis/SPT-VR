@@ -50,7 +50,7 @@ namespace TarkovVR.Patches.Core.Player
     {
         public static Vector3 weaponOffset = Vector3.zero;
         public static bool grenadeEquipped;
-        private static Transform oldGrenadeHolder;
+        public static bool pinPulled = false;
         public static Transform previousLeftHandMarker;
         public static GunInteractionController currentGunInteractController;
         public static Transform currentScope;
@@ -548,10 +548,10 @@ namespace TarkovVR.Patches.Core.Player
 
 
         public static Transform knifeTransform = null;
-
+        
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.BaseKnifeController), "IEventsConsumerOnWeapIn")]
-        private static void MoveKnifeToIKHands(EFT.Player.BaseKnifeController __instance)
+        [HarmonyPatch(typeof(KnifeController), "Spawn")]
+        private static void MoveKnifeToIKHands(KnifeController __instance)
         {
             if (!__instance._player.IsYourPlayer)
                 return;
@@ -569,7 +569,6 @@ namespace TarkovVR.Patches.Core.Player
                 grenadeEquipped = false;
 
             pinPulled = false;
-            VRGlobals.switchingWeapon = true;
 
             if (currentGunInteractController != null) { 
                 currentGunInteractController.enabled = false;
@@ -645,7 +644,6 @@ namespace TarkovVR.Patches.Core.Player
 
             VRGlobals.oldWeaponHolder = null;
         }
-
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_49")]
@@ -1302,57 +1300,6 @@ namespace TarkovVR.Patches.Core.Player
             }
             return false;
         }
-
-        private static Vector3 lastHandPosition = Vector3.zero;
-        private static Queue<Vector3> velocityHistory = new Queue<Vector3>();
-        private static int maxVelocitySamples = 10;
-
-        //These two method handle getting velocity of your controller straight from SteamVR to handle throwing items/grenades
-        private static Vector3 GetSteamVRVelocity(SteamVR_Input_Sources inputSource)
-        {
-            SteamVR_Action_Pose poseAction = inputSource == SteamVR_Input_Sources.LeftHand
-                ? SteamVR_Actions._default.LeftHandPose
-                : SteamVR_Actions._default.RightHandPose;
-
-            if (poseAction != null)
-            {
-                Vector3 velocity = poseAction.GetVelocity(inputSource);
-                return velocity;
-            }
-            return Vector3.zero;
-        }
-
-        private static Vector3 GetSteamVRPosition(SteamVR_Input_Sources inputSource)
-        {
-            SteamVR_Action_Pose poseAction = inputSource == SteamVR_Input_Sources.LeftHand
-                ? SteamVR_Actions._default.LeftHandPose
-                : SteamVR_Actions._default.RightHandPose;
-
-            return poseAction != null ? poseAction.GetLocalPosition(inputSource) : Vector3.zero;
-        }
-
-        private static Quaternion GetSteamVRRotation(SteamVR_Input_Sources inputSource)
-        {
-            SteamVR_Action_Pose poseAction = inputSource == SteamVR_Input_Sources.LeftHand
-                ? SteamVR_Actions._default.LeftHandPose
-                : SteamVR_Actions._default.RightHandPose;
-
-            return poseAction != null ? poseAction.GetLocalRotation(inputSource) : Quaternion.identity;
-        }
-
-        private static Vector3 GetSteamVRAngularVelocity(SteamVR_Input_Sources inputSource)
-        {
-            SteamVR_Action_Pose poseAction = inputSource == SteamVR_Input_Sources.LeftHand
-                ? SteamVR_Actions._default.LeftHandPose
-                : SteamVR_Actions._default.RightHandPose;
-
-            if (poseAction != null)
-            {
-                Vector3 angularVelocity = poseAction.GetAngularVelocity(inputSource);
-                return angularVelocity;
-            }
-            return Vector3.zero;
-        }
         public static void DropObject(LootItem val, bool useThrowVelocity = false)
         {
             AssetPoolObject component = val.GetComponent<AssetPoolObject>();
@@ -1377,8 +1324,8 @@ namespace TarkovVR.Patches.Core.Player
             if (useThrowVelocity)
             {
                 SteamVR_Input_Sources throwingHand = SteamVR_Input_Sources.LeftHand;
-                Vector3 throwVelocity = GetSteamVRVelocity(throwingHand);
-                Vector3 angularVelocity = GetSteamVRAngularVelocity(throwingHand);
+                Vector3 throwVelocity = ControllerVelocity.GetSteamVRVelocity(throwingHand);
+                Vector3 angularVelocity = ControllerVelocity.GetSteamVRAngularVelocity(throwingHand);
 
                 if (throwVelocity.magnitude > 0.1f)
                 {
@@ -1500,189 +1447,14 @@ namespace TarkovVR.Patches.Core.Player
                 Plugin.MyLog.LogError($"Error in MedsControllerSpawnPatch: {ex.Message}");
             }
             //Plugin.MyLog.LogError($"[SpawnMedsController] Spawning meds controller for {player} with item {item}");
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(GrenadeHandsController), "Spawn")]
-        static void HandleGrenade(GrenadeHandsController __instance, float animationSpeed, Action callback)
-        {
-            var player = __instance._player;
-
-            if (!player.IsYourPlayer)
-                return;
-
-            grenadeEquipped = true;
-            pinPulled = false;
-            VRGlobals.switchingWeapon = true;
-            InitVRPatches.rightPointerFinger.enabled = false;
-
-            if (currentGunInteractController != null)
-                currentGunInteractController.enabled = false;
-
-            VRGlobals.player = player;
-            VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
-            if (VRSettings.GetLeftHandedMode())
-                VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
-            VRGlobals.usingItem = false;
-
-            VRPlayerManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[10];
-            VRGlobals.oldWeaponHolder = __instance.HandsHierarchy.gameObject;
-            if (__instance.WeaponRoot.parent.name != "weaponHolder")
-            {
-                if (__instance.WeaponRoot.parent.Find("RightHandPositioner"))
-                {
-                    currentGunInteractController = __instance.WeaponRoot.parent.GetComponent<GunInteractionController>();
-                    currentGunInteractController.enabled = true;
-                    currentGunInteractController.SetPlayerOwner(player.gameObject.GetComponent<GamePlayerOwner>());
-                    VRGlobals.weaponHolder = __instance.WeaponRoot.parent.Find("RightHandPositioner").Find("weaponHolder").gameObject;
-
-                }
-                else
-                {
-                    currentGunInteractController = __instance.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
-                    currentGunInteractController.Init();
-                    currentGunInteractController.initialized = true;
-                    currentGunInteractController.SetPlayerOwner(player.gameObject.GetComponent<GamePlayerOwner>());
-
-                    GameObject rightHandPositioner = new GameObject("RightHandPositioner");
-                    rightHandPositioner.transform.SetParent(__instance.WeaponRoot.transform.parent, false);
-                    VRGlobals.weaponHolder = new GameObject("weaponHolder");
-                    VRGlobals.weaponHolder.transform.SetParent(rightHandPositioner.transform, false);
-                    HandsPositioner handsPositioner = rightHandPositioner.AddComponent<HandsPositioner>();
-                    handsPositioner.rightHandIk = rightHandPositioner.transform;
-                }
-                //Transform handTransform = VRGlobals.vrPlayer.RightHand.transform; //figure out why this works
-                //VRGlobals.weaponHolder.transform.SetParent(handTransform, false);
-
-                __instance.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform, false);
-                VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
-                weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset("", "grenade");
-            }
-            else if (__instance.WeaponRoot.parent.parent.name == "RightHandPositioner")
-            {
-                __instance.WeaponRoot.transform.parent = __instance.WeaponRoot.transform.parent.parent.parent;
-                HandleGrenade(__instance, animationSpeed, callback);
-                return;
-            }
-            //Plugin.MyLog.LogError($"Weaponroot parent: {__instance.WeaponRoot.parent.name}");
-            if (VRGlobals.player)
-            {
-                previousLeftHandMarker = VRGlobals.player._markers[0];
-                VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
-                //VRGlobals.leftArmBendGoal.localPosition = new Vector3(-0.5f, -0.3f, -0.4f);
-                //VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
-            }
-
-            if (VRSettings.GetLeftHandedMode())
-            {
-                VRGlobals.player._elbowBends[0] = VRGlobals.rightArmBendGoal;
-                VRGlobals.player._elbowBends[1] = VRGlobals.leftArmBendGoal;
-            }
-            else
-            {
-                VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
-                VRGlobals.player._elbowBends[1] = VRGlobals.rightArmBendGoal;
-            }
-
-            __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
-
-            VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(340, 340, 0);
-            VRGlobals.weaponHolder.transform.localPosition = weaponOffset;
-        }
-
-        // 1. Create a list of GClass2804 with names and actions
-        // 2. Create a GClass2805 and assign the list to Actions
-        // 3. Run HideoutPlayerOwner.AvailableInteractionState.set_Value(Gclass2805)
-        //public static float grenadeOffset = 0;
-
-        public static bool pinPulled = false;
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseGrenadeHandsController), "method_9")]
-        private static bool RepositionGrenadeThrow(BaseGrenadeHandsController __instance, ref Vector3? throwPosition, float timeSinceSafetyLevelRemoved, float lowHighThrow, Vector3 direction, float forcePower, bool lowThrow, bool withVelocity)
-        {
-            if (!__instance._player.IsYourPlayer)
-                return true;
-            if (!pinPulled)
-                return false;
-
-            Vector3 throwVelocity = GetSteamVRVelocity(SteamVR_Input_Sources.RightHand);
-            Vector3 force;
-            Vector3 throwPos = GetSteamVRPosition(SteamVR_Input_Sources.RightHand);
-            Quaternion throwRot = GetSteamVRRotation(SteamVR_Input_Sources.RightHand);
-
-            __instance.firearmsAnimator_0.SetGrenadeFire(EGrenadeFire.Throw);
-            __instance.firearmsAnimator_0.SetAnimationSpeed(2f);
-
-            if (throwVelocity.magnitude > 0.1f)
-            {
-                // Transform from controller local space to world space
-                Vector3 worldSpaceVelocity = VRGlobals.vrOffsetter.transform.TransformDirection(throwVelocity);
-
-                float grenadeVelocityMultiplier = 1.5f;
-                force = worldSpaceVelocity * grenadeVelocityMultiplier;
-
-                if (force.magnitude > 15f)
-                {
-                    force = force.normalized * 15f;
-                }
-            }
-            else
-            {
-                Vector3 defaultDirection = VRGlobals.vrPlayer.RightHand.transform.forward;
-                force = defaultDirection * (forcePower * lowHighThrow * 0.5f);
-            }
-
-            if (withVelocity)
-            {
-                force += __instance._player.Velocity;
-            }
-            /*
-            __instance.vmethod_2(
-                timeSinceSafetyLevelRemoved,
-                VRGlobals.vrPlayer.RightHand.transform.position,
-                VRGlobals.vrPlayer.RightHand.transform.rotation,
-                force,
-                lowThrow
-            );
-            */
-            __instance.vmethod_2(
-                timeSinceSafetyLevelRemoved,
-                VRGlobals.vrOffsetter.transform.TransformPoint(throwPos),
-                VRGlobals.vrOffsetter.transform.rotation * throwRot,
-                force,
-                lowThrow
-            );
-            VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
-            InitVRPatches.rightPointerFinger.enabled = false;
-            VRGlobals.emptyHands = null;
-            return false;
-        }
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(BaseGrenadeHandsController), "vmethod_2")]
-        private static void GrenadeAnimationSpeedReset(BaseGrenadeHandsController __instance, float timeSinceSafetyLevelRemoved, Vector3 position, Quaternion rotation, Vector3 force, bool lowThrow)
-        {
-            __instance.firearmsAnimator_0.SetAnimationSpeed(1f);
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseGrenadeHandsController), "IEventsConsumerOnWeapOut")]
-        private static bool DisableGrenadeStuffAfterCancel(BaseGrenadeHandsController __instance)
-        {
-            if (!__instance._player.IsYourPlayer)
-                return true;
-
-            VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
-            InitVRPatches.rightPointerFinger.enabled = false;
-            VRGlobals.emptyHands = null;
-            pinPulled = false;
-
-            return true;
-        }
+        }      
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CollimatorSight), "OnEnable")]
         private static void FixCollimatorParallaxEffect(CollimatorSight __instance)
         {
+            if (!__instance.CollimatorMaterial.HasProperty("_MarkScale"))
+                return;
             // Mark scale pulls the red dot/holo closer to the lens the higher it is, which makes it shift around when looking
             // as this value decreases it gets pushed further away from the lens, gets smaller, but it stops shifting around
             float markScale = __instance.CollimatorMaterial.GetFloat("_MarkScale");

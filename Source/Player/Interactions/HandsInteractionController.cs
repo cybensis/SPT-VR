@@ -173,12 +173,10 @@ namespace TarkovVR.Source.Player.Interactions
         }
         public void Update()
         {
-            // Early exit conditions
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
                 return;
 
-            // Cache expensive VR settings check
             if (Time.time > leftHandedModeCheckTimer)
             {
                 cachedLeftHandedMode = VRSettings.GetLeftHandedMode();
@@ -186,7 +184,6 @@ namespace TarkovVR.Source.Player.Interactions
                 UpdateInputReferences();
             }
 
-            // Cache trigger axis calculation
             float secondaryHandTriggerAxis = cachedLeftHandedMode ?
                 SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) :
                 SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any);
@@ -216,14 +213,11 @@ namespace TarkovVR.Source.Player.Interactions
                 lastCacheCleanupTime = Time.time;
             }
 
-            // Handle held item physics
             UpdateHeldItemPhysics();
 
-            // Handle scope interaction
             if (changingScopeZoom)
                 HandleScopeInteraction();
 
-            // Update exit states
             UpdateInteractionExitStates();
         }
         private void CleanupCache()
@@ -249,7 +243,6 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void ProcessRightHandInputs()
         {
-            // Handle backHolster interactions with cached state
             if (rightHandState.inBackHolster)
             {
                 if (primaryHandGrip.stateUp)
@@ -269,7 +262,6 @@ namespace TarkovVR.Source.Player.Interactions
                 }
             }
 
-            // Handle sidearmHolster interactions with cached state
             if (rightHandState.inSidearmHolster)
             {
                 if (primaryHandGrip.stateDown)
@@ -283,7 +275,6 @@ namespace TarkovVR.Source.Player.Interactions
         {
             float secondaryHandTriggerAmount = cachedLeftHandedMode ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
 
-            // Handle rig interactions with cached state
             if (leftHandState.inBackpack)
             {
                 if (UIPatches.quickSlotUi && secondaryHandGrip.stateDown)
@@ -293,7 +284,6 @@ namespace TarkovVR.Source.Player.Interactions
                 }
             }
 
-            // Handle backpack interactions with cached state
             if (leftHandState.inBackpack && heldItem)
             {
                 if (secondaryHandGrip.stateUp)
@@ -333,7 +323,6 @@ namespace TarkovVR.Source.Player.Interactions
                 }
             }
 
-            // Handle headGear interactions with cached state
             if (leftHandState.inHeadGear)
             {
                 if (secondaryHandGrip.stateDown)
@@ -359,7 +348,6 @@ namespace TarkovVR.Source.Player.Interactions
                 }
             }
 
-            // Handle scope interactions with cached state
             if (leftHandState.inScope)
             {
                 HandleScopeInteraction();
@@ -377,7 +365,6 @@ namespace TarkovVR.Source.Player.Interactions
             // Handle loot interactions
             if (leftHandState.inInteractiveCollider)
             {
-                // Process loot interactions using cached lootItem, lootableContainer, door, corpse
                 ProcessInteractiveObjects();
             }
         }
@@ -414,7 +401,6 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (collider.gameObject.layer != 3) continue;
 
-                // Use cached interactable lookup
                 if (!interactableCache.ContainsKey(collider))
                 {
                     interactableCache[collider] = new CachedInteractable(collider.gameObject);
@@ -471,7 +457,6 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 else if (collider.gameObject.layer == 3)
                 {
-                    // Use cached interactable lookup
                     if (!interactableCache.ContainsKey(collider))
                     {
                         interactableCache[collider] = new CachedInteractable(collider.gameObject);
@@ -481,7 +466,7 @@ namespace TarkovVR.Source.Player.Interactions
 
                     switch (cachedInteractable.Type)
                     {
-                        // Disabled but left 
+                        // Rig Collider disabled but left here for possible future use
                         case InteractableType.RigCollider:
                             leftHandState.inRigCollider = true;
                             if (!previousState.inRigCollider)
@@ -530,7 +515,6 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 else if (collider.gameObject.layer == INTERACTIVE_LAYER || collider.transform.root.gameObject.layer == DEAD_BODY_LAYER)
                 {
-                    // Use cached interactable lookup for interactive objects too
                     if (!interactableCache.ContainsKey(collider))
                     {
                         interactableCache[collider] = new CachedInteractable(collider.gameObject);
@@ -542,7 +526,6 @@ namespace TarkovVR.Source.Player.Interactions
                     {
                         leftHandState.inInteractiveCollider = true;
 
-                        // Cache the specific component based on type
                         switch (cachedInteractable.Type)
                         {
                             case InteractableType.LootItem:
@@ -586,7 +569,6 @@ namespace TarkovVR.Source.Player.Interactions
             if (heldItem != null || !secondaryHandGrip.stateDown)
                 return;
 
-            // Handle different types of loot interactions using cached components
             if (leftHandState.lootItem != null)
             {
                 heldItem = leftHandState.lootItem;
@@ -827,7 +809,6 @@ namespace TarkovVR.Source.Player.Interactions
 
         public CachedInteractable(GameObject go)
         {
-            // Cache component lookups by name/type
             switch (go.name)
             {
                 case "backHolsterCollider":

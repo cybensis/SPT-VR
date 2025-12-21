@@ -32,6 +32,7 @@ using Newtonsoft.Json;
 using EFT;
 using System.Security.Cryptography;
 using Microsoft.SqlServer.Server;
+using GPUInstancer;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -40,12 +41,12 @@ namespace TarkovVR.Patches.Visuals
     {
         private static Camera postProcessingStoogeCamera;
         public static DistantShadow distantShadow;
-        
+
 
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The volumetric light was only using the projection matrix for one eye which made it appear
-        // off position in the other eye, this gets the current eyes matrix to fix this issue
+        // off position in the other eye, this gets the current eyes matrix to fix this issue              
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VolumetricLightRenderer), "OnPreRender")]
         private static bool PatchVolumetricLightingToVR(VolumetricLightRenderer __instance)
@@ -81,6 +82,23 @@ namespace TarkovVR.Patches.Visuals
             }
             return true;
         }
+
+        // This is where GPU Instancing handles culling, it does not work properly in multipass, it only takes left eye into account.
+        // Adding toggles for it because this can heavily impact performance depending on the scene and hardware.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GPUInstancerManager), "UpdateBuffers")]
+        private static void DisableAllCulling(GPUInstancerManager __instance)
+        {
+            if (VRSettings.GetOccCulling())
+                __instance.isOcclusionCulling = false;
+            else
+                __instance.isOcclusionCulling = true;
+            if (VRSettings.GetFrusCulling())
+                __instance.isFrustumCulling = false;
+            else
+                __instance.isFrustumCulling = true;
+        }       
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(InventoryBlur), "Enable")]

@@ -16,7 +16,7 @@ using System.Text;
 
 namespace TarkovVR
 {
-    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.1.1")]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.1.3")]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
@@ -66,10 +66,12 @@ namespace TarkovVR
                 XRGeneralSettings.AttemptInitializeXRSDKOnLoad();
                 XRGeneralSettings.AttemptStartXRSDKOnBeforeSplashScreen();
 
+                XRSettings.useOcclusionMesh = true;
+
                 // Initialize SteamVR
                 SteamVR.Initialize();
 
-                Plugin.MyLog.LogError("StereoRenderingMode:" + XRSettings.stereoRenderingMode);
+                Plugin.MyLog.LogInfo("StereoRenderingMode:" + XRSettings.stereoRenderingMode);
                 // Verify SteamVR is running
                 if (!SteamVR.active)
                 {
@@ -93,7 +95,7 @@ namespace TarkovVR
                 // Initialize action sets - important for different controller types
                 InitializeActionSets();
 
-                Plugin.MyLog.LogInfo("[VR] Initialization completed successfully with Single Pass Instanced.");
+                Plugin.MyLog.LogInfo("[VR] Initialization completed successfully.");
                 return true;
             }
             catch (Exception ex)

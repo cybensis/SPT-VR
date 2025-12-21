@@ -8,6 +8,7 @@ using EFT.Animations;
 using EFT.ItemInHandSubsystem;
 using EFT.UI.Ragfair;
 using RootMotion.FinalIK;
+using Valve.VR;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -32,13 +33,13 @@ namespace TarkovVR.Patches.Core.Player
             return false;
 
         }
+        
         /*
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(PlayerAnimator), "EnableSprint")]
-        private static bool DisableSprintAnim(PlayerAnimator __instance, ref bool enabled)
+        [HarmonyPatch(typeof(WalkEffector), "Process")]
+        private static bool DisableWalkEffector(WalkEffector __instance, float deltaTime)
         {
-            enabled = false;
-            return true;
+            return false;
         }
         */
 
@@ -46,48 +47,73 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(PlayerBones), "SetShoulders")]
         private static bool OverrideShoulders(PlayerBones __instance)
         {
-            if (__instance == null || __instance.Shoulders_Anim == null || __instance.Shoulders_Anim.Length < 2 ||
-                __instance.Player == null || !__instance.Player.IsYourPlayer ||
-                VRGlobals.switchingWeapon || VRGlobals.usingItem ||
-                VRGlobals.vrPlayer == null || VRGlobals.ikManager == null)
+            if (__instance.Player == null || !__instance.Player.IsYourPlayer ||
+                VRGlobals.vrPlayer == null || VRGlobals.ikManager == null ||
+                VRSettings.GetLeftHandedMode())
                 return true;
 
-            // Skip shoulder adjustments in left-handed mode for now until it's fixed
-            if (VRSettings.GetLeftHandedMode())
-                return true;
+            // Base shoulder dimensions
+            const float ShoulderWidth = 0.13f;
+            const float ShoulderHeight = -0.18f;
+            const float ShoulderDepth = -0.10f;
+            const float NeckLength = 0.15f;
+            const float STANDING_BASELINE = 1.7f;
+            const float SITTING_BASELINE = 1.25f;
 
-            bool sprintAnimDisabled = __instance.Player.IsSprintEnabled && VRSettings.GetDisableRunAnim();
+            // Height-based scaling
+            float baselineHeight = VRSettings.GetSeatedMode() ? SITTING_BASELINE : STANDING_BASELINE;
+            float heightRatio = VRGlobals.vrPlayer.initPos.y / baselineHeight;
+            float armLengthOffset = (heightRatio - 1f) * 0.25f;
 
-            Vector3 leftShoulderPos = __instance.Shoulders_Anim[0].position;
-            Vector3 rightShoulderPos = __instance.Shoulders_Anim[1].position;
+            // State-based offsets
+            bool isSprinting = __instance.Player.IsSprintEnabled;
+            bool isAiming = VRGlobals.firearmController?.IsAiming ?? false;
+            bool isUsingItem = VRGlobals.usingItem;
 
-            // Get yaw-only rotation to apply offsets relative to body direction
+            bool sprintAnimEnabled = isSprinting && !VRSettings.GetDisableRunAnim();
+            if (sprintAnimEnabled) return true;
+
+            float aimOffset = isAiming ? -0.02f : 0.02f;
+            float sprintOffset = isSprinting ? 0.10f : 0f;
+            float usingItemOffset = isUsingItem ? -0.10f : 0f;
+
+            // Calculate neck base position
+            Vector3 headPos = VRGlobals.VRCam.transform.position;
+            Vector3 headForward = VRGlobals.VRCam.transform.forward;
+            Vector3 headForwardFlat = new Vector3(headForward.x, 0f, headForward.z).normalized;
+
+            float headPitch = VRGlobals.VRCam.transform.eulerAngles.x * Mathf.Deg2Rad;
+            Vector3 neckBase = headPos - (headForwardFlat * NeckLength * Mathf.Sin(headPitch));
+            neckBase.y = headPos.y;
+
+            // Body-relative directions
             float bodyYaw = __instance.Player.Transform.eulerAngles.y;
-            Quaternion yawOnlyRotation = Quaternion.Euler(0f, bodyYaw, 0f);
-            Vector3 forwardYawOnly = yawOnlyRotation * Vector3.forward;
-            Vector3 rightYawOnly = yawOnlyRotation * Vector3.right;
+            Quaternion yawRotation = Quaternion.Euler(0f, bodyYaw, 0f);
+            Vector3 right = yawRotation * Vector3.right;
+            Vector3 forward = yawRotation * Vector3.forward;
 
-            Vector3 offsetLeft = forwardYawOnly * (sprintAnimDisabled ? -0.25f : -0.1f)   // Forward/backward
-                                + rightYawOnly * (sprintAnimDisabled ? 0f : -0.03f)      // Left/right
-                                + Vector3.up * (sprintAnimDisabled ? 0.23f : -0.07f);        // Up/down
-            leftShoulderPos += offsetLeft;
+            // Calculate shoulder offsets
+            float leftLateral = -ShoulderWidth - sprintOffset;
+            float leftDepth = ShoulderDepth + sprintOffset + armLengthOffset; //+ usingItemOffset;
 
-            Vector3 offsetRight = forwardYawOnly * (sprintAnimDisabled ? -0.25f : 0.05f)      // Forward/backward
-                                 + rightYawOnly * (sprintAnimDisabled ? 0f : 0.03f)       // Left/right
-                                  + Vector3.up * (sprintAnimDisabled ? 0.23f : -0.07f);       // Up/down
-            rightShoulderPos += offsetRight;
+            float rightLateral = ShoulderWidth + sprintOffset;
+            float rightDepth = ShoulderDepth + aimOffset + sprintOffset + armLengthOffset; //+ usingItemOffset;
 
+            Vector3 leftOffset = right * leftLateral + Vector3.up * ShoulderHeight + forward * leftDepth;
+            Vector3 rightOffset = right * rightLateral + Vector3.up * ShoulderHeight + forward * rightDepth;
+
+            // Apply positions
             TransformHelperClass.LerpPositionAndRotation(
                 __instance.Shoulders[0],
-                leftShoulderPos,
+                neckBase + leftOffset,
                 __instance.Shoulders_Anim[0].rotation,
-                0.60f);
+                0.7f);
 
             TransformHelperClass.LerpPositionAndRotation(
                 __instance.Shoulders[1],
-                rightShoulderPos,
+                neckBase + rightOffset,
                 __instance.Shoulders_Anim[1].rotation,
-                0.60f);
+                0.7f);
 
             return false;
         }

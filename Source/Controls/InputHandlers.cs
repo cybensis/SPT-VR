@@ -149,69 +149,7 @@ namespace TarkovVR.Source.Controls
                 }
             }
         }
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        /*
-        public class ResetHeightHandler : IInputHandler
-        {
-            float timeHeld = 0f;
-            public static float HEIGH_RESET_TIME_THRESHOLD = 0.5f;
-            public static float ARM_SCALING_BASE_PLAYER_HEIGHT = 1.4147f;
-            public static float FOREARM_BASE_LENGTH = 1.15f;
-            private Transform leftForearm;
-            private Transform rightForearm;
-            private bool heightReset = false;
-            public void UpdateCommand(ref ECommand command)
-            {
-                if (!leftForearm || !rightForearm)
-                    return;
-
-                if (SteamVR_Actions._default.ClickRightJoystick.state && !heightReset)
-                {
-                    timeHeld += Time.deltaTime;
-                    if (timeHeld > HEIGH_RESET_TIME_THRESHOLD)
-                    {
-                        VRGlobals.vrPlayer.initPos = Camera.main.transform.localPosition;
-                        float heightDiffScale = (VRGlobals.vrPlayer.initPos.y / ARM_SCALING_BASE_PLAYER_HEIGHT);
-                        heightDiffScale += (1 - heightDiffScale) * 0.5f;
-                        Vector3 forearmLength = new Vector3(heightDiffScale, 1, 1) * FOREARM_BASE_LENGTH;
-
-
-                        Transform leftForearmCounterObj = leftForearm.GetChild(0);
-                        Transform rightForearmCounterObj = rightForearm.GetChild(0);
-                        // Calculate the inverse scale for forearm1
-                        Vector3 forearmInverseScale = new Vector3(
-                            1 / forearmLength.x,
-                            1 / forearmLength.y,
-                            1 / forearmLength.z
-                        );
-
-                        // Apply the inverse scale to forearm1
-                        leftForearmCounterObj.localScale = forearmInverseScale;
-                        rightForearmCounterObj.localScale = forearmInverseScale;
-
-                        leftForearm.transform.localScale = forearmLength;
-                        rightForearm.transform.localScale = forearmLength;
-
-                        heightReset = true;
-                    }
-                }
-                else { 
-                    timeHeld = 0f;
-                    heightReset = false;
-                }
-            }
-
-            public void SetRightArmTransform(Transform rightForearm)
-            {
-                this.rightForearm = rightForearm;
-            }
-            public void SetLeftArmTransform(Transform leftForearm)
-            {
-                this.leftForearm = leftForearm;
-            }
-        }
-        */
-        
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------      
         public class ResetHeightHandler : IInputHandler
         {
             float timeHeld = 0f;
@@ -226,7 +164,6 @@ namespace TarkovVR.Source.Controls
                     if (timeHeld > HEIGH_RESET_TIME_THRESHOLD)
                     {
                         VRGlobals.vrPlayer.initPos = VRGlobals.VRCam.transform.localPosition;
-
                         heightReset = true;
                     }
                 }
@@ -268,41 +205,77 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class ReloadInputHandler : IInputHandler
         {
-            private bool toggleReload = false; 
+            private const float DOUBLE_TAP_WINDOW = 0.2f;
+
+            private bool reloadTriggered = false;
+            private float lastTapTime = 0f;
+            private bool waitingForSecondTap = false;
+
             public void UpdateCommand(ref ECommand command)
             {
-                bool reloadButtonClick = (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any)  : SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any));
-                if (reloadButtonClick) { 
-                    command = ECommand.ReloadWeapon;
-                    toggleReload = false;
+                if (!VRGlobals.inGame)
+                    return;
+
+                bool reloadButton = VRSettings.GetLeftHandedMode()
+                    ? SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any)
+                    : SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
+
+                if (reloadButton)
+                {
+                    float currentTime = Time.time;
+                    float timeSinceLastTap = currentTime - lastTapTime;
+
+                    if (waitingForSecondTap && timeSinceLastTap < DOUBLE_TAP_WINDOW)
+                    {
+                        command = ECommand.QuickReloadWeapon;
+                        waitingForSecondTap = false;
+                        lastTapTime = 0f;
+                    }
+                    else
+                    {
+                        waitingForSecondTap = true;
+                        lastTapTime = currentTime;
+                    }
+
+                    reloadTriggered = false;
                 }
-                if (toggleReload) {
+                else if (waitingForSecondTap && (Time.time - lastTapTime) >= DOUBLE_TAP_WINDOW)
+                {
                     command = ECommand.ReloadWeapon;
-                    toggleReload = false;
+                    waitingForSecondTap = false;
+                }
+                else if (reloadTriggered)
+                {
+                    command = ECommand.ReloadWeapon;
+                    reloadTriggered = false;
                 }
             }
 
             public void TriggerReload()
             {
-                toggleReload = true;
+                reloadTriggered = true;
             }
         }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class AimHandler : IInputHandler
         {
-            // Hysteresis thresholds to prevent spam toggling
-            private const float SCOPE_ENTER_ANGLE = 15f;
-            private const float SCOPE_EXIT_ANGLE = 25f;
-            private const float IRONS_ENTER_ANGLE_TO = 15f;
-            private const float IRONS_EXIT_ANGLE_TO = 25f;
-            private const float IRONS_ENTER_ANGLE_FROM = 15.5f;
-            private const float IRONS_EXIT_ANGLE_FROM = 28.5f;
+            private const float SCOPE_ENTER_ANGLE_ALIGNMENT = 15f;      // How aligned scope must be with head direction
+            private const float SCOPE_EXIT_ANGLE_ALIGNMENT = 25f;       // Threshold to exit scope view
+            private const float SCOPE_ENTER_ANGLE_VIEW = 25f;           // How aligned head must be looking at scope
+            private const float SCOPE_EXIT_ANGLE_VIEW = 35f;            // Threshold to stop looking at scope
+            private const float SCOPE_OFFSET_DISTANCE = 0.25f;          // Offset from scope lens for eye position
 
-            // Distance check to prevent scope activation when too far
-            private const float MAX_SCOPE_DISTANCE = 0.45f;
+            private const float IRONS_ENTER_ANGLE_ALIGNMENT = 15f;      // How aligned gun must be with head direction
+            private const float IRONS_EXIT_ANGLE_ALIGNMENT = 25f;       // Threshold to exit iron sight view
+            private const float IRONS_ENTER_ANGLE_VIEW = 25.5f;         // How aligned head must be looking at gun
+            private const float IRONS_EXIT_ANGLE_VIEW = 38.5f;          // Threshold to stop looking at gun
 
-            // Cooldown to prevent rapid toggling
+            private const float RANGEFINDER_TRIGGER_THRESHOLD = 0.5f;
+
             private const float TOGGLE_COOLDOWN = 0.2f;
+            private const int MAX_CAMERA_SEARCH_DEPTH = 3;
+
             private float lastToggleTime = 0f;
 
             public void UpdateCommand(ref ECommand command)
@@ -314,48 +287,40 @@ namespace TarkovVR.Source.Controls
                     ? SteamVR_Actions._default.LeftTrigger.axis
                     : SteamVR_Actions._default.RightTrigger.axis;
 
-                // Handle rangefinder special case
                 if (WeaponPatches.rangeFinder)
                 {
                     HandleRangefinder(primaryHandTriggerAmount);
                     return;
                 }
 
-                bool isAiming = VRGlobals.firearmController.IsAiming;
-                float currentTime = Time.time;
-
                 // Prevent rapid toggling
-                if (currentTime - lastToggleTime < TOGGLE_COOLDOWN)
+                if (Time.time - lastToggleTime < TOGGLE_COOLDOWN)
                     return;
 
-                // Handle scope or iron sight aiming
+                bool isAiming = VRGlobals.firearmController.IsAiming;
+
                 if (HasValidScope())
                 {
-                    HandleScopeAiming(ref command, isAiming, currentTime);
+                    HandleScopeAiming(ref command, isAiming);
                 }
                 else
                 {
-                    HandleIronSightAiming(ref command, isAiming, currentTime);
-                }
-
-                // Adjust player rotation when entering aim mode while supporting weapon - disabled this, what was this for? it causes jitter when adsing
-                if (command == ECommand.ToggleAlternativeShooting && VRGlobals.vrPlayer.isSupporting)
-                {
-                    //VRGlobals.player.Transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+                    HandleIronSightAiming(ref command, isAiming);
                 }
             }
 
             private void HandleRangefinder(float triggerAmount)
             {
-                const float TRIGGER_THRESHOLD = 0.5f;
+                bool shouldBeAiming = triggerAmount > RANGEFINDER_TRIGGER_THRESHOLD;
+                bool currentlyAiming = WeaponPatches.rangeFinder.IsAiming;
 
-                if (triggerAmount > TRIGGER_THRESHOLD && !WeaponPatches.rangeFinder.IsAiming)
+                if (shouldBeAiming && !currentlyAiming)
                 {
                     WeaponPatches.rangeFinder.ToggleAim();
                     VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.13f, -0.1711f, -0.24f);
                     VRGlobals.weaponHolder.transform.localEulerAngles = new Vector3(12, 308, 90);
                 }
-                else if (triggerAmount < TRIGGER_THRESHOLD && WeaponPatches.rangeFinder.IsAiming)
+                else if (!shouldBeAiming && currentlyAiming)
                 {
                     WeaponPatches.rangeFinder.ToggleAim();
                     VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(37, 267, 55);
@@ -368,98 +333,131 @@ namespace TarkovVR.Source.Controls
                 return VRGlobals.scopes != null && VRGlobals.scopes.Count > 0;
             }
 
-            private Transform FindAimCamera(Transform parent, int maxDepth = 3, int currentDepth = 0)
+            private Transform FindAimCamera(Transform parent, int currentDepth = 0)
             {
-                if (currentDepth > maxDepth)
+                if (currentDepth > MAX_CAMERA_SEARCH_DEPTH)
                     return null;
 
-                // Check if current transform is a camera
-                if (parent.name == "mod_aim_camera" ||
-                    parent.name == "mod_aim_camera_000" ||
-                    parent.name == "mod_aim_camera_001")
+                // Check's if the current scope is an optic
+                string parentName = parent.name;
+                if (parentName == "mod_aim_camera" ||
+                    parentName == "mod_aim_camera_000" ||
+                    parentName == "mod_aim_camera_001")
+                {
                     return parent;
+                }
 
-                // If parent not camera, search children (likely modded scope)
                 foreach (Transform child in parent)
                 {
-                    Transform result = FindAimCamera(child, maxDepth, currentDepth + 1);
+                    Transform result = FindAimCamera(child, currentDepth + 1);
                     if (result != null)
                         return result;
                 }
 
                 return null;
             }
-            private void HandleScopeAiming(ref ECommand command, bool isAiming, float currentTime)
+
+            private void HandleScopeAiming(ref ECommand command, bool isAiming)
             {
                 Transform activeScope = VRGlobals.scopes.FirstOrDefault(s => s != null && s.parent != null);
                 if (activeScope == null)
                     return;
 
-                // Try to find the aim camera, use activeScope if not found
                 Transform aimCamera = FindAimCamera(activeScope);
-                if (aimCamera != null)
-                    activeScope = aimCamera;
+                Transform scopeTransform = aimCamera ?? activeScope;
 
-                Vector3 scopeTargetPosition = activeScope.position + (activeScope.forward * -0.25f);
                 Vector3 headPosition = VRGlobals.camHolder.transform.position;
-                Vector3 directionToScope = scopeTargetPosition - headPosition;
-                float distanceToScope = directionToScope.magnitude;
-                directionToScope.Normalize();
-                float angleToScope = Vector3.Angle(activeScope.forward * -1f, directionToScope);
-                float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToScope);
+                Vector3 headForward = VRGlobals.camHolder.transform.forward;
+                Vector3 scopeForward = scopeTransform.forward;
+                Vector3 eyeTargetPosition = scopeTransform.position + (scopeForward * -SCOPE_OFFSET_DISTANCE);
 
-                if (!isAiming &&
-                    angleToScope <= SCOPE_ENTER_ANGLE &&
-                    angleFromScope <= SCOPE_ENTER_ANGLE)
+                Vector3 directionToScope = (eyeTargetPosition - headPosition).normalized;
+
+                // Angle between scope's forward direction and direction from head to scope
+                // (measures if scope is pointing at your head)
+                float alignmentAngle = Vector3.Angle(scopeForward * -1f, directionToScope);
+
+                // Angle between head's forward direction and direction to scope
+                // (measures if you're looking at the scope)
+                float viewAngle = Vector3.Angle(headForward, directionToScope);
+
+                if (!isAiming)
                 {
-                    command = ECommand.ToggleAlternativeShooting;
-                    lastToggleTime = currentTime;
+                    if (alignmentAngle <= SCOPE_ENTER_ANGLE_ALIGNMENT &&
+                        viewAngle <= SCOPE_ENTER_ANGLE_VIEW)
+                    {
+                        command = ECommand.ToggleAlternativeShooting;
+                        lastToggleTime = Time.time;
+                    }
                 }
-                else if (isAiming && (angleToScope > SCOPE_EXIT_ANGLE ||
-                                      angleFromScope > SCOPE_EXIT_ANGLE))
+                else
                 {
-                    command = ECommand.EndAlternativeShooting;
-                    VRPlayerManager.smoothingFactor = 50f;
-                    VRGlobals.scopeSensitivity = 0;
-                    lastToggleTime = currentTime;
+                    if (alignmentAngle > SCOPE_EXIT_ANGLE_ALIGNMENT ||
+                        viewAngle > SCOPE_EXIT_ANGLE_VIEW)
+                    {
+                        ExitAimMode(ref command);
+                    }
                 }
             }
 
-            private void HandleIronSightAiming(ref ECommand command, bool isAiming, float currentTime)
+            private void HandleIronSightAiming(ref ECommand command, bool isAiming)
             {
-                Vector3 direction = VRGlobals.vrPlayer.RightHand.transform.right * -1;
-                Vector3 directionToGun = (VRGlobals.vrPlayer.RightHand.transform.position + direction) - VRGlobals.camHolder.transform.position;
-                float distanceToGun = directionToGun.magnitude;
-                directionToGun = directionToGun.normalized;               
-                float angleToScope = Vector3.Angle(direction, directionToGun);
-                float angleFromScope = Vector3.Angle(VRGlobals.camHolder.transform.forward, directionToGun);
+                Transform rightHand = VRGlobals.vrPlayer.RightHand.transform;
+                Vector3 headPosition = VRGlobals.camHolder.transform.position;
+                Vector3 headForward = VRGlobals.camHolder.transform.forward;
 
-                // Use different thresholds based on current state (hysteresis)
-                if (!isAiming && angleToScope <= IRONS_ENTER_ANGLE_TO && angleFromScope <= IRONS_ENTER_ANGLE_FROM)
+                // Gun's right axis points left, so invert it to get the aiming direction
+                Vector3 gunForward = rightHand.right * -1f;
+                Vector3 sightPosition = rightHand.position + gunForward;
+
+                Vector3 directionToSight = (sightPosition - headPosition).normalized;
+
+                // Angle between gun's forward direction and direction from head to sight
+                // (measures if gun is pointing at your head)
+                float alignmentAngle = Vector3.Angle(gunForward, directionToSight);
+
+                // Angle between head's forward direction and direction to sight
+                // (measures if you're looking at the gun)
+                float viewAngle = Vector3.Angle(headForward, directionToSight);
+
+                if (!isAiming)
                 {
-                    command = ECommand.ToggleAlternativeShooting;
-                    lastToggleTime = currentTime;
+                    if (alignmentAngle <= IRONS_ENTER_ANGLE_ALIGNMENT &&
+                        viewAngle <= IRONS_ENTER_ANGLE_VIEW)
+                    {
+                        command = ECommand.ToggleAlternativeShooting;
+                        lastToggleTime = Time.time;
+                    }
                 }
-                else if (isAiming && (angleToScope > IRONS_EXIT_ANGLE_TO || angleFromScope > IRONS_EXIT_ANGLE_FROM))
+                else
                 {
-                    command = ECommand.EndAlternativeShooting;
-                    VRPlayerManager.smoothingFactor = 50f;
-                    VRGlobals.scopeSensitivity = 0;
-                    lastToggleTime = currentTime;
+                    if (alignmentAngle > IRONS_EXIT_ANGLE_ALIGNMENT ||
+                        viewAngle > IRONS_EXIT_ANGLE_VIEW)
+                    {
+                        ExitAimMode(ref command);
+                    }
                 }
+            }
+
+            private void ExitAimMode(ref ECommand command)
+            {
+                command = ECommand.EndAlternativeShooting;
+                //VRPlayerManager.smoothingFactor = 50f;
+                VRGlobals.scopeSensitivity = 0;
+                lastToggleTime = Time.time;
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class FireHandler : IInputHandler
         {
             private bool isShooting = false;
+
             public void UpdateCommand(ref ECommand command)
             {
                 if (WeaponPatches.grenadeEquipped || VRGlobals.switchingWeapon)
                     return;
 
                 float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
-
 
                 if (!isShooting && primaryHandTriggerAmount > 0.5f)
                 {
@@ -470,7 +468,7 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.EndShooting;
                     isShooting = false;
-                }
+                }               
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -518,15 +516,17 @@ namespace TarkovVR.Source.Controls
             }
 
         }
-        
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class BreathingHandler : IInputHandler
         {
             public static bool isHoldingBreath = false;
+
             public void UpdateCommand(ref ECommand command)
             {
                 if (!VRGlobals.firearmController)
                     return;
+
                 float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
                 bool isAiming = VRGlobals.firearmController.IsAiming;
                 var physical = VRGlobals.player.Physical;
@@ -536,7 +536,6 @@ namespace TarkovVR.Source.Controls
                     if (isHoldingBreath && !physical.HoldingBreath)
                     {
                         isHoldingBreath = false;
-                        VRPlayerManager.smoothingFactor = 50f; // reset to your default
                     }
                 }
 
@@ -544,18 +543,14 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.ToggleBreathing;
                     isHoldingBreath = true;
-                    if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
-                        VRPlayerManager.smoothingFactor = VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10);
                 }
                 else if (isHoldingBreath && (secondaryHandTriggerAmount < 0.5f || !isAiming))
                 {
                     command = ECommand.EndBreathing;
                     isHoldingBreath = false;
-                    VRPlayerManager.smoothingFactor = 50f;
                 }
             }
         }
-
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class SelectWeaponHandler : IInputHandler
         {
@@ -822,68 +817,106 @@ namespace TarkovVR.Source.Controls
         {
             private bool grenadePinPulled = false;
             private bool shootingToggled = false;
-            private bool releaseGrenade = false;
+            private bool grenadePinResetting = false;
+
             public void UpdateCommand(ref ECommand command)
             {
                 if (!WeaponPatches.grenadeEquipped)
                     return;
-                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
 
+                float primaryTrigger = VRSettings.GetLeftHandedMode()
+                    ? SteamVR_Actions._default.LeftTrigger.axis
+                    : SteamVR_Actions._default.RightTrigger.axis;
 
-                if (!shootingToggled && primaryHandTriggerAmount > 0.5)
+                float secondaryTrigger = VRSettings.GetLeftHandedMode()
+                    ? SteamVR_Actions._default.RightTrigger.axis
+                    : SteamVR_Actions._default.LeftTrigger.axis;
+
+                if (primaryTrigger < 0.5f && grenadePinResetting)
+                {
+                    shootingToggled = false;
+                    grenadePinResetting = false;
+                }
+
+                if (!shootingToggled && primaryTrigger > 0.5f && !grenadePinResetting)
                 {
                     command = ECommand.ToggleShooting;
                     shootingToggled = true;
                 }
-                else if (shootingToggled && !grenadePinPulled) { 
+                else if (shootingToggled && grenadePinPulled && secondaryTrigger > 0.5f)
+                {
+                    PutPinBack();
+                }
+                else if (shootingToggled && !grenadePinPulled && !grenadePinResetting)
+                {
                     command = ECommand.TryHighThrow;
                     grenadePinPulled = true;
-                    // Change the weapon holder position for grenade after the pin pulling animation
-                    PreloaderUI.Instance.WaitSeconds(1.25f, delegate
-                    {
-                        if (VRGlobals.player.HandsController as EFT.Player.GrenadeHandsController && (VRGlobals.player.HandsController as EFT.Player.GrenadeHandsController).WaitingForHighThrow) {
-                            if (VRGlobals.player.HandsController.HandsHierarchy.name != "weapon_grenade_rdg2.generated(Clone)") {                               
-                                //InitVRPatches.rightPointerFinger.enabled = true;
-                                //VRGlobals.handsInteractionController.grenadeLaser.SetActive(true);
-                                VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1f, -0.43f, -0.25f);
-                            }
-                            if (VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_m7920.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_rgo.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_rgn.generated(Clone)" || VRGlobals.player.HandsController.HandsHierarchy.name == "weapon_grenade_m18.generated(Clone)") { 
-                                VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(30, 273, 116);
-                                VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.05f, -0.43f, -0.15f);
-                            }
-                            WeaponPatches.pinPulled = true;
-                            // Do this to recalculate hand position
-                            if (WeaponPatches.currentGunInteractController != null)
-                                WeaponPatches.currentGunInteractController.framesAfterEnabled = 0;
-                        }
-                    });
+                    PreloaderUI.Instance.WaitSeconds(1.25f, PositionGrenadeAfterPinPull);
                 }
-                else if (shootingToggled && grenadePinPulled && primaryHandTriggerAmount < 0.5) {
+                else if (shootingToggled && grenadePinPulled && primaryTrigger < 0.5f && !grenadePinResetting)
+                {
                     command = ECommand.EndShooting;
                     shootingToggled = false;
-                }
-                else if (!shootingToggled && grenadePinPulled)
-                {
-                    //Trigger throwing grenade, check if pin is actually pulled before initiatiating
-                    if (VRGlobals.player.HandsController is BaseGrenadeHandsController grenadeController)
-                    {
-                        grenadeController.method_9(
-                            null, // throwPosition
-                            0f,   // timeSinceSafetyLevelRemoved
-                            1f,   // lowHighThrow
-                            Vector3.zero, // direction
-                            1f,   // forcePower
-                            false, // lowThrow
-                            true   // withVelocity
-                        );
-                    }
-
-                    //This command isn't needed as I finish the command by triggering the throw animation in method_9
-                    //command = ECommand.FinishHighThrow;
                     grenadePinPulled = false;
-                    
+                    ThrowGrenade();
+                }
+            }
+
+            private void PutPinBack()
+            {
+                if (VRGlobals.player.HandsController is BaseGrenadeHandsController grenadeController)
+                {
+                    grenadeController.method_8();
+                    grenadePinResetting = true;
+                    grenadePinPulled = false;
+                    shootingToggled = false;
+                    WeaponPatches.pinPulled = false;
+                }
+            }
+
+            private void ThrowGrenade()
+            {
+                if (VRGlobals.player.HandsController is BaseGrenadeHandsController grenadeController)
+                {
+                    grenadeController.method_9(null, 0f, 1f, Vector3.zero, 1f, false, true);
+                }
+            }
+
+            private void PositionGrenadeAfterPinPull()
+            {
+                if (!(VRGlobals.player.HandsController is EFT.Player.GrenadeHandsController controller))
+                    return;
+
+                if (!controller.WaitingForHighThrow)
+                    return;
+
+                string grenadeName = VRGlobals.player.HandsController.HandsHierarchy.name;
+
+                //if (grenadeName == "weapon_grenade_rdg2.generated(Clone)")
+                    //return;
+
+                // Default position for most grenades
+                VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1f, -0.43f, -0.25f);
+
+                // Special handling for specific grenade types
+                if (IsSpecialGrenade(grenadeName))
+                {
+                    VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(30, 273, 116);
+                    VRGlobals.weaponHolder.transform.localPosition = new Vector3(0.05f, -0.43f, -0.15f);
                 }
 
+                WeaponPatches.pinPulled = true;
+
+                if (WeaponPatches.currentGunInteractController != null)
+                    WeaponPatches.currentGunInteractController.framesAfterEnabled = 0;
+            }
+
+            private bool IsSpecialGrenade(string name)
+            {
+                return name == "weapon_grenade_m7920.generated(Clone)" ||
+                       name == "weapon_grenade_rgo.generated(Clone)" ||
+                       name == "weapon_grenade_rgn.generated(Clone)" ||
+                       name == "weapon_grenade_m18.generated(Clone)";
             }
         }
 

@@ -25,10 +25,162 @@ namespace TarkovVR.Patches.Visuals
         "p0/Reflective/Bumped Emissive Specular SMap",
         "p0/Reflective/Bumped Specular SMap Parallax",
         "Legacy Shaders/Transparent/Cutout/Bumped Specular",
-        //"Nature/SpeedTreeEFT",
+        "Nature/SpeedTreeEFT",
         "Custom/Vert",
         "Decal/Ultra"
         };
+        private const bool DEBUG_NUKE = false;
+        /*
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PreloaderUI), "ShowRaidStartInfo")]
+        private static void OnRaidStart(PreloaderUI __instance)
+        {
+            SpecularAliasing.ApplyVRMaterialTweaks();
+        }
+        */
+        public static void ApplyVRMaterialTweaks()
+        {
+            try
+            {
+                Renderer[] renderers = GameObject.FindObjectsOfType<Renderer>();
+                int tweakedMats = 0;
+                int logged = 0;
+
+                foreach (var r in renderers)
+                {
+                    var mats = r.sharedMaterials;
+                    if (mats == null) continue;
+
+                    foreach (var mat in mats)
+                    {
+                        if (mat == null || mat.shader == null) continue;
+
+                        if (TweakMaterialForVR(mat, ref logged))
+                            tweakedMats++;
+                    }
+                }
+
+                Plugin.MyLog.LogError($"[SpecularAliasing] VR tweaks applied to {tweakedMats} materials.");
+            }
+            catch (System.Exception ex)
+            {
+                Plugin.MyLog.LogError("[SpecularAliasing] Error applying VR tweaks: " + ex);
+            }
+        }
+
+        private static bool TweakMaterialForVR(Material mat, ref int logged)
+        {
+            bool changed = false;
+
+            string shaderName = mat.shader.name;
+            string materialName = mat.name;
+
+            // === DEBUG MODE: make it *painfully* obvious ===
+            if (DEBUG_NUKE)
+            {
+                if (mat.HasProperty("_Smoothness")) { mat.SetFloat("_Smoothness", 0.0f); changed = true; }
+                if (mat.HasProperty("_Glossiness")) { mat.SetFloat("_Glossiness", 0.0f); changed = true; }
+                if (mat.HasProperty("_Metallic")) { mat.SetFloat("_Metallic", 0.0f); changed = true; }
+                if (mat.HasProperty("_NormalScale")) { mat.SetFloat("_NormalScale", 0.1f); changed = true; }
+                if (mat.HasProperty("_BumpScale")) { mat.SetFloat("_BumpScale", 0.1f); changed = true; }
+
+                if (changed && logged < 40)
+                {
+                    logged++;
+                    Plugin.MyLog.LogError(
+                        $"[SpecularAliasing] NUKE mat '{materialName}' (shader '{shaderName}')");
+                }
+                return changed;
+            }
+
+            // === NORMAL MODE: global clamps that still keep the game looking okay-ish ===
+
+            // Smoothness / gloss: don’t allow razor-sharp highlights
+            if (mat.HasProperty("_Smoothness"))
+            {
+                float old = mat.GetFloat("_Smoothness");
+                float max = 0.45f;                     // lower = rougher = less sparkle
+                float val = Mathf.Min(old, max);
+                if (!Mathf.Approximately(old, val))
+                {
+                    mat.SetFloat("_Smoothness", val);
+                    changed = true;
+                }
+            }
+
+            if (mat.HasProperty("_Glossiness"))
+            {
+                float old = mat.GetFloat("_Glossiness");
+                float max = 0.45f;
+                float val = Mathf.Min(old, max);
+                if (!Mathf.Approximately(old, val))
+                {
+                    mat.SetFloat("_Glossiness", val);
+                    changed = true;
+                }
+            }
+
+            // Metallic: tone down full-on chrome
+            if (mat.HasProperty("_Metallic"))
+            {
+                float old = mat.GetFloat("_Metallic");
+                float max = 0.6f;
+                float val = Mathf.Min(old, max);
+                if (!Mathf.Approximately(old, val))
+                {
+                    mat.SetFloat("_Metallic", val);
+                    changed = true;
+                }
+            }
+
+            // Normals: reduce micro-faceting
+            if (mat.HasProperty("_NormalScale"))
+            {
+                float old = mat.GetFloat("_NormalScale");
+                float max = 0.5f;
+                float val = Mathf.Min(old, max);
+                if (!Mathf.Approximately(old, val))
+                {
+                    mat.SetFloat("_NormalScale", val);
+                    changed = true;
+                }
+            }
+
+            if (mat.HasProperty("_BumpScale"))
+            {
+                float old = mat.GetFloat("_BumpScale");
+                float max = 0.5f;
+                float val = Mathf.Min(old, max);
+                if (!Mathf.Approximately(old, val))
+                {
+                    mat.SetFloat("_BumpScale", val);
+                    changed = true;
+                }
+            }
+
+            // Optional: clamp crazy bright spec colors
+            if (mat.HasProperty("_SpecColor"))
+            {
+                Color sc = mat.GetColor("_SpecColor");
+                float maxChannel = Mathf.Max(sc.r, Mathf.Max(sc.g, sc.b));
+                if (maxChannel > 1.0f)
+                {
+                    float scale = 1.0f / maxChannel;
+                    sc *= 0.8f * scale; // bring into sane range
+                    mat.SetColor("_SpecColor", sc);
+                    changed = true;
+                }
+            }
+
+            if (changed && logged < 40)
+            {
+                logged++;
+                Plugin.MyLog.LogError(
+                    $"[SpecularAliasing] Tweaked mat '{materialName}' (shader '{shaderName}')");
+            }
+
+            return changed;
+        }
         //Random attempts to try and reduce specular aliasing, nothing worked
         //-matsix
         /*
@@ -100,7 +252,7 @@ namespace TarkovVR.Patches.Visuals
             Plugin.MyLog.LogError($"[SpecClamp] Finished. Modified {totalModified} renderers.");
         }
         */
-        
+
         /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PreloaderUI), "ShowRaidStartInfo")]

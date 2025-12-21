@@ -113,7 +113,6 @@ namespace TarkovVR.Patches.Core.VR
                 _snapTurned = false;
             }
 
-            // Check conditions that disable turning
             bool disableTurn = (WeaponPatches.currentGunInteractController && 
                                WeaponPatches.currentGunInteractController.highlightingMesh) || 
                                Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) >= JUMP_OR_STAND_CLAMP_RANGE || 
@@ -125,7 +124,6 @@ namespace TarkovVR.Patches.Core.VR
                 return;
             }
 
-            // Handle rotation based on rotation mode setting
             if (VRSettings.GetRotationType() == VRSettings.RotationMode.Smooth)
             {
                 // Smooth rotation
@@ -180,6 +178,6 @@ namespace TarkovVR.Patches.Core.VR
             {
                 axis[axisIndex] = joystickInput.y; // Vertical movement
             }
-        }
+        }    
     }
 }
