@@ -470,13 +470,13 @@ namespace TarkovVR.Source.Settings
             occCullingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             occCullingToggle.Toggle.action_0 = SetOccCulling;
             occCullingToggle.Text.localizationKey = "Disable Occlusion Culling ";
-            occCullingToggle.Toggle.UpdateValue(settings.enableSharpen);
+            occCullingToggle.Toggle.UpdateValue(settings.disableOccCulling);
 
             frusCullingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             frusCullingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             frusCullingToggle.Toggle.action_0 = SetFrusCulling;
             frusCullingToggle.Text.localizationKey = "Disable Frustum Culling ";
-            frusCullingToggle.Toggle.UpdateValue(settings.enableSharpen);
+            frusCullingToggle.Toggle.UpdateValue(settings.disableFrusCulling);
             //SetupScrollbar(vrSettings);
 
             vrSettingsObject = newSoundSettings.gameObject;

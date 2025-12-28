@@ -477,7 +477,7 @@ namespace TarkovVR.Patches.Core.Player
         }
 
 
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------       
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IEventsConsumerOnWeapOut")]
         private static void ReturnWeaponToOriginalParentOnChange(EFT.Player.FirearmController __instance)
@@ -508,15 +508,15 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.vrPlayer.isWeapPistol = false;
 
         }
+        
 
-
-
+        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IEventsConsumerOnWeapIn")]
         private static void FinishMovingWeaponToVrHands(EFT.Player.FirearmController __instance)
-        {
+        {          
             if (!__instance._player.IsYourPlayer)
-                return;
+                return;         
             if (VRGlobals.menuOpen)
             {
                 if (WeaponPatches.currentGunInteractController != null)
@@ -525,27 +525,27 @@ namespace TarkovVR.Patches.Core.Player
                         foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
                             renderer.enabled = false;
                 }
-            }
+            }           
             if (grenadeEquipped)
                 grenadeEquipped = false;
 
             pinPulled = false;
-            VRGlobals.switchingWeapon = false;
+            VRGlobals.switchingWeapon = false;           
             if (currentGunInteractController)
             {
                 if (!currentGunInteractController.initialized)
                     currentGunInteractController.CreateRaycastReceiver(__instance.GunBaseTransform, __instance.WeaponLn);
                 currentGunInteractController.enabled = true;
             }
-
+            
             __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
           
             VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
             VRGlobals.player._elbowBends[1] = VRGlobals.rightArmBendGoal;
 
-            VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
+            VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");           
         }
-
+        
 
         public static Transform knifeTransform = null;
         

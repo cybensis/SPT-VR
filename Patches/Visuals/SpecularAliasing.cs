@@ -95,11 +95,10 @@ namespace TarkovVR.Patches.Visuals
 
             // === NORMAL MODE: global clamps that still keep the game looking okay-ish ===
 
-            // Smoothness / gloss: don’t allow razor-sharp highlights
             if (mat.HasProperty("_Smoothness"))
             {
                 float old = mat.GetFloat("_Smoothness");
-                float max = 0.45f;                     // lower = rougher = less sparkle
+                float max = 0.45f;
                 float val = Mathf.Min(old, max);
                 if (!Mathf.Approximately(old, val))
                 {
@@ -120,7 +119,6 @@ namespace TarkovVR.Patches.Visuals
                 }
             }
 
-            // Metallic: tone down full-on chrome
             if (mat.HasProperty("_Metallic"))
             {
                 float old = mat.GetFloat("_Metallic");
@@ -133,7 +131,6 @@ namespace TarkovVR.Patches.Visuals
                 }
             }
 
-            // Normals: reduce micro-faceting
             if (mat.HasProperty("_NormalScale"))
             {
                 float old = mat.GetFloat("_NormalScale");
@@ -158,7 +155,6 @@ namespace TarkovVR.Patches.Visuals
                 }
             }
 
-            // Optional: clamp crazy bright spec colors
             if (mat.HasProperty("_SpecColor"))
             {
                 Color sc = mat.GetColor("_SpecColor");

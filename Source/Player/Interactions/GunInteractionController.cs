@@ -93,6 +93,7 @@ public class GunInteractionController : MonoBehaviour
     }
 
     private void OnEnable() {
+        
         if (initialized && gunRaycastReciever != null) {
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
             gunRaycastReciever.GetComponent<BoxCollider>().enabled = true;
@@ -110,18 +111,19 @@ public class GunInteractionController : MonoBehaviour
         prevRot = Vector3.zero;
         prevPos = Vector3.zero;
         prevForward = Vector3.zero;
+        
         Transform rightHandsPositioner = transform.Find("RightHandPositioner");
         if (rightHandsPositioner && rightHandsPositioner.GetComponent<HandsPositioner>())
         {
             rightHandsPositioner.GetComponent<HandsPositioner>().enabled = true;
             rightHandsPositioner.gameObject.active = true; 
         }
-
+        
         if (VRSettings.GetLeftHandedMode()) { 
             this.transform.parent.localScale = new Vector3(-1, 1, 1);
             
         }
-
+        
         if (VRGlobals.ikManager) {
             VRGlobals.ikManager.rightArmIk.solver.target = null;
             VRGlobals.ikManager.rightArmIk.enabled = false;
@@ -133,6 +135,7 @@ public class GunInteractionController : MonoBehaviour
         framesAfterEnabled = 0;
         VRGlobals.blockLeftJoystick = false;
         VRGlobals.blockRightJoystick = false;
+        
     }
 
     public void OnDisable()
@@ -186,7 +189,7 @@ public class GunInteractionController : MonoBehaviour
     private Vector3 prevForward;
     private Vector3 prevBodyPos;
     public int framesAfterEnabled = 0;
-
+    
     private void Update()
     {
         if (!initialized) //|| VRGlobals.firearmController == null)
@@ -217,6 +220,8 @@ public class GunInteractionController : MonoBehaviour
         bool isSprintEnabled = VRGlobals.player.IsSprintEnabled;
         bool isInPronePose = VRGlobals.player.IsInPronePose;
 
+        // Disabled, don't believe it's needed anymore as I'm handling shoulder placement elsewhere now
+        /*
         // Use this to keep the upper arms positioned under the players camera if they're not prone or sprinting
         if (!isSprintEnabled && !isInPronePose)
         {
@@ -227,7 +232,7 @@ public class GunInteractionController : MonoBehaviour
             transform.localPosition = Vector3.zero;
             transform.localEulerAngles = new Vector3(340, 340, 0);
         }
-
+        */
         // Cache previous values
         prevRot = cameraEulerAngles;
         prevForward = cameraForward;
@@ -270,7 +275,7 @@ public class GunInteractionController : MonoBehaviour
             framesAfterEnabled++;
         }
     }
-
+    
     private Class617[] cachedMalfunctionMeshArray;
     private Class617[] cachedMeshArray;
     private bool malfunctionMeshArrayDirty = true;
