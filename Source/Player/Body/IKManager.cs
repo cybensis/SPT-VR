@@ -40,6 +40,7 @@ namespace TarkovVR.Source.Player.VR
         private void Awake()
         {
             VRGlobals.VRCam = Camera.main;
+            
             for (int i = 0; i < transform.childCount; i++)
             {
                 Transform child = transform.GetChild(i);
@@ -55,6 +56,7 @@ namespace TarkovVR.Source.Player.VR
                     }
                 }
             }
+            
         }
 
         public void MatchLegsToArms()
@@ -249,12 +251,12 @@ namespace TarkovVR.Source.Player.VR
         {
             if (!VRGlobals.vrPlayer || VRGlobals.menuOpen)
                 return;
-
+            
             if (leftUpperArm)
                 leftUpperArm.localPosition = upperArmPos;
             if (rightUpperArm)
                 rightUpperArm.localPosition = upperArmPos;
-
+            
             if (!VRGlobals.emptyHands || VRGlobals.player.HandsIsEmpty)
             {
                 MatchLegsToArms();

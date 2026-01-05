@@ -29,6 +29,7 @@ using EFT.UI.Matchmaker;
 using EFT.UI;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.Body;
+using static DistantShadow;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -213,9 +214,18 @@ namespace TarkovVR.Patches.Core.VR
                 mainCam.farClipPlane = 5000f;
                 mainCam.stereoTargetEye = StereoTargetEyeMask.Both;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
+                mainCam.rect = new Rect(0.0f, 0.0f, VRGlobals.upscalingMultiplier, VRGlobals.upscalingMultiplier);
+                if (mainCam.GetComponent<VRJitterComponent>() == null)
+                {
+                    mainCam.gameObject.AddComponent<VRJitterComponent>();
+                }
                 mainCam.useOcclusionCulling = false;
                 //mainCam.useOcclusionCulling = true;
                 mainCam.layerCullSpherical = true;
+                if (XRSettings.enabled)
+                {
+                    XRSettings.useOcclusionMesh = false;
+                }
                 float[] distances = new float[32];
                 for (int i = 0; i < distances.Length; i++)
                 {
@@ -231,11 +241,11 @@ namespace TarkovVR.Patches.Core.VR
                         VRGlobals.menuVRManager.OnDisable();
                     }
                 }
+                mainCam.depthTextureMode |= DepthTextureMode.MotionVectors | DepthTextureMode.Depth;
                 //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;
                 //cameraManager.initPos = VRCam.transform.localPosition;
             }
         }
-
 
         // Forward rendering experiment
         /*
@@ -336,7 +346,7 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.menuVRManager.OnDisable();
             }
         }*/
-        
+
         public class ArmStretcher : MonoBehaviour
         {
             public LimbIK leftArmIk;

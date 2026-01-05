@@ -581,154 +581,31 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
 
+        // This allows the grips to be used as modifier keys when in the menu for quick moving items to stash and quick moving to sell etc..
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(TradingItemView), "OnClick")]
-        private static bool HandleTradingItemClick(TradingItemView __instance, PointerEventData.InputButton button, Vector2 position, bool doubleClick)
+        [HarmonyPatch(typeof(Input), nameof(Input.GetKey), typeof(KeyCode))]
+        private static bool GetKeyPrefix(KeyCode key, ref bool __result)
         {
-            bool flag = SteamVR_Actions._default.RightGrip.state || UnityEngine.Input.GetKey(KeyCode.LeftControl) || UnityEngine.Input.GetKey(KeyCode.RightControl);
-
-            ETradingItemViewType viewType = __instance.etradingItemViewType_0;
-            ETradeMode tradeMode = __instance.etradeMode_0;
-            TraderAssortmentControllerClass traderController = __instance.traderAssortmentControllerClass;
-
-            switch (button)
+            if (VRGlobals.menuOpen || VRGlobals.inGame == false)
             {
-                case PointerEventData.InputButton.Left:
-                    {
-                        if (viewType == ETradingItemViewType.TradingTable)
-                        {
-                            if (flag && tradeMode == ETradeMode.Sale)
-                            {
-                                __instance.HideTooltip();
-                                traderController.UnprepareSellItem(__instance.Item);
-                            }
-                        }
-                        else if (!(!flag && doubleClick) || !__instance.NewContextInteractions.ExecuteInteraction(EItemInfoButton.Inspect))
-                        {
-                            if (flag && tradeMode == ETradeMode.Sale && traderController.QuickFindTradingAppropriatePlace(__instance.Item))
-                            {
-                                __instance.ItemContext.CloseDependentWindows();
-                                __instance.HideTooltip();
-                                Comfort.Common.Singleton<GUISounds>.Instance.PlayItemSound(__instance.Item.ItemSound, EInventorySoundType.pickup);
-                            }
-                            if (__instance.bool_8)
-                            {
-                                traderController.SelectItem(__instance.Item);
-                            }
-                            else if (!flag)
-                            {
-                                __instance.OnClick(button, position, doubleClick);
-                            }
-                        }
-                        break;
-                    }
-                case PointerEventData.InputButton.Right:
-                    if (viewType != ETradingItemViewType.TradingTable)
-                    {
-                        __instance.ShowContextMenu(position);
-                        break;
-                    }
-                    __instance.HideTooltip();
-                    traderController.UnprepareSellItem(__instance.Item);
-                    break;
-                case PointerEventData.InputButton.Middle:
-                    __instance.ExecuteMiddleClick();
-                    break;
-            }
+                // Right grip = Control
+                if ((key == KeyCode.LeftControl || key == KeyCode.RightControl) &&
+                    SteamVR_Actions._default.RightGrip.state)
+                {
+                    __result = true;
+                    return false;
+                }
 
-            return false;
+                // Left grip = Alt  
+                if ((key == KeyCode.LeftAlt || key == KeyCode.RightAlt) &&
+                    SteamVR_Actions._default.LeftGrip.state)
+                {
+                    __result = true;
+                    return false;
+                }
+            }
+            return true;
         }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(ItemView), "OnClick")]
-        private static bool HandleItemClick(ItemView __instance, PointerEventData.InputButton button, Vector2 position, bool doubleClick)
-        {
-            //Plugin.MyLog.LogError($"[TarkovVR] Click: button={button}, doubleClick={doubleClick}");
-            if (__instance.ItemUiContext == null || !__instance.IsSearched)
-            {
-                return false;
-            }
-            // Use left and right grip to simulate ccontrol and alt click for items
-            bool flag = SteamVR_Actions._default.RightGrip.state;
-            bool flag2 = SteamVR_Actions._default.LeftGrip.state;
-            bool flag3 = UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift);
-            global::ItemInfoInteractionsAbstractClass<EItemInfoButton> newContextInteractions = __instance.NewContextInteractions;
-            switch (button)
-            {
-                case PointerEventData.InputButton.Left:
-                    {
-                        if (!(flag || flag3) && doubleClick)
-                        {
-
-                            bool flag4 = __instance.ItemController is EFT.Player.PlayerInventoryController;
-                            bool flag5 = Comfort.Common.Singleton<SharedGameSettingsClass>.Instance.Game.Settings.ItemQuickUseMode.Value switch
-                            {
-                                GClass1085.EItemQuickUseMode.Disabled => false,
-                                GClass1085.EItemQuickUseMode.InRaidOnly => flag4,
-                                GClass1085.EItemQuickUseMode.InRaidAndInLobby => true,
-                                _ => throw new ArgumentOutOfRangeException(),
-                            };
-                            if ((__instance.Item is FoodDrinkItemClass || __instance.Item is MedsItemClass) && flag5)
-                            {
-                                if (!newContextInteractions.ExecuteInteraction(EItemInfoButton.Use))
-                                {
-                                    newContextInteractions.ExecuteInteraction(EItemInfoButton.UseAll);
-                                }
-                                break;
-                            }
-                            if (newContextInteractions.ExecuteInteraction(__instance.Item.IsContainer ? EItemInfoButton.Open : EItemInfoButton.Inspect))
-                            {
-                                break;
-                            }
-                        }
-                        SimpleTooltip tooltip = __instance.ItemUiContext.Tooltip;
-                        if (flag || flag3)
-                        {
-                            GStruct153 gStruct = flag ? __instance.ItemUiContext.QuickFindAppropriatePlace(__instance.ItemContext, __instance.ItemController) : __instance.ItemUiContext.QuickMoveToSortingTable(__instance.ItemContext, __instance.ItemController);
-                            if (gStruct.Failed || !__instance.ItemController.CanExecute(gStruct.Value))
-                            {
-                                break;
-                            }
-                            if (gStruct.Value is GInterface427 { ItemsDestroyRequired: not false } destroyResult)
-                            {
-                                NotificationManagerClass.DisplayWarningNotification(new GClass1583(__instance.Item, destroyResult.ItemsToDestroy).GetLocalizedDescription());
-                                break;
-                            }
-                            string itemSound = __instance.Item.ItemSound;
-                            __instance.ItemController.RunNetworkTransaction(gStruct.Value);
-                            if (tooltip != null)
-                                tooltip.Close();
-                            {
-                            }
-                            Comfort.Common.Singleton<GUISounds>.Instance.PlayItemSound(itemSound, EInventorySoundType.pickup);
-                        }
-                        else if (flag2)
-                        {
-                            newContextInteractions.ExecuteInteraction(EItemInfoButton.Equip);
-                            if (tooltip != null)
-                            {
-                                tooltip.Close();
-                            }
-                        }
-                        else if (__instance.IsBeingLoadedMagazine.Value || __instance.IsBeingUnloadedMagazine.Value)
-                        {
-                            __instance.ItemController.StopProcesses();
-                        }
-                        break;
-                    }
-                case PointerEventData.InputButton.Right:
-                    __instance.ShowContextMenu(position);
-                    break;
-                case PointerEventData.InputButton.Middle:
-                    if (!__instance.ExecuteMiddleClick())
-                    {
-                        newContextInteractions.ExecuteInteraction(EItemInfoButton.CheckMagazine);
-                    }
-                    break;
-            }
-            return false;
-        }
-
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TraderScreensGroup), "Awake")]
@@ -882,24 +759,31 @@ namespace TarkovVR.Patches.Misc
             __result = __instance.WindowContext;
             return false;
         }
-        
+
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ItemView), "Update")]
         private static bool FixDragAndDropButton(ItemView __instance)
         {
+            bool triggerPressed = (VRSettings.GetLeftHandedMode() ?
+                SteamVR_Actions._default.LeftTrigger.axis :
+                SteamVR_Actions._default.RightTrigger.axis) >= 0.7f;
 
-            if (__instance != null && __instance.gameObject != null && __instance.pointerEventData_0 != null && (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis) < 0.7)
+            if (__instance.pointerEventData_0 != null && !triggerPressed)
             {
                 vrUiInteracter.EndDrop();
                 var eventData = __instance.pointerEventData_0;
 
                 if (eventData.pointerEnter != null && eventData.pointerEnter.gameObject == null)
-                {
                     eventData.pointerEnter = null;
-                }
+                if (eventData.pointerDrag != null && eventData.pointerDrag.gameObject == null)
+                    eventData.pointerDrag = null;
+                if (eventData.pointerPress != null && eventData.pointerPress.gameObject == null)
+                    eventData.pointerPress = null;
+
                 __instance.OnEndDrag(eventData);
             }
+
             if (__instance.IsSearched)
             {
                 if (__instance.IsBeingDrained.Value)

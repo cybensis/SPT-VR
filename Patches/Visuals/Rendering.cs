@@ -10,6 +10,15 @@ using UnityEngine;
 using System.IO;
 using UnityEngine.XR;
 using EFT.Visual;
+using static SSAAImpl;
+using static DLSSWrapper;
+using UnityEngine.Experimental.Rendering;
+using EFT.Settings.Graphics;
+using Comfort.Common;
+using EFT.UI.Settings;
+using EFT.UI;
+using Valve.VR;
+using System.Reflection;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -57,14 +66,14 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(SSAAImpl), "GetOutputHeight")]
         private static bool ReturnVROutputHeight(SSAAImpl __instance, ref int __result)
         {
-            __result = __instance.GetInputHeight();
+            __result = XRSettings.eyeTextureHeight;
             return false;
         }
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "GetOutputWidth")]
         private static bool ReturnVROutputWidth(SSAAImpl __instance, ref int __result)
         {
-            __result = __instance.GetInputWidth();
+            __result = XRSettings.eyeTextureWidth;
             return false;
         }
 
@@ -74,48 +83,100 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(SSAA), "Awake")]
         private static void DisableSSAA(SSAA __instance)
         {
-
             __instance.FlippedV = true;
-
-        }               
+        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-
+        private static int scaledWidth;
+        private static int scaledHeight;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
         private static bool ProcessImageRendering(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
         {
+
             if (__instance._postProcessLayer != null)
             {
                 Graphics.Blit(source, destination);
                 return false;
             }
 
-            int width = VRGlobals.VRCam.pixelWidth;
-            int height = VRGlobals.VRCam.pixelHeight;
+            int nativeWidth = XRSettings.eyeTextureWidth;
+            int nativeHeight = XRSettings.eyeTextureHeight;
+            
+            float resolutionScale = VRGlobals.upscalingMultiplier;
+            if (resolutionScale >= 1.0f)
+            {
+                scaledWidth = (int)(nativeWidth * resolutionScale);
+                scaledHeight = (int)(nativeHeight * resolutionScale);
+            } 
+            else
+            {
+                scaledWidth = nativeWidth;
+                scaledHeight = nativeHeight;
+            }
+
             VRGlobals.VRCam.useOcclusionCulling = false;
 
             ResetRenderingState(__instance);
-
-            InitializeOptimizedHDRRenderTargets(__instance, width, height);
-            InitializeOptimizedLDRRenderTargets(__instance, width, height);
+            InitializeOptimizedHDRRenderTargets(__instance, scaledWidth, scaledHeight);
+            InitializeOptimizedLDRRenderTargets(__instance, scaledWidth, scaledHeight);
 
             __instance.m_ssaa.RenderImage(source, __instance._resampledColorTargetHDR[0], true, null);
+
+            if (resolutionScale < 1.0f)
+            {
+                //UpscaleDepthBuffer(nativeWidth, nativeHeight);
+            }
 
             if (__instance._cmdBuf == null)
             {
                 __instance._cmdBuf = new CommandBuffer { name = "SSAAPropagator" };
             }
+
             __instance._cmdBuf.Clear();
 
             if (!__instance._thermalVisionIsOn && HasOpticalRenderers(__instance))
             {
-                InitializeOptimizedDepthRenderTarget(__instance, width, height);
+                InitializeOptimizedDepthRenderTarget(__instance, scaledWidth, scaledHeight);
                 RenderOpticalEffects(__instance);
             }
+
             ApplyVisionEffects(__instance);
-            Graphics.ExecuteCommandBuffer(__instance._cmdBuf);
+            Graphics.ExecuteCommandBuffer(__instance._cmdBuf);            
             return false;
+        }
+
+        private static RenderTexture upscaledDepthRT = null;
+        private static CommandBuffer depthUpscaleCmd = null;
+        private static void UpscaleDepthBuffer(int nativeWidth, int nativeHeight)
+        {
+            if (upscaledDepthRT == null || upscaledDepthRT.width != nativeWidth || upscaledDepthRT.height != nativeHeight)
+            {
+                if (upscaledDepthRT != null)
+                {
+                    upscaledDepthRT.Release();
+                    RuntimeUtilities.SafeDestroy(upscaledDepthRT);
+                }
+
+                upscaledDepthRT = new RenderTexture(nativeWidth, nativeHeight, 24, RenderTextureFormat.Depth);
+                upscaledDepthRT.name = "Upscaled Depth Buffer";
+                upscaledDepthRT.filterMode = FilterMode.Point;
+                upscaledDepthRT.Create();
+            }
+
+            if (depthUpscaleCmd == null)
+            {
+                depthUpscaleCmd = new CommandBuffer { name = "Upscale Depth" };
+            }
+
+            depthUpscaleCmd.Clear();
+
+            // Try BlitCopyDepth first
+            Material depthCopy = new Material(Shader.Find("Hidden/BlitCopyDepth"));
+            depthUpscaleCmd.Blit(BuiltinRenderTextureType.CurrentActive, upscaledDepthRT, depthCopy);
+            Graphics.ExecuteCommandBuffer(depthUpscaleCmd);
+
+            Shader.SetGlobalTexture("_CameraDepthTexture", upscaledDepthRT);
         }
 
         private static void ResetRenderingState(SSAAPropagator __instance)
@@ -153,11 +214,11 @@ namespace TarkovVR.Patches.Visuals
                     width, height, 0, format, $"SSAAPropagator{i}HDR",
                     rt => {
                         rt.enableRandomWrite = true;
-                        rt.filterMode = FilterMode.Bilinear;
+                        rt.filterMode = VRGlobals.upscalingMultiplier > 1.0f ? FilterMode.Point : FilterMode.Bilinear;
                         rt.wrapMode = TextureWrapMode.Clamp;
                         rt.useMipMap = false;
                         rt.autoGenerateMips = false;
-                        rt.anisoLevel = 16;
+                        rt.anisoLevel = 0;
                     }
                 );
             }
@@ -240,11 +301,11 @@ namespace TarkovVR.Patches.Visuals
             var newRT = new RenderTexture(width, height, depth, format)
             {
                 name = name,
-                filterMode = FilterMode.Bilinear,
+                filterMode = VRGlobals.upscalingMultiplier > 1.0f ? FilterMode.Point : FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
                 useMipMap = false,
                 autoGenerateMips = false,
-                anisoLevel = 16
+                anisoLevel = 0
             };
 
             configure?.Invoke(newRT);
@@ -393,7 +454,6 @@ namespace TarkovVR.Patches.Visuals
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-
         private static void LoadFXAAShader()
         {
             if (_fxaaMat != null) return;
@@ -425,111 +485,26 @@ namespace TarkovVR.Patches.Visuals
                 Plugin.MyLog.LogError($"Error loading FXAA shader: {ex.Message}");
             }
         }
-        private static Material _smaaMat;
-        private static Texture2D _smaaAreaTex;
-        private static Texture2D _smaaSearchTex;
 
-        private static readonly int _MetricsID = Shader.PropertyToID("_Metrics");
-        private static readonly int _AreaTexID = Shader.PropertyToID("_AreaTex");
-        private static readonly int _SearchTexID = Shader.PropertyToID("_SearchTex");
-        private static readonly int _BlendTexID = Shader.PropertyToID("_BlendTex");
-        private static readonly int _Params1ID = Shader.PropertyToID("_Params1");
-        private static readonly int _Params2ID = Shader.PropertyToID("_Params2");
-        private static readonly int _Params3ID = Shader.PropertyToID("_Params3");
-
-        private static void LoadSMAAShader()
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAA), "LateUpdate")]
+        private static bool FSR3Check(SSAA __instance)
         {
-            if (_smaaMat != null) return;
-
-            try
+            TemporalAntialiasing.JitterSamplesGeneratorRepeatCount = __instance.UnityTAAJitterSamplesRepeatCount;
+            if (__instance._impl != null && (__instance._impl.EnableDLSS || __instance._impl.EnableFSR2 || __instance._impl.EnableFSR3))
             {
-                string bundlePath = Path.Combine(BepInEx.Paths.PluginPath, "sptvr", "Assets", "smaa");
-                AssetBundle smaaBundle = AssetBundle.LoadFromFile(bundlePath);
-                if (smaaBundle == null)
-                {
-                    Plugin.MyLog.LogError("Failed to load SMAA AssetBundle.");
-                    return;
-                }
-
-                _smaaMat = smaaBundle.LoadAsset<Material>("smaaMat");
-                _smaaAreaTex = smaaBundle.LoadAsset<Texture2D>("AreaTex");
-                _smaaSearchTex = smaaBundle.LoadAsset<Texture2D>("SearchTex");
-
-                if (_smaaMat == null)
-                {
-                    Plugin.MyLog.LogError("SMAA Material not found in bundle.");
-                    return;
-                }
-                if (_smaaAreaTex == null || _smaaSearchTex == null)
-                {
-                    Plugin.MyLog.LogError("SMAA LUT textures (AreaTex/SearchTex) not found in bundle.");
-                    return;
-                }
-
-                _smaaAreaTex.wrapMode = TextureWrapMode.Clamp;
-                _smaaSearchTex.wrapMode = TextureWrapMode.Clamp;
-
-                _smaaMat.SetTexture(_AreaTexID, _smaaAreaTex);
-                _smaaMat.SetTexture(_SearchTexID, _smaaSearchTex);
-
-                // More aggressive edge detection and higher quality
-                // _Params1: SMAA_THRESHOLD, SMAA_DEPTH_THRESHOLD, SMAA_MAX_SEARCH_STEPS, SMAA_MAX_SEARCH_STEPS_DIAG
-                _smaaMat.SetVector(_Params1ID, new Vector4(0.05f, 0.01f, 32f, 16f));  // Lower threshold, more search steps
-
-                // _Params2: SMAA_CORNER_ROUNDING, SMAA_LOCAL_CONTRAST_ADAPTATION_FACTOR
-                _smaaMat.SetVector(_Params2ID, new Vector2(25f, 2.0f));
-
-                // _Params3: SMAA_PREDICATION_THRESHOLD, SMAA_PREDICATION_SCALE, SMAA_PREDICATION_STRENGTH
-                _smaaMat.SetVector(_Params3ID, new Vector3(0.01f, 2.0f, 0.4f));
-                _smaaMat.EnableKeyword("USE_DIAG_SEARCH");
-                _smaaMat.EnableKeyword("USE_CORNER_DETECTION");
-
-                Plugin.MyLog.LogInfo("SMAA Material + LUTs loaded successfully.");
-
-                smaaBundle.Unload(false);
+                if (XRSettings.eyeTextureResolutionScale == 1)
+                    TemporalAntialiasing.k_SampleCount = 16;
+                else
+                    TemporalAntialiasing.k_SampleCount = (int)((double)__instance.BasePhaseSamplesCount * (1.0 / (double)(__instance._currentSSRatio * __instance._currentSSRatio)) + 0.5);
             }
-            catch (Exception ex)
+            else
             {
-                Plugin.MyLog.LogError($"Error loading SMAA shader: {ex.Message}");
+                TemporalAntialiasing.k_SampleCount = 8;
             }
-        }
-        private static void ApplySMAA(RenderTexture source, RenderTexture destination)
-        {
-            LoadSMAAShader();
-            if (_smaaMat == null)
-            {
-                Graphics.Blit(source, destination);
-                return;
-            }
+            RuntimeUtilities.UseProj = __instance.UseProjectionMatrix;
+            return false;
 
-            int width = source.width;
-            int height = source.height;
-
-            _smaaMat.SetVector(_MetricsID, new Vector4(
-                1.0f / width,
-                1.0f / height,
-                width,
-                height
-            ));
-
-            var rtEdges = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf);
-            var rtBlend = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGBHalf);
-
-            rtEdges.filterMode = FilterMode.Bilinear;
-            rtBlend.filterMode = FilterMode.Bilinear;
-
-            // Pass 1: Luma Edge Detection (or use Pass 2 for Color Edge Detection)
-            Graphics.Blit(source, rtEdges, _smaaMat, 2);
-
-            // Pass 4: Blending Weight Calculation
-            Graphics.Blit(rtEdges, rtBlend, _smaaMat, 4);
-
-            // Pass 5: Neighborhood Blending (final output)
-            _smaaMat.SetTexture(_BlendTexID, rtBlend);
-            Graphics.Blit(source, destination, _smaaMat, 5);
-
-            RenderTexture.ReleaseTemporary(rtEdges);
-            RenderTexture.ReleaseTemporary(rtBlend);
         }
 
         private static void ApplyFXAA(RenderTexture source, RenderTexture destination)
@@ -550,32 +525,7 @@ namespace TarkovVR.Patches.Visuals
                 height = VRGlobals.VRCam.pixelHeight;
             }
             Graphics.Blit(source, destination, _fxaaMat);
-        }
-
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
-        private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
-        {
-            LoadFXAAShader(); // Make sure FXAA material is loaded
-            if (_fxaaMat == null)
-            {
-                // If FXAA material failed to load, just pass through the image
-                Graphics.Blit(source, destination);
-                return false;
-            }
-            // Allocate a temporary render target for the FXAA result
-            int width = destination != null ? destination.width : Screen.width;
-            int height = destination != null ? destination.height : Screen.height;
-            if (VRGlobals.VRCam != null)
-            {
-                width = VRGlobals.VRCam.pixelWidth;
-                height = VRGlobals.VRCam.pixelHeight;
-            }
-            Graphics.Blit(source, destination, _fxaaMat);
-            return false;
-        }
-        */
+        }      
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
@@ -586,278 +536,28 @@ namespace TarkovVR.Patches.Visuals
                 Graphics.Blit(source, destination);
                 return false;
             }
-            //SMAA in testing
-            //ApplySMAA(source, destination);
-            ApplyFXAA(source, destination);
+
+            if (__instance.CurrentState == SSState.UPSCALE)
+            {
+                bool flag = ((__instance.EnableDLSS && !__instance._failedToInitializeDLSS && !__instance.NeedToApplySwitch()) || (__instance.EnableDLSS && (__instance.DLSSDebugDisable || DLSSWrapper.WantToDebugDLSSViaRenderdoc))) && !__instance.InventoryBlurIsEnabled;
+                bool flag2 = __instance.EnableFSR && !__instance._failedToInitializeFSR && !flag && !__instance.NeedToApplySwitch();
+                bool flag3 = __instance.EnableFSR2 && !__instance._failedToInitializeFSR2 && !flag && !__instance.NeedToApplySwitch();
+                bool flag4 = __instance.EnableFSR3 && !__instance._failedToInitializeFSR3 && !flag && !__instance.NeedToApplySwitch();
+                if ((flag && __instance.TryRenderDLSS(source, destination, externalCommandBuffer)) || (flag2 && __instance.TryRenderFSR(source, destination, externalCommandBuffer)) || (flag3 && __instance.TryRenderFSR2(source, destination, externalCommandBuffer)) || (flag4 && __instance.TryRenderFSR3(source, destination, externalCommandBuffer)))
+                {
+                    return false;
+                }
+            }
+
+            EAntialiasingMode currentAA = Singleton<SharedGameSettingsClass>.Instance.Graphics.Settings.AntiAliasing;
+
+            if (currentAA == EAntialiasingMode.FXAA)
+                ApplyFXAA(source, destination);
+            else if (currentAA == EAntialiasingMode.None)
+                Graphics.Blit(source, destination);
             return false;
-
-        }
-        //Attempting to fix DLSS by forcing DLAA. not quite there yet but I think its getting somewhere... Using custom jitter because post processing is disabled for VR
-        //Maybe ill try getting PostProcessing working again...
-        //-matsix
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
-        private static bool FixSSAAImplRenderImage(SSAAImpl __instance, RenderTexture source, RenderTexture destination, bool flipV, CommandBuffer externalCommandBuffer)
-        {
-            __instance.Switch(1.0f); // DLAA mode
-
-            __instance.EnableDLSS = true;
-
-            if (__instance.TryRenderDLSS(source, destination, externalCommandBuffer))
-            {
-                //Plugin.MyLog.LogInfo("DLAA via native TryRenderDLSS successful.");
-                return false;
-            }
-
-            Plugin.MyLog.LogWarning("DLSS DLAA failed — falling back to FXAA.");
-
-            // === FXAA Fallback ===
-            LoadFXAAShader();
-            if (_fxaaMat != null)
-            {
-                int width = destination != null ? destination.width : Screen.width;
-                int height = destination != null ? destination.height : Screen.height;
-
-                if (VRGlobals.VRCam != null)
-                {
-                    width = VRGlobals.VRCam.pixelWidth;
-                    height = VRGlobals.VRCam.pixelHeight;
-                }
-
-                Graphics.Blit(source, destination, _fxaaMat);
-                Plugin.MyLog.LogWarning("DLSS unavailable — fallback to FXAA.");
-            }
-            else
-            {
-                Graphics.Blit(source, destination); // pass-through
-                Plugin.MyLog.LogError("FXAA material missing. Pass-through blit.");
-            }
-
-            return false; // skip original method
-        }
-        */
-
-        /*
-        private static readonly Vector2[] ImprovedJitterSequence = new Vector2[]
-{
-            new Vector2(0.125f, -0.375f),
-            new Vector2(-0.375f, 0.125f),
-            new Vector2(0.375f, 0.125f),
-            new Vector2(-0.125f, -0.375f),
-            new Vector2(-0.125f, 0.375f),
-            new Vector2(0.375f, -0.125f),
-            new Vector2(-0.375f, -0.125f),
-            new Vector2(0.125f, 0.375f)
-        };
-        private static int _jitterIndex = 0;
-        
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(SSAAImpl), "TryRenderDLSS", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(CommandBuffer) })]
-        private static bool FixDLAAOnlyRender(SSAAImpl __instance, RenderTexture source, RenderTexture destination, CommandBuffer externalCommandBuffer)
-        {
-            //Camera fpsCamera = GameObject.Find("FPS Camera")?.GetComponent<Camera>();
-
-            if (!VRGlobals.VRCam)
-            {
-                return false;
-            }
-
-            // DLSS Wrapper initialization
-            if (__instance._dlssWrapper == null)
-            {
-                if (!(__instance._ssaaPropagator != null) ||
-                    !(__instance._ssaaPropagator.CopyDLSSResources != null) ||
-                    !(__instance._ssaaPropagator.DLSSDebugOutput != null))
-                {
-                    __instance._failedToInitializeDLSS = true;
-                    return false;
-                }
-                __instance._dlssWrapper = new DLSSWrapper(
-                    __instance._ssaaPropagator.CopyDLSSResources,
-                    __instance._ssaaPropagator.DLSSDebugOutput
-                );
-            }
-            // Configure DLSS wrapper
-            if (__instance._dlssWrapper != null)
-            {
-                __instance._dlssWrapper.DebugMode = __instance.DLSSDebug;
-                __instance._dlssWrapper.DebugDisable = (__instance.DLSSDebugDisable || DLSSWrapper.WantToDebugDLSSViaRenderdoc);
-                __instance._dlssWrapper.Quality = __instance._DLSSCurrentQuality;
-                __instance._dlssWrapper.JitterOffsets = __instance.DLSSJitter;
-                __instance._dlssWrapper.MVScale = __instance.DLSSMVScale;
-            }
-
-            // Check DLSS library initialization
-            if (!__instance._dlssWrapper.IsDLSSLibraryLoaded())
-            {
-                DLSSWrapper.InitErrors initErrors = __instance._dlssWrapper.InitializeDLSS();
-                __instance._failedToInitializeDLSS = (initErrors > DLSSWrapper.InitErrors.INIT_SUCCESS);
-                if (initErrors != DLSSWrapper.InitErrors.INIT_SUCCESS)
-                {
-                    Plugin.MyLog.LogError($"Failed to initialize DLSS library: {initErrors}");
-                    return false;
-                }
-            }
-
-            // In SinglePassInstanced, we need to handle the combined eye texture
-            // This is critical - get combined eye resolution, not just single eye
-            //int renderWidth = XRSettings.eyeTextureWidth;
-            //int renderHeight = XRSettings.eyeTextureHeight;
-            int renderWidth = VRGlobals.VRCam.pixelWidth;
-            int renderHeight = VRGlobals.VRCam.pixelHeight;
-
-            // For SinglePassInstanced, we might need to handle the combined texture differently
-            // Force DLAA mode (0) by setting input and output resolutions to be the same
-            DLSSWrapper.SetCreateDLSSFeatureParameters(renderWidth, renderHeight, renderWidth, renderHeight, 0);
-
-            // Copy depth and motion vectors
-            __instance._dlssWrapper.CopyDepthMotion(source, destination, __instance.DepthCopyMode, externalCommandBuffer);
-            __instance._dlssWrapper.Sharpness = __instance.DLSSSharpness;
-
-            // Get jitter from our improved sequence
-            Vector2 jitter = ImprovedJitterSequence[_jitterIndex++ % ImprovedJitterSequence.Length];
-
-            // Scale jitter appropriately - may need adjustment for SinglePassInstanced
-            //jitter *= new Vector2(__instance.DLSSJitterXScale, __instance.DLSSJitterYScale);
-            Camera cam = Camera.main;
-            Vector2 jitterUV = new Vector2(
-                jitter.x / cam.pixelWidth,
-                jitter.y / cam.pixelHeight
-            );
-            Matrix4x4 originalProjection = cam.projectionMatrix;
-            Matrix4x4 proj = cam.projectionMatrix;
-            proj.m02 += jitterUV.x * 2f;
-            proj.m12 += jitterUV.y * 2f;
-            cam.projectionMatrix = proj;
-            Plugin.MyLog.LogError("Before OnRenderImage");
-            //__instance._dlssWrapper.OnRenderImage(source, destination, __instance.SwapDLSSUpDown, jitterUV, externalCommandBuffer);
-            //__instance._dlssWrapper.OnRenderImage(source, destination, __instance.SwapDLSSUpDown, jitter, externalCommandBuffer);
-            RenderDLSS(__instance._dlssWrapper, source, destination, __instance.SwapDLSSUpDown, jitterUV, externalCommandBuffer);
-            cam.projectionMatrix = originalProjection;
-            return true;
         }
 
-        public static void RenderDLSS(DLSSWrapper dlssWrapper, RenderTexture src, RenderTexture dest, bool flipOutputUpDown, Vector2 jitterOffset, CommandBuffer externalCommandBuffer)
-        {
-            // Initialize resources if needed
-            dlssWrapper.InitializeResourcesIfNeeded(src, dest);
-
-            // Prepare command buffer
-            if (dlssWrapper._cmdBufEvaluate == null)
-            {
-                dlssWrapper._cmdBufEvaluate = new CommandBuffer();
-                dlssWrapper._cmdBufEvaluate.name = "DLSSEvaluate";
-            }
-            dlssWrapper._cmdBufEvaluate.Clear();
-            CommandBuffer commandBuffer = (externalCommandBuffer == null) ? dlssWrapper._cmdBufEvaluate : externalCommandBuffer;
-
-            // Cleanup released handles
-            if (dlssWrapper._dlssHandlesToRelease.Count > 0)
-            {
-                foreach (int item in dlssWrapper._dlssHandlesToRelease)
-                {
-                    DLSSWrapper.ReleaseHandleInt(item, out var _);
-                }
-                dlssWrapper._dlssHandlesToRelease.Clear();
-            }
-
-            // Setup DLSS if needed
-            if (!dlssWrapper.DebugDisable && !DLSSWrapper.WantToDebugDLSSViaRenderdoc)
-            {
-                if (dlssWrapper._dlssHandle == -1)
-                {
-                   DLSSWrapper.SetCreateDLSSFeatureParameters(dlssWrapper._featureInWidth, dlssWrapper._featureInHeight, dlssWrapper._featureOutWidth, dlssWrapper._featureOutHeight, dlssWrapper._featureQuality);
-                    dlssWrapper._dlssHandle = DLSSWrapper.PrepareHandle();
-                }
-
-                // Validate texture sizes
-                if (src.width != dlssWrapper._featureInWidth || src.height != dlssWrapper._featureInHeight ||
-                    dlssWrapper._motionVectorsCopy.width != dlssWrapper._featureInWidth || dlssWrapper._motionVectorsCopy.height != dlssWrapper._featureInHeight ||
-                    dlssWrapper._srcCopyUAV.width != dlssWrapper._featureInWidth || dlssWrapper._srcCopyUAV.height != dlssWrapper._featureInHeight)
-                {
-                    Plugin.MyLog.LogErrorError("Wrong DLSS SIZE!");
-                }
-
-                // Configure DLSS evaluation
-                DLSSWrapper.SetDLSSEvaluateParametersExtInt(
-                    dlssWrapper._srcCopyUAVPtr,
-                    dlssWrapper._textureBufferPtr,
-                    dlssWrapper._depthCopyPtr,
-                    dlssWrapper._motionVectorsCopyPtr,
-                    0,
-                    src.width,
-                    src.height,
-                    dlssWrapper.Sharpness,
-                    -dlssWrapper._motionVectorsCopy.width,
-                    dlssWrapper._motionVectorsCopy.height,
-                    jitterOffset.x,
-                    jitterOffset.y,
-                    dlssWrapper._dlssHandle
-                );
-
-                commandBuffer.IssuePluginEvent(DLSSWrapper.GetDLSSEvaluateFuncExtInt(), dlssWrapper._dlssHandle);
-            }
-
-            // Configure shader keywords and rendering
-            bool shouldFlipVertically = DLSSWrapper.IsDLSSLoaded();
-            if (flipOutputUpDown)
-            {
-                shouldFlipVertically = !shouldFlipVertically;
-            }
-
-            if (shouldFlipVertically)
-            {
-                commandBuffer.EnableShaderKeyword("UPDOWN");
-            }
-            else
-            {
-                commandBuffer.DisableShaderKeyword("UPDOWN");
-            }
-
-            // Setup render target
-            int width = (dest != null) ? dest.width : Screen.width;
-            int height = (dest != null) ? dest.height : Screen.height;
-            commandBuffer.SetRenderTarget(dest);
-            commandBuffer.SetViewport(new Rect(0f, 0f, width, height));
-
-            // Render final output
-            if (!dlssWrapper.DebugMode)
-            {
-                if (dlssWrapper._propertiesOut == null)
-                {
-                    dlssWrapper._propertiesOut = new MaterialPropertyBlock();
-                }
-
-                if (!dlssWrapper.DebugDisable && !DLSSWrapper.WantToDebugDLSSViaRenderdoc)
-                {
-                    dlssWrapper._propertiesOut.SetTexture("_MainTex", dlssWrapper._textureBuffer);
-                }
-                else
-                {
-                    dlssWrapper._propertiesOut.SetTexture("_MainTex", src);
-                }
-
-                commandBuffer.DrawMesh(dlssWrapper._mesh, Matrix4x4.identity, dlssWrapper._matCopySources, 0, 1, dlssWrapper._propertiesOut);
-            }
-            else
-            {
-                MaterialPropertyBlock debugProperties = new MaterialPropertyBlock();
-                debugProperties.SetTexture("_MainTex", dlssWrapper._textureBuffer);
-                debugProperties.SetTexture("_DepthTex", dlssWrapper._depthCopy);
-                debugProperties.SetTexture("_MotionVectorsTex", dlssWrapper._motionVectorsCopy);
-                debugProperties.SetTexture("_SrcColorTex", dlssWrapper._srcCopyUAV);
-                commandBuffer.DrawMesh(dlssWrapper._mesh, Matrix4x4.identity, dlssWrapper._debugMaterial, 0, 0, debugProperties);
-            }
-
-            // Execute command buffer if no external one was provided
-            if (externalCommandBuffer == null)
-            {
-                Graphics.ExecuteCommandBuffer(commandBuffer);
-            }
-        }
-
-        */
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------
         public static float[] TarkovLayers()
         {

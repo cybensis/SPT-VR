@@ -12,7 +12,7 @@ namespace TarkovVR
 {
     internal class VRGlobals
     {
-
+        internal static float upscalingMultiplier;
         public const string LEFT_ARM_OBJECT_NAME = "Base HumanLCollarbone";
         public const string RIGHT_ARM_OBJECT_NAME = "Base HumanRCollarbone";
         public const float MIN_JOYSTICK_AXIS_FOR_MOVEMENT = 0.5f;
@@ -76,5 +76,6 @@ namespace TarkovVR
 
         public static bool blockRightJoystick = false;
         public static bool blockLeftJoystick = false;
+        
     }
 }

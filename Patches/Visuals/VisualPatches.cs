@@ -81,23 +81,7 @@ namespace TarkovVR.Patches.Visuals
                 return false;
             }
             return true;
-        }
-
-        // This is where GPU Instancing handles culling, it does not work properly in multipass, it only takes left eye into account.
-        // Adding toggles for it because this can heavily impact performance depending on the scene and hardware.
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(GPUInstancerManager), "UpdateBuffers")]
-        private static void DisableAllCulling(GPUInstancerManager __instance)
-        {
-            if (VRSettings.GetOccCulling())
-                __instance.isOcclusionCulling = false;
-            else
-                __instance.isOcclusionCulling = true;
-            if (VRSettings.GetFrusCulling())
-                __instance.isFrustumCulling = false;
-            else
-                __instance.isFrustumCulling = true;
-        }       
+        }   
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
