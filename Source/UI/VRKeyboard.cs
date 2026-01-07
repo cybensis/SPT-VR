@@ -23,6 +23,7 @@ namespace TarkovVR.Source.UI
         private Color normalColor = new Color(0.1f, 0.1f, 0.1f, 1f);
         private Color hoverColor = new Color(0.3f, 0.3f, 0.3f, 1f);
         private Color pressedColor = new Color(0.05f, 0.05f, 0.05f, 1f);
+        private bool isHovering = false;
 
         public enum KeyType { Character, Shift, Backspace, Enter, Space, Close, Clear }
 
@@ -44,19 +45,20 @@ namespace TarkovVR.Source.UI
 
         public void OnPointerUp(PointerEventData eventData)
         {
-            if (background) background.color = normalColor;
+            if (background) background.color = isHovering ? hoverColor : normalColor;
             controller.OnKeyReleased(this);
         }
 
-        public void OnPointerEnter(PointerEventData eventData) { 
+        public void OnPointerEnter(PointerEventData eventData) {
+            isHovering = true;
             if (background) {
                 background.color = hoverColor;
-                Singleton<GUISounds>.Instance.PlayUISound(EUISoundType.DialogButtonHover);
             }
         }
         
         public void OnPointerExit(PointerEventData eventData) 
-        { 
+        {
+            isHovering = false;
             if (background) background.color = normalColor;
             controller.OnKeyReleased(this);
         }
@@ -105,6 +107,7 @@ namespace TarkovVR.Source.UI
             {
                 HandleKeyPress(currentPressedKey);
                 nextRepeatTime = Time.time + REPEAT_RATE;
+                Singleton<GUISounds>.Instance.PlayUISound(EUISoundType.ButtonClick);
             }
 
             if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) ||
@@ -163,7 +166,7 @@ namespace TarkovVR.Source.UI
             currentPressedKey = key;
             nextRepeatTime = Time.time + REPEAT_DELAY;
             HandleKeyPress(key);
-            Singleton<GUISounds>.Instance.PlayUISound(EUISoundType.DialogButtonClick);
+            Singleton<GUISounds>.Instance.PlayUISound(EUISoundType.ButtonClick);
         }
 
         public void OnKeyReleased(VRKeyboardKey key)
