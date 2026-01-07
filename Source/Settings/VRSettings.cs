@@ -79,6 +79,7 @@ namespace TarkovVR.Source.Settings
             public ShadowOpt shadowOpt { get; set; }
             public bool disableOccCulling { get; set; }
             public bool disableFrusCulling { get; set; }
+            public bool useVRKeyboard { get; set; }
             public ModSettings()
             {
                 rotationSensitivity = 4;
@@ -113,6 +114,7 @@ namespace TarkovVR.Source.Settings
                 shadowOpt = ShadowOpt.IncreaseLighting;
                 disableOccCulling = false;
                 disableFrusCulling = false;
+                useVRKeyboard = true;
             }
             // Add more settings as needed
         }
@@ -157,7 +159,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle hideLegsToggle;
         private static SettingToggle disableRunAnimationToggle;
         private static SettingToggle seatedModeToggle;
-
+        private static SettingToggle useVRKeyboardToggle;
 
 
         private static ModSettings settings;
@@ -479,8 +481,24 @@ namespace TarkovVR.Source.Settings
             frusCullingToggle.Toggle.UpdateValue(settings.disableFrusCulling);
             //SetupScrollbar(vrSettings);
 
+            useVRKeyboardToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            useVRKeyboardToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            useVRKeyboardToggle.Toggle.action_0 = SetUseVRKeyboard;
+            useVRKeyboardToggle.Text.localizationKey = "Use In-Game VR Keyboard";
+            useVRKeyboardToggle.Toggle.UpdateValue(settings.useVRKeyboard);
+
             vrSettingsObject = newSoundSettings.gameObject;
             UnityEngine.Object.Destroy(newSoundSettings);
+        }
+
+        public static bool GetUseVRKeyboard()
+        {
+            return settings.useVRKeyboard;
+        }
+
+        private static void SetUseVRKeyboard(bool turnOn)
+        {
+            settings.useVRKeyboard = turnOn;
         }
 
         private static void SetupScrollbar(GameObject vrSettings)
