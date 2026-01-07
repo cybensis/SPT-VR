@@ -81,7 +81,50 @@ namespace TarkovVR.Patches.Visuals
                 return false;
             }
             return true;
-        }   
+        }
+
+        private static Dictionary<HBAO, RenderTexture[]> stereoAOTargets = new();
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(HBAO), "method_4")]
+        private static bool FixHBAOMethod4Stereo(HBAO __instance, RenderTexture source, RenderTexture destination,
+            Material ____hbaoMaterial, CommandBuffer ___commandBuffer_0, bool ___useTriangleBlit,
+            RenderTexture ___renderTexture_3, HBAO_Core.RenderTarget ____renderTarget)
+        {
+            int eyeIndex = Camera.current?.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
+
+            if (!stereoAOTargets.ContainsKey(__instance))
+            {
+                stereoAOTargets[__instance] = new RenderTexture[2];
+                for (int i = 0; i < 2; i++)
+                    stereoAOTargets[__instance][i] = new RenderTexture(___renderTexture_3.width, ___renderTexture_3.height, 0);
+            }
+
+            var aoTarget = stereoAOTargets[__instance][eyeIndex];
+
+            ___commandBuffer_0.Clear();
+            ___commandBuffer_0.SetRenderTarget(aoTarget);
+            ___commandBuffer_0.ClearRenderTarget(false, true, Color.white);
+            ___commandBuffer_0.BlitFullscreenTriangle(source, aoTarget, ____hbaoMaterial, __instance.GetAoPass(), null, false, null);
+
+            ____hbaoMaterial.SetTexture(ShaderProperties.hbaoTex, aoTarget);
+            ___commandBuffer_0.BlitFullscreenTriangle(source, destination, ____hbaoMaterial, __instance.GetFinalPass(), null, false, null);
+            Graphics.ExecuteCommandBuffer(___commandBuffer_0);
+
+            return false;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(HBAO), "OnDisable")]
+        private static void CleanupHBAOStereo(HBAO __instance)
+        {
+            if (stereoAOTargets.TryGetValue(__instance, out var targets))
+            {
+                foreach (var tex in targets)
+                    if (tex != null) UnityEngine.Object.Destroy(tex);
+                stereoAOTargets.Remove(__instance);
+            }
+        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]

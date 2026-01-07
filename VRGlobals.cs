@@ -63,6 +63,7 @@ namespace TarkovVR
         public static SkinnedMeshRenderer legsModel;
         public static AssetBundle handsBundle;
         public static GameObject cloudPrefab;
+        public static Shader prismShader;
 
         public static GameObject weaponHolder;
         public static GameObject oldWeaponHolder;

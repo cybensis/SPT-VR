@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using TarkovVR.Patches.UI;
+using TarkovVR.Patches.Visuals;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -90,6 +91,8 @@ namespace TarkovVR.Source.Weapons
                 fovAtStart = scopeCamera.fieldOfView;
                 initialHandRot = SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
                 swapZooms = false;
+                if (scopeCamera.GetComponent<VRJitterComponent>() == null)
+                    scopeCamera.gameObject.AddComponent<VRJitterComponent>();
             }
 
 

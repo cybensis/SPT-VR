@@ -632,7 +632,38 @@ namespace TarkovVR.Source.Player.VRManager
                         smoothingFactor = 0.1f * (VRSettings.GetScopeSensitivity() * 10);
                 }
                 else if (VRSettings.GetWeaponWeightOn())
-                    smoothingFactor = 50 / VRGlobals.firearmController.ErgonomicWeight;
+                {
+                    //smoothingFactor = 50 / VRGlobals.firearmController.ErgonomicWeight;
+                    /*
+                    float dist = Vector3.Distance(rawRightHand.transform.position, RightHand.transform.position);
+                    float acceleration = 1f + dist; // Multiplier based on lag distance
+                    smoothingFactor = (50 / VRGlobals.firearmController.ErgonomicWeight) * acceleration;
+                    */
+                    /*
+                    float weight = VRGlobals.firearmController.ErgonomicWeight;
+                    float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
+
+                    // As the angle between your hand and the gun increases, 
+                    // we slightly boost the smoothing factor to "pull" harder.
+                    float elasticBoost = 1f + (angleError * 0.05f);
+
+                    smoothingFactor = (50f / weight) * elasticBoost;
+                    smoothingFactor = Mathf.Clamp(smoothingFactor, 5f, 60f);
+                    */
+                    float weight = VRGlobals.firearmController.ErgonomicWeight;
+                    float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
+
+                    // Use Mathf.Sqrt so the boost 'softens' as the error gets larger.
+                    // This prevents heavy guns from losing their identity during fast moves.
+                    float elasticBoost = 1f + (Mathf.Sqrt(angleError) * 0.2f);
+
+                    // We reduce the '50f' slightly because the boost is now more consistent
+                    smoothingFactor = (40f / weight) * elasticBoost;
+
+                    // IMPORTANT: Keep the max clamp reasonable. 
+                    // If this is too high, heavy guns feel like paper when flicked.
+                    smoothingFactor = Mathf.Clamp(smoothingFactor, 3f, 65f);
+                }
                 else if (VRSettings.SmoothWeaponAim())
                 {
                     smoothingFactor = VRSettings.GetSmoothingSensitivity();
@@ -716,7 +747,36 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 else if (VRGlobals.firearmController && VRSettings.GetWeaponWeightOn())
                 {
-                    smoothingFactor = 50 / VRGlobals.firearmController.ErgonomicWeight;
+                    //smoothingFactor = 50 / VRGlobals.firearmController.ErgonomicWeight;
+                    /*
+                    float dist = Vector3.Distance(rawRightHand.transform.position, RightHand.transform.position);
+                    float acceleration = 1f + dist; // Multiplier based on lag distance
+                    smoothingFactor = (50 / VRGlobals.firearmController.ErgonomicWeight) * acceleration;
+                    */
+                    /*
+                    float weight = VRGlobals.firearmController.ErgonomicWeight;
+                    float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
+
+                    // As the angle between your hand and the gun increases, 
+                    // we slightly boost the smoothing factor to "pull" harder.
+                    float elasticBoost = 1f + (angleError * 0.05f);
+
+                    smoothingFactor = (50f / weight) * elasticBoost;
+                    smoothingFactor = Mathf.Clamp(smoothingFactor, 5f, 60f);
+                    */
+                    float weight = VRGlobals.firearmController.ErgonomicWeight;
+                    float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
+
+                    // Use Mathf.Sqrt so the boost 'softens' as the error gets larger.
+                    // This prevents heavy guns from losing their identity during fast moves.
+                    float elasticBoost = 1f + (Mathf.Sqrt(angleError) * 0.2f);
+
+                    // We reduce the '50f' slightly because the boost is now more consistent
+                    smoothingFactor = (40f / weight) * elasticBoost;
+
+                    // IMPORTANT: Keep the max clamp reasonable. 
+                    // If this is too high, heavy guns feel like paper when flicked.
+                    smoothingFactor = Mathf.Clamp(smoothingFactor, 3f, 65f);
                 }
                 else if (VRSettings.SmoothWeaponAim())
                 {

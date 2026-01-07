@@ -12,6 +12,7 @@ using UnityEngine.Rendering;
 using static GClass3809;
 using UnityEngine.XR;
 using System.Reflection;
+using static SSAAImpl;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -42,20 +43,244 @@ namespace TarkovVR.Patches.Visuals
         {
             __instance.enabled = false;
         }
+
+        private static RenderTexture[] _perEyeScatteringRT;
+        private static CommandBuffer _vrScatteringCmdBuffer;
+        private static readonly int int_1 = Shader.PropertyToID("_FrustumCornersWS");
+        private static readonly int int_2 = Shader.PropertyToID("_DitheringTexture");
+        private static readonly int int_3 = Shader.PropertyToID("_Density");
+        private static readonly int int_4 = Shader.PropertyToID("_SunrizeGlow");
+        private static readonly int int_5 = Shader.PropertyToID("_ScatteringTex");
+        static readonly int _InvVP = Shader.PropertyToID("_InverseViewProjection");
+        private static Matrix4x4 view;
+        private static Matrix4x4 proj;
         /*
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeatherController), "method_1")]
-        private static void FixTOD(WeatherController __instance)
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
+        private static bool StereoFix_TODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
         {
-            if (!__instance.PlayerCamera.GetComponent<TOD_Camera>())
+            if (!__instance.CheckSupport(needDepth: true, needHdr: true))
             {
-                __instance.PlayerCamera.gameObject.AddComponent<TOD_Camera>();
-                __instance.PlayerCamera.GetComponent<TOD_Camera>().sky = __instance.tod_Scattering_0.Sky;
-                Plugin.MyLog.LogError("Current TOD Sky assigned to Camera" + __instance.PlayerCamera.GetComponent<TOD_Camera>().sky);
+                Graphics.Blit(source, destination);
+                return false;
             }
-            Plugin.MyLog.LogError("Current TOD Sky assigned to Camera" + __instance.PlayerCamera.GetComponent<TOD_Camera>().sky);
+
+            Camera cam = __instance.cam;
+            __instance.Sky.Components.Scattering = __instance;
+            Camera.MonoOrStereoscopicEye eye = cam.stereoActiveEye;
+
+            // --- PART 1: GEOMETRY (The Fix for Pitch/Roll/Swimming) ---
+            // Instead of manually calculating vectors using generic FOV/Aspect,
+            // we ask Unity for the EXACT frustum corners used by the VR eye.
+            // This accounts for the asymmetric projection of headsets.
+
+            Vector3[] frustumCorners = new Vector3[4];
+            // Calculate corners at the Far Clip Plane for the current eye
+            cam.CalculateFrustumCorners(new Rect(0, 0, 1, 1), cam.farClipPlane, eye, frustumCorners);
+
+            // Transform them from Local Space (Camera relative) to World Space
+            Vector3 bottomLeft = cam.transform.TransformVector(frustumCorners[0]);
+            Vector3 topLeft = cam.transform.TransformVector(frustumCorners[1]);
+            Vector3 topRight = cam.transform.TransformVector(frustumCorners[2]);
+            Vector3 bottomRight = cam.transform.TransformVector(frustumCorners[3]);
+
+            Camera.StereoscopicEye stereoEye = (eye == Camera.MonoOrStereoscopicEye.Left) ? Camera.StereoscopicEye.Left : Camera.StereoscopicEye.Right;
+
+            view = cam.GetStereoViewMatrix(stereoEye);
+            proj = GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(stereoEye), false);
+
+            Matrix4x4 vp = proj * view;
+            Matrix4x4 invVP = vp.inverse;
+            //__instance.material_0.SetMatrix(_InvVP, invVP);
+            Shader.SetGlobalMatrix("UNITY_MATRIX_I_VP", invVP);
+            // TOD_Scattering expects rows in this order: TL, TR, BR, BL
+            Matrix4x4 identity = Matrix4x4.identity;
+            identity.SetRow(0, topLeft);
+            identity.SetRow(1, topRight);
+            identity.SetRow(2, bottomRight);
+            identity.SetRow(3, bottomLeft);
+
+            // --- PART 2: DENSITY STABILIZATION (From previous step) ---
+            if (__instance.FromLevelSettings)
+            {
+                LevelSettings instance = Singleton<LevelSettings>.Instance;
+                if (instance != null)
+                {
+                    __instance.HeightFalloff = instance.HeightFalloff;
+                    __instance.ZeroLevel = instance.ZeroLevel;
+                }
+            }
+
+            __instance.material_0.SetMatrix(int_1, identity);
+            __instance.material_0.SetTexture(int_2, __instance.DitheringTexture);
+
+            Vector3 camPos = cam.transform.position;
+            float densityBaseOffset = camPos.y - __instance.ZeroLevel;
+
+            // Counter-animate the fog height so it stays pinned to the Player Body
+            if (VRGlobals.player != null)
+            {
+                // Formula: Height = CamPos.y - Offset.
+                // We want Height to be (Player.y - ZeroLevel).
+                // So: Player.y - ZeroLevel = CamPos.y - Offset
+                // Offset = CamPos.y - Player.y + ZeroLevel
+                densityBaseOffset = camPos.y - VRGlobals.player.Transform.position.y + __instance.ZeroLevel;
+            }
+
+            // Note: The shader subtracts this Y value from the World Pos Y.
+            // If the shader logic is standard TOD, the second param is 'Height'.
+            // We pass the calculated offset here.
+            //Shader.SetGlobalVector(int_3, new Vector4(__instance.HeightFalloff, densityBaseOffset, __instance.GlobalDensity, 0f));
+            __instance.material_0.SetVector(int_3,
+    new Vector4(__instance.HeightFalloff, densityBaseOffset, __instance.GlobalDensity, 0f));
+
+            __instance.material_0.SetFloat(int_4, __instance.SunrizeGlow);
+            if (__instance.Lighten)
+            {
+                __instance.material_0.EnableKeyword("LIGHTEN");
+            }
+            else
+            {
+                __instance.material_0.DisableKeyword("LIGHTEN");
+            }
+
+            RenderTexture temporary = RenderTexture.GetTemporary(source.width, source.height, 0, source.format);
+            Vector4 densityVec =
+    new Vector4(__instance.HeightFalloff, densityBaseOffset, __instance.GlobalDensity, 0f);
+
+            __instance.material_0.SetVector(int_3, densityVec);
+            __instance.CustomBlit(source, temporary, __instance.material_0, 1);
+            __instance.material_0.SetVector(int_3, densityVec);
+            __instance.material_0.SetTexture(int_5, temporary);
+            __instance.CustomBlit(source, destination, __instance.material_0);
+            //Shader.SetGlobalTexture(int_5, temporary);
+            __instance.material_0.SetTexture(int_5, temporary);
+            RenderTexture.ReleaseTemporary(temporary);
+            return false;
         }
         */
+        /*
+        public static void TODScatteringRender(Camera.MonoOrStereoscopicEye eye, TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
+        {
+            Camera cam = VRGlobals.VRCam;
+            Vector3[] frustumCorners = new Vector3[4];
+            // Calculate corners at the Far Clip Plane for the current eye
+            cam.CalculateFrustumCorners(new Rect(0, 0, 1, 1), cam.farClipPlane, eye, frustumCorners);
+
+            // Transform them from Local Space (Camera relative) to World Space
+            Vector3 bottomLeft = cam.transform.TransformVector(frustumCorners[0]);
+            Vector3 topLeft = cam.transform.TransformVector(frustumCorners[1]);
+            Vector3 topRight = cam.transform.TransformVector(frustumCorners[2]);
+            Vector3 bottomRight = cam.transform.TransformVector(frustumCorners[3]);
+
+            Camera.StereoscopicEye stereoEye = (eye == Camera.MonoOrStereoscopicEye.Left) ? Camera.StereoscopicEye.Left : Camera.StereoscopicEye.Right;
+
+            view = cam.GetStereoViewMatrix(stereoEye);
+            proj = GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(stereoEye), false);
+
+            Matrix4x4 vp = proj * view;
+            Matrix4x4 invVP = vp.inverse;
+
+            Matrix4x4 identity = Matrix4x4.identity;
+
+            if (eye == Camera.MonoOrStereoscopicEye.Right)
+            {
+                // Instead of swapping rows, we "invert" the horizontal component 
+                // relative to the camera's right vector.
+                Vector3 camRight = cam.transform.right;
+
+                identity.SetRow(0, topLeft - 2 * Vector3.Project(topLeft, camRight));
+                identity.SetRow(1, topRight - 2 * Vector3.Project(topRight, camRight));
+                identity.SetRow(2, bottomRight - 2 * Vector3.Project(bottomRight, camRight));
+                identity.SetRow(3, bottomLeft - 2 * Vector3.Project(bottomLeft, camRight));
+            }
+            else
+            {
+                // Standard order for Left eye - which you said is perfect
+                identity.SetRow(0, topLeft);
+                identity.SetRow(1, topRight);
+                identity.SetRow(2, bottomRight);
+                identity.SetRow(3, bottomLeft);
+            }
+
+            // --- PART 2: DENSITY STABILIZATION (From previous step) ---
+            if (__instance.FromLevelSettings)
+            {
+                LevelSettings instance = Singleton<LevelSettings>.Instance;
+                if (instance != null)
+                {
+                    __instance.HeightFalloff = instance.HeightFalloff;
+                    __instance.ZeroLevel = instance.ZeroLevel;
+                }
+            }
+
+            __instance.material_0.SetMatrix(int_1, identity);
+            __instance.material_0.SetTexture(int_2, __instance.DitheringTexture);
+
+            __instance.material_0.SetVector(int_3, new Vector4(__instance.HeightFalloff, __instance.ZeroLevel, __instance.GlobalDensity, 0f));
+
+            __instance.material_0.SetFloat(int_4, __instance.SunrizeGlow);
+            if (__instance.Lighten)
+            {
+                __instance.material_0.EnableKeyword("LIGHTEN");
+            }
+            else
+            {
+                __instance.material_0.DisableKeyword("LIGHTEN");
+            }
+
+            RenderTexture temporary = RenderTexture.GetTemporary(source.width, source.height, 0, source.format);
+            Vector4 densityVec = new Vector4(__instance.HeightFalloff, __instance.ZeroLevel, __instance.GlobalDensity, 0f);
+
+            __instance.material_0.SetVector(int_3, densityVec);
+            __instance.CustomBlit(source, temporary, __instance.material_0, 1);
+            __instance.material_0.SetVector(int_3, densityVec);
+            __instance.material_0.SetTexture(int_5, temporary);
+            __instance.CustomBlit(source, destination, __instance.material_0);
+            __instance.material_0.SetTexture(int_5, temporary);
+            RenderTexture.ReleaseTemporary(temporary);
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
+        private static bool StereoFix_TODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
+        {
+            if (!__instance.CheckSupport(needDepth: true, needHdr: true))
+            {
+                Graphics.Blit(source, destination);
+                return false;
+            }
+
+            Camera cam = __instance.cam;
+            __instance.Sky.Components.Scattering = __instance;
+            Camera.MonoOrStereoscopicEye eye = cam.stereoActiveEye;
+
+            // --- PART 1: GEOMETRY (The Fix for Pitch/Roll/Swimming) ---
+            // Instead of manually calculating vectors using generic FOV/Aspect,
+            // we ask Unity for the EXACT frustum corners used by the VR eye.
+            // This accounts for the asymmetric projection of headsets.
+            if (eye == Camera.MonoOrStereoscopicEye.Left)
+            {
+                TODScatteringRender(eye, __instance, source, destination);
+            }
+            else if (eye == Camera.MonoOrStereoscopicEye.Right)
+            {
+                TODScatteringRender(eye, __instance, source, destination);
+            }
+            
+            return false;
+        }
+        */
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TOD_Camera), "Update")]
+        private static bool FixTODCamera(TOD_Camera __instance)
+        {
+            if ((bool)__instance.sky && __instance.sky.Initialized)
+            {
+                __instance.sky.Components.Camera = __instance;
+            }
+            return false;
+            //__instance.enabled = false;
+        }
 
         //Tarkov fog doesn't render correctly in VR so disable it
         [HarmonyPostfix]
@@ -69,6 +294,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImage")]
         private static void FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
         {
+
             __instance.enabled = false;
         }
 
@@ -79,7 +305,7 @@ namespace TarkovVR.Patches.Visuals
             __instance.enabled = false;
             return false;
         }
-
+        /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PrismEffects), "method_5")]
         private static bool FixFogForVR(PrismEffects __instance, Material fogMaterial)
@@ -92,25 +318,65 @@ namespace TarkovVR.Patches.Visuals
             fogMaterial.SetFloat(Shader.PropertyToID("_FogStart"), __instance.fogStartPoint);
             fogMaterial.SetColor(Shader.PropertyToID("_FogColor"), __instance.fogColor);
             fogMaterial.SetColor(Shader.PropertyToID("_FogEndColor"), __instance.fogEndColor);
+            fogMaterial.SetFloat(Shader.PropertyToID("_FogBlurSkybox"), __instance.fogAffectSkybox ? 1f : 0.9999999f);
 
-            if (__instance.fogAffectSkybox)
-                fogMaterial.SetFloat(Shader.PropertyToID("_FogBlurSkybox"), 1f);
-            else
-                fogMaterial.SetFloat(Shader.PropertyToID("_FogBlurSkybox"), 0.9999999f);
+            // Convert pixel jitter to world-space offset
+            Vector2 jitter = VRJitterComponent.CurrentJitter;
+            float scale = VRGlobals.upscalingMultiplier;
+            int scaledWidth = (int)(XRSettings.eyeTextureWidth * scale);
+            int scaledHeight = (int)(XRSettings.eyeTextureHeight * scale);
 
-            // Create a matrix with camera position but world-space rotation
+            float halfHeight = cam.nearClipPlane * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float halfWidth = halfHeight * cam.aspect;
+
+            float worldJitterX = (jitter.x / scaledWidth) * 2f * halfWidth;
+            float worldJitterY = (jitter.y / scaledHeight) * 2f * halfHeight;
+
+            // Apply jitter offset in view space
+            Vector3 viewSpaceOffset = new Vector3(worldJitterX, worldJitterY, 0f);
+            Vector3 worldSpaceOffset = cam.transform.TransformDirection(viewSpaceOffset);
+
+            // World-locked fog with jitter compensation
+            Vector3 jitteredPosition = cam.transform.position + worldSpaceOffset;
             Matrix4x4 worldMatrix = Matrix4x4.TRS(
-                cam.transform.position,  // Keep position (so fog moves with player)
-                Quaternion.identity,     // World rotation (fog doesn't rotate with head)
+                cam.transform.position,//jitteredPosition,    // Camera position WITH jitter offset
+                Quaternion.identity, // World rotation (doesn't rotate with head)
                 Vector3.one
             );
 
             fogMaterial.SetMatrix(Shader.PropertyToID("_InverseView"), worldMatrix);
 
-            // Skip original method
-            return false ;
+            return false;
         }
-        /*
+        */
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(PrismEffects), "method_5")]
+        private static bool FixFogForVR(PrismEffects __instance, Material fogMaterial)
+        {
+            Camera cam = __instance.GetPrismCamera();
+            // 1. Set all the standard properties (mirroring original code)
+            fogMaterial.SetFloat("_FogHeight", __instance.fogHeight);
+            fogMaterial.SetFloat("_FogIntensity", 1f);
+            fogMaterial.SetFloat("_FogDistance", __instance.fogDistance);
+            fogMaterial.SetFloat("_FogStart", __instance.fogStartPoint);
+            //fogMaterial.SetFloat("_FogStart", __instance.fogStartPoint);
+            fogMaterial.SetColor("_FogColor", __instance.fogColor);
+            fogMaterial.SetColor("_FogEndColor", __instance.fogEndColor);
+            fogMaterial.SetFloat("_FogBlurSkybox", 0.9999999f);
+            //Matrix4x4 nonJitteredMatrix = __instance.GetComponent<Camera>().worldToCameraMatrix.inverse;
+            //fogMaterial.SetMatrix("_InverseView", nonJitteredMatrix);
+            Matrix4x4 worldMatrix = Matrix4x4.TRS(
+                cam.transform.position,//jitteredPosition,    // Camera position WITH jitter offset
+                Quaternion.identity, // World rotation (doesn't rotate with head)
+                Vector3.one
+            );
+
+            fogMaterial.SetMatrix(Shader.PropertyToID("_InverseView"), worldMatrix);
+
+            return false; // Skip the original method
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WeatherController), "method_9")]
         private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
@@ -146,7 +412,21 @@ namespace TarkovVR.Patches.Visuals
 
             UpdateOpticFog(fogDistance, fogColor);
         }
-        */
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PrismEffects), "method_12")]
+        private static void ApplyFXAAAfterAllEffects(RenderTexture source, RenderTexture destination)
+        {
+            Rendering.LoadFXAAShader();
+            if (Rendering._fxaaMat == null) return;
+
+            // Apply FXAA to the final rendered result
+            RenderTexture temp = RenderTexture.GetTemporary(destination.descriptor);
+            Graphics.Blit(destination, temp);
+            Graphics.Blit(temp, destination, Rendering._fxaaMat);
+            RenderTexture.ReleaseTemporary(temp);
+        }
+
         private static void InitializeCameras()
         {
             foreach (var cam in Camera.allCameras)

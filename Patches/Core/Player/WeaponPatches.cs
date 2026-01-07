@@ -1160,6 +1160,46 @@ namespace TarkovVR.Patches.Core.Player
                 __instance.volumetricLightRenderer_1.DefaultSpotCookie = __instance.volumetricLightRenderer_0.DefaultSpotCookie;
                 __instance.volumetricLightRenderer_1.Resolution = __instance.volumetricLightRenderer_0.Resolution;
             }
+            TOD_Scattering tod_Scattering_1 = __instance.tod_Scattering_1;
+            TOD_Scattering tod_Scattering_0 = __instance.tod_Scattering_0;
+            MBOIT_Scattering mboit_Scattering_1 = __instance.mboit_Scattering_1;
+            MBOIT_Scattering mboit_Scattering_0 = __instance.mboit_Scattering_0;
+            if (tod_Scattering_1 != null && tod_Scattering_0 != null)
+            {
+                tod_Scattering_1.enabled = tod_Scattering_0.enabled;
+                tod_Scattering_1.DitheringTexture = tod_Scattering_0.DitheringTexture;
+                tod_Scattering_1.GlobalDensity = tod_Scattering_0.GlobalDensity;
+                tod_Scattering_1.HeightFalloff = tod_Scattering_0.HeightFalloff;
+                tod_Scattering_1.SunrizeGlow = tod_Scattering_0.SunrizeGlow;
+                tod_Scattering_1.ZeroLevel = tod_Scattering_0.ZeroLevel;
+                tod_Scattering_1.MBOIT = tod_Scattering_0.MBOIT;
+                if (mboit_Scattering_1 != null && mboit_Scattering_0 != null)
+                {
+                    mboit_Scattering_1.Sky = mboit_Scattering_0.Sky;
+                    mboit_Scattering_1.enabled = mboit_Scattering_0.enabled;
+                    mboit_Scattering_1.DitheringTexture = mboit_Scattering_0.DitheringTexture;
+                    mboit_Scattering_1.GlobalDensity = mboit_Scattering_0.GlobalDensity;
+                    mboit_Scattering_1.HeightFalloff = mboit_Scattering_0.HeightFalloff;
+                    mboit_Scattering_1.SunrizeGlow = mboit_Scattering_0.SunrizeGlow;
+                    mboit_Scattering_1.ZeroLevel = mboit_Scattering_0.ZeroLevel;
+                    mboit_Scattering_1.MBOITDitherScale = mboit_Scattering_0.MBOITDitherScale;
+                    mboit_Scattering_1.ScatterColorMultiplier = mboit_Scattering_0.ScatterColorMultiplier;
+                    mboit_Scattering_1.ScatterDensityBias = mboit_Scattering_0.ScatterDensityBias;
+                    mboit_Scattering_1.ScatterDensityMultiplier = mboit_Scattering_0.ScatterDensityMultiplier;
+                    mboit_Scattering_1.SlicesDistributionExponent = mboit_Scattering_0.SlicesDistributionExponent;
+                    mboit_Scattering_1.SOFT_SCALE = mboit_Scattering_0.SOFT_SCALE;
+                    float num = Mathf.Min(Mathf.Max(__instance.float_0, 1f), 11f);
+                    num = (num - 1f) / 10f;
+                    float num2 = 1f + num * __instance.OpticScatterReductionStrength;
+                    mboit_Scattering_1.ScatterDensityPower = mboit_Scattering_0.ScatterDensityPower * num2;
+                    mboit_Scattering_1.ScatterGreyscale = mboit_Scattering_0.ScatterGreyscale;
+                    mboit_Scattering_1.HeightFalloffFactor = mboit_Scattering_0.HeightFalloffFactor;
+                    mboit_Scattering_1.ScatteringMBOITComputeShader = mboit_Scattering_0.ScatteringMBOITComputeShader;
+                    mboit_Scattering_1.ScatteringMBOITFinalPassComputeShader = mboit_Scattering_0.ScatteringMBOITFinalPassComputeShader;
+                    mboit_Scattering_1.ScatteringMBOITRCPComputeShader = mboit_Scattering_0.ScatteringMBOITRCPComputeShader;
+                    mboit_Scattering_1.ScatteringSlicesComputeShader = mboit_Scattering_0.ScatteringSlicesComputeShader;
+                }
+            }
             if (__instance.opticSight_0.CameraData.IsAdjustableOptic)
             {
                 __instance.scopeZoomHandler_0.UpdateScope();

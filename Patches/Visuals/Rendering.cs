@@ -27,7 +27,7 @@ namespace TarkovVR.Patches.Visuals
     {
         private static Dictionary<string, Queue<RenderTexture>> _renderTargetPool = new Dictionary<string, Queue<RenderTexture>>();
         private static readonly int MAX_POOLED_TARGETS = 6;
-        private static Material _fxaaMat;
+        public static Material _fxaaMat;
 
         //NOTEEEEEEEEEEEE: Removing the SSAApropagator (i think) from the PostProcessingLayer/Volume will restore some visual fidelity but still not as good as no ssaa
 
@@ -77,6 +77,58 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAA), "GetOutputHeight")]
+        private static bool SSAAVROutputHeight(SSAAImpl __instance, ref int __result)
+        {
+            __result = XRSettings.eyeTextureHeight;
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAA), "GetOutputWidth")]
+        private static bool SSAAVROutputWidth(SSAAImpl __instance, ref int __result)
+        {
+            __result = XRSettings.eyeTextureWidth;
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "ApplySwitch")]
+        private static bool SSAAVROutputWidth(SSAAImpl __instance)
+        {
+            //__instance._currentCamera.rect = new Rect(0f, 0f, 1f, 1f);
+            __instance._cmdBufAfterForwardAlpha.Clear();
+            __instance._cmdBufAfterForwardOpaque.Clear();
+            __instance._currentCamera.GetCommandBuffers(CameraEvent.AfterDepthNormalsTexture);
+            if (__instance._currentRT != null)
+            {
+                __instance._currentCamera.targetTexture = null;
+                __instance._currentRT.Release();
+                UnityEngine.Object.DestroyImmediate(__instance._currentRT);
+                __instance._currentRT = null;
+            }
+            if (__instance._currentSSRatio == 1f)
+            {
+                __instance._currentCamera.targetTexture = null;
+                __instance.CurrentState = SSState.NOSCALE;
+            }
+            else
+            {
+                if (__instance._currentSSRatio < 1f)
+                {
+                    //__instance._currentCamera.rect = new Rect(0f, 0f, __instance._currentSSRatio, __instance._currentSSRatio);
+                    __instance.CurrentState = SSState.UPSCALE;
+                }
+                if (__instance._dlssWrapper != null)
+                {
+                    __instance._dlssWrapper.Quality = __instance._DLSSCurrentQuality;
+                }
+            }
+            //__instance.RenderTexturesAreChanged?.Invoke();
+            return false;
+        }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPostfix]
@@ -89,6 +141,7 @@ namespace TarkovVR.Patches.Visuals
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         private static int scaledWidth;
         private static int scaledHeight;
+        public static bool IsInjectingFog = false;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAPropagator), "OnRenderImage")]
         private static bool ProcessImageRendering(SSAAPropagator __instance, RenderTexture source, RenderTexture destination)
@@ -104,7 +157,7 @@ namespace TarkovVR.Patches.Visuals
             int nativeHeight = XRSettings.eyeTextureHeight;
             
             float resolutionScale = VRGlobals.upscalingMultiplier;
-            if (resolutionScale >= 1.0f)
+            if (resolutionScale > 1.0f)
             {
                 scaledWidth = (int)(nativeWidth * resolutionScale);
                 scaledHeight = (int)(nativeHeight * resolutionScale);
@@ -123,11 +176,6 @@ namespace TarkovVR.Patches.Visuals
 
             __instance.m_ssaa.RenderImage(source, __instance._resampledColorTargetHDR[0], true, null);
 
-            if (resolutionScale < 1.0f)
-            {
-                //UpscaleDepthBuffer(nativeWidth, nativeHeight);
-            }
-
             if (__instance._cmdBuf == null)
             {
                 __instance._cmdBuf = new CommandBuffer { name = "SSAAPropagator" };
@@ -144,39 +192,6 @@ namespace TarkovVR.Patches.Visuals
             ApplyVisionEffects(__instance);
             Graphics.ExecuteCommandBuffer(__instance._cmdBuf);            
             return false;
-        }
-
-        private static RenderTexture upscaledDepthRT = null;
-        private static CommandBuffer depthUpscaleCmd = null;
-        private static void UpscaleDepthBuffer(int nativeWidth, int nativeHeight)
-        {
-            if (upscaledDepthRT == null || upscaledDepthRT.width != nativeWidth || upscaledDepthRT.height != nativeHeight)
-            {
-                if (upscaledDepthRT != null)
-                {
-                    upscaledDepthRT.Release();
-                    RuntimeUtilities.SafeDestroy(upscaledDepthRT);
-                }
-
-                upscaledDepthRT = new RenderTexture(nativeWidth, nativeHeight, 24, RenderTextureFormat.Depth);
-                upscaledDepthRT.name = "Upscaled Depth Buffer";
-                upscaledDepthRT.filterMode = FilterMode.Point;
-                upscaledDepthRT.Create();
-            }
-
-            if (depthUpscaleCmd == null)
-            {
-                depthUpscaleCmd = new CommandBuffer { name = "Upscale Depth" };
-            }
-
-            depthUpscaleCmd.Clear();
-
-            // Try BlitCopyDepth first
-            Material depthCopy = new Material(Shader.Find("Hidden/BlitCopyDepth"));
-            depthUpscaleCmd.Blit(BuiltinRenderTextureType.CurrentActive, upscaledDepthRT, depthCopy);
-            Graphics.ExecuteCommandBuffer(depthUpscaleCmd);
-
-            Shader.SetGlobalTexture("_CameraDepthTexture", upscaledDepthRT);
         }
 
         private static void ResetRenderingState(SSAAPropagator __instance)
@@ -454,7 +469,7 @@ namespace TarkovVR.Patches.Visuals
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        private static void LoadFXAAShader()
+        public static void LoadFXAAShader()
         {
             if (_fxaaMat != null) return;
 
@@ -486,27 +501,6 @@ namespace TarkovVR.Patches.Visuals
             }
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(SSAA), "LateUpdate")]
-        private static bool FSR3Check(SSAA __instance)
-        {
-            TemporalAntialiasing.JitterSamplesGeneratorRepeatCount = __instance.UnityTAAJitterSamplesRepeatCount;
-            if (__instance._impl != null && (__instance._impl.EnableDLSS || __instance._impl.EnableFSR2 || __instance._impl.EnableFSR3))
-            {
-                if (XRSettings.eyeTextureResolutionScale == 1)
-                    TemporalAntialiasing.k_SampleCount = 16;
-                else
-                    TemporalAntialiasing.k_SampleCount = (int)((double)__instance.BasePhaseSamplesCount * (1.0 / (double)(__instance._currentSSRatio * __instance._currentSSRatio)) + 0.5);
-            }
-            else
-            {
-                TemporalAntialiasing.k_SampleCount = 8;
-            }
-            RuntimeUtilities.UseProj = __instance.UseProjectionMatrix;
-            return false;
-
-        }
-
         private static void ApplyFXAA(RenderTexture source, RenderTexture destination)
         {
             LoadFXAAShader();
@@ -525,7 +519,7 @@ namespace TarkovVR.Patches.Visuals
                 height = VRGlobals.VRCam.pixelHeight;
             }
             Graphics.Blit(source, destination, _fxaaMat);
-        }      
+        }       
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "RenderImage", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(bool), typeof(CommandBuffer) })]
@@ -556,6 +550,27 @@ namespace TarkovVR.Patches.Visuals
             else if (currentAA == EAntialiasingMode.None)
                 Graphics.Blit(source, destination);
             return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAA), "LateUpdate")]
+        private static bool SampleCountSet(SSAA __instance)
+        {
+            TemporalAntialiasing.JitterSamplesGeneratorRepeatCount = __instance.UnityTAAJitterSamplesRepeatCount;
+            if (__instance._impl != null && (__instance._impl.EnableDLSS || __instance._impl.EnableFSR2 || __instance._impl.EnableFSR3))
+            {
+                if (XRSettings.eyeTextureResolutionScale == 1)
+                    TemporalAntialiasing.k_SampleCount = 16;
+                else
+                    TemporalAntialiasing.k_SampleCount = (int)((double)__instance.BasePhaseSamplesCount * (1.0 / (double)(__instance._currentSSRatio * __instance._currentSSRatio)) + 0.5);
+            }
+            else
+            {
+                TemporalAntialiasing.k_SampleCount = 8;
+            }
+            RuntimeUtilities.UseProj = __instance.UseProjectionMatrix;
+            return false;
+
         }
 
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------

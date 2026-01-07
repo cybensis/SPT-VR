@@ -61,7 +61,7 @@ namespace TarkovVR.Patches.Visuals
                 source,
                 destination,
                 VRJitterComponent.CurrentJitter,
-                VRJitterHelper.CurrentSampleCount,
+                VRGlobals.upscalingMultiplier < 0.6f ? 32 : VRJitterHelper.CurrentSampleCount,
                 __instance._currentCamera,
                 __instance.OpticLensRenderer != null || __instance.CollimatorRenderer != null,
                 externalCommandBuffer
@@ -102,7 +102,7 @@ namespace TarkovVR.Patches.Visuals
                 source,
                 destination,
                 VRJitterComponent.CurrentJitter,
-                VRJitterHelper.CurrentSampleCount,
+                VRGlobals.upscalingMultiplier < 0.6f ? 32 : VRJitterHelper.CurrentSampleCount,
                 __instance._currentCamera,
                 __instance.OpticLensRenderer != null || __instance.CollimatorRenderer != null,
                 externalCommandBuffer
@@ -188,16 +188,16 @@ namespace TarkovVR.Patches.Visuals
 
             float scale = fsr3Mode switch
             {
-                EFSR3Mode.Quality => 0.95f,
-                EFSR3Mode.Balanced => 0.8f,
-                EFSR3Mode.Performance => 0.7f,
-                EFSR3Mode.UltraPerformance => 0.5f,
+                EFSR3Mode.Quality => 0.77f,
+                EFSR3Mode.Balanced => 0.67f,
+                EFSR3Mode.Performance => 0.59f,
+                EFSR3Mode.UltraPerformance => 0.50f,
                 _ => 1f
             };
 
             VRGlobals.upscalingMultiplier = scale;
 
-            VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f));
+            VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f), false);
 
             if (VRGlobals.VRCam.name == "FPS Camera")
             {
@@ -221,16 +221,16 @@ namespace TarkovVR.Patches.Visuals
 
             float scale = fsr2Mode switch
             {
-                EFSR2Mode.Quality => 0.95f,
-                EFSR2Mode.Balanced => 0.8f,
-                EFSR2Mode.Performance => 0.7f,
-                EFSR2Mode.UltraPerformance => 0.5f,
+                EFSR2Mode.Quality => 0.77f,
+                EFSR2Mode.Balanced => 0.67f,
+                EFSR2Mode.Performance => 0.59f,
+                EFSR2Mode.UltraPerformance => 0.50f,
                 _ => 1f
             };
 
             VRGlobals.upscalingMultiplier = scale;
 
-            VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f));
+            VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f), false);
             if (VRGlobals.VRCam.name == "FPS Camera")
             {
                 if (scale < 1.0f)
@@ -256,6 +256,19 @@ namespace TarkovVR.Patches.Visuals
             {
                 _ = __instance._rcasShader == null;
             }
+            /*
+            var prism = mainCamera.GetComponent<PrismEffects>();
+            if (prism != null && prism.useFog && prism.m_Material2 != null)
+            {
+                // 1. Setup the fog properties for this frame
+                prism.method_5(prism.m_Material2);
+
+                // 2. Draw the fog DIRECTLY onto the source texture.
+                // This forces FSR3 to treat the fog as part of the actual geometry.
+                // FSR3 will now upscale the fog and the object edges TOGETHER.
+                Graphics.Blit(source, source, prism.m_Material2, 0);
+            }
+            */
             __instance._mainCamera = mainCamera;
             __instance.CalcDeviceDepthToViewSpaceDepthParams(mainCamera);
             int num = ((source != null) ? source.width : Screen.width);
@@ -462,14 +475,18 @@ namespace TarkovVR.Patches.Visuals
             __instance.tempFloatVec[0] = (float)__instance.renderSize[0] / (float)__instance.displaySize[0];
             __instance.tempFloatVec[1] = (float)__instance.renderSize[1] / (float)__instance.displaySize[1];
             cmdBuf.SetComputeFloatParams(shader, "fDownscaleFactor", __instance.tempFloatVec);
+
             cmdBuf.SetComputeFloatParams(shader, "fMotionVectorJitterCancellation", __instance.zeroFloatVec);
             cmdBuf.SetComputeFloatParam(shader, "fPreExposure", 1f);
             cmdBuf.SetComputeFloatParam(shader, "fPreviousFramePreExposure", 1f);
             float num3 = (float)__instance.renderSize[0] / (float)__instance.renderSize[1];
-            float val = Mathf.Tan(0.5f * __instance._mainCamera.fieldOfView * (Mathf.PI / 180f)) * num3;
+            //float val = Mathf.Tan(0.5f * __instance._mainCamera.fieldOfView * (Mathf.PI / 180f)) * num3;
+            //float val = 1.0f / __instance._mainCamera.projectionMatrix.m00;
+            float val = 1.0f / __instance._mainCamera.projectionMatrix.m11;
             cmdBuf.SetComputeFloatParam(shader, "fTanHalfFOV", val);
             cmdBuf.SetComputeFloatParam(shader, "fJitterSequenceLength", __instance.jitterPhaseCount);
-            float val2 = Mathf.Max(0f, Mathf.Min(1f, Time.deltaTime));
+            //float val2 = Mathf.Max(0f, Mathf.Min(1f, Time.deltaTime));
+            float val2 = (XRDevice.refreshRate > 0) ? (1f / XRDevice.refreshRate) : Time.deltaTime;
             cmdBuf.SetComputeFloatParam(shader, "fDeltaTime", val2);
             cmdBuf.SetComputeFloatParam(shader, "fDynamicResChangeFactor", 0f);
             cmdBuf.SetComputeFloatParam(shader, "fViewSpaceToMetersFactor", 1f);

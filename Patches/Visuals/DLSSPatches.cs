@@ -87,15 +87,15 @@ namespace TarkovVR.Patches.Visuals
 
                 float scale = dlssMode switch
                 {
-                    EDLSSMode.Quality => 1f,
-                    EDLSSMode.Balanced => 0.8f,
-                    EDLSSMode.Performance => 0.7f,
-                    EDLSSMode.UltraPerformance => 0.5f,
+                    EDLSSMode.Quality => 1.0f,
+                    EDLSSMode.Balanced => 0.77f,
+                    EDLSSMode.Performance => 0.67f,
+                    EDLSSMode.UltraPerformance => 0.50f,
                     _ => 1f
                 };
 
                 VRGlobals.upscalingMultiplier = scale;
-                VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f));
+                VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f), true);
 
                 if (VRGlobals.VRCam.name == "FPS Camera")
                     VRGlobals.VRCam.rect = new Rect(0f, 0f, scale, scale);
@@ -115,12 +115,16 @@ namespace TarkovVR.Patches.Visuals
             {
                 if ((bool)ssaaimpl_)
                 {
-                    ssaaimpl_.DLSSQualityNext = GraphicsSettingsClass.GetDLSSQuality(dlssMode);
+                    if (dlssMode == EDLSSMode.Quality)
+                        ssaaimpl_.DLSSQualityNext = 5;
+                    else
+                        ssaaimpl_.DLSSQualityNext = GraphicsSettingsClass.GetDLSSQuality(dlssMode);
                     ssaaimpl_.EnableDLSS = true;
                     float num = ssaaimpl_.ComputeOptimalResamplingFactor(__instance.SSAA.GetOutputWidth(), __instance.SSAA.GetOutputHeight(), ssaaimpl_.DLSSQualityNext);
                     __instance.SSAA.Switch(num);
                     float x = Mathf.Log(num, 2f) - 1f;
                     Shader.SetGlobalVector(value: new Vector4(x, 1f, 2f, 3f), nameID: Shader.PropertyToID("_DLSSParams"));
+                    Plugin.MyLog.LogError($"[VR DLSS] DLSS enabled with resampling factor {num} (quality {ssaaimpl_.DLSSQualityNext})");
                 }
             }
             __instance.method_3();

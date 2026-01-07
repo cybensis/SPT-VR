@@ -285,6 +285,8 @@ public class GunInteractionController : MonoBehaviour
 
     private void HandleWeaponInteraction(Vector3 cameraPosition, Vector3 cameraForward, bool isLeftHanded)
     {
+        if (VRGlobals.firearmController == null)
+            return;
         bool hasMalfunction = VRGlobals.firearmController.Weapon.MalfState.State != EFT.InventoryLogic.Weapon.EMalfunctionState.None;
 
         if (hasMalfunction)
