@@ -6,10 +6,13 @@ using System.Collections.Generic;
 using System.Linq;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Controls;
+using Comfort.Common;
+using EFT;
+using EFT.UI;
 
 namespace TarkovVR.Source.UI
 {
-    public class VRKeyboardKey : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
+    public class VRKeyboardKey : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler
     {
         public string character;
         public string shiftCharacter;
@@ -19,6 +22,7 @@ namespace TarkovVR.Source.UI
         private Image background;
         private Color normalColor = new Color(0.1f, 0.1f, 0.1f, 1f);
         private Color hoverColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+        private Color pressedColor = new Color(0.05f, 0.05f, 0.05f, 1f);
 
         public enum KeyType { Character, Shift, Backspace, Enter, Space, Close, Clear }
 
@@ -32,9 +36,30 @@ namespace TarkovVR.Source.UI
             background.color = normalColor;
         }
 
-        public void OnPointerClick(PointerEventData eventData) => controller.HandleKeyPress(this);
-        public void OnPointerEnter(PointerEventData eventData) { if (background) background.color = hoverColor; }
-        public void OnPointerExit(PointerEventData eventData) { if (background) background.color = normalColor; }
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (background) background.color = pressedColor;
+            controller.OnKeyPressed(this);
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (background) background.color = normalColor;
+            controller.OnKeyReleased(this);
+        }
+
+        public void OnPointerEnter(PointerEventData eventData) { 
+            if (background) {
+                background.color = hoverColor;
+                Singleton<GUISounds>.Instance.PlayUISound(EUISoundType.DialogButtonHover);
+            }
+        }
+        
+        public void OnPointerExit(PointerEventData eventData) 
+        { 
+            if (background) background.color = normalColor;
+            controller.OnKeyReleased(this);
+        }
     }
 
     public class VRKeyboardController : MonoBehaviour
@@ -45,6 +70,11 @@ namespace TarkovVR.Source.UI
         private bool isShifted = false;
         private List<TextMeshProUGUI> keyLabels = new List<TextMeshProUGUI>();
         private List<VRKeyboardKey> keyLogics = new List<VRKeyboardKey>();
+
+        private VRKeyboardKey currentPressedKey;
+        private float nextRepeatTime;
+        private const float REPEAT_DELAY = 0.5f;
+        private const float REPEAT_RATE = 0.1f;
 
         // US QWERTY Layout
         private readonly string[] row1 = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" };
@@ -69,6 +99,12 @@ namespace TarkovVR.Source.UI
             {
                 CloseKeyboard();
                 return;
+            }
+
+            if (currentPressedKey != null && Time.time >= nextRepeatTime)
+            {
+                HandleKeyPress(currentPressedKey);
+                nextRepeatTime = Time.time + REPEAT_RATE;
             }
 
             if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) ||
@@ -119,6 +155,21 @@ namespace TarkovVR.Source.UI
         {
             keyboardRoot.SetActive(false);
             activeInputField = null;
+            currentPressedKey = null;
+        }
+
+        public void OnKeyPressed(VRKeyboardKey key)
+        {
+            currentPressedKey = key;
+            nextRepeatTime = Time.time + REPEAT_DELAY;
+            HandleKeyPress(key);
+            Singleton<GUISounds>.Instance.PlayUISound(EUISoundType.DialogButtonClick);
+        }
+
+        public void OnKeyReleased(VRKeyboardKey key)
+        {
+            if (currentPressedKey == key)
+                currentPressedKey = null;
         }
 
         public void HandleKeyPress(VRKeyboardKey key)
