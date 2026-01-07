@@ -32,6 +32,12 @@ namespace TarkovVR.Source.Player.VRManager
             if (LeftHand)
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
 
+            if (VRKeyboardController.Instance == null) {
+                GameObject kbHandler = new GameObject("VRKeyboardManager");
+                kbHandler.AddComponent<VRKeyboardController>();
+                DontDestroyOnLoad(kbHandler);
+            }
+
             if (VRSettings.GetLeftHandedMode())
             {
                 SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);

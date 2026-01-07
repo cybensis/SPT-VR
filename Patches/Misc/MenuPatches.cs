@@ -886,19 +886,43 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(TMP_InputField), "OnPointerClick")]
         private static void OpenVRKeyboard(TMP_InputField __instance)
         {
-            SteamVR.instance.overlay.ShowKeyboard(
-                (int)EGamepadTextInputMode.k_EGamepadTextInputModeNormal,
-                (int)EGamepadTextInputLineMode.k_EGamepadTextInputLineModeSingleLine,
-                (uint)EKeyboardFlags.KeyboardFlag_Modal, "Description", 256, "", 0);
+            // Check the user setting
+            if (VRSettings.GetUseVRKeyboard())
+            {
+                // Create the controller if it doesn't exist
+                if (VRKeyboardController.Instance == null)
+                {
+                    if (VRGlobals.camRoot != null)
+                    {
+                        GameObject kbHandler = new GameObject("VRKeyboardManager");
+                        kbHandler.AddComponent<VRKeyboardController>();
+                        UnityEngine.Object.DontDestroyOnLoad(kbHandler);
+                    }
+                }
 
-            var keyboardDoneAction =
-            SteamVR_Events.SystemAction(EVREventType.VREvent_KeyboardDone, ev => {
-                StringBuilder stringBuilder = new StringBuilder(256);
-                SteamVR.instance.overlay.GetKeyboardText(stringBuilder, 256);
-                string value = stringBuilder.ToString();
-                __instance.SetText(value, true);
-            });
-            keyboardDoneAction.enabled = true;
+                __instance.WaitOneFrame(() => {
+                    if (VRKeyboardController.Instance != null)
+                    {
+                        VRKeyboardController.Instance.OpenKeyboard(__instance);
+                    }
+                });
+            }
+            else
+            {
+                    SteamVR.instance.overlay.ShowKeyboard(
+                    (int)EGamepadTextInputMode.k_EGamepadTextInputModeNormal,
+                    (int)EGamepadTextInputLineMode.k_EGamepadTextInputLineModeSingleLine,
+                    (uint)EKeyboardFlags.KeyboardFlag_Modal, "Description", 256, "", 0);
+
+                var keyboardDoneAction =
+                SteamVR_Events.SystemAction(EVREventType.VREvent_KeyboardDone, ev => {
+                    StringBuilder stringBuilder = new StringBuilder(256);
+                    SteamVR.instance.overlay.GetKeyboardText(stringBuilder, 256);
+                    string value = stringBuilder.ToString();
+                    __instance.SetText(value, true);
+                });
+                keyboardDoneAction.enabled = true;
+            }
         }
 
         [HarmonyPostfix]
