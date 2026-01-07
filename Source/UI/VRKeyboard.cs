@@ -25,6 +25,10 @@ namespace TarkovVR.Source.UI
         private Color pressedColor = new Color(0.05f, 0.05f, 0.05f, 1f);
         private bool isHovering = false;
 
+        private BoxCollider boxCollider;
+        private RectTransform rectTransform;
+        private Vector3[] fourCornersArray = new Vector3[4];
+
         public enum KeyType { Character, Shift, Backspace, Enter, Space, Close, Clear }
 
         public void Init(string charKey, string shiftKey, KeyType kType, VRKeyboardController ctrl)
@@ -34,7 +38,31 @@ namespace TarkovVR.Source.UI
             type = kType;
             controller = ctrl;
             background = GetComponent<Image>();
-            background.color = normalColor;
+            if (background) background.color = normalColor;
+
+            boxCollider = GetComponent<BoxCollider>();
+            rectTransform = GetComponent<RectTransform>();
+        }
+
+        private void LateUpdate()
+        {
+            if (boxCollider != null && rectTransform != null)
+            {
+                // get rect coords after render to properly adhere to any transformations
+                rectTransform.GetLocalCorners(fourCornersArray);
+
+                float width = fourCornersArray[2].x - fourCornersArray[0].x;
+                float height = fourCornersArray[1].y - fourCornersArray[0].y;
+
+                Vector3 visualCenter = (fourCornersArray[0] + fourCornersArray[2]) * 0.5f;
+
+                // Only resize when not resized yet, basically only do it once
+                if (Mathf.Abs(boxCollider.size.x - width) > 0.1f || Mathf.Abs(boxCollider.size.y - height) > 0.1f)
+                {
+                    boxCollider.size = new Vector3(width, height, 0.001f);
+                    boxCollider.center = new Vector3(visualCenter.x, visualCenter.y, 0f);
+                }
+            }
         }
 
         public void OnPointerDown(PointerEventData eventData)
@@ -152,6 +180,8 @@ namespace TarkovVR.Source.UI
                 keyboardRoot.transform.position = head.position + (flatForward * 0.5f) + (Vector3.down * 0.4f);
                 keyboardRoot.transform.rotation = Quaternion.LookRotation(flatForward) * Quaternion.Euler(30, 0, 0);
             }
+            //fix hitbox after first render
+            LayoutRebuilder.ForceRebuildLayoutImmediate(kbRect);
         }
 
         public void CloseKeyboard()
@@ -250,6 +280,7 @@ namespace TarkovVR.Source.UI
 
             GameObject bgObj = new GameObject("Background");
             bgObj.transform.SetParent(keyboardRoot.transform, false);
+            bgObj.layer = 5;
             Image bg = bgObj.AddComponent<Image>();
             bg.color = new Color(0.05f, 0.05f, 0.05f, 0.95f);
             RectTransform bgRect = bg.GetComponent<RectTransform>();
@@ -258,6 +289,7 @@ namespace TarkovVR.Source.UI
 
             GameObject container = new GameObject("Container");
             container.transform.SetParent(keyboardRoot.transform, false);
+            container.layer = 5;
             VerticalLayoutGroup vLayout = container.AddComponent<VerticalLayoutGroup>();
             vLayout.spacing = 5;
             vLayout.childControlHeight = true; vLayout.childControlWidth = true;
@@ -279,6 +311,7 @@ namespace TarkovVR.Source.UI
         {
             GameObject rowObj = new GameObject("Row");
             rowObj.transform.SetParent(parent.transform, false);
+            rowObj.layer = 5;
             HorizontalLayoutGroup hLayout = rowObj.AddComponent<HorizontalLayoutGroup>();
             hLayout.spacing = 8;
             hLayout.childControlHeight = true; hLayout.childControlWidth = true;
@@ -293,6 +326,7 @@ namespace TarkovVR.Source.UI
         {
             GameObject rowObj = new GameObject("SpecialRow");
             rowObj.transform.SetParent(parent.transform, false);
+            rowObj.layer = 5;
             HorizontalLayoutGroup hLayout = rowObj.AddComponent<HorizontalLayoutGroup>();
             hLayout.spacing = 8;
             hLayout.childControlHeight = true; hLayout.childControlWidth = true;
@@ -310,19 +344,19 @@ namespace TarkovVR.Source.UI
         {
             GameObject keyObj = new GameObject(normal);
             keyObj.transform.SetParent(parent.transform, false);
+            keyObj.layer = 5;
 
             Image img = keyObj.AddComponent<Image>();
             img.color = new Color(0.2f, 0.2f, 0.2f);
+            keyObj.AddComponent<BoxCollider>();
 
             VRKeyboardKey keyScript = keyObj.AddComponent<VRKeyboardKey>();
             keyScript.Init(normal, shifted, type, this);
             keyLogics.Add(keyScript);
 
-            BoxCollider col = keyObj.AddComponent<BoxCollider>();
-            col.size = new Vector3(0, 0, 1);
-
             GameObject textObj = new GameObject("Text");
             textObj.transform.SetParent(keyObj.transform, false);
+            textObj.layer = 5;
             TextMeshProUGUI text = textObj.AddComponent<TextMeshProUGUI>();
             text.text = normal;
             text.fontSize = 28;
