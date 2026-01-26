@@ -61,9 +61,10 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.Player_0.IsYourPlayer)
                 return;
-
+            /*
             if (__instance.Weapon_0.MalfState.State != 0)
                 VRGlobals.vrPlayer.ForceUnlockHand();
+            */
         }
 
         // This removed the sway/tilt of the gun when turning and walking
@@ -76,190 +77,7 @@ namespace TarkovVR.Patches.Core.Player
             else
                 return false;
         }
-
-        private static readonly Dictionary<EFT.Player.FirearmController, PlayerPhysicalClass.GClass773> activeConsumptions =
-        new Dictionary<EFT.Player.FirearmController, PlayerPhysicalClass.GClass773>();
-
-        // The Action returned by HandsStamina.AddConsumption (so we can remove it cleanly)
-        private static readonly Dictionary<EFT.Player.FirearmController, Action> removeFromHandsActions
-            = new Dictionary<EFT.Player.FirearmController, Action>();
-
-        // The handler we attach to HandsStamina.OnExpired (so we can unsubscribe)
-        private static readonly Dictionary<EFT.Player.FirearmController, Action> handsExpiredHandlers
-            = new Dictionary<EFT.Player.FirearmController, Action>();
-
-        // To avoid double-promoting if expired fires more than once
-        private static readonly HashSet<EFT.Player.FirearmController> promotedToBaseOxygen
-            = new HashSet<EFT.Player.FirearmController>();
-        //Leaving this, can be used for custom stamina drain if needed in future for better VR support
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player.FirearmController), "IsAiming", MethodType.Setter)]
-        private static bool BypassADSAnimation(EFT.Player.FirearmController __instance, ref bool value)
-        {
-            var player = __instance._player;
-            if (player == null)
-                return true;
-
-            if (!value)
-            {
-                player.Physical.HoldBreath(enable: false);
-            }
-
-            // Keep only the functional aiming logic and remove ADS animation
-            __instance._isAiming = value;
-
-            player.Skills.FastAimTimer.Target = value ? 0f : 2f;
-            player.MovementContext.SetAimingSlowdown(value, 0.33f + __instance.gclass2250_0.AimMovementSpeed);
-
-            __instance.weaponManagerClass.SetAiming(value);
-            __instance.UpdateSensitivity();
-            __instance.AimingChanged(value);
-
-            var physical = player.Physical;
-            var handsStamina = physical.HandsStamina;
-
-            if (value)
-            {
-                if (!activeConsumptions.ContainsKey(__instance))
-                {
-                    var movementContext = player.MovementContext;
-                    var staminaParams = physical.StaminaParameters;
-
-                    var consumption = new PlayerPhysicalClass.GClass773(PlayerPhysicalClass.EConsumptionType.Aim)
-                    {
-                        PrimaryTarget = PlayerPhysicalClass.EConsumptionTarget.Hands,
-                        Delta = new GClass849<float>(() =>
-                        {
-                            // Arm damage multiplier
-                            float armDamageMultiplier = 1f;
-                            if (movementContext.PhysicalConditionIs(EPhysicalCondition.OnPainkillers))
-                            {
-                                armDamageMultiplier = 1f;
-                            }
-                            else if (movementContext.PhysicalConditionIs(EPhysicalCondition.LeftArmDamaged | EPhysicalCondition.RightArmDamaged))
-                            {
-                                armDamageMultiplier = 2f; // Both arms damaged
-                            }
-                            else if (movementContext.PhysicalConditionContainsAny(EPhysicalCondition.LeftArmDamaged | EPhysicalCondition.RightArmDamaged))
-                            {
-                                armDamageMultiplier = 1.5f; // One arm damaged
-                            }
-
-                            // Base drain rate
-                            float baseDrainRate = staminaParams.AimDrainRate;
-                            if (player.HandsController is PortableRangeFinderController)
-                            {
-                                baseDrainRate = staminaParams.AimRangeFinderDrainRate;
-                            }
-
-                            // Mounting multiplier
-                            float mountingMultiplier = 1f;
-                            if (movementContext.IsInMountedState && __instance is EFT.Player.FirearmController firearmController)
-                            {
-                                if (movementContext.PlayerMountingPointData.MountPointData.MountSideDirection != 0)
-                                {
-                                    mountingMultiplier = staminaParams.MountingVerticalAimDrainRateMultiplier;
-                                }
-                                else if (firearmController.BipodState)
-                                {
-                                    mountingMultiplier = staminaParams.BipodAimDrainRateMultiplier;
-                                }
-                                else
-                                {
-                                    mountingMultiplier = staminaParams.MountingHorizontalAimDrainRateMultiplier;
-                                }
-                            }
-
-                            float weaponWeight = __instance.ErgonomicWeight;
-
-                            float[] aimConsumptionByPose =
-                                GClass2298.ToArray(Singleton<BackendConfigSettingsClass>.Instance.Stamina.AimConsumptionByPose);
-
-                            float poseMultiplier = aimConsumptionByPose[(int)movementContext.PoseToInt];
-
-                            float strengthReduction = 1f - (float)player.Skills.StrengthBuffAimFatigue;
-
-                            float hydrationMultiplier =
-                                Singleton<BackendConfigSettingsClass>.Instance.StaminaDrain
-                                    .GetAt(player.HealthController.Hydration.Normalized);
-
-                            return weaponWeight * baseDrainRate * armDamageMultiplier * poseMultiplier *
-                                   strengthReduction * hydrationMultiplier * mountingMultiplier;
-                        }),
-                        Requires = PlayerPhysicalClass.EConsumptionTarget.None,
-                        AllowsRestoration = false,
-                        Downtime = 0f
-                    };
-
-                    Action removeFromHands = handsStamina.AddConsumption(consumption);
-                    activeConsumptions[__instance] = consumption;
-                    removeFromHandsActions[__instance] = removeFromHands;
-
-                    void PromoteToBaseAndOxygen()
-                    {
-                        if (promotedToBaseOxygen.Contains(__instance))
-                            return;
-
-                        promotedToBaseOxygen.Add(__instance);
-
-                        physical.Stamina.AddConsumption(consumption);
-                        physical.Oxygen.AddConsumption(consumption);
-
-                        if (handsExpiredHandlers.TryGetValue(__instance, out var handler))
-                        {
-                            handsStamina.OnExpired -= handler;
-                            handsExpiredHandlers.Remove(__instance);
-                        }
-                    }
-
-                    if (handsStamina.Current <= 0f)
-                    {
-                        PromoteToBaseAndOxygen();
-                    }
-                    else
-                    {
-                        Action expiredHandler = PromoteToBaseAndOxygen;
-                        handsExpiredHandlers[__instance] = expiredHandler;
-                        handsStamina.OnExpired += expiredHandler;
-                    }
-                }
-            }
-            else
-            {
-
-                if (activeConsumptions.TryGetValue(__instance, out var consumption))
-                {
-                    if (removeFromHandsActions.TryGetValue(__instance, out var removeFromHands))
-                    {
-                        removeFromHands?.Invoke();
-                        removeFromHandsActions.Remove(__instance);
-                    }
-                    else
-                    {
-                        handsStamina.RemoveConsumption(consumption);
-                    }
-
-                    if (promotedToBaseOxygen.Contains(__instance))
-                    {
-                        physical.Stamina.RemoveConsumption(consumption);
-                        physical.Oxygen.RemoveConsumption(consumption);
-                        promotedToBaseOxygen.Remove(__instance);
-                    }
-
-                    if (handsExpiredHandlers.TryGetValue(__instance, out var handler))
-                    {
-                        handsStamina.OnExpired -= handler;
-                        handsExpiredHandlers.Remove(__instance);
-                    }
-
-                    activeConsumptions.Remove(__instance);
-                }
-            }
-
-            return false;
-        }
-        */
+       
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IsAiming", MethodType.Setter)]
         private static bool BypassADSAnimation(EFT.Player.FirearmController __instance, ref bool value)
@@ -495,7 +313,6 @@ namespace TarkovVR.Patches.Core.Player
                             renderer.enabled = false;
                 }
             }
-
             // Check if a weapon is currently equipped, if that weapon isn the same as the one trying to be equipped, and that the weaponHolder actually has something there
             if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
             {
@@ -505,18 +322,46 @@ namespace TarkovVR.Patches.Core.Player
                 currentGunInteractController.enabled = false;
                 VRGlobals.emptyHands = null;
             }
+            
             VRGlobals.vrPlayer.isWeapPistol = false;
 
         }
-        
 
-        
+        // Some animations get stuck when switching weapon mainly while in inventory with only some guns, possibly because of VR controls having control over the hands.
+        // This forces the animation to move to WeapIn and finish the switch
+        // Also has the nice side effect of skipping to the correct hand position rather than it taking a second to update
+        // This may also be a good place to get started with manual reloads by checking for reload events here
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(AnimationEventSystem.AnimationEventsEmitter), "EmitEvents")]
+        public static void CheckQueue(AnimationEventSystem.AnimationEventsEmitter __instance)
+        {
+            if (VRGlobals.switchingWeapon)
+            {
+                var animator = VRGlobals.player.ArmsAnimatorCommon;
+                var state = animator.GetCurrentAnimatorStateInfo(1);
+
+                if (state.normalizedTime == 0f)
+                {
+                    animator.Update(0.01f);
+
+                    var firearmController = VRGlobals.player.HandsController as FirearmController;
+                    if (firearmController != null)
+                    {
+                        firearmController.IEventsConsumerOnWeapIn();
+
+                        //VRGlobals.switchingWeapon = false;
+                    }
+                }
+            }
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IEventsConsumerOnWeapIn")]
         private static void FinishMovingWeaponToVrHands(EFT.Player.FirearmController __instance)
-        {          
+        {
             if (!__instance._player.IsYourPlayer)
-                return;         
+                return;               
+            
             if (VRGlobals.menuOpen)
             {
                 if (WeaponPatches.currentGunInteractController != null)
@@ -817,6 +662,7 @@ namespace TarkovVR.Patches.Core.Player
                     Plugin.MyLog.LogError($"Stack trace: {ex.StackTrace}");
                 }
             }
+
         }
 
         private static Transform GetChildSafe(Transform parent, int index)
@@ -843,12 +689,13 @@ namespace TarkovVR.Patches.Core.Player
 
         //Damn nulls... This creates a dummy invisible Material when HighLightMesh is activated. This catches a null that happens with the weapon highlight when entering a raid
         //MoveWeaponToIKHands adds the HighLightMesh monobehavior component to the camera if it's not detected. This causes the script to run before a material is attached to it
+        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HighLightMesh), "Awake")]
         private static void HandleHighLightMeshAwake(HighLightMesh __instance)
         {
 
-            if (Camera.main.stereoEnabled && __instance.Mat == null && VRGlobals.player && (VRGlobals.vrPlayer is HideoutVRPlayerManager || VRGlobals.vrPlayer is RaidVRPlayerManager))
+            if (__instance.Mat == null && VRGlobals.player && (VRGlobals.vrPlayer is HideoutVRPlayerManager || VRGlobals.vrPlayer is RaidVRPlayerManager))
             {
                 var shader = Shader.Find("Hidden/HighLightMesh");
                 __instance.Mat = new Material(shader);
@@ -875,10 +722,11 @@ namespace TarkovVR.Patches.Core.Player
                 }
             }
         }
-
+        
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public static List<Transform> weaponInteractables;
         public static Transform gunCollider;
+        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
         private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
@@ -1035,15 +883,6 @@ namespace TarkovVR.Patches.Core.Player
                                 currentGunInteractController.SetFireModeSwitch(weaponMeshRoot.FindChildRecursive(firingModeSwitch));
                         }
                     }
-                    /*
-                    if (__instance.weaponManagerClass != null && __instance.weaponManagerClass.TacticalComboVisualController_0 != null)
-                    {
-                        for (int i = 0; i < __instance.weaponManagerClass.TacticalComboVisualController_0.Length; i++)
-                        {
-                            currentGunInteractController.AddTacticalDevice(__instance.weaponManagerClass.TacticalComboVisualController_0[i].transform, __instance.FirearmsAnimator);
-                        }
-                    }
-                    */
 
                     GameObject rightHandPositioner = new GameObject("RightHandPositioner");
                     rightHandPositioner.transform.SetParent(__instance.WeaponRoot.transform.parent, false);
@@ -1132,10 +971,9 @@ namespace TarkovVR.Patches.Core.Player
                     Plugin.MyLog.LogError($"Stack trace: {ex.StackTrace}");
                 }
             }
-
-            VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");
+            VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");          
         }
-
+        
         //This might clean up scopes a bit but it was mainly done to fix an issue with how BSG handles variable scopes
         //Now we tell LateUpdate to disable effects (I think?) but mainly to just update scope and nothing more
         [HarmonyPrefix]
@@ -1314,14 +1152,14 @@ namespace TarkovVR.Patches.Core.Player
         //}
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-
+        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GetActionsClass.Class1750), "method_0")]
         private static bool PreventUsingStationaryWeapon(GetActionsClass.Class1750 __instance)
         {
             return false;
         }
-
+        
         //BSG changed something with how physics was being killed which caused physically holding items to break
         //This disables the coroutine that checks to disable physics until you drop the item you're holding
         [HarmonyPrefix]

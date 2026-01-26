@@ -361,7 +361,7 @@ namespace TarkovVR.Source.Player.VRManager
                 crouchLevel = Mathf.Clamp((1 - crouchHeightDiff / 0.4f) - crouchLevel, 0, 1);
 
                 VRGlobals.player.MovementContext.PoseLevel_1 = crouchLevel;
-
+                /*
                 // Only change GameObject active states when prone state actually changes
                 bool currentProneState = VRGlobals.player.MovementContext.IsInPronePose;
                 bool currentOrigArmsActive = VRGlobals.origArmsModel.transform.parent.gameObject.activeSelf;
@@ -382,6 +382,7 @@ namespace TarkovVR.Source.Player.VRManager
                     lastProneState = currentProneState;
                     lastOrigArmsActive = !currentOrigArmsActive; // Will be flipped after SetActive calls
                 }
+                */
             }
         }
         // localpos 0.12 0 -0.085

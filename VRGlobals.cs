@@ -1,5 +1,7 @@
-﻿using EFT.UI;
+﻿using EFT.Settings.Graphics;
+using EFT.UI;
 using EFT.Visual;
+using HarmonyLib;
 using System.Collections.Generic;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VR;
@@ -12,6 +14,7 @@ namespace TarkovVR
 {
     internal class VRGlobals
     {
+        public static Harmony harmonyInstance;
         internal static float upscalingMultiplier;
         public const string LEFT_ARM_OBJECT_NAME = "Base HumanLCollarbone";
         public const string RIGHT_ARM_OBJECT_NAME = "Base HumanRCollarbone";
@@ -77,6 +80,6 @@ namespace TarkovVR
 
         public static bool blockRightJoystick = false;
         public static bool blockLeftJoystick = false;
-        
+        public static ESSAOMode ssaoMode;
     }
 }

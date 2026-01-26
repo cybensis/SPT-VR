@@ -208,6 +208,7 @@ namespace TarkovVR.Patches.UI
 
         public static void HandleOpenInventory()
         {
+            //PatchTracer.TraceAllMyPatches(VRGlobals.harmonyInstance);
             Cursor.lockState = CursorLockMode.Locked;
             ShowUiScreens();
             
@@ -271,7 +272,7 @@ namespace TarkovVR.Patches.UI
                 preloader.SetParent(VRGlobals.camRoot.transform);
                 preloader.localScale = new Vector3(0.0006f, 0.0006f, 0.0006f);
                 preloader.GetChild(0).localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
-                preloader.position = VRGlobals.camRoot.transform.position + flatForward * distance + flatRight * 0.05f + new Vector3(0, -0.15f + extraYOffset, 0);
+                preloader.position = VRGlobals.camRoot.transform.position + flatForward * distance + flatRight * 0.05f + new Vector3(0, -0.1f + extraYOffset, 0);
                 preloader.rotation = flatRotation;
 
                 if (UIPatches.notifierUi)
@@ -843,7 +844,7 @@ namespace TarkovVR.Patches.UI
                 if (__instance._beaconDummy != null)
                 {
                     //if (Physics.Raycast(new Ray(Camera.main.transform.position + Camera.main.transform.forward / 2f, Camera.main.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
-                    if (Physics.Raycast(new Ray(VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward / 2f, VRGlobals.VRCam.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
+                    if (Physics.Raycast(new Ray(VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward * 0.3f, VRGlobals.VRCam.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
                     {
                         __instance._beaconDummy.transform.position = hitInfo.point;
                         __instance._beaconDummy.transform.rotation = Quaternion.LookRotation(hitInfo.normal);
@@ -863,6 +864,10 @@ namespace TarkovVR.Patches.UI
                         __instance._beaconMaterialSetter.SetAvailable(isAvailable: false);
                         __instance.AllowToPlantBeacon = false;
                     }
+                }
+                if (__instance.TripwireVisualPlacer_0 != null)
+                {
+                    __instance.TripwireVisualPlacer_0.ProcessPlacement(new Ray(VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward * 0.3f, VRGlobals.VRCam.transform.forward), __instance.WeaponRoot.position);
                 }
                 __instance.ProceduralWeaponAnimation.StartFovCoroutine(__instance);
                 __instance.PropUpdate();

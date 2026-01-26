@@ -30,6 +30,7 @@ using UnityEngine.UIElements;
 using TarkovVR.Patches.Core.VR;
 using System.Collections;
 using EFT.UI.Matchmaker;
+using TarkovVR.Patches.Visuals;
 
 
 
@@ -38,6 +39,23 @@ namespace TarkovVR.ModSupport.FIKA
     [HarmonyPatch]
     internal static class FIKASupport
     {
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(LoadingScreenUI), "Awake")]
+        private static void SetLoadingScreenUI(LoadingScreenUI __instance)
+        {
+            Transform transform = __instance.transform;
+            __instance.WaitOneFrame(delegate
+            {
+                var canvasTransform = transform.GetChild(0);
+                var canvas = canvasTransform.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.WorldSpace;
+
+                canvasTransform.gameObject.layer = LayerMask.NameToLayer("UI");
+                canvasTransform.localPosition = new Vector3(0, -999.9f, 1);
+                canvasTransform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+            });
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MatchMakerUI), "Awake")]
         private static void SetMatchMakerUI(MatchMakerUI __instance)
@@ -65,8 +83,6 @@ namespace TarkovVR.ModSupport.FIKA
             if (mainMenuUiChild == null)
                 return;
 
-
-            // Add null checks inside the delegate too, since it's called later
             if (mainMenuUiChild == null || mainMenuUiChild.childCount == 0)
                 return;
 
@@ -143,7 +159,7 @@ namespace TarkovVR.ModSupport.FIKA
             PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
             VRGlobals.inGame = false;
             VRGlobals.menuOpen = true;
-
+            WeatherPatches.CleanupClouds();
             MenuPatches.PositionMainMenuUi();
             return true;
         }
@@ -153,7 +169,7 @@ namespace TarkovVR.ModSupport.FIKA
         [HarmonyPatch(typeof(Fika.Core.Main.FreeCamera.FreeCameraController), "ShowExtractMessage")]
         private static bool FixExitRaid(Fika.Core.Main.FreeCamera.FreeCameraController __instance)
         {
-            if (FikaPlugin.ShowExtractMessage.Value)
+            if (FikaPlugin.Instance.Settings.ShowExtractMessage.Value)
                 __instance._extractText = FikaUIGlobals.CreateOverlayText("Press 'B' to extract");
             return false;
         }
@@ -239,8 +255,8 @@ namespace TarkovVR.ModSupport.FIKA
             if (!vrExtractPressed || quitState == EQuitState.None || __instance._requestQuitGame)
                 return false;
 
-            ConsoleScreen.Log($"{FikaPlugin.ExtractKey.Value} pressed, attempting to extract!");
-            Plugin.MyLog.LogInfo($"{FikaPlugin.ExtractKey.Value} pressed, attempting to extract!");
+            ConsoleScreen.Log($"{FikaPlugin.Instance.Settings.ExtractKey.Value} pressed, attempting to extract!");
+            Plugin.MyLog.LogInfo($"{FikaPlugin.Instance.Settings.ExtractKey.Value} pressed, attempting to extract!");
 
             __instance._requestQuitGame = true;
 

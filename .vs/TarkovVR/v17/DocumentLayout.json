@@ -3,20 +3,184 @@
   "WorkspaceRootPath": "F:\\SPT-VR-development\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\visualpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\visualpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\vrglobals.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:vrglobals.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\rendering.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\rendering.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\plugin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:plugin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\weapons\\vropticcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\weapons\\vropticcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\ui\\vrkeyboard.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\ui\\vrkeyboard.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\settings\\vrsettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\settings\\vrsettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\weatherpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\weatherpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\vrglobals.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:vrglobals.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\vrjittercomponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\vrjittercomponent.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\dlsspatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\dlsspatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\ui\\uipatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\ui\\uipatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\misc\\menupatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\misc\\menupatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\vr\\initvrpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\vr\\initvrpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\weaponpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\weaponpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\movementpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\movementpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\ikpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\ikpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\modsupport\\fikasupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:modsupport\\fikasupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifygtao.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifygtao.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifyocclusioneffect.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifyocclusioneffect.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifyocclusioncommon.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifyocclusioncommon.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\aopatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\aopatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\fsrpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\fsrpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\guninteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\guninteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\rendering.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\rendering.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\visualpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\visualpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\ui\\vruiinteracter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\ui\\vruiinteracter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\vrmanager\\raidvrplayermanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\vrmanager\\raidvrplayermanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\misc\\laserpointer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\misc\\laserpointer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\vrmanager\\vrplayermanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\vrmanager\\vrplayermanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\misc\\patchtracer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\misc\\patchtracer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\body\\dynamicelbowpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\body\\dynamicelbowpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\body\\ikmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\body\\ikmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\vr\\vrmeleecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\vr\\vrmeleecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\controls\\inputhandlers.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\controls\\inputhandlers.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\handsinteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\handsinteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\postprocessing.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\postprocessing.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\vr\\vrcontrolspatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\vr\\vrcontrolspatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\vr\\vrgrenadecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\vr\\vrgrenadecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\handspositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:handspositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\misc\\grenadefingerpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\misc\\grenadefingerpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\todo.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:todo.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\misc\\weaponpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\misc\\weaponpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\weapons\\weaponholderoffsets.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\weapons\\weaponholderoffsets.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\misc\\hideoutpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\misc\\hideoutpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\vrmanager\\menuvrmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\vrmanager\\menuvrmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\controls\\vrinputmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\controls\\vrinputmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\ui\\menumover.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\ui\\menumover.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -26,63 +190,566 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 14,
           "Children": [
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "VisualPatches.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\VisualPatches.cs",
-              "RelativeDocumentMoniker": "Patches\\Visuals\\VisualPatches.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\VisualPatches.cs",
-              "RelativeToolTip": "Patches\\Visuals\\VisualPatches.cs",
-              "ViewState": "AgIAAFIAAAAAAAAAAADwv34AAAAJAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-07T22:56:16.055Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "Rendering.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\Rendering.cs",
-              "RelativeDocumentMoniker": "Patches\\Visuals\\Rendering.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\Rendering.cs",
-              "RelativeToolTip": "Patches\\Visuals\\Rendering.cs",
-              "ViewState": "AgIAAMgBAAAAAAAAAAAqwN4BAABOAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-07T21:40:27.587Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "VRGlobals.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\VRGlobals.cs",
-              "RelativeDocumentMoniker": "VRGlobals.cs",
-              "ToolTip": "F:\\SPT-VR-development\\VRGlobals.cs",
-              "RelativeToolTip": "VRGlobals.cs",
-              "ViewState": "AgIAACIAAAAAAAAAAAAiwEEAAAApAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-07T19:05:41.459Z",
-              "EditorCaption": ""
-            },
             {
               "$type": "Bookmark",
               "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 5,
               "Title": "WeatherPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\WeatherPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Visuals\\WeatherPatches.cs",
               "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\WeatherPatches.cs",
               "RelativeToolTip": "Patches\\Visuals\\WeatherPatches.cs",
-              "ViewState": "AgIAAAABAAAAAAAAAAAuwCQBAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAABIAAAAAgGZmZmYiwKcCAABRAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-01-05T19:25:15.767Z",
               "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "WeaponPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\Player\\WeaponPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\Player\\WeaponPatches.cs",
+              "ViewState": "AgIAAF0EAAAAAAAAAAAAAA4BAABiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:01:23.059Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "InitVRPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\InitVRPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\VR\\InitVRPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\VR\\InitVRPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\VR\\InitVRPatches.cs",
+              "ViewState": "AgIAAFcBAAAAAAAAAAAAANUAAABBAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:34:16.679Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "IKPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\Player\\IKPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\Player\\IKPatches.cs",
+              "ViewState": "AgIAAM4AAAAAMzMzMzMmwOQAAABQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:00:48.53Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "MovementPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MovementPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\Player\\MovementPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MovementPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\Player\\MovementPatches.cs",
+              "ViewState": "AgIAADIAAAAAAAAAAAAqwN4AAABWAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:01:10.875Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "MenuPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Misc\\MenuPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Misc\\MenuPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Misc\\MenuPatches.cs",
+              "RelativeToolTip": "Patches\\Misc\\MenuPatches.cs",
+              "ViewState": "AgIAAAcFAAAAAAAAAAAAAPsEAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-07T23:18:21.586Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "UIPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\UI\\UIPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\UI\\UIPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\UI\\UIPatches.cs",
+              "RelativeToolTip": "Patches\\UI\\UIPatches.cs",
+              "ViewState": "AgIAAEsDAAAAAAAAAAAEwE4DAADDAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-08T05:43:05.566Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "DLSSPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\DLSSPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Visuals\\DLSSPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\DLSSPatches.cs",
+              "RelativeToolTip": "Patches\\Visuals\\DLSSPatches.cs",
+              "ViewState": "AgIAAHsAAAAAAAAAAAAowBcBAAA/AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-08T06:45:18.17Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "VRJitterComponent.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\VRJitterComponent.cs",
+              "RelativeDocumentMoniker": "Patches\\Visuals\\VRJitterComponent.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\VRJitterComponent.cs",
+              "RelativeToolTip": "Patches\\Visuals\\VRJitterComponent.cs",
+              "ViewState": "AgIAACkAAAAAAAAAAAAAwFMAAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-08T15:15:46.276Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "VRSettings.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Settings\\VRSettings.cs",
+              "RelativeDocumentMoniker": "Source\\Settings\\VRSettings.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Settings\\VRSettings.cs",
+              "RelativeToolTip": "Source\\Settings\\VRSettings.cs",
+              "ViewState": "AgIAALEBAAAAAAAAAAAEwMUBAAAtAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-07T23:18:57.751Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "VRKeyboard.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\UI\\VRKeyboard.cs",
+              "RelativeDocumentMoniker": "Source\\UI\\VRKeyboard.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\UI\\VRKeyboard.cs",
+              "RelativeToolTip": "Source\\UI\\VRKeyboard.cs",
+              "ViewState": "AgIAACQBAAAAAAAAAAAuwIMAAAAaAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-07T23:17:52.363Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "VROpticController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Weapons\\VROpticController.cs",
+              "RelativeDocumentMoniker": "Source\\Weapons\\VROpticController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Weapons\\VROpticController.cs",
+              "RelativeToolTip": "Source\\Weapons\\VROpticController.cs",
+              "ViewState": "AgIAAEcAAAAAAAAAAAAwwEEAAAA/AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-11T17:28:00.167Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Plugin.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Plugin.cs",
+              "RelativeDocumentMoniker": "Plugin.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Plugin.cs",
+              "RelativeToolTip": "Plugin.cs",
+              "ViewState": "AgIAAAsBAAAAAAAAAAAmwHMAAAARAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-09T21:56:06.461Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "VRGlobals.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\VRGlobals.cs",
+              "RelativeDocumentMoniker": "VRGlobals.cs",
+              "ToolTip": "F:\\SPT-VR-development\\VRGlobals.cs",
+              "RelativeToolTip": "VRGlobals.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAE8AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-07T19:05:41.459Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "FIKASupport.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\FIKASupport.cs",
+              "RelativeDocumentMoniker": "ModSupport\\FIKASupport.cs",
+              "ToolTip": "F:\\SPT-VR-development\\ModSupport\\FIKASupport.cs",
+              "RelativeToolTip": "ModSupport\\FIKASupport.cs",
+              "ViewState": "AgIAAHkAAAAAAAAAAAAIwKEAAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:33:01.815Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
+              "Title": "AmplifyOcclusionCommon.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionCommon.cs",
+              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyOcclusionCommon.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionCommon.cs",
+              "RelativeToolTip": "Source\\Graphics\\AmplifyOcclusionCommon.cs",
+              "ViewState": "AgIAAGYAAAAAAAAAAIA3wH8AAAANAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-13T21:50:30.762Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "AmplifyGTAO.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyGTAO.cs",
+              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyGTAO.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyGTAO.cs",
+              "RelativeToolTip": "Source\\Graphics\\AmplifyGTAO.cs",
+              "ViewState": "AgIAAFUAAAAAAAAAAAAgwHEAAAAhAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-13T23:32:44.337Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "AOPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\AOPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Visuals\\AOPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\AOPatches.cs",
+              "RelativeToolTip": "Patches\\Visuals\\AOPatches.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-14T00:40:46.509Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 19,
+              "Title": "FSRPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\FSRPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Visuals\\FSRPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\FSRPatches.cs",
+              "RelativeToolTip": "Patches\\Visuals\\FSRPatches.cs",
+              "ViewState": "AgIAAPwAAAAAAAAAAAA0wEQBAAA0AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-08T16:13:18.912Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "AmplifyOcclusionEffect.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionEffect.cs",
+              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyOcclusionEffect.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionEffect.cs",
+              "RelativeToolTip": "Source\\Graphics\\AmplifyOcclusionEffect.cs",
+              "ViewState": "AgIAABwAAAAAAAAAAAAgwC8FAAA+AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-13T21:50:13.543Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 21,
+              "Title": "Rendering.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\Rendering.cs",
+              "RelativeDocumentMoniker": "Patches\\Visuals\\Rendering.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\Rendering.cs",
+              "RelativeToolTip": "Patches\\Visuals\\Rendering.cs",
+              "ViewState": "AgIAADYCAAAAAAAAAAAAAMQAAABKAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-07T21:40:27.587Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 20,
+              "Title": "GunInteractionController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\GunInteractionController.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\GunInteractionController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\GunInteractionController.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\GunInteractionController.cs",
+              "ViewState": "AgIAAD4BAAAAAAAAAAAwwFgBAAAlAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:33:12.525Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 22,
+              "Title": "VisualPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\VisualPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Visuals\\VisualPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\VisualPatches.cs",
+              "RelativeToolTip": "Patches\\Visuals\\VisualPatches.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAIcAAAAIAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-07T22:56:16.055Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 25,
+              "Title": "LaserPointer.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Misc\\LaserPointer.cs",
+              "RelativeDocumentMoniker": "Source\\Misc\\LaserPointer.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Misc\\LaserPointer.cs",
+              "RelativeToolTip": "Source\\Misc\\LaserPointer.cs",
+              "ViewState": "AgIAAFUAAAAAAAAAAAAewG4AAAAfAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-11T17:08:50.318Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 26,
+              "Title": "VRPlayerManager.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\VRManager\\VRPlayerManager.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\VRManager\\VRPlayerManager.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\VRManager\\VRPlayerManager.cs",
+              "RelativeToolTip": "Source\\Player\\VRManager\\VRPlayerManager.cs",
+              "ViewState": "AgIAANkDAAAAAAAAAAAAAPsDAAAdAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:34:25.855Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 27,
+              "Title": "PatchTracer.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Misc\\PatchTracer.cs",
+              "RelativeDocumentMoniker": "Source\\Misc\\PatchTracer.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Misc\\PatchTracer.cs",
+              "RelativeToolTip": "Source\\Misc\\PatchTracer.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACoAAAAgAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T23:34:59.2Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 23,
+              "Title": "VRUIInteracter.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\UI\\VRUIInteracter.cs",
+              "RelativeDocumentMoniker": "Source\\UI\\VRUIInteracter.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\UI\\VRUIInteracter.cs",
+              "RelativeToolTip": "Source\\UI\\VRUIInteracter.cs",
+              "ViewState": "AgIAAC8AAAAAAAAAAAAqwEQAAAAZAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-23T22:26:11.753Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 24,
+              "Title": "RaidVRPlayerManager.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\VRManager\\RaidVRPlayerManager.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\VRManager\\RaidVRPlayerManager.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\VRManager\\RaidVRPlayerManager.cs",
+              "RelativeToolTip": "Source\\Player\\VRManager\\RaidVRPlayerManager.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAAxAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T20:29:41.375Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 30,
+              "Title": "VRMeleeController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRMeleeController.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\VR\\VRMeleeController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRMeleeController.cs",
+              "RelativeToolTip": "Patches\\Core\\VR\\VRMeleeController.cs",
+              "ViewState": "AgIAACYAAAAAAAAAAAAAAD4AAAA4AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-11T01:26:05.051Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 32,
+              "Title": "HandsInteractionController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\HandsInteractionController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\HandsInteractionController.cs",
+              "ViewState": "AgIAAMkCAAAAAAAAAAAewOICAAArAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:33:21.417Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 31,
+              "Title": "InputHandlers.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Controls\\InputHandlers.cs",
+              "RelativeDocumentMoniker": "Source\\Controls\\InputHandlers.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Controls\\InputHandlers.cs",
+              "RelativeToolTip": "Source\\Controls\\InputHandlers.cs",
+              "ViewState": "AgIAAGAAAAAAAAAAAAAAAGsAAABCAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:03:11.475Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 28,
+              "Title": "DynamicElbowPositioner.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Body\\DynamicElbowPositioner.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Body\\DynamicElbowPositioner.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Body\\DynamicElbowPositioner.cs",
+              "RelativeToolTip": "Source\\Player\\Body\\DynamicElbowPositioner.cs",
+              "ViewState": "AgIAAAkAAAAAAAAAAAAUwCoAAAA6AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-18T01:11:09.005Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 29,
+              "Title": "IKManager.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Body\\IKManager.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Body\\IKManager.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Body\\IKManager.cs",
+              "RelativeToolTip": "Source\\Player\\Body\\IKManager.cs",
+              "ViewState": "AgIAAN0AAAAAAAAAAAAAAN0AAAAzAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:34:11.601Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 33,
+              "Title": "PostProcessing.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\PostProcessing.cs",
+              "RelativeDocumentMoniker": "Patches\\Visuals\\PostProcessing.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\PostProcessing.cs",
+              "RelativeToolTip": "Patches\\Visuals\\PostProcessing.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACgAAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-14T00:40:50.239Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 35,
+              "Title": "VRGrenadeController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRGrenadeController.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\VR\\VRGrenadeController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRGrenadeController.cs",
+              "RelativeToolTip": "Patches\\Core\\VR\\VRGrenadeController.cs",
+              "ViewState": "AgIAAHYAAAAAAAAAAAAnwKgAAABHAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:01:19.883Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 34,
+              "Title": "VRControlsPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRControlsPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\VR\\VRControlsPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRControlsPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\VR\\VRControlsPatches.cs",
+              "ViewState": "AgIAAA4AAAAAAAAAAAAgwCcAAAA3AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:34:18.579Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 36,
+              "Title": "HandsPositioner.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\HandsPositioner.cs",
+              "RelativeDocumentMoniker": "HandsPositioner.cs",
+              "ToolTip": "F:\\SPT-VR-development\\HandsPositioner.cs",
+              "RelativeToolTip": "HandsPositioner.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACEAAAAfAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:33:45.739Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 37,
+              "Title": "GrenadeFingerPositioner.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Misc\\GrenadeFingerPositioner.cs",
+              "RelativeDocumentMoniker": "Source\\Misc\\GrenadeFingerPositioner.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Misc\\GrenadeFingerPositioner.cs",
+              "RelativeToolTip": "Source\\Misc\\GrenadeFingerPositioner.cs",
+              "ViewState": "AgIAABwAAAAAAAAAAAAiwBsAAAAfAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-11T16:44:11.43Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 38,
+              "Title": "ToDo.md",
+              "DocumentMoniker": "F:\\SPT-VR-development\\ToDo.md",
+              "RelativeDocumentMoniker": "ToDo.md",
+              "ToolTip": "F:\\SPT-VR-development\\ToDo.md",
+              "RelativeToolTip": "ToDo.md",
+              "ViewState": "AgIAAAUAAAAAAAAAAIBpwBEAAADrAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
+              "WhenOpened": "2026-01-11T16:44:12.164Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 39,
+              "Title": "WeaponPositioner.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Misc\\WeaponPositioner.cs",
+              "RelativeDocumentMoniker": "Source\\Misc\\WeaponPositioner.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Misc\\WeaponPositioner.cs",
+              "RelativeToolTip": "Source\\Misc\\WeaponPositioner.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAAfAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-11T16:44:13.123Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 40,
+              "Title": "WeaponHolderOffsets.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Weapons\\WeaponHolderOffsets.cs",
+              "RelativeDocumentMoniker": "Source\\Weapons\\WeaponHolderOffsets.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Weapons\\WeaponHolderOffsets.cs",
+              "RelativeToolTip": "Source\\Weapons\\WeaponHolderOffsets.cs",
+              "ViewState": "AgIAAAYAAAAAAAAAAAAAwAcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:45:34.32Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 41,
+              "Title": "HideoutPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Misc\\HideoutPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Misc\\HideoutPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Misc\\HideoutPatches.cs",
+              "RelativeToolTip": "Patches\\Misc\\HideoutPatches.cs",
+              "ViewState": "AgIAAKMAAAAAAAAAAAAnwL0AAAAtAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-08T05:42:58.174Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 42,
+              "Title": "MenuVRManager.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\VRManager\\MenuVRManager.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\VRManager\\MenuVRManager.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\VRManager\\MenuVRManager.cs",
+              "RelativeToolTip": "Source\\Player\\VRManager\\MenuVRManager.cs",
+              "ViewState": "AgIAAIkAAAAAAAAAAAAnwKMAAABSAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T20:29:35.493Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 43,
+              "Title": "VRInputManager.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Controls\\VRInputManager.cs",
+              "RelativeDocumentMoniker": "Source\\Controls\\VRInputManager.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Controls\\VRInputManager.cs",
+              "RelativeToolTip": "Source\\Controls\\VRInputManager.cs",
+              "ViewState": "AgIAAE0AAAAAAAAAAAAqwGsAAAA3AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:34:21.566Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 44,
+              "Title": "MenuMover.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\UI\\MenuMover.cs",
+              "RelativeDocumentMoniker": "Source\\UI\\MenuMover.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\UI\\MenuMover.cs",
+              "RelativeToolTip": "Source\\UI\\MenuMover.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-08T04:32:12.912Z"
             }
           ]
         }

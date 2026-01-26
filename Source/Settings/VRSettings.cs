@@ -75,7 +75,7 @@ namespace TarkovVR.Source.Settings
             public bool hideLegs { get; set; }
             public bool disableRunAnimation { get; set; }
             public bool disablePrismEffects { get; set; }
-            public bool disableFog { get; set; }
+            public bool disablePrismFog { get; set; }
             public ShadowOpt shadowOpt { get; set; }
             public bool disableOccCulling { get; set; }
             public bool disableFrusCulling { get; set; }
@@ -110,11 +110,11 @@ namespace TarkovVR.Source.Settings
                 hideLegs = false;
                 disableRunAnimation = true;
                 disablePrismEffects = false;
-                disableFog = false;               
+                disablePrismFog = true;               
                 shadowOpt = ShadowOpt.IncreaseLighting;
                 disableOccCulling = false;
                 disableFrusCulling = false;
-                useVRKeyboard = true;
+                useVRKeyboard = false;
             }
             // Add more settings as needed
         }
@@ -440,8 +440,8 @@ namespace TarkovVR.Source.Settings
             disableFogToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             disableFogToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             disableFogToggle.Toggle.action_0 = SetDisableFog;
-            disableFogToggle.Text.localizationKey = "Disable Fog";
-            disableFogToggle.Toggle.UpdateValue(settings.disableFog);
+            disableFogToggle.Text.localizationKey = "Disable Fog - Worse aliasing if enabled";
+            disableFogToggle.Toggle.UpdateValue(settings.disablePrismFog);
             /*
             emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass1050_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
@@ -461,13 +461,21 @@ namespace TarkovVR.Source.Settings
 
             shadowOptsToggle.DropDown.gclass1626_0.Action_0 = ChangeShadowOpts;
 
-            
+            /*
             sharpenToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             sharpenToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             sharpenToggle.Toggle.action_0 = SetSharpen;
             sharpenToggle.Text.localizationKey = "Enable Sharpen ";
-            sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);           
-            
+            sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);
+            */
+            useVRKeyboardToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            useVRKeyboardToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            useVRKeyboardToggle.Toggle.action_0 = SetUseVRKeyboard;
+            useVRKeyboardToggle.Text.localizationKey = "Use In-Game VR Keyboard";
+            useVRKeyboardToggle.Toggle.UpdateValue(settings.useVRKeyboard);
+
+
+
             occCullingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             occCullingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             occCullingToggle.Toggle.action_0 = SetOccCulling;
@@ -481,24 +489,8 @@ namespace TarkovVR.Source.Settings
             frusCullingToggle.Toggle.UpdateValue(settings.disableFrusCulling);
             //SetupScrollbar(vrSettings);
 
-            useVRKeyboardToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            useVRKeyboardToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            useVRKeyboardToggle.Toggle.action_0 = SetUseVRKeyboard;
-            useVRKeyboardToggle.Text.localizationKey = "Use In-Game VR Keyboard";
-            useVRKeyboardToggle.Toggle.UpdateValue(settings.useVRKeyboard);
-
             vrSettingsObject = newSoundSettings.gameObject;
             UnityEngine.Object.Destroy(newSoundSettings);
-        }
-
-        public static bool GetUseVRKeyboard()
-        {
-            return settings.useVRKeyboard;
-        }
-
-        private static void SetUseVRKeyboard(bool turnOn)
-        {
-            settings.useVRKeyboard = turnOn;
         }
 
         private static void SetupScrollbar(GameObject vrSettings)
@@ -869,12 +861,12 @@ namespace TarkovVR.Source.Settings
         }
         public static bool GetDisableFog()
         {
-            return settings.disableFog;
+            return settings.disablePrismFog;
         }
 
         private static void SetDisableFog(bool turnOff)
         {
-            settings.disableFog = turnOff;
+            settings.disablePrismFog = turnOff;
         }
 
         public static bool GetOccCulling()
@@ -968,6 +960,14 @@ namespace TarkovVR.Source.Settings
         public static SnapTurnAmount GetSnapTurnAmount()
         {
             return settings.snapTurnAmount;
+        }
+        public static bool GetUseVRKeyboard()
+        {
+            return settings.useVRKeyboard;
+        }
+        private static void SetUseVRKeyboard(bool turnOn)
+        {
+            settings.useVRKeyboard = turnOn;
         }
     }
 }

@@ -72,7 +72,7 @@ namespace TarkovVR.Patches.Core.Player
                 return true;
 
             if (VRGlobals.menuOpen || !VRGlobals.inGame)
-                return false;
+                return true;
 
             // Normally you'd stand with your left foot forward and right foot back, which doesn't feel natural in VR so rotate 28 degrees to have both feet in front when standing still
             Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;

@@ -886,7 +886,6 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(TMP_InputField), "OnPointerClick")]
         private static void OpenVRKeyboard(TMP_InputField __instance)
         {
-            // Check the user setting
             if (VRSettings.GetUseVRKeyboard())
             {
                 // Create the controller if it doesn't exist
@@ -899,8 +898,8 @@ namespace TarkovVR.Patches.Misc
                         UnityEngine.Object.DontDestroyOnLoad(kbHandler);
                     }
                 }
-
-                __instance.WaitOneFrame(() => {
+                __instance.WaitOneFrame(() =>
+                {
                     if (VRKeyboardController.Instance != null)
                     {
                         VRKeyboardController.Instance.OpenKeyboard(__instance);
@@ -909,13 +908,13 @@ namespace TarkovVR.Patches.Misc
             }
             else
             {
-                    SteamVR.instance.overlay.ShowKeyboard(
-                    (int)EGamepadTextInputMode.k_EGamepadTextInputModeNormal,
-                    (int)EGamepadTextInputLineMode.k_EGamepadTextInputLineModeSingleLine,
-                    (uint)EKeyboardFlags.KeyboardFlag_Modal, "Description", 256, "", 0);
-
+                SteamVR.instance.overlay.ShowKeyboard(
+                (int)EGamepadTextInputMode.k_EGamepadTextInputModeNormal,
+                (int)EGamepadTextInputLineMode.k_EGamepadTextInputLineModeSingleLine,
+                (uint)EKeyboardFlags.KeyboardFlag_Modal, "Description", 256, "", 0);
                 var keyboardDoneAction =
-                SteamVR_Events.SystemAction(EVREventType.VREvent_KeyboardDone, ev => {
+                SteamVR_Events.SystemAction(EVREventType.VREvent_KeyboardDone, ev =>
+                {
                     StringBuilder stringBuilder = new StringBuilder(256);
                     SteamVR.instance.overlay.GetKeyboardText(stringBuilder, 256);
                     string value = stringBuilder.ToString();
@@ -1302,31 +1301,40 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1637), "method_0")]
         private static bool SetUiOnExtractOrDeath(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1637 __instance)
         {
-            if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
+            if (__instance?.baseLocalGame_0?.PlayerOwner?.player_0 == null || !__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
                 return true;
 
             GameObject deathPositioner = new GameObject("DeathPos");
-            deathPositioner.transform.position = VRGlobals.emptyHands.position;
-            deathPositioner.transform.rotation = VRGlobals.emptyHands.rotation;
+
+            if (VRGlobals.emptyHands != null)
+            {
+                deathPositioner.transform.position = VRGlobals.emptyHands.position;
+                deathPositioner.transform.rotation = VRGlobals.emptyHands.rotation;
+            }
+
             VRGlobals.emptyHands = deathPositioner.transform;
 
-            UIPatches.gameUi.transform.parent = null;
-            UIPatches.HandleCloseInventory();
-            if (UIPatches.notifierUi != null)
-                UIPatches.notifierUi.transform.parent = PreloaderUI.Instance._alphaVersionLabel.transform.parent;
+            if (UIPatches.gameUi != null)
+                UIPatches.gameUi.transform.parent = null;
 
-            if (UIPatches.extractionTimerUi != null)
+            UIPatches.HandleCloseInventory();
+
+            if (UIPatches.notifierUi != null)
+                UIPatches.notifierUi.transform.parent = PreloaderUI.Instance?._alphaVersionLabel?.transform.parent;
+            if (UIPatches.extractionTimerUi != null && UIPatches.gameUi != null)
                 UIPatches.extractionTimerUi.transform.parent = UIPatches.gameUi.transform;
-            if (UIPatches.healthPanel != null)
+            if (UIPatches.healthPanel != null && UIPatches.battleScreenUi != null)
                 UIPatches.healthPanel.transform.parent = UIPatches.battleScreenUi.transform;
-            if (UIPatches.healthPanel != null)
+            if (UIPatches.stancePanel != null && UIPatches.battleScreenUi != null)
                 UIPatches.stancePanel.transform.parent = UIPatches.battleScreenUi.transform;
-            if (UIPatches.battleScreenUi != null)
+            if (UIPatches.battleScreenUi != null && VRGlobals.commonUi != null)
                 UIPatches.battleScreenUi.transform.parent = VRGlobals.commonUi.GetChild(0);
 
+            if (UIPatches.gameUi != null)
+                PreloaderUI.DontDestroyOnLoad(UIPatches.gameUi);
+            if (Camera.main != null)
+                PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
 
-            PreloaderUI.DontDestroyOnLoad(UIPatches.gameUi);
-            PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
             VRGlobals.inGame = false;
             VRGlobals.menuOpen = true;
             PositionMainMenuUi();
@@ -1519,15 +1527,7 @@ namespace TarkovVR.Patches.Misc
                 VRSettings.ShowVRSettings();
            
             Camera.main.useOcclusionCulling = false;
-            //Camera.main.useOcclusionCulling = true;
-            Camera.main.layerCullSpherical = true;
-            float[] distances = new float[32];
-            for (int i = 0; i < distances.Length; i++)
-            {
-                distances[i] = 1000f; // Adjust as needed
-            }
-            Camera.main.layerCullDistances = distances;
-
+            //Camera.main.useOcclusionCulling = true;          
             Camera.main.farClipPlane = 5000f;
         }
 

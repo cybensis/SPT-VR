@@ -30,6 +30,7 @@ using EFT.UI;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.Body;
 using static DistantShadow;
+using TarkovVR.Source.Graphics;
 
 namespace TarkovVR.Patches.Core.VR
 {
@@ -187,18 +188,18 @@ namespace TarkovVR.Patches.Core.VR
 
 
             VRGlobals.inGame = true;
-        }
-
+        }      
+        
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Don't know why I chose this method for setting the main cam but it works so whatever
-        
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BloodOnScreen), "Start")]
         private static void SetMainCamParent(BloodOnScreen __instance)
-        {
+        {          
             Camera mainCam = __instance.GetComponent<Camera>();
             if (mainCam.name == "FPS Camera")
-            {
+            {               
                 VRGlobals.VRCam = mainCam;
                 GameObject uiCamHolder = new GameObject("uiCam");
                 uiCamHolder.transform.parent = __instance.transform;
@@ -214,24 +215,17 @@ namespace TarkovVR.Patches.Core.VR
                 mainCam.farClipPlane = 5000f;
                 mainCam.stereoTargetEye = StereoTargetEyeMask.Both;
                 mainCam.gameObject.AddComponent<SteamVR_TrackedObject>();
+                
                 mainCam.rect = new Rect(0.0f, 0.0f, VRGlobals.upscalingMultiplier, VRGlobals.upscalingMultiplier);
                 if (mainCam.GetComponent<VRJitterComponent>() == null)
                 {
                     mainCam.gameObject.AddComponent<VRJitterComponent>();
                 }
                 mainCam.useOcclusionCulling = false;
-                //mainCam.useOcclusionCulling = true;
-                mainCam.layerCullSpherical = true;
                 if (XRSettings.enabled)
                 {
                     XRSettings.useOcclusionMesh = false;
                 }
-                float[] distances = new float[32];
-                for (int i = 0; i < distances.Length; i++)
-                {
-                    distances[i] = 1000f; // Adjust as needed
-                }
-                mainCam.layerCullDistances = distances;
                 if (VRGlobals.vrPlayer)
                 {
                     if (VRGlobals.vrPlayer.radialMenu)

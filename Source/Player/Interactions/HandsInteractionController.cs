@@ -738,8 +738,11 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     if (!changingScopeZoom)
                     {
-                        VRGlobals.vrOpticController.initZoomDial();
-                        changingScopeZoom = true;
+                        if (VRGlobals.vrOpticController.scopeCamera != null)
+                        {
+                            VRGlobals.vrOpticController.initZoomDial();
+                            changingScopeZoom = true;
+                        }
                     }
                     VRGlobals.vrOpticController.handlePhysicalZoomDial();
                 }

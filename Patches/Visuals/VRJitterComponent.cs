@@ -14,6 +14,7 @@ namespace TarkovVR.Patches.Visuals
         private Camera _camera;
         private SSAAImpl _ssaaImpl;
         private Vector3 originalPosition;
+        private Matrix4x4 _originalProj;
         public static Vector2 CurrentJitter { get; private set; }
 
         private void Awake()
@@ -21,34 +22,7 @@ namespace TarkovVR.Patches.Visuals
             _camera = GetComponent<Camera>();
             _ssaaImpl = GetComponent<SSAAImpl>();
         }
-        /*
-        private void OnPreRender()
-        {
-            if (_ssaaImpl == null) return;
 
-            if (!(_ssaaImpl.EnableFSR3 || _ssaaImpl.EnableFSR2 || _ssaaImpl.EnableDLSS || _ssaaImpl.EnableFSR)) return; // Not upscaling
-
-
-            float scale = VRGlobals.upscalingMultiplier;
-            int nativeWidth = XRSettings.eyeTextureWidth;
-            int nativeHeight = XRSettings.eyeTextureHeight;
-            int scaledWidth = (int)(nativeWidth * scale);
-            int scaledHeight = (int)(nativeHeight * scale);
-
-            // Calculate jitter for scaled resolution (what the camera will actually render)
-            if (scale >= 1f)
-                CurrentJitter = VRJitterHelper.GetJitterPixelSpace(nativeWidth, nativeHeight);
-            else
-                CurrentJitter = VRJitterHelper.GetJitterPixelSpace(scaledWidth, scaledHeight);
-            // Apply jitter for scaled resolution
-            Matrix4x4 projMatrix = _camera.projectionMatrix;
-            projMatrix.m02 += CurrentJitter.x * 2f / scaledWidth;
-            projMatrix.m12 += CurrentJitter.y * 2f / scaledHeight;
-
-            _camera.nonJitteredProjectionMatrix = _camera.projectionMatrix;
-            _camera.projectionMatrix = projMatrix;
-        }
-        */
         private void OnPreRender()
         {
             if (_ssaaImpl == null || !(_ssaaImpl.EnableFSR3 || _ssaaImpl.EnableDLSS)) return;
@@ -58,70 +32,25 @@ namespace TarkovVR.Patches.Visuals
             int scaledHeight = (int)(XRSettings.eyeTextureHeight * scale);
 
             // Get the jitter for the scaled space
-            CurrentJitter = VRJitterHelper.GetJitterPixelSpace(scaledWidth, scaledHeight);
+            CurrentJitter = VRJitterHelper.GetJitterPixelSpace();
 
             // Save the original matrix before we mess with it
+            _originalProj = _camera.projectionMatrix;
             _camera.nonJitteredProjectionMatrix = _camera.projectionMatrix;
 
             Matrix4x4 projMatrix = _camera.projectionMatrix;
             // Map -0.5..0.5 jitter to the projection space
-            //projMatrix.m02 += CurrentJitter.x * 2f / scaledWidth;
-            //projMatrix.m12 += CurrentJitter.y * 2f / scaledHeight;
-            projMatrix.m02 += (CurrentJitter.x * 2f) / XRSettings.eyeTextureWidth;
-            projMatrix.m12 += (CurrentJitter.y * 2f) / XRSettings.eyeTextureHeight;
+            projMatrix.m02 += CurrentJitter.x * 2f / scaledWidth;
+            projMatrix.m12 += CurrentJitter.y * 2f / scaledHeight;
+            //projMatrix.m02 += (CurrentJitter.x * 2f) / XRSettings.eyeTextureWidth;
+            //.m12 += (CurrentJitter.y * 2f) / XRSettings.eyeTextureHeight;
             _camera.projectionMatrix = projMatrix;
         }
         private void OnPostRender()
         {
-            _camera.ResetProjectionMatrix();
+            _camera.projectionMatrix = _originalProj;
         }
-        
-        /*
-        private void OnPreRender()
-        {
-            if (!XRSettings.enabled) return;
-            if (_ssaaImpl == null) return;
-
-            if (!(_ssaaImpl.EnableFSR3 || _ssaaImpl.EnableFSR2 || _ssaaImpl.EnableDLSS || _ssaaImpl.EnableFSR)) return;
-
-            float scale = VRGlobals.upscalingMultiplier;
-            int nativeWidth = XRSettings.eyeTextureWidth;
-            int nativeHeight = XRSettings.eyeTextureHeight;
-            int scaledWidth = (int)(nativeWidth * scale);
-            int scaledHeight = (int)(nativeHeight * scale);
-
-            if (scale >= 1f)
-                CurrentJitter = VRJitterHelper.GetJitterPixelSpace(nativeWidth, nativeHeight);
-            else
-                CurrentJitter = VRJitterHelper.GetJitterPixelSpace(scaledWidth, scaledHeight);
-
-            originalPosition = _camera.transform.position;
-
-            // Calculate jitter in VIEW space (independent of camera rotation)
-            float halfHeight = _camera.nearClipPlane * Mathf.Tan(_camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
-            float halfWidth = halfHeight * _camera.aspect;
-
-            float worldJitterX = (CurrentJitter.x / scaledWidth) * 2f * halfWidth;
-            float worldJitterY = (CurrentJitter.y / scaledHeight) * 2f * halfHeight;
-
-            // Create view-space offset vector
-            Vector3 viewSpaceOffset = new Vector3(worldJitterX, worldJitterY, 0f);
-
-            // Transform to world space using camera's rotation matrix
-            Vector3 worldSpaceOffset = _camera.transform.TransformDirection(viewSpaceOffset);
-
-            // Apply offset
-            _camera.transform.position += worldSpaceOffset;
-        }
-
-        private void OnPostRender()
-        {
-            if (!XRSettings.enabled) return;
-
-            // Restore original position
-            _camera.transform.position = originalPosition;
-        }
-        */
+       
     }
 
     public static class VRJitterHelper
@@ -130,11 +59,6 @@ namespace TarkovVR.Patches.Visuals
         public static int CurrentSampleCount { get; private set; } = 8;
         public static void SetSampleCountForScale(float scale, bool isDLSS)
         {
-            /*
-            const int baseSampleCount = 8;
-            CurrentSampleCount = (int)((double)baseSampleCount / (scale * scale) + 0.5);
-            CurrentSampleCount = Mathf.Clamp(CurrentSampleCount, 8, 32);
-            */
             if (isDLSS)
             {
                 // DLSS AI is optimized for 8 or 16. 
@@ -153,17 +77,8 @@ namespace TarkovVR.Patches.Visuals
                 else CurrentSampleCount = 32;
             }
         }
-        /*
-        public static Vector2 GetJitterPixelSpace(int renderWidth, int renderHeight)
-        {
-            var jitter = GetHaltonValue(_sampleIndex & (CurrentSampleCount - 1));
-            _sampleIndex++;
 
-            return jitter;
-        }
-        */
-
-        public static Vector2 GetJitterPixelSpace(int renderWidth, int renderHeight)
+        public static Vector2 GetJitterPixelSpace()
         {
             // Use Time.frameCount to ensure both eyes get the exact same jitter index
             int index = Time.frameCount % CurrentSampleCount;

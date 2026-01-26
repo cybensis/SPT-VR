@@ -87,9 +87,9 @@ namespace TarkovVR.Patches.Visuals
 
                 float scale = dlssMode switch
                 {
-                    EDLSSMode.Quality => 1.0f,
-                    EDLSSMode.Balanced => 0.77f,
-                    EDLSSMode.Performance => 0.67f,
+                    EDLSSMode.Quality => 0.77f,
+                    EDLSSMode.Balanced => 0.67f,
+                    EDLSSMode.Performance => 0.59f,
                     EDLSSMode.UltraPerformance => 0.50f,
                     _ => 1f
                 };
@@ -115,10 +115,7 @@ namespace TarkovVR.Patches.Visuals
             {
                 if ((bool)ssaaimpl_)
                 {
-                    if (dlssMode == EDLSSMode.Quality)
-                        ssaaimpl_.DLSSQualityNext = 5;
-                    else
-                        ssaaimpl_.DLSSQualityNext = GraphicsSettingsClass.GetDLSSQuality(dlssMode);
+                    ssaaimpl_.DLSSQualityNext = GraphicsSettingsClass.GetDLSSQuality(dlssMode);
                     ssaaimpl_.EnableDLSS = true;
                     float num = ssaaimpl_.ComputeOptimalResamplingFactor(__instance.SSAA.GetOutputWidth(), __instance.SSAA.GetOutputHeight(), ssaaimpl_.DLSSQualityNext);
                     __instance.SSAA.Switch(num);

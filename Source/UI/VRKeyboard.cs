@@ -9,6 +9,7 @@ using TarkovVR.Source.Controls;
 using Comfort.Common;
 using EFT;
 using EFT.UI;
+using Valve.VR;
 
 namespace TarkovVR.Source.UI
 {
@@ -82,6 +83,7 @@ namespace TarkovVR.Source.UI
             if (background) {
                 background.color = hoverColor;
             }
+            TriggerHoverHaptic();
         }
         
         public void OnPointerExit(PointerEventData eventData) 
@@ -89,6 +91,17 @@ namespace TarkovVR.Source.UI
             isHovering = false;
             if (background) background.color = normalColor;
             controller.OnKeyReleased(this);
+        }
+
+        private void TriggerHoverHaptic()
+        {
+            float duration = 0.05f;
+            float frequency = 150f;
+            float amplitude = 0.15f;
+
+            var haptic = SteamVR_Actions._default.Haptic;
+
+            haptic?.Execute(0f, duration, frequency, amplitude, SteamVR_Input_Sources.RightHand);
         }
     }
 
@@ -154,7 +167,8 @@ namespace TarkovVR.Source.UI
         {
             activeInputField = inputField;
             keyboardRoot.SetActive(true);
-
+            LayoutElement layout = keyboardRoot.AddComponent<LayoutElement>();
+            layout.ignoreLayout = true;
             RectTransform kbRect = keyboardRoot.GetComponent<RectTransform>();
 
             if (VRGlobals.commonUi != null)
@@ -207,7 +221,7 @@ namespace TarkovVR.Source.UI
 
         public void HandleKeyPress(VRKeyboardKey key)
         {
-            if (activeInputField == null) return;
+            if (activeInputField == null || key == null) return;
             activeInputField.Select();
             activeInputField.ActivateInputField();
 
@@ -216,44 +230,46 @@ namespace TarkovVR.Source.UI
 
             switch (key.type)
             {
+                // Adjusted to just simulate keypresses, this is less error prone.
                 case VRKeyboardKey.KeyType.Character:
                     string charToAdd = isShifted ? key.shiftCharacter : key.character;
-                    if (end > start) activeInputField.text = activeInputField.text.Remove(start, end - start);
-                    activeInputField.text = activeInputField.text.Insert(start, charToAdd);
-                    activeInputField.caretPosition = start + charToAdd.Length;
+                    foreach (char c in charToAdd)
+                    {
+                        Event e = Event.KeyboardEvent(c.ToString());
+                        e.character = c;
+                        activeInputField.ProcessEvent(e);
+                    }
                     if (isShifted) ToggleShift();
                     break;
+
                 case VRKeyboardKey.KeyType.Space:
-                    if (end > start) activeInputField.text = activeInputField.text.Remove(start, end - start);
-                    activeInputField.text = activeInputField.text.Insert(start, " ");
-                    activeInputField.caretPosition = start + 1;
+                    Event spaceEvent = Event.KeyboardEvent("space");
+                    spaceEvent.character = ' ';
+                    activeInputField.ProcessEvent(spaceEvent);
                     break;
+
                 case VRKeyboardKey.KeyType.Backspace:
-                    if (end > start)
-                    {
-                        activeInputField.text = activeInputField.text.Remove(start, end - start);
-                        activeInputField.caretPosition = start;
-                    }
-                    else if (activeInputField.text.Length > 0 && start > 0)
-                    {
-                        activeInputField.text = activeInputField.text.Remove(start - 1, 1);
-                        activeInputField.caretPosition = start - 1;
-                    }
+                    activeInputField.ProcessEvent(Event.KeyboardEvent("backspace"));
                     break;
+
                 case VRKeyboardKey.KeyType.Enter:
-                    activeInputField.onSubmit?.Invoke(activeInputField.text);
+                    activeInputField.ProcessEvent(Event.KeyboardEvent("return"));
+                    //activeInputField.onSubmit?.Invoke(activeInputField.text);
                     CloseKeyboard();
-                    break;
+                    return;
+
                 case VRKeyboardKey.KeyType.Shift:
                     ToggleShift();
                     break;
+
                 case VRKeyboardKey.KeyType.Clear:
                     activeInputField.text = "";
                     activeInputField.caretPosition = 0;
                     break;
+
                 case VRKeyboardKey.KeyType.Close:
                     CloseKeyboard();
-                    break;
+                    return;
             }
             activeInputField.ForceLabelUpdate();
         }

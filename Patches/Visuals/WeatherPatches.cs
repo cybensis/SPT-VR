@@ -26,9 +26,7 @@ namespace TarkovVR.Patches.Visuals
         private static PrismEffects opticPrism;
         private static GameObject cloudInstance;
         private static Renderer lowRenderer;
-        private static Renderer highRenderer;
         private static Material lowMaterial;
-        private static Material highMaterial;
 
         // Wind system state
         public static float lastWind = 0.0f;
@@ -305,50 +303,6 @@ namespace TarkovVR.Patches.Visuals
             __instance.enabled = false;
             return false;
         }
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(PrismEffects), "method_5")]
-        private static bool FixFogForVR(PrismEffects __instance, Material fogMaterial)
-        {
-            Camera cam = __instance.GetPrismCamera();
-
-            fogMaterial.SetFloat(Shader.PropertyToID("_FogHeight"), __instance.fogHeight);
-            fogMaterial.SetFloat(Shader.PropertyToID("_FogIntensity"), 1f);
-            fogMaterial.SetFloat(Shader.PropertyToID("_FogDistance"), __instance.fogDistance);
-            fogMaterial.SetFloat(Shader.PropertyToID("_FogStart"), __instance.fogStartPoint);
-            fogMaterial.SetColor(Shader.PropertyToID("_FogColor"), __instance.fogColor);
-            fogMaterial.SetColor(Shader.PropertyToID("_FogEndColor"), __instance.fogEndColor);
-            fogMaterial.SetFloat(Shader.PropertyToID("_FogBlurSkybox"), __instance.fogAffectSkybox ? 1f : 0.9999999f);
-
-            // Convert pixel jitter to world-space offset
-            Vector2 jitter = VRJitterComponent.CurrentJitter;
-            float scale = VRGlobals.upscalingMultiplier;
-            int scaledWidth = (int)(XRSettings.eyeTextureWidth * scale);
-            int scaledHeight = (int)(XRSettings.eyeTextureHeight * scale);
-
-            float halfHeight = cam.nearClipPlane * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
-            float halfWidth = halfHeight * cam.aspect;
-
-            float worldJitterX = (jitter.x / scaledWidth) * 2f * halfWidth;
-            float worldJitterY = (jitter.y / scaledHeight) * 2f * halfHeight;
-
-            // Apply jitter offset in view space
-            Vector3 viewSpaceOffset = new Vector3(worldJitterX, worldJitterY, 0f);
-            Vector3 worldSpaceOffset = cam.transform.TransformDirection(viewSpaceOffset);
-
-            // World-locked fog with jitter compensation
-            Vector3 jitteredPosition = cam.transform.position + worldSpaceOffset;
-            Matrix4x4 worldMatrix = Matrix4x4.TRS(
-                cam.transform.position,//jitteredPosition,    // Camera position WITH jitter offset
-                Quaternion.identity, // World rotation (doesn't rotate with head)
-                Vector3.one
-            );
-
-            fogMaterial.SetMatrix(Shader.PropertyToID("_InverseView"), worldMatrix);
-
-            return false;
-        }
-        */
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PrismEffects), "method_5")]
@@ -360,21 +314,18 @@ namespace TarkovVR.Patches.Visuals
             fogMaterial.SetFloat("_FogIntensity", 1f);
             fogMaterial.SetFloat("_FogDistance", __instance.fogDistance);
             fogMaterial.SetFloat("_FogStart", __instance.fogStartPoint);
-            //fogMaterial.SetFloat("_FogStart", __instance.fogStartPoint);
             fogMaterial.SetColor("_FogColor", __instance.fogColor);
             fogMaterial.SetColor("_FogEndColor", __instance.fogEndColor);
             fogMaterial.SetFloat("_FogBlurSkybox", 0.9999999f);
-            //Matrix4x4 nonJitteredMatrix = __instance.GetComponent<Camera>().worldToCameraMatrix.inverse;
-            //fogMaterial.SetMatrix("_InverseView", nonJitteredMatrix);
             Matrix4x4 worldMatrix = Matrix4x4.TRS(
-                cam.transform.position,//jitteredPosition,    // Camera position WITH jitter offset
-                Quaternion.identity, // World rotation (doesn't rotate with head)
+                cam.transform.position,
+                Quaternion.identity,
                 Vector3.one
             );
 
             fogMaterial.SetMatrix(Shader.PropertyToID("_InverseView"), worldMatrix);
 
-            return false; // Skip the original method
+            return false;
         }
 
         [HarmonyPostfix]
@@ -390,13 +341,11 @@ namespace TarkovVR.Patches.Visuals
             if (fpsCam == null || __instance.tod_Scattering_0 == null)
                 return;
 
-            // Initialize fog effects only once
             if (fpsPrism == null)
             {
                 fpsPrism = fpsCam.GetComponent<PrismEffects>() ?? fpsCam.gameObject.AddComponent<PrismEffects>();
             }
-            //Plugin.MyLog.LogError("Density: " + __instance.tod_Scattering_0.GlobalDensity);
-            // Calculate fog properties every frame for smoothness
+
             float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
             float fogAlpha = Mathf.Lerp(0.7f, 0.2f, (fogDistance - 100f) / 400f);
             Color fogColor = new Color(1f, 1f, 1f, fogAlpha);
@@ -412,21 +361,20 @@ namespace TarkovVR.Patches.Visuals
 
             UpdateOpticFog(fogDistance, fogColor);
         }
-
+        /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PrismEffects), "method_12")]
-        private static void ApplyFXAAAfterAllEffects(RenderTexture source, RenderTexture destination)
+        private static void ApplyFXAAAfterAllEffects(PrismEffects __instance, RenderTexture source, RenderTexture destination)
         {
             Rendering.LoadFXAAShader();
-            if (Rendering._fxaaMat == null) return;
+            if (Rendering._fxaaMat == null || !__instance.useFog) return;
 
-            // Apply FXAA to the final rendered result
             RenderTexture temp = RenderTexture.GetTemporary(destination.descriptor);
             Graphics.Blit(destination, temp);
             Graphics.Blit(temp, destination, Rendering._fxaaMat);
             RenderTexture.ReleaseTemporary(temp);
         }
-
+        */
         private static void InitializeCameras()
         {
             foreach (var cam in Camera.allCameras)
@@ -490,7 +438,7 @@ namespace TarkovVR.Patches.Visuals
                     return;
                 }
 
-                VRGlobals.cloudPrefab = cloudBundle.LoadAsset<GameObject>("Clouds");
+                VRGlobals.cloudPrefab = cloudBundle.LoadAsset<GameObject>("Clouds New");
                 cloudBundle.Unload(false);
                 Plugin.MyLog.LogInfo("Cloud prefab loaded successfully.");
             }
@@ -511,13 +459,13 @@ namespace TarkovVR.Patches.Visuals
             }
         }
 
+
         private static void InitializeCloudRenderers()
         {
             if (VRGlobals.cloudPrefab == null)
                 return;
 
             Transform lowCloud = VRGlobals.cloudPrefab.transform.Find("Low");
-            Transform highCloud = VRGlobals.cloudPrefab.transform.Find("High");
 
             if (lowCloud != null)
             {
@@ -529,32 +477,76 @@ namespace TarkovVR.Patches.Visuals
                     lowRenderer.allowOcclusionWhenDynamic = false;
                     lowRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
                     lowMaterial = lowRenderer.sharedMaterial;
-                    if (lowRenderer.material != null)
-                    {
-                        lowRenderer.material.SetInt("_ZWrite", 0); // No depth write
-                        Plugin.MyLog.LogInfo("[Clouds] Disabled depth write for low clouds");
-                    }
                 }
             }
 
-            if (highCloud != null)
+            if (lowMaterial != null)
             {
-                highCloud.gameObject.layer = 28;
+                float tilingVariation0 = UnityEngine.Random.Range(0.3f, 0.8f);
+                float tilingVariation1 = UnityEngine.Random.Range(0.3f, 0.8f);
 
-                highRenderer = highCloud.GetComponent<Renderer>();
-                if (highRenderer != null)
-                {
-                    highRenderer.allowOcclusionWhenDynamic = false;
-                    highRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
-                    highMaterial = highRenderer.sharedMaterial;
-                    if (highRenderer.material != null)
-                    {
-                        highRenderer.material.SetInt("_ZWrite", 0); // No depth write
-                        Plugin.MyLog.LogInfo("[Clouds] Disabled depth write for high clouds");
-                    }
-                }
+                //lowMaterial.SetTextureScale("_ScatterMap0", new Vector2(tilingVariation0, tilingVariation0));
+                //lowMaterial.SetTextureScale("_ScatterMap1", new Vector2(tilingVariation1, tilingVariation1));
+
+                cloudOffset = new Vector4(UnityEngine.Random.Range(0f, 100f), UnityEngine.Random.Range(0f, 100f), UnityEngine.Random.Range(0f, 100f), UnityEngine.Random.Range(0f, 100f));
+
+
             }
         }
+        private static CommandBuffer cloudCommandBuffer;
+        private static Camera lastRegisteredCamera;
+
+        private static void SetupCloudCommandBuffer(Camera cam)
+        {
+            if (cam == null || lowRenderer == null)
+                return;
+
+            if (lastRegisteredCamera != null && lastRegisteredCamera != cam && cloudCommandBuffer != null)
+            {
+                lastRegisteredCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, cloudCommandBuffer);
+                cloudCommandBuffer.Dispose();
+                cloudCommandBuffer = null;
+            }
+
+            if (cloudCommandBuffer != null)
+                return;
+
+            lowRenderer.enabled = false;
+
+            cloudCommandBuffer = new CommandBuffer();
+            cloudCommandBuffer.name = "VR Clouds";
+
+            cam.AddCommandBuffer(CameraEvent.AfterForwardOpaque, cloudCommandBuffer);
+            lastRegisteredCamera = cam;
+
+            Plugin.MyLog.LogInfo("Cloud CommandBuffer initialized.");
+        }
+
+        public static void CleanupClouds()
+        {
+            if (cloudCommandBuffer != null)
+            {
+                if (lastRegisteredCamera != null)
+                {
+                    lastRegisteredCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, cloudCommandBuffer);
+                }
+                cloudCommandBuffer.Dispose();
+                cloudCommandBuffer = null;
+            }
+
+            lastRegisteredCamera = null;
+
+            if (cloudInstance != null)
+            {
+                GameObject.Destroy(cloudInstance);
+                cloudInstance = null;
+            }
+
+            lowRenderer = null;
+            lowMaterial = null;
+            VRGlobals.cloudPrefab = null;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WeatherController), "method_9")]
         private static void DynamicClouds(WeatherController __instance, float fog, GStruct275 interpolatedParams)
@@ -562,49 +554,61 @@ namespace TarkovVR.Patches.Visuals
             if (VRGlobals.cloudPrefab == null)
                 return;
 
-            if (lowRenderer == null || highRenderer == null)
+            if (lowRenderer == null)
             {
                 InitializeCloudRenderers();
+                if (lowRenderer == null)
+                    return;
             }
 
-            if (lowRenderer == null && highRenderer == null)
+            Camera vrCam = VRGlobals.VRCam;
+            if (vrCam == null || vrCam.name != "FPS Camera")
                 return;
 
-            // Weather parameters
+            SetupCloudCommandBuffer(vrCam);
+
+            cloudInstance.transform.position = vrCam.transform.position;
+
+            if (cloudCommandBuffer != null && lowRenderer != null && lowMaterial != null)
+            {
+                cloudCommandBuffer.Clear();
+                cloudCommandBuffer.DrawRenderer(lowRenderer, lowMaterial);
+            }
+
             float cloudiness = __instance.WeatherCurve.Cloudiness;
             float rain = __instance.WeatherCurve.Rain;
             float timeOfDay = GClass4.Instance.Cycle.Hour;
             Vector2 windVector = __instance.WeatherCurve.Wind;
 
             UpdateWindSystem(windVector);
+            
+            // Cloudiness (-1 to 1) -> Density (0.6 clear to 1.7 overcast)
+            float normalizedCloudiness = (cloudiness + 1f) * 0.5f;
+            float density = Mathf.Lerp(0.6f, 1.75f, normalizedCloudiness);
+            float upperDensity = Mathf.Lerp(0.6f, 1.2f, Mathf.InverseLerp(0.6f, 1.75f, density));
 
-            float normalizedCloudiness = Mathf.Clamp((cloudiness + 1f) / 2f, 0f, 1f);
-            float slowedCloudiness = Mathf.Pow(normalizedCloudiness, 3f);
-            float density = Mathf.Lerp(2f, 0f, slowedCloudiness);
-            float cloudAlpha = Mathf.Lerp(0.4f, 0.7f, rain);
+            CalculateLightingParameters(timeOfDay, out Color sunColor, out Color moonColor, out Vector3 sunDir, out Vector3 moonDir, out float sunIntensity, out float moonIntensity);
 
-            Color cloudColor = CalculateCloudColor(timeOfDay, rain, density);
-            cloudColor.a = cloudAlpha;
+            // Rain darkens clouds and sun
+            //sunColor = ApplyRainEffect(sunColor, rain);
 
-            UpdateCloudMaterials(density, cloudColor);
-
+            Color cloudColor = CalculateCloudColor(sunColor, moonColor, timeOfDay, out float upperBrightness);
+            UpdateCloudMaterial(density, upperDensity, sunColor, moonColor, sunDir, moonDir, sunIntensity, moonIntensity, cloudColor, upperBrightness);
             UpdateCloudOffsets();
+            
         }
-
-
 
         private static void UpdateWindSystem(Vector2 windVector)
         {
-            const float WIND_DAMPENING = 0.03f;
-            const float MIN_WIND = 0.005f;
-            const float MAX_WIND = 0.01f;
-            const float MIN_WIND_MAGNITUDE = 0.06f;
-            const float MAX_WIND_MAGNITUDE = 0.38f;
+            const float WIND_DAMPENING = 0.02f;
+            const float MIN_WIND = 0.00025f; 
+            const float MAX_WIND = 0.002f;
+            const float MIN_WIND_MAGNITUDE = 0.0f;
+            const float MAX_WIND_MAGNITUDE = 0.5f;
 
             float windMagnitude = windVector.magnitude;
             float mappedSpeed = Mathf.Lerp(MIN_WIND, MAX_WIND, Mathf.InverseLerp(MIN_WIND_MAGNITUDE, MAX_WIND_MAGNITUDE, windMagnitude));
-            float smoothedWind = Mathf.Lerp(lastWind, mappedSpeed, WIND_DAMPENING * Time.deltaTime);
-            lastWind = smoothedWind;
+            lastWind = Mathf.Lerp(lastWind, mappedSpeed, WIND_DAMPENING * Time.deltaTime);
 
             if (windVector.sqrMagnitude > 0.0001f)
                 lastWindDirection = windVector.normalized;
@@ -612,68 +616,153 @@ namespace TarkovVR.Patches.Visuals
 
         private static void UpdateCloudOffsets()
         {
-            float offsetMagnitude = Mathf.Max(lastWind, 0.005f);
-            cloudOffset += lastWindDirection * offsetMagnitude * Time.deltaTime;
+            cloudOffset += lastWindDirection * lastWind * Time.deltaTime;
 
             if (lowMaterial != null)
                 lowMaterial.SetVector("_Offset", cloudOffset);
-
-            if (highMaterial != null)
-                highMaterial.SetVector("_Offset", cloudOffset * 0.7f);
         }
 
-        private static void UpdateCloudMaterials(float density, Color cloudColor)
+        private static Color ApplyRainEffect(Color sunColor, float rain)
         {
-            if (lowMaterial != null)
-            {
-                lowMaterial.SetFloat("_Density", density);
-                lowMaterial.SetColor("_CloudColor", cloudColor);
-            }
+            if (rain <= 0.2f)
+                return sunColor;
 
-            if (highMaterial != null)
-            {
-                highMaterial.SetFloat("_Density", density);
-                highMaterial.SetColor("_CloudColor", cloudColor);
-            }
+            float rainT = Mathf.InverseLerp(0.2f, 1.0f, rain);
+
+            // Dim
+            sunColor *= Mathf.Lerp(1.0f, 0.7f, rainT);
+
+            // Desaturate toward gray
+            float gray = (sunColor.r + sunColor.g + sunColor.b) / 3f;
+            return Color.Lerp(sunColor, new Color(gray, gray, gray, sunColor.a), rainT * 0.5f);
         }
 
-        private static Color CalculateCloudColor(float timeOfDay, float rain, float density)
+        private static Color CalculateCloudColor(Color sunColor, Color moonColor, float timeOfDay, out float upperBrightness)
         {
-            Color dayColor = Color.white;
-            Color sunsetColor = new Color(0.35f, 0.2f, 0.1f);
-            Color nightColor = new Color(0.039f, 0.039f, 0.047f);
+            Color sourceColor;
+            float desaturateAmount;
+            float brightnessMultiplier;
 
-            Color cloudColor;
-
-            // Time-based color calculation
-            if (timeOfDay >= 5.3f && timeOfDay <= 7.0f)
-                cloudColor = Color.Lerp(nightColor, sunsetColor, Mathf.InverseLerp(5.3f, 7.0f, timeOfDay));
-            else if (timeOfDay > 7.0f && timeOfDay <= 8.3f)
-                cloudColor = Color.Lerp(sunsetColor, dayColor, Mathf.InverseLerp(7.0f, 8.3f, timeOfDay));
-            else if (timeOfDay > 8.3f && timeOfDay < 18f)
-                cloudColor = dayColor;
-            else if (timeOfDay >= 18f && timeOfDay <= 20.3f)
-                cloudColor = Color.Lerp(dayColor, sunsetColor, Mathf.InverseLerp(18f, 20.3f, timeOfDay));
-            else if (timeOfDay > 20.3f && timeOfDay <= 21.3f)
-                cloudColor = Color.Lerp(sunsetColor, nightColor, Mathf.InverseLerp(20.3f, 21.3f, timeOfDay));
+            if (timeOfDay >= 4.3f && timeOfDay <= 8f)
+            {
+                // Dawn: blend source color, start darker
+                float t = Mathf.InverseLerp(4.3f, 8f, timeOfDay);
+                sourceColor = Color.Lerp(moonColor, sunColor, t);
+                desaturateAmount = Mathf.Lerp(0.7f, 0.6f, t);
+                brightnessMultiplier = Mathf.Lerp(0.2f, 0.85f, t);
+                // Upper clouds catch light earlier - brighter at dawn start
+                upperBrightness = Mathf.Lerp(0.4f, 1.1f, t);
+            }
+            else if (timeOfDay > 8f && timeOfDay <= 19f)
+            {
+                // Day
+                sourceColor = sunColor;
+                desaturateAmount = 0.6f;
+                brightnessMultiplier = 0.9f;
+                upperBrightness = 1.1f;
+            }
+            else if (timeOfDay > 19f && timeOfDay <= 22.3f)
+            {
+                // Dusk: blend source color, end darker
+                float t = Mathf.InverseLerp(19f, 22.3f, timeOfDay);
+                sourceColor = Color.Lerp(sunColor, moonColor, t);
+                desaturateAmount = Mathf.Lerp(0.6f, 0.7f, t);
+                brightnessMultiplier = Mathf.Lerp(0.85f, 0.2f, t);
+                // Upper clouds hold light longer - brighter at dusk end
+                upperBrightness = Mathf.Lerp(1.1f, 0.5f, t);
+            }
             else
-                cloudColor = nightColor;
-
-            // Apply rain darkening effect
-            if (rain > 0.2f)
             {
-                Color rainDarkColor = new Color(0.03f, 0.03f, 0.03f);
-                cloudColor = Color.Lerp(cloudColor, rainDarkColor, rain);
+                // Night
+                sourceColor = moonColor;
+                desaturateAmount = 0.7f;
+                brightnessMultiplier = 0.25f;
+                upperBrightness = 0.35f;  // Slightly brighter than lower clouds at night
             }
 
-            // Apply density-based darkening
-            float densityFactor = Mathf.InverseLerp(2f, 0f, density);
-            float darkeningAmount = densityFactor * 0.4f;
-            cloudColor = Color.Lerp(cloudColor, Color.black, darkeningAmount);
-
-            return cloudColor;
+            // Desaturate: lerp toward white
+            Color desaturated = Color.Lerp(sourceColor, Color.white, desaturateAmount);
+            // Then darken
+            return desaturated * brightnessMultiplier;
         }
-        
+
+        private static void UpdateCloudMaterial(float density, float upperDensity, Color sunColor, Color moonColor,Vector3 sunDir, Vector3 moonDir, float sunIntensity, float moonIntensity, Color cloudColor, float upperBrightness)
+        {
+            if (lowMaterial == null)
+                return;
+            lowMaterial.SetFloat("_Density", density);
+            lowMaterial.SetFloat("_UpperDensity", upperDensity);
+            lowMaterial.SetColor("_SunColor", sunColor);
+            lowMaterial.SetColor("_MoonColor", moonColor);
+            lowMaterial.SetVector("_SunDirection", sunDir);
+            lowMaterial.SetVector("_MoonDirection", moonDir);
+            lowMaterial.SetFloat("_SunIntensity", sunIntensity);
+            lowMaterial.SetFloat("_MoonIntensity", moonIntensity);
+            lowMaterial.SetColor("_CloudColor", cloudColor);
+            lowMaterial.SetFloat("_UpperBrightness", upperBrightness);
+        }
+
+        private static void CalculateLightingParameters(float timeOfDay, out Color sunColor, out Color moonColor, out Vector3 sunDir, out Vector3 moonDir, out float sunIntensity, out float moonIntensity)
+        {
+            var todSky = MonoBehaviourSingleton<TOD_Sky>.Instance;
+            Color rawSunColor = todSky.SunSkyColor;
+            Color rawMoonColor = todSky.MoonLightColor;
+            sunDir = todSky.LocalSunDirection;
+            moonDir = todSky.LocalMoonDirection;
+
+            // Desaturate sun color more at dawn/dusk when it gets too intense
+            float sunDesaturate;
+            if (timeOfDay >= 4.3f && timeOfDay <= 7.0f)
+            {
+                // Early dawn: desaturate more at the start, ease off
+                float t = Mathf.InverseLerp(4.3f, 7.0f, timeOfDay);
+                sunDesaturate = Mathf.Lerp(0.20f, 0.1f, t);
+            }
+            else if (timeOfDay > 17.0f && timeOfDay <= 19.8f)
+            {
+                // Dusk: ramp up desaturation
+                float t = Mathf.InverseLerp(17.0f, 19.8f, timeOfDay);
+                sunDesaturate = Mathf.Lerp(0.1f, 0.20f, t);
+            }
+            else
+            {
+                // Midday: subtle desaturation
+                sunDesaturate = 0.1f;
+            }
+
+            sunColor = Color.Lerp(rawSunColor, Color.white, sunDesaturate);
+
+            // Slightly desaturate moon color
+            moonColor = Color.Lerp(rawMoonColor, Color.white, 0.10f);
+
+            if (timeOfDay >= 4.3f && timeOfDay <= 6.5f)
+            {
+                // Dawn: moon fading out, sun fading in
+                float t = Mathf.InverseLerp(4.3f, 6.5f, timeOfDay);
+                sunIntensity = t;
+                moonIntensity = 1.0f - t;
+            }
+            else if (timeOfDay > 6.5f && timeOfDay <= 18.0f)
+            {
+                // Day
+                sunIntensity = 1.0f;
+                moonIntensity = 0.0f;
+            }
+            else if (timeOfDay > 18.0f && timeOfDay <= 19.8f)
+            {
+                // Dusk: sun fading out, moon fading in
+                float t = Mathf.InverseLerp(18.0f, 19.8f, timeOfDay);
+                sunIntensity = 1.0f - t;
+                moonIntensity = t;
+            }
+            else
+            {
+                // Night
+                sunIntensity = 0.0f;
+                moonIntensity = 1.0f;
+            }
+        }
+
     }
-       
+
 }

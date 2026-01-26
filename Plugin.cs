@@ -16,7 +16,7 @@ using System.Text;
 
 namespace TarkovVR
 {
-    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.1.4")]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.1")]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
@@ -298,7 +298,7 @@ namespace TarkovVR
 
             var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
             var assembly = Assembly.GetExecutingAssembly();
-
+            VRGlobals.harmonyInstance = harmony;
             foreach (var type in assembly.GetTypes())
             {
                 if (type.Namespace != null && type.Namespace.StartsWith(@namespace))
@@ -306,6 +306,7 @@ namespace TarkovVR
                     harmony.CreateClassProcessor(type).Patch();
                 }
             }
+            
         }
     }
 }

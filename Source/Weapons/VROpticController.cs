@@ -91,8 +91,6 @@ namespace TarkovVR.Source.Weapons
                 fovAtStart = scopeCamera.fieldOfView;
                 initialHandRot = SteamVR_Actions._default.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand);
                 swapZooms = false;
-                if (scopeCamera.GetComponent<VRJitterComponent>() == null)
-                    scopeCamera.gameObject.AddComponent<VRJitterComponent>();
             }
 
 
