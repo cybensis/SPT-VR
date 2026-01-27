@@ -3,6 +3,18 @@
   "WorkspaceRootPath": "F:\\SPT-VR-development\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifyocclusioncommon.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifyocclusioncommon.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifygtao.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifygtao.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifyocclusioneffect.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifyocclusioneffect.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\vrglobals.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:vrglobals.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -61,18 +73,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\modsupport\\fikasupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:modsupport\\fikasupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifygtao.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifygtao.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifyocclusioneffect.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifyocclusioneffect.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifyocclusioncommon.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\graphics\\amplifyocclusioncommon.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\visuals\\aopatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -190,7 +190,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 14,
+          "SelectedChildIndex": 13,
           "Children": [
             {
               "$type": "Bookmark",
@@ -198,7 +198,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 8,
               "Title": "WeatherPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\WeatherPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Visuals\\WeatherPatches.cs",
@@ -211,59 +211,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
-              "Title": "WeaponPatches.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
-              "RelativeDocumentMoniker": "Patches\\Core\\Player\\WeaponPatches.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
-              "RelativeToolTip": "Patches\\Core\\Player\\WeaponPatches.cs",
-              "ViewState": "AgIAAF0EAAAAAAAAAAAAAA4BAABiAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-10T19:01:23.059Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 10,
-              "Title": "InitVRPatches.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\InitVRPatches.cs",
-              "RelativeDocumentMoniker": "Patches\\Core\\VR\\InitVRPatches.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\VR\\InitVRPatches.cs",
-              "RelativeToolTip": "Patches\\Core\\VR\\InitVRPatches.cs",
-              "ViewState": "AgIAAFcBAAAAAAAAAAAAANUAAABBAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-10T19:34:16.679Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 13,
-              "Title": "IKPatches.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
-              "RelativeDocumentMoniker": "Patches\\Core\\Player\\IKPatches.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
-              "RelativeToolTip": "Patches\\Core\\Player\\IKPatches.cs",
-              "ViewState": "AgIAAM4AAAAAMzMzMzMmwOQAAABQAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-10T19:00:48.53Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
               "DocumentIndex": 12,
-              "Title": "MovementPatches.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MovementPatches.cs",
-              "RelativeDocumentMoniker": "Patches\\Core\\Player\\MovementPatches.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MovementPatches.cs",
-              "RelativeToolTip": "Patches\\Core\\Player\\MovementPatches.cs",
-              "ViewState": "AgIAADIAAAAAAAAAAAAqwN4AAABWAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-10T19:01:10.875Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 9,
               "Title": "MenuPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Misc\\MenuPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Misc\\MenuPatches.cs",
@@ -276,7 +224,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 11,
               "Title": "UIPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\UI\\UIPatches.cs",
               "RelativeDocumentMoniker": "Patches\\UI\\UIPatches.cs",
@@ -289,7 +237,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 10,
               "Title": "DLSSPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\DLSSPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Visuals\\DLSSPatches.cs",
@@ -302,7 +250,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 9,
               "Title": "VRJitterComponent.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\VRJitterComponent.cs",
               "RelativeDocumentMoniker": "Patches\\Visuals\\VRJitterComponent.cs",
@@ -315,7 +263,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 7,
               "Title": "VRSettings.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Settings\\VRSettings.cs",
               "RelativeDocumentMoniker": "Source\\Settings\\VRSettings.cs",
@@ -328,7 +276,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 6,
               "Title": "VRKeyboard.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\UI\\VRKeyboard.cs",
               "RelativeDocumentMoniker": "Source\\UI\\VRKeyboard.cs",
@@ -341,7 +289,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 5,
               "Title": "VROpticController.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Weapons\\VROpticController.cs",
               "RelativeDocumentMoniker": "Source\\Weapons\\VROpticController.cs",
@@ -354,7 +302,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 4,
               "Title": "Plugin.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Plugin.cs",
               "RelativeDocumentMoniker": "Plugin.cs",
@@ -367,20 +315,111 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 3,
               "Title": "VRGlobals.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\VRGlobals.cs",
               "RelativeDocumentMoniker": "VRGlobals.cs",
               "ToolTip": "F:\\SPT-VR-development\\VRGlobals.cs",
               "RelativeToolTip": "VRGlobals.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAE8AAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAkAAAAAAAAAAAAAABAAAAAhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-01-07T19:05:41.459Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "AmplifyOcclusionEffect.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionEffect.cs",
+              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyOcclusionEffect.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionEffect.cs",
+              "RelativeToolTip": "Source\\Graphics\\AmplifyOcclusionEffect.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAEAAAA5AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-13T21:50:13.543Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "AmplifyGTAO.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyGTAO.cs",
+              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyGTAO.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyGTAO.cs",
+              "RelativeToolTip": "Source\\Graphics\\AmplifyGTAO.cs",
+              "ViewState": "AgIAAFUAAAAAAAAAAAAgwHEAAAAhAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-13T23:32:44.337Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "AmplifyOcclusionCommon.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionCommon.cs",
+              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyOcclusionCommon.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionCommon.cs",
+              "RelativeToolTip": "Source\\Graphics\\AmplifyOcclusionCommon.cs",
+              "ViewState": "AgIAAAgBAAAAAAAAAAAiwAEAAAA5AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-13T21:50:30.762Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "InitVRPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\InitVRPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\VR\\InitVRPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\VR\\InitVRPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\VR\\InitVRPatches.cs",
+              "ViewState": "AgIAAFcBAAAAAAAAAAAAANUAAABBAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:34:16.679Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
               "DocumentIndex": 14,
+              "Title": "WeaponPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\Player\\WeaponPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\Player\\WeaponPatches.cs",
+              "ViewState": "AgIAAF0EAAAAAAAAAAAAAA4BAABiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:01:23.059Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "MovementPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MovementPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\Player\\MovementPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MovementPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\Player\\MovementPatches.cs",
+              "ViewState": "AgIAADIAAAAAAAAAAAAqwN4AAABWAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:01:10.875Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "IKPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\Player\\IKPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\Player\\IKPatches.cs",
+              "ViewState": "AgIAAM4AAAAAMzMzMzMmwOQAAABQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-01-10T19:00:48.53Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
               "Title": "FIKASupport.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\FIKASupport.cs",
               "RelativeDocumentMoniker": "ModSupport\\FIKASupport.cs",
@@ -390,30 +429,6 @@
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-01-10T19:33:01.815Z",
               "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 17,
-              "Title": "AmplifyOcclusionCommon.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionCommon.cs",
-              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyOcclusionCommon.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionCommon.cs",
-              "RelativeToolTip": "Source\\Graphics\\AmplifyOcclusionCommon.cs",
-              "ViewState": "AgIAAGYAAAAAAAAAAIA3wH8AAAANAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-13T21:50:30.762Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 15,
-              "Title": "AmplifyGTAO.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyGTAO.cs",
-              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyGTAO.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyGTAO.cs",
-              "RelativeToolTip": "Source\\Graphics\\AmplifyGTAO.cs",
-              "ViewState": "AgIAAFUAAAAAAAAAAAAgwHEAAAAhAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-13T23:32:44.337Z"
             },
             {
               "$type": "Document",
@@ -438,18 +453,6 @@
               "ViewState": "AgIAAPwAAAAAAAAAAAA0wEQBAAA0AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-01-08T16:13:18.912Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 16,
-              "Title": "AmplifyOcclusionEffect.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionEffect.cs",
-              "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyOcclusionEffect.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionEffect.cs",
-              "RelativeToolTip": "Source\\Graphics\\AmplifyOcclusionEffect.cs",
-              "ViewState": "AgIAABwAAAAAAAAAAAAgwC8FAAA+AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-01-13T21:50:13.543Z"
             },
             {
               "$type": "Document",

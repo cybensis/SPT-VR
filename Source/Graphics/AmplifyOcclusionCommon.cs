@@ -1,4 +1,7 @@
-﻿using System;
+﻿// Amplify Occlusion 2 - Robust Ambient Occlusion for Unity
+// Copyright (c) Amplify Creations, Lda <info@amplify.pt>
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
