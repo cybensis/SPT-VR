@@ -110,7 +110,7 @@ namespace TarkovVR.Source.Graphics
                 ESSAOMode.ColoredHighestQuality => SampleCountLevel.VeryHigh,
                 _ => SampleCountLevel.Medium
             };
-
+            /*
             if (aoEffect != null)
             {
                 aoEffect.SampleCount = sampleCountLevel;
@@ -135,6 +135,33 @@ namespace TarkovVR.Source.Graphics
                 aoEffect.Tint = new Color32(12, 12, 12, 255);
                 aoEffect.ApplyMethod = AmplifyOcclusionEffect.ApplicationMethod.PostEffect;
                 aoEffect.PerPixelNormals = AmplifyOcclusionEffect.PerPixelNormalSource.Camera;
+            }
+            */
+            if (aoEffect != null)
+            {
+                aoEffect.SampleCount = sampleCountLevel;
+                aoEffect.Radius = 1f;
+                aoEffect.Bias = 0.1f;
+                aoEffect.Thickness = 0.5f;
+                aoEffect.Intensity = 2f;
+                aoEffect.PowerExponent = 0.8f;
+
+                aoEffect.Downsample = false;
+                aoEffect.CacheAware = true;
+
+                aoEffect.BlurEnabled = true;
+                aoEffect.BlurRadius = 3;
+                aoEffect.BlurSharpness = 10;
+                aoEffect.BlurPasses = 2;
+
+                aoEffect.FadeEnabled = true;
+                aoEffect.FadeStart = 35f;
+                aoEffect.FadeLength = 65f;
+
+                aoEffect.FilterEnabled = false;
+
+                aoEffect.ApplyMethod = AmplifyOcclusionEffect.ApplicationMethod.Deferred;
+                aoEffect.PerPixelNormals = AmplifyOcclusionEffect.PerPixelNormalSource.None;
             }
         }
     }

@@ -475,7 +475,7 @@ namespace TarkovVR.Source.Settings
             useVRKeyboardToggle.Toggle.UpdateValue(settings.useVRKeyboard);
 
 
-
+            /*
             occCullingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             occCullingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             occCullingToggle.Toggle.action_0 = SetOccCulling;
@@ -487,6 +487,7 @@ namespace TarkovVR.Source.Settings
             frusCullingToggle.Toggle.action_0 = SetFrusCulling;
             frusCullingToggle.Text.localizationKey = "Disable Frustum Culling ";
             frusCullingToggle.Toggle.UpdateValue(settings.disableFrusCulling);
+            */
             //SetupScrollbar(vrSettings);
 
             vrSettingsObject = newSoundSettings.gameObject;

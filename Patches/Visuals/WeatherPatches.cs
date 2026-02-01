@@ -30,244 +30,18 @@ namespace TarkovVR.Patches.Visuals
 
         // Wind system state
         public static float lastWind = 0.0f;
-        public static Vector2 cloudOffset = Vector2.zero;
+        public static Vector4 cloudOffset = Vector4.zero;
         public static Vector2 lastWindDirection = new Vector2(1f, 0f);
        
 
         //Tarkov Clouds dont render correctly in VR so disable them
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(CloudController), "OnEnable")]
-        private static void DisableClouds(CloudController __instance)
-        {
-            __instance.enabled = false;
-        }
-
-        private static RenderTexture[] _perEyeScatteringRT;
-        private static CommandBuffer _vrScatteringCmdBuffer;
-        private static readonly int int_1 = Shader.PropertyToID("_FrustumCornersWS");
-        private static readonly int int_2 = Shader.PropertyToID("_DitheringTexture");
-        private static readonly int int_3 = Shader.PropertyToID("_Density");
-        private static readonly int int_4 = Shader.PropertyToID("_SunrizeGlow");
-        private static readonly int int_5 = Shader.PropertyToID("_ScatteringTex");
-        static readonly int _InvVP = Shader.PropertyToID("_InverseViewProjection");
-        private static Matrix4x4 view;
-        private static Matrix4x4 proj;
-        /*
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
-        private static bool StereoFix_TODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
+        [HarmonyPatch(typeof(Class1821), "RenderClouds")]
+        private static bool DisableClouds(Class1821 __instance)
         {
-            if (!__instance.CheckSupport(needDepth: true, needHdr: true))
-            {
-                Graphics.Blit(source, destination);
-                return false;
-            }
-
-            Camera cam = __instance.cam;
-            __instance.Sky.Components.Scattering = __instance;
-            Camera.MonoOrStereoscopicEye eye = cam.stereoActiveEye;
-
-            // --- PART 1: GEOMETRY (The Fix for Pitch/Roll/Swimming) ---
-            // Instead of manually calculating vectors using generic FOV/Aspect,
-            // we ask Unity for the EXACT frustum corners used by the VR eye.
-            // This accounts for the asymmetric projection of headsets.
-
-            Vector3[] frustumCorners = new Vector3[4];
-            // Calculate corners at the Far Clip Plane for the current eye
-            cam.CalculateFrustumCorners(new Rect(0, 0, 1, 1), cam.farClipPlane, eye, frustumCorners);
-
-            // Transform them from Local Space (Camera relative) to World Space
-            Vector3 bottomLeft = cam.transform.TransformVector(frustumCorners[0]);
-            Vector3 topLeft = cam.transform.TransformVector(frustumCorners[1]);
-            Vector3 topRight = cam.transform.TransformVector(frustumCorners[2]);
-            Vector3 bottomRight = cam.transform.TransformVector(frustumCorners[3]);
-
-            Camera.StereoscopicEye stereoEye = (eye == Camera.MonoOrStereoscopicEye.Left) ? Camera.StereoscopicEye.Left : Camera.StereoscopicEye.Right;
-
-            view = cam.GetStereoViewMatrix(stereoEye);
-            proj = GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(stereoEye), false);
-
-            Matrix4x4 vp = proj * view;
-            Matrix4x4 invVP = vp.inverse;
-            //__instance.material_0.SetMatrix(_InvVP, invVP);
-            Shader.SetGlobalMatrix("UNITY_MATRIX_I_VP", invVP);
-            // TOD_Scattering expects rows in this order: TL, TR, BR, BL
-            Matrix4x4 identity = Matrix4x4.identity;
-            identity.SetRow(0, topLeft);
-            identity.SetRow(1, topRight);
-            identity.SetRow(2, bottomRight);
-            identity.SetRow(3, bottomLeft);
-
-            // --- PART 2: DENSITY STABILIZATION (From previous step) ---
-            if (__instance.FromLevelSettings)
-            {
-                LevelSettings instance = Singleton<LevelSettings>.Instance;
-                if (instance != null)
-                {
-                    __instance.HeightFalloff = instance.HeightFalloff;
-                    __instance.ZeroLevel = instance.ZeroLevel;
-                }
-            }
-
-            __instance.material_0.SetMatrix(int_1, identity);
-            __instance.material_0.SetTexture(int_2, __instance.DitheringTexture);
-
-            Vector3 camPos = cam.transform.position;
-            float densityBaseOffset = camPos.y - __instance.ZeroLevel;
-
-            // Counter-animate the fog height so it stays pinned to the Player Body
-            if (VRGlobals.player != null)
-            {
-                // Formula: Height = CamPos.y - Offset.
-                // We want Height to be (Player.y - ZeroLevel).
-                // So: Player.y - ZeroLevel = CamPos.y - Offset
-                // Offset = CamPos.y - Player.y + ZeroLevel
-                densityBaseOffset = camPos.y - VRGlobals.player.Transform.position.y + __instance.ZeroLevel;
-            }
-
-            // Note: The shader subtracts this Y value from the World Pos Y.
-            // If the shader logic is standard TOD, the second param is 'Height'.
-            // We pass the calculated offset here.
-            //Shader.SetGlobalVector(int_3, new Vector4(__instance.HeightFalloff, densityBaseOffset, __instance.GlobalDensity, 0f));
-            __instance.material_0.SetVector(int_3,
-    new Vector4(__instance.HeightFalloff, densityBaseOffset, __instance.GlobalDensity, 0f));
-
-            __instance.material_0.SetFloat(int_4, __instance.SunrizeGlow);
-            if (__instance.Lighten)
-            {
-                __instance.material_0.EnableKeyword("LIGHTEN");
-            }
-            else
-            {
-                __instance.material_0.DisableKeyword("LIGHTEN");
-            }
-
-            RenderTexture temporary = RenderTexture.GetTemporary(source.width, source.height, 0, source.format);
-            Vector4 densityVec =
-    new Vector4(__instance.HeightFalloff, densityBaseOffset, __instance.GlobalDensity, 0f);
-
-            __instance.material_0.SetVector(int_3, densityVec);
-            __instance.CustomBlit(source, temporary, __instance.material_0, 1);
-            __instance.material_0.SetVector(int_3, densityVec);
-            __instance.material_0.SetTexture(int_5, temporary);
-            __instance.CustomBlit(source, destination, __instance.material_0);
-            //Shader.SetGlobalTexture(int_5, temporary);
-            __instance.material_0.SetTexture(int_5, temporary);
-            RenderTexture.ReleaseTemporary(temporary);
             return false;
         }
-        */
-        /*
-        public static void TODScatteringRender(Camera.MonoOrStereoscopicEye eye, TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
-        {
-            Camera cam = VRGlobals.VRCam;
-            Vector3[] frustumCorners = new Vector3[4];
-            // Calculate corners at the Far Clip Plane for the current eye
-            cam.CalculateFrustumCorners(new Rect(0, 0, 1, 1), cam.farClipPlane, eye, frustumCorners);
 
-            // Transform them from Local Space (Camera relative) to World Space
-            Vector3 bottomLeft = cam.transform.TransformVector(frustumCorners[0]);
-            Vector3 topLeft = cam.transform.TransformVector(frustumCorners[1]);
-            Vector3 topRight = cam.transform.TransformVector(frustumCorners[2]);
-            Vector3 bottomRight = cam.transform.TransformVector(frustumCorners[3]);
-
-            Camera.StereoscopicEye stereoEye = (eye == Camera.MonoOrStereoscopicEye.Left) ? Camera.StereoscopicEye.Left : Camera.StereoscopicEye.Right;
-
-            view = cam.GetStereoViewMatrix(stereoEye);
-            proj = GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(stereoEye), false);
-
-            Matrix4x4 vp = proj * view;
-            Matrix4x4 invVP = vp.inverse;
-
-            Matrix4x4 identity = Matrix4x4.identity;
-
-            if (eye == Camera.MonoOrStereoscopicEye.Right)
-            {
-                // Instead of swapping rows, we "invert" the horizontal component 
-                // relative to the camera's right vector.
-                Vector3 camRight = cam.transform.right;
-
-                identity.SetRow(0, topLeft - 2 * Vector3.Project(topLeft, camRight));
-                identity.SetRow(1, topRight - 2 * Vector3.Project(topRight, camRight));
-                identity.SetRow(2, bottomRight - 2 * Vector3.Project(bottomRight, camRight));
-                identity.SetRow(3, bottomLeft - 2 * Vector3.Project(bottomLeft, camRight));
-            }
-            else
-            {
-                // Standard order for Left eye - which you said is perfect
-                identity.SetRow(0, topLeft);
-                identity.SetRow(1, topRight);
-                identity.SetRow(2, bottomRight);
-                identity.SetRow(3, bottomLeft);
-            }
-
-            // --- PART 2: DENSITY STABILIZATION (From previous step) ---
-            if (__instance.FromLevelSettings)
-            {
-                LevelSettings instance = Singleton<LevelSettings>.Instance;
-                if (instance != null)
-                {
-                    __instance.HeightFalloff = instance.HeightFalloff;
-                    __instance.ZeroLevel = instance.ZeroLevel;
-                }
-            }
-
-            __instance.material_0.SetMatrix(int_1, identity);
-            __instance.material_0.SetTexture(int_2, __instance.DitheringTexture);
-
-            __instance.material_0.SetVector(int_3, new Vector4(__instance.HeightFalloff, __instance.ZeroLevel, __instance.GlobalDensity, 0f));
-
-            __instance.material_0.SetFloat(int_4, __instance.SunrizeGlow);
-            if (__instance.Lighten)
-            {
-                __instance.material_0.EnableKeyword("LIGHTEN");
-            }
-            else
-            {
-                __instance.material_0.DisableKeyword("LIGHTEN");
-            }
-
-            RenderTexture temporary = RenderTexture.GetTemporary(source.width, source.height, 0, source.format);
-            Vector4 densityVec = new Vector4(__instance.HeightFalloff, __instance.ZeroLevel, __instance.GlobalDensity, 0f);
-
-            __instance.material_0.SetVector(int_3, densityVec);
-            __instance.CustomBlit(source, temporary, __instance.material_0, 1);
-            __instance.material_0.SetVector(int_3, densityVec);
-            __instance.material_0.SetTexture(int_5, temporary);
-            __instance.CustomBlit(source, destination, __instance.material_0);
-            __instance.material_0.SetTexture(int_5, temporary);
-            RenderTexture.ReleaseTemporary(temporary);
-        }
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImageNormalMode")]
-        private static bool StereoFix_TODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
-        {
-            if (!__instance.CheckSupport(needDepth: true, needHdr: true))
-            {
-                Graphics.Blit(source, destination);
-                return false;
-            }
-
-            Camera cam = __instance.cam;
-            __instance.Sky.Components.Scattering = __instance;
-            Camera.MonoOrStereoscopicEye eye = cam.stereoActiveEye;
-
-            // --- PART 1: GEOMETRY (The Fix for Pitch/Roll/Swimming) ---
-            // Instead of manually calculating vectors using generic FOV/Aspect,
-            // we ask Unity for the EXACT frustum corners used by the VR eye.
-            // This accounts for the asymmetric projection of headsets.
-            if (eye == Camera.MonoOrStereoscopicEye.Left)
-            {
-                TODScatteringRender(eye, __instance, source, destination);
-            }
-            else if (eye == Camera.MonoOrStereoscopicEye.Right)
-            {
-                TODScatteringRender(eye, __instance, source, destination);
-            }
-            
-            return false;
-        }
-        */
         [HarmonyPrefix]
         [HarmonyPatch(typeof(TOD_Camera), "Update")]
         private static bool FixTODCamera(TOD_Camera __instance)
@@ -294,14 +68,6 @@ namespace TarkovVR.Patches.Visuals
         {
 
             __instance.enabled = false;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(CloudController), "UpdateAmbient")]
-        private static bool FixAmbientErrors(CloudController __instance)
-        {
-            __instance.enabled = false;
-            return false;
         }
 
         [HarmonyPrefix]
@@ -419,6 +185,8 @@ namespace TarkovVR.Patches.Visuals
 
             if (player is not HideoutPlayer)
             {
+                if (cloudInstance != null)
+                    return;
                 LoadCloudPrefab();
                 InstantiateCloudPrefab();
             }
@@ -440,6 +208,7 @@ namespace TarkovVR.Patches.Visuals
 
                 VRGlobals.cloudPrefab = cloudBundle.LoadAsset<GameObject>("Clouds New");
                 cloudBundle.Unload(false);
+                GameObject.DontDestroyOnLoad(VRGlobals.cloudPrefab);
                 Plugin.MyLog.LogInfo("Cloud prefab loaded successfully.");
             }
             catch (Exception ex)
@@ -450,6 +219,35 @@ namespace TarkovVR.Patches.Visuals
 
         private static void InstantiateCloudPrefab()
         {
+            // Clean up main camera buffer
+            if (mainCloudCommandBuffer != null)
+            {
+                if (lastMainCamera != null)
+                    lastMainCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, mainCloudCommandBuffer);
+                mainCloudCommandBuffer.Dispose();
+                mainCloudCommandBuffer = null;
+            }
+            lastMainCamera = null;
+
+            // Clean up optic camera buffer
+            if (opticCloudCommandBuffer != null)
+            {
+                if (lastOpticCamera != null)
+                    lastOpticCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, opticCloudCommandBuffer);
+                opticCloudCommandBuffer.Dispose();
+                opticCloudCommandBuffer = null;
+            }
+            lastOpticCamera = null;
+
+            if (cloudInstance != null)
+            {
+                GameObject.Destroy(cloudInstance);
+                cloudInstance = null;
+            }
+
+            lowRenderer = null;
+            lowMaterial = null;
+
             if (VRGlobals.cloudPrefab != null && cloudInstance == null)
             {
                 cloudInstance = GameObject.Instantiate(VRGlobals.cloudPrefab);
@@ -462,10 +260,10 @@ namespace TarkovVR.Patches.Visuals
 
         private static void InitializeCloudRenderers()
         {
-            if (VRGlobals.cloudPrefab == null)
+            if (cloudInstance == null)
                 return;
 
-            Transform lowCloud = VRGlobals.cloudPrefab.transform.Find("Low");
+            Transform lowCloud = cloudInstance.transform.Find("Low");
 
             if (lowCloud != null)
             {
@@ -493,65 +291,67 @@ namespace TarkovVR.Patches.Visuals
 
             }
         }
-        private static CommandBuffer cloudCommandBuffer;
-        private static Camera lastRegisteredCamera;
+        private static Camera lastMainCamera;
+        private static Camera lastOpticCamera;
 
-        private static void SetupCloudCommandBuffer(Camera cam)
+        public static CommandBuffer mainCloudCommandBuffer;
+        public static CommandBuffer opticCloudCommandBuffer;
+
+        private static void SetupCloudCommandBuffer(Camera mainCamera, Camera opticCamera)
         {
-            if (cam == null || lowRenderer == null)
+            if (mainCamera == null || lowRenderer == null)
                 return;
 
-            if (lastRegisteredCamera != null && lastRegisteredCamera != cam && cloudCommandBuffer != null)
+            if (lastMainCamera != null && lastMainCamera != mainCamera && mainCloudCommandBuffer != null)
             {
-                lastRegisteredCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, cloudCommandBuffer);
-                cloudCommandBuffer.Dispose();
-                cloudCommandBuffer = null;
+                lastMainCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, mainCloudCommandBuffer);
+                mainCloudCommandBuffer.Dispose();
+                mainCloudCommandBuffer = null;
             }
 
-            if (cloudCommandBuffer != null)
-                return;
-
-            lowRenderer.enabled = false;
-
-            cloudCommandBuffer = new CommandBuffer();
-            cloudCommandBuffer.name = "VR Clouds";
-
-            cam.AddCommandBuffer(CameraEvent.AfterForwardOpaque, cloudCommandBuffer);
-            lastRegisteredCamera = cam;
-
-            Plugin.MyLog.LogInfo("Cloud CommandBuffer initialized.");
-        }
-
-        public static void CleanupClouds()
-        {
-            if (cloudCommandBuffer != null)
+            if (mainCloudCommandBuffer == null)
             {
-                if (lastRegisteredCamera != null)
+                lowRenderer.enabled = false;
+                mainCloudCommandBuffer = new CommandBuffer();
+                mainCloudCommandBuffer.name = "Custom Clouds Main";
+                mainCamera.AddCommandBuffer(CameraEvent.AfterForwardOpaque, mainCloudCommandBuffer);
+                lastMainCamera = mainCamera;
+            }
+
+            if (opticCamera != null)
+            {
+                if (lastOpticCamera != null && lastOpticCamera != opticCamera && opticCloudCommandBuffer != null)
                 {
-                    lastRegisteredCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, cloudCommandBuffer);
+                    lastOpticCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, opticCloudCommandBuffer);
+                    opticCloudCommandBuffer.Dispose();
+                    opticCloudCommandBuffer = null;
                 }
-                cloudCommandBuffer.Dispose();
-                cloudCommandBuffer = null;
+
+                if (opticCloudCommandBuffer == null)
+                {
+                    opticCloudCommandBuffer = new CommandBuffer();
+                    opticCloudCommandBuffer.name = "Custom Clouds Optic";
+                    opticCamera.AddCommandBuffer(CameraEvent.AfterForwardOpaque, opticCloudCommandBuffer);
+                    lastOpticCamera = opticCamera;
+                }
             }
-
-            lastRegisteredCamera = null;
-
-            if (cloudInstance != null)
+            else if (opticCloudCommandBuffer != null)
             {
-                GameObject.Destroy(cloudInstance);
-                cloudInstance = null;
+                if (lastOpticCamera != null)
+                {
+                    lastOpticCamera.RemoveCommandBuffer(CameraEvent.AfterForwardOpaque, opticCloudCommandBuffer);
+                }
+                opticCloudCommandBuffer.Dispose();
+                opticCloudCommandBuffer = null;
+                lastOpticCamera = null;
             }
-
-            lowRenderer = null;
-            lowMaterial = null;
-            VRGlobals.cloudPrefab = null;
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeatherController), "method_9")]
-        private static void DynamicClouds(WeatherController __instance, float fog, GStruct275 interpolatedParams)
+        [HarmonyPatch(typeof(WeatherController), "LateUpdate")]
+        private static void DynamicClouds(WeatherController __instance)
         {
-            if (VRGlobals.cloudPrefab == null)
+            if (VRGlobals.cloudPrefab == null || cloudInstance == null)
                 return;
 
             if (lowRenderer == null)
@@ -561,19 +361,12 @@ namespace TarkovVR.Patches.Visuals
                     return;
             }
 
-            Camera vrCam = VRGlobals.VRCam;
-            if (vrCam == null || vrCam.name != "FPS Camera")
+            if (fpsCam == null)
                 return;
 
-            SetupCloudCommandBuffer(vrCam);
+            SetupCloudCommandBuffer(fpsCam, opticCam);
 
-            cloudInstance.transform.position = vrCam.transform.position;
-
-            if (cloudCommandBuffer != null && lowRenderer != null && lowMaterial != null)
-            {
-                cloudCommandBuffer.Clear();
-                cloudCommandBuffer.DrawRenderer(lowRenderer, lowMaterial);
-            }
+            cloudInstance.transform.position = fpsCam.transform.position;
 
             float cloudiness = __instance.WeatherCurve.Cloudiness;
             float rain = __instance.WeatherCurve.Rain;
@@ -595,7 +388,16 @@ namespace TarkovVR.Patches.Visuals
             Color cloudColor = CalculateCloudColor(sunColor, moonColor, timeOfDay, out float upperBrightness);
             UpdateCloudMaterial(density, upperDensity, sunColor, moonColor, sunDir, moonDir, sunIntensity, moonIntensity, cloudColor, upperBrightness);
             UpdateCloudOffsets();
-            
+            if (mainCloudCommandBuffer != null && lowRenderer != null && lowMaterial != null)
+            {
+                mainCloudCommandBuffer.Clear();
+                mainCloudCommandBuffer.DrawRenderer(lowRenderer, lowMaterial);
+            }
+            if (opticCloudCommandBuffer != null && lowRenderer != null && lowMaterial != null)
+            {
+                opticCloudCommandBuffer.Clear();
+                opticCloudCommandBuffer.DrawRenderer(lowRenderer, lowMaterial);
+            }
         }
 
         private static void UpdateWindSystem(Vector2 windVector)
@@ -616,7 +418,8 @@ namespace TarkovVR.Patches.Visuals
 
         private static void UpdateCloudOffsets()
         {
-            cloudOffset += lastWindDirection * lastWind * Time.deltaTime;
+            cloudOffset.x += lastWindDirection.x * lastWind * Time.deltaTime;
+            cloudOffset.y += lastWindDirection.y * lastWind * Time.deltaTime;
 
             if (lowMaterial != null)
                 lowMaterial.SetVector("_Offset", cloudOffset);

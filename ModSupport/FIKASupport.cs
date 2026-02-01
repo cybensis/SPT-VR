@@ -159,7 +159,6 @@ namespace TarkovVR.ModSupport.FIKA
             PreloaderUI.DontDestroyOnLoad(Camera.main.gameObject);
             VRGlobals.inGame = false;
             VRGlobals.menuOpen = true;
-            WeatherPatches.CleanupClouds();
             MenuPatches.PositionMainMenuUi();
             return true;
         }

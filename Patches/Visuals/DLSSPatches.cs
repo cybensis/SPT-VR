@@ -108,7 +108,7 @@ namespace TarkovVR.Patches.Visuals
                 VRGlobals.upscalingMultiplier = 1;
                 if (VRGlobals.VRCam.name == "FPS Camera")
                     VRGlobals.VRCam.rect = new Rect(0f, 0f, 1f, 1f);
-                XRSettings.eyeTextureResolutionScale = 1f;
+                ssaaimpl_.EnableDLSS = false;
             }
 
             if (dlssOn)
@@ -243,7 +243,16 @@ namespace TarkovVR.Patches.Visuals
 
         public DLSSWrapper.InitErrors InitializeDLSS()
         {
-            return _wrappers[0].InitializeDLSS();
+            DLSSWrapper.InitErrors result = DLSSWrapper.InitErrors.INIT_SUCCESS;
+
+            for (int i = 0; i < NUM_EYES; i++)
+            {
+                var initResult = _wrappers[i].InitializeDLSS();
+                if (initResult != DLSSWrapper.InitErrors.INIT_SUCCESS)
+                    result = initResult;
+            }
+
+            return result;
         }
 
         public void CopyDepthMotion(

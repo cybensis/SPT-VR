@@ -545,9 +545,9 @@ namespace TarkovVR.Patches.Visuals
 
             EAntialiasingMode currentAA = Singleton<SharedGameSettingsClass>.Instance.Graphics.Settings.AntiAliasing;
 
-            if (currentAA == EAntialiasingMode.FXAA)
+            if (currentAA == EAntialiasingMode.FXAA && __instance.CurrentState != SSState.UPSCALE)
                 ApplyFXAA(source, destination);
-            else if (currentAA == EAntialiasingMode.None)
+            else
                 Graphics.Blit(source, destination);
             return false;
         }
