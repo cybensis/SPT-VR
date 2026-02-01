@@ -121,6 +121,21 @@ NVME SSD
 7. Install a bot spawner mod such as MOAR or ABPS, these are also big helps to performance because the main killer of performance in SPT is the AI. These mods are much better at managing spawns.
 8. Last thing I'd suggest which may not apply for many people, I disable my 4k monitor whenever I play which seems to help a bit.
 
+**IMPORTANT**: This mod is a *very* heavy mod, it will not run on a low-end or mid-grade PC. This requires a very high-end PC. 
+
+Minimum GPU Nvidia - Any 30 series+ with 16GB+ of VRAM 
+
+Minimum GPU AMD - Any RX 7000+ RDNA3/4 with 16GB+ of VRAM.
+
+Minimum CPU - Really I can't recommend anything other than the AMD X3D chips like the 5800x3d, 9800x3d, etc
+
+Minimum RAM: 32GB if you have a secondary headless PC, if you're self hosting you should really have more than 32GB
+
+Minimum drive - SSD or NVMe SSD, preferably NVMe but this isn't a big deal
+
+
+You may be able to get away with slightly lower specs but this is what I recommend to have an actual playable experience.
+
  FAQ 
 -----
 
