@@ -59,7 +59,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(MBOIT_Scattering), "Start")]
         private static void DisableMBOIT(CloudController __instance)
         {
-            __instance.enabled = false;
+            //__instance.enabled = false;
         }
 
         [HarmonyPrefix]
@@ -75,7 +75,7 @@ namespace TarkovVR.Patches.Visuals
         private static bool FixFogForVR(PrismEffects __instance, Material fogMaterial)
         {
             Camera cam = __instance.GetPrismCamera();
-            // 1. Set all the standard properties (mirroring original code)
+
             fogMaterial.SetFloat("_FogHeight", __instance.fogHeight);
             fogMaterial.SetFloat("_FogIntensity", 1f);
             fogMaterial.SetFloat("_FogDistance", __instance.fogDistance);
@@ -273,7 +273,7 @@ namespace TarkovVR.Patches.Visuals
                 if (lowRenderer != null)
                 {
                     lowRenderer.allowOcclusionWhenDynamic = false;
-                    lowRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+                    lowRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
                     lowMaterial = lowRenderer.sharedMaterial;
                 }
             }
@@ -440,17 +440,18 @@ namespace TarkovVR.Patches.Visuals
             return Color.Lerp(sunColor, new Color(gray, gray, gray, sunColor.a), rainT * 0.5f);
         }
 
+        private static readonly Color nightCloudColor = new Color(0.36f, 0.36f, 0.36f).linear;
+
         private static Color CalculateCloudColor(Color sunColor, Color moonColor, float timeOfDay, out float upperBrightness)
         {
             Color sourceColor;
             float desaturateAmount;
             float brightnessMultiplier;
-
             if (timeOfDay >= 4.3f && timeOfDay <= 8f)
             {
                 // Dawn: blend source color, start darker
                 float t = Mathf.InverseLerp(4.3f, 8f, timeOfDay);
-                sourceColor = Color.Lerp(moonColor, sunColor, t);
+                sourceColor = Color.Lerp(nightCloudColor, sunColor, t);
                 desaturateAmount = Mathf.Lerp(0.7f, 0.6f, t);
                 brightnessMultiplier = Mathf.Lerp(0.2f, 0.85f, t);
                 // Upper clouds catch light earlier - brighter at dawn start
@@ -468,7 +469,7 @@ namespace TarkovVR.Patches.Visuals
             {
                 // Dusk: blend source color, end darker
                 float t = Mathf.InverseLerp(19f, 22.3f, timeOfDay);
-                sourceColor = Color.Lerp(sunColor, moonColor, t);
+                sourceColor = Color.Lerp(sunColor, nightCloudColor, t);
                 desaturateAmount = Mathf.Lerp(0.6f, 0.7f, t);
                 brightnessMultiplier = Mathf.Lerp(0.85f, 0.2f, t);
                 // Upper clouds hold light longer - brighter at dusk end
@@ -477,10 +478,14 @@ namespace TarkovVR.Patches.Visuals
             else
             {
                 // Night
+                /*
                 sourceColor = moonColor;
                 desaturateAmount = 0.7f;
                 brightnessMultiplier = 0.25f;
                 upperBrightness = 0.35f;  // Slightly brighter than lower clouds at night
+                */
+                upperBrightness = 0.35f;
+                return nightCloudColor;
             }
 
             // Desaturate: lerp toward white
@@ -505,65 +510,62 @@ namespace TarkovVR.Patches.Visuals
             lowMaterial.SetFloat("_UpperBrightness", upperBrightness);
         }
 
+        private static readonly Color baseMoonColor = new Color(0.584f, 0.608f, 0.659f).linear;
+
+        private const float DESATURATION_MULTIPLIER = 0.8f;
+        private const float MAX_MOON_INTENSITY = 0.7f;
         private static void CalculateLightingParameters(float timeOfDay, out Color sunColor, out Color moonColor, out Vector3 sunDir, out Vector3 moonDir, out float sunIntensity, out float moonIntensity)
         {
             var todSky = MonoBehaviourSingleton<TOD_Sky>.Instance;
             Color rawSunColor = todSky.SunSkyColor;
-            Color rawMoonColor = todSky.MoonLightColor;
+            moonColor = baseMoonColor;
             sunDir = todSky.LocalSunDirection;
             moonDir = todSky.LocalMoonDirection;
 
-            // Desaturate sun color more at dawn/dusk when it gets too intense
             float sunDesaturate;
             if (timeOfDay >= 4.3f && timeOfDay <= 7.0f)
             {
-                // Early dawn: desaturate more at the start, ease off
                 float t = Mathf.InverseLerp(4.3f, 7.0f, timeOfDay);
                 sunDesaturate = Mathf.Lerp(0.20f, 0.1f, t);
             }
             else if (timeOfDay > 17.0f && timeOfDay <= 19.8f)
             {
-                // Dusk: ramp up desaturation
                 float t = Mathf.InverseLerp(17.0f, 19.8f, timeOfDay);
                 sunDesaturate = Mathf.Lerp(0.1f, 0.20f, t);
             }
             else
             {
-                // Midday: subtle desaturation
                 sunDesaturate = 0.1f;
             }
 
-            sunColor = Color.Lerp(rawSunColor, Color.white, sunDesaturate);
-
-            // Slightly desaturate moon color
-            moonColor = Color.Lerp(rawMoonColor, Color.white, 0.10f);
+            sunDesaturate *= DESATURATION_MULTIPLIER;
+            sunColor = Color.Lerp(rawSunColor, Color.white, Mathf.Clamp01(sunDesaturate));
 
             if (timeOfDay >= 4.3f && timeOfDay <= 6.5f)
             {
-                // Dawn: moon fading out, sun fading in
                 float t = Mathf.InverseLerp(4.3f, 6.5f, timeOfDay);
                 sunIntensity = t;
                 moonIntensity = 1.0f - t;
             }
             else if (timeOfDay > 6.5f && timeOfDay <= 18.0f)
             {
-                // Day
                 sunIntensity = 1.0f;
                 moonIntensity = 0.0f;
             }
             else if (timeOfDay > 18.0f && timeOfDay <= 19.8f)
             {
-                // Dusk: sun fading out, moon fading in
                 float t = Mathf.InverseLerp(18.0f, 19.8f, timeOfDay);
                 sunIntensity = 1.0f - t;
                 moonIntensity = t;
             }
             else
             {
-                // Night
                 sunIntensity = 0.0f;
                 moonIntensity = 1.0f;
             }
+
+            // Cap moon intensity
+            moonIntensity = Mathf.Min(moonIntensity, MAX_MOON_INTENSITY);
         }
 
     }

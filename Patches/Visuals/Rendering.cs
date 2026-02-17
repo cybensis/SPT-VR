@@ -533,7 +533,7 @@ namespace TarkovVR.Patches.Visuals
 
             if (__instance.CurrentState == SSState.UPSCALE)
             {
-                bool flag = ((__instance.EnableDLSS && !__instance._failedToInitializeDLSS && !__instance.NeedToApplySwitch()) || (__instance.EnableDLSS && (__instance.DLSSDebugDisable || DLSSWrapper.WantToDebugDLSSViaRenderdoc))) && !__instance.InventoryBlurIsEnabled;
+                bool flag = __instance.EnableDLSS && !__instance._failedToInitializeDLSS && !__instance.NeedToApplySwitch();
                 bool flag2 = __instance.EnableFSR && !__instance._failedToInitializeFSR && !flag && !__instance.NeedToApplySwitch();
                 bool flag3 = __instance.EnableFSR2 && !__instance._failedToInitializeFSR2 && !flag && !__instance.NeedToApplySwitch();
                 bool flag4 = __instance.EnableFSR3 && !__instance._failedToInitializeFSR3 && !flag && !__instance.NeedToApplySwitch();

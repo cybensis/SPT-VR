@@ -77,7 +77,7 @@ namespace TarkovVR.Patches.Core.Player
             else
                 return false;
         }
-       
+       /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IsAiming", MethodType.Setter)]
         private static bool BypassADSAnimation(EFT.Player.FirearmController __instance, ref bool value)
@@ -94,7 +94,7 @@ namespace TarkovVR.Patches.Core.Player
             __instance._isAiming = value;
 
             player.Skills.FastAimTimer.Target = value ? 0f : 2f;
-            player.MovementContext.SetAimingSlowdown(value, 0.33f + __instance.gclass2250_0.AimMovementSpeed);
+            player.MovementContext.SetAimingSlowdown(__instance.IsAiming, 0.33f + __instance.gclass2250_0.AimMovementSpeed);
 
             float mass = (!value || player.MovementContext.StationaryWeapon != null) ? 0f : __instance.ErgonomicWeight;
             player.Physical.Aim(mass);
@@ -105,6 +105,7 @@ namespace TarkovVR.Patches.Core.Player
 
             return false;
         }
+       */
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Spawn")]

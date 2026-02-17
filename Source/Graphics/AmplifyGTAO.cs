@@ -93,14 +93,6 @@ namespace TarkovVR.Source.Graphics
             if (aoEffect == null)
                 return;
 
-            if (ssaoMode == ESSAOMode.Off)
-            {
-                aoEffect.enabled = false;
-                return;
-            }
-
-            aoEffect.enabled = true;
-
             SampleCountLevel sampleCountLevel = ssaoMode switch
             {
                 ESSAOMode.FastestPerformance => SampleCountLevel.Low,
@@ -108,7 +100,7 @@ namespace TarkovVR.Source.Graphics
                 ESSAOMode.HighQuality => SampleCountLevel.High,
                 ESSAOMode.HighestQuality => SampleCountLevel.VeryHigh,
                 ESSAOMode.ColoredHighestQuality => SampleCountLevel.VeryHigh,
-                _ => SampleCountLevel.Medium
+                _ => SampleCountLevel.Low
             };
             /*
             if (aoEffect != null)

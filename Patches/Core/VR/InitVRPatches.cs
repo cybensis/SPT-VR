@@ -21,7 +21,6 @@ using System.Runtime.Remoting.Contexts;
 using UnityEngine.XR;
 using UnityEngine.Rendering;
 using System.Collections;
-using TarkovVR.Patches.Visuals;
 using Valve.VR.InteractionSystem;
 using System.IO;
 using System;
@@ -31,6 +30,7 @@ using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.Body;
 using static DistantShadow;
 using TarkovVR.Source.Graphics;
+using TarkovVR.Patches.Upscalers;
 
 namespace TarkovVR.Patches.Core.VR
 {

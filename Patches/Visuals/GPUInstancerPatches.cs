@@ -53,6 +53,8 @@ namespace TarkovVR.Patches.Visuals
 
         // This is where GPU Instancing handles culling, it does not work properly in multipass, it only takes left eye into account.
         // Adding toggles for it because this can heavily impact performance depending on the scene and hardware.
+        // This isn't needed anymore so I have it commented out, leaving here for reference.
+        /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GPUInstancerManager), "UpdateBuffers")]
         private static void DisableAllCulling(GPUInstancerManager __instance)
@@ -67,38 +69,8 @@ namespace TarkovVR.Patches.Visuals
             else
                 __instance.isFrustumCulling = true;
         }
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(GPUInstancerHiZOcclusionGenerator), "Initialize")]
-        private static void ForceVREnabled(GPUInstancerHiZOcclusionGenerator __instance, Camera occlusionCamera = null)
-        {
-            __instance.isVREnabled = true;
-            GClass1262.gpuiSettings.vrRenderingMode = 1; // Multipass
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(GPUInstancerCameraData), "CalculateCameraData")]
-        private static bool FixGpuInstancerCulling(GPUInstancerCameraData __instance)
-        {
-            if (__instance.mainCamera == null)
-            {
-                return false;
-            }
-            __instance.hasOcclusionGenerator = __instance.hiZOcclusionGenerator != null && __instance.hiZOcclusionGenerator.hiZDepthTexture != null;
-            // This now uses mainCamera.projectionMatrix (center) instead of left eye
-            Matrix4x4 matrix4x = __instance.mainCamera.projectionMatrix * __instance.mainCamera.worldToCameraMatrix;
-
-            if (__instance.mvpMatrixFloats == null || __instance.mvpMatrixFloats.Length != 16)
-            {
-                __instance.mvpMatrixFloats = new float[16];
-            }
-            GClass1274.Matrix4x4ToFloatArray(matrix4x, __instance.mvpMatrixFloats);
-
-            __instance.cameraPosition = __instance.mainCamera.transform.position;
-
-            return false;
-        }
         */
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GPUInstancerManager), "Awake")]
         private static void ForceVRComputeShader(GPUInstancerManager __instance)

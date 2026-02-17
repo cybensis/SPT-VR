@@ -11,7 +11,7 @@ using EFT.Settings.Graphics;
 using UnityEngine.XR;
 using Comfort.Common;
 
-namespace TarkovVR.Patches.Visuals
+namespace TarkovVR.Patches.Upscalers
 {
     [HarmonyPatch]
     internal class DLSSPatches
@@ -68,6 +68,7 @@ namespace TarkovVR.Patches.Visuals
 
         // Adjusts VR eye resolution scale when DLSS/FSR is enabled
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(CameraClass), "SetAntiAliasing")]
         private static bool UpdateVREyeResolutionForDLSS(CameraClass __instance, EAntialiasingMode quality, EDLSSMode dlssMode, EFSR2Mode fsr2Mode, EFSR3Mode fsr3Mode)
@@ -77,40 +78,10 @@ namespace TarkovVR.Patches.Visuals
             bool fsr3On = fsr3Mode > EFSR3Mode.Off;
             SSAAImpl ssaaimpl_ = __instance.Ssaaimpl_0;
             __instance.SSAA.UseJitter = dlssOn || fsr2On || fsr3On;
-
-            if (dlssOn)
+            if ((bool)ssaaimpl_)
             {
-                if (VRGlobals.VRCam != null)
-                {
-                    VRGlobals.VRCam.depthTextureMode |= DepthTextureMode.MotionVectors | DepthTextureMode.Depth;
-                }
-
-                float scale = dlssMode switch
-                {
-                    EDLSSMode.Quality => 0.77f,
-                    EDLSSMode.Balanced => 0.67f,
-                    EDLSSMode.Performance => 0.59f,
-                    EDLSSMode.UltraPerformance => 0.50f,
-                    _ => 1f
-                };
-
-                VRGlobals.upscalingMultiplier = scale;
-                VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f), true);
-
-                if (VRGlobals.VRCam.name == "FPS Camera")
-                    VRGlobals.VRCam.rect = new Rect(0f, 0f, scale, scale);
-
-                Plugin.MyLog.LogWarning($"[VR DLSS] Set eye texture scale to {scale} for mode {dlssMode}");
-            }
-            else if (fsr2Mode == EFSR2Mode.Off && fsr3Mode == EFSR3Mode.Off)
-            {
-                // Reset to native when all upscalers are off
-                VRGlobals.upscalingMultiplier = 1;
-                if (VRGlobals.VRCam.name == "FPS Camera")
-                    VRGlobals.VRCam.rect = new Rect(0f, 0f, 1f, 1f);
                 ssaaimpl_.EnableDLSS = false;
             }
-
             if (dlssOn)
             {
                 if ((bool)ssaaimpl_)

@@ -17,7 +17,7 @@ using UnityEngine.XR;
 using System.Diagnostics;
 using Valve.VR;
 
-namespace TarkovVR.Patches.Visuals
+namespace TarkovVR.Patches.Upscalers
 {
     [HarmonyPatch]
     internal class FSRPatches
@@ -174,80 +174,8 @@ namespace TarkovVR.Patches.Visuals
             _stereoFSR2Wrapper?.OnDestroy();
         }
 
-        // This patch updates the XR eye texture resolution scale based on the selected FSR mode
-        //-----------------------------------------------------------------------------------------------------------------------------------------------
-        
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(CameraClass), "SetFSR3")]
-        private static void UpdateVREyeResolutionForFSR3(EFSR3Mode fsr3Mode)
-        {
-            if (VRGlobals.VRCam != null && fsr3Mode != EFSR3Mode.Off)
-            {
-                VRGlobals.VRCam.depthTextureMode |= DepthTextureMode.MotionVectors | DepthTextureMode.Depth;
-            }
-
-            float scale = fsr3Mode switch
-            {
-                EFSR3Mode.Quality => 0.77f,
-                EFSR3Mode.Balanced => 0.67f,
-                EFSR3Mode.Performance => 0.59f,
-                EFSR3Mode.UltraPerformance => 0.50f,
-                _ => 1f
-            };
-
-            VRGlobals.upscalingMultiplier = scale;
-
-            VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f), false);
-
-            if (VRGlobals.VRCam.name == "FPS Camera")
-            {
-                if (scale < 1.0f)
-                    VRGlobals.VRCam.rect = new Rect(0f, 0f, scale, scale);
-                else
-                    VRGlobals.VRCam.rect = new Rect(0f, 0f, 1f, 1f);
-            }
-
-            Plugin.MyLog.LogWarning($"[VR FSR3] Set eye texture scale to {scale} for mode {fsr3Mode}");
-        }
-        
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(CameraClass), "SetFSR2")]
-        private static void UpdateVREyeResolutionForFSR2(EFSR2Mode fsr2Mode)
-        {
-            if (VRGlobals.VRCam != null && fsr2Mode != EFSR2Mode.Off)
-            {
-                VRGlobals.VRCam.depthTextureMode |= DepthTextureMode.MotionVectors | DepthTextureMode.Depth;
-            }
-
-            float scale = fsr2Mode switch
-            {
-                EFSR2Mode.Quality => 0.77f,
-                EFSR2Mode.Balanced => 0.67f,
-                EFSR2Mode.Performance => 0.59f,
-                EFSR2Mode.UltraPerformance => 0.50f,
-                _ => 1f
-            };
-
-            VRGlobals.upscalingMultiplier = scale;
-
-            VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f), false);
-            if (VRGlobals.VRCam.name == "FPS Camera")
-            {
-                if (scale < 1.0f)
-                    VRGlobals.VRCam.rect = new Rect(0f, 0f, scale, scale);
-                else
-                    VRGlobals.VRCam.rect = new Rect(0f, 0f, 1f, 1f);
-            }
-            Plugin.MyLog.LogWarning($"[VR FSR2] Set eye texture scale to {scale} for mode {fsr2Mode}");
-        }
-
         // The two patches below are for making adjustments to FSR3 itself to make it work better in stereo VR.
         //------------------------------------------------------------------------------------------------------------------------------------------------
-
-        // Add these as static fields in your patch class
-        private static Vector3 lastHeadPosition = Vector3.zero;
-        private static Quaternion lastHeadRotation = Quaternion.identity;
-        private static bool isFirstFrame = true;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FSR3Wrapper), "PrepareOutput")]
         private static bool FSR3WrapperPatch(FSR3Wrapper __instance, RenderTexture source, RenderTexture destination, Vector2 jitter, int sampleCount, Camera mainCamera, bool opticOrCollimator, CommandBuffer externalCommandBuffer)
@@ -271,10 +199,10 @@ namespace TarkovVR.Patches.Visuals
             */
             __instance._mainCamera = mainCamera;
             __instance.CalcDeviceDepthToViewSpaceDepthParams(mainCamera);
-            int num = ((source != null) ? source.width : Screen.width);
-            int num2 = ((source != null) ? source.height : Screen.height);
-            int num3 = ((destination != null) ? destination.width : Screen.width);
-            int num4 = ((destination != null) ? destination.height : Screen.height);
+            int num = source != null ? source.width : Screen.width;
+            int num2 = source != null ? source.height : Screen.height;
+            int num3 = destination != null ? destination.width : Screen.width;
+            int num4 = destination != null ? destination.height : Screen.height;
 
             __instance.renderSize[0] = num;
             __instance.renderSize[1] = num2;
@@ -340,7 +268,7 @@ namespace TarkovVR.Patches.Visuals
                 __instance._img_mip.Create();
             }
             __instance._cmdBuf.Clear();
-            CommandBuffer commandBuffer = ((externalCommandBuffer == null) ? __instance._cmdBuf : externalCommandBuffer);
+            CommandBuffer commandBuffer = externalCommandBuffer == null ? __instance._cmdBuf : externalCommandBuffer;
             commandBuffer.BeginSample("FSR3");
             commandBuffer.SetComputeTextureParam(__instance._autogenReactiveShader, 0, "r_input_opaque_only", __instance._beforeAlpha);
             commandBuffer.SetComputeTextureParam(__instance._autogenReactiveShader, 0, "r_input_color_jittered", __instance._afterAlpha);
@@ -353,8 +281,8 @@ namespace TarkovVR.Patches.Visuals
             commandBuffer.SetComputeFloatParam(__instance._autogenReactiveShader, "gen_reactive_threshold", opticOrCollimator ? 0.05f : 0.2f);
             commandBuffer.SetComputeFloatParam(__instance._autogenReactiveShader, "gen_reactive_binaryValue", 0.9f);
             commandBuffer.SetComputeIntParam(__instance._autogenReactiveShader, "gen_reactive_flags", val);
-            int threadGroupsX = (int)Mathf.Ceil((float)num / 8f);
-            int threadGroupsY = (int)Mathf.Ceil((float)num2 / 8f);
+            int threadGroupsX = (int)Mathf.Ceil(num / 8f);
+            int threadGroupsY = (int)Mathf.Ceil(num2 / 8f);
             commandBuffer.DispatchCompute(__instance._autogenReactiveShader, 0, threadGroupsX, threadGroupsY, 1);
             commandBuffer.SetComputeTextureParam(__instance._computeLuminancePyramidShader, 0, "r_input_color_jittered", source);
             commandBuffer.SetComputeTextureParam(__instance._computeLuminancePyramidShader, 0, "rw_spd_global_atomic", __instance._spd_global_atomic);
@@ -362,8 +290,8 @@ namespace TarkovVR.Patches.Visuals
             commandBuffer.SetComputeTextureParam(__instance._computeLuminancePyramidShader, 0, "rw_img_mip_5", __instance._img_mip, 5);
             commandBuffer.SetComputeTextureParam(__instance._computeLuminancePyramidShader, 0, "rw_auto_exposure", __instance._exposure);
             __instance.Set_cbFSR3_Constants(__instance._computeLuminancePyramidShader, commandBuffer);
-            int num7 = (int)Mathf.Ceil((float)num / 64f);
-            int num8 = (int)Mathf.Ceil((float)num2 / 64f);
+            int num7 = (int)Mathf.Ceil(num / 64f);
+            int num8 = (int)Mathf.Ceil(num2 / 64f);
             commandBuffer.SetComputeIntParam(__instance._computeLuminancePyramidShader, "mips", __instance.mipCount);
             commandBuffer.SetComputeIntParam(__instance._computeLuminancePyramidShader, "numWorkGroups", num7 * num8);
             commandBuffer.SetComputeIntParams(__instance._computeLuminancePyramidShader, "workGroupOffset", __instance.zeroIntVec);
@@ -378,8 +306,8 @@ namespace TarkovVR.Patches.Visuals
             commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "rw_dilated_depth", __instance._dilatedDepth);
             commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "rw_lock_input_luma", __instance._lock_input_luma);
             __instance.Set_cbFSR3_Constants(__instance._reconstructPreviousDepthShader, commandBuffer);
-            int threadGroupsX2 = (int)Mathf.Ceil((float)num / 8f);
-            int threadGroupsY2 = (int)Mathf.Ceil((float)num2 / 8f);
+            int threadGroupsX2 = (int)Mathf.Ceil(num / 8f);
+            int threadGroupsY2 = (int)Mathf.Ceil(num2 / 8f);
             commandBuffer.DispatchCompute(__instance._reconstructPreviousDepthShader, 0, threadGroupsX2, threadGroupsY2, 1);
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_reconstructed_previous_nearest_depth", __instance._reconstructed_previous_nearest_depth);
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_dilated_motion_vectors", __instance.isOddFrame ? __instance._dilated_motion_vectors0 : __instance._dilated_motion_vectors1);
@@ -394,15 +322,15 @@ namespace TarkovVR.Patches.Visuals
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "rw_dilated_reactive_masks", __instance._dilated_reactive_masks);
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "rw_prepared_input_color", __instance._prepared_input_color);
             __instance.Set_cbFSR3_Constants(__instance._depthClipShader, commandBuffer);
-            int threadGroupsX3 = (int)Mathf.Ceil((float)num / 8f);
-            int threadGroupsY3 = (int)Mathf.Ceil((float)num2 / 8f);
+            int threadGroupsX3 = (int)Mathf.Ceil(num / 8f);
+            int threadGroupsY3 = (int)Mathf.Ceil(num2 / 8f);
             commandBuffer.DispatchCompute(__instance._depthClipShader, 0, threadGroupsX3, threadGroupsY3, 1);
             commandBuffer.SetComputeTextureParam(__instance._lockShader, 0, "r_lock_input_luma", __instance._lock_input_luma);
             commandBuffer.SetComputeTextureParam(__instance._lockShader, 0, "rw_new_locks", __instance._new_locks);
             commandBuffer.SetComputeTextureParam(__instance._lockShader, 0, "rw_reconstructed_previous_nearest_depth", __instance._reconstructed_previous_nearest_depth);
             __instance.Set_cbFSR3_Constants(__instance._lockShader, commandBuffer);
-            int threadGroupsX4 = (int)Mathf.Ceil((float)num / 8f);
-            int threadGroupsY4 = (int)Mathf.Ceil((float)num2 / 8f);
+            int threadGroupsX4 = (int)Mathf.Ceil(num / 8f);
+            int threadGroupsY4 = (int)Mathf.Ceil(num2 / 8f);
             commandBuffer.DispatchCompute(__instance._lockShader, 0, threadGroupsX4, threadGroupsY4, 1);
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_input_exposure", __instance._exposure);
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_dilated_reactive_masks", __instance._dilated_reactive_masks);
@@ -422,16 +350,16 @@ namespace TarkovVR.Patches.Visuals
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "rw_new_locks", __instance._new_locks);
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "rw_luma_history", __instance.isOddFrame ? __instance._luma_history1 : __instance._luma_history0);
             __instance.Set_cbFSR3_Constants(__instance._accumulateShader, commandBuffer);
-            int threadGroupsX5 = (int)Mathf.Ceil((float)num3 / 8f);
-            int threadGroupsY5 = (int)Mathf.Ceil((float)num4 / 8f);
+            int threadGroupsX5 = (int)Mathf.Ceil(num3 / 8f);
+            int threadGroupsY5 = (int)Mathf.Ceil(num4 / 8f);
             commandBuffer.DispatchCompute(__instance._accumulateShader, 0, threadGroupsX5, threadGroupsY5, 1);
             commandBuffer.SetComputeTextureParam(__instance._rcasShader, 0, "r_input_exposure", __instance._exposure);
             commandBuffer.SetComputeTextureParam(__instance._rcasShader, 0, "r_rcas_input", __instance.isOddFrame ? __instance._internal_upscaled_color1 : __instance._internal_upscaled_color0);
             commandBuffer.SetComputeTextureParam(__instance._rcasShader, 0, "rw_upscaled_output", __instance._upscaledBuf);
             __instance.Set_cbFSR3_Constants(__instance._rcasShader, commandBuffer);
             commandBuffer.SetComputeIntParams(__instance._rcasShader, "rcasConfig", __instance.rcasConfig);
-            int threadGroupsX6 = (int)Mathf.Ceil((float)num3 / 16f);
-            int threadGroupsY6 = (int)Mathf.Ceil((float)num4 / 16f);
+            int threadGroupsX6 = (int)Mathf.Ceil(num3 / 16f);
+            int threadGroupsY6 = (int)Mathf.Ceil(num4 / 16f);
             commandBuffer.DispatchCompute(__instance._rcasShader, 0, threadGroupsX6, threadGroupsY6, 1);
             commandBuffer.SetRenderTarget(destination);
             commandBuffer.SetViewport(new Rect(0f, 0f, num3, num4));
@@ -462,8 +390,8 @@ namespace TarkovVR.Patches.Visuals
             cmdBuf.SetComputeIntParams(shader, "iInputColorResourceDimensions", __instance.renderSize);
             int num = 4;
             float num2 = 2 << num;
-            __instance.tempIntVec[0] = (int)((float)__instance.renderSize[0] / num2);
-            __instance.tempIntVec[1] = (int)((float)__instance.renderSize[1] / num2);
+            __instance.tempIntVec[0] = (int)(__instance.renderSize[0] / num2);
+            __instance.tempIntVec[1] = (int)(__instance.renderSize[1] / num2);
             cmdBuf.SetComputeIntParams(shader, "iLumaMipDimensions", __instance.tempIntVec);
             cmdBuf.SetComputeIntParam(shader, "iLumaMipLevelToUse", num);
             cmdBuf.SetComputeIntParam(shader, "iFrameIndex", __instance.frameNum);
@@ -472,21 +400,21 @@ namespace TarkovVR.Patches.Visuals
             __instance.tempFloatVec[0] = -1f;
             __instance.tempFloatVec[1] = -1f;
             cmdBuf.SetComputeFloatParams(shader, "fMotionVectorScale", __instance.tempFloatVec);
-            __instance.tempFloatVec[0] = (float)__instance.renderSize[0] / (float)__instance.displaySize[0];
-            __instance.tempFloatVec[1] = (float)__instance.renderSize[1] / (float)__instance.displaySize[1];
+            __instance.tempFloatVec[0] = __instance.renderSize[0] / (float)__instance.displaySize[0];
+            __instance.tempFloatVec[1] = __instance.renderSize[1] / (float)__instance.displaySize[1];
             cmdBuf.SetComputeFloatParams(shader, "fDownscaleFactor", __instance.tempFloatVec);
 
             cmdBuf.SetComputeFloatParams(shader, "fMotionVectorJitterCancellation", __instance.zeroFloatVec);
             cmdBuf.SetComputeFloatParam(shader, "fPreExposure", 1f);
             cmdBuf.SetComputeFloatParam(shader, "fPreviousFramePreExposure", 1f);
-            float num3 = (float)__instance.renderSize[0] / (float)__instance.renderSize[1];
+            float num3 = __instance.renderSize[0] / (float)__instance.renderSize[1];
             //float val = Mathf.Tan(0.5f * __instance._mainCamera.fieldOfView * (Mathf.PI / 180f)) * num3;
             //float val = 1.0f / __instance._mainCamera.projectionMatrix.m00;
             float val = 1.0f / __instance._mainCamera.projectionMatrix.m11;
             cmdBuf.SetComputeFloatParam(shader, "fTanHalfFOV", val);
             cmdBuf.SetComputeFloatParam(shader, "fJitterSequenceLength", __instance.jitterPhaseCount);
             //float val2 = Mathf.Max(0f, Mathf.Min(1f, Time.deltaTime));
-            float val2 = (XRDevice.refreshRate > 0) ? (1f / XRDevice.refreshRate) : Time.deltaTime;
+            float val2 = XRDevice.refreshRate > 0 ? 1f / XRDevice.refreshRate : Time.deltaTime;
             cmdBuf.SetComputeFloatParam(shader, "fDeltaTime", val2);
             cmdBuf.SetComputeFloatParam(shader, "fDynamicResChangeFactor", 0f);
             cmdBuf.SetComputeFloatParam(shader, "fViewSpaceToMetersFactor", 1f);

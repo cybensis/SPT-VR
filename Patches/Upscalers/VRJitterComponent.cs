@@ -7,7 +7,7 @@ using static SSAAImpl;
 using UnityEngine.XR;
 using UnityEngine;
 
-namespace TarkovVR.Patches.Visuals
+namespace TarkovVR.Patches.Upscalers
 {
     public class VRJitterComponent : MonoBehaviour
     {
@@ -63,7 +63,7 @@ namespace TarkovVR.Patches.Visuals
             {
                 // DLSS AI is optimized for 8 or 16. 
                 // 16 is better for the "DLAA" (1.0x) mode you've added.
-                CurrentSampleCount = (scale >= 0.99f) ? 16 : 8;
+                CurrentSampleCount = scale >= 0.99f ? 16 : 8;
             }
             else
             {
@@ -99,7 +99,7 @@ namespace TarkovVR.Patches.Visuals
             float fraction = 1f / radix;
             while (index > 0)
             {
-                result += (index % radix) * fraction;
+                result += index % radix * fraction;
                 index /= radix;
                 fraction /= radix;
             }
