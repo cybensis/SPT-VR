@@ -230,6 +230,10 @@ namespace TarkovVR.Patches.Misc
                 Canvas menuUICanvas = menuUIObject.GetComponent<Canvas>();
                 menuUICanvas.enabled = true;
                 menuUICanvas.renderMode = RenderMode.WorldSpace;
+                menuUICanvas.additionalShaderChannels =
+                    AdditionalCanvasShaderChannels.TexCoord1 |
+                    AdditionalCanvasShaderChannels.Normal |
+                    AdditionalCanvasShaderChannels.Tangent;
                 menuUICanvas.RectTransform().localScale = new Vector3(1.3333f, 1.3333f, 1.3333f);
                 menuUICanvas.RectTransform().anchoredPosition = new Vector3(1280, 720, 0);
                 menuUICanvas.RectTransform().sizeDelta = new Vector2(1920, 1080);

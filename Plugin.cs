@@ -16,7 +16,7 @@ using System.Text;
 
 namespace TarkovVR
 {
-    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.3")]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.4")]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
@@ -288,6 +288,33 @@ namespace TarkovVR
             {
                 MyLog.LogWarning("FIKA Core dll not found, support patches will not be applied.");
             }
+            
+            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\DynamicMaps\\DynamicMaps.dll");
+
+            if (File.Exists(modDllPath))
+            {
+                // Load the assembly
+                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+
+                // Check for the required types and methods in the loaded assembly
+                Type configViewType = modAssembly.GetType("DynamicMaps.Plugin");
+                if (configViewType != null)
+                {
+                    // Apply conditional patches
+                    InstalledMods.DynamicMapsInstalled = true;
+                    ApplyPatches("TarkovVR.ModSupport.DynamicMaps");
+                    MyLog.LogInfo("Dependent mod found and patches applied.");
+                }
+                else
+                {
+                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+                }
+            }
+            else
+            {
+                MyLog.LogWarning("DynamicMaps dll not found, support patches will not be applied.");
+            }
+            
             // Repeat for other mods (AmandsGraphics, FIKA) as needed
         }
 

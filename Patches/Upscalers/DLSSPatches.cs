@@ -66,39 +66,6 @@ namespace TarkovVR.Patches.Upscalers
             return false;
         }
 
-        // Adjusts VR eye resolution scale when DLSS/FSR is enabled
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(CameraClass), "SetAntiAliasing")]
-        private static bool UpdateVREyeResolutionForDLSS(CameraClass __instance, EAntialiasingMode quality, EDLSSMode dlssMode, EFSR2Mode fsr2Mode, EFSR3Mode fsr3Mode)
-        {
-            bool dlssOn = dlssMode > EDLSSMode.Off;
-            bool fsr2On = fsr2Mode > EFSR2Mode.Off;
-            bool fsr3On = fsr3Mode > EFSR3Mode.Off;
-            SSAAImpl ssaaimpl_ = __instance.Ssaaimpl_0;
-            __instance.SSAA.UseJitter = dlssOn || fsr2On || fsr3On;
-            if ((bool)ssaaimpl_)
-            {
-                ssaaimpl_.EnableDLSS = false;
-            }
-            if (dlssOn)
-            {
-                if ((bool)ssaaimpl_)
-                {
-                    ssaaimpl_.DLSSQualityNext = GraphicsSettingsClass.GetDLSSQuality(dlssMode);
-                    ssaaimpl_.EnableDLSS = true;
-                    float num = ssaaimpl_.ComputeOptimalResamplingFactor(__instance.SSAA.GetOutputWidth(), __instance.SSAA.GetOutputHeight(), ssaaimpl_.DLSSQualityNext);
-                    __instance.SSAA.Switch(num);
-                    float x = Mathf.Log(num, 2f) - 1f;
-                    Shader.SetGlobalVector(value: new Vector4(x, 1f, 2f, 3f), nameID: Shader.PropertyToID("_DLSSParams"));
-                    Plugin.MyLog.LogError($"[VR DLSS] DLSS enabled with resampling factor {num} (quality {ssaaimpl_.DLSSQualityNext})");
-                }
-            }
-            __instance.method_3();
-            return false;
-        }
-
         // Adds cleanup for the stereo DLSS wrapper
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]

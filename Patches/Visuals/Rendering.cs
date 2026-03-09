@@ -29,37 +29,6 @@ namespace TarkovVR.Patches.Visuals
         private static readonly int MAX_POOLED_TARGETS = 6;
         public static Material _fxaaMat;
 
-        //NOTEEEEEEEEEEEE: Removing the SSAApropagator (i think) from the PostProcessingLayer/Volume will restore some visual fidelity but still not as good as no ssaa
-
-        //ANOTHER NOTE: I'm pretty sure if you delete or disable the SSAA shit you still get all the nice visual effects from the post processing without the blur,
-        // its just the night vision doessn't work, so maybe only enable SSAA when enabling night/thermal vision
-
-        // FIGURED IT OUT Delete the SSAAPropagator, SSAA, and SSAAImpl and it just works
-
-        // Also remove the distant shadows command buffer from the camera
-        // MotionVectorsPASS is whats causing the annoying [Error  : Unity Log] Dimensions of color surface does not match dimensions of depth surface    error to occur 
-        // but its also needed for grass and maybe other stuff
-
-        // SSAA causes a bunch of issues like thermal/nightvision rendering all fucky, and the
-        // s also render in 
-        // with 2 other lenses on either side of the main lense, Although SSAA is nice for fixing the jagged edges, it 
-        // also adds a strong layer of blur over everything so it's definitely best to keep it disabled. Might look into
-        // keeping it around later on if I can figure a way to get it to look nice without messing with everything else
-
-        // In hideout, don't notice any real fps difference when changing object LOD quality and overall visibility
-
-        // anti aliasing is off or on FXAA - no FPS difference noticed - seems like scopes won't work without it
-        // Resampling x1 OFF 
-        // DLSS and FSR OFF
-        // HBAO - Looks better but takes a massive hit on performance - off gets about around 10-20 fps increase
-        // SSR - turning low to off raises FPS by about 2-5, turning ultra to off raises fps by about 5ish. I don't know if it looks better but it seems like if you have it on, you may as well go to ultra
-        // Anistrophic filtering - per texture or on maybe cos it looks bettter, or just off - No real FPS difference
-        // Sharpness at 1-1.5 I think it the gain falls off after around 1.5+
-        // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
-        // Uncheck all boxes on bottom - CHROMATIC ABBERATIONS probably causing scope issues so always have it off
-        // POST FX - Turning it off gains about 8-10 FPS
-
-        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // These two functions would return the screen resolution setting and would result in the game
         // being very blurry
         [HarmonyPrefix]
