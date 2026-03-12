@@ -1,18 +1,19 @@
-﻿using EFT.Rendering.Clouds;
+﻿using Comfort.Common;
+using EFT;
+using EFT.EnvironmentEffect;
+using EFT.Rendering.Clouds;
+using EFT.Weather;
 using HarmonyLib;
 using System;
+using System.IO;
+using System.Reflection;
 using TarkovVR.Source.Settings;
 using UnityEngine;
-using EFT.Weather;
-using System.IO;
-using EFT;
-using static UnityEngine.ParticleSystem.PlaybackState;
-using Comfort.Common;
 using UnityEngine.Rendering;
-using static GClass3809;
 using UnityEngine.XR;
-using System.Reflection;
+using static GClass3809;
 using static SSAAImpl;
+using static UnityEngine.ParticleSystem.PlaybackState;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -32,7 +33,14 @@ namespace TarkovVR.Patches.Visuals
         public static float lastWind = 0.0f;
         public static Vector4 cloudOffset = Vector4.zero;
         public static Vector2 lastWindDirection = new Vector2(1f, 0f);
-       
+
+        // Disables eye exposure, this does not work nicely in VR at all, cloudy weather causes everything to get absurdly dark
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EnvironmentManager), "Update")]
+        private static void LimitExposureForVR(EnvironmentManager __instance)
+        {
+            __instance.PrismExposureSpeed = 0f;
+        }
 
         //Tarkov Clouds dont render correctly in VR so disable them
         [HarmonyPrefix]

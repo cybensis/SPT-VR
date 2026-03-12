@@ -16,7 +16,7 @@ using System.Text;
 
 namespace TarkovVR
 {
-    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.4")]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.5")]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;

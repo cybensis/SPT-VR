@@ -11,6 +11,7 @@ using HarmonyLib;
 using KmyTarkovConfiguration.Views;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -101,7 +102,50 @@ namespace TarkovVR.ModSupport.DynamicMaps
             __instance.Text.text = $"Cursor: {localPoint.x:F} {localPoint.y:F}";
 
             return false;
-        }      
+        }
+
+        // Fixes texture resolutions used by Dynamic maps to not eat VRAM
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TextureUtils), "LoadTexture2DFromPath")]
+        private static bool FixTextureResolution(string absolutePath, ref Texture2D __result)
+        {
+            if (!File.Exists(absolutePath))
+            {
+                __result = null;
+                return false;
+            }
+
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            tex.LoadImage(File.ReadAllBytes(absolutePath));
+
+            // Downscale to half, rounded to multiple of 4 for compression
+            int newWidth = ((tex.width / 2) + 3) & ~3;
+            int newHeight = ((tex.height / 2) + 3) & ~3;
+
+            RenderTexture rt = RenderTexture.GetTemporary(newWidth, newHeight, 0, RenderTextureFormat.ARGB32);
+            Graphics.Blit(tex, rt);
+
+            Texture2D result = new Texture2D(newWidth, newHeight, TextureFormat.RGBA32, false);
+            RenderTexture prev = RenderTexture.active;
+            RenderTexture.active = rt;
+            result.ReadPixels(new Rect(0, 0, newWidth, newHeight), 0, 0);
+            RenderTexture.active = prev;
+            RenderTexture.ReleaseTemporary(rt);
+            UnityEngine.Object.Destroy(tex);
+
+            result.Compress(false);
+            result.Apply(false, true);
+
+            __result = result;
+            return false;
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(ModdedMapScreen), "ReadConfig")]
+        private static Exception SuppressReadConfigError()
+        {
+            return null;
+        }
     }
     public class VRMapDragger : MonoBehaviour
     {
