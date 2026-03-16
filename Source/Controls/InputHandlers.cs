@@ -37,7 +37,6 @@ namespace TarkovVR.Source.Controls
         //   at the moment the click fires, so that clicking DOWN for crouch never accidentally jumps.
         //   Short click  → Jump
         //   Hold click   → Vault  (threshold configurable via VRSettings.GetVaultHoldTime())
-        //   Crouch threshold for CrouchHandler also uses VRSettings.GetCrouchThreshold().
         public class JumpInputHandler : IInputHandler
         {
             private enum JumpState { Idle, Held, Fired }
@@ -174,8 +173,9 @@ namespace TarkovVR.Source.Controls
                     return;
 
                 float joystickY = SteamVR_Actions._default.RightJoystick.axis.y;
-                float crouchThreshold = VRSettings.GetCrouchThreshold();
-
+                float crouchThreshold = VRGlobals.vrControllerType == "vive"
+                    ? VRSettings.GetCrouchThreshold()
+                    : 0.8f;
                 // When the right joystick is pulled down, lower player pose (crouch)
                 if (joystickY < -crouchThreshold)
                 {
@@ -220,8 +220,9 @@ namespace TarkovVR.Source.Controls
                 if (VRGlobals.player is HideoutPlayer || VRGlobals.blockRightJoystick)
                     return;
 
-                float crouchThreshold = VRSettings.GetCrouchThreshold();
-
+                float crouchThreshold = VRGlobals.vrControllerType == "vive"
+                    ? VRSettings.GetCrouchThreshold()
+                    : 0.8f;
                 if (SteamVR_Actions._default.RightJoystick.axis.y > -crouchThreshold && ((float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) == MAX_CROUCH_HEIGHT_DIFF))
                     releasedPullAfterFullCrouch = true;
                 else if (releasedPullAfterFullCrouch && (float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) != MAX_CROUCH_HEIGHT_DIFF)
