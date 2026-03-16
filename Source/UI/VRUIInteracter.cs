@@ -141,6 +141,8 @@ namespace TarkovVR.Source.UI
             // Track button down and send OnPointerDown event
             if (actionButton.stateDown)
             {
+                CloseContextMenusIfClickedOutside();
+
                 pressedObject = hitObject;
                 eventData.button = PointerEventData.InputButton.Left;
                 ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerDownHandler);
@@ -255,6 +257,55 @@ namespace TarkovVR.Source.UI
             ExecuteEvents.Execute(dragObject, eventData, ExecuteEvents.endDragHandler);
             dragObject = null;
         }
+
+        /// <summary>
+        /// Closes any visible SimpleContextMenu that the VR pointer is NOT currently hovering over.
+        /// Called on primary button press (stateDown) to replicate the behaviour of
+        /// SimpleContextMenu.Update() which only fires on Input.GetMouseButtonUp() — never triggered in VR.
+        /// </summary>
+        private void CloseContextMenusIfClickedOutside()
+        {
+            SimpleContextMenu[] menus;
+            try { menus = Object.FindObjectsOfType<SimpleContextMenu>(); }
+            catch { return; }
+
+            if (menus == null || menus.Length == 0)
+                return;
+
+            Camera cam = Camera.main;
+            if (cam == null)
+                return;
+
+            EventSystem es = EventSystem.current;
+            if (es == null)
+                return;
+
+            // uiPointerPos is the world-space hit point updated every frame by RaycastFindHit
+            Vector2 screenPos = cam.WorldToScreenPoint(uiPointerPos);
+            PointerEventData pointerData = new PointerEventData(es) { position = screenPos };
+            List<RaycastResult> results = new List<RaycastResult>();
+            es.RaycastAll(pointerData, results);
+
+            foreach (var menu in menus)
+            {
+                if (menu == null || !menu.gameObject.activeInHierarchy)
+                    continue;
+
+                bool pointerOverMenu = false;
+                foreach (var result in results)
+                {
+                    if (result.gameObject != null && result.gameObject.transform.IsChildOf(menu.transform))
+                    {
+                        pointerOverMenu = true;
+                        break;
+                    }
+                }
+
+                if (!pointerOverMenu)
+                    try { menu.Close(); } catch { }
+            }
+        }
+
         private GameObject RaycastFindHit(RaycastHit hit, ref PointerEventData eventData)
         {
             var pointerPosition = Camera.main.WorldToScreenPoint(hit.point);
