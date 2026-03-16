@@ -488,56 +488,119 @@ namespace TarkovVR.Source.Settings
             frusCullingToggle.Text.localizationKey = "Disable Frustum Culling ";
             frusCullingToggle.Toggle.UpdateValue(settings.disableFrusCulling);
             */
-            //SetupScrollbar(vrSettings);
+            SetupScrollbar(vrSettings);
 
             vrSettingsObject = newSoundSettings.gameObject;
             UnityEngine.Object.Destroy(newSoundSettings);
         }
 
+        private static ScrollRect _vrSettingsScroll;
+
         private static void SetupScrollbar(GameObject vrSettings)
         {
-            // Find or add ScrollRect component
-            var scrollRect = vrSettings.GetComponentInChildren<ScrollRect>();
+            SoundSettingsTab tab = vrSettings.GetComponent<SoundSettingsTab>();
+            Transform slidersPanel = tab._slidersSection;
+            Transform panel = slidersPanel.parent;
+            RectTransform panelRT = panel.GetComponent<RectTransform>();
 
-            if (scrollRect == null)
-            {
-                // If no ScrollRect exists, we need to find the content parent and set it up
-                // The slidersPanel should be inside a viewport that has a ScrollRect
-                Transform viewport = null;
+            // Screen.height / scaleFactor gives the true Canvas-space height —
+            // rect.height on a stretch-anchored object returns the offset, not the real size.
+            Canvas canvas = vrSettings.GetComponentInParent<Canvas>();
+            float scaleFactor = (canvas != null && canvas.scaleFactor > 0f) ? canvas.scaleFactor : 1f;
+            float viewportHeight = Screen.height / scaleFactor - 70f;
 
-                // Try to find the viewport by looking for a common structure
-                // Usually it's: Settings -> Viewport -> Content (slidersPanel)
-                var soundSettings = settingsUi._soundSettingsScreen;
-                if (soundSettings != null)
-                {
-                    // Look for the parent of the sliders section which should be inside a viewport
-                    Transform contentParent = soundSettings._slidersSection.parent;
-                    if (contentParent != null)
-                    {
-                        viewport = contentParent.parent;
-                        if (viewport != null)
-                        {
-                            scrollRect = viewport.GetComponent<ScrollRect>();
-                        }
-                    }
-                }
-            }
+            // Destroy ContentSizeFitter so end-of-frame layout rebuild can't override our size
+            ContentSizeFitter panelCsf = panel.GetComponent<ContentSizeFitter>();
+            if (panelCsf != null)
+                UnityEngine.Object.Destroy(panelCsf);
 
-            // If we found or can access a ScrollRect, enable and configure it
-            if (scrollRect != null)
-            {
-                scrollRect.enabled = true;
-                scrollRect.vertical = true;
-                scrollRect.horizontal = false;
-                scrollRect.movementType = ScrollRect.MovementType.Clamped;
-                scrollRect.scrollSensitivity = 20f;
+            panelRT.sizeDelta = new Vector2(panelRT.sizeDelta.x, viewportHeight);
 
-                // Make sure the scrollbar is visible if it exists
-                if (scrollRect.verticalScrollbar != null)
-                {
-                    scrollRect.verticalScrollbar.gameObject.SetActive(true);
-                }
-            }
+            // Padding so first and last elements aren't clipped by the mask
+            VerticalLayoutGroup sliderVlg = slidersPanel.GetComponent<VerticalLayoutGroup>();
+            if (sliderVlg != null)
+                sliderVlg.padding = new RectOffset(
+                    sliderVlg.padding.left,
+                    sliderVlg.padding.right,
+                    40,
+                    40);
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(panelRT);
+
+            // RectMask2D clips content without affecting child layout
+            if (panel.GetComponent<RectMask2D>() == null)
+                panel.gameObject.AddComponent<RectMask2D>();
+
+            // SlidersSection as scroll content: anchor top-stretch, grow downward
+            RectTransform contentRT = slidersPanel.GetComponent<RectTransform>();
+            contentRT.anchorMin = new Vector2(0f, 1f);
+            contentRT.anchorMax = new Vector2(1f, 1f);
+            contentRT.pivot = new Vector2(0.5f, 1f);
+            contentRT.anchoredPosition = Vector2.zero;
+            contentRT.sizeDelta = new Vector2(0f, contentRT.sizeDelta.y);
+
+            ContentSizeFitter csf = slidersPanel.GetComponent<ContentSizeFitter>()
+                                    ?? slidersPanel.gameObject.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+            // ScrollRectNoDrag: responds only to scroll events from VRUIInteracter,
+            // never auto-scrolls to focused children (unlike ScrollRect)
+            ScrollRectNoDrag scrollRect = panel.GetComponent<ScrollRectNoDrag>()
+                                          ?? panel.gameObject.AddComponent<ScrollRectNoDrag>();
+            scrollRect.content = contentRT;
+            scrollRect.viewport = panelRT;
+            scrollRect.vertical = true;
+            scrollRect.horizontal = false;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.scrollSensitivity = 30f;
+            scrollRect.inertia = false;
+
+            _vrSettingsScroll = scrollRect;
+
+            // Scrollbar lives outside Panel so RectMask2D doesn't clip it
+            GameObject scrollbarGO = new GameObject("VRScrollbar");
+            scrollbarGO.transform.SetParent(panel.parent, false);
+
+            float scrollbarWidth = 14f;
+            float panelRightEdge = panelRT.anchoredPosition.x + panelRT.sizeDelta.x / 2f;
+
+            RectTransform scrollbarRT = scrollbarGO.AddComponent<RectTransform>();
+            scrollbarRT.anchorMin = panelRT.anchorMin;
+            scrollbarRT.anchorMax = panelRT.anchorMax;
+            scrollbarRT.pivot = new Vector2(0f, 1f);
+            scrollbarRT.sizeDelta = new Vector2(scrollbarWidth, viewportHeight);
+            scrollbarRT.anchoredPosition = new Vector2(panelRightEdge, panelRT.anchoredPosition.y);
+
+            UnityEngine.UI.Image scrollbarBg = scrollbarGO.AddComponent<UnityEngine.UI.Image>();
+            scrollbarBg.color = new Color(0.1f, 0.1f, 0.1f, 0.7f);
+
+            Scrollbar scrollbar = scrollbarGO.AddComponent<Scrollbar>();
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+
+            GameObject handleArea = new GameObject("Sliding Area");
+            handleArea.transform.SetParent(scrollbarGO.transform, false);
+            RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
+            handleAreaRT.anchorMin = Vector2.zero;
+            handleAreaRT.anchorMax = Vector2.one;
+            handleAreaRT.offsetMin = new Vector2(2f, 10f);
+            handleAreaRT.offsetMax = new Vector2(-2f, -10f);
+
+            GameObject handle = new GameObject("Handle");
+            handle.transform.SetParent(handleArea.transform, false);
+            RectTransform handleRT = handle.AddComponent<RectTransform>();
+            handleRT.anchorMin = Vector2.zero;
+            handleRT.anchorMax = Vector2.one;
+            handleRT.sizeDelta = Vector2.zero;
+
+            UnityEngine.UI.Image handleImg = handle.AddComponent<UnityEngine.UI.Image>();
+            handleImg.color = new Color(0.55f, 0.55f, 0.55f, 1f);
+
+            scrollbar.handleRect = handleRT;
+            scrollbar.targetGraphic = handleImg;
+
+            scrollRect.verticalScrollbar = scrollbar;
+            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
         }
 
         private static void ChangeRotationSensitivity(int sensitivity)
@@ -573,7 +636,8 @@ namespace TarkovVR.Source.Settings
             {
                 settingsUi.settingsTab_0.gameObject.active = false;
                 vrSettingsObject.active = true;
-
+                if (_vrSettingsScroll != null)
+                    _vrSettingsScroll.verticalNormalizedPosition = 1f;
             }
         }
 
