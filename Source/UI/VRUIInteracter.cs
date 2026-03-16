@@ -1,5 +1,4 @@
 ﻿using EFT.UI;
-using EFT.UI.DragAndDrop;
 using EFT.UI.Health;
 using EFT.UI.Ragfair;
 using EFT.UI.Utilities.LightScroller;
@@ -128,8 +127,6 @@ namespace TarkovVR.Source.UI
                 ? SteamVR_Actions._default.ButtonX
                 : SteamVR_Actions._default.ButtonA;
 
-            bool isPointerClick = !hitObject.GetComponent<EmptyItemView>();
-
             // Normalize object targeting for specific UI cases
             if (hitObject.transform.parent)
             {
@@ -179,13 +176,10 @@ namespace TarkovVR.Source.UI
                 ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerUpHandler);
 
                 // Then send click event for other UI elements that need it
-                if (isPointerClick)
-                {
-                    clickCount = (Time.time - lastClickTime <= 0.25f) ? clickCount + 1 : 1;
-                    lastClickTime = Time.time;
-                    eventData.clickCount = clickCount;
-                    ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
-                }
+                clickCount = (Time.time - lastClickTime <= 0.25f) ? clickCount + 1 : 1;
+                lastClickTime = Time.time;
+                eventData.clickCount = clickCount;
+                ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerClickHandler);
             }
         }
         private void handleUIScrollwheel()
