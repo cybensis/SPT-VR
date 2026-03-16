@@ -1,4 +1,4 @@
-﻿using EFT;
+using EFT;
 using EFT.InputSystem;
 using EFT.InventoryLogic;
 using EFT.UI;
@@ -31,40 +31,128 @@ namespace TarkovVR.Source.Controls
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Vive-friendly JumpInputHandler (v2):
+        //   Uses a PHYSICAL CLICK of the right trackpad as the trigger (binary, no sweet-spot).
+        //   The click is only accepted when the finger rests in the UPPER HALF of the pad (y > 0)
+        //   at the moment the click fires, so that clicking DOWN for crouch never accidentally jumps.
+        //   Short click  → Jump
+        //   Hold click   → Vault  (threshold configurable via VRSettings.GetVaultHoldTime())
+        //   Crouch threshold for CrouchHandler also uses VRSettings.GetCrouchThreshold().
         public class JumpInputHandler : IInputHandler
         {
-            private bool isVaulting = false;
-            private float timeHeld = 0f;
-            private static float TIME_HELD_FOR_VAULT = 0.3f;
+            private enum JumpState { Idle, Held, Fired }
+            private JumpState _state = JumpState.Idle;
+            private float _heldTime = 0f;
+
+            // Y > 0 means finger is in the upper half of the Vive trackpad disc.
+            // We use a small positive guard (0.05) to avoid the dead-centre triggering vault+jump.
+            private const float UPPER_HALF_Y = 0.05f;
+
             public void UpdateCommand(ref ECommand command)
             {
                 // Safety checks
-                if (VRGlobals.vrPlayer == null || SteamVR_Actions._default?.RightJoystick == null)
+                if (VRGlobals.vrPlayer == null ||
+                    SteamVR_Actions._default?.RightJoystick == null ||
+                    SteamVR_Actions._default?.ClickRightJoystick == null)
                     return;
 
+                if (VRGlobals.vrControllerType == "vive")
+                {
+                    UpdateVive(ref command);
+                }
+                else
+                {
+                    UpdateDefault(ref command);
+                }
+            }
+
+            // Vive Wand: physical trackpad click + upper-half guard
+            private void UpdateVive(ref ECommand command)
+            {
+                // Physical click state (binary, no sweet-spot on Vive)
+                bool clickHeld = SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.RightHand);
+                bool clickDown = SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.RightHand);
+
+                // Touch position — used only as a guard to separate "jump/vault" from "crouch"
+                float fingerY = SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
+                bool fingerInUpperHalf = fingerY > UPPER_HALF_Y;
+
+                command = ECommand.None;
+
+                switch (_state)
+                {
+                    case JumpState.Idle:
+                        if (clickDown && fingerInUpperHalf && !VRGlobals.vrPlayer.blockJump)
+                        {
+                            _state = JumpState.Held;
+                            _heldTime = 0f;
+                        }
+                        break;
+
+                    case JumpState.Held:
+                        if (!clickHeld)
+                        {
+                            // Released before vault threshold → Jump
+                            command = ECommand.Jump;
+                            _state = JumpState.Idle;
+                        }
+                        else
+                        {
+                            _heldTime += Time.deltaTime;
+                            if (_heldTime >= VRSettings.GetVaultHoldTime())
+                            {
+                                command = ECommand.Vaulting;
+                                _state = JumpState.Fired;
+                            }
+                        }
+                        break;
+
+                    case JumpState.Fired:
+                        if (!clickHeld)
+                        {
+                            // Send VaultingEnd if the player is still in vaulting state
+                            if (VRGlobals.player != null && VRGlobals.player.IsVaultingPressed)
+                                command = ECommand.VaultingEnd;
+                            _state = JumpState.Idle;
+                        }
+                        else
+                        {
+                            command = ECommand.Vaulting;
+                        }
+                        break;
+                }
+            }
+
+            // Default (Index, Oculus, etc.): original joystick axis logic
+            private bool _isVaulting = false;
+            private float _timeHeld = 0f;
+            private const float TIME_HELD_FOR_VAULT = 0.3f;
+
+            private void UpdateDefault(ref ECommand command)
+            {
                 float yAxis = SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
 
                 if (!VRGlobals.vrPlayer.blockJump && yAxis > 0.925f)
                 {
-                    timeHeld += Time.deltaTime;
-                    if (timeHeld >= TIME_HELD_FOR_VAULT)
+                    _timeHeld += Time.deltaTime;
+                    if (_timeHeld >= TIME_HELD_FOR_VAULT)
                     {
                         command = ECommand.Vaulting;
-                        isVaulting = true;
+                        _isVaulting = true;
                     }
                 }
                 else
                 {
                     if (VRGlobals.player && VRGlobals.player.IsVaultingPressed)
                     {
-                        isVaulting = false;
+                        _isVaulting = false;
                         command = ECommand.VaultingEnd;
                     }
-                    else if (timeHeld > 0.05f && timeHeld < TIME_HELD_FOR_VAULT)
+                    else if (_timeHeld > 0.05f && _timeHeld < TIME_HELD_FOR_VAULT)
                     {
                         command = ECommand.Jump;
                     }
-                    timeHeld = 0f;
+                    _timeHeld = 0f;
                 }
             }
         }
@@ -86,9 +174,10 @@ namespace TarkovVR.Source.Controls
                     return;
 
                 float joystickY = SteamVR_Actions._default.RightJoystick.axis.y;
+                float crouchThreshold = VRSettings.GetCrouchThreshold();
 
                 // When the right joystick is pulled down, lower player pose (crouch)
-                if (joystickY < -0.8f)
+                if (joystickY < -crouchThreshold)
                 {
                     float poseDelta = -1.5f * Time.deltaTime;
                     VRGlobals.player.ChangePose(poseDelta);
@@ -99,7 +188,7 @@ namespace TarkovVR.Source.Controls
                 }
 
                 // When the joystick is pushed up and player has crouched, raise pose (stand)
-                if (VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && joystickY > 0.8f)
+                if (VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && joystickY > crouchThreshold)
                 {
                     float poseDelta = 0.05f;
                     VRGlobals.player.ChangePose(poseDelta);
@@ -131,12 +220,14 @@ namespace TarkovVR.Source.Controls
                 if (VRGlobals.player is HideoutPlayer || VRGlobals.blockRightJoystick)
                     return;
 
-                if (SteamVR_Actions._default.RightJoystick.axis.y > -0.8 && ((float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) == MAX_CROUCH_HEIGHT_DIFF))
+                float crouchThreshold = VRSettings.GetCrouchThreshold();
+
+                if (SteamVR_Actions._default.RightJoystick.axis.y > -crouchThreshold && ((float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) == MAX_CROUCH_HEIGHT_DIFF))
                     releasedPullAfterFullCrouch = true;
                 else if (releasedPullAfterFullCrouch && (float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) != MAX_CROUCH_HEIGHT_DIFF)
                     releasedPullAfterFullCrouch = false;
 
-                if (SteamVR_Actions._default.RightJoystick.axis.y < -0.8 && releasedPullAfterFullCrouch && Time.time - timeSinceLastPress > MIN_TIME_BETWEEN_PRESSES)
+                if (SteamVR_Actions._default.RightJoystick.axis.y < -crouchThreshold && releasedPullAfterFullCrouch && Time.time - timeSinceLastPress > MIN_TIME_BETWEEN_PRESSES)
                 {
                     releasedPullAfterFullCrouch = false;
                     command = ECommand.ToggleProne;

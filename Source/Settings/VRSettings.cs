@@ -14,6 +14,7 @@ using Newtonsoft.Json;
 using static HBAO_Core;
 using EFT.UI.Ragfair;
 using TarkovVR.Patches.Visuals;
+using TarkovVR;
 using UnityEngine.UI;
 
 namespace TarkovVR.Source.Settings
@@ -46,6 +47,11 @@ namespace TarkovVR.Source.Settings
             DisableNearShadows = 1,
             IncreaseLighting = 2
         }
+            
+        // Vive Wand controller scales
+        private static readonly float[] ViveWandVaultTimeValues = [0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f];
+        private static readonly float[] ViveWandCrouchThresholdValues = [0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f];
+        
         public class ModSettings
         {
             public int rotationSensitivity { get; set; }
@@ -80,6 +86,11 @@ namespace TarkovVR.Source.Settings
             public bool disableOccCulling { get; set; }
             public bool disableFrusCulling { get; set; }
             public bool useVRKeyboard { get; set; }
+            
+            // Vive Wand controller settings
+            public float viveWandCrouchTrackpadThreshold { get; set; }
+            public float viveWandVaultHoldTime { get; set; }
+            
             public ModSettings()
             {
                 rotationSensitivity = 4;
@@ -115,6 +126,8 @@ namespace TarkovVR.Source.Settings
                 disableOccCulling = false;
                 disableFrusCulling = false;
                 useVRKeyboard = false;
+                viveWandCrouchTrackpadThreshold = 0.7f;
+                viveWandVaultHoldTime = 0.3f;
             }
             // Add more settings as needed
         }
@@ -145,6 +158,10 @@ namespace TarkovVR.Source.Settings
         private static SettingSelectSlider leftHandVerticalAngleSlider;
         private static SettingSelectSlider handPosOffsetSlider;
         private static SettingSelectSlider variableZoomSensitivitySlider;
+
+        // Vive controller settings
+        private static SettingSelectSlider viveWandCrouchThresholdSlider;
+        private static SettingSelectSlider viveWandVaultHoldTimeSlider;
 
         // Graphics Settings
         private static SettingToggle sharpenToggle;
@@ -474,6 +491,23 @@ namespace TarkovVR.Source.Settings
             useVRKeyboardToggle.Text.localizationKey = "Use In-Game VR Keyboard";
             useVRKeyboardToggle.Toggle.UpdateValue(settings.useVRKeyboard);
 
+            // Vive Wand-specific settings — only shown when Vive controllers are detected
+            if (VRGlobals.vrControllerType == "vive")
+            {
+                viveWandCrouchThresholdSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+                viveWandCrouchThresholdSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, new ReadOnlyCollection<float>(ViveWandCrouchThresholdValues),
+                    (x) => x.ToString("F1"));
+                viveWandCrouchThresholdSlider.Slider.action_0 = SetCrouchThreshold;
+                viveWandCrouchThresholdSlider.Text.localizationKey = "Crouch/Prone Trackpad Threshold (Vive):";
+                viveWandCrouchThresholdSlider.Slider.UpdateValue(CrouchThresholdToSlider(settings.viveWandCrouchTrackpadThreshold));
+
+                viveWandVaultHoldTimeSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+                viveWandVaultHoldTimeSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, new ReadOnlyCollection<float>(ViveWandVaultTimeValues),
+                    (x) => x.ToString("F1") + "s");
+                viveWandVaultHoldTimeSlider.Slider.action_0 = SetVaultHoldTime;
+                viveWandVaultHoldTimeSlider.Text.localizationKey = "Vault/Jump Hold Time (Vive):";
+                viveWandVaultHoldTimeSlider.Slider.UpdateValue(VaultHoldTimeToSlider(settings.viveWandVaultHoldTime));
+            }
 
             /*
             occCullingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
@@ -1033,6 +1067,52 @@ namespace TarkovVR.Source.Settings
         private static void SetUseVRKeyboard(bool turnOn)
         {
             settings.useVRKeyboard = turnOn;
+        }
+
+        // ---- Vive Crouch Threshold ----
+        public static float GetCrouchThreshold()
+        {
+            return settings.viveWandCrouchTrackpadThreshold;
+        }
+        
+        private static int CrouchThresholdToSlider(float v)
+        {
+            int best = 0;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < ViveWandCrouchThresholdValues.Length; i++)
+            {
+                float d = Mathf.Abs(ViveWandCrouchThresholdValues[i] - v);
+                if (d < bestDist) { bestDist = d; best = i; }
+            }
+            return best;
+        }
+        private static void SetCrouchThreshold(int index)
+        {
+            if (index >= 0 && index < ViveWandCrouchThresholdValues.Length)
+                settings.viveWandCrouchTrackpadThreshold = ViveWandCrouchThresholdValues[index];
+        }
+
+        // ---- Vive Vault Hold Time ----
+        public static float GetVaultHoldTime()
+        {
+            return settings.viveWandVaultHoldTime;
+        }
+        
+        private static int VaultHoldTimeToSlider(float v)
+        {
+            int best = 0;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < ViveWandVaultTimeValues.Length; i++)
+            {
+                float d = Mathf.Abs(ViveWandVaultTimeValues[i] - v);
+                if (d < bestDist) { bestDist = d; best = i; }
+            }
+            return best;
+        }
+        private static void SetVaultHoldTime(int index)
+        {
+            if (index >= 0 && index < ViveWandVaultTimeValues.Length)
+                settings.viveWandVaultHoldTime = ViveWandVaultTimeValues[index];
         }
     }
 }
