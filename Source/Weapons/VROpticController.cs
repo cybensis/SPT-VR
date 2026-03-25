@@ -244,7 +244,8 @@ namespace TarkovVR.Source.Weapons
                     scopeZoomHandler?.TriggerSwapZooms();
                 }
 
-                if (!VRGlobals.vrPlayer.isSupporting)
+                if (!VRGlobals.vrPlayer.isSupporting &&
+                    (VRGlobals.handsInteractionController == null || VRGlobals.handsInteractionController.heldItem == null))
                 {
                     float normalizedValue = Mathf.InverseLerp(minFov, maxFov, currentFov);
                     float rotation = Mathf.Lerp(30, -30, normalizedValue);

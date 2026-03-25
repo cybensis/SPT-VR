@@ -836,9 +836,28 @@ namespace TarkovVR.Source.Player.VRManager
                 }
             }
 
-            if (VRGlobals.menuOpen || !LeftHand || (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && secondaryGripState.state))
+            if (VRGlobals.menuOpen || !LeftHand)
                 return;
 
+            // If holding a loot item, skip ALL gun/scope IK logic — just position hand freely
+            // Must come BEFORE scopeTransform check so heldItem always wins
+            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            {
+                handLock = false;
+                hapticTriggered = false;
+                if (isSupporting) isSupporting = false;
+                Vector3 freePos = (fromAction.localPosition + secondaryHandPosOffset) -
+                                  fromAction.localRotation * Vector3.forward * controllerLength;
+                LeftHand.transform.localPosition = freePos;
+                LeftHand.transform.localRotation = fromAction.localRotation;
+                LeftHand.transform.Rotate(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x,
+                    secondaryHandRotOffset.y,
+                    VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
+                return;
+            }
+
+            if (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && secondaryGripState.state)
+                return;
 
             if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(LEFT_HAND_ANIMATOR_HASH) == 1.0)
             {

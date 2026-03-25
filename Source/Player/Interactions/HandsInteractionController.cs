@@ -171,8 +171,15 @@ namespace TarkovVR.Source.Player.Interactions
                 pickupState?.Pickup(false, null);
             });
         }
+        
         public void Update()
         {
+            // Always update held item position regardless of game state
+            if (heldItem != null)
+            {
+                UpdateHeldItemPosition();
+            }
+
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
                 return;
@@ -200,6 +207,10 @@ namespace TarkovVR.Source.Player.Interactions
 
             ProcessInputStates();
 
+            // Drop check runs after ProcessInputStates so backpack pickup (stateUp) is handled first
+            if (heldItem != null)
+                UpdateHeldItemDrop();
+
             // Throttle expensive physics checks to 20 FPS
             if (Time.time - lastPhysicsCheckTime > PHYSICS_CHECK_INTERVAL)
             {
@@ -213,13 +224,12 @@ namespace TarkovVR.Source.Player.Interactions
                 lastCacheCleanupTime = Time.time;
             }
 
-            UpdateHeldItemPhysics();
-
-            if (changingScopeZoom)
+            if (changingScopeZoom && heldItem == null)
                 HandleScopeInteraction();
 
             UpdateInteractionExitStates();
         }
+        
         private void CleanupCache()
         {
             var keysToRemove = new List<Collider>();
@@ -350,7 +360,9 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (leftHandState.inScope)
             {
-                HandleScopeInteraction();
+                // Don't interact with scope while holding a loot item
+                if (heldItem == null)
+                    HandleScopeInteraction();
             }
 
             // Handle scope exit logic
@@ -451,6 +463,10 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (collider.gameObject.layer == 6)
                 {
+                    // Don't enter scope zone while holding a loot item
+                    if (heldItem != null) 
+                        continue;
+                    
                     scopeTransform = collider.transform;
                     leftHandState.inScope = true;
                     noScopeHit = false;
@@ -565,8 +581,18 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void ProcessInteractiveObjects()
         {
-            // Only process if we don't already have an item and button is pressed
-            if (heldItem != null || !secondaryHandGrip.stateDown)
+            // If heldItem is destroyed (e.g. picked up into inventory), clear the reference
+            if (heldItem != null && heldItem is not UnityEngine.Object)
+            {
+                ForceDropHeldItem();
+            }
+            
+            // Block all world interactions while holding an item
+            if (heldItem != null)
+                return;
+
+            // Only process if button is pressed
+            if (!secondaryHandGrip.stateDown)
                 return;
 
             if (leftHandState.lootItem != null)
@@ -613,69 +639,189 @@ namespace TarkovVR.Source.Player.Interactions
                 corpseInteractionClass.method_3();
             }
         }
-        /*
-        private void UpdateHeldItemPhysics()
+
+        /// <summary>
+        /// Updates held item position every frame, even during sprint/menu.
+        /// </summary>
+        private void UpdateHeldItemPosition()
         {
-
-            if (heldItem == null) return;
-
-            Rigidbody rb = heldItem.GetComponent<Rigidbody>() ?? heldItem.gameObject.AddComponent<Rigidbody>();
+            if (heldItem == null) 
+                return;
             
-            if (rb != null)
+            if (heldItem is not UnityEngine.Object)
             {
-                heldItem._rigidBody = rb;
-                Transform hand = VRGlobals.vrPlayer.LeftHand.transform;
-                Vector3 offsetPosition = hand.position
-                    + hand.right * heldItemOffset.x
-                    + hand.up * heldItemOffset.y
-                    + hand.forward * heldItemOffset.z;              
-                Quaternion targetRotation = hand.rotation;
-                rb.interpolation = RigidbodyInterpolation.Interpolate;
-                rb.useGravity = false;
-                rb.detectCollisions = true;
-                heldItem._rigidBody.mass = heldItem.item_0.TotalWeight;
-                rb.MovePosition(offsetPosition);
-                rb.MoveRotation(targetRotation);
+                ForceDropHeldItem();
+                return;
             }
 
-            if (!secondaryHandGrip.state)
-            {
-                WeaponPatches.DropObject(heldItem, true);
-                heldItem = null;
-            }
-        }
-        */
-        
-
-        private void UpdateHeldItemPhysics()
-        {
-            if (heldItem == null) return;
-
-            // Only initialize once when item is first held
             if (!isItemInitialized)
             {
                 InitializeHeldItem();
                 isItemInitialized = true;
             }
 
-            // Only do the positioning math every frame
+            // Re-enforce kinematic every frame — EFT coroutines (method_4/SupportRigidbody)
+            // can change rigidbody state while item is held
+            cachedRigidbody.isKinematic = true;
+            cachedRigidbody.detectCollisions = false;
+            cachedRigidbody.useGravity = false;
+
             Vector3 offsetPosition = cachedHand.position
                 + cachedHand.right * heldItemOffset.x
                 + cachedHand.up * heldItemOffset.y
                 + cachedHand.forward * heldItemOffset.z;
-            Quaternion rotation = cachedHand.rotation;
 
-            cachedRigidbody.MovePosition(offsetPosition);
-            cachedRigidbody.MoveRotation(rotation);
-            // Check for drop
-            if (!secondaryHandGrip.state)
+            heldItem.transform.position = offsetPosition;
+            heldItem.transform.rotation = cachedHand.rotation;
+
+            cachedRigidbody.velocity = Vector3.zero;
+            cachedRigidbody.angularVelocity = Vector3.zero;
+
+            // Drain hands stamina while holding — drop if exhausted
+            if (VRSettings.GetHeldItemWeight())
+                DrainHoldingStamina();
+        }
+
+        private void DrainHoldingStamina()
+        {
+            const float baseHandsCapacity = 150f;
+            try
             {
-                isItemInitialized = false;
-                WeaponPatches.DropObject(heldItem, true);
-                heldItem = null;               
-                cachedRigidbody = null;
-                cachedHand = null;
+                if (VRGlobals.player?.Physical is not PlayerPhysicalClass physical) 
+                    return;
+
+                if (physical.HandsStamina.Current <= 0f)
+                {
+                    ForceDropHeldItem();
+                    return;
+                }
+
+                float itemWeight = heldItem.item_0.TotalWeight;
+                float drainPerSec = baseHandsCapacity * 0.0004f * Mathf.Pow(itemWeight, 1.20f);
+                physical.ConsumeAsMelee(drainPerSec * Time.deltaTime);
             }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        /// <summary>
+        /// Checks for grip release and drops the item. Only called when full input is active (not sprinting).
+        /// </summary>
+        private void UpdateHeldItemDrop()
+        {
+            if (heldItem == null) 
+                return;
+
+            if (secondaryHandGrip.state) 
+                return;
+            
+            isItemInitialized = false;
+            cachedRigidbody.isKinematic = false;
+            ConsumeThrowStamina(heldItem);
+            WeaponPatches.DropObject(heldItem, true);
+            heldItem = null;
+            cachedRigidbody = null;
+            cachedHand = null;
+
+            // Restore EFT interaction state so player can interact again after drop
+            try
+            {
+                VRGlobals.player?.GetComponent<GamePlayerOwner>()?.InteractionsChangedHandler();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            NotifyWeightChanged();
+        }
+
+        /// <summary>
+        /// Consumes hand stamina on throw, scaled by item weight and throw speed.
+        /// No cost if the item is just dropped (velocity below threshold).
+        /// </summary>
+        private void ConsumeThrowStamina(LootItem item)
+        {
+            // Minimum controller speed (m/s) to count as an intentional throw
+            const float throwVelocityThreshold = 1.5f;
+
+            if (!VRSettings.GetHeldItemWeight())
+                return;
+
+            try
+            {
+                if (VRGlobals.player?.Physical is not PlayerPhysicalClass physical)
+                    return;
+
+                // Get controller velocity at release
+                Vector3 throwVelocity = ControllerVelocity.GetSteamVRVelocity(
+                    cachedLeftHandedMode ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
+
+                float speed = throwVelocity.magnitude;
+
+                // Below threshold = just letting go, no stamina cost
+                if (speed < throwVelocityThreshold)
+                    return;
+
+                float itemWeight = item.item_0.TotalWeight;
+                float speedFactor = Mathf.Clamp01((speed - throwVelocityThreshold) / 3f);
+                const float throwA = 1.340f;
+                const float throwP = 0.90f;
+                const float throwSf = 0.20f;
+                
+                // cost = a * w^p * lerp(sf, 1, speedFactor)
+                float cost = throwA * Mathf.Pow(itemWeight, throwP) * Mathf.Lerp(throwSf, 1f, speedFactor);
+
+                if (cost <= 0f)
+                    return;
+
+                physical.ConsumeAsMelee(cost);
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        public void ForceDropHeldItem()
+        {
+            if (heldItem != null && heldItem is UnityEngine.Object)
+            {
+                try
+                {
+                    if (cachedRigidbody != null)
+                    {
+                        cachedRigidbody.isKinematic = false;
+                        cachedRigidbody.useGravity = true;
+                        cachedRigidbody.detectCollisions = true;
+                    }
+
+                    WeaponPatches.DropObject(heldItem, true);
+                }
+                catch
+                {
+                     /* item may already be in an invalid state */
+                }
+            }
+
+            heldItem = null;
+            cachedRigidbody = null;
+            cachedHand = null;
+            isItemInitialized = false;
+
+            // Restore EFT interaction state so player can interact again after drop
+            try
+            {
+                VRGlobals.player?.GetComponent<GamePlayerOwner>()?.InteractionsChangedHandler();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            NotifyWeightChanged();
         }
 
         private void InitializeHeldItem()
@@ -684,11 +830,46 @@ namespace TarkovVR.Source.Player.Interactions
             cachedHand = VRGlobals.vrPlayer.LeftHand.transform;
 
             heldItem._rigidBody = cachedRigidbody;
-            cachedRigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+            
+            // Kinematic + no collisions while held: item follows hand exactly, never gets stuck in geometry
+            cachedRigidbody.isKinematic = true;
+            cachedRigidbody.detectCollisions = false;
             cachedRigidbody.useGravity = false;
-            cachedRigidbody.detectCollisions = true;
+            cachedRigidbody.velocity = Vector3.zero;
+            cachedRigidbody.angularVelocity = Vector3.zero;
             cachedRigidbody.mass = heldItem.item_0.TotalWeight;
+
+            // Clear any stale interaction menu immediately when picking up
+            try
+            {
+                VRGlobals.player?.GetComponent<GamePlayerOwner>()?.ClearInteractionState();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            NotifyWeightChanged();
         }
+
+        /// <summary>
+        /// Triggers EFT's weight recalculation so held item weight is reflected immediately.
+        /// </summary>
+        private static void NotifyWeightChanged()
+        {
+            if (!VRSettings.GetHeldItemWeight()) 
+                return;
+            
+            try
+            {
+                VRGlobals.player?.Physical?.OnWeightUpdated();
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
         private void UpdateInteractionExitStates()
         {
             if (hasEnteredScope && !wasInScope)
