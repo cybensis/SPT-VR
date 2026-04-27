@@ -1,38 +1,39 @@
 ﻿using Comfort.Common;
+using EFT;
+using EFT.BlitDebug;
 using EFT.CameraControl;
+using EFT.EnvironmentEffect;
 using EFT.Rendering.Clouds;
+using EFT.Settings.Graphics;
 using EFT.UI;
+using EFT.Visual;
+using EFT.Weather;
+using GPUInstancer;
 using HarmonyLib;
+using Microsoft.SqlServer.Server;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Security.Cryptography;
 using System.Text;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
+using Unity.Audio;
+using Unity.XR.OpenVR;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.XR;
-using Valve.VR;
-using EFT.BlitDebug;
 using UnityStandardAssets.ImageEffects;
+using Valve.VR;
 using static HBAO_Core;
 using static UnityEngine.ParticleSystem.PlaybackState;
 using static Val;
-using EFT.Visual;
-using Unity.XR.OpenVR;
-using EFT.Weather;
-using EFT.Settings.Graphics;
-using System.IO;
-using Unity.Audio;
-using Newtonsoft.Json;
-using EFT;
-using System.Security.Cryptography;
-using Microsoft.SqlServer.Server;
-using GPUInstancer;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -43,6 +44,13 @@ namespace TarkovVR.Patches.Visuals
         public static DistantShadow distantShadow;
 
 
+        // Disables eye exposure, this does not work nicely in VR at all, cloudy weather causes everything to get absurdly dark
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EnvironmentManager), "Update")]
+        private static void LimitExposureForVR(EnvironmentManager __instance)
+        {
+            __instance.PrismExposureSpeed = 0f;
+        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The volumetric light was only using the projection matrix for one eye which made it appear
