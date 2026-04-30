@@ -31,6 +31,9 @@ using TarkovVR.Patches.Core.VR;
 using System.Collections;
 using EFT.UI.Matchmaker;
 using TarkovVR.Patches.Visuals;
+using EFT.Ballistics;
+using EFT.HealthSystem;
+using EFT.InventoryLogic;
 
 
 
@@ -293,6 +296,81 @@ namespace TarkovVR.ModSupport.FIKA
             }
 
             localGameInstance.Stop(__instance.MyPlayer.ProfileId, localGameInstance.ExitStatus, exitName);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(FikaPlayer), nameof(FikaPlayer.ApplyShot))]
+        private static bool AllowSelfDamageApplyShot(FikaPlayer __instance, ref ShotInfoClass __result,
+            DamageInfoStruct damageInfo, EBodyPart bodyPartType, EBodyPartColliderType colliderType,
+            EArmorPlateCollider armorPlateCollider, ShotIdStruct shotId)
+        {
+            if (damageInfo.Player == null || !__instance.IsYourPlayer)
+            {
+                return true;
+            }
+
+            if (damageInfo.Player.iPlayer.ProfileId != __instance.ProfileId)
+            {
+                return true;
+            }
+
+            // --- Inlined SimulatedApplyShot + Player.ApplyDamageInfo logic ---
+            ActiveHealthController healthController = __instance.ActiveHealthController;
+            if (healthController is not { IsAlive: true })
+            {
+                __result = null;
+                return false;
+            }
+
+            // Armor processing
+            bool deflected = damageInfo.DeflectedBy != null;
+            float preDamage = damageInfo.Damage;
+            List<ArmorComponent> damagedArmor =
+                __instance.ProceedDamageThroughArmor(ref damageInfo, colliderType, armorPlateCollider, true);
+            __instance.method_97(damagedArmor);
+
+            MaterialType materialType = deflected switch
+            {
+                true => MaterialType.HelmetRicochet,
+                false when damagedArmor == null || damagedArmor.Count < 1 => MaterialType.Body,
+                _ => damagedArmor[0].Material
+            };
+
+            float armorAbsorbed = preDamage - damageInfo.Damage;
+            if (armorAbsorbed > 0)
+            {
+                damageInfo.DidArmorDamage = armorAbsorbed;
+            }
+
+            // --- Inlined Player.ApplyDamageInfo (bypasses FikaPlayer friendly fire check) ---
+            __instance.LastDamagedBodyPart = bodyPartType;
+            healthController.DoWoundRelapse(damageInfo.Damage, bodyPartType);
+            __instance.LastAggressor = damageInfo.Player?.iPlayer;
+            __instance.LastDamageInfo = damageInfo;
+            __instance.LastBodyPart = bodyPartType;
+            damageInfo.BleedBlock = __instance.method_95(colliderType);
+            float bodyDamage = healthController.ApplyDamage(bodyPartType, damageInfo.Damage, damageInfo);
+            damageInfo.DidBodyDamage = bodyDamage;
+            healthController.BluntContusion(bodyPartType, 0f);
+
+            healthController.TryApplySideEffects(damageInfo, bodyPartType, out _);
+
+            __instance.ApplyHitDebuff(damageInfo.Damage, damageInfo.StaminaBurnRate * damageInfo.Damage, bodyPartType,
+                damageInfo.DamageType);
+
+            // --- Post-damage effects ---
+            __instance.ShotReactions(damageInfo, bodyPartType);
+            __instance.ReceiveDamage(damageInfo.Damage, bodyPartType, damageInfo.DamageType, armorAbsorbed,
+                materialType);
+
+            __result = new ShotInfoClass()
+            {
+                PoV = __instance.PointOfView,
+                Penetrated = damageInfo.Penetrated,
+                Material = materialType
+            };
+
             return false;
         }
     }
