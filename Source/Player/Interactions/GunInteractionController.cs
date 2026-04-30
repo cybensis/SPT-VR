@@ -1,7 +1,9 @@
-﻿using EFT;
-using EFT.UI.Ragfair;
+using EFT;
+using EFT.InventoryLogic;
+using EFT.UI;
 using JetBrains.Annotations;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -46,6 +48,12 @@ public class GunInteractionController : MonoBehaviour
     private bool initMalfunction = false;
     public bool hasExaminedAfterMalfunction = false;
     public Vector3 armsOffset = new Vector3(-0.05f, -0.075f, -0.075f);
+
+    // Zeroing: label action for text display, and a reference to the bolt menu list
+    // so RefreshZeroingLabel can rebuild the UI with the updated text.
+    private ActionsTypesClass zeroingLabelAction = null;
+    private ActionsReturnClass boltActionsList = null;
+    private ActionPanel cachedActionPanel = null;
 
     private Dictionary<Transform, ActionsReturnClass> interactablesDictionary;
     private Dictionary<Transform, ActionsReturnClass> tacDeviceDictionary;
@@ -140,6 +148,7 @@ public class GunInteractionController : MonoBehaviour
 
     public void OnDisable()
     {
+        cachedActionPanel = null;
         // Check if gunRaycastReciever exists before using it
         if (initialized && gunRaycastReciever != null && gunRaycastReciever.GetComponent<BoxCollider>() != null)
         {
@@ -635,9 +644,108 @@ public class GunInteractionController : MonoBehaviour
         return (magazine || internalMag);
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
-    public void SetChargingHandleOrBolt(Transform chargeOrBoltTransform, bool isBolt) {
-        //if (chargingHandle || bolt)
-           // return;
+
+    /// <summary>
+    /// Switches zeroing by directly mutating SightComponent.ScopesCurrentCalibPointIndexes —
+    /// the same data that OpticCalibrationSwitch modifies, but without the IsAiming guard
+    /// that would block the call when the player is not aiming.
+    /// After changing the index we call method_2() to flag calibration for recalculation
+    /// on the next frame, which updates the reticle / zeroing panel.
+    /// </summary>
+    private void DoZeroingChange(bool increase)
+    {
+        try
+        {
+            if (VRGlobals.player == null) return;
+            var pwa = VRGlobals.player.ProceduralWeaponAnimation;
+            if (pwa == null) return;
+
+            var sight = pwa.CurrentAimingMod;
+            if (sight == null) return;
+            if (!sight.HasOpticCalibrationPoints(sight.SelectedScopeIndex)) return;
+
+            bool changed = increase
+                ? sight.OpticCalibrationPointUp()
+                : sight.OpticCalibrationPointDown();
+
+            if (changed)
+            {
+                // Flag PWA to recalculate calibration on next frame
+                pwa.method_2();
+            }
+        }
+        catch (Exception ex)
+        {
+            UnityEngine.Debug.LogWarning("[VR Zeroing] DoZeroingChange failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Returns the current zeroing distance from the active sight, e.g. "100m".
+    /// Returns "---" when no calibration data is available.
+    /// </summary>
+    private string GetCurrentZeroingText()
+    {
+        try
+        {
+            if (VRGlobals.player == null) return "---";
+            var pwa = VRGlobals.player.ProceduralWeaponAnimation;
+            if (pwa == null) return "---";
+            var sight = pwa.CurrentAimingMod;
+            if (sight == null) return "---";
+            if (!sight.HasOpticCalibrationPoints(sight.SelectedScopeIndex)) return "---";
+            int dist = sight.GetCurrentOpticCalibrationDistance();
+            return dist + "m";
+        }
+        catch { return "---"; }
+    }
+
+    /// <summary>
+    /// Updates the zeroing label text and immediately rebuilds the ActionPanel button list
+    /// so the new distance is visible without reopening the menu.
+    ///
+    /// InteractionButton.Show() writes _text.text once at creation; the CurrentActionChanged
+    /// event only refreshes highlight colours, never text. The only way to update button text
+    /// is to call AvailableInteractionState.method_0() which rebuilds GClass3822 from Actions[].
+    /// We save/restore SelectedAction so the selection does not jump back to Actions[0].
+    /// </summary>
+    private void RefreshZeroingLabel()
+    {
+        if (zeroingLabelAction == null || boltActionsList == null || playerOwner == null)
+            return;
+
+        zeroingLabelAction.Name = "Zeroing: " + GetCurrentZeroingText();
+
+        if (lastHitCompIndex != boltIndex)
+            return;
+
+        // Cache ActionPanel — FindObjectOfType is expensive and would cause a frame hitch
+        // if called every time. We look it up once and reuse the reference.
+        if (cachedActionPanel == null)
+            cachedActionPanel = UnityEngine.Object.FindObjectOfType<ActionPanel>();
+
+        if (cachedActionPanel == null)
+            return;
+
+        // Call ActionPanel.method_0 directly instead of going through
+        // AvailableInteractionState.method_0, which skips the update when the same
+        // object reference is already the current Value (reference equality check).
+        var savedAction = boltActionsList.SelectedAction;
+        cachedActionPanel.method_0(boltActionsList);
+        if (savedAction != null)
+            boltActionsList.SelectedAction = savedAction;
+    }
+
+    private IEnumerator RefreshZeroingLabelDelayed()
+    {
+        yield return null;
+        yield return null;
+        RefreshZeroingLabel();
+    }
+
+    //------------------------------------------------------------------------------------------------------------------------------------------------------------
+    public void SetChargingHandleOrBolt(Transform chargeOrBoltTransform, bool isBolt)
+    {
         if (isBolt)
             bolt = chargeOrBoltTransform;
         else
@@ -648,6 +756,8 @@ public class GunInteractionController : MonoBehaviour
         GetMesh(chargeOrBoltTransform);
         GetMalfunctionMeshes(chargeOrBoltTransform);
         List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
+
+        // --- Examine Weapon ---
         ActionsTypesClass examineWeapon = new ActionsTypesClass();
         examineWeapon.Name = "Examine Weapon";
         IInputHandler baseHandler;
@@ -659,7 +769,7 @@ public class GunInteractionController : MonoBehaviour
         }
         listComponents.Add(examineWeapon);
 
-
+        // --- Check Chamber / Fix Malfunction ---
         ActionsTypesClass checkChamber = new ActionsTypesClass();
         checkChamber.Name = "Check Chamber/Fix Malfunction";
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.CheckChamber, out baseHandler);
@@ -670,10 +780,40 @@ public class GunInteractionController : MonoBehaviour
         }
         listComponents.Add(checkChamber);
 
+        // --- Zeroing label (display-only) ---
+        // Disabled = true so SelectNextAction/SelectPreviousAction skips it on scroll.
+        zeroingLabelAction = new ActionsTypesClass();
+        zeroingLabelAction.Name = "Zeroing: " + GetCurrentZeroingText();
+        zeroingLabelAction.Disabled = true;
+        zeroingLabelAction.Action = null;
+        listComponents.Add(zeroingLabelAction);
+
+        // --- Zeroing + ---
+        // Calls OpticCalibrationSwitchUp DIRECTLY on firearmController — no command queue,
+        // no VRInputManager dependency. Then refreshes the label after 2 frames.
+        ActionsTypesClass zeroingUp = new ActionsTypesClass();
+        zeroingUp.Name = "  Zeroing +";
+        zeroingUp.Action = () =>
+        {
+            DoZeroingChange(true);
+            RefreshZeroingLabel();
+        };
+        listComponents.Add(zeroingUp);
+
+        // --- Zeroing - ---
+        ActionsTypesClass zeroingDown = new ActionsTypesClass();
+        zeroingDown.Name = "  Zeroing -";
+        zeroingDown.Action = () =>
+        {
+            DoZeroingChange(false);
+            RefreshZeroingLabel();
+        };
+        listComponents.Add(zeroingDown);
 
         ActionsReturnClass chamberList = new ActionsReturnClass();
         chamberList.Actions = listComponents;
         weaponUiLists.Add(chamberList);
+        boltActionsList = chamberList;
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
     public void SetFireModeSwitch(Transform fireModeSwitch) {
