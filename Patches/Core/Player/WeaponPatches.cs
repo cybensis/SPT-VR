@@ -1345,7 +1345,31 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(FirearmController), "InitiateShot")]
+        private static void ShotHapticFeedback(FirearmController __instance)
+        {
+            if (VRGlobals.vrPlayer == null || __instance._player != VRGlobals.player)
+            {
+                return;
+            }
 
+            bool leftHanded = VRSettings.GetLeftHandedMode();
+            (SteamVR_Input_Sources primaryHand, SteamVR_Input_Sources secondaryHand) = leftHanded
+                ? (SteamVR_Input_Sources.LeftHand, SteamVR_Input_Sources.RightHand)
+                : (SteamVR_Input_Sources.RightHand, SteamVR_Input_Sources.LeftHand);
+
+            const float frequency = 1;
+            const float duration = 0.3f;
+            const float amplitude = 1.0f;
+
+            SteamVR_Actions._default.Haptic.Execute(0, duration, frequency, amplitude, primaryHand);
+
+            if (VRGlobals.vrPlayer.isSupporting)
+            {
+                SteamVR_Actions._default.Haptic.Execute(0, duration, frequency, amplitude, secondaryHand);
+            }
+        }
     }
 }
 public static class GameObjectExtensions
