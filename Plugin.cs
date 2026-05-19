@@ -133,36 +133,52 @@ namespace TarkovVR
                         ETrackedDeviceClass deviceClass = system.GetTrackedDeviceClass(deviceIndex);
                         if (deviceClass == ETrackedDeviceClass.Controller)
                         {
-                            // Get controller type
+                            // Use a large buffer — some model strings exceed 64 chars
                             ETrackedPropertyError error = new ETrackedPropertyError();
-                            StringBuilder modelNumber = new StringBuilder(64);
-                            system.GetStringTrackedDeviceProperty(deviceIndex, ETrackedDeviceProperty.Prop_ModelNumber_String, modelNumber, 64, ref error);
+                            StringBuilder modelNumber = new StringBuilder(256);
+                            system.GetStringTrackedDeviceProperty(deviceIndex, ETrackedDeviceProperty.Prop_ModelNumber_String, modelNumber, 256, ref error);
+
+                            // Also read the render model name as a fallback identifier
+                            StringBuilder renderModel = new StringBuilder(256);
+                            system.GetStringTrackedDeviceProperty(deviceIndex, ETrackedDeviceProperty.Prop_RenderModelName_String, renderModel, 256, ref error);
+
+                            string modelStr = modelNumber.ToString();
+                            string renderStr = renderModel.ToString();
+                            Plugin.MyLog.LogInfo($"[Controller Detection] Device {deviceIndex}: ModelNumber='{modelStr}' RenderModel='{renderStr}'");
+
+                            // Case-insensitive matching — real strings seen in the wild:
+                            //   "VIVE Controller Pro MV", "VIVE Controller MV", "vive_controller"
+                            string modelLower = modelStr.ToLowerInvariant();
+                            string renderLower = renderStr.ToLowerInvariant();
 
                             string controllerType = "Unknown";
-                            if (modelNumber.ToString().Contains("Vive Controller"))
+                            if (modelLower.Contains("vive") || renderLower.Contains("vive_controller") || renderLower.Contains("vr_controller_vive"))
                             {
-                                VRGlobals.vrControllerType = "vive";
+                                // Only set once — don't overwrite a confirmed type with Unknown
+                                if (VRGlobals.vrControllerType != "vive")
+                                    VRGlobals.vrControllerType = "vive";
                                 controllerType = "Vive Wand";
                             }
-                            else if (modelNumber.ToString().Contains("Knuckles"))
+                            else if (modelLower.Contains("knuckles") || renderLower.Contains("knuckles"))
                             {
-                                VRGlobals.vrControllerType = "index";
+                                if (string.IsNullOrEmpty(VRGlobals.vrControllerType))
+                                    VRGlobals.vrControllerType = "index";
                                 controllerType = "Valve Index Knuckles";
                             }
-                            else if (modelNumber.ToString().Contains("Oculus Touch"))
+                            else if (modelLower.Contains("oculus touch") || renderLower.Contains("oculus"))
                             {
-                                VRGlobals.vrControllerType = "oculus";
+                                if (string.IsNullOrEmpty(VRGlobals.vrControllerType))
+                                    VRGlobals.vrControllerType = "oculus";
                                 controllerType = "Oculus Touch";
                             }
 
-                            Plugin.MyLog.LogInfo($"[Controller Detection] Found controller ({deviceIndex}): {modelNumber} ({controllerType})");
-
-                            // Log controller role (left/right)
                             ETrackedControllerRole role = system.GetControllerRoleForTrackedDeviceIndex(deviceIndex);
-                            Plugin.MyLog.LogInfo($"[Controller Detection] Controller role: {role}");
+                            Plugin.MyLog.LogInfo($"[Controller Detection] Found controller ({deviceIndex}): {modelStr} → type='{controllerType}', role={role}");
                         }
                     }
                 }
+
+                Plugin.MyLog.LogInfo($"[Controller Detection] Final vrControllerType='{VRGlobals.vrControllerType ?? "null"}'");
             }
             catch (Exception ex)
             {
