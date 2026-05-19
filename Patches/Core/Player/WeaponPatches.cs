@@ -1168,17 +1168,159 @@ namespace TarkovVR.Patches.Core.Player
         private static bool DisableCoroutineWhenHeldItem(LootItem __instance)
         {
             __instance.bool_1 = false;
-            if (__instance._rigidBody != null)
-            {
-                Rigidbody rigidBody = __instance._rigidBody;
-                GClass833 visibilityChecker = __instance.GetVisibilityChecker();
-                EFTPhysicsClass.GClass745.SupportRigidbody(rigidBody, __instance.PhysicsQuality, visibilityChecker);
-                __instance.ienumerator_0 = __instance.method_4();
-                if(VRGlobals.handsInteractionController.heldItem == null)
-                    __instance.StartCoroutine(__instance.ienumerator_0);
-            }
+            
+            if (__instance._rigidBody == null) 
+                return false;
+            
+            Rigidbody rigidBody = __instance._rigidBody;
+            GClass833 visibilityChecker = __instance.GetVisibilityChecker();
+            EFTPhysicsClass.GClass745.SupportRigidbody(rigidBody, __instance.PhysicsQuality, visibilityChecker);
+            __instance.ienumerator_0 = __instance.method_4();
+
+            bool isHeld = VRGlobals.handsInteractionController != null &&
+                          VRGlobals.handsInteractionController.heldItem == __instance;
+
+            if (!isHeld)
+                __instance.StartCoroutine(__instance.ienumerator_0);
+            
             return false;
         }
+
+        // Prevent EFT from destroying the Rigidbody on a held item via StopPhysics
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(LootItem), "StopPhysics")]
+        private static bool PreventStopPhysicsOnHeldItem(LootItem __instance)
+        {
+            if (VRGlobals.handsInteractionController == null)
+                return true;
+            
+            // block StopPhysics while item is held
+            return VRGlobals.handsInteractionController.heldItem != __instance;
+        }
+
+        // Patch PlayerBridge.TotalWeight getter to include the weight of the currently held item
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BasePhysicalClass.PlayerBridge), "TotalWeight", MethodType.Getter)]
+        private static void AddHeldItemWeight(ref float __result)
+        {
+            if (!VRSettings.GetHeldItemWeight())
+                return;
+            if (VRGlobals.handsInteractionController == null)
+                return;
+
+            LootItem heldItem = VRGlobals.handsInteractionController.heldItem;
+            
+            if (heldItem == null)
+                return;
+
+            try
+            {
+                __result += heldItem.item_0.TotalWeight;
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        // PlayerPhysicalClass.OnWeightUpdated reads Inventory.TotalWeight directly,
+        // bypassing PlayerBridge.TotalWeight. Postfix recalculates with the held item weight added.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PlayerPhysicalClass), "OnWeightUpdated")]
+        private static void FixWeightAfterOnWeightUpdated(PlayerPhysicalClass __instance)
+        {
+            if (!VRSettings.GetHeldItemWeight()) 
+                return;
+            
+            if (VRGlobals.handsInteractionController == null) 
+                return;
+            
+            LootItem heldItem = VRGlobals.handsInteractionController.heldItem;
+            
+            if (heldItem == null) 
+                return;
+            
+            if (!__instance.IobserverToPlayerBridge_0.iPlayer.IsYourPlayer) 
+                return;
+
+            try
+            {
+                float extraWeight = heldItem.item_0.TotalWeight;
+                bool elite = __instance.IobserverToPlayerBridge_0.Skills.StrengthBuffElite;
+                float baseWeight = elite
+                    ? (float)__instance.Player_0.InventoryController.Inventory.TotalWeightEliteSkill
+                    : (float)__instance.Player_0.InventoryController.Inventory.TotalWeight;
+                float totalWeight = baseWeight + extraWeight;
+
+                // Inertia and acceleration
+                BackendConfigSettingsClass.InertiaSettings inertia = Singleton<BackendConfigSettingsClass>.Instance.Inertia;
+                __instance.Inertia = __instance.CalculateValue(__instance.BaseInertiaLimits, totalWeight);
+                __instance.SprintAcceleration = inertia.SprintAccelerationLimits.InverseLerp(__instance.Inertia);
+                __instance.PreSprintAcceleration = inertia.PreSprintAccelerationLimits.Evaluate(__instance.Inertia);
+                float num2 = Mathf.Lerp(inertia.MinMovementAccelerationRangeRight.x, inertia.MaxMovementAccelerationRangeRight.x, __instance.Inertia);
+                float num3 = Mathf.Lerp(inertia.MinMovementAccelerationRangeRight.y, inertia.MaxMovementAccelerationRangeRight.y, __instance.Inertia);
+                EFTHardSettings.Instance.MovementAccelerationRange.MoveKey(1, new Keyframe(num2, num3));
+                __instance.MoveSideInertia = inertia.SideTime.Evaluate(__instance.Inertia);
+                __instance.MoveDiagonalInertia = inertia.DiagonalTime.Evaluate(__instance.Inertia);
+
+                // Overweight and speed
+                __instance.Overweight = __instance.BaseOverweightLimits.InverseLerp(totalWeight);
+                __instance.WalkOverweight = __instance.WalkOverweightLimits.InverseLerp(totalWeight);
+                __instance.WalkSpeedLimit = 1f - __instance.WalkSpeedOverweightLimits.InverseLerp(totalWeight);
+                __instance.Float_3 = __instance.SprintOverweightLimits.InverseLerp(totalWeight);
+
+                // Consumptions
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.OverweightIdle]
+                    .SetActive(__instance, __instance.Overweight >= 1f);
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.OverweightIdle].Delta.SetDirty();
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.SitToStand].AllowsRestoration = __instance.Overweight >= 1f;
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.StandUp].AllowsRestoration = __instance.Overweight >= 1f;
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.Walk].Delta.SetDirty();
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.Sprint].Delta.SetDirty();
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.VaultLegs].Delta.SetDirty();
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.VaultHands].Delta.SetDirty();
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.ClimbLegs].Delta.SetDirty();
+                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.ClimbHands].Delta.SetDirty();
+
+                __instance.MaxPoseLevel = (__instance.Overweight >= 1f) ? 0.9f : 1f;
+                __instance.FallDamageMultiplier = Mathf.Lerp(1f, __instance.StaminaParameters.FallDamageMultiplier, __instance.Overweight);
+                __instance.SoundRadius = __instance.StaminaParameters.SoundRadius.Evaluate(__instance.Overweight);
+                __instance.TransitionSpeed.SetDirty();
+                __instance.PoseLevelDecreaseSpeed.SetDirty();
+                __instance.PoseLevelIncreaseSpeed.SetDirty();
+                __instance.MinStepSound.SetDirty();
+
+                // Re-fire WeightRelatedValuesUpdated on MovementContext so WalkInertia,
+                // TiltInertia, SprintBrakeInertia etc. are recalculated with the correct Inertia
+                __instance.Player_0.MovementContext.WeightRelatedValuesUpdated();
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        // FixWeightAfterOnWeightUpdated handles recalculation every time OnWeightUpdated fires.
+        // Trigger OnWeightUpdated every frame while holding an item so stamina stays current.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BasePhysicalClass), "LateUpdate")]
+        private static void ForceWeightRecalcWhileHoldingItem(BasePhysicalClass __instance)
+        {
+            if (!VRSettings.GetHeldItemWeight()) 
+                return;
+            
+            if (VRGlobals.handsInteractionController?.heldItem == null) 
+                return;
+            
+            if (__instance.IobserverToPlayerBridge_0 == null) 
+                return;
+            
+            if (!__instance.IobserverToPlayerBridge_0.iPlayer.IsYourPlayer) 
+                return;
+            
+            __instance.Bool_1 = true;
+        }
+        
         public static void DropObject(LootItem val, bool useThrowVelocity = false)
         {
             AssetPoolObject component = val.GetComponent<AssetPoolObject>();

@@ -1305,6 +1305,19 @@ namespace TarkovVR.Patches.UI
         //    }
         //}
 
-    }
+        // Block EFT's world interaction menu (door/container/corpse) while holding a loot item
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GamePlayerOwner), "InteractionsChangedHandler")]
+        private static bool BlockInteractionMenuWhenHolding()
+        {
+            if (VRGlobals.handsInteractionController == null
+                || VRGlobals.handsInteractionController.heldItem == null)
+                return true;
 
+            // Also clear any existing interaction state so stale menus disappear
+            GamePlayerOwner owner = VRGlobals.player?.GetComponent<GamePlayerOwner>();
+            owner?.ClearInteractionState();
+            return false;
+        }
+    }
 }
