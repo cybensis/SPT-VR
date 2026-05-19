@@ -172,7 +172,7 @@ namespace TarkovVR.Patches.Visuals
 
         private static void InitializeOptimizedHDRRenderTargets(SSAAPropagator __instance, int width, int height)
         {
-            var format = RenderTextureFormat.RGB111110Float;
+            var format = RenderTextureFormat.ARGBHalf;
 
             bool needsUpdate = __instance._resampledColorTargetHDR[0] == null ||
                               __instance._resampledColorTargetHDR[0].width != width ||
