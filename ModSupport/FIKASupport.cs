@@ -179,12 +179,12 @@ namespace TarkovVR.ModSupport.FIKA
         {
             if (__instance._extracted)
             {
-                if (__instance._cameraParent != null && Camera.main.transform.parent == null)
+                if (__instance._cameraParent != null && VRGlobals.VRCam.transform.parent == null)
                 {
-                    Camera.main.transform.parent = __instance._cameraParent.transform;
+                    VRGlobals.VRCam.transform.parent = __instance._cameraParent.transform;
                 }
-                PreloaderUI.Instance.transform.position = Camera.main.transform.position + (Camera.main.transform.forward * 0.6f) + (Camera.main.transform.up * 0.2f);
-                PreloaderUI.Instance.transform.rotation = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, Camera.main.transform.eulerAngles.z);
+                PreloaderUI.Instance.transform.position = VRGlobals.VRCam.transform.position + (VRGlobals.VRCam.transform.forward * 0.6f) + (VRGlobals.VRCam.transform.up * 0.2f);
+                PreloaderUI.Instance.transform.rotation = Quaternion.Euler(0, VRGlobals.VRCam.transform.eulerAngles.y, VRGlobals.VRCam.transform.eulerAngles.z);
                 if (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y) > VRSettings.GetLeftStickSensitivity())
                 {
                     __instance._cameraParent.transform.position += __instance._cameraParent.transform.forward * (SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y / 10);
@@ -212,33 +212,6 @@ namespace TarkovVR.ModSupport.FIKA
         private static void AddLaserBackToRaidLoading(Fika.Core.Main.GameMode.BaseGameController __instance)
         {
             VRGlobals.menuVRManager.OnEnable();
-        }
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(PreloaderUI), "ShowRaidStartInfo")]
-        private static void DisableLaser(PreloaderUI __instance)
-        {
-            if (ModSupport.InstalledMods.FIKAInstalled)
-            {
-                VRGlobals.menuVRManager.enabled = false;
-                VRGlobals.vrPlayer.enabled = true;
-                VRGlobals.ikManager.enabled = true;
-
-                if (VRGlobals.menuOpen)
-                {
-                    if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
-                        foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
-                            renderer.enabled = true;
-                    if (WeaponPatches.currentGunInteractController != null)
-                    {
-                        if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
-                            foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
-                                renderer.enabled = true;
-                    }
-                }
-
-                VRGlobals.menuOpen = false;
-            }
         }
 
         [HarmonyPrefix]

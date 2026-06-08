@@ -13,10 +13,11 @@ using Valve.VR;
 using static TarkovVR.Patches.Visuals.VisualPatches;
 using UnityEngine.XR;
 using System.Text;
+using TarkovVR.Source.Settings;
 
 namespace TarkovVR
 {
-    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.6")]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.7")]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
@@ -55,7 +56,6 @@ namespace TarkovVR
                 var xrLoader = ScriptableObject.CreateInstance<OpenVRLoader>();
                 var settings = OpenVRSettings.GetSettings();
                 settings.StereoRenderingMode = OpenVRSettings.StereoRenderingModes.SinglePassInstanced;
-                
 
                 generalSettings.Manager = managerSettings;
 
@@ -330,7 +330,33 @@ namespace TarkovVR
             {
                 MyLog.LogWarning("DynamicMaps dll not found, support patches will not be applied.");
             }
-            
+
+            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Tyfon.WeaponCustomizer.dll");
+
+            if (File.Exists(modDllPath))
+            {
+                // Load the assembly
+                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
+
+                // Check for the required types and methods in the loaded assembly
+                Type configViewType = modAssembly.GetType("WeaponCustomizer.DraggableBone");
+                if (configViewType != null)
+                {
+                    // Apply conditional patches
+                    InstalledMods.WeaponCustomizerInstalled = true;
+                    ApplyPatches("TarkovVR.ModSupport.WeaponCustomizer");
+                    MyLog.LogInfo("Dependent mod found and patches applied.");
+                }
+                else
+                {
+                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+                }
+            }
+            else
+            {
+                MyLog.LogWarning("WeaponCustomizer dll not found, support patches will not be applied.");
+            }
+
             // Repeat for other mods (AmandsGraphics, FIKA) as needed
         }
 

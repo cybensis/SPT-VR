@@ -116,8 +116,8 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.camHolder.layer = 7;                  
                     if (!ModSupport.InstalledMods.FIKAInstalled)
                     {
-                        VRGlobals.menuVRManager.enabled = false;
-                        VRGlobals.menuOpen = false;
+                        //VRGlobals.menuVRManager.enabled = false;
+                        //VRGlobals.menuOpen = false;
                     }
                     else {
                         VRGlobals.vrPlayer.enabled = false;
@@ -125,7 +125,7 @@ namespace TarkovVR.Patches.Core.VR
                         //VRGlobals.vrOffsetter.transform.localPosition = Camera.main.transform.localPosition * -1;
                         VRGlobals.vrOffsetter.transform.localPosition = VRGlobals.VRCam.transform.localPosition * -1;
                         VRGlobals.menuOpen = true;
-                        VRGlobals.menuVRManager.OnEnable();
+                        //VRGlobals.menuVRManager.OnEnable();
                     }
                     
                     if (UIPatches.quickSlotUi == null)
@@ -187,9 +187,34 @@ namespace TarkovVR.Patches.Core.VR
             //}
 
 
+            //VRGlobals.inGame = true;
+        }
+
+        // Disables the laser right after timer finishes to avoid losing the laser any time during loading screen
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(PreloaderUI), "ShowRaidStartInfo")]
+        private static void DisableLaser(PreloaderUI __instance)
+        {
+            VRGlobals.menuVRManager.enabled = false;
+            VRGlobals.vrPlayer.enabled = true;
+            VRGlobals.ikManager.enabled = true;
+
+            if (VRGlobals.menuOpen)
+            {
+                if (VRGlobals.player?.PlayerBody?.MeshTransform != null)
+                    foreach (var renderer in VRGlobals.player.PlayerBody.MeshTransform.GetComponentsInChildren<Renderer>(true))
+                        renderer.enabled = true;
+                if (WeaponPatches.currentGunInteractController != null)
+                {
+                    if (WeaponPatches.currentGunInteractController?.transform.Find("RightHandPositioner") is Transform rightHand)
+                        foreach (var renderer in rightHand.GetComponentsInChildren<Renderer>(true))
+                            renderer.enabled = true;
+                }
+            }
             VRGlobals.inGame = true;
-        }      
-        
+            VRGlobals.menuOpen = false;
+        }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Don't know why I chose this method for setting the main cam but it works so whatever
 
@@ -230,10 +255,12 @@ namespace TarkovVR.Patches.Core.VR
                 {
                     if (VRGlobals.vrPlayer.radialMenu)
                         VRGlobals.vrPlayer.radialMenu.active = false;
+                    /*
                     if (VRGlobals.vrPlayer is RaidVRPlayerManager)
                     {
                         VRGlobals.menuVRManager.OnDisable();
                     }
+                    */
                 }
                 mainCam.depthTextureMode |= DepthTextureMode.MotionVectors | DepthTextureMode.Depth;
                 //mainCam.gameObject.GetComponent<PostProcessLayer>().enabled = false;

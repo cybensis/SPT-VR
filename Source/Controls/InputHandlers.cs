@@ -762,6 +762,7 @@ namespace TarkovVR.Source.Controls
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        /*
         public class ScopeZoomHandler : IInputHandler
         {
             private bool swapZooms = false;
@@ -779,6 +780,25 @@ namespace TarkovVR.Source.Controls
             {
                 swapZooms = true;
             }
+        }
+        */
+        public class VRScopeZoomHandler : IInputHandler
+        {
+            private bool swapZooms = false;
+
+            public void UpdateCommand(ref ECommand command)
+            {
+                if (!VRGlobals.firearmController || !VRGlobals.firearmController.IsAiming)
+                    return;
+
+                if (swapZooms)
+                {
+                    command = ECommand.ChangeScopeMagnification;
+                    swapZooms = false;
+                }
+            }
+
+            public void TriggerSwapZooms() => swapZooms = true;
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class CheckAmmoHandler : IInputHandler

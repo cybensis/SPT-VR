@@ -14,14 +14,99 @@ namespace TarkovVR.Patches.Core.Player
 {
     [HarmonyPatch]
     internal class IKPatches
-    {       
+    {
+        /*
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player), "MouseLook")]
+        private static void StabilizeGunHeight(EFT.Player __instance)
+        {
+            if (!__instance.IsYourPlayer || __instance.UsedSimplifiedSkeleton ||
+                VRGlobals.VRCam == null || __instance.HandsController?.ControllerGameObject == null)
+                return;
+
+            var t = __instance.HandsController.ControllerGameObject.transform;
+            Vector3 p = t.position;
+            p.y = VRGlobals.VRCam.transform.position.y - 0.4f; // tune offset
+            t.position = p;
+        }
+        */
+        // VR body-stance vertical smoothing.
+        // The mod used to fully disable EFT's HeightInterpolation, which left the crouch-walk <-> crouch-idle
+        // stance change (~15cm) SNAPPING under the fixed VR headset - that's the "torso jolt" felt at the
+        // start/stop of crouch-walking. Instead of disabling it, we ease only the body model: AnimatedTransform
+        // offsets the rendered body (the VR camera is a separate rig, and the gun is pinned to the controller
+        // rig), so smoothing it settles the torso/arms without moving the view or the weapon.
+        // Set bodyStanceSmoothTime = 0 to fall back to the old (snap) behavior.
+        public static float bodyStanceSmoothTime = 0.18f;  // how gently the move<->idle transition settles
+        // When you physically move your head fast (crouch/peek), easing the body makes the head-follow view
+        // lag your real head -> jitter. Above this headset vertical speed (m/s) we stop easing and let the
+        // body track, so the view stays glued to your head.
+        public static float physMoveBypassSpeed = 0.12f;
+        private const float BODY_STANCE_CLAMP = 0.2f;      // matches EFT's own clamp
+        private static float bodyStanceVel = 0f;
+        private static float prevStanceY = float.NaN;
+        private static float prevCamLocalY = float.NaN;
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "HeightInterpolation")]
-        private static bool DisableYAxisSmoothing(EFT.Player __instance)
+        private static bool DisableYAxisSmoothing(EFT.Player __instance, float timeDeltatime)
         {
             if (!__instance.IsYourPlayer)
-                return true;
+                return true; // bots / other players keep vanilla smoothing
+
+            var bones = __instance.PlayerBones;
+            var at = bones?.AnimatedTransform; // BifacialTransform (same one EFT's HeightInterpolation writes)
+
+            // Disabled or not ready -> restore the old behavior (no body offset, body snaps)
+            if (bodyStanceSmoothTime <= 0f || at == null || at.Original == null || bones.Ribcage?.Original == null || Mathf.Approximately(timeDeltatime, 0f))
+            {
+                prevStanceY = float.NaN;
+                if (at != null)
+                {
+                    Vector3 lp0 = at.localPosition;
+                    if (lp0.y != 0f)
+                        at.localPosition = new Vector3(lp0.x, 0f, lp0.z);
+                }
+                return false;
+            }
+
+            // Animator stance height = ribcage world Y minus the body root world Y. Both share our offset
+            // (ribcage is a descendant) and global movement, so both cancel => this only reflects the
+            // animator's crouch-walk<->idle stance change (and the gait bob).
+            float stanceY = bones.Ribcage.Original.position.y - at.Original.position.y;
+            if (float.IsNaN(prevStanceY))
+                prevStanceY = stanceY;
+
+            float delta = stanceY - prevStanceY; // this frame's stance change (down = negative)
+            prevStanceY = stanceY;
+
+            // Ignore teleport-sized jumps (respawn, vault, etc.)
+            if (Mathf.Abs(delta) > BODY_STANCE_CLAMP)
+                delta = 0f;
+
+            Vector3 lp = at.localPosition;
+
+            // If YOU are physically moving your head (crouch/peek), don't ease - it would make the
+            // head-follow view trail your real head. Clear any offset quickly so the body tracks the pose
+            // and the view stays glued to your head. (VRCam.localPosition.y is pure physical head motion;
+            // joystick crouch doesn't change it, so this only fires for real head movement.)
+            float camLocalY = VRGlobals.VRCam != null ? VRGlobals.VRCam.transform.localPosition.y : 0f;
+            float camSpeed = float.IsNaN(prevCamLocalY) ? 0f : Mathf.Abs(camLocalY - prevCamLocalY) / timeDeltatime;
+            prevCamLocalY = camLocalY;
+            if (camSpeed > physMoveBypassSpeed)
+            {
+                float cleared = Mathf.SmoothDamp(lp.y, 0f, ref bodyStanceVel, 0.04f, Mathf.Infinity, timeDeltatime);
+                at.localPosition = new Vector3(lp.x, Mathf.Clamp(cleared, -BODY_STANCE_CLAMP, BODY_STANCE_CLAMP), lp.z);
+                return false;
+            }
+
+            // Counter the stance change, then ease the counter-offset back to zero. This low-passes the
+            // body's vertical: it eases the move<->idle step (good) but also softens the vertical gait bob
+            // (the muting). bodyStanceSmoothTime trades those off - lower = more bob, less transition easing.
+            float eased = Mathf.SmoothDamp(lp.y - delta, 0f, ref bodyStanceVel, bodyStanceSmoothTime, Mathf.Infinity, timeDeltatime);
+            eased = Mathf.Clamp(eased, -BODY_STANCE_CLAMP, BODY_STANCE_CLAMP);
+            at.localPosition = new Vector3(lp.x, eased, lp.z);
+
             return false;
         }
         
@@ -33,14 +118,14 @@ namespace TarkovVR.Patches.Core.Player
             return false;
 
         }
-
         [HarmonyPrefix]
         [HarmonyPatch(typeof(WalkEffector), "Process")]
         private static bool DisableWalkEffector(WalkEffector __instance, float deltaTime)
         {
-            return false;
+            // Return value = whether the original runs. Toggle in VR settings ("Turn On EFT Weapon Walk
+            // Effector"): on -> let it run (weapon walk bob), off -> skip it (default; steadier weapon).
+            return VRSettings.GetWalkEffectorOn();
         }
-        
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PlayerBones), "SetShoulders")]

@@ -36,9 +36,9 @@ namespace TarkovVR.Source.Player.VRManager
         public Vector3 initPos;
         public Vector3 x;
         private Vector3 mainHandRotOffset = new Vector3(0, 170, 50);
-        private Vector3 secondaryHandRotOffset = new Vector3(-110, 0, 70);
+        public Vector3 secondaryHandRotOffset = new Vector3(-110, 0, 70);
         private Vector3 mainHandPosOffset = Vector3.zero;
-        private Vector3 secondaryHandPosOffset = Vector3.zero;
+        public Vector3 secondaryHandPosOffset = Vector3.zero;
         public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
         public Transform gunTransform;
         public static Transform leftHandGunIK;
@@ -75,6 +75,17 @@ namespace TarkovVR.Source.Player.VRManager
         private bool leftHandInAnimation = false;
         public bool showScopeZoom = false;
         public float crouchHeightDiff = 0;
+
+        // The joystick crouch drops the view instantly (crouchHeightDiff is derived from the instant
+        // CharacterController.height), but the body/arms ease down on SmoothedPoseLevel - so the view
+        // outruns the arms. We ease the value actually applied to the rig toward crouchHeightDiff at the
+        // body's rate so view + arms descend together. Tune crouchViewSmoothTime to match the arms.
+        public static float crouchViewSmoothTime = 0.14f; // 0 = instant (old behavior); only used when useHeadFollowView = false
+        private float displayedCrouchHeightDiff = 0f;
+        private float crouchViewVel = 0f;
+
+        public static float headViewYOffset = 0f;                  // (only used by head-follow) trims eye height relative to the head bone
+        public static bool drivePoseFromPhysicalCrouch = true;     // true: physically crouching drives the body pose down (the in-game head/anchor follows you)
         public Transform scopeUiPosition;
         public bool isWeapPistol = false;
         public int framesAfterSwitching = 0;
@@ -270,7 +281,16 @@ namespace TarkovVR.Source.Player.VRManager
 
             // Only update position if changed significantly
             Vector3 newLocalPos = initPos * -1 + headOffset;
-            newLocalPos.y -= crouchHeightDiff;
+
+
+            // Ease the manual crouch offset toward the joystick target at the body's rate so the
+            // view doesn't drop ahead of the arms (raw crouchHeightDiff stays instant for jump-block/pose).
+            if (crouchViewSmoothTime > 0f)
+                displayedCrouchHeightDiff = Mathf.SmoothDamp(displayedCrouchHeightDiff, crouchHeightDiff, ref crouchViewVel, crouchViewSmoothTime);
+            else
+                displayedCrouchHeightDiff = crouchHeightDiff;
+            newLocalPos.y -= displayedCrouchHeightDiff;
+
 
             if (Vector3.Distance(newLocalPos, lastLocalPos) > 0.001f)
             {
@@ -354,9 +374,11 @@ namespace TarkovVR.Source.Player.VRManager
                 float normalizedHeightPosition = (VRGlobals.VRCam.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
 
                 // Ensure the normalized height is within 0 (full crouch/prone) and 1 (full stand).
-                float crouchLevel = 1 - Mathf.Clamp(normalizedHeightPosition, 0, 1);
+                // With Option A the physical headset is a 1:1 VIEW term, so we must NOT also feed it into the
+                // body pose here, or physical crouch double-drops the view. Joystick crouch still drives pose.
+                float crouchLevel = drivePoseFromPhysicalCrouch ? (1 - Mathf.Clamp(normalizedHeightPosition, 0, 1)) : 0f;
 
-                // crouchHeightDiff at max will be 0.4 when the joystick is used to crouch which will return a value between 0 and 1 which when subtracted from 1 
+                // crouchHeightDiff at max will be 0.4 when the joystick is used to crouch which will return a value between 0 and 1 which when subtracted from 1
                 // will return a value that can be used to subtract the physical crouch value from and will combine the physical and joystick crouching
                 crouchLevel = Mathf.Clamp((1 - crouchHeightDiff / 0.4f) - crouchLevel, 0, 1);
 
@@ -821,6 +843,17 @@ namespace TarkovVR.Source.Player.VRManager
             SteamVR_Action_Boolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
 
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockRightJoystick : VRGlobals.blockLeftJoystick;
+
+            // Using this to determine left hand position when two handing a gun. Very few guns have the left hand grip position very misaligned.
+            /*
+            if (Input.GetKeyDown(KeyCode.F9) && VRGlobals.firearmController != null && VRGlobals.vrPlayer != null)
+            {
+                Transform root = VRGlobals.firearmController.WeaponRoot;
+                Vector3 local = root.InverseTransformPoint(VRGlobals.vrPlayer.LeftHand.transform.position);
+                string name = VRGlobals.firearmController.weaponPrefab_0.name.Replace("(Clone)", "");
+                Plugin.MyLog.LogInfo($"[L-hand override] {{ \"{name}\", new Vector3({local.x:F3}f, {local.y:F3}f, {local.z:F3}f) }},");
+            }
+            */
 
             // If the joystick is being blocked but the right grip isn't down, keep the joystick blocked until they stop pushing it beyond a certain threshold so the player
             // doesn't immediately move forward after selecting something from the radial menu

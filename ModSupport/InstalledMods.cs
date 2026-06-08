@@ -12,6 +12,7 @@ namespace TarkovVR.ModSupport
         public static bool AmandsGraphicsInstalled { get; set; }
         public static bool FIKAInstalled { get; set; }
         public static bool DynamicMapsInstalled { get; set; }
+        public static bool WeaponCustomizerInstalled { get; set; }
 
         static InstalledMods()
         {
@@ -19,6 +20,7 @@ namespace TarkovVR.ModSupport
             AmandsGraphicsInstalled = false;
             FIKAInstalled = false;
             DynamicMapsInstalled = false;
+            WeaponCustomizerInstalled = false;
         }
     }
 }

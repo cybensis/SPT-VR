@@ -189,6 +189,15 @@ public class GunInteractionController : MonoBehaviour
     private Vector3 prevForward;
     private Vector3 prevBodyPos;
     public int framesAfterEnabled = 0;
+
+    // --- TEMPORARY crouch-walk jolt diagnostics (remove once source is confirmed) ---
+    private bool joltLogActive = false;
+    private int joltLogFrame = 0;
+    private float joltPrevSpeed = 0f;
+    private int joltStopCounter = 0;
+    private const int JOLT_MAX_FRAMES = 160;
+    private float bDist, bRibc, bMarkY, bShldr;  // baselines captured at capture start
+    private float peakDist;                       // max gun<->hand separation seen
     
     private void Update()
     {

@@ -112,8 +112,7 @@ namespace TarkovVR.Source.Player.VRManager
         {
 
             // Verify if the current hit object is still the same after the delay
-            Vector3 rayOrigin = Camera.main.transform.position;
-
+            Vector3 rayOrigin = VRGlobals.VRCam.transform.position;
 
             //Vector3 rayDirection = Camera.main.transform.forward;
             //RaycastHit hit;

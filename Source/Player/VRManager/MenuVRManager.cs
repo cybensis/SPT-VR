@@ -22,6 +22,7 @@ namespace TarkovVR.Source.Player.VRManager
         private Vector3 pos;
         public SteamVR_Action_Vibration hapticAction;
         private float timeHeld = 0;
+        private bool _listenersAdded = false;
 
         public void Awake()
         {
@@ -38,22 +39,14 @@ namespace TarkovVR.Source.Player.VRManager
                 DontDestroyOnLoad(kbHandler);
             }
 
-            if (VRSettings.GetLeftHandedMode())
-            {
-                SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
-                SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
-            }
-            else
-            {
-                SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-                SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
-            }
+            AddPoseListeners();
 
         }
 
-
+        /*
         public void OnDisable()
         {
+            
             if (pointer && pointer.holder)
             {
                 pointer.enabled = false;
@@ -64,7 +57,9 @@ namespace TarkovVR.Source.Player.VRManager
                 SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
                 SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
             }
+            
         }
+        
         public void OnEnable()
         {
             if (pointer && pointer.holder)
@@ -83,6 +78,56 @@ namespace TarkovVR.Source.Player.VRManager
                     SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
                 }
             }
+        }
+        */
+
+        public void OnDisable()
+        {
+
+            if (!pointer || !pointer.holder) return;
+
+            pointer.enabled = false;
+            pointer.holder.active = false;
+            if (MenuPatches.vrUiInteracter)
+                MenuPatches.vrUiInteracter.enabled = false;
+
+            RemovePoseListeners();
+        }
+
+        public void OnEnable()
+        {
+            if (!pointer || !pointer.holder) return;
+
+            pointer.enabled = true;
+            pointer.holder.active = true;
+            if (MenuPatches.vrUiInteracter)
+                MenuPatches.vrUiInteracter.enabled = true;
+
+            AddPoseListeners();
+        }
+
+        private void AddPoseListeners()
+        {
+            RemovePoseListeners();
+
+            if (VRSettings.GetLeftHandedMode())
+            {
+                SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
+                SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+            }
+            else
+            {
+                SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+                SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            }
+        }
+
+        private void RemovePoseListeners()
+        {
+            SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            SteamVR_Actions._default.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+            SteamVR_Actions._default.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
         }
 
         public void LeftHandedMode() {

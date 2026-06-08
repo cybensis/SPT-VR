@@ -42,6 +42,7 @@ using Comfort.Common;
 using Valve.VR;
 using EFT.InputSystem;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Player.Interactions;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -110,7 +111,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Spawn")]
         private static void ResetWeaponOnEquipHands(EFT.Player.EmptyHandsController __instance)
-        {
+        {         
             if (!__instance._player.IsYourPlayer)
                 return;
             VRGlobals.firearmController = null;
@@ -121,6 +122,23 @@ namespace TarkovVR.Patches.Core.Player
 
             //if (!__instance.WeaponRoot.parent.GetComponent<GunInteractionController>())
             //    currentGunInteractController = __instance.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
+            // Going to empty hands should always detach any VR-held weapon back to its origin,
+            // in case we got here via Escape/cancel rather than a weapon switch-out (which fires
+            // IEventsConsumerOnWeapOut). Guard makes it a no-op if already cleaned up.
+            if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
+            {
+                VRGlobals.weaponHolder.transform.GetChild(0).SetParent(VRGlobals.oldWeaponHolder.transform, false);
+                VRGlobals.oldWeaponHolder.transform.localRotation = Quaternion.identity;
+                VRGlobals.oldWeaponHolder = null;
+                // NOTE: do NOT null emptyHands here. We are entering EMPTY HANDS, so it
+                // must stay = ControllerGameObject (set above) for the per-frame pins to
+                // run (HandsPositioner.LateUpdate does emptyHands.rotation = handsRotation
+                // and the camRoot pin only when emptyHands != null). This guard is copied
+                // from ReturnWeaponToOriginalParentOnChange, where nulling is correct
+                // because you're switching TO a weapon — but on the knife->empty path
+                // (where ReturnWeapon doesn't fire) nulling it here left the hands
+                // unpinned = jittery, while gun->empty skipped this guard entirely.
+            }
 
             if (VRGlobals.vrPlayer)
             {
@@ -303,7 +321,6 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance._player.IsYourPlayer)
                 return;
-
             //If menu is open turn gun renderer off
             if (VRGlobals.menuOpen)
             {
@@ -362,7 +379,6 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance._player.IsYourPlayer)
                 return;               
-            
             if (VRGlobals.menuOpen)
             {
                 if (WeaponPatches.currentGunInteractController != null)
@@ -401,6 +417,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance._player.IsYourPlayer)
                 return;
+            
 
             if (VRGlobals.menuOpen)
             {
@@ -481,7 +498,6 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance._player.IsYourPlayer)
                 return;
-
             knifeTransform = null;
             if (__instance.WeaponRoot.parent.name == "weaponHolder")
             {
@@ -690,7 +706,7 @@ namespace TarkovVR.Patches.Core.Player
 
         //Damn nulls... This creates a dummy invisible Material when HighLightMesh is activated. This catches a null that happens with the weapon highlight when entering a raid
         //MoveWeaponToIKHands adds the HighLightMesh monobehavior component to the camera if it's not detected. This causes the script to run before a material is attached to it
-        
+        /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HighLightMesh), "Awake")]
         private static void HandleHighLightMeshAwake(HighLightMesh __instance)
@@ -702,6 +718,54 @@ namespace TarkovVR.Patches.Core.Player
                 __instance.Mat = new Material(shader);
                 __instance.Mat.SetColor(HighLightMesh.int_2, Color.clear);
                 __instance.Mat.SetTexture(HighLightMesh.int_4, __instance.renderTexture_0);
+            }
+        }
+        */
+        private static readonly Dictionary<HighLightMesh, System.Action> _highLightHandlers
+            = new Dictionary<HighLightMesh, System.Action>();
+        private static bool _highLightAllowUpdate = false;
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(HighLightMesh), "Update")]
+        private static bool BlockHighLightMeshUpdate() => _highLightAllowUpdate;
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(HighLightMesh), "Awake")]
+        private static void HandleHighLightMeshAwake(HighLightMesh __instance)
+        {
+            if (__instance.Mat == null && VRGlobals.player && (VRGlobals.vrPlayer is HideoutVRPlayerManager || VRGlobals.vrPlayer is RaidVRPlayerManager))
+            {
+                var shader = Shader.Find("Hidden/HighLightMesh");
+                __instance.Mat = new Material(shader);
+                __instance.Mat.SetColor(HighLightMesh.int_2, Color.clear);
+                __instance.Mat.SetTexture(HighLightMesh.int_4, __instance.renderTexture_0);
+            }
+
+            if (!_highLightHandlers.ContainsKey(__instance))
+            {
+                HighLightMesh captured = __instance;
+                System.Action handler = () =>
+                {
+                    if (captured != null && captured.enabled && captured.gameObject.activeInHierarchy)
+                    {
+                        _highLightAllowUpdate = true;
+                        try { captured.Update(); }
+                        finally { _highLightAllowUpdate = false; }
+                    }
+                };
+                _highLightHandlers[__instance] = handler;
+                Application.onBeforeRender += handler.Invoke;
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(HighLightMesh), "OnDestroy")]
+        private static void UnregisterHighLightOnBeforeRender(HighLightMesh __instance)
+        {
+            if (_highLightHandlers.TryGetValue(__instance, out var handler))
+            {
+                Application.onBeforeRender -= handler.Invoke;
+                _highLightHandlers.Remove(__instance);
             }
         }
 
@@ -727,7 +791,14 @@ namespace TarkovVR.Patches.Core.Player
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public static List<Transform> weaponInteractables;
         public static Transform gunCollider;
-        
+
+        // Custom grip points for specific guns, for some reason very few guns don't place the left hand IK marker in the right spot
+        private static readonly Dictionary<string, Vector3> LeftHandIKOverrides = new()
+        {
+            { "weapon_sako_trg_m10_86x70_container", new Vector3(-0.099f, -0.480f, -0.054f) },
+            { "weapon_toz_tt_gold_762x25tt_container", new Vector3(-0.058f, -0.416f, -0.187f) },
+        };
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
         private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
@@ -735,7 +806,6 @@ namespace TarkovVR.Patches.Core.Player
 
             if (!__instance._player.IsYourPlayer || __instance._player == null)
                 return;
-
             if (VRGlobals.menuOpen)
             {
                 if (WeaponPatches.currentGunInteractController != null)
@@ -826,7 +896,35 @@ namespace TarkovVR.Patches.Core.Player
                 }
             }
 
-            VRPlayerManager.leftHandGunIK = __instance.HandsHierarchy.Transforms[10];
+            Transform leftHandMarker = __instance.HandsHierarchy.Transforms[10];
+
+            // Setup custom left hand marker position for a few guns that are very misaligned
+            string prefabKey = __instance.weaponPrefab_0.name.Replace("(Clone)", "");
+            if (LeftHandIKOverrides.TryGetValue(prefabKey, out Vector3 localOffset))
+            {
+                Transform existing = __instance.WeaponRoot.Find("VR_LeftHandIK_Override");
+                if (existing == null)
+                {
+                    var go = new GameObject("VR_LeftHandIK_Override");
+                    go.transform.SetParent(__instance.WeaponRoot, false);
+                    existing = go.transform;
+                }
+                existing.localPosition = localOffset;
+                leftHandMarker = existing;
+            }
+
+            VRPlayerManager.leftHandGunIK = leftHandMarker;
+
+
+            // after the leftHandGunIK assignment in MoveWeaponToIKHands
+            /*
+            var dbg = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            GameObject.Destroy(dbg.GetComponent<Collider>());
+            dbg.transform.SetParent(VRPlayerManager.leftHandGunIK, false);
+            dbg.transform.localPosition = Vector3.zero;
+            dbg.transform.localScale = Vector3.one * 0.03f;
+            dbg.GetComponent<Renderer>().material.color = Color.magenta;
+            */
 
             if (__instance.WeaponRoot.parent.name != "weaponHolder")
             {
@@ -973,10 +1071,98 @@ namespace TarkovVR.Patches.Core.Player
                 }
             }
             VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");          
+        }     
+
+        // #3 perf: the optic camera renders the whole scene into a square RT (GClass3687.RenderTexture_0,
+        // vanilla 1024) bound as the global _CamTex the lens samples. In VR that 1024 second scene-render for a
+        // small lens is costly. We ALWAYS shrink that camera target to opticRenderResolution - the camera still
+        // renders into its OWN RenderTexture_0, just smaller, which keeps GPU-Instancer grass correct (confirmed
+        // in-headset; redirecting the camera to a DIFFERENT target froze/blued the grass, so we never do that).
+        // The reticle has two modes:
+        //  - decoupleOpticReticle = true (default): keep a separate FULL-res lensTex, point the lens's _CamTex
+        //    global at it, and each frame upscale RenderTexture_0 -> lensTex + re-draw the reticle sharp
+        //    (OpticReticleDecoupler). Cheap soft scene, crisp reticle, grass intact.
+        //  - decoupleOpticReticle = false: the lens samples the shrunk RenderTexture_0 directly - cheapest, but
+        //    the reticle softens with the scene.
+        public static bool decoupleOpticReticle = true;
+        public static int opticLensResolution = 1024;     // lens/reticle texture size when decoupling (sharp).
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GClass3687), "SetResolution")]
+        private static void ScaleOpticResolution(ref int resolution)
+        {
+            // Shrink the optic camera's OWN render target to the user-selected scope resolution (grass-safe:
+            // same target object, just smaller). Driven by the "Scope Render Resolution" VR Graphics setting.
+            int res = VRSettings.GetOpticRenderResolution();
+            if (res > 0)
+                resolution = Mathf.Clamp(res, 256, 1024);
         }
-        
-        //This might clean up scopes a bit but it was mainly done to fix an issue with how BSG handles variable scopes
-        //Now we tell LateUpdate to disable effects (I think?) but mainly to just update scope and nothing more
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GClass3687), "SetResolution")]
+        private static void SetupOpticReticleDecouple(GClass3687 __instance)
+        {
+            if (__instance == null || __instance.Camera == null || __instance.RenderTexture_0 == null)
+                return;
+
+            var decoupler = __instance.Camera.GetComponent<TarkovVR.Source.Weapons.OpticReticleDecoupler>();
+
+            if (!decoupleOpticReticle)
+            {
+                // Soft-reticle mode: lens samples the shrunk RenderTexture_0 directly (vanilla binding, which
+                // SetResolution just set). Drop the decoupler + make sure _CamTex points back at RenderTexture_0.
+                if (decoupler != null)
+                {
+                    UnityEngine.Shader.SetGlobalTexture("_CamTex", __instance.RenderTexture_0);
+                    UnityEngine.Object.Destroy(decoupler);
+                }
+                return;
+            }
+
+            int lensSize = Mathf.Max(opticLensResolution, __instance.RenderTexture_0.width);
+
+            if (decoupler == null)
+                decoupler = __instance.Camera.gameObject.AddComponent<TarkovVR.Source.Weapons.OpticReticleDecoupler>();
+
+            // Full-res lens texture the lens samples. The CAMERA keeps rendering into RenderTexture_0 (shrunk,
+            // grass-safe); the decoupler upscales that into lensTex + draws the reticle sharp each frame.
+            if (decoupler.lensTex == null || decoupler.lensTex.width != lensSize)
+            {
+                if (decoupler.lensTex != null)
+                {
+                    decoupler.lensTex.Release();
+                    UnityEngine.Object.Destroy(decoupler.lensTex);
+                }
+                RenderTextureFormat fmt = __instance.Camera.allowHDR ? RenderTextureFormat.ARGBHalf : RenderTextureFormat.ARGB32;
+                decoupler.lensTex = new RenderTexture(lensSize, lensSize, 24, fmt) { name = "OpticLensFullRes" };
+                decoupler.lensTex.Create();
+            }
+
+            decoupler.retrice = __instance.OpticRetrice;
+            // Point the lens at our full-res texture instead of the shrunk camera target.
+            UnityEngine.Shader.SetGlobalTexture("_CamTex", decoupler.lensTex);
+        }
+
+        // When decoupling, the reticle is re-drawn sharp into the full-res _CamTex by OpticReticleDecoupler.
+        // Vanilla OpticRetrice ALSO draws it (low-res) into the scene RT, which upscales blurry under the sharp
+        // one - the "double reticle" halo. Suppress the vanilla low-res draw so only the crisp one remains.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.CameraControl.OpticRetrice), "OnPreCull")]
+        private static bool SuppressLowResReticle(EFT.CameraControl.OpticRetrice __instance)
+        {
+            if (!decoupleOpticReticle)
+                return true; // vanilla low-res draw
+            __instance.commandBuffer_0?.Clear();
+            return false;
+        }
+
+        // CPU/GPU win: the scope re-renders the WHOLE scene every frame - the heavy part is the CPU cost of
+        // culling + submitting draw calls for everything the optic camera sees. BSG hands the optic camera the
+        // MAIN far clip (5000m), so it draws distant geometry you can't meaningfully use through a scope.
+        // Capping it culls those objects from the second render (fewer draw calls = CPU win, fewer tris = GPU).
+        // 0 = disabled (vanilla 5000). We only ever LOWER it, so thermal scopes with a smaller far clip keep it.
+        public static float opticFarClip = 1500f;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "LateUpdate")]
         private static bool FixAdjustableOptic(EFT.CameraControl.OpticComponentUpdater __instance)
@@ -987,6 +1173,9 @@ namespace TarkovVR.Patches.Core.Player
             }
             __instance.transform.position = __instance.transform_0.position;
             __instance.transform.rotation = __instance.transform_0.rotation;
+
+            if (opticFarClip > 0f && __instance.camera_0 != null)
+                __instance.camera_0.farClipPlane = Mathf.Min(__instance.camera_0.farClipPlane, opticFarClip);
             //__instance.camera_0.useOcclusionCulling = __instance.MainCamera.useOcclusionCulling;
             if (__instance.undithering_1 != null && __instance.undithering_0 != null)
             {
@@ -1057,13 +1246,11 @@ namespace TarkovVR.Patches.Core.Player
                 return;
         }
 
-        //This actually handles the scope zoom
+        // This actually handles the scope zoom 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
         private static void SetOpticCamFoV(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)
         {
-            float fov;
-
             if (!visualController)
                 visualController = opticSight.transform.parent.GetComponent<SightModVisualControllers>();
             if (!visualController)
@@ -1071,49 +1258,42 @@ namespace TarkovVR.Patches.Core.Player
 
             if (rangeFinder)
             {
-                fov = 3.2f;
                 opticSight.transform.Find("linza").gameObject.SetActive(true);
+                VRGlobals.vrOpticController.isSmoothZoom = false;
+                VRGlobals.vrOpticController.isAdjustable = false;
+                VRGlobals.vrOpticController.minFov = 3.2f;
+                VRGlobals.vrOpticController.maxFov = 3.2f;
             }
 
             if (visualController && VRGlobals.vrOpticController)
             {
-                float zoomLevel = visualController.sightComponent_0.GetCurrentOpticZoom();
                 VRGlobals.vrOpticController.scopeCamera = __instance.camera_0;
-                //VRGlobals.scopeSensitivity = visualController.sightComponent_0.GetCurrentSensitivity;
-                
-                string scopeName = opticSight.name;
-                BoxCollider scopeCollider;
-
                 currentScope = __instance.transform_0;
+
                 if (VRSettings.GetLeftHandedMode())
                     currentScope.parent.localScale = new Vector3(-1, 1, 1);
 
-                // For scopes that have multiple levels of zoom of different zoom effects (e.g. changing sight lines from black to red), opticSight will be stored in 
-                // mode_000, mode_001, etc, and that will be stored in the scope game object, so we need to get parent name for scopes with multiple settings
+                string scopeName = opticSight.name;
+                BoxCollider scopeCollider;
 
                 if (scopeName.Contains("mode") || scopeName.Contains("Mode"))
                 {
                     if (currentScope)
-                        VRGlobals.vrPlayer.scopeUiPosition = currentScope.parent.Cast<Transform>().FirstOrDefault(child => child.name.Equals("backLens", StringComparison.OrdinalIgnoreCase));
-                    //VRGlobals.vrPlayer.scopeUiPosition = currentScope.parent.Find("backLens");
-                    scopeName = opticSight.transform.parent.name;
-
-                    //This check is for Epic's AIO support
-                    if (!scopeName.Contains("(Clone)"))
-                        scopeName = opticSight.transform.parent.parent.name;
-
+                        VRGlobals.vrPlayer.scopeUiPosition = currentScope.parent.Cast<Transform>()
+                            .FirstOrDefault(child => child.name.Equals("backLens", StringComparison.OrdinalIgnoreCase));
                     opticSight.transform.parent.gameObject.layer = 6;
                     scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
                 }
                 else
                 {
                     if (currentScope)
-                        VRGlobals.vrPlayer.scopeUiPosition = currentScope.Cast<Transform>().FirstOrDefault(child => child.name.Equals("backLens", StringComparison.OrdinalIgnoreCase));
+                        VRGlobals.vrPlayer.scopeUiPosition = currentScope.Cast<Transform>()
+                            .FirstOrDefault(child => child.name.Equals("backLens", StringComparison.OrdinalIgnoreCase));
                     opticSight.gameObject.layer = 6;
-                    scopeCollider = opticSight.GetComponent<BoxCollider>();
-                    if (!scopeCollider)
-                        scopeCollider = opticSight.transform.parent.GetComponent<BoxCollider>();
+                    scopeCollider = opticSight.GetComponent<BoxCollider>()
+                                    ?? opticSight.transform.parent.GetComponent<BoxCollider>();
                 }
+
                 if (scopeCollider)
                 {
                     scopeCollider.size = new Vector3(0.09f, 0.04f, 0.02f);
@@ -1121,25 +1301,29 @@ namespace TarkovVR.Patches.Core.Player
                     scopeCollider.isTrigger = true;
                     scopeCollider.enabled = true;
                 }
-                //Plugin.MyLog.LogInfo($"Scope Name: {scopeName}");
-                VRGlobals.vrOpticController.minFov = ScopeManager.GetMinFOV(scopeName);
-                VRGlobals.vrOpticController.maxFov = ScopeManager.GetMaxFOV(scopeName);
-                VRGlobals.vrOpticController.currentFov = VRGlobals.vrOpticController.scopeCamera.fieldOfView;
-                VRGlobals.vrOpticController.SetScopeSensitivity();
 
-                if (scopeName.Contains("mode") || scopeName.Contains("Mode"))
+                // Read scope characteristics straight from base data
+                var camData = opticSight.CameraData;
+                VRGlobals.vrOpticController.isAdjustable = camData.IsAdjustableOptic;
+                VRGlobals.vrOpticController.isSmoothZoom = camData is ScopeSmoothCameraData;
+
+                if (camData is ScopeSmoothCameraData smoothData)
                 {
-                    var parent = opticSight.transform.parent;
-                    var collider = parent.GetComponent<BoxCollider>() ?? parent.parent.GetComponent<BoxCollider>();
-                    if (collider) collider.enabled = true;
+                    VRGlobals.vrOpticController.minFov = smoothData.MinMaxFieldOfView.y;
+                    VRGlobals.vrOpticController.maxFov = smoothData.MinMaxFieldOfView.x;
+                    VRGlobals.vrOpticController.baseZoomHandler = smoothData.ScopeZoomHandler;
+                }
+                else if (camData is ScopeCameraData scopeData)
+                {
+                    // Discrete toggle or fixed — single FOV per mode
+                    VRGlobals.vrOpticController.minFov = scopeData.FieldOfView;
+                    VRGlobals.vrOpticController.maxFov = scopeData.FieldOfView;
                 }
                 else
                 {
-                    var collider = opticSight.GetComponent<BoxCollider>() ?? opticSight.transform.parent.GetComponent<BoxCollider>();
-                    if (collider) collider.enabled = true;
+                    VRGlobals.vrOpticController.baseZoomHandler = null;
                 }
-
-
+                VRGlobals.vrOpticController.SetScopeSensitivity();
             }
         }
 
@@ -1153,7 +1337,7 @@ namespace TarkovVR.Patches.Core.Player
         //}
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GetActionsClass.Class1750), "method_0")]
         private static bool PreventUsingStationaryWeapon(GetActionsClass.Class1750 __instance)
@@ -1412,6 +1596,55 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
+        // Trying to attempt manual eating/drinking but it's not turning out how I want. Maybe I'll come back to it but the end goal is to have a full custom VR player controller for everything
+        /*
+        private static int lastStateHash = 0;
+        private static FieldInfo delayedEventsField;
+        private static FieldInfo animEventField;
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(AnimationEventSystem.AnimationEventsEmitter), "EmitEvents")]
+        public static void LogEvents(AnimationEventSystem.AnimationEventsEmitter __instance)
+        {
+            if (!VRGlobals.usingItem) return;
+
+            var animator = VRGlobals.player.ArmsAnimatorCommon;
+            if (animator == null) return;
+            var state = animator.GetCurrentAnimatorStateInfo(1);
+
+            if (state.fullPathHash != lastStateHash)
+            {
+                Plugin.MyLog.LogInfo(
+                    $"[EatLog] STATE: {lastStateHash} -> {state.fullPathHash} (t={state.normalizedTime:F3})");
+                lastStateHash = state.fullPathHash;
+            }
+
+            if (delayedEventsField == null)
+            {
+                delayedEventsField = __instance.GetType().GetField(
+                    "DelayedEvents",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (delayedEventsField == null) return;
+            }
+
+            var queue = delayedEventsField.GetValue(__instance) as System.Collections.IEnumerable;
+            if (queue == null) return;
+
+            foreach (var entry in queue)
+            {
+                if (entry == null) continue;
+                if (animEventField == null)
+                {
+                    animEventField = entry.GetType().GetField(
+                        "AnimationEvent",
+                        BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic);
+                }
+                var ev = animEventField?.GetValue(entry);
+                Plugin.MyLog.LogInfo($"[EatLog] EVENT @ t={state.normalizedTime:F3}: {ev}");
+            }
+        }
+        */
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MedsController), "Spawn")]
         private static void SpawnMedsController(MedsController __instance, float animationSpeed, Action callback)
@@ -1422,6 +1655,13 @@ namespace TarkovVR.Patches.Core.Player
 
                 if (player == null || !player.IsYourPlayer)
                     return;
+
+                // NOTE: manual (gesture-gated) eating is handled by EatingPatches /
+                // EatingInteractionController as a separate postfix on this same
+                // Spawn. We intentionally let the normal body below run for food too
+                // (it disables both arm IKs + sets usingItem=true), so the game's
+                // consume animation owns the arms while the manual controller only
+                // gates the animation SPEED. Don't early-return for food here.
 
                 if (VRGlobals.menuOpen)
                 {
@@ -1469,7 +1709,7 @@ namespace TarkovVR.Patches.Core.Player
             }
             //Plugin.MyLog.LogError($"[SpawnMedsController] Spawning meds controller for {player} with item {item}");
         }      
-
+        
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CollimatorSight), "OnEnable")]
         private static void FixCollimatorParallaxEffect(CollimatorSight __instance)

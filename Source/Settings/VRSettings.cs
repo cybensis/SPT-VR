@@ -1,5 +1,7 @@
 ﻿using EFT.UI;
+using EFT.UI.Ragfair;
 using EFT.UI.Settings;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -9,13 +11,13 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
-using UnityEngine;
-using Newtonsoft.Json;
-using static HBAO_Core;
-using EFT.UI.Ragfair;
-using TarkovVR.Patches.Visuals;
 using TarkovVR;
+using TarkovVR.Patches.Visuals;
+using Unity.XR.OpenVR;
+using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.XR;
+using static HBAO_Core;
 
 namespace TarkovVR.Source.Settings
 {
@@ -47,7 +49,7 @@ namespace TarkovVR.Source.Settings
             DisableNearShadows = 1,
             IncreaseLighting = 2
         }
-            
+
         // Vive Wand controller scales
         private static readonly float[] ViveWandVaultTimeValues = [0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f];
         private static readonly float[] ViveWandCrouchThresholdValues = [0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f];
@@ -77,6 +79,7 @@ namespace TarkovVR.Source.Settings
             public float handPosOffset { get; set; }
             public bool weaponWeight { get; set; }
             public bool weaponInertia { get; set; }
+            public bool walkEffector { get; set; }
             public bool hideArms { get; set; }
             public bool hideLegs { get; set; }
             public bool disableRunAnimation { get; set; }
@@ -87,7 +90,8 @@ namespace TarkovVR.Source.Settings
             public bool disableFrusCulling { get; set; }
             public bool useVRKeyboard { get; set; }
             public bool heldItemWeight { get; set; }
-            
+            public int opticRenderResolution { get; set; }
+
             // Vive Wand controller settings
             public float viveWandCrouchTrackpadThreshold { get; set; }
             public float viveWandVaultHoldTime { get; set; }
@@ -118,6 +122,7 @@ namespace TarkovVR.Source.Settings
                 enableSharpen = true;
                 weaponWeight = false;
                 weaponInertia = false;
+                walkEffector = false;
                 hideArms = false;
                 hideLegs = false;
                 disableRunAnimation = true;
@@ -128,6 +133,7 @@ namespace TarkovVR.Source.Settings
                 disableFrusCulling = false;
                 useVRKeyboard = false;
                 heldItemWeight = false;
+                opticRenderResolution = 512;
                 viveWandCrouchTrackpadThreshold = 0.7f;
                 viveWandVaultHoldTime = 0.3f;
             }
@@ -136,6 +142,7 @@ namespace TarkovVR.Source.Settings
 
         private static SettingsScreen settingsUi;
         public static GameObject vrSettingsObject;
+        public static GameObject vrGraphicsObject;
 
         //private static SettingSelectSlider leftStickDriftSlider;
         //private static SettingSelectSlider rightStickDriftSlider;
@@ -151,6 +158,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle supportGunHoldToggle;
         private static SettingToggle weaponWeightToggle;
         private static SettingToggle weaponInertiaToggle;
+        private static SettingToggle walkEffectorToggle;
         private static SettingSelectSlider aimSmoothingSlider;
         private static SettingSelectSlider scopeSmoothingSlider;
         private static SettingToggle scopeSmoothingToggle;
@@ -172,6 +180,7 @@ namespace TarkovVR.Source.Settings
         private static SettingDropDown shadowOptsToggle;
         private static SettingToggle disablePrismEffectsToggle;
         private static SettingToggle disableFogToggle;
+        private static SettingDropDown opticResolutionDropDown;
 
         // Other settings
         private static SettingToggle hideArmsToggle;
@@ -180,6 +189,8 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle seatedModeToggle;
         private static SettingToggle useVRKeyboardToggle;
         private static SettingToggle heldItemWeightToggle;
+
+        private static SettingSelectSlider emptySpacingSlider;
 
 
         private static ModSettings settings;
@@ -230,6 +241,21 @@ namespace TarkovVR.Source.Settings
                 UIAnimatedToggleSpawner settingsController = vrSettingsButton.GetComponent<UIAnimatedToggleSpawner>();
                 settingsController.SpawnableToggle._headerLabel.text = "VR";
                 settingsController.action_0 = ShowVRSettings;
+            }
+
+            // Second custom tab: "VR Graphics" (sits next to "VR")
+            GameObject vrGraphicsButton = UnityEngine.Object.Instantiate(settingsUi._controlsButton.gameObject);
+            vrGraphicsButton.transform.parent = settingsUi._controlsButton.transform.parent;
+            vrGraphicsButton.transform.localScale = Vector3.one;
+            vrGraphicsButton.transform.localRotation = Quaternion.identity;
+            vrGraphicsButton.transform.localPosition = Vector3.zero;
+            vrGraphicsButton.name = "vrGraphicsToggle";
+
+            if (vrGraphicsButton.GetComponent<UIAnimatedToggleSpawner>())
+            {
+                UIAnimatedToggleSpawner graphicsController = vrGraphicsButton.GetComponent<UIAnimatedToggleSpawner>();
+                graphicsController.SpawnableToggle._headerLabel.text = "VR GFX";
+                graphicsController.action_0 = ShowVRGraphicsSettings;
             }
 
             GameObject vrSettings = UnityEngine.Object.Instantiate(settingsUi._soundSettingsScreen.gameObject);
@@ -309,12 +335,12 @@ namespace TarkovVR.Source.Settings
             //rightStickDriftSlider.transform.localPosition = new Vector3(0, -120, 0);
 
 
-            /*
+            
             emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             emptySpacingSlider.Slider.gameObject.SetActive(false);
             emptySpacingSlider.Text.gameObject.SetActive(false);
-            */
+            
 
             seatedModeToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             seatedModeToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
@@ -364,6 +390,12 @@ namespace TarkovVR.Source.Settings
             weaponInertiaToggle.Text.localizationKey = "Turn On EFT Weapon Inertia";
             weaponInertiaToggle.Toggle.UpdateValue(settings.weaponInertia);
 
+            walkEffectorToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            walkEffectorToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            walkEffectorToggle.Toggle.action_0 = SetWalkEffectorOn;
+            walkEffectorToggle.Text.localizationKey = "Turn On EFT Weapon Walk Bobbing";
+            walkEffectorToggle.Toggle.UpdateValue(settings.walkEffector);
+
             heldItemWeightToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             heldItemWeightToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             heldItemWeightToggle.Toggle.action_0 = SetHeldItemWeight;
@@ -382,11 +414,13 @@ namespace TarkovVR.Source.Settings
             scopeSmoothingSlider.Text.localizationKey = "Hold Breath Sensitivity:";
             scopeSmoothingSlider.Slider.UpdateValue(settings.scopeSmoothingSensitivity);
 
+            
             variableZoomSensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             variableZoomSensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             variableZoomSensitivitySlider.Slider.action_0 = SetVariableZoomSensitivity;
             variableZoomSensitivitySlider.Text.localizationKey = "Variable Zoom Sensitivity:";
             variableZoomSensitivitySlider.Slider.UpdateValue((int)(settings.variableZoomSensitivity * 10));
+            
 
             rightHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             rightHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
@@ -438,54 +472,17 @@ namespace TarkovVR.Source.Settings
             }
             handPosOffsetSlider.Slider.UpdateValue(sliderValue);
 
-
-            hideArmsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            hideArmsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            hideArmsToggle.Toggle.action_0 = SetHideArms;
-            hideArmsToggle.Text.localizationKey = "Hide Arms";
-            hideArmsToggle.Toggle.UpdateValue(settings.hideArms);
-
-            hideLegsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            hideLegsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            hideLegsToggle.Toggle.action_0 = SetHideLegs;
-            hideLegsToggle.Text.localizationKey = "Hide Legs";
-            hideLegsToggle.Toggle.UpdateValue(settings.hideLegs);
+            emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
+            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            emptySpacingSlider.Slider.gameObject.SetActive(false);
+            emptySpacingSlider.Text.gameObject.SetActive(false);
 
             disableRunAnimationToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             disableRunAnimationToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
             disableRunAnimationToggle.Toggle.action_0 = SetDisableRunAnim;
             disableRunAnimationToggle.Text.localizationKey = "Disable Run Animation";
             disableRunAnimationToggle.Toggle.UpdateValue(settings.disableRunAnimation);
-
-            disablePrismEffectsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            disablePrismEffectsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            disablePrismEffectsToggle.Toggle.action_0 = SetDisablePrismEffects;
-            disablePrismEffectsToggle.Text.localizationKey = "Disable Prism Effects";
-            disablePrismEffectsToggle.Toggle.UpdateValue(settings.disablePrismEffects);
-
-            disableFogToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            disableFogToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            disableFogToggle.Toggle.action_0 = SetDisableFog;
-            disableFogToggle.Text.localizationKey = "Disable Fog - Worse aliasing if enabled";
-            disableFogToggle.Toggle.UpdateValue(settings.disablePrismFog);
-            /*
-            emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass1050_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            emptySpacingSlider.Slider.gameObject.SetActive(false);
-            emptySpacingSlider.Text.gameObject.SetActive(false);
-            */
-            ReadOnlyCollection<string> shadowOpts = new ReadOnlyCollection<string>(new List<string> { "Normal", "Disable Near Shadows", "Distant Shadows (FPS hit)" });
-            shadowOptsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
-            shadowOptsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.VoipDevice, shadowOpts, (x) => !(x == "Normal") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
-            shadowOptsToggle.Text.localizationKey = "Shadows Settings: ";
-            if (settings.shadowOpt == ShadowOpt.Normal)
-                shadowOptsToggle.DropDown.SetLabelText("Normal");
-            else if (settings.shadowOpt == ShadowOpt.DisableNearShadows)
-                shadowOptsToggle.DropDown.SetLabelText("Disable Near Shadows");
-            else
-                shadowOptsToggle.DropDown.SetLabelText("Distant Shadows (FPS hit)");
-
-            shadowOptsToggle.DropDown.gclass1626_0.Action_0 = ChangeShadowOpts;
+            
 
             /*
             sharpenToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
@@ -531,119 +528,194 @@ namespace TarkovVR.Source.Settings
             frusCullingToggle.Text.localizationKey = "Disable Frustum Culling ";
             frusCullingToggle.Toggle.UpdateValue(settings.disableFrusCulling);
             */
-            SetupScrollbar(vrSettings);
-
+            _vrSettingsScroll = SetupScrollbar(vrSettings);
             vrSettingsObject = newSoundSettings.gameObject;
             UnityEngine.Object.Destroy(newSoundSettings);
+            vrSettingsObject.active = false;
+
+            // ============================ VR Graphics tab ============================
+            GameObject vrGraphics = UnityEngine.Object.Instantiate(settingsUi._soundSettingsScreen.gameObject);
+            vrGraphics.transform.parent = settingsUi._soundSettingsScreen.transform.parent;
+            vrGraphics.transform.localScale = Vector3.one;
+            vrGraphics.transform.localRotation = Quaternion.identity;
+            vrGraphics.transform.localPosition = new Vector3(0, -71.5f, 0);
+            vrGraphics.transform.GetChild(0).localPosition = new Vector3(10, 433.5f, 0);
+
+            SoundSettingsTab gSoundSettings = vrGraphics.GetComponent<SoundSettingsTab>();
+            Transform gPanel = gSoundSettings._slidersSection;
+            for (int i = 0; i < gPanel.childCount; i++)
+                UnityEngine.Object.Destroy(gPanel.GetChild(i).gameObject);
+            GameObject.Destroy(gSoundSettings._togglesSection.gameObject);
+            GameObject.Destroy(gSoundSettings._slidersSection.parent.FindChild("VoipSection").gameObject);
+
+            // Scope render resolution
+            ReadOnlyCollection<string> opticResOpts = new ReadOnlyCollection<string>(new List<string> { "256", "512", "768", "1024 (Vanilla)" });
+            opticResolutionDropDown = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, gPanel);
+            opticResolutionDropDown.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.VoipDevice, opticResOpts, (x) => !(x == "512") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            opticResolutionDropDown.Text.localizationKey = "Scope Render Resolution: ";
+            opticResolutionDropDown.DropDown.SetLabelText(OpticResLabel(settings.opticRenderResolution));
+            opticResolutionDropDown.DropDown.gclass1626_0.Action_0 = ChangeOpticResolution;
+
+            // Shadows
+            ReadOnlyCollection<string> gShadowOpts = new ReadOnlyCollection<string>(new List<string> { "Normal", "Disable Near Shadows", "Distant Shadows (FPS hit)" });
+            shadowOptsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, gPanel);
+            shadowOptsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.VoipDevice, gShadowOpts, (x) => !(x == "Normal") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            shadowOptsToggle.Text.localizationKey = "Shadows Settings: ";
+            if (settings.shadowOpt == ShadowOpt.Normal)
+                shadowOptsToggle.DropDown.SetLabelText("Normal");
+            else if (settings.shadowOpt == ShadowOpt.DisableNearShadows)
+                shadowOptsToggle.DropDown.SetLabelText("Disable Near Shadows");
+            else
+                shadowOptsToggle.DropDown.SetLabelText("Distant Shadows (FPS hit)");
+            shadowOptsToggle.DropDown.gclass1626_0.Action_0 = ChangeShadowOpts;
+
+            emptySpacingSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
+            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            emptySpacingSlider.Slider.gameObject.SetActive(false);
+            emptySpacingSlider.Text.gameObject.SetActive(false);
+
+            // Prism effects
+            /*
+            disablePrismEffectsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            disablePrismEffectsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            disablePrismEffectsToggle.Toggle.action_0 = SetDisablePrismEffects;
+            disablePrismEffectsToggle.Text.localizationKey = "Disable Prism Effects";
+            disablePrismEffectsToggle.Toggle.UpdateValue(settings.disablePrismEffects);
+            */
+            // Fog
+            disableFogToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            disableFogToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            disableFogToggle.Toggle.action_0 = SetDisableFog;
+            disableFogToggle.Text.localizationKey = "Disable Fog - Worse aliasing if enabled";
+            disableFogToggle.Toggle.UpdateValue(settings.disablePrismFog);
+
+            // Hide arms
+            hideArmsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            hideArmsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            hideArmsToggle.Toggle.action_0 = SetHideArms;
+            hideArmsToggle.Text.localizationKey = "Hide Arms";
+            hideArmsToggle.Toggle.UpdateValue(settings.hideArms);
+
+            // Hide legs
+            hideLegsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            hideLegsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            hideLegsToggle.Toggle.action_0 = SetHideLegs;
+            hideLegsToggle.Text.localizationKey = "Hide Legs";
+            hideLegsToggle.Toggle.UpdateValue(settings.hideLegs);
+
+            _vrGraphicsScroll = SetupScrollbar(vrGraphics);
+            vrGraphicsObject = gSoundSettings.gameObject;
+            UnityEngine.Object.Destroy(gSoundSettings);
+            vrGraphicsObject.active = false;
         }
 
         private static ScrollRect _vrSettingsScroll;
+        private static ScrollRect _vrGraphicsScroll;
 
-        private static void SetupScrollbar(GameObject vrSettings)
+        private static ScrollRect SetupScrollbar(GameObject vrSettings)
         {
+            const float scrollbarWidth = 10f;
+            const float reservedVertical = 200f;  // canvas space taken by header + tabs above the panel; tune to taste
+
             SoundSettingsTab tab = vrSettings.GetComponent<SoundSettingsTab>();
-            Transform slidersPanel = tab._slidersSection;
-            Transform panel = slidersPanel.parent;
-            RectTransform panelRT = panel.GetComponent<RectTransform>();
+            RectTransform contentRT = tab._slidersSection.GetComponent<RectTransform>();
+            RectTransform panelRT = contentRT.parent.GetComponent<RectTransform>();
 
-            // Screen.height / scaleFactor gives the true Canvas-space height —
-            // rect.height on a stretch-anchored object returns the offset, not the real size.
-            Canvas canvas = vrSettings.GetComponentInParent<Canvas>();
-            float scaleFactor = (canvas != null && canvas.scaleFactor > 0f) ? canvas.scaleFactor : 1f;
-            float viewportHeight = Screen.height / scaleFactor - 70f;
-
-            // Destroy ContentSizeFitter so end-of-frame layout rebuild can't override our size
-            ContentSizeFitter panelCsf = panel.GetComponent<ContentSizeFitter>();
-            if (panelCsf != null)
-                UnityEngine.Object.Destroy(panelCsf);
-
+            // --- Panel sizing ---
+            // Panel has non-stretch Y anchors (1..1), so sizeDelta.y is the real height.
+            // Canvas is the only ancestor with a sane rect, so size against it directly.
+            var canvasRT = panelRT.GetComponentInParent<Canvas>().GetComponent<RectTransform>();
+            float viewportHeight = Mathf.Max(canvasRT.rect.height - reservedVertical, 400f);
             panelRT.sizeDelta = new Vector2(panelRT.sizeDelta.x, viewportHeight);
 
-            // Padding so first and last elements aren't clipped by the mask
-            VerticalLayoutGroup sliderVlg = slidersPanel.GetComponent<VerticalLayoutGroup>();
-            if (sliderVlg != null)
-                sliderVlg.padding = new RectOffset(
-                    sliderVlg.padding.left,
-                    sliderVlg.padding.right,
-                    40,
-                    40);
+            // Kill any ContentSizeFitter on the panel so a layout rebuild can't grow it back to fit children.
+            var panelCsf = panelRT.GetComponent<ContentSizeFitter>();
+            if (panelCsf != null) UnityEngine.Object.Destroy(panelCsf);
 
-            LayoutRebuilder.ForceRebuildLayoutImmediate(panelRT);
-
-            // RectMask2D clips content without affecting child layout
-            if (panel.GetComponent<RectMask2D>() == null)
-                panel.gameObject.AddComponent<RectMask2D>();
-
-            // SlidersSection as scroll content: anchor top-stretch, grow downward
-            RectTransform contentRT = slidersPanel.GetComponent<RectTransform>();
+            // --- Content (slidersPanel) ---
+            // Stays a direct child of panel. Top-stretch anchored, right-inset to leave
+            // a strip for the scrollbar so it doesn't overlap controls.
             contentRT.anchorMin = new Vector2(0f, 1f);
             contentRT.anchorMax = new Vector2(1f, 1f);
             contentRT.pivot = new Vector2(0.5f, 1f);
             contentRT.anchoredPosition = Vector2.zero;
-            contentRT.sizeDelta = new Vector2(0f, contentRT.sizeDelta.y);
+            contentRT.offsetMin = new Vector2(0f, contentRT.offsetMin.y);
+            contentRT.offsetMax = new Vector2(0f, 0f);
 
-            ContentSizeFitter csf = slidersPanel.GetComponent<ContentSizeFitter>()
-                                    ?? slidersPanel.gameObject.AddComponent<ContentSizeFitter>();
+            var vlg = contentRT.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null)
+                vlg.padding = new RectOffset(vlg.padding.left, vlg.padding.right, 40, 40);
+
+            var csf = contentRT.GetComponent<ContentSizeFitter>()
+                      ?? contentRT.gameObject.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
-            // ScrollRectNoDrag: responds only to scroll events from VRUIInteracter,
-            // never auto-scrolls to focused children (unlike ScrollRect)
-            ScrollRectNoDrag scrollRect = panel.GetComponent<ScrollRectNoDrag>()
-                                          ?? panel.gameObject.AddComponent<ScrollRectNoDrag>();
+            // --- Clip content to panel ---
+            if (panelRT.GetComponent<RectMask2D>() == null)
+                panelRT.gameObject.AddComponent<RectMask2D>();
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(panelRT);
+
+            // --- Scrollbar ---
+            // Scrollbar lives outside the panel so RectMask2D doesn't clip it.
+            // Anchor-match to panel so it tracks position and size automatically.
+            GameObject scrollbarGO = new GameObject("VRScrollbar", typeof(RectTransform));
+            scrollbarGO.transform.SetParent(panelRT.parent, false);
+            RectTransform scrollbarRT = scrollbarGO.GetComponent<RectTransform>();
+
+            scrollbarRT.anchorMin = panelRT.anchorMin;
+            scrollbarRT.anchorMax = panelRT.anchorMax;
+            scrollbarRT.pivot = new Vector2(0f, panelRT.pivot.y);
+
+            // Right edge of panel in its parent's local space:
+            // pivot position + offset from pivot to right edge.
+            float panelRightX = panelRT.anchoredPosition.x + (1f - panelRT.pivot.x) * panelRT.rect.width;
+            scrollbarRT.anchoredPosition = new Vector2(panelRightX, panelRT.anchoredPosition.y);
+            scrollbarRT.sizeDelta = new Vector2(scrollbarWidth, panelRT.sizeDelta.y);
+
+            var scrollbarBg = scrollbarGO.AddComponent<UnityEngine.UI.Image>();
+            scrollbarBg.color = new Color(0.1f, 0.1f, 0.1f, 0.7f);
+
+            var scrollbar = scrollbarGO.AddComponent<Scrollbar>();
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+
+            GameObject handleArea = new GameObject("Sliding Area", typeof(RectTransform));
+            handleArea.transform.SetParent(scrollbarGO.transform, false);
+            var haRT = handleArea.GetComponent<RectTransform>();
+            haRT.anchorMin = Vector2.zero;
+            haRT.anchorMax = Vector2.one;
+            haRT.offsetMin = new Vector2(2f, 10f);
+            haRT.offsetMax = new Vector2(-2f, -10f);
+
+            GameObject handle = new GameObject("Handle", typeof(RectTransform));
+            handle.transform.SetParent(handleArea.transform, false);
+            var hRT = handle.GetComponent<RectTransform>();
+            hRT.anchorMin = Vector2.zero;
+            hRT.anchorMax = Vector2.one;
+            hRT.sizeDelta = Vector2.zero;
+
+            var handleImg = handle.AddComponent<UnityEngine.UI.Image>();
+            handleImg.color = new Color(0.55f, 0.55f, 0.55f, 1f);
+            scrollbar.handleRect = hRT;
+            scrollbar.targetGraphic = handleImg;
+
+            // --- ScrollRect ---
+            // Panel acts as its own viewport. ScrollRectNoDrag responds only to scroll
+            // events from VRUIInteracter (no auto-scroll-to-focused-child).
+            var scrollRect = panelRT.GetComponent<ScrollRectNoDrag>()
+                             ?? panelRT.gameObject.AddComponent<ScrollRectNoDrag>();
             scrollRect.content = contentRT;
             scrollRect.viewport = panelRT;
+            scrollRect.verticalScrollbar = scrollbar;
             scrollRect.vertical = true;
             scrollRect.horizontal = false;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
             scrollRect.scrollSensitivity = 30f;
             scrollRect.inertia = false;
-
-            _vrSettingsScroll = scrollRect;
-
-            // Scrollbar lives outside Panel so RectMask2D doesn't clip it
-            GameObject scrollbarGO = new GameObject("VRScrollbar");
-            scrollbarGO.transform.SetParent(panel.parent, false);
-
-            float scrollbarWidth = 14f;
-            float panelRightEdge = panelRT.anchoredPosition.x + panelRT.sizeDelta.x / 2f;
-
-            RectTransform scrollbarRT = scrollbarGO.AddComponent<RectTransform>();
-            scrollbarRT.anchorMin = panelRT.anchorMin;
-            scrollbarRT.anchorMax = panelRT.anchorMax;
-            scrollbarRT.pivot = new Vector2(0f, 1f);
-            scrollbarRT.sizeDelta = new Vector2(scrollbarWidth, viewportHeight);
-            scrollbarRT.anchoredPosition = new Vector2(panelRightEdge, panelRT.anchoredPosition.y);
-
-            UnityEngine.UI.Image scrollbarBg = scrollbarGO.AddComponent<UnityEngine.UI.Image>();
-            scrollbarBg.color = new Color(0.1f, 0.1f, 0.1f, 0.7f);
-
-            Scrollbar scrollbar = scrollbarGO.AddComponent<Scrollbar>();
-            scrollbar.direction = Scrollbar.Direction.BottomToTop;
-
-            GameObject handleArea = new GameObject("Sliding Area");
-            handleArea.transform.SetParent(scrollbarGO.transform, false);
-            RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
-            handleAreaRT.anchorMin = Vector2.zero;
-            handleAreaRT.anchorMax = Vector2.one;
-            handleAreaRT.offsetMin = new Vector2(2f, 10f);
-            handleAreaRT.offsetMax = new Vector2(-2f, -10f);
-
-            GameObject handle = new GameObject("Handle");
-            handle.transform.SetParent(handleArea.transform, false);
-            RectTransform handleRT = handle.AddComponent<RectTransform>();
-            handleRT.anchorMin = Vector2.zero;
-            handleRT.anchorMax = Vector2.one;
-            handleRT.sizeDelta = Vector2.zero;
-
-            UnityEngine.UI.Image handleImg = handle.AddComponent<UnityEngine.UI.Image>();
-            handleImg.color = new Color(0.55f, 0.55f, 0.55f, 1f);
-
-            scrollbar.handleRect = handleRT;
-            scrollbar.targetGraphic = handleImg;
-
-            scrollRect.verticalScrollbar = scrollbar;
             scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+
+            return scrollRect;
         }
 
         private static void ChangeRotationSensitivity(int sensitivity)
@@ -678,9 +750,30 @@ namespace TarkovVR.Source.Settings
             if (settingsUi != null)
             {
                 settingsUi.settingsTab_0.gameObject.active = false;
-                vrSettingsObject.active = true;
-                if (_vrSettingsScroll != null)
-                    _vrSettingsScroll.verticalNormalizedPosition = 1f;
+                if (vrGraphicsObject)
+                    vrGraphicsObject.active = false;
+                if (vrSettingsObject)
+                {
+                    vrSettingsObject.active = true;
+                    if (_vrSettingsScroll != null)
+                        _vrSettingsScroll.verticalNormalizedPosition = 1f;
+                }
+            }
+        }
+
+        public static void ShowVRGraphicsSettings()
+        {
+            if (settingsUi != null)
+            {
+                settingsUi.settingsTab_0.gameObject.active = false;
+                if (vrSettingsObject)
+                    vrSettingsObject.active = false;
+                if (vrGraphicsObject)
+                {
+                    vrGraphicsObject.active = true;
+                    if (_vrGraphicsScroll != null)
+                        _vrGraphicsScroll.verticalNormalizedPosition = 1f;
+                }
             }
         }
 
@@ -688,6 +781,8 @@ namespace TarkovVR.Source.Settings
         {
             if (vrSettingsObject)
                 vrSettingsObject.active = false;
+            if (vrGraphicsObject)
+                vrGraphicsObject.active = false;
         }
 
         public static int GetRotationSensitivity() { 
@@ -754,6 +849,15 @@ namespace TarkovVR.Source.Settings
             return settings.weaponInertia;
         }
 
+        private static void SetWalkEffectorOn(bool turnOn)
+        {
+            settings.walkEffector = turnOn;
+        }
+        public static bool GetWalkEffectorOn()
+        {
+            return settings.walkEffector;
+        }
+
         public static bool SmoothScopeAim()
         {
             return settings.scopeAimSmoothing;
@@ -766,6 +870,7 @@ namespace TarkovVR.Source.Settings
         {
             return settings.movementType;
         }
+
         private static void SetLeftHandVerticalOffset(int offset) {
             settings.leftHandVerticalAngle = offset * 10;
         }
@@ -1034,6 +1139,35 @@ namespace TarkovVR.Source.Settings
             return settings.shadowOpt;
         }
 
+        // ---- Scope (optic) render resolution ----
+        public static int GetOpticRenderResolution()
+        {
+            return settings.opticRenderResolution;
+        }
+
+        private static string OpticResLabel(int res)
+        {
+            return res >= 1024 ? "1024 (Vanilla)" : res.ToString();
+        }
+
+        private static void ChangeOpticResolution(int index)
+        {
+            int[] opts = { 256, 512, 768, 1024 };
+            int res = (index >= 0 && index < opts.Length) ? opts[index] : 512;
+            settings.opticRenderResolution = res;
+            if (opticResolutionDropDown != null)
+                opticResolutionDropDown.DropDown.SetLabelText(OpticResLabel(res));
+
+            // Live re-apply if a scope camera already exists (otherwise it takes effect on next scope setup).
+            // SetResolution gets intercepted by WeaponPatches.ScaleOpticResolution which reads this setting.
+            try
+            {
+                if (CameraClass.Exist && CameraClass.Instance.OpticCameraManager != null && CameraClass.Instance.OpticCameraManager.Camera != null)
+                    CameraClass.Instance.OpticCameraManager.SetResolution(res);
+            }
+            catch { }
+        }
+
 
         private static void ChangeRotationType(int mode)
         {
@@ -1085,6 +1219,7 @@ namespace TarkovVR.Source.Settings
         private static void SetHeldItemWeight(bool turnOn)
         {
             settings.heldItemWeight = turnOn;
+        }
         // ---- Vive Crouch Threshold ----
         public static float GetCrouchThreshold()
         {

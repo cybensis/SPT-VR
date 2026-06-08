@@ -251,6 +251,7 @@ namespace TarkovVR.Source.UI
             eventData.dragging = false;
             eventData.pointerDrag = dragObject;
             ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.dropHandler);
+            ExecuteEvents.Execute(dragObject, eventData, ExecuteEvents.endDragHandler);
             dragObject = null;
         }
 
@@ -307,8 +308,13 @@ namespace TarkovVR.Source.UI
                     i++;
                 }
             }
-            if (foundValidObject) { 
-
+            if (foundValidObject)
+            {
+                CameraViewporter vp = hitObject.GetComponentInParent<CameraViewporter>();
+                if (vp != null && vp.TargetCamera != null)
+                {
+                    eventData.position = vp.TargetCamera.WorldToScreenPoint(hit.point);
+                }
                 return hitObject;
             }
             else

@@ -142,8 +142,8 @@ namespace TarkovVR.Patches.Core.Player
             bool leftJoystickUsed = xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity();
             bool rightJoystickUsed = rightYAxis > 0;
 
-            float dotProduct = Vector3.Dot(Camera.main.transform.up, Vector3.up);
-            float headY = (dotProduct < 0) ? (Camera.main.transform.eulerAngles.y - 180) : Camera.main.transform.eulerAngles.y;
+            float dotProduct = Vector3.Dot(VRGlobals.VRCam.transform.up, Vector3.up);
+            float headY = (dotProduct < 0) ? (VRGlobals.VRCam.transform.eulerAngles.y - 180) : VRGlobals.VRCam.transform.eulerAngles.y;
 
             // Get head pitch
             float headPitch = VRGlobals.VRCam.transform.eulerAngles.x;

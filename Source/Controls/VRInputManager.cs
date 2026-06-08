@@ -17,6 +17,12 @@ namespace TarkovVR.Source.Controls
 
         private static float lastCooldownCommandTime = 0f;
 
+        // Commands queued by code (not a physical input) to inject into the game's
+        // command stream — e.g. auto-cancelling an eat by faking a trigger/fire press.
+        // Drained one per input frame so a press+release lands on consecutive frames.
+        private static readonly Queue<ECommand> forcedCommands = new Queue<ECommand>();
+        public static void ForceCommand(ECommand command) => forcedCommands.Enqueue(command);
+
         // Cooldown system setup to avoid busy hands bug, bag and headlight collider were pretty close and if they were toggled too quickly together, busy hands would trigger
         // Commands not listed here will have no cooldown
         private static Dictionary<ECommand, float> commandCooldowns = new Dictionary<ECommand, float>
@@ -74,9 +80,7 @@ namespace TarkovVR.Source.Controls
                 { ECommand.ToggleBreathing, new InputHandlers.BreathingHandler() },
                 { ECommand.ToggleAlternativeShooting, new InputHandlers.AimHandler() },
                 { ECommand.SelectFirstPrimaryWeapon, new InputHandlers.SelectWeaponHandler() },
-                { ECommand.ChangeScopeMagnification, new InputHandlers.ScopeZoomHandler() },
-                { ECommand.ScopeZoomIn, new InputHandlers.ScopeZoomHandler() },
-                { ECommand.ScopeZoomOut, new InputHandlers.ScopeZoomHandler() },
+                { ECommand.ChangeScopeMagnification, new InputHandlers.VRScopeZoomHandler() },
                 { ECommand.CheckAmmo, new InputHandlers.CheckAmmoHandler() },
                 { ECommand.ChangeWeaponMode, new InputHandlers.FireModeHandler() },
                 { ECommand.CheckChamber, new InputHandlers.CheckChamberHandler() },
@@ -122,6 +126,10 @@ namespace TarkovVR.Source.Controls
                         }
                     }
                 }
+
+                // Inject one queued (code-forced) command per frame.
+                if (forcedCommands.Count > 0)
+                    commands.Add(forcedCommands.Dequeue());
             }
             else
             {

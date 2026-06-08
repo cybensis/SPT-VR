@@ -50,6 +50,7 @@ using TarkovVR.Source.Weapons;
 using Comfort.Common;
 using TarkovVR.Patches.Core.Player;
 using GPUInstancer;
+using TarkovVR.Source.Misc;
 
 
 
@@ -460,8 +461,25 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
+        // This adds support for VR buttons to close context menu when clicking away from it. BSG has it set so it closes on mouseclick state up/down which isn't detected with VR controls
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SimpleContextMenu), "Update")]
+        private static void CloseContextMenu(SimpleContextMenu __instance)
+        {
+            SteamVR_Action_Boolean actionButton = VRSettings.GetLeftHandedMode()
+                ? SteamVR_Actions._default.ButtonX
+                : SteamVR_Actions._default.ButtonA;
 
-        
+            if (vrUiInteracter != null && vrUiInteracter.hitObject != null &&
+                vrUiInteracter.hitObject.transform.IsChildOf(__instance.transform))
+                return;
+
+            if (actionButton.stateDown)
+            {
+                __instance.Close();
+            }
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SimpleContextMenu), "CorrectPosition")]
         private static bool FixContextMenuPositioning(SimpleContextMenu __instance)
@@ -572,7 +590,7 @@ namespace TarkovVR.Patches.Misc
             });
         }
 
-
+        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(WeaponPreview), "method_2")]
         private static bool FixWeaponPreviewCamera(WeaponPreview __instance)
@@ -584,7 +602,7 @@ namespace TarkovVR.Patches.Misc
 
             return true;
         }
-
+        
         // This allows the grips to be used as modifier keys when in the menu for quick moving items to stash and quick moving to sell etc..
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Input), nameof(Input.GetKey), typeof(KeyCode))]
@@ -1171,56 +1189,9 @@ namespace TarkovVR.Patches.Misc
 
         //}
 
-
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(ModdingScreenSlotView), "Start")]
-        private static void ActivateWeaponModdingDropDown(ModdingScreenSlotView __instance)
-        {
-            __instance._dropDownButton.gameObject.SetActive(true); 
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(ModdingScreenSlotView), "method_1")]
-        private static bool PreventHidingDropDownMethod1(ModdingScreenSlotView __instance)
-        {
-            if (__instance.bool_0)
-            {
-                __instance.simpleTooltip_0.Close();
-                return false;
-            }
-
-            __instance.ginterface481_0.HideModHighlight(overriding: true);
-            return false;
-        }
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(ModdingScreenSlotView), "method_5")]
-        private static bool PreventHidingDropDownMethod5(ModdingScreenSlotView __instance, ModdingScreenSlotView slotView)
-        {
-            __instance.method_6(slotView == __instance);
-            return false;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(ModdingScreenSlotView), "CheckVisibility")]
-        private static bool PreventHidingDropDownCheckVisibility(ModdingScreenSlotView __instance, EModClass visibleClasses)
-        {
-            bool flag = (visibleClasses & __instance.EModClass_0) != 0;
-            __instance.gameObject.SetActive(flag);
-            if (!flag && __instance.dropDownMenu_0.Open)
-            {
-                if (__instance.dropDownMenu_0.Open)
-                    __instance.dropDownMenu_0.Close();
-            }
-            return false;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(DropDownMenu), "method_1")]
-        private static bool FixWeaponModdingDropDownPosition(DropDownMenu __instance)
-        {
-            __instance.transform.position = __instance.moddingScreenSlotView_0.MenuAnchor.position;
-            return false;
-        }
+        // These patches fix the edit build/modding menu for weapon modding, it moves the gun model to the correct position, adds support for drag to rotate using the laser pointer, fixes some UI selection issues,
+        // and adds custom line renderer sync to reposition the lines pointing to attachments correctly in VR
+        //----------------------------------------------------------------------
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CharacteristicsPanel), "Show")]
@@ -1247,58 +1218,193 @@ namespace TarkovVR.Patches.Misc
                 __instance.transform.localPosition = new Vector3(-950, 381, 0);
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(DropDownMenu), "method_1")]
+        private static bool FixWeaponModdingDropDownPosition(DropDownMenu __instance)
+        {
+            __instance.transform.position = __instance.moddingScreenSlotView_0.MenuAnchor.position;
+            return false;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ModdingScreenSlotView), "Start")]
+        private static void ActivateWeaponModdingDropDown(ModdingScreenSlotView __instance)
+        {
+            __instance._dropDownButton.gameObject.SetActive(true);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ModdingScreenSlotView), "method_1")]
+        private static bool PreventHidingDropDownMethod1(ModdingScreenSlotView __instance)
+        {
+            if (__instance.bool_0)
+            {
+                __instance.simpleTooltip_0.Close();
+                return false;
+            }
+
+            __instance.ginterface481_0.HideModHighlight(overriding: true);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ModdingScreenSlotView), "method_5")]
+        private static bool PreventHidingDropDownMethod5(ModdingScreenSlotView __instance, ModdingScreenSlotView slotView)
+        {
+            __instance.method_6(slotView == __instance);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ModdingScreenSlotView), "CheckVisibility")]
+        private static bool PreventHidingDropDownCheckVisibility(ModdingScreenSlotView __instance, EModClass visibleClasses)
+        {
+            bool flag = (visibleClasses & __instance.EModClass_0) != 0;
+            __instance.gameObject.SetActive(flag);
+            if (!flag && __instance.dropDownMenu_0.Open)
+            {
+                if (__instance.dropDownMenu_0.Open)
+                    __instance.dropDownMenu_0.Close();
+            }
+            return false;
+        }
+        /*
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ModdingScreenSlotView), "Show")]
-        private static void HideModdingLines(ModdingScreenSlotView __instance)
+        private static void FixModdingLineRenderersForVR(ModdingScreenSlotView __instance)
         {
-            __instance._boneIcon.gameObject.SetActive(false);
+            foreach (var lr in __instance.GetComponentsInChildren<LineRenderer>(true))
+            {
+                lr.useWorldSpace = false;
+                lr.startWidth = lr.startWidth * 0.0015f;
+                lr.endWidth = lr.endWidth * 0.0015f;
+            }
+        }
+        */
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ModdingScreenSlotView), "Show")]
+        private static void AttachVRLineSync(ModdingScreenSlotView __instance)
+        {
+            foreach (var lr in __instance.GetComponentsInChildren<LineRenderer>(true))
+            {
+                if (lr.GetComponent<BuildMenuLines>() != null) continue;
+
+                Transform p = lr.transform.parent;
+                if (p == null) continue;
+
+                Transform start = p.Find("modding_menu_item");
+                Transform end = p.Find("Bone Icon");
+                if (start == null || end == null) continue;
+
+                var sync = lr.gameObject.AddComponent<BuildMenuLines>();
+                sync.lr = lr;
+                sync.startNode = start;
+                sync.endNode = end;
+            }
+        }
+        /*
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(WeaponPreview), "Init")]
+        private static void PositionWeaponPreviewForVR(WeaponPreview __instance)
+        {
+            Transform parent = __instance.Rotator?.parent;
+            if (parent == null) return;
+
+            Vector3 delta = __instance.transform.position - parent.position;
+
+            parent.position = __instance.transform.position;
+            parent.rotation = __instance.transform.rotation;
+            parent.localScale = Vector3.one * 1.5f;
+
+            if (Camera.main != null)
+                Camera.main.cullingMask |= (1 << LayerMaskClass.WeaponPreview);
+        }
+        */
+        
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EditBuildScreen), nameof(EditBuildScreen.Show), new Type[] { typeof(EditBuildScreen.GClass3881) })]
+        private static void PositionWeaponPreviewEditBuild(EditBuildScreen __instance)
+        {
+            WeaponPreview wp = __instance._weaponPreview;
+            Transform parent = wp.Rotator?.parent;
+            if (wp != null && parent != null)
+            {
+                Vector3 delta = wp.transform.position - parent.position;
+
+                parent.position = wp.transform.position;
+                parent.rotation = wp.transform.rotation;
+                parent.localScale = Vector3.one * 1.5f;
+
+                if (Camera.main != null)
+                    Camera.main.cullingMask |= (1 << LayerMaskClass.WeaponPreview);
+            }
         }
 
-        //Redid the way WeaponModdingScreen and EditBuildScreen weapon previews work for SPT 3.11 - old way caused camera freeze
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeaponModdingScreen), "Show", new Type[] { typeof(GClass3922) })]
-        private static void PositionWeaponModdingCamera(WeaponModdingScreen __instance, GClass3922 controller)
+        [HarmonyPatch(typeof(WeaponModdingScreen), nameof(WeaponModdingScreen.Show), new Type[] { typeof(WeaponModdingScreen.GClass3922) })]
+        private static void PositionWeaponPreviewModding(WeaponModdingScreen __instance)
         {
-            int previewLayer = LayerMask.NameToLayer("Weapon Preview");
-            GameObject camObj = new GameObject("VRWeaponPreviewCamera");
-            Camera cam = camObj.GetComponent<Camera>();
-            Transform weaponCam = __instance.highLightMesh_0.transform;
-
-            if (cam == null)
+            WeaponPreview wp = __instance._weaponPreview;
+            Transform parent = wp.Rotator?.parent;
+            if (wp != null && parent != null)
             {
-                cam = camObj.AddComponent<Camera>();
-                //camObj.transform.SetParent(weaponCam.parent);
-                camObj.AddComponent<SteamVR_TrackedObject>();
-                cam.stereoTargetEye = StereoTargetEyeMask.Both;
-                cam.clearFlags = CameraClearFlags.Depth;
-                cam.cullingMask = 1 << previewLayer;
-                cam.depth = 11;
+                Vector3 delta = wp.transform.position - parent.position;
+
+                parent.position = wp.transform.position;
+                parent.rotation = wp.transform.rotation;
+                parent.localScale = Vector3.one * 1.5f;
+
+                if (Camera.main != null)
+                    Camera.main.cullingMask |= (1 << LayerMaskClass.WeaponPreview);
             }
-            __instance._weaponPreview.Rotator.localPosition = (Camera.main.transform.localPosition) + new Vector3(0, 0.1f, 1.6f);
-            __instance._weaponPreview.Rotator.localScale = Vector3.one * 1.5f;
         }
+        
+        private static readonly HashSet<int> _hookedViewporters = new();
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EditBuildScreen), "Show", new Type[] { typeof(EditBuildScreen.GClass3881) })]
-        private static void PositionWeaponModdingCamera(EditBuildScreen __instance, EditBuildScreen.GClass3881 controller)
+        [HarmonyPatch(typeof(CameraViewporter), "OnEnable")]
+        private static void HookViewporterDragForVR(CameraViewporter __instance)
         {
-            int previewLayer = LayerMask.NameToLayer("Weapon Preview");
-            GameObject camObj = new GameObject("VRWeaponPreviewCamera");
-            Camera cam = camObj.GetComponent<Camera>();
-            Transform weaponCam = __instance.highLightMesh_0.transform;
+            int id = __instance.GetInstanceID();
+            if (_hookedViewporters.Contains(id)) return;
+            _hookedViewporters.Add(id);
 
-            if (cam == null)
+            DragTrigger dt = __instance.GetComponent<DragTrigger>();
+            if (dt == null) return;
+
+            WeaponPreview wp = __instance._weaponPreview;
+            if (wp == null) return;
+
+            Vector3 lastPos = Vector3.zero;
+            dt.onBeginDrag += (e) => { lastPos = vrUiInteracter.uiPointerPos; };
+            dt.onDrag += (e) =>
             {
-                cam = camObj.AddComponent<Camera>();
-                //camObj.transform.SetParent(weaponCam.parent);
-                camObj.AddComponent<SteamVR_TrackedObject>();
-                cam.stereoTargetEye = StereoTargetEyeMask.Both;
-                cam.clearFlags = CameraClearFlags.Depth;
-                cam.cullingMask = 1 << previewLayer;
-                cam.depth = 11;
-            }
-            __instance._weaponPreview.Rotator.localPosition = (Camera.main.transform.localPosition) + new Vector3(0, 0.1f, 1.6f);
-            __instance._weaponPreview.Rotator.localScale = Vector3.one * 1.5f;
+                Vector3 current = vrUiInteracter.uiPointerPos;
+                Vector3 lastLocal = VRGlobals.preloaderUi.transform.InverseTransformPoint(lastPos);
+                Vector3 currentLocal = VRGlobals.preloaderUi.transform.InverseTransformPoint(current);
+                float yRot = (lastLocal.y - currentLocal.y) * -1;
+                float xRot = (lastLocal.x - currentLocal.x) * -1;
+                wp.Rotate(xRot, yRot, 0f, 0f);
+                lastPos = current;
+            };
+        }
+        
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(CameraViewporter), nameof(CameraViewporter.WorldToLocalScreenPosition))]
+        private static bool ScaleBoneIconsForVR(CameraViewporter __instance, Vector3 worldPosition, ref Vector2 __result)
+        {
+            Vector3 vp = __instance.TargetCamera.WorldToViewportPoint(worldPosition);
+            Vector2 size = (__instance.transform as RectTransform).rect.size;
+
+            const float vrIconSpread = 0.4f; // <1 compresses inward, >1 spreads outward
+
+            Vector2 centered = new Vector2(
+                0.5f + (vp.x - 0.5f) * vrIconSpread,
+                0.5f + (vp.y - 0.5f) * vrIconSpread);
+
+            __result = new Vector2(size.x * centered.x, size.y * centered.y);
+            return false;
         }
 
         [HarmonyPrefix]
@@ -1529,7 +1635,9 @@ namespace TarkovVR.Patches.Misc
         {
             if (toggle.name == "vrSettingsToggle")
                 VRSettings.ShowVRSettings();
-           
+            else if (toggle.name == "vrGraphicsToggle")
+                VRSettings.ShowVRGraphicsSettings();
+
             Camera.main.useOcclusionCulling = false;
             //Camera.main.useOcclusionCulling = true;          
             Camera.main.farClipPlane = 5000f;

@@ -55,6 +55,7 @@ namespace TarkovVR.Source.Player.Interactions
         private float leftHandedModeCheckTimer;
         private float lastPhysicsCheckTime;
         private const float PHYSICS_CHECK_INTERVAL = 0.05f;
+        private const float MaxHoldDistance = 0.35f;
 
         private SteamVR_Action_Boolean primaryHandGrip;
         private SteamVR_Action_Boolean secondaryHandGrip;
@@ -73,7 +74,11 @@ namespace TarkovVR.Source.Player.Interactions
         private const float CACHE_CLEANUP_INTERVAL = 30f;
 
         private Rigidbody cachedRigidbody;
+        private Vector3 cachedGrabOffset;
+        private Vector3 cachedItemPosition;
+        private Quaternion cachedGrabRotation;
         private Transform cachedHand;
+        private Transform cachedOriginalParent;
         private bool isItemInitialized = false;
 
         // Called in Awake
@@ -174,11 +179,6 @@ namespace TarkovVR.Source.Player.Interactions
         
         public void Update()
         {
-            // Always update held item position regardless of game state
-            if (heldItem != null)
-            {
-                UpdateHeldItemPosition();
-            }
 
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
@@ -229,7 +229,13 @@ namespace TarkovVR.Source.Player.Interactions
 
             UpdateInteractionExitStates();
         }
-        
+
+        private void LateUpdate()
+        {
+            if (heldItem != null)
+                UpdateHeldItemPosition();
+        }
+
         private void CleanupCache()
         {
             var keysToRemove = new List<Collider>();
@@ -640,46 +646,118 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        /// <summary>
-        /// Updates held item position every frame, even during sprint/menu.
-        /// </summary>
         private void UpdateHeldItemPosition()
         {
-            if (heldItem == null) 
-                return;
-            
-            if (heldItem is not UnityEngine.Object)
+            if (heldItem == null) return;
+            if (heldItem is not UnityEngine.Object) { ForceDropHeldItem(); return; }
+            if (!isItemInitialized) { InitializeHeldItem(); isItemInitialized = true; }
+
+            cachedRigidbody.isKinematic = true;
+            cachedRigidbody.detectCollisions = true;
+            cachedRigidbody.useGravity = false;
+
+            Vector3 naturalPosition = cachedHand.TransformPoint(cachedGrabOffset);
+            Vector3 clampedPosition = ClampPositionToGeometry(naturalPosition, cachedItemPosition);
+
+            // Forced drop if the constraint has pulled the item too far from where the hand wants it
+            if ((clampedPosition - naturalPosition).sqrMagnitude > MaxHoldDistance * MaxHoldDistance)
             {
                 ForceDropHeldItem();
                 return;
             }
 
-            if (!isItemInitialized)
-            {
-                InitializeHeldItem();
-                isItemInitialized = true;
-            }
+            if ((clampedPosition - naturalPosition).sqrMagnitude > 0.0001f)
+                heldItem.transform.position = clampedPosition;
+            else
+                heldItem.transform.localPosition = cachedGrabOffset;
 
-            // Re-enforce kinematic every frame — EFT coroutines (method_4/SupportRigidbody)
-            // can change rigidbody state while item is held
-            cachedRigidbody.isKinematic = true;
-            cachedRigidbody.detectCollisions = false;
-            cachedRigidbody.useGravity = false;
+            cachedItemPosition = clampedPosition;
 
-            Vector3 offsetPosition = cachedHand.position
-                + cachedHand.right * heldItemOffset.x
-                + cachedHand.up * heldItemOffset.y
-                + cachedHand.forward * heldItemOffset.z;
-
-            heldItem.transform.position = offsetPosition;
-            heldItem.transform.rotation = cachedHand.rotation;
-
-            cachedRigidbody.velocity = Vector3.zero;
-            cachedRigidbody.angularVelocity = Vector3.zero;
-
-            // Drain hands stamina while holding — drop if exhausted
             if (VRSettings.GetHeldItemWeight())
                 DrainHoldingStamina();
+        }
+
+        private Vector3 ClampPositionToGeometry(Vector3 targetPosition, Vector3 previousPosition)
+        {
+            if (heldItem._boundCollider == null)
+                return targetPosition;
+
+            int layerMask = LayerMask.GetMask("Default", "Terrain", "HighPolyCollider");
+            Vector3 localCenter = heldItem._boundCollider.center;
+            Vector3 halfSize = heldItem._boundCollider.size * 0.5f;
+            Quaternion rotation = heldItem.transform.rotation;
+            float itemRadius = Mathf.Min(halfSize.x, halfSize.y, halfSize.z);
+
+            // Collide-and-slide: iteratively cast, hit, project leftover motion onto the hit plane
+            Vector3 currentPos = previousPosition;
+            Vector3 remainingMove = targetPosition - previousPosition;
+            const float skinWidth = 0.001f;
+
+            for (int i = 0; i < 4; i++)
+            {
+                float moveDist = remainingMove.magnitude;
+                if (moveDist < 0.0001f)
+                    break;
+
+                Vector3 moveDir = remainingMove / moveDist;
+                Ray ray = new Ray(currentPos, moveDir);
+
+                if (Physics.SphereCast(ray, itemRadius, out RaycastHit hit, moveDist, layerMask, QueryTriggerInteraction.Ignore))
+                {
+                    // Advance up to just before the hit
+                    float safeDist = Mathf.Max(0f, hit.distance - itemRadius - skinWidth);
+                    currentPos += moveDir * safeDist;
+
+                    // The portion of motion we didn't get to use
+                    Vector3 leftover = remainingMove - moveDir * safeDist;
+
+                    // Slide: project remaining motion onto the hit surface
+                    remainingMove = Vector3.ProjectOnPlane(leftover, hit.normal);
+                }
+                else
+                {
+                    // Clear path — finish the move
+                    currentPos += remainingMove;
+                    break;
+                }
+            }
+
+            // Depenetration safety net (handles grabbed-inside-wall and accumulated drift)
+            Vector3 result = currentPos;
+            Collider[] hits = new Collider[8];
+            for (int iter = 0; iter < 4; iter++)
+            {
+                Vector3 boxCenter = result + rotation * localCenter;
+                int count = Physics.OverlapBoxNonAlloc(boxCenter, halfSize, hits, rotation, layerMask, QueryTriggerInteraction.Ignore);
+
+                if (count == 0)
+                    break;
+
+                Vector3 totalPush = Vector3.zero;
+                bool penetrated = false;
+                for (int i = 0; i < count; i++)
+                {
+                    Collider other = hits[i];
+                    if (other == heldItem._boundCollider)
+                        continue;
+
+                    if (Physics.ComputePenetration(
+                        heldItem._boundCollider, result, rotation,
+                        other, other.transform.position, other.transform.rotation,
+                        out Vector3 dir, out float dist))
+                    {
+                        totalPush += dir * dist;
+                        penetrated = true;
+                    }
+                }
+
+                if (!penetrated || totalPush.sqrMagnitude < 0.0001f)
+                    break;
+
+                result += totalPush;
+            }
+
+            return result;
         }
 
         private void DrainHoldingStamina()
@@ -720,6 +798,7 @@ namespace TarkovVR.Source.Player.Interactions
             isItemInitialized = false;
             cachedRigidbody.isKinematic = false;
             ConsumeThrowStamina(heldItem);
+            heldItem.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
             WeaponPatches.DropObject(heldItem, true);
             heldItem = null;
             cachedRigidbody = null;
@@ -797,7 +876,7 @@ namespace TarkovVR.Source.Player.Interactions
                         cachedRigidbody.useGravity = true;
                         cachedRigidbody.detectCollisions = true;
                     }
-
+                    heldItem.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
                     WeaponPatches.DropObject(heldItem, true);
                 }
                 catch
@@ -830,25 +909,21 @@ namespace TarkovVR.Source.Player.Interactions
             cachedHand = VRGlobals.vrPlayer.LeftHand.transform;
 
             heldItem._rigidBody = cachedRigidbody;
-            
-            // Kinematic + no collisions while held: item follows hand exactly, never gets stuck in geometry
             cachedRigidbody.isKinematic = true;
-            cachedRigidbody.detectCollisions = false;
+            cachedRigidbody.detectCollisions = true;
             cachedRigidbody.useGravity = false;
-            cachedRigidbody.velocity = Vector3.zero;
-            cachedRigidbody.angularVelocity = Vector3.zero;
             cachedRigidbody.mass = heldItem.item_0.TotalWeight;
 
-            // Clear any stale interaction menu immediately when picking up
-            try
-            {
-                VRGlobals.player?.GetComponent<GamePlayerOwner>()?.ClearInteractionState();
-            }
-            catch
-            {
-                // ignored
-            }
+            cachedGrabOffset = cachedHand.InverseTransformPoint(heldItem.transform.position);
+            cachedGrabRotation = Quaternion.Inverse(cachedHand.rotation) * heldItem.transform.rotation;
 
+            // Parent to hand — transform hierarchy handles inherited motion with perfect timing
+            cachedOriginalParent = heldItem.transform.parent;
+            heldItem.transform.SetParent(cachedHand, worldPositionStays: true);
+
+            cachedItemPosition = heldItem.transform.position;
+
+            try { VRGlobals.player?.GetComponent<GamePlayerOwner>()?.ClearInteractionState(); } catch { }
             NotifyWeightChanged();
         }
 
@@ -888,7 +963,7 @@ namespace TarkovVR.Source.Player.Interactions
                 hasEnteredHeadGear = false;
         }
 
-        
+
         private void HandleScopeInteraction()
         {
             SteamVR_Action_Boolean secondaryHandGrip = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
@@ -904,12 +979,6 @@ namespace TarkovVR.Source.Player.Interactions
                     SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (VRSettings.GetLeftHandedMode()) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
                     hasEnteredScope = true;
                 }
-                /*
-                if (WeaponPatches.currentGunInteractController != null && scopeTransform != null)
-                {
-                    WeaponPatches.currentGunInteractController.SetScopeHighlight(scopeTransform);
-                }
-                */
             }
 
             if (secondaryHandGrip.state)
@@ -917,15 +986,13 @@ namespace TarkovVR.Source.Player.Interactions
                 scopeTimeHeldFor += Time.deltaTime;
                 if (scopeTimeHeldFor >= 0.3f)
                 {
-                    if (!changingScopeZoom)
+                    if (!changingScopeZoom && VRGlobals.vrOpticController.scopeCamera != null)
                     {
-                        if (VRGlobals.vrOpticController.scopeCamera != null)
-                        {
-                            VRGlobals.vrOpticController.initZoomDial();
-                            changingScopeZoom = true;
-                        }
+                        VRGlobals.vrOpticController.BeginPhysicalZoom();
+                        changingScopeZoom = true;
                     }
-                    VRGlobals.vrOpticController.handlePhysicalZoomDial();
+                    VRGlobals.vrOpticController.TickPhysicalZoom();
+                    VRGlobals.vrOpticController.UpdateGripHandPose();
                 }
             }
             else if (secondaryHandGrip.stateUp && scopeTimeHeldFor < 0.3f)
@@ -936,11 +1003,9 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 scopeTimeHeldFor = 0;
                 if (changingScopeZoom)
-                    changingScopeZoom = false;
-                if (!hasEnteredScope)
                 {
-                    SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (VRSettings.GetLeftHandedMode()) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
-                    hasEnteredScope = true;
+                    changingScopeZoom = false;
+                    VRGlobals.vrOpticController.EndPhysicalZoom();
                 }
             }
         }

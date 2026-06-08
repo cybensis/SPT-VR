@@ -228,7 +228,7 @@ namespace TarkovVR.Patches.UI
             //VRGlobals.vrPlayer.enabled = false;
             VRGlobals.menuVRManager.enabled = true;
 
-            Transform head = Camera.main.transform;
+            Transform head = VRGlobals.VRCam.transform;
             // Use horizontal forward/right
             Vector3 flatForward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
             Quaternion flatRotation = Quaternion.LookRotation(flatForward, Vector3.up);
@@ -668,9 +668,9 @@ namespace TarkovVR.Patches.UI
                 }
                 else
                 {
-                    Vector3 rayOrigin = Camera.main.transform.position;
+                    Vector3 rayOrigin = VRGlobals.VRCam.transform.position;
                     // Raycasts hit a bit too high so tilt it down for it to hit closer to the centre of vision
-                    Vector3 rayDirection = Quaternion.Euler(-5, 0, 0) * Camera.main.transform.forward;
+                    Vector3 rayDirection = Quaternion.Euler(-5, 0, 0) * VRGlobals.VRCam.transform.forward;
                     float adjustedRayDistance = manager.rayDistance * manager.GetDistanceMultiplier(rayDirection);
 
                     if (Physics.SphereCast(rayOrigin, InteractionRayRadius, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld.int_0))
@@ -792,7 +792,7 @@ namespace TarkovVR.Patches.UI
                     interactionRay.origin = __instance.Transform.position + Vector3.up * 3f;
                     interactionRay.direction = Vector3.down;
                 }
-                __instance.Boolean_0 = GameWorld.InteractionSense(Camera.main.transform.position, Camera.main.transform.forward, radius, distance);
+                __instance.Boolean_0 = GameWorld.InteractionSense(VRGlobals.VRCam.transform.position, VRGlobals.VRCam.transform.forward, radius, distance);
             }
             else
             {
@@ -1231,15 +1231,15 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(PlaceItemTrigger), "TriggerEnter")]
         private static void PlaceItemPositionUi(PlaceItemTrigger __instance)
         {
-            if (VRGlobals.vrPlayer.interactionUi != null)
+            if (VRGlobals.vrPlayer.interactionUi != null && VRGlobals.VRCam != null)
             {
                 // Set position not local position so it doesn't inherit rotated position from camRoot
-                VRGlobals.vrPlayer.interactionUi.position = Camera.main.transform.position +
-                                                           Camera.main.transform.forward * 0.4f +
-                                                           Camera.main.transform.up * -0.2f +
-                                                           Camera.main.transform.right * 0;
+                VRGlobals.vrPlayer.interactionUi.position = VRGlobals.VRCam.transform.position +
+                                                           VRGlobals.VRCam.transform.forward * 0.4f +
+                                                           VRGlobals.VRCam.transform.up * -0.2f +
+                                                           VRGlobals.VRCam.transform.right * 0;
 
-                VRGlobals.vrPlayer.interactionUi.LookAt(Camera.main.transform);
+                VRGlobals.vrPlayer.interactionUi.LookAt(VRGlobals.VRCam.transform);
 
                 // Need to rotate 180 degrees otherwise it shows up backwards
                 VRGlobals.vrPlayer.interactionUi.Rotate(0, 180, 0);

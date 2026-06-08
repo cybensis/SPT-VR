@@ -19,17 +19,20 @@ namespace TarkovVR.Source.Player.VRManager
         protected override void Update()
         {
             base.Update();
-            if (interactionUi && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.highlightingMesh))
+            if (VRGlobals.VRCam != null)
             {
-
-                float yRotationDifference = Mathf.Abs(Quaternion.Angle(Camera.main.transform.localRotation, camRotation));
-
-                if (yRotationDifference > 30)
+                if (interactionUi && (!WeaponPatches.currentGunInteractController || !WeaponPatches.currentGunInteractController.highlightingMesh))
                 {
 
-                    PositionInteractionUI();
-                }
+                    float yRotationDifference = Mathf.Abs(Quaternion.Angle(VRGlobals.VRCam.transform.localRotation, camRotation));
 
+                    if (yRotationDifference > 30)
+                    {
+
+                        PositionInteractionUI();
+                    }
+
+                }
             }
         }
 
@@ -57,11 +60,11 @@ namespace TarkovVR.Source.Player.VRManager
         }
         public void PositionInteractionUI()
         {
-            camRotation = Camera.main.transform.localRotation;
+            camRotation = VRGlobals.VRCam.transform.localRotation;
 
             // Set position not local position so it doesn't inherit rotated position from camRoot
-            interactionUi.position = Camera.main.transform.position + Camera.main.transform.forward * 0.4f + Camera.main.transform.up * -0.2f + Camera.main.transform.right * 0;
-            interactionUi.LookAt(Camera.main.transform);
+            interactionUi.position = VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward * 0.4f + VRGlobals.VRCam.transform.up * -0.2f + VRGlobals.VRCam.transform.right * 0;
+            interactionUi.LookAt(VRGlobals.VRCam.transform);
             // Need to rotate 180 degrees otherwise it shows up backwards
             interactionUi.Rotate(0, 180, 0);
         }
