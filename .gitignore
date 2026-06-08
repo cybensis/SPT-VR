@@ -10,3 +10,5 @@ obj/
 /libs/Managed/Assembly-CSharpold.dll
 /libs/Managed/Assembly-CSharp-firstpass.dll
 /libs/Managed/Assembly-CSharp.dll
+/CLAUDE.md
+/.gitignore
