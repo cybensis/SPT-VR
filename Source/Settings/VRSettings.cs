@@ -82,6 +82,7 @@ namespace TarkovVR.Source.Settings
             public bool walkEffector { get; set; }
             public bool hideArms { get; set; }
             public bool hideLegs { get; set; }
+            public bool manualEating { get; set; }
             public bool disableRunAnimation { get; set; }
             public bool disablePrismEffects { get; set; }
             public bool disablePrismFog { get; set; }
@@ -125,6 +126,7 @@ namespace TarkovVR.Source.Settings
                 walkEffector = false;
                 hideArms = false;
                 hideLegs = false;
+                manualEating = false;
                 disableRunAnimation = true;
                 disablePrismEffects = false;
                 disablePrismFog = true;               
@@ -185,6 +187,7 @@ namespace TarkovVR.Source.Settings
         // Other settings
         private static SettingToggle hideArmsToggle;
         private static SettingToggle hideLegsToggle;
+        private static SettingToggle manualEatingToggle;
         private static SettingToggle disableRunAnimationToggle;
         private static SettingToggle seatedModeToggle;
         private static SettingToggle useVRKeyboardToggle;
@@ -254,7 +257,7 @@ namespace TarkovVR.Source.Settings
             if (vrGraphicsButton.GetComponent<UIAnimatedToggleSpawner>())
             {
                 UIAnimatedToggleSpawner graphicsController = vrGraphicsButton.GetComponent<UIAnimatedToggleSpawner>();
-                graphicsController.SpawnableToggle._headerLabel.text = "VR GFX";
+                graphicsController.SpawnableToggle._headerLabel.text = "VR More";
                 graphicsController.action_0 = ShowVRGraphicsSettings;
             }
 
@@ -533,7 +536,7 @@ namespace TarkovVR.Source.Settings
             UnityEngine.Object.Destroy(newSoundSettings);
             vrSettingsObject.active = false;
 
-            // ============================ VR Graphics tab ============================
+            // ============================ VR More tab (graphics/interactions ============================
             GameObject vrGraphics = UnityEngine.Object.Instantiate(settingsUi._soundSettingsScreen.gameObject);
             vrGraphics.transform.parent = settingsUi._soundSettingsScreen.transform.parent;
             vrGraphics.transform.localScale = Vector3.one;
@@ -602,6 +605,13 @@ namespace TarkovVR.Source.Settings
             hideLegsToggle.Toggle.action_0 = SetHideLegs;
             hideLegsToggle.Text.localizationKey = "Hide Legs";
             hideLegsToggle.Toggle.UpdateValue(settings.hideLegs);
+
+            // Manual eating
+            manualEatingToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            manualEatingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            manualEatingToggle.Toggle.action_0 = SetManualEating;
+            manualEatingToggle.Text.localizationKey = "Manual Eating";
+            manualEatingToggle.Toggle.UpdateValue(settings.manualEating);
 
             _vrGraphicsScroll = SetupScrollbar(vrGraphics);
             vrGraphicsObject = gSoundSettings.gameObject;
@@ -1044,6 +1054,14 @@ namespace TarkovVR.Source.Settings
             settings.hideLegs = turnOff;
             if (VRGlobals.legsModel)
                 VRGlobals.legsModel.transform.parent.gameObject.active = !turnOff;
+        }
+        private static void SetManualEating(bool turnOn)
+        {
+            settings.manualEating = turnOn;
+        }
+        public static bool GetManualEating()
+        {
+            return settings.manualEating;
         }
 
         public static bool GetDisableRunAnim()

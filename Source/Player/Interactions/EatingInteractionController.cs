@@ -1,6 +1,8 @@
-using System;
 using EFT.InventoryLogic;
+using MonoMod.RuntimeDetour;
 using RootMotion.FinalIK;
+using System;
+using System.Text;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -9,47 +11,45 @@ using static EFT.Player;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Fully manual, two-handed, gesture-driven eating.
-    //
-    // Recon (item_food_beefstew_2 / tushonka) showed the eat is NOT mesh swaps —
-    // every prop renderer stays enabled and the vanilla animation just moves bones.
-    // Props all hang off one root:
-    //   saira_root                  -> the can (SkinnedMeshRenderer)
-    //   saira_root/saira_spoon      -> the spoon (MeshRenderer)
-    //   saira_root/saira_foodpiece  -> the bite on the spoon (MeshRenderer)
-    //
-    // Hard lessons from earlier iterations (all fixed here):
-    //  * The controller animator, even frozen at speed 0, RE-APPLIES its bone pose
-    //    every frame — so writing prop bone transforms in ManualUpdate gets stomped.
-    //    Fix: REPARENT the props out of the animated rig onto the VR hands, so the
-    //    animator no longer owns them. Restore on teardown (the object is pooled).
-    //  * During meds the game raises LEFT_HAND_ANIMATOR_HASH and
-    //    VRPlayerManager.UpdateLeftHand early-returns, freezing LeftHand + disabling
-    //    leftArmIk. Suppressing ThirdAction did NOT prevent the flag. Fix: a prefix
-    //    on UpdateLeftHand keeps the left hand tracking while we're active (see
-    //    EatingPatches.ForceLeftHandTracking).
-    //  * Completion (effect + switch back to weapon) needs the animation: freezing
-    //    forever leaves you stuck. Fix: on the final bite we unfreeze and fire
-    //    method_5 (the proven path), handing back to vanilla to finish.
-    //
-    // Per-item: prop names differ per food, so each handled food has a FoodDef.
-    // Foods without a def fall back to vanilla auto-eat (we don't arm them).
+    // Fully manual, two-handed, gesture-driven eating. Each handled food has a FoodDef; foods
+    // without one fall back to vanilla auto-eat. Facts that shaped this (don't re-derive):
+    //  * The eat is pure BONE animation (renderers never toggle), so props are moved by
+    //    reparenting their roots — not by mesh swaps.
+    //  * The controller animator re-applies its bone pose every frame even at speed 0, so
+    //    per-frame writes to a prop's transform get stomped. Fix: REPARENT props out of the
+    //    animated rig onto the VR hands (restored on teardown — the object is pooled).
+    //  * Meds raises LEFT_HAND_ANIMATOR_HASH and freezes the left hand; a prefix on
+    //    VRPlayerManager.UpdateLeftHand (EatingPatches.ForceLeftHandTracking) keeps it tracking.
+    //  * The finish needs the animation to reach END — freezing forever leaves you stuck.
     internal static class EatingInteractionController
     {
         //--- Per-item definitions ---------------------------------------------------
-        // Everything that differs between foods lives here. The finish (nutrition,
-        // cancel, discard) is food-agnostic; this is the gesture/prop half.
-        //
-        // Spoon vs. no-spoon: if spoonName is set the food is eaten with a utensil held
-        // in the right hand (tushonka). If spoonName is null/empty the food is grabbed
-        // directly by the right hand (sprats — the food piece parents to the right hand
-        // instead of a spoon). HasSpoon drives that branch.
-        //
-        // CannedFood vs Handheld: cans (tushonka, sprats) are held in the LEFT hand and
-        // opened/eaten with the RIGHT. A Handheld food (chocolate bar) is held in the
-        // RIGHT hand, the LEFT hand opens it (peels a wrapper), and it's eaten in N bites
-        // straight to the mouth — no can/lid/scoop. FoodKind picks the gesture machine.
-        private enum FoodKind { CannedFood, Handheld, Bag, Pack }
+        // Everything that differs between foods. The finish (nutrition/cancel/discard) is
+        // food-agnostic; this is the gesture/prop half. FoodKind picks the gesture machine.
+        private enum FoodKind { CannedFood, Handheld, Bag, Pack, Drink }
+
+        // ===== Gesture archetype descriptor =====================================
+        // What the shared open->take->eat loop needs that differs per archetype. Built per food
+        // (BuildStyle), so the control flow is written ONCE; a new TYPE is mostly one BuildStyle
+        // case + its prop-setup/late-zero tails. The hooks call the existing per-archetype routines.
+        private enum Hand { Dominant, Off }        // Dominant = the right hand always; Off = left
+        private enum TakeKind { None, HandNear, Shake }
+
+        private sealed class EatStyle
+        {
+            public string label;          // for logs ("can"/"wrapper"/"bag"/"pack")
+            public Hand openHand;         // hand that performs the open gesture
+            public Hand eatHand;          // hand that goes to the mouth
+            public Hand takeHand;         // hand that performs a HandNear take (unused for Shake/None)
+            public bool hasTakeStep;      // false = open then eat directly (Handheld)
+            public TakeKind takeKind;     // how the take is triggered
+            public int openStateHash;     // arms state the open plays (STATE_OPEN, or STATE_USE)
+            public bool logsGesturePose;  // log the take/eat pulse's source state (cans + pack)
+            public Action onOpened;       // reveal/detach once the open completes
+            public Action onTake;         // reveal/move the food + advance the animator on take
+            public Action onEatHide;      // hide the eaten renderer(s) at the start of a bite
+            public Action onAfterBite;    // advance the animator after a non-final bite
+        }
 
         private sealed class FoodDef
         {
@@ -58,80 +58,113 @@ namespace TarkovVR.Source.Player.Interactions
             public string rootName;       // the held prop (can for cans; the bar for handheld)
             public string spoonName;      // utensil; null/empty = grabbed by hand (no spoon)
             public string foodPieceName;  // the bite that appears on the utensil/hand (cans)
-            // Handheld only. wrapperName = a group glued onto the held item so it follows
-            // the hand while its children animate (e.g. "sn_CAT", which also carries the
-            // chocolate sn_feces — that stays with the bar). coverName = the actual wrapper
-            // mesh (e.g. "sn_cover") that DETACHES to the off (left) hand once peeled — you
-            // take the wrapper off and hold it. Either can be null.
+            public string capName;            // the drink cap if it has one
+            // Handheld/Pack: wrapperName = a group glued to the held item (carries sub-pieces like
+            // the chocolate); coverName = the wrapper mesh that DETACHES to the off hand once
+            // peeled. Either can be null.
             public string wrapperName;
             public string coverName;
             public int bites = 3;
 
-            // Sound event names (BaseSoundPlayer.OnSound). Null/empty = no sound.
-            // drawSound/openSounds fire from the STATE_OPEN animation itself; scoop/eat
-            // are played by us per gesture (the animation is frozen between gestures).
+            // Sound event names (BaseSoundPlayer.OnSound); null = none. draw/open fire from the
+            // STATE_OPEN clip itself; scoop/eat we play per-gesture (animation is frozen between).
             public string drawSound;
             public string[] openSounds;
             public string scoopSound;     // played when the food is taken (scoop / grab)
             public string eatSound;       // played on each bite
 
-            // Hold poses LOCAL TO THE PALM BONE — measured palm->prop at the grip (see
-            // EatingRecon [GRIP]). Live-tune on the holder GameObjects in Unity Explorer.
-            public Vector3 canPos;        // can in the off (left) hand
-            public Vector3 canRot;
+            // Grip = hold pose LOCAL TO THE PALM BONE (measured; see EatingRecon [GRIP]). Live-tune
+            // on the holder GameObjects in Unity Explorer.
+            public Vector3 basePos;        // base in the off (left) hand
+            public Vector3 baseRot;
             public Vector3 spoonPos;      // utensil in the main (right) hand (HasSpoon only)
             public Vector3 spoonRot;
             public Vector3 foodPos;       // food piece: vs the spoon holder (HasSpoon) or
             public Vector3 foodRot;       //   the right hand (no spoon)
+            public Vector3 capPos;        // drink cap if it has one
+            public Vector3 capRot;
 
             // Arms layer-1 normalizedTime knobs (see EatingRecon [SOUND]/[STATE]).
             public float openHoldTime = 0.92f; // freeze STATE_OPEN here (lid rolled / spoon grabbed)
             public float endStartTime = 0.3f;  // where in STATE_END to start the put-away
 
-            // Per-gesture pose determinism. When true, each grab/eat SNAPS the arms
-            // animator to a fixed (state, normalizedTime) before its play pulse, so every
-            // bite replays the SAME segment — identical finger pose + food deform. Without
-            // it the pulse free-runs from the last frozen pose and the timeline drifts, so
-            // each bite looks different (sprats symptom: each grabbed fish a different
-            // orientation, only the 2nd grab clean). grab=STATE_USE, eat=STATE_EAT.
+            // deterministicGesture: each grab/eat SNAPS the animator to a fixed (state, time) so
+            // every bite replays the SAME segment — else the timeline drifts and each bite looks
+            // different (the sprats symptom). grab=STATE_USE, eat=STATE_EAT.
             public bool deterministicGesture = false;
             public float grabPoseTime = 0f;   // STATE_USE normalizedTime the grab pulse starts from
             public float eatPoseTime = 0f;    // STATE_EAT normalizedTime the eat pulse starts from
 
+            // Interaction zones = WHERE you reach to trigger each gesture (distinct from the grips
+            // above = where the prop SITS). Fires when the acting hand is within <radius> of an
+            // anchor + offset. Defaults (0 offset + the radius) = the original hand-to-hand /
+            // hand-to-mouth triggers; set offsets via Zones() for off-palm items (bottle cap,
+            // spout). open/take anchor on the holding hand; eat on the eating hand vs the head.
+            public Vector3 openZoneOffset; public float openZoneRadius = 0.18f;
+            public Vector3 takeZoneOffset; public float takeZoneRadius = 0.18f;
+            public Vector3 eatZoneOffset; public float eatZoneRadius = 0.23f;
+
             public bool HasSpoon => !string.IsNullOrEmpty(spoonName);
+            public bool HasCap => !string.IsNullOrEmpty(capName);
         }
 
         // ===== Food registry ====================================================
-        // To add a food: copy a line below and change the template id + prop names (and,
-        // if its grips/timings differ from the archetype, the overrides). Use the
-        // EatingRecon profiler to get a paste-ready line, then DumpFoodDef() to bake your
-        // in-headset holder tuning back into the overrides. Each archetype factory fills
-        // the defaults (grips, sounds, timings) so a typical food is ONE line.
-        //   CanSpoon — can in the left hand, lid roll, spoon scoop in the right (tushonka)
-        //   CanHand  — same but no spoon: grab the food by the right hand (sprats)
-        //   Wrapper  — bar in the right hand, left hand peels the wrapper off (chocolate)
+        // Add a food = one line: pick the archetype factory, pass the template id + prop names.
+        // Use EatingRecon for a paste-ready line, then DumpFoodDef() to bake in-headset tuning.
+        //   CanSpoon — can in left hand, lid roll, spoon scoops in right (tushonka)
+        //   CanHand  — same, no spoon: grab the food by the right hand (sprats)
+        //   Wrapper  — bar in right hand, left hand peels the wrapper (chocolate)
+        //   Bag      — bag in right hand, shake crackers into the left hand (croutons)
+        //   Pack     — pack in right hand, left hand takes a piece and eats it (galette)
+        // Off-palm item? Wrap in Zones(...): Zones(CanHand(...), eatOffset: V(0f, 0.1f, 0f)).
+        // 1. add a FoodKind value
+        // 2. add a BuildStyle case   ← the gesture behavior(hand roles + hooks)
+        // 3. add a Setup* Props method + a LateZeroProps case   ← the prop wiring
+        // 4. add a factory
+
+        // Zones - X: moves trigger points to left+/right- (palm facing up), Y: Moves trigger point up-/down+, Z: moves trigger point forward+/back-
         private static readonly FoodDef[] Defs =
         {
-            CanSpoon("57347d7224597744596b4e72", "saira_root", "saira_spoon", "saira_foodpiece"),
-            CanSpoon("5673de654bdc2d180f8b456d", "saira_root", "saira_spoon", "saira_foodpiece"),
-            CanSpoon("57347d5f245977448b40fa81", "saira_root", "saira_spoon", "saira_foodpiece"),
-            CanHand("5bc9c29cd4351e003562b8a3", "sprats_root", "sprats_foodpiece"),
-            Wrapper("544fb6cc4bdc2d34748b456e", "item_slickers_LOD0", "sn_CAT", "sn_cover"),
-            Bag("5751487e245977207e26a315", "bone_upakovka", "bone_suharik_hold"),
-            Bag("57347d3d245977448f7b7f61", "bone_upakovka", "bone_suharik_hold"),
-            // Held root is pack_CAT (the bone group that drives the skinned pack mesh + holds
-            // the cover/pile/galette) — NOT item_galettte_pack_LOD0 (a SkinnedMeshRenderer whose
-            // transform is a phantom off near the weapon root). So it's a unified root, no glue.
-            Pack("5448ff904bdc2d6f028b456e", "pack_CAT", null, "item_galette_LOD0"),
+            CanSpoon("57347d7224597744596b4e72", "saira_root", "saira_spoon", "saira_foodpiece"), // Tushonka (small can)
+            CanSpoon("5673de654bdc2d180f8b456d", "saira_root", "saira_spoon", "saira_foodpiece"), // Saury
+            CanSpoon("57347d5f245977448b40fa81", "saira_root", "saira_spoon", "saira_foodpiece"), // Humpback salmon
+            CanSpoon("57347d9c245977448b40fa85", "saira_root", "saira_spoon", "saira_foodpiece"), // Herring
+            CanSpoon("69774bb0a247161ff1068335", "saira_root", "saira_spoon", "saira_foodpiece"), // Duck Pate
+            Zones(CanSpoon("57347da92459774491567cf5", "saira_root", "saira_spoon", "saira_foodpiece", bigCan: true), 
+                takeOffset: V(-0.15f, -0.1f, 0f), openOffset: V(-0.15f, -0.1f, 0f)), // Tushonka (big can)
+            Zones(CanSpoon("57347d692459774491567cf1", "saira_root", "saira_spoon", "saira_foodpiece", bigCan: true), 
+                takeOffset: V(-0.15f, -0.1f, 0f), openOffset: V(-0.15f, -0.1f, 0f)), // Peas
+            Zones(CanSpoon("57347d8724597744596b4e76", "saira_root", "saira_spoon", "saira_foodpiece", bigCan: true), 
+                takeOffset: V(-0.15f, -0.1f, 0f), openOffset: V(-0.15f, -0.1f, 0f)), // Squash
+            CanHand("5bc9c29cd4351e003562b8a3", "sprats_root", "sprats_foodpiece"), // sprats
+            Wrapper("544fb6cc4bdc2d34748b456e", "item_slickers_LOD0", "sn_CAT", "sn_cover"), // Chocolate bar (slickers)
+            Drink("60b0f93284c20f0feb453da7", "tc_root", null), // Rat Cola
+            Drink("5751435d24597720a27126d1", "tc_root", null), // Max Energy
+            Drink("575062b524597720a31c09a1", "tc_root", null), // Green tea
+            Drink("5751496424597720a27126da", "hr_root", null), // Hotrod
+            Drink("544fb62a4bdc2dfb738b4568", "tetrapak_root", null), // Pineapple Juice
+            Drink("575146b724597720a27126d5", "tetrapak_root", null), // Milk
+            Drink("62a09f32621468534a797acb", "mod_item", "cap"), // Pevko Beer
+            Drink("60098b1705871270cd5352a1", "mod_item", null), // Emergency water ration
+            Drink("5d40407c86f774318526545a", "mod_item", "cap"), // Vodka
+            Drink("5d403f9186f7743cac3f229b", "mod_item", "cap"), // Whiskey
+            Drink("5d1b376e86f774252519444e", "mod_item", "cap"), // Moonshine
+            Drink("5d1b33a686f7742523398398", "mod_item", "cap"), // Superwater
+            Drink("5734773724597737fd047c14", "saira_root", null), // Condensed milk
+            Bag("5751487e245977207e26a315", "bone_upakovka", "bone_suharik_hold"), // Emelya croutons
+            Bag("57347d3d245977448f7b7f61", "bone_upakovka", "bone_suharik_hold"), // Rye croutons
+            // Held root is the bone group pack_CAT (drives the skinned mesh + holds everything),
+            // NOT item_galettte_pack_LOD0 (a SkinnedMeshRenderer whose transform is a phantom).
+            Pack("5448ff904bdc2d6f028b456e", "pack_CAT", null, "item_galette_LOD0"), // Galette (crackers)
         };
 
         private static Vector3 V(float x, float y, float z) => new Vector3(x, y, z);
 
-        // CanSpoon archetype (tushonka): can held in the LEFT hand, pull-tab lid roll, a
-        // spoon scoops from the can in the RIGHT hand, N bites to the mouth. Defaults below
-        // are tushonka's measured grips/sounds — override only what differs for a new can.
+        // CanSpoon (tushonka): can in LEFT hand, lid roll, spoon scoops in RIGHT, N bites.
+        // Defaults = tushonka's measured grips/sounds; override only what differs for a new can.
         private static FoodDef CanSpoon(string id, string root, string spoon, string food,
             int bites = 3,
+            bool bigCan = false,
             Vector3? canPos = null, Vector3? canRot = null,
             Vector3? spoonPos = null, Vector3? spoonRot = null,
             Vector3? foodPos = null, Vector3? foodRot = null,
@@ -139,20 +172,29 @@ namespace TarkovVR.Source.Player.Interactions
             string[] openSounds = null, string scoopSound = null, string eatSound = "Take") =>
             new FoodDef
             {
-                templateId = id, kind = FoodKind.CannedFood,
-                rootName = root, spoonName = spoon, foodPieceName = food, bites = bites,
-                drawSound = "Draw", openSounds = openSounds ?? new[] { "Open", "Open2", "SpoonTake" },
-                scoopSound = scoopSound, eatSound = eatSound,
-                canPos = canPos ?? V(-0.1135f, -0.0298f, -0.0034f), canRot = canRot ?? V(80.72f, 248.34f, 303.57f),
-                spoonPos = spoonPos ?? V(-0.1247f, -0.0537f, -0.0113f), spoonRot = spoonRot ?? V(40.67f, 194.91f, 210.26f),
-                foodPos = foodPos ?? V(0f, 0.05f, 0.007f), foodRot = foodRot ?? Vector3.zero,
-                openHoldTime = openHoldTime, endStartTime = endStartTime,
+                templateId = id,
+                kind = FoodKind.CannedFood,
+                rootName = root,
+                spoonName = spoon,
+                foodPieceName = food,
+                bites = bites,
+                drawSound = "Draw",
+                openSounds = openSounds ?? new[] { "Open", "Open2", "SpoonTake" },
+                scoopSound = scoopSound,
+                eatSound = eatSound,
+                basePos = canPos ?? (bigCan ? V(-0.126f, -0.058f, 0.021f) : V(-0.1135f, -0.0298f, -0.0034f)),
+                baseRot = canRot ?? (bigCan ? V(357.8f, 326.6f, 73.4f) : V(80.72f, 248.34f, 303.57f)),
+                spoonPos = spoonPos ?? V(-0.1247f, -0.0537f, -0.0113f),
+                spoonRot = spoonRot ?? V(40.67f, 194.91f, 210.26f),
+                foodPos = foodPos ?? V(0f, 0.05f, 0.007f),
+                foodRot = foodRot ?? Vector3.zero,
+                openHoldTime = openHoldTime,
+                endStartTime = endStartTime,
                 deterministicGesture = false,
             };
 
-        // CanHand archetype (sprats): like CanSpoon but NO spoon — the food piece is grabbed
-        // directly by the RIGHT hand. Uses deterministic gesture poses so every grab is the
-        // same clean "reach in -> pinch -> lift" (STATE_USE@grabPoseTime). Defaults = sprats.
+        // CanHand (sprats): CanSpoon with no spoon — grab the food by the RIGHT hand. Deterministic
+        // poses so every grab is the same clean reach->pinch->lift (STATE_USE@grabPoseTime).
         private static FoodDef CanHand(string id, string root, string food,
             int bites = 3,
             Vector3? canPos = null, Vector3? canRot = null,
@@ -162,45 +204,90 @@ namespace TarkovVR.Source.Player.Interactions
             string[] openSounds = null, string scoopSound = "Take", string eatSound = "Eat") =>
             new FoodDef
             {
-                templateId = id, kind = FoodKind.CannedFood,
-                rootName = root, spoonName = null, foodPieceName = food, bites = bites,
-                drawSound = "Draw", openSounds = openSounds ?? new[] { "Open", "Open2" },
-                scoopSound = scoopSound, eatSound = eatSound,
-                canPos = canPos ?? V(-0.106f, -0.013f, 0f), canRot = canRot ?? V(80.2f, 248.9f, 303.5f),
-                foodPos = foodPos ?? V(-0.1247f, -0.0537f, -0.0113f), foodRot = foodRot ?? V(40.67f, 194.91f, 210.26f),
-                openHoldTime = openHoldTime, endStartTime = endStartTime,
-                deterministicGesture = true, grabPoseTime = grabPoseTime, eatPoseTime = eatPoseTime,
+                templateId = id,
+                kind = FoodKind.CannedFood,
+                rootName = root,
+                spoonName = null,
+                foodPieceName = food,
+                bites = bites,
+                drawSound = "Draw",
+                openSounds = openSounds ?? new[] { "Open", "Open2" },
+                scoopSound = scoopSound,
+                eatSound = eatSound,
+                basePos = canPos ?? V(-0.106f, -0.013f, 0f),
+                baseRot = canRot ?? V(80.2f, 248.9f, 303.5f),
+                foodPos = foodPos ?? V(-0.1247f, -0.0537f, -0.0113f),
+                foodRot = foodRot ?? V(40.67f, 194.91f, 210.26f),
+                openHoldTime = openHoldTime,
+                endStartTime = endStartTime,
+                deterministicGesture = true,
+                grabPoseTime = grabPoseTime,
+                eatPoseTime = eatPoseTime,
             };
 
-        // Wrapper archetype (chocolate bar): bar (root) held in the RIGHT hand; the LEFT hand
-        // peels the wrapper. wrapperGroup (e.g. sn_CAT) stays glued to the bar and carries any
-        // sub-pieces; cover (e.g. sn_cover) is the wrapper that DETACHES to the left hand once
-        // peeled. barPos/barRot = the bar's right-hand grip; coverPos/coverRot = the peeled
-        // wrapper's left-hand grip. Defaults = chocolate.
+        // Wrapper (chocolate): bar in RIGHT hand, LEFT peels it. wrapperGroup stays glued to the bar
+        // (carries sub-pieces); cover DETACHES to the left hand once peeled. barPos/coverPos = the
+        // bar's / peeled wrapper's grips. Defaults = chocolate.
         private static FoodDef Wrapper(string id, string root, string wrapperGroup, string cover,
             int bites = 1,
             Vector3? barPos = null, Vector3? barRot = null,
             Vector3? coverPos = null, Vector3? coverRot = null,
-            float openHoldTime = 0.35f, float endStartTime = 0.3f,
+            float openHoldTime = 0.9f, float endStartTime = 0.3f,
             string[] openSounds = null, string eatSound = "Eat") =>
             new FoodDef
             {
-                templateId = id, kind = FoodKind.Handheld,
-                rootName = root, wrapperName = wrapperGroup, coverName = cover,
-                spoonName = null, foodPieceName = null, bites = bites,
-                drawSound = "Draw", openSounds = openSounds ?? new[] { "Open" }, scoopSound = null, eatSound = eatSound,
-                canPos = barPos ?? V(-0.121f, -0.037f, -0.054f), canRot = barRot ?? V(57.7f, 110.3f, 258.6f),
-                foodPos = coverPos ?? V(-0.137f, -0.078f, 0.04f), foodRot = coverRot ?? V(27.4f, 105.2f, 354.7f),
-                openHoldTime = openHoldTime, endStartTime = endStartTime,
+                templateId = id,
+                kind = FoodKind.Handheld,
+                rootName = root,
+                wrapperName = wrapperGroup,
+                coverName = cover,
+                spoonName = null,
+                foodPieceName = null,
+                bites = bites,
+                drawSound = "Draw",
+                openSounds = openSounds ?? new[] { "Open" },
+                scoopSound = null,
+                eatSound = eatSound,
+                basePos = barPos ?? V(-0.121f, -0.037f, -0.054f),
+                baseRot = barRot ?? V(57.7f, 110.3f, 258.6f),
+                foodPos = coverPos ?? V(-0.137f, -0.078f, 0.04f),
+                foodRot = coverRot ?? V(27.4f, 105.2f, 354.7f),
+                openHoldTime = openHoldTime,
+                endStartTime = endStartTime,
                 deterministicGesture = false,
             };
 
-        // Bag archetype (Emelya/Borodinsky croutons): the BAG (root, e.g. bone_upakovka,
-        // which holds everything) is held in the RIGHT hand; the LEFT hand opens it, then you
-        // SHAKE the bag near the left hand to pour N "hold" crackers (crackerPrefix matches
-        // every bone, e.g. "bone_suharik_hold") into the LEFT hand, and eat from the LEFT hand.
-        // `bites` = shake→eat rounds. bagPos/bagRot = bag's right-hand grip; crackerPos/
-        // crackerRot = the cracker clump's left-hand grip. Grips seeded — recon + tune.
+        private static FoodDef Drink(string id, string root, string cap,
+            int bites = 1,
+            Vector3? drinkPos = null, Vector3? drinkRot = null,
+            Vector3? capPos = null, Vector3? capRot = null,
+            float openHoldTime = 0.9f, float endStartTime = 0.3f,
+            string[] openSounds = null, string eatSound = "Drink") =>
+            new FoodDef
+            {
+                templateId = id,
+                kind = FoodKind.Drink,
+                rootName = root,
+                capName = cap,
+                spoonName = null,
+                foodPieceName = null,
+                bites = bites,
+                drawSound = "Draw",
+                openSounds = openSounds ?? new[] { "Open" },
+                scoopSound = null,
+                eatSound = eatSound,
+                basePos = drinkPos ?? V(-0.106f, -0.055f, 0.039f),
+                baseRot = drinkRot ?? V(0.1f, 193.2f, 294.8f),
+                foodPos = capPos ?? V(-0.137f, -0.078f, 0.04f),
+                foodRot = capRot ?? V(27.4f, 105.2f, 354.7f),
+                openHoldTime = openHoldTime,
+                endStartTime = endStartTime,
+                deterministicGesture = false,
+            };
+
+        // Bag (croutons): bag (root, holds everything) in RIGHT hand, LEFT opens it, then SHAKE
+        // near the left hand to pour the crackerPrefix-matched crackers into the LEFT hand, eaten
+        // left-handed. bites = shake->eat rounds. bagPos/crackerPos = the bag's / clump's grips.
         private static FoodDef Bag(string id, string root, string crackerPrefix,
             int bites = 2,
             Vector3? bagPos = null, Vector3? bagRot = null,
@@ -209,150 +296,191 @@ namespace TarkovVR.Source.Player.Interactions
             string[] openSounds = null, string scoopSound = "Take", string eatSound = "Eat") =>
             new FoodDef
             {
-                templateId = id, kind = FoodKind.Bag,
-                rootName = root, foodPieceName = crackerPrefix, spoonName = null, bites = bites,
-                drawSound = "Draw", openSounds = openSounds ?? new[] { "Draw1", "Open", "Draw" },
-                scoopSound = scoopSound, eatSound = eatSound,
-                // bag grip MEASURED (palm->bone_upakovka, Base HumanRPalm, averaged).
-                canPos = bagPos ?? V(-0.148f, -0.040f, -0.026f), canRot = bagRot ?? V(355.4f, 204.9f, 251.6f),
-                // cracker (clump anchor) grip MEASURED in-hand (palm->bone_suharik_hold_000,
-                // Base HumanLPalm, settled STATE_USE/EAT cluster).
-                foodPos = crackerPos ?? V(-0.067f, -0.042f, -0.003f), foodRot = crackerRot ?? V(8f, 73.1f, 93.4f),
-                openHoldTime = openHoldTime, endStartTime = endStartTime,
+                templateId = id,
+                kind = FoodKind.Bag,
+                rootName = root,
+                foodPieceName = crackerPrefix,
+                spoonName = null,
+                bites = bites,
+                drawSound = "Draw",
+                openSounds = openSounds ?? new[] { "Draw1", "Open", "Draw" },
+                scoopSound = scoopSound,
+                eatSound = eatSound,
+                // bag grip measured (palm->bone_upakovka, R palm).
+                basePos = bagPos ?? V(-0.148f, -0.040f, -0.026f),
+                baseRot = bagRot ?? V(355.4f, 204.9f, 251.6f),
+                // cracker clump-anchor grip measured in-hand (palm->...hold_000, L palm).
+                foodPos = crackerPos ?? V(-0.067f, -0.042f, -0.003f),
+                foodRot = crackerRot ?? V(8f, 73.1f, 93.4f),
+                openHoldTime = openHoldTime,
+                endStartTime = endStartTime,
                 deterministicGesture = false,
             };
 
-        // Pack archetype (galette crackers): a wrapped pack (root, e.g. item_galettte_pack_LOD0)
-        // held in the RIGHT hand; wrapperGroup (e.g. pack_CAT) is glued to it (carries the cover
-        // — which just opens in place, no detach — plus the pile and the single food piece). The
-        // LEFT hand opens it, then takes the food piece (food, e.g. item_galette_LOD0) into the
-        // LEFT hand and eats from there. Mirror of CanHand. `bites` = take→eat rounds. packPos/
-        // packRot = pack's right-hand grip; foodPos/foodRot = the piece's left-hand grip.
+        // Pack (galette): wrapped pack (root) in RIGHT hand, wrapperGroup glued to it (cover opens
+        // in place, no detach). LEFT opens it, takes the food piece into the LEFT hand, eats there.
+        // Mirror of CanHand. bites = take->eat rounds. packPos/foodPos = the pack's / piece's grips.
         private static FoodDef Pack(string id, string root, string wrapperGroup, string food,
             int bites = 2,
             Vector3? packPos = null, Vector3? packRot = null,
             Vector3? foodPos = null, Vector3? foodRot = null,
             float openHoldTime = 0.9f, float endStartTime = 0.3f,
-            float grabPoseTime = 0.11f, float eatPoseTime = 0.7f,
+            float grabPoseTime = 0.3f, float eatPoseTime = 1f,
             string[] openSounds = null, string scoopSound = "Take", string eatSound = "Eat") =>
             new FoodDef
             {
-                templateId = id, kind = FoodKind.Pack,
-                rootName = root, wrapperName = wrapperGroup, foodPieceName = food, spoonName = null, bites = bites,
-                drawSound = "Draw", openSounds = openSounds ?? new[] { "Draw", "Open" },
-                scoopSound = scoopSound, eatSound = eatSound,
-                // pack grip MEASURED (right hand) — recon pack_CAT / Base HumanRPalm.
-                canPos = packPos ?? V(-0.124f, -0.052f, -0.054f), canRot = packRot ?? V(28.2f, 112.6f, 254.7f),
-                // piece grip MEASURED (left hand) — recon item_galette_LOD0 / Base HumanLPalm in-hand.
-                foodPos = foodPos ?? V(-0.15f, -0.031f, 0.033f), foodRot = foodRot ?? V(38.4f, 27.3f, 286.7f),
-                openHoldTime = openHoldTime, endStartTime = endStartTime,
-                // Deterministic grab/eat like CanHand: each take replays STATE_USE@grabPoseTime
-                // (hand opens -> reach -> pinch) and each eat STATE_EAT@eatPoseTime. Also keeps
-                // the animator out of STATE_OPEN so the finish cancels cleanly.
-                deterministicGesture = true, grabPoseTime = grabPoseTime, eatPoseTime = eatPoseTime,
+                templateId = id,
+                kind = FoodKind.Pack,
+                rootName = root,
+                wrapperName = wrapperGroup,
+                foodPieceName = food,
+                spoonName = null,
+                bites = bites,
+                drawSound = "Draw",
+                openSounds = openSounds ?? new[] { "Draw", "Open" },
+                scoopSound = scoopSound,
+                eatSound = eatSound,
+                // pack grip measured (R palm).
+                basePos = packPos ?? V(-0.124f, -0.052f, -0.054f),
+                baseRot = packRot ?? V(28.2f, 112.6f, 254.7f),
+                // piece grip measured (L palm, in-hand).
+                foodPos = foodPos ?? V(-0.15f, -0.031f, 0.033f),
+                foodRot = foodRot ?? V(38.4f, 27.3f, 286.7f),
+                openHoldTime = openHoldTime,
+                endStartTime = endStartTime,
+                // Deterministic grab/eat like CanHand; also keeps the animator out of STATE_OPEN
+                // so the finish cancels cleanly.
+                deterministicGesture = true,
+                grabPoseTime = grabPoseTime,
+                eatPoseTime = eatPoseTime,
             };
 
+        // Move an off-palm item's reach points (bottle cap up high, spout at the mouth). Chains
+        // onto any factory: Zones(CanHand(...), eatOffset: V(0f, 0.1f, 0f)). Leaves grips alone.
+        // Offsets are anchor-local (open/take = holding hand; eat = eating hand vs head).
+        private static FoodDef Zones(FoodDef d,
+            Vector3? openOffset = null, float? openRadius = null,
+            Vector3? takeOffset = null, float? takeRadius = null,
+            Vector3? eatOffset = null, float? eatRadius = null)
+        {
+            if (openOffset.HasValue) d.openZoneOffset = openOffset.Value;
+            if (openRadius.HasValue) d.openZoneRadius = openRadius.Value;
+            if (takeOffset.HasValue) d.takeZoneOffset = takeOffset.Value;
+            if (takeRadius.HasValue) d.takeZoneRadius = takeRadius.Value;
+            if (eatOffset.HasValue) d.eatZoneOffset = eatOffset.Value;
+            if (eatRadius.HasValue) d.eatZoneRadius = eatRadius.Value;
+            return d;
+        }
+
         // ===== Authoring helper ==================================================
-        // Call this from UnityExplorer (static method on EatingInteractionController) while
-        // a food is being eaten and AFTER you've tuned its holders live (EatCanHolder /
-        // EatSpoonHolder / EatFoodHolder / EatBarHolder / EatWrapperHolder). It prints a
-        // paste-ready archetype factory line — grips read straight off the tuned holders,
-        // timings off the live knobs — so you can bake your tuning into Defs above without
-        // re-measuring. (For Wrapper foods, open the wrapper first so the wrapper holder
-        // exists.)
+        // Invoke from UnityExplorer while eating, AFTER tuning the holders live — prints a
+        // paste-ready factory line (grips off the tuned holders, timings off the live knobs) so
+        // you can bake your tuning into Defs. (Wrapper foods: open the wrapper first.)
         public static void DumpFoodDef()
         {
             if (!active || def == null) { Plugin.MyLog.LogWarning("[ManualEat] DumpFoodDef: no food is being eaten."); return; }
             Vector3 HolderPos(GameObject h, Vector3 fallback) => h != null ? h.transform.localPosition : fallback;
             Vector3 HolderRot(GameObject h, Vector3 fallback) => h != null ? h.transform.localEulerAngles : fallback;
 
-            string line;
+            string core;
             if (def.kind == FoodKind.Bag)
             {
-                line = $"Bag(\"{def.templateId}\", \"{def.rootName}\", \"{def.foodPieceName}\", bites: {def.bites}, "
-                     + $"bagPos: {VStr(HolderPos(canHolder, def.canPos))}, bagRot: {VStr(HolderRot(canHolder, def.canRot))}, "
+                core = $"Bag(\"{def.templateId}\", \"{def.rootName}\", \"{def.foodPieceName}\", bites: {def.bites}, "
+                     + $"bagPos: {VStr(HolderPos(baseHolder, def.basePos))}, bagRot: {VStr(HolderRot(baseHolder, def.baseRot))}, "
                      + $"crackerPos: {VStr(HolderPos(crackerHolder, def.foodPos))}, crackerRot: {VStr(HolderRot(crackerHolder, def.foodRot))}, "
-                     + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)}),";
+                     + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)})";
             }
             else if (def.kind == FoodKind.Pack)
             {
-                line = $"Pack(\"{def.templateId}\", \"{def.rootName}\", \"{def.wrapperName}\", \"{def.foodPieceName}\", bites: {def.bites}, "
-                     + $"packPos: {VStr(HolderPos(canHolder, def.canPos))}, packRot: {VStr(HolderRot(canHolder, def.canRot))}, "
+                core = $"Pack(\"{def.templateId}\", \"{def.rootName}\", \"{def.wrapperName}\", \"{def.foodPieceName}\", bites: {def.bites}, "
+                     + $"packPos: {VStr(HolderPos(baseHolder, def.basePos))}, packRot: {VStr(HolderRot(baseHolder, def.baseRot))}, "
                      + $"foodPos: {VStr(HolderPos(foodHolder, def.foodPos))}, foodRot: {VStr(HolderRot(foodHolder, def.foodRot))}, "
-                     + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)}),";
+                     + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)})";
             }
             else if (def.kind == FoodKind.Handheld)
             {
-                line = $"Wrapper(\"{def.templateId}\", \"{def.rootName}\", \"{def.wrapperName}\", \"{def.coverName}\", bites: {def.bites}, "
-                     + $"barPos: {VStr(HolderPos(canHolder, def.canPos))}, barRot: {VStr(HolderRot(canHolder, def.canRot))}, "
+                core = $"Wrapper(\"{def.templateId}\", \"{def.rootName}\", \"{def.wrapperName}\", \"{def.coverName}\", bites: {def.bites}, "
+                     + $"barPos: {VStr(HolderPos(baseHolder, def.basePos))}, barRot: {VStr(HolderRot(baseHolder, def.baseRot))}, "
                      + $"coverPos: {VStr(HolderPos(foodHolder, def.foodPos))}, coverRot: {VStr(HolderRot(foodHolder, def.foodRot))}, "
-                     + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)}),";
+                     + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)})";
             }
             else if (def.HasSpoon)
             {
-                line = $"CanSpoon(\"{def.templateId}\", \"{def.rootName}\", \"{def.spoonName}\", \"{def.foodPieceName}\", bites: {def.bites}, "
-                     + $"canPos: {VStr(HolderPos(canHolder, def.canPos))}, canRot: {VStr(HolderRot(canHolder, def.canRot))}, "
+                core = $"CanSpoon(\"{def.templateId}\", \"{def.rootName}\", \"{def.spoonName}\", \"{def.foodPieceName}\", bites: {def.bites}, "
+                     + $"canPos: {VStr(HolderPos(baseHolder, def.basePos))}, canRot: {VStr(HolderRot(baseHolder, def.baseRot))}, "
                      + $"spoonPos: {VStr(HolderPos(spoonHolder, def.spoonPos))}, spoonRot: {VStr(HolderRot(spoonHolder, def.spoonRot))}, "
                      + $"foodPos: {VStr(HolderPos(foodHolder, def.foodPos))}, foodRot: {VStr(HolderRot(foodHolder, def.foodRot))}, "
-                     + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)}),";
+                     + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)})";
             }
             else
             {
-                line = $"CanHand(\"{def.templateId}\", \"{def.rootName}\", \"{def.foodPieceName}\", bites: {def.bites}, "
-                     + $"canPos: {VStr(HolderPos(canHolder, def.canPos))}, canRot: {VStr(HolderRot(canHolder, def.canRot))}, "
+                core = $"CanHand(\"{def.templateId}\", \"{def.rootName}\", \"{def.foodPieceName}\", bites: {def.bites}, "
+                     + $"basePos: {VStr(HolderPos(baseHolder, def.basePos))}, baseRot: {VStr(HolderRot(baseHolder, def.baseRot))}, "
                      + $"foodPos: {VStr(HolderPos(foodHolder, def.foodPos))}, foodRot: {VStr(HolderRot(foodHolder, def.foodRot))}, "
                      + $"openHoldTime: {FStr(openHoldTime)}, endStartTime: {FStr(endStartTime)}, "
-                     + $"grabPoseTime: {FStr(grabPoseTime)}, eatPoseTime: {FStr(eatPoseTime)}),";
+                     + $"grabPoseTime: {FStr(grabPoseTime)}, eatPoseTime: {FStr(eatPoseTime)})";
             }
-            Plugin.MyLog.LogInfo("[ManualEat] === paste into Defs (tuned) ===\n            " + line);
+            Plugin.MyLog.LogInfo("[ManualEat] === paste into Defs (tuned) ===\n            " + WrapZones(core) + ",");
         }
 
         private static string VStr(Vector3 v) => $"V({v.x:0.###}f, {v.y:0.###}f, {v.z:0.###}f)";
         private static string FStr(float f) => $"{f:0.###}f";
 
-        //--- Tunables (public so they can be A/B'd live in the headset) -------------
-        public static bool enableManualEating = true;
+        // Wrap in Zones(...) iff a zone was moved off default. Reads the live statics (seeded from
+        // the FoodDef, A/B-tunable) so in-headset zone tuning round-trips into the pasteable line.
+        private static string WrapZones(string core)
+        {
+            string z = ZoneArgs();
+            return z.Length == 0 ? core : $"Zones({core}{z})";
+        }
 
-        // Gesture distances (metres). The gesture uses the controller positions, but
-        // the spoon/can sit offset from the controllers, so these are generous.
-        public static float openDistance  = 0.18f;
+        private static string ZoneArgs()
+        {
+            var sb = new StringBuilder();
+            if (openZoneOffset != Vector3.zero) sb.Append($", openOffset: {VStr(openZoneOffset)}");
+            if (openDistance != 0.18f) sb.Append($", openRadius: {FStr(openDistance)}");
+            if (takeZoneOffset != Vector3.zero) sb.Append($", takeOffset: {VStr(takeZoneOffset)}");
+            if (scoopDistance != 0.18f) sb.Append($", takeRadius: {FStr(scoopDistance)}");
+            if (eatZoneOffset != Vector3.zero) sb.Append($", eatOffset: {VStr(eatZoneOffset)}");
+            if (eatDistance != 0.23f) sb.Append($", eatRadius: {FStr(eatDistance)}");
+            return sb.ToString();
+        }
+
+        //--- Tunables (public so they can be A/B'd live in the headset) -------------
+        public static bool enableManualEating = VRSettings.GetManualEating();
+
+        // Gesture trigger radii (metres); generous since the prop sits offset from the controller.
+        // Seeded per-food on spawn (= the zone radii). mouthForwardDot gates the eat to in-front.
+        public static float openDistance = 0.18f;
         public static float scoopDistance = 0.18f;
-        public static float eatDistance   = 0.23f;
+        public static float eatDistance = 0.23f;
         public static float mouthForwardDot = -0.2f;
 
-        // Bag (croutons) shake-to-pour. The bag (right hand) must be within shakeNearDistance
-        // of the left hand, and you must wiggle it: a head-relative velocity reversal above
-        // shakeMinSpeed counts as one wiggle; shakeReversalsNeeded of them within shakeWindow
-        // seconds pours the crackers out.
+        // Reach offsets (anchor-local), seeded from the FoodDef each spawn; public for live A/B.
+        // Zero = the original hand-to-hand / hand-to-mouth triggers. Radii are the statics above.
+        public static Vector3 openZoneOffset = Vector3.zero;
+        public static Vector3 takeZoneOffset = Vector3.zero;
+        public static Vector3 eatZoneOffset = Vector3.zero;
+
+        // Bag shake-to-pour: the bag must be within shakeNearDistance of the left hand, and you
+        // wiggle it — shakeReversalsNeeded head-relative velocity reversals (> shakeMinSpeed)
+        // within shakeWindow seconds pour the crackers (head-relative so walking doesn't count).
         public static float shakeNearDistance = 0.60f;
         public static float shakeMinSpeed = 0.2f;     // m/s, head-relative
-        public static int   shakeReversalsNeeded = 1;
+        public static int shakeReversalsNeeded = 1;
         public static float shakeWindow = 1.2f;
 
-        // Hold-pose grip offsets are now PER-FOOD (FoodDef.canPos/spoonPos/foodPos, all
-        // LOCAL TO THE PALM BONE). Live-tune them on the EatCanHolder / EatSpoonHolder /
-        // EatFoodHolder GameObjects in Unity Explorer, then bake into the FoodDef.
-
         public static bool eatingHaptics = true;
-        // Drive the body-follow (IKManager.MatchLegsToArms) ourselves each frame during
-        // the eat. Normally that runs from a live HandsPositioner or IKManager.Update,
-        // but mid-eat IKManager.Update's gate skips it (emptyHands set + !HandsIsEmpty)
-        // AND the gun's HandsPositioner is disabled — so with no caller the body never
-        // follows the head while walking and the rig/IK-targets desync = jitter. (A
-        // weapon switch left an orphan HandsPositioner calling it, which is why
-        // switching "fixed" the jitter.) Keep true.
+        // Drive the body-follow ourselves each eat frame. Mid-eat nothing else does (IKManager/
+        // VRPlayerManager gates skip it, the gun's HandsPositioner is disabled) -> rig/IK desync =
+        // walking jitter. (A weapon switch left an orphan caller, hence "switching fixed it.") Keep true.
         public static bool driveBodyFollowDuringEat = true;
-        // Parent the props to the IK'd hand bone (bone3, the rendered wrist) rather
-        // than the rig target. CONFIRMED in-headset: with driveHandsToTargets pinning
-        // bone3 onto the smooth target each frame, the wrist tracks the target to
-        // ~2-3mm with no walk lag — and parenting the prop to that SAME bone (not the
-        // target, which lives on a different transform chain) removes the last ~2-3mm
-        // prop/hand mismatch. So the prop rides the rendered hand exactly, and the hand
-        // rides the smooth target. Set true only to A/B against target-parenting.
+        // A/B: parent props to the IK wrist bone (bone3) vs the rig target. bone3 (pinned to the
+        // smooth target by driveHandsToTargets) tracks to ~2-3mm with no walk lag and removes the
+        // last prop/hand mismatch — so false is the good default; true routes to the targets.
         public static bool debugParentToTarget = false;
-        // Pin the rendered hand bone (bone3) to the rig target after the IK solve so the
-        // wrist tracks the smooth target 1:1 during locomotion (no lag). Required for
-        // the prop-on-bone3 setup above to stay smooth.
+        // Pin bone3 to the rig target after the IK solve so the wrist tracks 1:1 (no lag).
+        // Required for the prop-on-bone3 setup above.
         public static bool driveHandsToTargets = true;
 
         //--- Runtime ----------------------------------------------------------------
@@ -364,36 +492,31 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool manualDone;     // handed back to vanilla for the finish
         private static MedsController controller;
         private static FoodDef def;
+        private static EatStyle style;      // per-archetype descriptor for the gesture loop
         private static Phase phase;
         private static int biteCount;
         private static float spawnAnimSpeed = 1f;
 
-        private static Transform canT, spoonT, foodT;
+        private static Transform baseT, spoonT, foodT, capT;
         private static Transform medsBody;                // the meds controller object (pinned to the ribcage); rig body anchor
-        private static Renderer spoonR, foodR;
+        private static Renderer spoonR, foodR, capR;
         private static BaseSoundPlayer soundPlayer;
-        // Holders sit between the hand and the prop. The animator still writes the
-        // prop's LOCAL transform (we zero it in LateUpdate), but it never touches the
-        // holder — so the holder is the clean, Unity-Explorer-tunable hold offset.
-        private static GameObject canHolder, spoonHolder, foodHolder;
+        // Holders sit between hand and prop: the animator still writes the prop's local (we zero
+        // it in LateUpdate) but never the holder, so the holder is the clean, tunable hold offset.
+        private static GameObject baseHolder, spoonHolder, foodHolder, capHolder;
 
-        // Handheld props (chocolate):
-        //  wrapperT (e.g. sn_CAT) — glued onto the held bar (canT) at the captured rest
-        //    offset; it carries the chocolate (sn_feces) so that stays with the bar, and
-        //    its child sn_cover animates the peel.
-        //  coverT (e.g. sn_cover) — the wrapper mesh. Once peeled (the open gesture) it
-        //    DETACHES from wrapperT onto a LEFT-hand holder (foodHolder) — you take the
-        //    wrapper off and hold it in the off hand, like the spoon for a can.
+        // Handheld (chocolate): wrapperT glued onto the bar (canT) at its rest offset (carries the
+        // chocolate); coverT is the wrapper mesh that DETACHES to a left-hand holder once peeled.
         private static Transform wrapperT, coverT;
         private static Vector3 wrapperLocalPos; private static Quaternion wrapperLocalRot;
         private static Transform coverParent0; private static Vector3 coverPos0; private static Quaternion coverRot0;
         private static bool coverDetached;            // wrapper (cover) moved from the bar to the left hand
+        private static bool capDetached;              // drink cap moved from the can to the left hand
         private static Transform leftHandBoneRef;     // resolved left IK hand bone (for the late wrapper/cracker holder)
 
-        // Bag props (croutons): the bag (canT) is held in the right hand; on a SHAKE the
-        // hold-crackers (crackerT[], found by prefix) move from the bag onto a left-hand
-        // holder (crackerHolder) in their captured clump layout (crackerLocal*, relative to
-        // the clump anchor crackerT[0]) and are eaten from the LEFT hand. Hidden until shaken.
+        // Bag (croutons): bag (canT) in the right hand; on a SHAKE the prefix-matched crackerT[]
+        // move to a left-hand holder in their captured clump layout (crackerLocal*, vs anchor
+        // crackerT[0]) and are eaten left-handed. Hidden until shaken.
         private static Transform[] crackerT;
         private static Vector3[] crackerLocalPos; private static Quaternion[] crackerLocalRot;
         private static Transform[] crackerParent0; private static Vector3[] crackerPos0; private static Quaternion[] crackerRot0;
@@ -407,9 +530,9 @@ namespace TarkovVR.Source.Player.Interactions
         private static float shakeWindowEnd;
 
         // Saved so we can put the props back before the controller object is pooled.
-        private static Transform canParent0, spoonParent0, foodParent0, wrapperParent0;
-        private static Vector3 canPos0, spoonPos0, foodPos0, wrapperPos0;
-        private static Quaternion canRot0, spoonRot0, foodRot0, wrapperRot0;
+        private static Transform baseParent0, spoonParent0, foodParent0, wrapperParent0, capParent0;
+        private static Vector3 basePos0, spoonPos0, foodPos0, wrapperPos0, capPos0;
+        private static Quaternion baseRot0, spoonRot0, foodRot0, wrapperRot0, capRot0;
         private static bool reparented;
 
         private static bool effectFired;
@@ -419,17 +542,15 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool playingManualSound; // true while WE call OnSound (so it's not suppressed)
         private static bool playingOpen;        // playing the STATE_OPEN lid-roll segment
 
-        // The eat's arms layer-1 states. The hashes are shared across foods (generic
-        // arms-animator states — confirmed identical for tushonka and sprats in recon).
+        // Arms layer-1 states, shared across foods (confirmed in recon).
         private const int STATE_OPEN_HASH = 492683391;  // draw -> roll lid -> [grab spoon]
         private const int STATE_USE_HASH = -735675743;  // scoop / take (the grab motion)
         private const int STATE_EAT_HASH = 719885042;   // bite
         private const int STATE_END_HASH = -1014941517; // put-away
 
-        // Per-gesture pose determinism (active values, loaded from the FoodDef on spawn;
-        // public so they can be A/B'd live). See FoodDef.deterministicGesture and
-        // StartGesturePulse. grabPoseState/eatPoseState are the segments each gesture
-        // replays; the *Time fields are where in that segment the pulse starts.
+        // Per-gesture pose determinism (loaded from the FoodDef on spawn; public for live A/B).
+        // See FoodDef.deterministicGesture + StartGesturePulse. *State = the replayed segment,
+        // *Time = where in it the pulse starts.
         public static bool deterministicGesturePose = false;
         public static int grabPoseState = STATE_USE_HASH;
         public static float grabPoseTime = 0f;
@@ -441,23 +562,18 @@ namespace TarkovVR.Source.Player.Interactions
         // Active normalizedTime to freeze STATE_OPEN at — set from the current FoodDef on
         // spawn; public so it can still be A/B'd live for the current eat.
         public static float openHoldTime = 0.92f;
-        // On the last bite, auto-fire the trigger/fire command (ToggleShooting) — the
-        // same press that cancels an eat and draws the weapon fast. Confirmed the manual
-        // cancel works after the last bite; this just does it for you. Off = wait out the
-        // operation's use-time.
+        // Last bite: auto-fire the trigger/fire cancel (fast put-away + weapon draw).
+        // Off = wait out the operation's use-time.
         public static bool cancelToFinish = true;
-        // On the last bite, force the arms animator straight to STATE_END (put-away)
-        // instead of letting SetActiveParam transition through the rest of STATE_EAT
-        // (the "auto last bite"). Off = keep the auto-bite.
+        // Last bite: jump the animator straight to STATE_END instead of playing out STATE_EAT.
         public static bool skipLastBiteAnim = true;
-        // Where in STATE_END to start (normalizedTime 0..1). The clip opens by holding
-        // the can out for a beat; starting later skips that and goes straight to the
-        // hands-down put-away. Set from the current FoodDef on spawn; A/B live.
+        // Where in STATE_END to start (skips the can-hold bite at the start). Seeded per-food, A/B live.
         public static float endStartTime = 0.3f;
         // Each scoop/eat gesture plays the animation forward this long (finger/hand
         // motion) then freezes. Set 0 to keep bites fully frozen.
         public static float bitePlayTime = 0.5f;
         private static float playUntil;        // animation plays (speed>0) while Time.time < this
+        private static bool cancelAction = false;
 
         // Used by the UpdateLeftHand prefix to know when to keep the left hand live.
         public static bool ManualActive => active && !manualDone;
@@ -468,7 +584,7 @@ namespace TarkovVR.Source.Player.Interactions
             try
             {
                 Reset();
-                if (!enableManualEating) return;
+                if (!VRSettings.GetManualEating()) return;
 
                 EFT.Player player = instance?._player;
                 if (player == null || !player.IsYourPlayer) return;
@@ -487,6 +603,11 @@ namespace TarkovVR.Source.Player.Interactions
                 eatPoseTime = d.eatPoseTime;
                 grabPoseState = STATE_USE_HASH;  // segments are shared; reset in case A/B'd
                 eatPoseState = STATE_EAT_HASH;
+                // Interaction-zone reach points (radii into the existing distance statics,
+                // offsets into the new ones) — same A/B-able-live seeding as the timings above.
+                openDistance = d.openZoneRadius; scoopDistance = d.takeZoneRadius; eatDistance = d.eatZoneRadius;
+                openZoneOffset = d.openZoneOffset; takeZoneOffset = d.takeZoneOffset; eatZoneOffset = d.eatZoneOffset;
+                style = BuildStyle(d.kind); // per-archetype gesture descriptor
                 phase = Phase.Closed;
                 biteCount = 0;
                 spawnAnimSpeed = animationSpeed <= 0f ? 1f : animationSpeed;
@@ -514,9 +635,8 @@ namespace TarkovVR.Source.Player.Interactions
 
                 soundPlayer = instance._controllerObject.GetComponentInChildren<BaseSoundPlayer>(true);
 
-                // Parent to the IK'd HAND BONES (solver.bone3) — these follow your
-                // controllers (the animation-rig palms don't) and share the palm-bone
-                // orientation, so the measured grip offset still lands right.
+                // Parent to the IK'd hand bones (solver.bone3): they follow your controllers (the
+                // animation-rig palms don't) and share the palm orientation, so the grip lands right.
                 Transform leftHandBone = VRGlobals.ikManager?.leftArmIk?.solver?.bone3?.transform;
                 Transform rightHandBone = VRGlobals.ikManager?.rightArmIk?.solver?.bone3?.transform;
                 if (leftHandBone == null || rightHandBone == null)
@@ -536,9 +656,10 @@ namespace TarkovVR.Source.Player.Interactions
                 leftHandBoneRef = leftHandBone; // for the handheld wrapper's left-hand holder (built on open)
 
                 bool ok = def.kind == FoodKind.Handheld ? SetupHandheldProps(root, rightHandBone)
-                        : def.kind == FoodKind.Bag      ? SetupBagProps(root, rightHandBone)
-                        : def.kind == FoodKind.Pack     ? SetupPackProps(root, rightHandBone)
-                        :                                 SetupCannedProps(root, leftHandBone, rightHandBone);
+                        : def.kind == FoodKind.Drink ? SetupDrinkProps(root, leftHandBone, rightHandBone)
+                        : def.kind == FoodKind.Bag ? SetupBagProps(root, rightHandBone)
+                        : def.kind == FoodKind.Pack ? SetupPackProps(root, rightHandBone)
+                        : SetupCannedProps(root, leftHandBone, rightHandBone);
                 if (!ok) return; // failure already logged + Reset
 
                 if (driveHandsToTargets) SubscribePinAfterIk();
@@ -552,30 +673,29 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Canned food (tushonka, sprats): can in the LEFT hand; spoon (if any) + food piece
-        // in the RIGHT hand. The food piece hangs off the spoon holder (HasSpoon) or the
-        // right hand directly (no spoon). Returns false (and Resets) if a prop is missing.
+        // Canned (tushonka, sprats): can in the LEFT hand; spoon (if any) + food in the RIGHT.
+        // Food hangs off the spoon holder (HasSpoon) or the right hand. False+Reset if a prop's missing.
         private static bool SetupCannedProps(Transform root, Transform leftHandBone, Transform rightHandBone)
         {
-            canT   = FindDeep(root, def.rootName);
-            foodT  = FindDeep(root, def.foodPieceName);
+            baseT = FindDeep(root, def.rootName);
+            foodT = FindDeep(root, def.foodPieceName);
             spoonT = def.HasSpoon ? FindDeep(root, def.spoonName) : null;
 
-            if (canT == null || foodT == null || (def.HasSpoon && spoonT == null))
+            if (baseT == null || foodT == null || (def.HasSpoon && spoonT == null))
             {
-                Plugin.MyLog.LogError($"[ManualEat] Missing props (can={canT != null} spoon={(def.HasSpoon ? (spoonT != null).ToString() : "n/a")} food={foodT != null}) — vanilla fallback.");
+                Plugin.MyLog.LogError($"[ManualEat] Missing props (base={baseT != null} spoon={(def.HasSpoon ? (spoonT != null).ToString() : "n/a")} food={foodT != null}) — vanilla fallback.");
                 Reset();
                 return false;
             }
 
             spoonR = spoonT != null ? spoonT.GetComponentInChildren<Renderer>(true) : null;
-            foodR  = foodT.GetComponentInChildren<Renderer>(true);
+            foodR = foodT.GetComponentInChildren<Renderer>(true);
 
-            Save(canT, out canParent0, out canPos0, out canRot0);
+            Save(baseT, out baseParent0, out basePos0, out baseRot0);
             if (spoonT != null) Save(spoonT, out spoonParent0, out spoonPos0, out spoonRot0);
             Save(foodT, out foodParent0, out foodPos0, out foodRot0);
 
-            canHolder = NewHolder("EatCanHolder", leftHandBone, def.canPos, def.canRot);
+            baseHolder = NewHolder("EatBaseHolder", leftHandBone, def.basePos, def.baseRot);
             if (def.HasSpoon)
             {
                 // Utensil in the right hand; the food piece sits in the utensil bowl.
@@ -589,7 +709,7 @@ namespace TarkovVR.Source.Player.Interactions
                 foodHolder = NewHolder("EatFoodHolder", rightHandBone, def.foodPos, def.foodRot);
             }
 
-            canT.SetParent(canHolder.transform, false);
+            baseT.SetParent(baseHolder.transform, false);
             if (spoonT != null) spoonT.SetParent(spoonHolder.transform, false);
             foodT.SetParent(foodHolder.transform, false);
             reparented = true;
@@ -597,42 +717,73 @@ namespace TarkovVR.Source.Player.Interactions
             SetRenderer(spoonR, false); // appears on "open" (no-op if no spoon)
             SetRenderer(foodR, false);  // appears on "scoop"/grab
             // (Draw/Open/Open2[/SpoonTake] fire from the STATE_OPEN segment itself.)
+            return true;          
+        }
+
+        private static bool SetupDrinkProps(Transform root, Transform leftHandBone, Transform rightHandBone)
+        {
+            baseT = FindDeep(root, def.rootName);
+            capT = def.HasCap ? FindDeep(root, def.capName) : null;
+
+            if (baseT == null || (def.HasCap && capT == null))
+            {
+                Plugin.MyLog.LogError($"[ManualEat] Missing props (base={baseT != null} cap={(def.HasCap ? (capT != null).ToString() : "n/a")}");
+                Reset();
+                return false;
+            }
+
+            capR = capT != null ? capT.GetComponentInChildren<Renderer>(true) : null;
+
+            Save(baseT, out baseParent0, out basePos0, out baseRot0);
+            if (capT != null) Save(capT, out capParent0, out capPos0, out capRot0);
+
+            baseHolder = NewHolder("EatBaseHolder", rightHandBone, def.basePos, def.baseRot);
+
+            if (def.HasCap)
+                capHolder = NewHolder("EatCapHolder", leftHandBone, def.capPos, def.capRot);
+            else
+                capHolder = null;
+
+            baseT.SetParent(baseHolder.transform, false);
+            if (capT != null) capT.SetParent(capHolder.transform, false);
+            reparented = true;
+
+            SetRenderer(capR, false); // appears on "open" (no-op if no cap)
+            // (Draw/Open/Open2[/CapTake] fire from the STATE_OPEN segment itself.)
             return true;
         }
 
-        // Handheld food (chocolate bar): the bar (rootName) is held in the RIGHT hand; the
-        // wrapper+piece group (wrapperName) is reparented UNDER the bar so it follows the
-        // hand, but its local is pinned to the captured rest offset each frame (LateZeroProps)
-        // while its own children (sn_cover) still animate the peel. No food-piece toggling.
+        // Handheld (chocolate bar): bar (rootName) in the RIGHT hand; the wrapper group is reparented
+        // UNDER the bar (pinned to its rest offset each frame in LateZeroProps) while its sn_cover
+        // child still animates the peel. No food-piece toggling.
         private static bool SetupHandheldProps(Transform root, Transform rightHandBone)
         {
-            canT = FindDeep(root, def.rootName);                       // the bar (held item)
+            baseT = FindDeep(root, def.rootName);                       // the bar (held item)
             wrapperT = string.IsNullOrEmpty(def.wrapperName) ? null : FindDeep(root, def.wrapperName);
             coverT = string.IsNullOrEmpty(def.coverName) ? null : FindDeep(root, def.coverName);
-            if (canT == null)
+            if (baseT == null)
             {
                 Plugin.MyLog.LogError($"[ManualEat] Handheld missing bar '{def.rootName}' — vanilla fallback.");
                 Reset();
                 return false;
             }
 
-            // Capture the wrapper group's offset RELATIVE TO THE BAR at the rest pose (both
-            // are siblings under 'weapon' right now) so it stays glued after the bar moves.
+            // Capture the wrapper's offset relative to the bar at the rest pose so it stays glued.
             if (wrapperT != null)
             {
-                wrapperLocalPos = canT.InverseTransformPoint(wrapperT.position);
-                wrapperLocalRot = Quaternion.Inverse(canT.rotation) * wrapperT.rotation;
+                wrapperLocalPos = baseT.InverseTransformPoint(wrapperT.position);
+                wrapperLocalRot = Quaternion.Inverse(baseT.rotation) * wrapperT.rotation;
             }
 
-            Save(canT, out canParent0, out canPos0, out canRot0);
+            Save(baseT, out baseParent0, out basePos0, out baseRot0);
             if (wrapperT != null) Save(wrapperT, out wrapperParent0, out wrapperPos0, out wrapperRot0);
             if (coverT != null) Save(coverT, out coverParent0, out coverPos0, out coverRot0);
 
-            canHolder = NewHolder("EatBarHolder", rightHandBone, def.canPos, def.canRot);
-            canT.SetParent(canHolder.transform, false);
+            baseHolder = NewHolder("EatBarHolder", rightHandBone, def.basePos, def.baseRot);
+            baseT.SetParent(baseHolder.transform, false);
             if (wrapperT != null)
             {
-                wrapperT.SetParent(canT, false);                 // ride the bar (carries sn_feces + sn_cover)
+                wrapperT.SetParent(baseT, false);                 // ride the bar (carries sn_feces + sn_cover)
                 wrapperT.localPosition = wrapperLocalPos;        // glue at the captured offset
                 wrapperT.localRotation = wrapperLocalRot;
             }
@@ -642,16 +793,13 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // Bag food (croutons): the bag root (rootName, holds everything) is held in the RIGHT
-        // hand. The hold-crackers (every transform whose name starts with foodPieceName) are
-        // hidden and left riding the bag until a SHAKE pours them into the left hand. We
-        // capture each cracker's pose relative to the clump anchor (crackerT[0]) so they keep
-        // their arrangement when moved. In-bag crackers + the torn corner ride the bag (we
-        // don't touch them, like sn_feces).
+        // Bag (croutons): bag root (rootName) in the RIGHT hand. The hold-crackers (names starting
+        // with foodPieceName) ride the bag, hidden, until a SHAKE pours them into the left hand;
+        // each is captured relative to the clump anchor (crackerT[0]) to keep its arrangement.
         private static bool SetupBagProps(Transform root, Transform rightHandBone)
         {
-            canT = FindDeep(root, def.rootName); // the bag (held item, holds everything)
-            if (canT == null)
+            baseT = FindDeep(root, def.rootName); // the bag (held item, holds everything)
+            if (baseT == null)
             {
                 Plugin.MyLog.LogError($"[ManualEat] Bag missing root '{def.rootName}' — vanilla fallback.");
                 Reset();
@@ -682,25 +830,24 @@ namespace TarkovVR.Source.Player.Interactions
                 SetRenderer(crackerR[i], false); // hidden until the shake pours them out
             }
 
-            Save(canT, out canParent0, out canPos0, out canRot0);
-            canHolder = NewHolder("EatBagHolder", rightHandBone, def.canPos, def.canRot);
-            canT.SetParent(canHolder.transform, false);
+            Save(baseT, out baseParent0, out basePos0, out baseRot0);
+            baseHolder = NewHolder("EatBagHolder", rightHandBone, def.basePos, def.baseRot);
+            baseT.SetParent(baseHolder.transform, false);
             reparented = true;
             return true;
         }
 
-        // Pack food (galette): the pack (rootName) is held in the RIGHT hand; the wrapper group
-        // (wrapperName, e.g. pack_CAT) is glued to the pack (like Wrapper — it carries the cover,
-        // which opens in place, plus the food piece). The food piece (foodPieceName) is hidden
-        // until the LEFT hand takes it, then it moves to a left-hand holder. Mirror of CanHand.
+        // Pack (galette): pack (rootName) in the RIGHT hand; the wrapper group is glued to it
+        // (carries the cover, which opens in place, + the food piece). The piece (foodPieceName)
+        // is hidden until the LEFT hand takes it onto a left-hand holder. Mirror of CanHand.
         private static bool SetupPackProps(Transform root, Transform rightHandBone)
         {
-            canT = FindDeep(root, def.rootName);                                            // the pack (held)
+            baseT = FindDeep(root, def.rootName);                                            // the pack (held)
             wrapperT = string.IsNullOrEmpty(def.wrapperName) ? null : FindDeep(root, def.wrapperName);
             foodT = FindDeep(root, def.foodPieceName);                                      // the piece to take
-            if (canT == null || foodT == null)
+            if (baseT == null || foodT == null)
             {
-                Plugin.MyLog.LogError($"[ManualEat] Pack missing prop (pack={canT != null} food={foodT != null}) — vanilla fallback.");
+                Plugin.MyLog.LogError($"[ManualEat] Pack missing prop (pack={baseT != null} food={foodT != null}) — vanilla fallback.");
                 Reset();
                 return false;
             }
@@ -709,19 +856,19 @@ namespace TarkovVR.Source.Player.Interactions
             // Glue the wrapper group to the pack at its rest offset (carries the cover + food).
             if (wrapperT != null)
             {
-                wrapperLocalPos = canT.InverseTransformPoint(wrapperT.position);
-                wrapperLocalRot = Quaternion.Inverse(canT.rotation) * wrapperT.rotation;
+                wrapperLocalPos = baseT.InverseTransformPoint(wrapperT.position);
+                wrapperLocalRot = Quaternion.Inverse(baseT.rotation) * wrapperT.rotation;
             }
 
-            Save(canT, out canParent0, out canPos0, out canRot0);
+            Save(baseT, out baseParent0, out basePos0, out baseRot0);
             if (wrapperT != null) Save(wrapperT, out wrapperParent0, out wrapperPos0, out wrapperRot0);
             Save(foodT, out foodParent0, out foodPos0, out foodRot0);
 
-            canHolder = NewHolder("EatPackHolder", rightHandBone, def.canPos, def.canRot);
-            canT.SetParent(canHolder.transform, false);
+            baseHolder = NewHolder("EatPackHolder", rightHandBone, def.basePos, def.baseRot);
+            baseT.SetParent(baseHolder.transform, false);
             if (wrapperT != null)
             {
-                wrapperT.SetParent(canT, false);
+                wrapperT.SetParent(baseT, false);
                 wrapperT.localPosition = wrapperLocalPos;
                 wrapperT.localRotation = wrapperLocalRot;
             }
@@ -747,19 +894,19 @@ namespace TarkovVR.Source.Player.Interactions
         // ===== Per-frame =====
         public static void Tick(MedsController instance)
         {
+            float leftTriggerAxis = SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any);
+            float rightTriggerAxis = SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any);
+            bool bothTriggersPressed = leftTriggerAxis > 0.5f && rightTriggerAxis > 0.5f;
             if (!active || manualDone || instance != controller) return;
             if (VRGlobals.vrPlayer == null || VRGlobals.ikManager == null) return;
 
-            // The lid-roll drives its own speed in StepGesture. Otherwise the animator
-            // is frozen, except during a per-bite play pulse (Time.time < playUntil).
+            // Animator stays frozen except during the lid-roll (StepGesture drives it) and the
+            // per-bite play pulse (Time.time < playUntil).
             if (!playingOpen)
                 instance.FirearmsAnimator?.SetAnimationSpeed(Time.time < playUntil ? spawnAnimSpeed : 0f);
 
-            // Keep the rig glued to the body while walking. Mid-eat nothing else does
-            // this (IKManager.Update body-follow + VRPlayerManager's camRoot pins are
-            // gated out, and the gun's HandsPositioner is disabled), so the rig root
-            // drifts from the body and the IK hands jitter. Replicate the live
-            // HandsPositioner's per-frame work (Update phase).
+            // Keep the rig glued to the body while walking (see driveBodyFollowDuringEat) — mid-eat
+            // nothing else does, so without this the IK hands jitter.
             if (driveBodyFollowDuringEat)
             {
                 if (VRGlobals.ikManager != null) VRGlobals.ikManager.MatchLegsToArms();
@@ -767,6 +914,11 @@ namespace TarkovVR.Source.Player.Interactions
             }
             DriveArms();
             StepGesture();
+            if (bothTriggersPressed)
+            {
+                FinishSequence();
+                cancelAction = true;
+            }
         }
 
         public static void End()
@@ -779,13 +931,9 @@ namespace TarkovVR.Source.Player.Interactions
             Reset();
         }
 
-        // Discard the eaten food — but ONLY after the cancel has fully switched off the
-        // meds controller (food returned to the bag + weapon drawn). The game's cancel
-        // sequence returns the food to inventory AS PART OF drawing the weapon, so
-        // removing it any earlier corrupts the return: the weapon never comes back and the
-        // right hand (which the returning weapon controller drives) is left stuck while the
-        // left hand still works. Once HandsController has left the meds controller, the
-        // return is done and discarding the (now backpacked) food is safe.
+        // Discard the eaten food, but ONLY after the cancel has fully switched off the meds
+        // controller. The cancel returns the food to the bag AS PART OF drawing the weapon, so
+        // discarding earlier corrupts the return (weapon never comes back, right hand sticks).
         private static System.Collections.IEnumerator ConsumeFoodWhenSettled(EFT.InventoryLogic.Item item)
         {
             MedsController meds = controller; // capture before teardown nulls it
@@ -823,10 +971,8 @@ namespace TarkovVR.Source.Player.Interactions
                     Plugin.MyLog.LogWarning("[ManualEat] DiscardFood: item not settled — skipped.");
                     return;
                 }
-                // simulate: true => BUILD the operation only. RunNetworkTransaction then
-                // executes it once (and replicates). Passing false here executes the
-                // discard immediately AND returns the op, so RunNetworkTransaction ran it
-                // a second time on the now-detached item -> get_Parent() threw.
+                // simulate:true BUILDS the op; RunNetworkTransaction executes it once. false would
+                // execute it here AND return it -> double-executed on a parentless item -> throw.
                 var result = InteractionsHandlerClass.Discard(item, ic, simulate: true);
                 if (result.Succeeded)
                 {
@@ -846,11 +992,9 @@ namespace TarkovVR.Source.Player.Interactions
             DriveElbowBends();
         }
 
-        // Point the arms' elbow bend goals at the VR bend goals (DynamicElbowPositioner moves
-        // them), exactly like the gun/empty-hands states do. The meds controller spawns with
-        // _elbowBends pointed at its OWN Bend_Goal_Left/Right (at the animation pose), which
-        // bends the elbows wrong — so we re-assert the VR goals each frame while eating. The
-        // index->hand mapping flips with handedness (mirrors VRPlayerManager.Right/LeftHandedMode).
+        // Re-point the arms' elbow bend goals at the VR goals each frame (like gun/empty-hands).
+        // Meds spawns _elbowBends at its OWN goals (animation pose) -> elbows bend wrong. The
+        // index->hand mapping flips with handedness.
         private static void DriveElbowBends()
         {
             var p = VRGlobals.player;
@@ -872,7 +1016,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (VRGlobals.ikManager == null) return;
             if (VRGlobals.ikManager.rightArmIk != null) { VRGlobals.ikManager.rightArmIk.solver.target = null; VRGlobals.ikManager.rightArmIk.enabled = false; }
-            if (VRGlobals.ikManager.leftArmIk != null)  { VRGlobals.ikManager.leftArmIk.solver.target = null;  VRGlobals.ikManager.leftArmIk.enabled = false; }
+            if (VRGlobals.ikManager.leftArmIk != null) { VRGlobals.ikManager.leftArmIk.solver.target = null; VRGlobals.ikManager.leftArmIk.enabled = false; }
         }
 
         private static void SetArmIk(LimbIK ik, GameObject hand)
@@ -891,55 +1035,53 @@ namespace TarkovVR.Source.Player.Interactions
             return go;
         }
 
-        // Runs in LateUpdate (after the animator). The animator keeps writing the
-        // prop's local transform every frame; we zero it so the prop sits exactly on
-        // its holder. Then the HOLDER (which the animator never touches) is the clean
-        // hold offset you can tune in Unity Explorer.
+        // LateUpdate (after the animator): the animator keeps writing each prop's local, so zero
+        // it back onto its holder (the holder = the clean, tunable hold offset).
         public static void LateZeroProps()
         {
-            if (!active || !reparented) return;
-            if (def != null && def.kind == FoodKind.Handheld)
+            if (!active || !reparented || def == null) return;
+            // Re-pin each archetype's props onto their holders (the animator keeps rewriting the
+            // props' locals every frame). One case per FoodKind — a new type adds its case here.
+            switch (def.kind)
             {
-                ZeroLocal(canT); // bar sits on its holder
-                // The animator keeps rewriting these locals each frame, so re-pin them:
-                //  - wrapperT (sn_CAT, carrying the chocolate) stays glued to the bar.
-                //  - coverT (sn_cover) peels in place until detached, then sits on the
-                //    left-hand holder (local zero) once it's in the off hand.
-                if (wrapperT != null) { wrapperT.localPosition = wrapperLocalPos; wrapperT.localRotation = wrapperLocalRot; }
-                if (coverT != null && coverDetached) ZeroLocal(coverT);
-            }
-            else if (def != null && def.kind == FoodKind.Bag)
-            {
-                ZeroLocal(canT); // bag sits on its holder (carries the in-bag crackers + corner)
-                // Once shaken out, the hold-crackers live under the left-hand holder; pin
-                // each to its captured clump layout so the animator can't drag them off.
-                if (crackersShown && crackerT != null)
-                    for (int i = 0; i < crackerT.Length; i++)
-                    {
-                        if (crackerT[i] == null) continue;
-                        crackerT[i].localPosition = crackerLocalPos[i];
-                        crackerT[i].localRotation = crackerLocalRot[i];
-                    }
-            }
-            else if (def != null && def.kind == FoodKind.Pack)
-            {
-                ZeroLocal(canT); // pack sits on its holder
-                // wrapper group (cover + pile + food) stays glued to the pack.
-                if (wrapperT != null) { wrapperT.localPosition = wrapperLocalPos; wrapperT.localRotation = wrapperLocalRot; }
-                // once taken, the food piece sits on the left-hand holder.
-                if (foodHolder != null && foodT != null && foodT.parent == foodHolder.transform) ZeroLocal(foodT);
-            }
-            else
-            {
-                ZeroLocal(canT);
-                ZeroLocal(spoonT);
-                ZeroLocal(foodT);
+                case FoodKind.Handheld:
+                    ZeroLocal(baseT); // bar sits on its holder
+                    // wrapper stays glued to the bar; cover zeroes onto the left-hand holder once detached.
+                    if (wrapperT != null) { wrapperT.localPosition = wrapperLocalPos; wrapperT.localRotation = wrapperLocalRot; }
+                    if (coverT != null && coverDetached) ZeroLocal(coverT);
+                    break;
+                case FoodKind.Bag:
+                    ZeroLocal(baseT); // bag sits on its holder (carries the in-bag crackers + corner)
+                    // Once shaken out, the hold-crackers live under the left-hand holder; pin
+                    // each to its captured clump layout so the animator can't drag them off.
+                    if (crackersShown && crackerT != null)
+                        for (int i = 0; i < crackerT.Length; i++)
+                        {
+                            if (crackerT[i] == null) continue;
+                            crackerT[i].localPosition = crackerLocalPos[i];
+                            crackerT[i].localRotation = crackerLocalRot[i];
+                        }
+                    break;
+                case FoodKind.Pack:
+                    ZeroLocal(baseT); // pack sits on its holder
+                    // wrapper group (cover + pile + food) stays glued to the pack.
+                    if (wrapperT != null) { wrapperT.localPosition = wrapperLocalPos; wrapperT.localRotation = wrapperLocalRot; }
+                    // once taken, the food piece sits on the left-hand holder.
+                    if (foodHolder != null && foodT != null && foodT.parent == foodHolder.transform) ZeroLocal(foodT);
+                    break;
+                case FoodKind.Drink:
+                    ZeroLocal(baseT); // drink sits on its holder
+                    if (capT != null && capHolder != null && capT.parent == capHolder.transform) ZeroLocal(capT); // cap sits on its holder once taken
+                    break;
+                default: // FoodKind.CannedFood
+                    ZeroLocal(baseT);
+                    ZeroLocal(spoonT);
+                    ZeroLocal(foodT);
+                    break;
             }
 
-            // LateUpdate-phase rig pins (after the IK solve), mirroring the live
-            // HandsPositioner.LateUpdate: re-pin the body rotation to handsRotation and
-            // the rig root to the body. Without this mid-eat the rig drifts post-solve
-            // and the hands jitter while walking.
+            // LateUpdate-phase rig pins (after the IK solve), like HandsPositioner.LateUpdate —
+            // without this mid-eat the rig drifts post-solve and the hands jitter while walking.
             if (driveBodyFollowDuringEat)
             {
                 if (medsBody != null && VRGlobals.vrPlayer != null)
@@ -948,10 +1090,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Pins the rig root (camRoot) to the body anchor (the meds controller object,
-        // which VRPlayerManager keeps on the ribcage), exactly like the live
-        // HandsPositioner does for empty hands. This is the per-frame coupling that's
-        // missing mid-eat and causes the walking jitter.
+        // Pin the rig root (camRoot) to the body anchor (the meds object, kept on the ribcage),
+        // like HandsPositioner does for empty hands — the coupling that's missing mid-eat.
         private static void PinRigToBody()
         {
             if (medsBody == null || VRGlobals.camRoot == null || VRGlobals.player == null) return;
@@ -961,10 +1101,9 @@ namespace TarkovVR.Source.Player.Interactions
                 medsBody.position.z);
         }
 
-        // Hand-pin runs from the IK solver's OnPostUpdate (see Subscribe/Unsubscribe
-        // PinAfterIk) — Player.LateUpdate is too early (FinalIK solves after it and
-        // overwrites). OnPostUpdate fires right after each arm solves.
-        private static void PinLeftAfterIk()  { if (active && !manualDone && driveHandsToTargets) PinBoneToTarget(VRGlobals.ikManager?.leftArmIk, LeftHand()); }
+        // Hand-pin runs from the IK solver's OnPostUpdate — Player.LateUpdate is too early (FinalIK
+        // solves after it). Pins the rendered wrist (bone3) onto the smooth target, no walk lag.
+        private static void PinLeftAfterIk() { if (active && !manualDone && driveHandsToTargets) PinBoneToTarget(VRGlobals.ikManager?.leftArmIk, LeftHand()); }
         private static void PinRightAfterIk() { if (active && !manualDone && driveHandsToTargets) PinBoneToTarget(VRGlobals.ikManager?.rightArmIk, RightHand()); }
 
         private static void SubscribePinAfterIk()
@@ -1007,11 +1146,12 @@ namespace TarkovVR.Source.Player.Interactions
                 // Props back to their original rig parents, then drop the holders. Restore
                 // the wrapper group BEFORE the cover (the cover's original parent sn_root
                 // lives under the wrapper group, so it must be back in place first).
-                Restore(canT, canParent0, canPos0, canRot0);
+                Restore(baseT, baseParent0, basePos0, baseRot0);
                 Restore(spoonT, spoonParent0, spoonPos0, spoonRot0);
                 Restore(foodT, foodParent0, foodPos0, foodRot0);
                 Restore(wrapperT, wrapperParent0, wrapperPos0, wrapperRot0); // handheld (null-safe)
                 Restore(coverT, coverParent0, coverPos0, coverRot0);         // handheld (null-safe)
+                Restore(capT, capParent0, capPos0, capRot0);                     // drink (null-safe)
                 if (crackerT != null) // bag crackers back to the bag, re-shown
                     for (int i = 0; i < crackerT.Length; i++)
                     {
@@ -1020,147 +1160,217 @@ namespace TarkovVR.Source.Player.Interactions
                     }
                 SetRenderer(spoonR, true);
                 SetRenderer(foodR, true);
-                if (canHolder != null) UnityEngine.Object.Destroy(canHolder);
+                if (baseHolder != null) UnityEngine.Object.Destroy(baseHolder);
                 if (spoonHolder != null) UnityEngine.Object.Destroy(spoonHolder);
                 if (foodHolder != null) UnityEngine.Object.Destroy(foodHolder);
                 if (crackerHolder != null) UnityEngine.Object.Destroy(crackerHolder);
+                if (capHolder != null) UnityEngine.Object.Destroy(capHolder);
             }
             catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] RestoreProps error: {ex}"); }
-            canHolder = spoonHolder = foodHolder = crackerHolder = null;
+            baseHolder = spoonHolder = foodHolder = crackerHolder = capHolder = null;
             reparented = false;
         }
 
         //--- Gesture state machine --------------------------------------------------
+        // All archetypes share ONE open->take->eat loop; only the hand roles, the arms state
+        // the open plays, and a few reveal/advance hooks differ. Those live in the per-archetype
+        // EatStyle descriptor (built per food on spawn), so the control flow below is written
+        // once. The genuinely-unique routines (DetachWrapperToLeftHand / ShakeOutCrackers /
+        // TakeFoodToLeftHand / EnterUseState / DetectShake) are kept as-is and just called from
+        // the hooks. To add a TYPE: a new case here + its prop setup / late-zero tails.
+        private static EatStyle BuildStyle(FoodKind kind)
+        {
+            switch (kind)
+            {
+                // Chocolate bar: held in the RIGHT hand, the LEFT (off) hand peels the wrapper,
+                // then bite straight to the mouth — NO take step. The whole clip is STATE_USE.
+                case FoodKind.Handheld:
+                    return new EatStyle
+                    {
+                        label = "wrapper",
+                        openHand = Hand.Off,
+                        eatHand = Hand.Dominant,
+                        takeHand = Hand.Off,
+                        hasTakeStep = false,
+                        takeKind = TakeKind.None,
+                        openStateHash = STATE_USE_HASH,
+                        logsGesturePose = false,
+                        onOpened = () => DetachWrapperToLeftHand(), // peeled -> stays in the left hand
+                    };
+                case FoodKind.Drink:
+                    return new EatStyle
+                    {
+                        label = "drink",
+                        openHand = Hand.Off,
+                        eatHand = Hand.Dominant,
+                        takeHand = Hand.Off,
+                        hasTakeStep = false,
+                        takeKind = TakeKind.None,
+                        openStateHash = STATE_OPEN_HASH,
+                        logsGesturePose = false,
+                        onOpened = () => DetachCapToLeftHand(), // cap opened -> stays in the left hand
+                    };
+                // Bag (croutons): held in the RIGHT hand, LEFT opens, then SHAKE pours crackers
+                // into the LEFT hand; eaten from the LEFT hand. The shake/eat don't advance the
+                // animator, so the take pushes it into STATE_USE (EnterUseState) for a clean finish.
+                case FoodKind.Bag:
+                    return new EatStyle
+                    {
+                        label = "bag",
+                        openHand = Hand.Off,
+                        eatHand = Hand.Off,
+                        takeHand = Hand.Off,
+                        hasTakeStep = true,
+                        takeKind = TakeKind.Shake,
+                        openStateHash = STATE_OPEN_HASH,
+                        logsGesturePose = false,
+                        onOpened = () => ResetShake(),
+                        onTake = () => { ShakeOutCrackers(); EnterUseState(); }, // no haptic pulse on a shake
+                        onEatHide = HideCrackers,
+                        onAfterBite = () => ResetShake(),
+                    };
+                // Pack (galette): mirror of CanHand — held RIGHT, LEFT opens, LEFT takes a piece
+                // and eats it. Deterministic grab/eat pulses (see StartGesturePulse).
+                case FoodKind.Pack:
+                    return new EatStyle
+                    {
+                        label = "pack",
+                        openHand = Hand.Off,
+                        eatHand = Hand.Off,
+                        takeHand = Hand.Off,
+                        hasTakeStep = true,
+                        takeKind = TakeKind.HandNear,
+                        openStateHash = STATE_OPEN_HASH,
+                        logsGesturePose = true,
+                        onTake = () => { TakeFoodToLeftHand(); StartGesturePulse(grabPoseState, grabPoseTime); Pulse(); },
+                        onEatHide = () => SetRenderer(foodR, false),
+                        onAfterBite = () => StartGesturePulse(eatPoseState, eatPoseTime),
+                    };
+                // Canned (tushonka spoon + sprats hand): can in the LEFT hand, RIGHT rolls the
+                // lid, RIGHT takes the food (onto the spoon, or grabbed directly) and eats it.
+                default: // FoodKind.CannedFood
+                    return new EatStyle
+                    {
+                        label = "can",
+                        openHand = Hand.Dominant,
+                        eatHand = Hand.Dominant,
+                        takeHand = Hand.Dominant,
+                        hasTakeStep = true,
+                        takeKind = TakeKind.HandNear,
+                        openStateHash = STATE_OPEN_HASH,
+                        logsGesturePose = true,
+                        onOpened = () => SetRenderer(spoonR, true), // reveal the spoon (no-op if none)
+                        onTake = () => { SetRenderer(foodR, true); StartGesturePulse(grabPoseState, grabPoseTime); Pulse(); },
+                        onEatHide = () => SetRenderer(foodR, false),
+                        onAfterBite = () => StartGesturePulse(eatPoseState, eatPoseTime),
+                    };
+            }
+        }
+
         private static void StepGesture()
         {
-            if (def != null && def.kind == FoodKind.Handheld) { StepGestureHandheld(); return; }
-            if (def != null && def.kind == FoodKind.Bag) { StepGestureBag(); return; }
-            if (def != null && def.kind == FoodKind.Pack) { StepGesturePack(); return; }
+            EatStyle s = style;
+            if (s == null) return;
             switch (phase)
             {
                 case Phase.Closed:
-                    if (!playingOpen)
-                    {
-                        // Right hand to the can + trigger -> roll the lid open by
-                        // playing STATE_OPEN forward (real animation: lid rolls, the
-                        // hand grabs the spoon (if any), and the eat's own sounds fire).
-                        if (RightHandNear(LeftHand(), openDistance) && TriggerEdge())
-                        {
-                            playingOpen = true;
-                            controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
-                            Pulse();
-                            Plugin.MyLog.LogInfo("[ManualEat] Opening — rolling lid...");
-                        }
-                    }
-                    else
-                    {
-                        // Hold once the lid is open (+ spoon grabbed, if this food uses one).
-                        var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                        bool past = st.fullPathHash != STATE_OPEN_HASH || st.normalizedTime >= openHoldTime;
-                        if (past)
-                        {
-                            playingOpen = false;
-                            controller.FirearmsAnimator?.SetAnimationSpeed(0f);
-                            SetRenderer(spoonR, true); // no-op if no spoon
-                            phase = Phase.Ready;
-                            Plugin.MyLog.LogInfo($"[ManualEat] Opened — ready to take food (spoon={def.HasSpoon}).");
-                        }
-                    }
+                    StepOpen(s);
                     break;
-
                 case Phase.Ready:
-                    // Right hand to the can -> take food (onto the spoon, or grabbed in hand).
-                    if (RightHandNear(LeftHand(), scoopDistance))
-                    {
-                        if (logGesturePose) Plugin.MyLog.LogInfo($"[ManualEat] grab #{biteCount + 1} pulse from {CurStateStr()}");
-                        SetRenderer(foodR, true);
-                        phase = Phase.Holding;
-                        StartGesturePulse(grabPoseState, grabPoseTime); // play the scoop/grab motion
-                        Pulse();
-                        PlaySound(def.scoopSound);
-                        Plugin.MyLog.LogInfo($"[ManualEat] Took food (bite {biteCount + 1}/{def.bites}).");
-                    }
+                    // With a take step you take first (-> Holding); without one (Handheld) you
+                    // eat straight from Ready.
+                    if (s.hasTakeStep) StepTake(s); else StepEat(s);
                     break;
-
                 case Phase.Holding:
-                    if (HandAtMouth())
-                    {
-                        if (logGesturePose) Plugin.MyLog.LogInfo($"[ManualEat] eat #{biteCount + 1} pulse from {CurStateStr()}");
-                        SetRenderer(foodR, false);
-                        biteCount++;
-                        Pulse();
-                        PlaySound(def.eatSound);
-                        Plugin.MyLog.LogInfo($"[ManualEat] Ate bite {biteCount}/{def.bites}.");
-
-                        if (biteCount >= def.bites)
-                        {
-                            FinishSequence(); // drives STATE_END itself; no eat pulse needed
-                        }
-                        else
-                        {
-                            StartGesturePulse(eatPoseState, eatPoseTime); // play the bite motion
-                            phase = Phase.Ready;
-                        }
-                    }
+                    StepEat(s);
                     break;
-
                 case Phase.Done:
                     break;
             }
         }
 
-        // Handheld (chocolate bar): bar held in the RIGHT hand. Bring the OFF (left) hand to
-        // the bar + its trigger -> peel the wrapper (play STATE_USE forward to openHoldTime;
-        // sn_cover peels, Open sound fires). Then bring the bar (right hand) to the mouth ->
-        // one bite -> finish. The whole clip is STATE_USE, so the open monitors that state.
-        private static void StepGestureHandheld()
+        // Open: bring the opening hand to the held item's open-zone + that hand's trigger ->
+        // play the open state forward to openHoldTime (lid rolls / wrapper peels / bag tears),
+        // then freeze and run the per-archetype onOpened reveal.
+        private static void StepOpen(EatStyle s)
         {
-            switch (phase)
+            if (!playingOpen)
             {
-                case Phase.Closed:
-                    if (!playingOpen)
-                    {
-                        if (LeftHandNear(RightHand(), openDistance) && OffTriggerEdge())
-                        {
-                            playingOpen = true;
-                            controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
-                            Pulse();
-                            Plugin.MyLog.LogInfo("[ManualEat] Opening wrapper...");
-                        }
-                    }
-                    else
-                    {
-                        var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                        bool past = st.fullPathHash != STATE_USE_HASH || st.normalizedTime >= openHoldTime;
-                        if (past)
-                        {
-                            playingOpen = false;
-                            controller.FirearmsAnimator?.SetAnimationSpeed(0f);
-                            DetachWrapperToLeftHand(); // you peeled it off -> it stays in your left hand
-                            phase = Phase.Ready;
-                            Plugin.MyLog.LogInfo("[ManualEat] Wrapper open — ready to bite.");
-                        }
-                    }
-                    break;
-
-                case Phase.Ready:
-                    // Bring the bar (right hand) to the mouth -> bite (Eat sound) -> finish
-                    // immediately (no chew wait).
-                    if (HandAtMouth())
-                    {
-                        biteCount++;
-                        Pulse();
-                        PlaySound(def.eatSound);
-                        Plugin.MyLog.LogInfo($"[ManualEat] Ate bite {biteCount}/{def.bites}.");
-                        if (biteCount >= def.bites)
-                            FinishSequence();
-                        // else: stay in Ready — bring it to the mouth again for the next bite.
-                    }
-                    break;
-
-                case Phase.Done:
-                    break;
+                Transform acting = HandT(s.openHand);
+                Transform holding = HandT(Other(s.openHand)); // the held item rides this hand
+                if (ZoneReached(acting, holding, openZoneOffset, openDistance) && TriggerEdgeImpl(s.openHand == Hand.Dominant))
+                {
+                    playingOpen = true;
+                    controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
+                    Pulse();
+                    Plugin.MyLog.LogInfo($"[ManualEat] Opening {s.label}...");
+                }
             }
+            else
+            {
+                var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+                bool past = st.fullPathHash != s.openStateHash || st.normalizedTime >= openHoldTime;
+                if (past)
+                {
+                    playingOpen = false;
+                    controller.FirearmsAnimator?.SetAnimationSpeed(0f);
+                    s.onOpened?.Invoke();
+                    phase = Phase.Ready;
+                    Plugin.MyLog.LogInfo($"[ManualEat] Opened {s.label} — ready (take={s.hasTakeStep}).");
+                }
+            }
+        }
+
+        // Take: the take gesture (reach the holding hand, or SHAKE the bag) reveals/moves the
+        // food onto the eating hand and advances the animator. -> Holding.
+        private static void StepTake(EatStyle s)
+        {
+            bool triggered = s.takeKind == TakeKind.Shake
+                ? DetectShake()
+                : ZoneReached(HandT(s.takeHand), HandT(Other(s.takeHand)), takeZoneOffset, scoopDistance);
+            if (!triggered) return;
+
+            if (logGesturePose && s.logsGesturePose)
+                Plugin.MyLog.LogInfo($"[ManualEat] take #{biteCount + 1} pulse from {CurStateStr()}");
+            s.onTake?.Invoke();
+            PlaySound(def.scoopSound);
+            phase = Phase.Holding;
+            Plugin.MyLog.LogInfo($"[ManualEat] Took {s.label} (round {biteCount + 1}/{def.bites}).");
+        }
+
+        // Eat: bring the eating hand (+ eat-zone offset) to the mouth -> hide the eaten piece,
+        // count the bite, then finish (last bite) or advance for the next round. Shared by the
+        // Holding phase (foods with a take step) and the Ready phase (Handheld: open then bite).
+        private static void StepEat(EatStyle s)
+        {
+            if (!EatZoneReached(HandT(s.eatHand))) return;
+
+            if (logGesturePose && s.logsGesturePose)
+                Plugin.MyLog.LogInfo($"[ManualEat] eat #{biteCount + 1} pulse from {CurStateStr()}");
+            s.onEatHide?.Invoke();
+            biteCount++;
+            Pulse();
+            PlaySound(def.eatSound);
+            Plugin.MyLog.LogInfo($"[ManualEat] Ate {biteCount}/{def.bites}.");
+
+            if (biteCount >= def.bites)
+            {
+                FinishSequence(); // drives STATE_END itself; no eat pulse needed
+            }
+            else
+            {
+                s.onAfterBite?.Invoke();
+                phase = Phase.Ready;
+            }
+        }
+
+        // Hide every poured cracker (Bag onEatHide). Named (not a lambda) so the loop body in
+        // the for-each stays readable.
+        private static void HideCrackers()
+        {
+            if (crackerR != null)
+                for (int i = 0; i < crackerR.Length; i++) SetRenderer(crackerR[i], false);
+            crackersShown = false;
         }
 
         // Handheld: once peeled, move the WRAPPER (coverT, e.g. sn_cover) from the bar onto
@@ -1181,76 +1391,17 @@ namespace TarkovVR.Source.Player.Interactions
             catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] DetachWrapper error: {ex}"); }
         }
 
-        // Bag (croutons): bag held in the RIGHT hand. LEFT hand to the bag + off-trigger ->
-        // open (tear the corner, STATE_OPEN). Then SHAKE the bag near the left hand -> pour
-        // the crackers into the left hand. Bring the LEFT hand to the mouth -> eat. Repeat
-        // for `bites` rounds, then put away.
-        private static void StepGestureBag()
+        private static void DetachCapToLeftHand()
         {
-            switch (phase)
+            if (capT == null || capDetached || leftHandBoneRef == null) return;
+            try
             {
-                case Phase.Closed:
-                    if (!playingOpen)
-                    {
-                        if (LeftHandNear(RightHand(), openDistance) && OffTriggerEdge())
-                        {
-                            playingOpen = true;
-                            controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
-                            Pulse();
-                            Plugin.MyLog.LogInfo("[ManualEat] Opening bag...");
-                        }
-                    }
-                    else
-                    {
-                        var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                        bool past = st.fullPathHash != STATE_OPEN_HASH || st.normalizedTime >= openHoldTime;
-                        if (past)
-                        {
-                            playingOpen = false;
-                            controller.FirearmsAnimator?.SetAnimationSpeed(0f);
-                            phase = Phase.Ready;
-                            ResetShake();
-                            Plugin.MyLog.LogInfo("[ManualEat] Bag open — shake it over your left hand.");
-                        }
-                    }
-                    break;
-
-                case Phase.Ready:
-                    // Shake the bag (right hand) near the left hand to pour crackers out.
-                    if (DetectShake())
-                    {
-                        ShakeOutCrackers();
-                        // Push the arms animator OUT of STATE_OPEN into the use phase (like the
-                        // cans' scoop). The finish cancels from STATE_USE cleanly; cancelling
-                        // while still frozen in STATE_OPEN leaves the use op half-started ->
-                        // "busy hands" + the food-return collides with our discard (it flashes
-                        // instead of leaving).
-                        EnterUseState();
-                        PlaySound(def.scoopSound);
-                        phase = Phase.Holding;
-                        Plugin.MyLog.LogInfo($"[ManualEat] Shook out crackers (round {biteCount + 1}/{def.bites}).");
-                    }
-                    break;
-
-                case Phase.Holding:
-                    // Eat from the LEFT hand.
-                    if (LeftHandAtMouth())
-                    {
-                        for (int i = 0; i < crackerR.Length; i++) SetRenderer(crackerR[i], false);
-                        crackersShown = false;
-                        biteCount++;
-                        Pulse();
-                        PlaySound(def.eatSound);
-                        Plugin.MyLog.LogInfo($"[ManualEat] Ate handful {biteCount}/{def.bites}.");
-                        if (biteCount >= def.bites)
-                            FinishSequence();
-                        else { phase = Phase.Ready; ResetShake(); } // shake again
-                    }
-                    break;
-
-                case Phase.Done:
-                    break;
+                capHolder = NewHolder("EatCapHolder", leftHandBoneRef, def.foodPos, def.foodRot);
+                capT.SetParent(capHolder.transform, false);
+                capDetached = true;
+                Plugin.MyLog.LogInfo("[ManualEat] Cap detached to the left hand.");
             }
+            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] DetachCap error: {ex}"); }
         }
 
         // Pour the hold-crackers into the LEFT hand: move them onto a left-hand holder in
@@ -1284,80 +1435,6 @@ namespace TarkovVR.Source.Player.Interactions
             try { controller._player.ArmsAnimatorCommon.Play(STATE_USE_HASH, 1, 0f); }
             catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] EnterUseState failed: {ex.Message}"); }
             playUntil = Time.time + 0.15f;
-        }
-
-        // Pack (galette): pack held in the RIGHT hand. LEFT hand to the pack + off-trigger ->
-        // open (cover animates in place, stays on the pack). LEFT hand to the pack -> take a
-        // piece into the left hand. LEFT hand to the mouth -> eat. Repeat for `bites`, then
-        // put away. Mirror of CanHand (the take/eat hand is the LEFT).
-        private static void StepGesturePack()
-        {
-            switch (phase)
-            {
-                case Phase.Closed:
-                    if (!playingOpen)
-                    {
-                        if (LeftHandNear(RightHand(), openDistance) && OffTriggerEdge())
-                        {
-                            playingOpen = true;
-                            controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
-                            Pulse();
-                            Plugin.MyLog.LogInfo("[ManualEat] Opening pack...");
-                        }
-                    }
-                    else
-                    {
-                        var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                        bool past = st.fullPathHash != STATE_OPEN_HASH || st.normalizedTime >= openHoldTime;
-                        if (past)
-                        {
-                            playingOpen = false;
-                            controller.FirearmsAnimator?.SetAnimationSpeed(0f);
-                            phase = Phase.Ready;
-                            Plugin.MyLog.LogInfo("[ManualEat] Pack open — pick out a cracker.");
-                        }
-                    }
-                    break;
-
-                case Phase.Ready:
-                    // LEFT hand to the pack -> take a piece into the left hand. Replays
-                    // STATE_USE@grabPoseTime (hand open -> reach -> pinch), which also leaves
-                    // STATE_OPEN so the finish cancels cleanly (see StartGesturePulse).
-                    if (LeftHandNear(RightHand(), scoopDistance))
-                    {
-                        if (logGesturePose) Plugin.MyLog.LogInfo($"[ManualEat] take #{biteCount + 1} pulse from {CurStateStr()}");
-                        TakeFoodToLeftHand();
-                        StartGesturePulse(grabPoseState, grabPoseTime);
-                        Pulse();
-                        PlaySound(def.scoopSound);
-                        phase = Phase.Holding;
-                        Plugin.MyLog.LogInfo($"[ManualEat] Took a cracker (bite {biteCount + 1}/{def.bites}).");
-                    }
-                    break;
-
-                case Phase.Holding:
-                    // Eat from the LEFT hand.
-                    if (LeftHandAtMouth())
-                    {
-                        if (logGesturePose) Plugin.MyLog.LogInfo($"[ManualEat] eat #{biteCount + 1} pulse from {CurStateStr()}");
-                        SetRenderer(foodR, false);
-                        biteCount++;
-                        Pulse();
-                        PlaySound(def.eatSound);
-                        Plugin.MyLog.LogInfo($"[ManualEat] Ate cracker {biteCount}/{def.bites}.");
-                        if (biteCount >= def.bites)
-                            FinishSequence();
-                        else
-                        {
-                            StartGesturePulse(eatPoseState, eatPoseTime); // play the bite motion
-                            phase = Phase.Ready; // pick another
-                        }
-                    }
-                    break;
-
-                case Phase.Done:
-                    break;
-            }
         }
 
         // Move the single food piece (foodT) onto a left-hand holder and show it (re-shows for
@@ -1459,7 +1536,8 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     // The fire-cancel aborts the over-time heal effect, so apply the
                     // food's full energy/hydration INSTANTLY first (otherwise no nutrition).
-                    ApplyInstantNutrition();
+                    if(!cancelAction)
+                        ApplyInstantNutrition();
                     pendingOp.method_5();   // keep — leaves the controller in the state the cancel needs
                     // SetActiveParam(false) is REQUIRED — it flips the controller out of
                     // the mid-use state into the cancellable/put-away state. Without it the
@@ -1481,8 +1559,9 @@ namespace TarkovVR.Source.Player.Interactions
                     // gets removed. Discard it ourselves once the put-away has settled it
                     // back into a container (need a stable parent; the discard itself is
                     // simulate->RunNetworkTransaction so it executes exactly once).
-                    if (VRGlobals.vrPlayer != null)
+                    if (VRGlobals.vrPlayer != null && !cancelAction)
                         VRGlobals.vrPlayer.StartCoroutine(ConsumeFoodWhenSettled(controller.Item));
+                    cancelAction = false;
                 }
                 else
                 {
@@ -1531,30 +1610,31 @@ namespace TarkovVR.Source.Player.Interactions
 
         //--- Helpers ----------------------------------------------------------------
         private static Transform RightHand() => VRGlobals.vrPlayer?.RightHand != null ? VRGlobals.vrPlayer.RightHand.transform : null;
-        private static Transform LeftHand()  => VRGlobals.vrPlayer?.LeftHand  != null ? VRGlobals.vrPlayer.LeftHand.transform  : null;
+        private static Transform LeftHand() => VRGlobals.vrPlayer?.LeftHand != null ? VRGlobals.vrPlayer.LeftHand.transform : null;
 
-        private static bool RightHandNear(Transform target, float dist)
+        // Resolve a hand role to its transform. RightHand is ALWAYS the dominant hand and
+        // LeftHand the off hand (the SteamVR pose listeners swap in left-handed mode), so no
+        // handedness branch is needed here.
+        private static Transform HandT(Hand h) => h == Hand.Dominant ? RightHand() : LeftHand();
+        private static Hand Other(Hand h) => h == Hand.Dominant ? Hand.Off : Hand.Dominant;
+
+        // A reach gesture fires when the acting hand is within <radius> of an anchor point +
+        // local offset. Offset zero => the anchor's own position = the original hand-to-hand
+        // trigger. The offset is in the anchor's local frame, so it rides the held item (e.g.
+        // up a bottle's axis to its cap).
+        private static bool ZoneReached(Transform actingHand, Transform anchor, Vector3 offset, float radius)
         {
-            Transform right = RightHand();
-            if (right == null || target == null) return false;
-            return Vector3.Distance(right.position, target.position) < dist;
+            if (actingHand == null || anchor == null) return false;
+            return Vector3.Distance(actingHand.position, anchor.TransformPoint(offset)) < radius;
         }
 
-        private static bool LeftHandNear(Transform target, float dist)
-        {
-            Transform left = LeftHand();
-            if (left == null || target == null) return false;
-            return Vector3.Distance(left.position, target.position) < dist;
-        }
-
-        private static bool HandAtMouth() => HandAtMouth(RightHand());
-        private static bool LeftHandAtMouth() => HandAtMouth(LeftHand());
-
-        private static bool HandAtMouth(Transform hand)
+        // The eat gesture: the eating hand (+ eatZoneOffset, e.g. a spout) is near the head and
+        // roughly in front of it. Offset zero + the forward gate = the original HandAtMouth.
+        private static bool EatZoneReached(Transform eatHand)
         {
             Transform head = GetHead();
-            if (head == null || hand == null) return false;
-            Vector3 delta = hand.position - head.position;
+            if (head == null || eatHand == null) return false;
+            Vector3 delta = eatHand.TransformPoint(eatZoneOffset) - head.position;
             if (delta.magnitude > eatDistance) return false;
             return Vector3.Dot(delta.normalized, head.forward) > mouthForwardDot;
         }
@@ -1565,11 +1645,9 @@ namespace TarkovVR.Source.Player.Interactions
             return Camera.main != null ? Camera.main.transform : null;
         }
 
-        // Dominant-hand trigger edge (right in normal mode) — the can-opening hand.
-        private static bool TriggerEdge() => TriggerEdgeImpl(dominant: true);
-        // Off-hand trigger edge (left in normal mode) — the handheld wrapper-peeling hand.
-        private static bool OffTriggerEdge() => TriggerEdgeImpl(dominant: false);
-
+        // Trigger rising-edge for the opening hand. dominant=true => the dominant (can-opening)
+        // hand's trigger; false => the off hand's (wrapper/bag/pack opening). Tracks each hand's
+        // previous axis separately so the two edges don't interfere.
         private static bool TriggerEdgeImpl(bool dominant)
         {
             bool lefty = VRSettings.GetLeftHandedMode();
@@ -1664,12 +1742,14 @@ namespace TarkovVR.Source.Player.Interactions
             manualDone = false;
             controller = null;
             def = null;
+            style = null;
             phase = Phase.Closed;
             biteCount = 0;
-            canT = spoonT = foodT = null;
+            baseT = spoonT = foodT = capT = null;
             wrapperT = coverT = null;
             coverParent0 = null;
             coverDetached = false;
+            capDetached = false;
             leftHandBoneRef = null;
             crackerT = null; crackerR = null;
             crackerParent0 = null; crackerPos0 = null; crackerRot0 = null;
@@ -1679,8 +1759,8 @@ namespace TarkovVR.Source.Player.Interactions
             medsBody = null;
             spoonR = foodR = null;
             soundPlayer = null;
-            canHolder = spoonHolder = foodHolder = null;
-            canParent0 = spoonParent0 = foodParent0 = wrapperParent0 = null;
+            baseHolder = spoonHolder = foodHolder = capHolder = null;
+            baseParent0 = spoonParent0 = foodParent0 = wrapperParent0 = capParent0 = null;
             reparented = false;
             effectFired = false;
             pendingOp = null;

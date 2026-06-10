@@ -35,7 +35,7 @@ namespace TarkovVR.Patches.Core.Player
         public static bool enabled = true;            // master toggle — flip on live
 
         // Grip measurement: set to a prop bone name + the palm bone holding it.
-        public static string gripPropName = "item_galette_LOD0";        // e.g. "saira_spoon" / "saira_root"
+        public static string gripPropName = "saira_root";        // e.g. "saira_spoon" / "saira_root"
         public static string gripPalmName = "Base HumanLPalm"; // or "Base HumanLPalm"
         public static float gripLogInterval = 0.25f;
 
