@@ -96,7 +96,18 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(BaseSoundPlayer), "OnSound")]
         public static bool OnSoundGate(BaseSoundPlayer __instance, string StringParam)
         {
-            return EatingInteractionController.AllowSound(__instance);
+            return EatingInteractionController.AllowSound(__instance, StringParam);
+        }
+
+        // Audio -> haptics: every audible clip on OUR controller's sound player (gulps,
+        // lid rolls, holster — whatever made it past the gate above) also plays its
+        // waveform envelope on the controllers, so you FEEL what you hear. PlayClip is
+        // the one funnel every clip goes through, AFTER the distance/occlusion culls.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BaseSoundPlayer), "PlayClip")]
+        public static void AudioToHaptics(BaseSoundPlayer __instance, AudioClip clip, float volume)
+        {
+            EatingInteractionController.OnEatAudio(__instance, clip, volume);
         }
 
         // Keep the LEFT hand tracking the controller during manual eating. Normally
@@ -123,7 +134,12 @@ namespace TarkovVR.Patches.Core.Player
             t.localRotation = fromAction.localRotation;
             t.Rotate(VRSettings.GetSecondaryHandVertOffset() + secRotOff.x, secRotOff.y, VRSettings.GetSecondaryHandHorOffset() + secRotOff.z);
 
-            if (VRGlobals.ikManager?.leftArmIk != null)
+            // While a pull-to-open has the LEFT hand latched onto the held item, keep
+            // updating the rig target (above — so releasing lands the hand on the
+            // controller) but do NOT re-point its IK at it: this runs on the SteamVR pose
+            // callback, after the eat Tick aimed the IK at the latch, and would yank the
+            // rendered hand off the item back to the controller mid-pull.
+            if (VRGlobals.ikManager?.leftArmIk != null && !EatingInteractionController.OffHandLatched)
             {
                 VRGlobals.ikManager.leftArmIk.solver.target = t;
                 VRGlobals.ikManager.leftArmIk.enabled = true;
