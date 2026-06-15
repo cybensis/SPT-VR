@@ -1604,8 +1604,8 @@ namespace TarkovVR.Patches.Misc
             Camera.main.farClipPlane = 5000f;
             if (VRGlobals.leftArmBendGoal != null && VRGlobals.rightArmBendGoal != null)
             {
-                VRGlobals.leftArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(1, -0.5f, -0.8f) : new Vector3(-1, -0.5f, -0.8f);
-                VRGlobals.rightArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(-1, -0.5f, -0.8f) : new Vector3(1, -0.5f, -0.8f);
+                VRGlobals.leftArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(1, -2f, -0.8f) : new Vector3(-1, -2f, -0.8f);
+                VRGlobals.rightArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(-2.5f, -2f, -0.8f) : new Vector3(2.5f, -2f, -0.8f);
             }
             if (VRGlobals.weaponHolder && VRGlobals.firearmController) {
                 Vector3 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(VRGlobals.firearmController.weaponPrefab_0.name, VRGlobals.firearmController.Weapon.WeapClass);

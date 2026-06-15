@@ -63,21 +63,24 @@ namespace TarkovVR.Patches.Core.Player
             return EatingInteractionController.AllowThirdAction(__instance);
         }
 
-        // Switching off the item (swap weapon / cancel to empty hands).
+        // Switching off the item (swap weapon / cancel to empty hands). Fires for EVERY
+        // MedsController in the raid — gate on our armed controller (OnControllerGone) so a
+        // bot's weap-out doesn't tear down the local eat mid-sequence.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MedsController), "IEventsConsumerOnWeapOut")]
-        public static void OnWeapOut()
+        public static void OnWeapOut(MedsController __instance)
         {
-            EatingInteractionController.End();
+            EatingInteractionController.OnControllerGone(__instance);
         }
 
         // PREFIX: clean up (restore the reparented props) BEFORE the original
         // Destroy returns the controller object to the pool — a postfix is too late.
+        // Also fires for every MedsController, so gate the same way as OnWeapOut.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MedsController), "Destroy")]
-        public static void OnDestroy()
+        public static void OnDestroy(MedsController __instance)
         {
-            EatingInteractionController.End();
+            EatingInteractionController.OnControllerGone(__instance);
         }
 
         // After the animator runs (LateUpdate), zero the props' animator-driven local
@@ -97,6 +100,17 @@ namespace TarkovVR.Patches.Core.Player
         public static bool OnSoundGate(BaseSoundPlayer __instance, string StringParam)
         {
             return EatingInteractionController.AllowSound(__instance, StringParam);
+        }
+
+        // Our controller's clips play HEAD-LOCKED 2D (see PlayClipHeadLocked): the vanilla
+        // PlayClip path leaves the pooled source 3D-blended on the (VR-reparented) weapon
+        // transform — intermittently quiet/mislocated/silent. Prefix returns false (skip
+        // original) when it handled the clip; the haptics postfix below still runs.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BaseSoundPlayer), "PlayClip")]
+        public static bool ForceHeadLockedEatAudio(BaseSoundPlayer __instance, AudioClip clip, int rolloff, float volume)
+        {
+            return !EatingInteractionController.PlayClipHeadLocked(__instance, clip, rolloff, volume);
         }
 
         // Audio -> haptics: every audible clip on OUR controller's sound player (gulps,

@@ -227,7 +227,6 @@ namespace TarkovVR.Patches.Core.Player
             {
                 previousLeftHandMarker = VRGlobals.player._markers[0];
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
-                //VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
             }
             __instance.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
             VRGlobals.oldWeaponHolder.transform.localEulerAngles = new Vector3(340, 340, 0);
@@ -471,7 +470,6 @@ namespace TarkovVR.Patches.Core.Player
                 previousLeftHandMarker = VRGlobals.player._markers[0];
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
                 //VRGlobals.player._elbowBends[0] = VRGlobals.leftArmBendGoal;
-                //VRGlobals.player._markers[1] = VRGlobals.vrPlayer.RightHand.transform;
             }
             if (VRSettings.GetLeftHandedMode())
             {

@@ -574,8 +574,11 @@ namespace TarkovVR.Source.Controls
             //if ((!VRSettings.GetLeftHandedMode() && VRGlobals.blockRightJoystick) || !VRGlobals.vrPlayer.interactMenuOpen)
             public void UpdateCommand(ref ECommand command)
             {
-                // Early-out if vrPlayer is null
-                if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.interactMenuOpen)
+                // Early-out if vrPlayer is null, or the menu doesn't need the stick to navigate.
+                // With a single (or zero) selectable action there's nothing to cycle, so we leave
+                // the right joystick free to crouch instead of consuming it for a no-op scroll
+                // (mirrors blockCrouch - both gate on interactMenuOwnsStick).
+                if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.interactMenuOwnsStick)
                     return;
 
                 float primaryHandScrollAxis = 0f;

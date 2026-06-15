@@ -68,6 +68,20 @@ namespace TarkovVR.Source.Player.VRManager
         public bool blockJump = false;
         public bool blockCrouch = false;
         public bool interactMenuOpen = false;
+        // Number of selectable (non-disabled) actions in the currently-open interaction context
+        // menu. Updated from UIPatches' ActionPanel.method_0 patch. The right joystick Y axis is
+        // shared between the menu scroll (ScrollNext/Prev) and crouch, so the menu only needs to
+        // "own" the stick when there's more than one action to cycle through.
+        public int interactMenuActionCount = 0;
+        // true: a single-option interaction menu ("Search" on a body/container, "Take" on loot)
+        // does NOT block joystick crouch / consume the scroll stick - only a multi-option menu
+        // (which actually needs the stick to navigate) does. false = old behavior (any open
+        // interaction menu blocks crouch).
+        public static bool allowCrouchWithSingleAction = true;
+        // True only when the open interaction menu genuinely needs the right joystick to navigate
+        // between actions; single-option menus leave the stick free to crouch. Both the blockCrouch
+        // calc and the ScrollHandler gate on this so they stay in lockstep.
+        public bool interactMenuOwnsStick => interactMenuOpen && !(allowCrouchWithSingleAction && interactMenuActionCount <= 1);
         public static int LEFT_HAND_ANIMATOR_HASH = UnityEngine.Animator.StringToHash("ReloadFloat");
         private Transform ammoFireModeUi;
         private bool isAmmoCount = false;
@@ -281,8 +295,8 @@ namespace TarkovVR.Source.Player.VRManager
 
             // Only update position if changed significantly
             Vector3 newLocalPos = initPos * -1 + headOffset;
-
-
+            newLocalPos.y -= crouchHeightDiff;
+            /*
             // Ease the manual crouch offset toward the joystick target at the body's rate so the
             // view doesn't drop ahead of the arms (raw crouchHeightDiff stays instant for jump-block/pose).
             if (crouchViewSmoothTime > 0f)
@@ -290,7 +304,7 @@ namespace TarkovVR.Source.Player.VRManager
             else
                 displayedCrouchHeightDiff = crouchHeightDiff;
             newLocalPos.y -= displayedCrouchHeightDiff;
-
+            */
 
             if (Vector3.Distance(newLocalPos, lastLocalPos) > 0.001f)
             {
@@ -314,7 +328,7 @@ namespace TarkovVR.Source.Player.VRManager
             }
 
             blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0;
-            blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen;
+            blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick;
             // Cache ammoFireModeUi reference
             if (cachedAmmoFireModeUi != ammoFireModeUi)
                 cachedAmmoFireModeUi = ammoFireModeUi;

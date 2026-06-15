@@ -181,7 +181,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(CameraLodBiasController), "SetBiasByFov")]
         private static void FixAimCulling(CameraLodBiasController __instance)
         {
-            __instance.LodBiasFactor = 1.5f;
+            __instance.LodBiasFactor = 1f;
 
         }
 

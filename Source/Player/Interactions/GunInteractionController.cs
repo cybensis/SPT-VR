@@ -135,7 +135,6 @@ public class GunInteractionController : MonoBehaviour
         framesAfterEnabled = 0;
         VRGlobals.blockLeftJoystick = false;
         VRGlobals.blockRightJoystick = false;
-        
     }
 
     public void OnDisable()
@@ -175,7 +174,7 @@ public class GunInteractionController : MonoBehaviour
         prevPos = Vector3.zero;
         prevForward = Vector3.zero;
     }
-    public void SetHighlightComponent(HighLightMesh meshHighlighter) { 
+    public void SetHighlightComponent(HighLightMesh meshHighlighter) {
         this.meshHighlighter = meshHighlighter;
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------

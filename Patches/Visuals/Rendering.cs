@@ -138,6 +138,10 @@ namespace TarkovVR.Patches.Visuals
             }
 
             VRGlobals.VRCam.useOcclusionCulling = false;
+            // Re-applied every frame: the camera is reconfigured across raids, so a one-time set
+            // silently reverts (the usual reason a layerCullDistances attempt "does nothing"). Cheap:
+            // a cached array is reused, so there's no per-frame GC. See ApplyCullDistances below.
+            ApplyCullDistances(VRGlobals.VRCam);
 
             ResetRenderingState(__instance);
             InitializeOptimizedHDRRenderTargets(__instance, scaledWidth, scaledHeight);
@@ -543,44 +547,90 @@ namespace TarkovVR.Patches.Visuals
         }
 
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------
-        public static float[] TarkovLayers()
+        // PER-LAYER CULL DISTANCES (CPU win)
+        // -----------------------------------------------------------------------------------------
+        // Engine-level distance culling on the VR render camera. In MultiPass everything is culled
+        // AND draw-submitted once PER EYE, so dropping renderers from the set saves CPU twice over.
+        // Only RENDER layers matter here — collider/trigger/unused layers are no-ops for rendering,
+        // so we leave them at 0. A value of 0 means "no extra cull, use the camera far clip".
+        //
+        // STRUCTURAL layers (Default world geometry, Terrain, Water, Player, PlayerRenderers, Sky,
+        // LevelBorder) are deliberately left at 0 so buildings/terrain/other players never pop in/out.
+        // The win comes from the high-COUNT clutter layers (loot, foliage, ragdolls, casings, rain).
+        // If you want to push it further, lower cullDistanceMultiplier, or give Default a finite
+        // distance (e.g. 1500) to trim very distant world geometry — test for building pop-in first.
+        //
+        // Tunables are live (UnityExplorer): flip useLayerCullDistances / change cullDistanceMultiplier
+        // mid-raid and the next frame rebuilds + re-applies. Watch the BepInEx log for "[CullDist]".
+        public static bool useLayerCullDistances = true;   // master toggle
+        public static float cullDistanceMultiplier = 1f;   // scales the whole table; <1 = more aggressive
+
+        private static float[] _cullDistances;             // cached scaled array (rebuilt on multiplier change)
+        private static float[] _zeroDistances;             // all-0 = far clip everywhere (restore on disable)
+        private static float _builtMultiplier = float.NaN;
+        private static bool _cullApplied = false;
+
+        // Base per-layer cull radius in meters at multiplier 1.0. 0 = no extra cull (far clip).
+        // Layer names match Tarkov's layer indices.
+        private static float[] CullDistanceBase()
         {
-            float[] distances = new float[32];
+            float[] d = new float[32];
+            //  d[0]  Default            -> 0 (world geometry/buildings; keep, would pop)
+            //  d[4]  Water              -> 0 (keep; culling reflective water looks bad)
+            //  d[8]  Player             -> 0 (never cull players)
+            //  d[11] Terrain            -> 0 (keep)
+            //  d[17] PlayerRenderers    -> 0 (never cull player meshes)
+            //  d[28] Sky / d[29] Border -> 0 (keep)
+            d[15] = 120f;  // Loot
+            d[20] = 30f;   // Shells (ejected casings)
+            d[22] = 150f;  // Interactive
+            d[23] = 100f;  // Deadbody / ragdolls
+            d[24] = 30f;   // RainDrops
+            d[26] = 120f;  // Foliage (bushes/plants that are real renderers)
+            d[31] = 60f;   // Grass (mostly GPU-Instancer-driven; harmless if it's a no-op)
+            return d;
+        }
 
-            distances[0] = 200f;   // Default
-            distances[1] = 150f;   // TransparentFX
-            distances[2] = 50f;    // Ignore Raycast
-            distances[3] = 0f;     // <unused>
-            distances[4] = 300f;   // Water
-            distances[5] = 5f;     // UI
-            distances[6] = 0f;     // <unused>
-            distances[7] = 0f;     // <unused>
-            distances[8] = 400f;   // Player
-            distances[9] = 100f;   // DoorLowPolyCollider
-            distances[10] = 150f;  // PlayerCollisionTest
-            distances[11] = 500f;  // Terrain
-            distances[12] = 200f;  // HighPolyCollider
-            distances[13] = 100f;  // Triggers
-            distances[14] = 300f;  // DisablerCullingObject
-            distances[15] = 150f;  // Loot
-            distances[16] = 300f;  // HitCollider
-            distances[17] = 400f;  // PlayerRenderers
-            distances[18] = 150f;  // LowPolyCollider
-            distances[19] = 10f;   // Weapon Preview
-            distances[20] = 50f;   // Shells
-            distances[21] = 250f;  // CullingMask
-            distances[22] = 100f;  // Interactive
-            distances[23] = 200f;  // Deadbody
-            distances[24] = 30f;   // RainDrops
-            distances[25] = 100f;  // Menu Environment
-            distances[26] = 150f;  // Foliage
-            distances[27] = 50f;   // PlayerSpiritAura
-            distances[28] = 1000f; // Sky
-            distances[29] = 800f;  // LevelBorder
-            distances[30] = 100f;  // TransparentCollider
-            distances[31] = 100f;  // Grass
+        // Applies the cull-distance table to a camera. Safe to call every frame — the array is cached
+        // and only rebuilt when the multiplier changes, so there's no allocation on the hot path.
+        public static void ApplyCullDistances(Camera cam)
+        {
+            if (cam == null)
+                return;
 
-            return distances;
+            if (!useLayerCullDistances)
+            {
+                // Restore far-clip-everywhere once, so toggling off mid-raid actually reverts.
+                if (_cullApplied)
+                {
+                    if (_zeroDistances == null)
+                        _zeroDistances = new float[32];
+                    cam.layerCullDistances = _zeroDistances;
+                    _cullApplied = false;
+                    Plugin.MyLog.LogInfo("[CullDist] Disabled — restored far-clip on all layers.");
+                }
+                return;
+            }
+
+            if (_cullDistances == null || _builtMultiplier != cullDistanceMultiplier)
+            {
+                float m = Mathf.Max(0.1f, cullDistanceMultiplier);
+                float[] baseT = CullDistanceBase();
+                _cullDistances = new float[32];
+                for (int i = 0; i < 32; i++)
+                    _cullDistances[i] = baseT[i] > 0f ? baseT[i] * m : 0f;
+                _builtMultiplier = cullDistanceMultiplier;
+                _cullApplied = false; // force a re-apply + log with the new table
+                Plugin.MyLog.LogInfo($"[CullDist] Built layer cull table (x{m:0.00}).");
+            }
+
+            cam.layerCullSpherical = true;   // distances are a radius from the headset, not planar depth
+            cam.layerCullDistances = _cullDistances;
+            if (!_cullApplied)
+            {
+                _cullApplied = true;
+                Plugin.MyLog.LogInfo($"[CullDist] Applied to '{cam.name}' (spherical, x{_builtMultiplier:0.00}).");
+            }
         }
     }
 }

@@ -15,8 +15,8 @@ namespace TarkovVR.Source.Player.Body
         public Transform leftBendGoal;
         public Transform rightBendGoal;
 
-        private Vector3 leftBendGoalBasePos = VRSettings.GetLeftHandedMode() ? new Vector3(1, -0.5f, -0.8f) : new Vector3(-1, -0.5f, -0.8f);
-        private Vector3 rightBendGoalBasePos = VRSettings.GetLeftHandedMode() ? new Vector3(-1, -0.5f, -0.8f) : new Vector3(1, -0.5f, -0.8f);
+        private Vector3 leftBendGoalBasePos = VRSettings.GetLeftHandedMode() ? new Vector3(1, -2f, -0.8f) : new Vector3(-1, -2f, -0.8f);
+        private Vector3 rightBendGoalBasePos = VRSettings.GetLeftHandedMode() ? new Vector3(-2.5f, -2f, -0.8f) : new Vector3(2.5f, -2f, -0.8f);
 
         public float elbowOffsetMultiplier = 0.12f;
         public float smoothSpeed = 8f;
@@ -30,16 +30,26 @@ namespace TarkovVR.Source.Player.Body
             rightTargetPos = rightBendGoalBasePos;
         }
 
+        // While sprinting with the run anim disabled, the forearm twist this reads is still being pumped by
+        // the gait, so the wrist-driven elbow goal swings and the elbows go crazy. Hold the goal at its
+        // neutral base position during that sprint instead (the existing lerp eases in/out smoothly).
+        public static bool sprintNeutralElbows = true;
+
         void Update()
         {
+            bool freezeForSprint = sprintNeutralElbows && VRGlobals.player != null &&
+                                   VRGlobals.player.IsSprintEnabled && VRSettings.GetDisableRunAnim();
+
             if (leftWristTransform != null && leftBendGoal != null)
             {
-                leftTargetPos = CalculateElbowPosition(leftWristTransform, leftBendGoalBasePos, true);
+                leftTargetPos = freezeForSprint ? leftBendGoalBasePos
+                                                : CalculateElbowPosition(leftWristTransform, leftBendGoalBasePos, true);
                 leftBendGoal.localPosition = Vector3.Lerp(leftBendGoal.localPosition, leftTargetPos, Time.deltaTime * smoothSpeed);
             }
             if (rightWristTransform != null && rightBendGoal != null)
             {
-                rightTargetPos = CalculateElbowPosition(rightWristTransform, rightBendGoalBasePos, false);
+                rightTargetPos = freezeForSprint ? rightBendGoalBasePos
+                                                 : CalculateElbowPosition(rightWristTransform, rightBendGoalBasePos, false);
                 rightBendGoal.localPosition = Vector3.Lerp(rightBendGoal.localPosition, rightTargetPos, Time.deltaTime * smoothSpeed);
             }
         }
@@ -81,6 +91,7 @@ namespace TarkovVR.Source.Player.Body
                 else
                     newPos.x = Mathf.Max(newPos.x, basePos.x);
             }
+
             return newPos;
         }
     }

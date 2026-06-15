@@ -412,7 +412,30 @@ namespace TarkovVR.Patches.UI
                 Plugin.MyLog.LogError($"Error in SetTransmitInteractionMenuActive: {ex.Message}");
             }
         }
-        
+
+        // method_0 is the reactive handler bound to GamePlayerOwner.AvailableInteractionState, so it
+        // fires whenever the available interaction actions change (and with null on look-away). Record
+        // how many actions are SELECTABLE (non-disabled) - that's what the right joystick cycles through
+        // (ScrollNext/Prev) - so the crouch/scroll handlers know whether the menu actually needs the stick.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ActionPanel), "method_0")]
+        private static void TrackInteractionActionCount([CanBeNull] ActionsReturnClass interactionState)
+        {
+            if (VRGlobals.vrPlayer == null)
+                return;
+
+            int count = 0;
+            if (interactionState != null && interactionState.Actions != null)
+            {
+                for (int i = 0; i < interactionState.Actions.Count; i++)
+                {
+                    if (!interactionState.Actions[i].Disabled)
+                        count++;
+                }
+            }
+            VRGlobals.vrPlayer.interactMenuActionCount = count;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TransferItemsInRaidScreen), "Show", new Type[] { typeof(TransferItemsInRaidScreen.GClass3893) })]
         private static void ShowTransitTransferMenu(TransferItemsInRaidScreen __instance) {

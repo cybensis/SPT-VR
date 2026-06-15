@@ -48,9 +48,8 @@ namespace TarkovVR.Source.Misc
             renderRight = rightHand;
             if (tap == null || tap.gameObject != bs.source1.gameObject)
             {
-                if (tap != null) tap.enabled = false; // old pooled source — stop its callbacks
-                tap = bs.source1.gameObject.GetComponent<HapticAudioTap>();
-                if (tap == null) tap = bs.source1.gameObject.AddComponent<HapticAudioTap>();
+                DestroyTap(); // never leave a filter script behind on a pooled source GO
+                tap = bs.source1.gameObject.AddComponent<HapticAudioTap>();
             }
             tap.sampleRate = AudioSettings.outputSampleRate;
             tap.enabled = true;
@@ -63,9 +62,41 @@ namespace TarkovVR.Source.Misc
         {
             if (pump != null && VRGlobals.vrPlayer != null) VRGlobals.vrPlayer.StopCoroutine(pump);
             pump = null;
-            if (tap != null) tap.enabled = false;
-            tap = null; trackedBs = null; expectedClipName = null;
+            DestroyTap();
+            trackedBs = null; expectedClipName = null;
         }
+
+        // DESTROY the tap rather than disable it. An OnAudioFilterRead script inserts a
+        // custom DSP filter on the AudioSource's GameObject, and BetterAudio sources are
+        // POOLED: release/re-borrow toggles source1.enabled off/on under the attached
+        // filter, after which the source can report Playing while producing pure silence
+        // (observed 2026-06-12: moonshine's open streamed haptics onto the source, the
+        // source pool-cycled during the long pull, and every gulp after came out playing-
+        // but-inaudible with all volume/mute/active flags clean). Removing the component
+        // restores the vanilla DSP chain; OnClipPlayed re-adds it fresh per clip.
+        private static void DestroyTap()
+        {
+            if (tap != null)
+            {
+                tap.enabled = false;
+                Object.Destroy(tap);
+            }
+            tap = null;
+        }
+
+        // Trace helper for the eating debug log: is one of our filter taps sitting on this
+        // source GameObject right now?
+        public static string DescribeTap(GameObject go)
+        {
+            if (go == null) return "noGO";
+            var t = go.GetComponent<HapticAudioTap>();
+            return t == null ? "none" : (t.enabled ? "ENABLED" : "disabled");
+        }
+
+        // After this long with nothing of ours playing, the pump shuts itself down and
+        // DESTROYS the tap (see DestroyTap — a lingering filter on a pooled source breaks
+        // its audio after a pool cycle). OnClipPlayed restarts everything on the next clip.
+        public static float idleStopSec = 1f;
 
         private static IEnumerator Pump()
         {
@@ -73,12 +104,21 @@ namespace TarkovVR.Source.Misc
             float peak = 0.02f;   // auto-gain reference (foley levels vary wildly)
             float freq = 140f;
             int lastBuffers = -1;
+            float idle = 0f;
             while (true)
             {
                 float amp = 0f;
                 bool live = tap != null && trackedBs != null && expectedClipName != null
                     && trackedBs.PlayBackState == BetterSource.EPlayBackState.Playing
                     && trackedBs._lastPlayingClipName == expectedClipName;
+                if (live) idle = 0f;
+                else if ((idle += windowSec) >= idleStopSec)
+                {
+                    DestroyTap();
+                    trackedBs = null; expectedClipName = null;
+                    pump = null;
+                    yield break;
+                }
                 if (live)
                 {
                     int b = tap.Buffers;
