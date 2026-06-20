@@ -488,7 +488,10 @@ public class GunInteractionController : MonoBehaviour
         // Vertical offset setting is a value from 0-100, horizontal starts at 0, the higher the slider, it goes into negative with the max being
         // -50, or slider max to the left is +50, stupid I know, can't possibly explain why I did it this way.
         float normalizedVertical = VRSettings.GetPrimaryHandVertOffset();
-        float normalizedHorizontal = VRSettings.GetPrimaryHandHorOffset() / 50;
+        // Hand offsets are floats now (smooth sliders), but this position-compensation was written
+        // around integer division (only stepped at multiples of 50). Cast to keep the original feel;
+        // change to "/ 50f" if you want the compensation to track fractional horizontal offsets too.
+        float normalizedHorizontal = (int)VRSettings.GetPrimaryHandHorOffset() / 50;
         if (normalizedVertical >= 50)
             // Map values from 50 to 100 to the range 0 to 1
             normalizedVertical = (normalizedVertical - 50) / 50;

@@ -1,0 +1,719 @@
+using System.Collections.Generic;
+using Comfort.Common;
+using EFT;
+using EFT.Interactive;
+using EFT.InventoryLogic;
+using SptVrFikaSync;
+using TarkovVR.ModSupport;
+using TarkovVR.ModSupport.FIKA;
+using TarkovVR.Source.Controls;
+using TarkovVR.Source.Player.VRManager;
+using UnityEngine;
+using Valve.VR;
+
+namespace TarkovVR.Source.Player.Interactions
+{
+    // Physical grab-and-drag for dead bodies (ragdolls).
+    //
+    // A dead body is an EFT `Corpse` whose ragdoll is a set of `RigidbodySpawner` bone
+    // rigidbodies. Once a corpse settles, EFT freezes every bone KINEMATIC (a static pose), and
+    // after it also leaves the camera view EFT tears the rigidbodies down (corpses are built
+    // keepRigidbody:false). We reactivate a settled/torn-down ragdoll the same way the game does
+    // on a hit — `corpse.Ragdoll.Start()` — then drive the grabbed bone. This is all base-EFT;
+    // nothing here calls into HollywoodFX. (HollywoodFX, if installed, only tweaks corpse-physics
+    // VALUES — no-sleep, a ~15s settle, a low depenetration velocity — none of which this needs;
+    // it just shapes the feel/timing.)
+    //
+    // Unlike loose loot, there's NO white dot / pointer: you grab a body ONLY by physically
+    // putting your (off) hand on a body part and pressing grip. The bone you're touching becomes
+    // a kinematic, hand-driven anchor; the rest of the ragdoll follows through its joints, so you
+    // can drag the whole body around. Releasing grip lets physics resume (with a throw if you
+    // flick).
+    //
+    // Tap-vs-hold: a quick grip TAP on a body still opens the corpse loot grid (the old
+    // grip-on-corpse behavior), so looting isn't lost — HOLD to drag, TAP to loot.
+    //
+    // All knobs are live-tunable statics so the feel can be A/B'd in the headset.
+    internal partial class HandsInteractionController
+    {
+        //--- Tunables ----------------------------------------------------------------
+        // Master switch. false = restore the old behavior (grip-on-corpse opens the loot grid,
+        // no dragging).
+        public static bool enableBodyGrab = true;
+
+        // How close the palm must be to a body part's collider to grab it (m). ~0.18 matches the
+        // loot/eat reach radii.
+        public static float bodyGrabRadius = 0.18f;
+
+        // Drive the grabbed bone's ROTATION from the hand too (rigid 6dof follow), letting you
+        // pose/turn the part you hold. false = position-only (the part hangs/rotates naturally
+        // under physics while you drag it by position).
+        public static bool bodyDriveRotation = true;
+
+        // Release throw: the bone keeps the controller's velocity (scaled) when you let go, so a
+        // flick tosses the body. Clamped so it can't launch across the map.
+        public static float bodyThrowVelocityScale = 1.0f;
+        public static float bodyMaxThrowSpeed = 8f;
+
+        // Tap-to-loot: a grip press shorter than this AND that moved the hand less than this
+        // counts as a TAP (opens the corpse loot grid) rather than a drag.
+        public static bool enableCorpseLootTap = true;
+        public static float bodyTapMaxTime = 0.25f;
+        public static float bodyTapMaxMove = 0.06f;
+
+        public static bool debugBodyGrab = false;
+
+        // Collision: while dragging, let the ragdoll bones escape geometry faster than
+        // HollywoodFX's deliberately-low default (1) so the body snags/catches on terrain less,
+        // and use continuous detection so a fast drag doesn't tunnel/hook on edges. Restored to
+        // bodyDragRestDepenetrationVelocity on release (the low value tames ragdoll explosions
+        // when the body is later shot). Too high can make a deeply-clipped body pop — keep it
+        // moderate.
+        public static bool bodyDragImproveCollision = true;
+        public static float bodyDragDepenetrationVelocity = 5f;
+        public static float bodyDragRestDepenetrationVelocity = 1f; // HollywoodFX's settled value
+
+        // Keep a grabbed body's ragdoll from being torn down. EFT destroys a corpse's
+        // joints+rigidbodies once it has settled AND left the camera view (keepRigidbody=false) —
+        // which mid-long-drag stopped the drag and broke the re-grab for a few seconds. true sets
+        // the ragdoll's keepRigidbody flag on grab so it survives going out of view.
+        public static bool bodyDragPreventTeardown = true;
+
+        // Weighted drag (req: "more of a drag than a pickup"). false = the original 1:1 snap, so
+        // the body goes exactly where your hand goes (easy to lift/carry). true = the anchor
+        // chases your hand at a CAPPED speed (feels heavy/laggy) and RESISTS being lifted, so the
+        // body drags along the ground instead of being hoisted. It's a shaped kinematic drive,
+        // not true mass — but it reads as a heavy drag. Tune live in the headset.
+        public static bool bodyDragWeighted = true;
+        public static float bodyDragMaxSpeed = 1.5f; // m/s the anchor can chase the hand (lower = heavier)
+        public static float bodyLiftFactor = 0.15f;  // upward-follow scale (0 = can't lift at all, 1 = free)
+        // Weighted-mode rotation: the body rotates toward your hand at up to this many deg/s, so you
+        // can twist the held part by rotating your wrist (capped for the heavy feel; raise toward
+        // ~1000 for near-instant, lower for heavier). Gated by bodyDriveRotation; the non-weighted
+        // path follows hand rotation rigidly (1:1).
+        public static float bodyDragMaxAngularSpeed = 240f;
+
+        // Movement slowdown while dragging a body — "the weight bears you down." A flat multiplier:
+        // every corpse weighs the same (the heavy feel is faked by the weighted-chase drive above, and
+        // EFT ragdoll masses are identical across bodies), so there's nothing to scale per-body.
+        // bodyDragSpeedMultiplier = locomotion speed while dragging (0.5 = half speed). Sprint already
+        // drops the body, so this only shapes walk/run. Tune live in the headset.
+        public static bool bodyDragSlowsMovement = true;
+        public static float bodyDragSpeedMultiplier = 0.001f;
+
+        // Live output: current locomotion speed multiplier (1 = not dragging / no slowdown). Set on
+        // grab, reset to 1 on release. MovementPatches.GetBodyRotation multiplies SetCharacterMovementSpeed by it.
+        public static float bodyDragMoveSpeedMultiplier = 1f;
+
+        // Release settle (your model): when you let go, the body STAYS in active physics — kept
+        // awake every step so it can't freeze mid-air — until it lands AND has been at rest for
+        // bodyFreezeDelay seconds, THEN it's frozen kinematic (stops simulating). This replaces
+        // EFT's own unpredictable ~15s settle freeze (which caused both "freezes when I let go" and
+        // "physics stays active forever"). bodyLandedSpeed = max bone speed (m/s) counted as "at
+        // rest"; bodyFreezeMaxTime = hard fallback so a body that never fully rests (jitter on
+        // uneven ground) still freezes. false = old behavior (reactivate once on release).
+        public static bool bodyManageReleaseSettle = true;
+        public static float bodyLandedSpeed = 0.3f;
+        public static float bodyFreezeDelay = 3f;
+        public static float bodyFreezeMaxTime = 20f;
+
+        // FIKA co-op: broadcast the dragged body's ragdoll pose so other players see it move
+        // (like the loose-loot sync). bodySyncInterval ~0.05 = 20/s. No-op solo / without FIKA.
+        public static bool syncBodyDragOverFika = true;
+        public static float bodySyncInterval = 0.05f;
+
+        // The dead player's NetId (GameWorld.ObservedPlayersCorpses key) of the corpse WE are
+        // dragging, or -1. Read by FIKASupport to tag our outgoing packets and to ignore echoes
+        // for a body we're already driving locally.
+        public static int localDraggedCorpseNetId = -1;
+
+        // Time.time of our most recent body grab — read by FIKASupport's steal arbitration so the
+        // newest grabber wins a contested corpse (whoever has dragged it longer yields). Same idea
+        // as heldItemGrabTime for loose loot.
+        public static float bodyGrabTime;
+
+        // Gates for the ragdoll's settle predicate (RagdollClass.Func_0 = (allAsleep, timePassed) ->
+        // shouldFreeze). EFT's settle coroutine freezes a corpse (-> kinematic, the "static pose") the
+        // first time this returns true. While we hold a body we point Func_0 at NeverFreeze so the game
+        // can't freeze it out from under us (this is the clean fix for the whole "freezes mid-drag /
+        // freezes on release / stays active forever" family of bugs — no per-frame fighting needed).
+        // When WE freeze a settled body we point it at AlwaysFreeze so the coroutine exits cleanly
+        // instead of looping forever.
+        private static readonly System.Func<bool, float, bool> RagdollNeverFreeze = (a, t) => false;
+        private static readonly System.Func<bool, float, bool> RagdollAlwaysFreeze = (a, t) => true;
+
+        //--- Runtime state -----------------------------------------------------------
+        private bool isDraggingBody;
+        private Rigidbody grabbedBodyRb;
+        private Corpse grabbedCorpse;
+        private RagdollClass grabbedRagdoll;
+        private Transform grabBodyHand;
+        private Vector3 grabBodyPosOffset;
+        private Quaternion grabBodyRotOffset;
+        private float lastBodySyncTime;
+
+        // Armed on grip-down over a body (even if no grabbable bone — the bound collider still
+        // identifies the corpse for tap-to-loot). Cleared on grip-up.
+        private bool bodyInteractionArmed;
+        private Corpse bodyInteractionCorpse;
+        private float bodyInteractionStartTime;
+        private Vector3 bodyInteractionStartHandPos;
+
+        private readonly Collider[] bodyOverlap = new Collider[16];
+
+        // Bodies we've let go of that are still falling/settling — kept in active physics until
+        // landed + timer, then frozen (see UpdateReleasedBodies). One entry per dragged-then-
+        // released ragdoll.
+        private sealed class ReleasedBody
+        {
+            public RagdollClass ragdoll;
+            public float restTimer;   // accumulated time below bodyLandedSpeed (resets if disturbed)
+            public float releaseTime; // for the bodyFreezeMaxTime hard fallback
+        }
+        private readonly List<ReleasedBody> releasedBodies = new List<ReleasedBody>();
+
+        private int DeadBodyMask => 1 << DEAD_BODY_LAYER;
+
+        //--- Per-frame entry (called from Update, before the loot pointer) ------------
+        private void UpdateBodyGrab()
+        {
+            if (!enableBodyGrab)
+            {
+                if (isDraggingBody) ReleaseBody();
+                bodyInteractionArmed = false;
+                return;
+            }
+
+            Transform hand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand?.transform : null;
+            if (hand == null)
+            {
+                if (isDraggingBody) ReleaseBody();
+                bodyInteractionArmed = false;
+                return;
+            }
+
+            // Grip released: end the drag and/or fire a tap-to-loot.
+            if (bodyInteractionArmed && secondaryHandGrip.stateUp)
+            {
+                bool wasTap = (Time.time - bodyInteractionStartTime) <= bodyTapMaxTime
+                              && (hand.position - bodyInteractionStartHandPos).sqrMagnitude <= bodyTapMaxMove * bodyTapMaxMove;
+                Corpse tapCorpse = bodyInteractionCorpse;
+                if (isDraggingBody) ReleaseBody();
+                bodyInteractionArmed = false;
+                bodyInteractionCorpse = null;
+                if (wasTap && enableCorpseLootTap)
+                    OpenCorpseLoot(tapCorpse);
+                return;
+            }
+
+            // Lost the grip without a clean stateUp (state simply went false) — release safely.
+            if (isDraggingBody && !secondaryHandGrip.state)
+            {
+                ReleaseBody();
+                bodyInteractionArmed = false;
+                return;
+            }
+
+            if (isDraggingBody)
+                return; // FixedUpdate drives the drag
+
+            // New grab on grip-down with a free off-hand.
+            if (!secondaryHandGrip.stateDown)
+                return;
+            if (heldItem != null || isSummoningLoot || VRGlobals.usingItem
+                || EatingInteractionController.ManualActive || NearForegrip())
+                return;
+
+            Vector3 palm = PalmOrigin();
+            if (TryFindBodyBone(palm, out RigidbodySpawner bone, out Corpse corpse))
+            {
+                bodyInteractionArmed = true;
+                bodyInteractionCorpse = corpse;
+                bodyInteractionStartTime = Time.time;
+                bodyInteractionStartHandPos = hand.position;
+                if (bone != null)
+                    BeginBodyGrab(bone, corpse, hand);
+            }
+        }
+
+        //--- Detection ---------------------------------------------------------------
+        // Finds the nearest grabbable ragdoll bone to the palm. Always reports the owning Corpse
+        // if any Deadbody collider is in range (so tap-to-loot works even when the hand is on the
+        // body's bound collider rather than a bone). bone may be null (corpse found, no bone).
+        private bool TryFindBodyBone(Vector3 palm, out RigidbodySpawner bone, out Corpse corpse)
+        {
+            bone = null;
+            corpse = null;
+            int count = Physics.OverlapSphereNonAlloc(palm, bodyGrabRadius, bodyOverlap, DeadBodyMask, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                Collider col = bodyOverlap[i];
+                if (col == null) continue;
+
+                Corpse c = col.GetComponentInParent<Corpse>();
+                if (c == null) continue;
+                if (corpse == null && bone == null) corpse = c; // remember any corpse for tap-loot
+
+                RigidbodySpawner rs = col.GetComponent<RigidbodySpawner>();
+                if (rs == null) continue; // not a ragdoll bone (e.g. the loot bound collider)
+
+                float d = (col.ClosestPoint(palm) - palm).sqrMagnitude;
+                if (d < best)
+                {
+                    best = d;
+                    bone = rs;
+                    corpse = c; // the corpse that owns the chosen bone wins
+                }
+            }
+            return corpse != null;
+        }
+
+        //--- Grab / drive / release --------------------------------------------------
+        private void BeginBodyGrab(RigidbodySpawner bone, Corpse corpse, Transform hand)
+        {
+            grabbedCorpse = corpse;
+            grabbedRagdoll = corpse != null ? corpse.Ragdoll : null;
+            grabbedBodyRb = bone.Rigidbody;
+
+            // Reactivate a settled (frozen-kinematic) or torn-down ragdoll the same way the game
+            // does when a corpse is shot (EFT's GoreController calls Ragdoll.Start()). Start()
+            // (re)creates the bone rigidbodies + joints and makes them dynamic again.
+            if (grabbedRagdoll != null && (grabbedBodyRb == null || grabbedBodyRb.isKinematic))
+            {
+                try { grabbedRagdoll.Start(); } catch { /* ragdoll may be mid-teardown */ }
+                grabbedBodyRb = bone.Rigidbody; // Start() may have (re)created it
+            }
+
+            if (grabbedBodyRb == null)
+            {
+                if (debugBodyGrab)
+                    Plugin.MyLog.LogWarning("[BodyGrab] no rigidbody on the grabbed bone — cannot grab.");
+                ResetBodyGrabState();
+                return;
+            }
+
+            // Keep this body's ragdoll from ever being torn down. EFT constructs corpses with
+            // keepRigidbody=false, so once a corpse has settled AND left the camera view its
+            // settle coroutine destroys the joints+rigidbodies (one per frame) — which mid-drag
+            // killed the drag and made the re-grab fight the in-progress teardown. Setting
+            // keepRigidbody (Ragdoll.Bool_0) = true skips that teardown branch entirely, so a body
+            // you've grabbed stays draggable regardless of view/time. Left true on release (a
+            // dragged body keeping its rigidbodies is desirable + costs ~nothing once it sleeps).
+            if (bodyDragPreventTeardown && grabbedRagdoll != null)
+                grabbedRagdoll.Bool_0 = true;
+
+            // Stop EFT's settle coroutine from freezing this body while we hold it. The coroutine only
+            // freezes when Func_0(...) returns true; NeverFreeze keeps the body a live ragdoll for as
+            // long as we hold it, so we no longer have to fight a freeze every frame. (Restored to a
+            // terminating predicate when the release-settle manager finally freezes it.)
+            if (grabbedRagdoll != null)
+                grabbedRagdoll.Func_0 = RagdollNeverFreeze;
+
+            // Weigh the player down: slow locomotion while a body is held.
+            bodyDragMoveSpeedMultiplier = bodyDragSlowsMovement ? bodyDragSpeedMultiplier : 1f;
+
+            // If we're re-grabbing a body that was still settling from a previous release, stop
+            // managing it (we drive it again now).
+            if (bodyManageReleaseSettle)
+                RemoveReleasedBody(grabbedRagdoll);
+
+            ThawRagdoll(); // make sure the rest of the body is dynamic + awake so it follows
+
+            // Pin the grabbed bone to the hand: kinematic = an infinite-mass anchor the joints
+            // pull the rest of the body toward. EFT registers every ragdoll bone with its custom
+            // physics-support system (GClass745 -> SyncTransformsClass), which sets the body's
+            // velocity each step — doing that on a KINEMATIC body spams "Setting velocity of a
+            // kinematic body is not supported". The game's own freeze (RagdollClass.method_1)
+            // always UNsupports first, so mirror that before going kinematic.
+            EFTPhysicsClass.GClass745.UnsupportRigidbody(grabbedBodyRb);
+            grabbedBodyRb.isKinematic = true;
+            grabbedBodyRb.useGravity = false;
+            grabbedBodyRb.detectCollisions = true;
+            if (bodyDragImproveCollision)
+            {
+                grabbedBodyRb.maxDepenetrationVelocity = bodyDragDepenetrationVelocity;
+                // ContinuousSpeculative is the one continuous mode valid on a kinematic body — it
+                // lets the dragged anchor sweep against geometry instead of catching/tunneling.
+                grabbedBodyRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            }
+
+            grabBodyHand = hand;
+            grabBodyPosOffset = hand.InverseTransformPoint(grabbedBodyRb.position);
+            grabBodyRotOffset = Quaternion.Inverse(hand.rotation) * grabbedBodyRb.rotation;
+
+            isDraggingBody = true;
+
+            // FIKA: resolve the corpse's network id so the drag can be broadcast (no-op solo).
+            localDraggedCorpseNetId = -1;
+            lastBodySyncTime = 0f;
+            bodyGrabTime = Time.time; // steal arbitration: newest grab wins (see FIKASupport)
+            if (InstalledMods.FIKAInstalled && syncBodyDragOverFika && TryGetCorpseNetId(corpse, out int corpseNetId))
+            {
+                localDraggedCorpseNetId = corpseNetId;
+                // We drive this corpse now, not the remote sync — drop any remote-drag bookkeeping
+                // so a later hand-off back to us re-enters the remote pin cleanly.
+                FikaVrSync.ClearRemoteDraggedCorpse(corpseNetId);
+            }
+
+            SteamVR_Actions._default.Haptic.Execute(0, 0.08f, 1, 0.5f, secondaryInputSource);
+            if (debugBodyGrab)
+                Plugin.MyLog.LogInfo($"[BodyGrab] grabbed {bone.name} on {(corpse != null ? corpse.name : "?")} netId={localDraggedCorpseNetId}");
+        }
+
+        // Driven in FixedUpdate so the kinematic anchor moves with proper joint solving.
+        private void FixedUpdate()
+        {
+            // Settle bodies we've let go of (keep them active until landed + timer, then freeze).
+            // Runs regardless of whether we're currently dragging.
+            if (bodyManageReleaseSettle)
+                UpdateReleasedBodies();
+
+            if (!isDraggingBody)
+                return;
+            if (grabbedBodyRb == null || grabBodyHand == null || !VRGlobals.inGame)
+            {
+                ReleaseBody();
+                return;
+            }
+
+            // Keep the rest of the ragdoll dynamic + awake every step so it follows the drag
+            // (bones auto-sleep or get re-frozen by the corpse's settle timer otherwise).
+            ThawRagdoll();
+
+            // Keep the GRABBED bone awake too. It's kinematic and driven by MovePosition; if PhysX
+            // sleeps it (e.g. you hold your hand still a moment), MovePosition stops taking effect
+            // and that one bone "freezes" until re-grabbed. ThawRagdoll skips the grabbed bone, so
+            // wake it here. (This was the "the bone I was grabbing freezes" bug.) Unconditional —
+            // WakeUp is a cheap no-op when already awake, and IsSleeping() is unreliable on a
+            // kinematic body.
+            grabbedBodyRb.WakeUp();
+
+            Vector3 target = grabBodyHand.TransformPoint(grabBodyPosOffset);
+            if (bodyDragWeighted)
+            {
+                // Heavy drag: chase the hand at a capped speed and resist upward lift, so the
+                // body drags along the ground rather than being hoisted.
+                Vector3 cur = grabbedBodyRb.position;
+                Vector3 delta = target - cur;
+                if (delta.y > 0f)
+                    delta.y *= bodyLiftFactor;
+                float maxStep = bodyDragMaxSpeed * Time.fixedDeltaTime;
+                grabbedBodyRb.MovePosition(cur + Vector3.ClampMagnitude(delta, maxStep));
+                // Rotate toward the hand too (capped, for the heavy feel) so twisting your wrist
+                // turns the held part. bodyDriveRotation=false leaves rotation to physics (dangle).
+                if (bodyDriveRotation)
+                {
+                    Quaternion targetRot = grabBodyHand.rotation * grabBodyRotOffset;
+                    grabbedBodyRb.MoveRotation(Quaternion.RotateTowards(
+                        grabbedBodyRb.rotation, targetRot, bodyDragMaxAngularSpeed * Time.fixedDeltaTime));
+                }
+            }
+            else
+            {
+                grabbedBodyRb.MovePosition(target);
+                if (bodyDriveRotation)
+                    grabbedBodyRb.MoveRotation(grabBodyHand.rotation * grabBodyRotOffset);
+            }
+
+            // FIKA: broadcast the FULL ragdoll pose (every bone) so other players see the exact same
+            // ragdoll (throttled). Syncing all bones — rather than one pinned bone + local physics —
+            // avoids the dangling bones diverging/stretching on the observer's screen.
+            if (InstalledMods.FIKAInstalled && syncBodyDragOverFika && localDraggedCorpseNetId >= 0
+                && Time.time - lastBodySyncTime >= bodySyncInterval)
+            {
+                lastBodySyncTime = Time.time;
+                FikaVrSync.SendDraggedBody(localDraggedCorpseNetId, grabbedCorpse);
+            }
+        }
+
+        // Keep every bone of the grabbed ragdoll dynamic AND awake (except the hand-driven one)
+        // so the joints transmit the drag through the whole body, every physics step.
+        //   - The corpse's settle timer can re-freeze bones KINEMATIC mid-drag -> un-kinematic.
+        //   - Bones that go still for a moment AUTO-SLEEP; PhysX won't reliably wake a sleeping
+        //     bone just because the kinematic bone it's jointed to is MovePosition'd, so it lags
+        //     behind and the mesh stretches between your hand and the asleep bones. Force them
+        //     awake each step (this was the "freeze + stretch after a few seconds" bug).
+        private void ThawRagdoll()
+        {
+            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll.RigidbodySpawner_0 : null;
+            if (bones == null)
+                return;
+            for (int i = 0; i < bones.Length; i++)
+            {
+                Rigidbody rb = bones[i] != null ? bones[i].Rigidbody : null;
+                if (rb == null || rb == grabbedBodyRb)
+                    continue;
+                // Always assert dynamic + gravity (not only when re-thawing a kinematic bone) so a
+                // dragged body's limbs hang/droop under gravity instead of floating rigidly.
+                if (rb.isKinematic)
+                    rb.isKinematic = false;
+                rb.useGravity = true;
+                rb.detectCollisions = true;
+                if (rb.IsSleeping())
+                    rb.WakeUp();
+                if (bodyDragImproveCollision)
+                {
+                    rb.maxDepenetrationVelocity = bodyDragDepenetrationVelocity;
+                    rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                }
+            }
+        }
+
+        // Restore the bones' (raised) depenetration velocity to the settled value on release, so a
+        // later interaction (e.g. shooting the corpse) doesn't pop with HollywoodFX's tame default
+        // overridden.
+        private void RestoreRagdollCollision()
+        {
+            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll.RigidbodySpawner_0 : null;
+            if (bones == null)
+                return;
+            for (int i = 0; i < bones.Length; i++)
+            {
+                Rigidbody rb = bones[i] != null ? bones[i].Rigidbody : null;
+                if (rb != null)
+                    rb.maxDepenetrationVelocity = bodyDragRestDepenetrationVelocity;
+            }
+        }
+
+        private void ReleaseBody()
+        {
+            if (grabbedBodyRb != null)
+            {
+                grabbedBodyRb.isKinematic = false;
+                grabbedBodyRb.useGravity = true;
+                grabbedBodyRb.detectCollisions = true;
+
+                // Throw: carry the controller's release velocity (scaled + clamped) into the bone.
+                Vector3 v = ControllerVelocity.GetSteamVRVelocity(secondaryInputSource) * bodyThrowVelocityScale;
+                if (v.sqrMagnitude > 0.0001f)
+                    grabbedBodyRb.velocity = Vector3.ClampMagnitude(v, bodyMaxThrowSpeed);
+
+                // Re-register the bone with EFT's physics-support system (we unsupported it on
+                // grab); now non-kinematic, it rejoins the ragdoll like its siblings. Mirrors
+                // RagdollClass.Start()'s order (velocity, then SupportRigidbody at Low quality).
+                EFTPhysicsClass.GClass745.SupportRigidbody(grabbedBodyRb, 0f);
+                grabbedBodyRb.WakeUp();
+
+                SteamVR_Actions._default.Haptic.Execute(0, 0.05f, 1, 0.3f, secondaryInputSource);
+            }
+
+            // Re-enable physics on the WHOLE ragdoll so the body FALLS/settles instead of freezing
+            // mid-air. We only re-activated the grabbed bone above; the others can be left kinematic
+            // (a settle-freeze the drag's ThawRagdoll was countering) or asleep, so without this the
+            // body hangs frozen on release. Mirrors the remote receiver's ReactivateRagdoll (which
+            // already fixed this on the OTHER clients) — the local owner was missing it. (A body
+            // grabbed while long-settled looked fine because Ragdoll.Start() reactivated all bones
+            // up front; this makes every grab behave that way on release.)
+            ReactivateRagdollBones();
+
+            if (bodyDragImproveCollision)
+                RestoreRagdollCollision();
+
+            // FIKA: tell other players the drag ended (they leave the body at its last synced pose).
+            if (InstalledMods.FIKAInstalled && localDraggedCorpseNetId >= 0)
+                FikaVrSync.SendDraggedBodyReleased(localDraggedCorpseNetId);
+
+            // Hand the body to the release-settle manager: it stays in active physics (kept awake)
+            // until it lands and rests, then gets frozen (and Func_0 restored). This is what makes
+            // "let go -> falls -> settles -> freezes" deterministic instead of relying on EFT's timing.
+            if (bodyManageReleaseSettle && grabbedRagdoll != null)
+            {
+                AddReleasedBody(grabbedRagdoll);
+            }
+            else if (grabbedRagdoll != null)
+            {
+                // Manager off (debug/AB): hand the freeze back to EFT's own coroutine, but make it
+                // release-relative — freeze once all bones go to sleep (i.e. landed + rested) rather
+                // than on the cumulative timer that's already counted our whole drag. Without this the
+                // NeverFreeze we set on grab would leave the body active forever.
+                grabbedRagdoll.Func_0 = (allAsleep, t) => allAsleep;
+            }
+
+            ResetBodyGrabState();
+        }
+
+        //--- Release-settle manager --------------------------------------------------
+        private void AddReleasedBody(RagdollClass ragdoll)
+        {
+            RemoveReleasedBody(ragdoll);
+            releasedBodies.Add(new ReleasedBody { ragdoll = ragdoll, restTimer = 0f, releaseTime = Time.time });
+        }
+
+        private void RemoveReleasedBody(RagdollClass ragdoll)
+        {
+            for (int i = releasedBodies.Count - 1; i >= 0; i--)
+                if (ReferenceEquals(releasedBodies[i].ragdoll, ragdoll))
+                    releasedBodies.RemoveAt(i);
+        }
+
+        // Per physics step: for each let-go body, keep every bone awake + dynamic + gravity (so it
+        // FALLS instead of freezing mid-air), and watch its speed. Once all bones have been at rest
+        // (< bodyLandedSpeed) continuously for bodyFreezeDelay seconds — i.e. it landed and stopped
+        // — freeze it kinematic. bodyFreezeMaxTime is a hard fallback for a body that never fully
+        // stills.
+        private void UpdateReleasedBodies()
+        {
+            if (releasedBodies.Count == 0)
+                return;
+            float dt = Time.fixedDeltaTime;
+            float landedSqr = bodyLandedSpeed * bodyLandedSpeed;
+
+            for (int i = releasedBodies.Count - 1; i >= 0; i--)
+            {
+                ReleasedBody body = releasedBodies[i];
+                RigidbodySpawner[] bones = body.ragdoll != null ? body.ragdoll.RigidbodySpawner_0 : null;
+                if (bones == null)
+                {
+                    releasedBodies.RemoveAt(i);
+                    continue;
+                }
+
+                float maxSpeedSqr = 0f;
+                bool anyValid = false;
+                for (int b = 0; b < bones.Length; b++)
+                {
+                    Rigidbody rb = bones[b] != null ? bones[b].Rigidbody : null;
+                    if (rb == null)
+                        continue;
+                    anyValid = true;
+                    // Keep it active: a falling body must not sleep/freeze mid-air, and we want it
+                    // genuinely simulating (reacting to bumps) during the post-landing timer.
+                    if (rb.isKinematic)
+                        rb.isKinematic = false;
+                    rb.useGravity = true;
+                    rb.detectCollisions = true;
+                    if (rb.IsSleeping())
+                        rb.WakeUp();
+                    float s = rb.velocity.sqrMagnitude;
+                    if (s > maxSpeedSqr)
+                        maxSpeedSqr = s;
+                }
+                if (!anyValid)
+                {
+                    releasedBodies.RemoveAt(i);
+                    continue;
+                }
+
+                if (maxSpeedSqr < landedSqr)
+                    body.restTimer += dt;
+                else
+                    body.restTimer = 0f;
+
+                if (body.restTimer >= bodyFreezeDelay || Time.time - body.releaseTime >= bodyFreezeMaxTime)
+                {
+                    FreezeReleasedBody(body.ragdoll, bones);
+                    releasedBodies.RemoveAt(i);
+                }
+            }
+        }
+
+        // Freeze a settled body kinematic in place (the efficient "done" state), mirroring EFT's own
+        // RagdollClass.method_1 (unsupport + Discrete + kinematic). Restores the tame depenetration
+        // velocity too so a later shot doesn't pop, and restores Func_0 to a terminating predicate so
+        // the settle coroutine we kept alive (NeverFreeze) exits cleanly instead of spinning forever.
+        private void FreezeReleasedBody(RagdollClass ragdoll, RigidbodySpawner[] bones)
+        {
+            for (int b = 0; b < bones.Length; b++)
+            {
+                Rigidbody rb = bones[b] != null ? bones[b].Rigidbody : null;
+                if (rb == null)
+                    continue;
+                EFTPhysicsClass.GClass745.UnsupportRigidbody(rb);
+                rb.maxDepenetrationVelocity = bodyDragRestDepenetrationVelocity;
+                rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
+                rb.isKinematic = true;
+            }
+            if (ragdoll != null)
+                ragdoll.Func_0 = RagdollAlwaysFreeze;
+        }
+
+        // Force every bone of the dragged ragdoll back into active physics (dynamic + gravity +
+        // awake) so the body resumes falling/settling on release. No SupportRigidbody here — some
+        // bones may still be registered with EFT's support system locally (double-registering leaks
+        // a List_0 entry), and being unsupported doesn't stop a dynamic body from falling.
+        private void ReactivateRagdollBones()
+        {
+            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll.RigidbodySpawner_0 : null;
+            if (bones == null)
+                return;
+            for (int i = 0; i < bones.Length; i++)
+            {
+                Rigidbody rb = bones[i] != null ? bones[i].Rigidbody : null;
+                if (rb == null)
+                    continue;
+                if (rb.isKinematic)
+                    rb.isKinematic = false;
+                rb.useGravity = true;
+                rb.detectCollisions = true;
+                rb.WakeUp();
+            }
+        }
+
+        private void ResetBodyGrabState()
+        {
+            isDraggingBody = false;
+            grabbedBodyRb = null;
+            grabBodyHand = null;
+            grabbedCorpse = null;
+            grabbedRagdoll = null;
+            localDraggedCorpseNetId = -1;
+            bodyDragMoveSpeedMultiplier = 1f; // restore full movement speed when we stop dragging
+        }
+
+        // FIKA co-op "steal": another player grabbed the body we were dragging more recently, so
+        // hand it over — stop our local drive WITHOUT throwing it or broadcasting a release. Their
+        // incoming packets now drive our copy (the FikaSync module pins the bone THEY hold and lets the
+        // rest ragdoll locally). Invoked via FikaVrSync.onYieldBodyDrag from the module's BodyDragApply
+        // when we lose the contest. (Leaves the ragdoll live; the remote pin takes over the bone.)
+        public void RelinquishBodyDrag()
+        {
+            if (!isDraggingBody)
+                return;
+            if (bodyDragImproveCollision)
+                RestoreRagdollCollision();
+            SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.6f, secondaryInputSource);
+            ResetBodyGrabState();
+            bodyInteractionArmed = false;
+            bodyInteractionCorpse = null;
+        }
+
+        // Reverse-lookup a corpse's network id (GameWorld.ObservedPlayersCorpses is keyed by the
+        // dead player's NetId). EFT-only; only meaningful for networked (ObservedCorpse) bodies —
+        // returns false for non-networked corpses (which simply won't sync).
+        private static bool TryGetCorpseNetId(Corpse corpse, out int netId)
+        {
+            netId = -1;
+            if (corpse == null)
+                return false;
+            GameWorld gameWorld = Singleton<GameWorld>.Instance;
+            if (gameWorld == null || gameWorld.ObservedPlayersCorpses == null)
+                return false;
+            foreach (var kv in gameWorld.ObservedPlayersCorpses)
+            {
+                if (ReferenceEquals(kv.Value, corpse))
+                {
+                    netId = kv.Key;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        //--- Corpse loot grid (the old grip-on-corpse interaction) --------------------
+        // Opens the corpse's loot grid. Used by the tap-to-loot path here and by
+        // ProcessInteractiveObjects when body-grab is disabled, so looting is never lost.
+        private void OpenCorpseLoot(Corpse corpse)
+        {
+            if (corpse == null)
+                return;
+            GetActionsClass.Class1748 corpseInteractionClass = new GetActionsClass.Class1748();
+            corpseInteractionClass.compoundItem = (InventoryEquipment)corpse.Item;
+            corpseInteractionClass.rootItem = (InventoryEquipment)corpse.Item;
+            corpseInteractionClass.lootItemOwner = corpse.ItemOwner;
+            corpseInteractionClass.controller = VRGlobals.player.InventoryController;
+            corpseInteractionClass.owner = PlayerOwner;
+            corpseInteractionClass.method_3();
+        }
+    }
+}

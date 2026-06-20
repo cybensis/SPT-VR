@@ -18,6 +18,9 @@ using TarkovVR.Source.Settings;
 namespace TarkovVR
 {
     [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.7")]
+    // Soft: the FikaSync module only loads its plugin when FIKA is present, so we must NOT hard-depend
+    // on it (that would break solo VR). We still ship its DLL alongside ours and load after it here.
+    [BepInDependency("com.matsix.sptvr.fikasync", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
@@ -293,6 +296,21 @@ namespace TarkovVR
                     // Apply conditional patches
                     InstalledMods.FIKAInstalled = true;
                     ApplyPatches("TarkovVR.ModSupport.FIKA");
+                    // The custom-packet sync (arm poses + body-drag) now lives in the standalone
+                    // SPT-VR-FikaSync.dll module, which self-initializes via its OWN plugin so that
+                    // flatscreen / headless peers can register + relay + render it too (that's the fix
+                    // for the "Undefined packet" busy-hands crash). We only feed it the VR-side hooks it
+                    // needs for the body-drag steal arbitration.
+                    try
+                    {
+                        SptVrFikaSync.FikaVrSync.getLocalDraggedCorpseNetId = () => Source.Player.Interactions.HandsInteractionController.localDraggedCorpseNetId;
+                        SptVrFikaSync.FikaVrSync.getLocalBodyGrabTime = () => Source.Player.Interactions.HandsInteractionController.bodyGrabTime;
+                        SptVrFikaSync.FikaVrSync.onYieldBodyDrag = () => VRGlobals.handsInteractionController?.RelinquishBodyDrag();
+                    }
+                    catch (Exception e)
+                    {
+                        MyLog.LogError($"SPT-VR-FikaSync.dll missing or failed to bind ({e.Message}). Install it next to SPT-VR.dll for co-op sync.");
+                    }
                     MyLog.LogInfo("Dependent mod found and patches applied.");
                 }
                 else
@@ -355,6 +373,17 @@ namespace TarkovVR
             else
             {
                 MyLog.LogWarning("WeaponCustomizer dll not found, support patches will not be applied.");
+            }
+
+            // HollywoodFX — soft dependency for body dragging only. We don't apply any patches or
+            // need its types; we just note it's present so the body-drag can lean on its corpse-physics
+            // tuning (bounce/drag/mass, no auto-sleep) and skip the tweaks it already owns. Body
+            // dragging works fully without it.
+            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\HollywoodFX\\HollywoodFX.dll");
+            if (File.Exists(modDllPath))
+            {
+                InstalledMods.HollywoodFXInstalled = true;
+                MyLog.LogInfo("HollywoodFX detected — body dragging will use its ragdoll physics.");
             }
 
             // Repeat for other mods (AmandsGraphics, FIKA) as needed

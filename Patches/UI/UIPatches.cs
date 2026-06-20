@@ -665,6 +665,13 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(EFT.Player), "InteractionRaycast")]
         private static bool Raycaster(EFT.Player __instance)
         {
+            // Defensive: this prefix REPLACES InteractionRaycast with the VR raycast, which reads LOCAL
+            // rig state (VRGlobals.vrPlayer/VRCam). It must only ever run for your own player. Today
+            // ObservedPlayer overrides InteractionRaycast (so the base-method patch never fires for
+            // remotes) and only the local GamePlayerOwner invokes it -- but gate it explicitly so no
+            // future call path can run the VR raycast on a bot/remote player.
+            if (!__instance.IsYourPlayer)
+                return true; // let vanilla interaction run for non-local players
             if (__instance._playerLookRaycastTransform == null || !__instance.HealthController.IsAlive || !(VRGlobals.vrPlayer is RaidVRPlayerManager))
             {
                 return false;
@@ -750,11 +757,17 @@ namespace TarkovVR.Patches.UI
             
             else if (interactableObject is LootItem lootItem)
             {
-                if (lootItem.Item == null || VRGlobals.handsInteractionController.heldItem != null)
+                var hic = VRGlobals.handsInteractionController;
+                bool isHeld = hic != null && lootItem != null && hic.heldItem == lootItem;
+                if (lootItem.Item == null)
                 {
                     interactableObject = null;
                 }
-                else if (lootItem.Item != null && lootItem.Item is Weapon { IsOneOff: not false } weapon && weapon.Repairable?.Durability == 0f)
+                else if (!isHeld && (HandsInteractionController.suppressWorldLootMenu || (hic != null && hic.heldItem != null)))
+                {
+                    interactableObject = null;
+                }
+                else if (lootItem.Item is Weapon { IsOneOff: not false } weapon && weapon.Repairable?.Durability == 0f)
                 {
                     interactableObject = null;
                 }
@@ -842,6 +855,23 @@ namespace TarkovVR.Patches.UI
             return true;
         }
         
+
+        // FIKA co-op: the gaze "Take" on a VR-held loot item must stow the SAME way the behind-the-
+        // back gesture does (release -> reconcile gap -> RunNetworkTransaction), or the equip/removal
+        // doesn't replicate to other clients — a plain RunNetworkTransaction while the item is still on
+        // the mod's custom held-sync path won't fire RemoveLootItem/DestroyLoot there. smethod_10 is the
+        // Take entry point BEFORE the pickup animation/state starts, so rerouting here bypasses the
+        // animation entirely (user's choice) and hands off to StowHeldItemToInventory. Non-held takes
+        // fall through to the normal path (DisableLootDistanceCheck handles Class1750.method_0).
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GetActionsClass), "smethod_10")]
+        private static bool RerouteHeldItemTake(Item rootItem)
+        {
+            var hic = VRGlobals.handsInteractionController;
+            if (hic != null && hic.TryStowHeldItem(rootItem))
+                return false; // we own this Take now — skip the native animation + transaction
+            return true;
+        }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
@@ -944,13 +974,23 @@ namespace TarkovVR.Patches.UI
         }
 
 
+        // Suppress BSG's native optic-magnification ("zoom times") panel entirely - it's not wanted
+        // in VR. AnimatedTextPanel is a shared type, so match ONLY the captured optic crate panel by
+        // reference and let every other AnimatedTextPanel show normally. Returning false skips Show().
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(AnimatedTextPanel), "Show")]
+        private static bool SuppressOpticZoomPanel(AnimatedTextPanel __instance)
+        {
+            return !(opticUi != null && __instance == opticUi);
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(AnimatedTextPanel), "Show")]
         private static void SetAmmoCountUi(AnimatedTextPanel __instance)
         {
             if (VRGlobals.vrPlayer)
             {
-                VRGlobals.vrPlayer.showScopeZoom = true;
+                VRGlobals.vrPlayer.showScopeZoom = false;
             }
         }
 
@@ -1333,13 +1373,29 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(GamePlayerOwner), "InteractionsChangedHandler")]
         private static bool BlockInteractionMenuWhenHolding()
         {
-            if (VRGlobals.handsInteractionController == null
-                || VRGlobals.handsInteractionController.heldItem == null)
+            EFT.Player player = VRGlobals.player;
+
+            // Guard against a dead LootItem: when the gaze rests on a loose item (or corpse) whose
+            // backing Item has gone null -- e.g. it's being position-synced/removed by ANOTHER player,
+            // or a corpse mid ragdoll-sync (body-drag) -- EFT's GetActionsClass.smethod_8 NREs while
+            // building its action list, spamming the log every frame. Block the handler so it never
+            // runs on a dead item, and clear the stale interactable. (Isolated from the net pipeline,
+            // but noisy in co-op; surfaced alongside the body-drag/loose-item sync work.)
+            if (player != null && player.InteractableObject is LootItem dead && dead.Item == null)
+            {
+                player.GetComponent<GamePlayerOwner>()?.ClearInteractionState();
+                return false;
+            }
+
+            var hic = VRGlobals.handsInteractionController;
+            if (hic == null || hic.heldItem == null)
+                return true; // not holding — normal interaction menu behavior
+
+            // Holding an item: allow EFT context menu only for the item you are holding, block it for everything else (doors, containers, corpses, etc)
+            if (player != null && player.InteractableObject is LootItem looked && looked == hic.heldItem)
                 return true;
 
-            // Also clear any existing interaction state so stale menus disappear
-            GamePlayerOwner owner = VRGlobals.player?.GetComponent<GamePlayerOwner>();
-            owner?.ClearInteractionState();
+            player?.GetComponent<GamePlayerOwner>()?.ClearInteractionState();
             return false;
         }
     }

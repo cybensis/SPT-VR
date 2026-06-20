@@ -1,5 +1,6 @@
 ﻿using EFT;
 using EFT.Hideout;
+using EFT.Interactive;
 using EFT.UI;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
@@ -24,6 +25,7 @@ namespace TarkovVR.Source.Player.VRManager
         // so use this to drop it down a little bit
         public float downwardOffset = 0.1f;
         private Vector3 interactUiPos;
+        private LootItem interactLootItem; // the loot item the menu is for, so it can track its movement
         private bool raycastHit = false;
         public bool positionTransitUi;
         private Quaternion camRotation;
@@ -55,6 +57,13 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 else if (raycastHit && interactionUi.gameObject.active)
                 {
+                    // Keep the menu centred on the loot item as it MOVES (e.g. while held) — the
+                    // raycast only fires PlaceUiInteracter on change, so re-derive the centre here.
+                    if (interactLootItem != null && interactLootItem._boundCollider != null)
+                    {
+                        Vector3 c = interactLootItem._boundCollider.bounds.center;
+                        interactUiPos = c + (VRGlobals.VRCam.transform.position - c).normalized * dirMultiplier;
+                    }
                     interactionUi.position = interactUiPos;
                     //interactionUi.LookAt(Camera.main.transform);
                     interactionUi.LookAt(VRGlobals.VRCam.transform);
@@ -124,6 +133,20 @@ namespace TarkovVR.Source.Player.VRManager
                 BoxCollider boxCollider = hit.collider as BoxCollider;
                 Vector3 offsetDirection = (rayOrigin - hit.point).normalized;
                 interactUiPos = hit.point + offsetDirection * dirMultiplier; // Adjust the offset distance as needed
+
+                // Loose loot items: anchor the menu to the CENTRE of the item (its bound collider's
+                // centre) so it always pops in the middle of the item, not on whichever face the
+                // gaze ray happened to hit. Remembered so Update keeps it on the item as it MOVES.
+                LootItem lootItem = hit.collider.GetComponentInParent<LootItem>();
+                interactLootItem = (lootItem != null && lootItem._boundCollider != null) ? lootItem : null;
+                if (interactLootItem != null)
+                {
+                    Vector3 itemCenter = lootItem._boundCollider.bounds.center;
+                    interactUiPos = itemCenter + (rayOrigin - itemCenter).normalized * dirMultiplier;
+                    raycastHit = true;
+                    return;
+                }
+
                 // If the interactable object has a box collider then use this to set the UI position to the very center
                 // of the face of the collider the raycast has hit.
                 if (boxCollider != null)
@@ -154,7 +177,7 @@ namespace TarkovVR.Source.Player.VRManager
             //}
         }
 
-        public void StopPlacingUi() { raycastHit = false; }
+        public void StopPlacingUi() { raycastHit = false; interactLootItem = null; }
 
 
         // We need to extend the raycast distance when the player is looking down because if a filing cabinet was in

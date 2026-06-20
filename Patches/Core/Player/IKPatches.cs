@@ -9,6 +9,7 @@ using EFT.ItemInHandSubsystem;
 using EFT.UI.Ragfair;
 using RootMotion.FinalIK;
 using Valve.VR;
+using EFT.InputSystem;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -329,47 +330,45 @@ namespace TarkovVR.Patches.Core.Player
 
         private static bool armPoseFrozen = false;
 
-        // Re-apply the frozen arm pose in Application.onBeforeRender (the LAST write of the frame, after every
-        // LateUpdate + IK solve, right before render) instead of trusting the method_20 prefix to be the final
-        // word. The method_20 freeze runs MID-frame (inside VisualPass / Player.LateUpdate), so several systems
-        // can overwrite the arm bones AFTER it the same frame: EFT's own per-frame hand IK solve (method_19,
-        // which runs right after method_20), the FinalIK LimbIK/TwistRelax SolverManager LateUpdate, and the
-        // SteamVR off-hand pose callback. Whether the freeze or one of those wins is Unity LateUpdate/callback
-        // ORDER, which Unity does not guarantee -> on the LEFT arm it's a per-session coin-flip whether the
-        // freeze survives ("totally random; sometimes the left wrist twists"). The RIGHT arm wins reliably only
-        // because its competitor (rightArmIk) is hard-disabled while a gun is held. Re-stamping the frozen
-        // rotations in onBeforeRender makes the freeze deterministically the last writer for BOTH arms, so the
-        // left becomes as reliable as the right. false = old behavior (method_20-only apply; left stays random).
-        public static bool freezeArmPoseInBeforeRender = true;
-        private static bool beforeRenderHooked = false;
+        // The forearm/upperarm bones each carry a TwistRelax (FinalIK) component (set up in InitVRPatches,
+        // weights 3/1.8/1/1) that RE-ROLLS the forearm twist every LateUpdate - i.e. AFTER our method_20
+        // freeze - so it overrides the frozen twist on exactly the twist DOF. On the RIGHT arm the hand is
+        // stably pinned to the gun marker, so TwistRelax relaxes toward ~0 roll and looks fine; on the LEFT
+        // the reference is less stable, so it intermittently rolls the frozen forearm while the IK keeps the
+        // HAND pinned to the gun -> the observed "left wrist twists, hand stays on the gun" that "works for a
+        // while then starts twisting." While a run-anim-disabled sprint holds the arm frozen we zero these
+        // weights so the frozen twist survives, then restore them. This touches the twist bones ONLY, never
+        // the IK hand pin, so the hands stay on the gun. false = leave TwistRelax alone (old behavior).
+        public static bool holdForearmTwistDuringSprint = true;
+        // Indices into the arm-bone chain that own a TwistRelax (upperarm, forearm1, forearm2, forearm3/wrist).
+        private static readonly int[] twistRelaxBoneIdx = { 1, 2, 3, 4 };
+        private static TwistRelax[] rightTwistRelax;
+        private static float[] rightTwistRelaxWeights; // original weights, restored when not frozen
+        private static TwistRelax[] leftTwistRelax;
+        private static float[] leftTwistRelaxWeights;
+        private static bool armTwistRelaxed = false;   // true while we've zeroed the weights for a freeze
 
-        // Lazily hook onBeforeRender the first time the freeze path runs (cheap idempotent guard). The handler
-        // self-gates, so registering once for the session is fine.
-        private static void EnsureBeforeRenderHook()
+        // Resolve the TwistRelax components (+ their configured weights) on an already-resolved arm chain.
+        private static void ResolveTwistRelax(Transform[] armBones, ref TwistRelax[] trs, ref float[] weights)
         {
-            if (beforeRenderHooked) return;
-            Application.onBeforeRender += ReapplyFrozenArmPoseBeforeRender;
-            beforeRenderHooked = true;
+            if (armBones == null || trs != null) return; // resolve once per arm
+            trs = new TwistRelax[twistRelaxBoneIdx.Length];
+            weights = new float[twistRelaxBoneIdx.Length];
+            for (int k = 0; k < twistRelaxBoneIdx.Length; k++)
+            {
+                Transform t = armBones[twistRelaxBoneIdx[k]];
+                TwistRelax tr = t != null ? t.GetComponent<TwistRelax>() : null;
+                trs[k] = tr;
+                weights[k] = tr != null ? tr.weight : 0f;
+            }
         }
 
-        // Last-writer re-stamp of the frozen arm rotations. Only acts while armPoseFrozen (set/cleared by the
-        // method_20 prefix), so it stops the instant a run-anim-disabled sprint ends - no stuck freeze.
-        private static void ReapplyFrozenArmPoseBeforeRender()
+        // frozen=true -> zero the weights (hold the frozen twist); false -> restore the configured weights.
+        private static void SetTwistRelaxFrozen(TwistRelax[] trs, float[] weights, bool frozen)
         {
-            if (!freezeArmPoseInBeforeRender || !armPoseFrozen)
-                return;
-
-            var p = VRGlobals.player;
-            if (p == null || !p.IsYourPlayer || p.HandsIsEmpty)
-                return;
-
-            if (rightArmBones != null && rightFrozenArmRot != null)
-                for (int i = 0; i < rightArmBones.Length; i++)
-                    if (rightArmBones[i] != null) rightArmBones[i].localRotation = rightFrozenArmRot[i];
-
-            if (leftArmBones != null && leftFrozenArmRot != null)
-                for (int i = 0; i < leftArmBones.Length; i++)
-                    if (leftArmBones[i] != null) leftArmBones[i].localRotation = leftFrozenArmRot[i];
+            if (trs == null) return;
+            for (int i = 0; i < trs.Length; i++)
+                if (trs[i] != null) trs[i].weight = frozen ? 0f : weights[i];
         }
 
         // Resolve both arm bone chains off the wrists. Returns true if AT LEAST ONE arm resolves successfully.
@@ -431,6 +430,10 @@ namespace TarkovVR.Patches.Core.Player
                 }
             }
 
+            // Cache the TwistRelax components (once per arm) now that the chains are resolved.
+            ResolveTwistRelax(rightArmBones, ref rightTwistRelax, ref rightTwistRelaxWeights);
+            ResolveTwistRelax(leftArmBones, ref leftTwistRelax, ref leftTwistRelaxWeights);
+
             // Proceed as long as we've found at least one arm
             return rightArmBones != null || leftArmBones != null;
         }
@@ -447,7 +450,7 @@ namespace TarkovVR.Patches.Core.Player
             bool trulyInAir = airborneFreefallTime > 0f &&
                               __instance.MovementContext.FreefallTime > airborneFreefallTime;
 
-            bool disableAnim = (__instance.IsSprintEnabled && VRGlobals.player.MovementContext.PoseLevel_1 != 0 && VRSettings.GetDisableRunAnim()) || trulyInAir ;
+            bool disableAnim = (__instance.IsSprintEnabled && VRGlobals.player.MovementContext.PoseLevel_1 != 0 && VRSettings.GetDisableRunAnim()) || trulyInAir;
 
             float currentTime = Time.time;
 
@@ -472,7 +475,20 @@ namespace TarkovVR.Patches.Core.Player
             // Removed !VRSettings.GetLeftHandedMode() so this executes universally.
             if (VRGlobals.firearmController != null && ResolveArmBones())
             {
-                EnsureBeforeRenderHook(); // make the freeze the deterministic last writer (see flag note)
+                // Hold (zero) the TwistRelax forearm-roll during the freeze so it can't re-twist the frozen
+                // arm; restore the configured weights otherwise. Touches the twist DOF only, not the hand pin.
+                if (holdForearmTwistDuringSprint)
+                {
+                    SetTwistRelaxFrozen(rightTwistRelax, rightTwistRelaxWeights, runAnimDisabledSprint);
+                    SetTwistRelaxFrozen(leftTwistRelax, leftTwistRelaxWeights, runAnimDisabledSprint);
+                    armTwistRelaxed = runAnimDisabledSprint;
+                }
+                else if (armTwistRelaxed) // flag turned off mid-freeze -> restore once so weights don't stick at 0
+                {
+                    SetTwistRelaxFrozen(rightTwistRelax, rightTwistRelaxWeights, false);
+                    SetTwistRelaxFrozen(leftTwistRelax, leftTwistRelaxWeights, false);
+                    armTwistRelaxed = false;
+                }
 
                 if (runAnimDisabledSprint)
                 {

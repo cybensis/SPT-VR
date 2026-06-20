@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ============================================================================================
+       SPT-VR-FikaSync.dll  —  standalone FIKA companion plugin.
+
+       This is the SHARED networking layer for the VR mod's custom FIKA packets (VR arm poses +
+       body-drag). It has NO SteamVR/VR dependency, so it loads fine on a FLATSCREEN player or a
+       HEADLESS client. Installing it on those peers lets them REGISTER the custom packets (so they
+       no longer crash on an "Undefined packet" — the busy-hands cause), RELAY them as host, and even
+       RENDER the VR players' arms / dragged bodies.
+
+       The full VR mod (SPT-VR.dll) ProjectReferences this and only feeds it the send-side data
+       (which needs the VR rig). Dependency direction is strictly VR mod -> this module.
+       ============================================================================================ -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>SPT-VR-FikaSync</AssemblyName>
+    <Description>FIKA co-op sync companion for the SPT-VR mod (arm + body-drag packets)</Description>
+    <Version>1.0.0</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>SptVrFikaSync</RootNamespace>
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json;
+      https://nuget.samboy.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+    <!-- Two projects in the repo both auto-generate plugin info; keep them from colliding. -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <PackageReference Include="UnityEngine.Modules" Version="2019.4.39" IncludeAssets="compile" />
+  </ItemGroup>
+
+  <!-- Game + FIKA assemblies (pre-publicized stubs in ..\libs). No SteamVR / VR here on purpose.
+       Private=false: these are provided by the game at runtime, so DON'T copy them into our output.
+       (Copying them made the main project's ProjectReference see duplicate Assembly-CSharp/Fika.Core
+       and drop types like LoadingScreenUI/FSR3Wrapper.) -->
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\libs\Managed\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>..\libs\Managed\Assembly-CSharp-firstpass.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Comfort">
+      <HintPath>..\libs\Managed\Comfort.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Comfort.Unity">
+      <HintPath>..\libs\Managed\Comfort.Unity.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ItemComponent.Types">
+      <HintPath>..\libs\Managed\ItemComponent.Types.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fika.Core">
+      <HintPath>..\libs\ModSupport\Fika.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

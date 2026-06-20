@@ -1575,6 +1575,25 @@ namespace TarkovVR.Patches.Core.Player
                 val.StartCoroutine(val.method_11(makeVisibleAfterDelay));
             }
         }
+
+        // Start the loot-item physics-settle coroutine (LootItem.method_4) on a JUST-DROPPED item.
+        // DropObject runs method_3 while we still "hold" the item, so the coroutine is intentionally
+        // NOT started there: at that moment the body is still kinematic, and IsRigidbodyDone() is
+        // true for a kinematic body (IsSleeping()), so the coroutine's first synchronous tick would
+        // StopPhysics and DESTROY the rigidbody before the drop gets any physics ("dropped items
+        // have no physics"). Call this AFTER the body is non-kinematic and we've released our hold.
+        // WakeUp guarantees IsSleeping()==false on the first check so the item actually falls; the
+        // coroutine then frees the rigidbody on rest — which is also what lets FIKA's
+        // ItemPositionSyncer reach Done instead of broadcasting a settled drop as "still held".
+        public static void StartSettleCoroutine(LootItem item)
+        {
+            if (item == null || item._rigidBody == null || !item.gameObject.activeInHierarchy)
+                return;
+            item._rigidBody.WakeUp();
+            item.ienumerator_0 = item.method_4();
+            item.StartCoroutine(item.ienumerator_0);
+        }
+
         [HarmonyPatch(typeof(MedsController), "Spawn")]
         [HarmonyPrefix]
         private static void CleanupHighlightMeshMeds()

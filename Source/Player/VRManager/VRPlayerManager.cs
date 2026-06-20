@@ -327,7 +327,11 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.blockLeftJoystick = (radialMenu && radialMenu.active) || (UIPatches.quickSlotUi && UIPatches.quickSlotUi.gameObject.active) || interactMenuOpen && cachedCurrentGunController && cachedCurrentGunController.GetComponent<MonoBehaviour>() && hasHighlightingMesh;                            
             }
 
-            blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOpen || crouchHeightDiff != 0;
+            // Jump/crouch/prone via the right stick are all blocked only when the interaction
+            // menu actually OWNS the stick (more than one option to scroll) — a single-option
+            // menu ("Take"/"Search") leaves jump free. (crouchHeightDiff != 0 keeps the existing
+            // "no jump while crouched" rule independent of menus.)
+            blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick || crouchHeightDiff != 0;
             blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick;
             // Cache ammoFireModeUi reference
             if (cachedAmmoFireModeUi != ammoFireModeUi)
@@ -580,12 +584,53 @@ namespace TarkovVR.Source.Player.VRManager
             }
         }
 
+        // The right-arm IK gets toggled OFF every time a gun is equipped (the gun drives the right
+        // side) and is only re-enabled on EmptyHandsController.Spawn (ResetWeaponOnEquipHands). The
+        // LEFT arm never gets that toggle, which is why only the RIGHT hand freezes: any transition
+        // that skips/races that single re-enable -- incl. the very first spawn before the rig is
+        // built -- strands the right hand IK off until you cycle a weapon. So re-assert it while
+        // STABLY empty-handed. It MUST be debounced (reassertEmptyDelay): a weapon draw briefly looks
+        // empty (EmptyHandsController.Drop disables the IK, then the firearm controller takes over a
+        // few frames later), and re-enabling the IK inside that window fought the draw and wedged it
+        // ("busy hands" on equip). firearmController != null also hard-gates any gun in play.
+        public static bool reassertRightArmIkWhenEmpty = true;
+        public static float reassertEmptyDelay = 0.25f; // seconds of continuous clean-empty before we touch the IK
+        private float lastNotCleanEmptyTime;
+
         private void LateUpdate()
         {
             if (VRGlobals.emptyHands && VRGlobals.player && VRGlobals.player.HandsIsEmpty)
             {
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
             }
+
+            bool cleanEmpty = reassertRightArmIkWhenEmpty
+                && VRGlobals.player != null && VRGlobals.player.HandsIsEmpty
+                && VRGlobals.firearmController == null   // no gun active OR mid-equip/draw
+                && !VRGlobals.usingItem && !isSupporting
+                && !Interactions.EatingInteractionController.ManualActive
+                && RightHand != null
+                && VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null
+                && VRGlobals.ikManager.rightArmIk.solver != null;
+            if (!cleanEmpty)
+            {
+                lastNotCleanEmptyTime = Time.time; // reset the debounce on any transition / non-empty frame
+            }
+            else if (Time.time - lastNotCleanEmptyTime > reassertEmptyDelay)
+            {
+                var rik = VRGlobals.ikManager.rightArmIk;
+                // Only touch it when actually wrong, so the steady state has zero churn on the solver.
+                if (!rik.enabled || rik.solver.target != RightHand.transform)
+                {
+                    rik.solver.target = RightHand.transform;
+                    rik.enabled = true;
+                }
+            }
+
+            // Stream our VR hand/arm poses to other players over FIKA (no-op without FIKA; the
+            // FIKA-referencing Tick() only JITs when actually called, so this stays load-safe).
+            if (TarkovVR.ModSupport.InstalledMods.FIKAInstalled)
+                TarkovVR.ModSupport.FIKA.VRArmSync.Tick();
         }
 
         public Quaternion initialCombinedRotation;

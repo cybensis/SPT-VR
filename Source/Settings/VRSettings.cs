@@ -56,7 +56,7 @@ namespace TarkovVR.Source.Settings
         
         public class ModSettings
         {
-            public int rotationSensitivity { get; set; }
+            public float rotationSensitivity { get; set; }
             public float leftStickDriftSensitivity { get; set; }
             public float rightStickDriftSensitivity { get; set; }
             public MovementMode movementType { get; set; }
@@ -67,15 +67,15 @@ namespace TarkovVR.Source.Settings
             public bool supportGunHoldToggle { get; set; }
             public bool leftHandedMode { get; set; }
             public bool seatedMode { get; set; }
-            public int smoothingSensitivity { get; set; }
-            public int scopeSmoothingSensitivity { get; set; }
+            public float smoothingSensitivity { get; set; }
+            public float scopeSmoothingSensitivity { get; set; }
             public float variableZoomSensitivity { get; set; }
             public bool scopeAimSmoothing { get; set; }
             public bool enableSharpen { get; set; }
-            public int rightHandVerticalAngle { get; set; }
-            public int rightHandHorizontalAngle { get; set; }
-            public int leftHandHorizontalAngle { get; set; }
-            public int leftHandVerticalAngle { get; set; }
+            public float rightHandVerticalAngle { get; set; }
+            public float rightHandHorizontalAngle { get; set; }
+            public float leftHandHorizontalAngle { get; set; }
+            public float leftHandVerticalAngle { get; set; }
             public float handPosOffset { get; set; }
             public bool weaponWeight { get; set; }
             public bool weaponInertia { get; set; }
@@ -83,6 +83,7 @@ namespace TarkovVR.Source.Settings
             public bool hideArms { get; set; }
             public bool hideLegs { get; set; }
             public bool manualEating { get; set; }
+            public bool disableMouseInput { get; set; }
             public bool disableRunAnimation { get; set; }
             public bool disablePrismEffects { get; set; }
             public bool disablePrismFog { get; set; }
@@ -92,6 +93,7 @@ namespace TarkovVR.Source.Settings
             public bool useVRKeyboard { get; set; }
             public bool heldItemWeight { get; set; }
             public int opticRenderResolution { get; set; }
+            public float lodBias { get; set; }
 
             // Vive Wand controller settings
             public float viveWandCrouchTrackpadThreshold { get; set; }
@@ -127,12 +129,14 @@ namespace TarkovVR.Source.Settings
                 hideArms = false;
                 hideLegs = false;
                 manualEating = false;
+                disableMouseInput = true;
                 disableRunAnimation = true;
                 disablePrismEffects = false;
                 disablePrismFog = true;               
                 shadowOpt = ShadowOpt.IncreaseLighting;
                 disableOccCulling = false;
                 disableFrusCulling = false;
+                lodBias = 1.0f;
                 useVRKeyboard = false;
                 heldItemWeight = false;
                 opticRenderResolution = 512;
@@ -183,11 +187,13 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle disablePrismEffectsToggle;
         private static SettingToggle disableFogToggle;
         private static SettingDropDown opticResolutionDropDown;
+        private static SettingSelectSlider lodBiasSlider;
 
         // Other settings
         private static SettingToggle hideArmsToggle;
         private static SettingToggle hideLegsToggle;
         private static SettingToggle manualEatingToggle;
+        private static SettingToggle disableMouseInput;
         private static SettingToggle disableRunAnimationToggle;
         private static SettingToggle seatedModeToggle;
         private static SettingToggle useVRKeyboardToggle;
@@ -227,6 +233,67 @@ namespace TarkovVR.Source.Settings
             {
                 settings = new ModSettings(); // Return default settings if file doesn't exist
             }
+        }
+
+        // Linearly remaps a value from one range to another. Used by the sliders to DISPLAY a clean,
+        // friendly number (e.g. 0..10 or -1..1) decoupled from the messy underlying value range -
+        // the stored setting keeps its real units; only the label is scaled.
+        private static float Remap(float v, float fromMin, float fromMax, float toMin, float toMax)
+        {
+            if (Mathf.Approximately(fromMax, fromMin))
+                return toMin;
+            float t = Mathf.Clamp01((v - fromMin) / (fromMax - fromMin));
+            return Mathf.Lerp(toMin, toMax, t);
+        }
+
+        // Turns one of EFT's discrete SelectSlider controls ("jumping to each line") into a smooth,
+        // continuous slider over a real [min,max] range. EFT's SelectSlider.Awake() forces
+        // wholeNumbers = true + an int-flooring listener + one notch per value, and - because our VR
+        // panels are cloned from an INACTIVE tab - that Awake runs only when the VR tab is first
+        // shown, i.e. AFTER this method. So we can't just reconfigure the slider once here; instead we
+        // attach a SmoothSlider component that re-applies the continuous config in OnEnable (which
+        // runs after Awake, every time the panel is shown). See SmoothSlider.cs.
+        // Call AFTER BindIndexTo (which builds + shows the control).
+        private static void MakeSliderSmooth(SettingSelectSlider control, float min, float max,
+                                             Func<float> getValue, Action<float> onChange, Func<float, string> format)
+        {
+            if (control == null)
+                return;
+            SelectSlider sel = control.Slider;
+            UnityEngine.UI.Slider ui = (sel != null) ? sel._slider : null;
+            if (ui == null)
+            {
+                Plugin.MyLog.LogWarning("MakeSliderSmooth: slider not found on control, leaving it discrete.");
+                return;
+            }
+
+            // CRITICAL: BindIndexTo binds this slider to the REAL OverallVolume (master volume)
+            // GameSetting - it sets SelectSlider.action_0 = (index => OverallVolume.Value = index),
+            // and that value gets applied to the audio on save. We don't drive OverallVolume; our
+            // SmoothSlider writes the actual setting via the Unity slider's own onValueChanged. So
+            // sever action_0 here - otherwise saving pushes our slider value into the master volume
+            // and mutes the game. (The old code masked this by overwriting action_0 with its own
+            // ChangeX callback; the SmoothSlider rewrite dropped that, hence the muted-audio bug.)
+            sel.action_0 = null;
+
+            SmoothSlider cfg = sel.gameObject.GetComponent<SmoothSlider>();
+            if (cfg == null)
+                cfg = sel.gameObject.AddComponent<SmoothSlider>();
+            cfg.slider = ui;
+            cfg.notchContainer = sel._notchContainer;
+            cfg.valueText = sel._valueText;
+            cfg.min = min;
+            cfg.max = max;
+            cfg.getValue = getValue;
+            cfg.onChange = onChange;
+            cfg.format = format;
+            // Only Apply now if the panel is ALREADY active (then SelectSlider.Awake has already run,
+            // so its wholeNumbers=true rounding happened before our listener exists - no write-back).
+            // The usual case is the panel being cloned INACTIVE: we deliberately DON'T Apply here, so
+            // our onChange listener isn't attached when the deferred Awake rounds the handle on first
+            // show. OnEnable does the full setup (and reseeds from getValue) once the panel appears.
+            if (sel.gameObject.activeInHierarchy)
+                cfg.Apply();
         }
 
         public static void initVrSettings(SettingsScreen settingsUi)
@@ -320,9 +387,9 @@ namespace TarkovVR.Source.Settings
 
             sensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             sensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            sensitivitySlider.Slider.action_0 = ChangeRotationSensitivity;
             sensitivitySlider.Text.localizationKey = "Rotation Sensitivity:";
-            sensitivitySlider.Slider.UpdateValue(settings.rotationSensitivity);
+            MakeSliderSmooth(sensitivitySlider, 0.5f, 20f, () => settings.rotationSensitivity,
+                (v) => settings.rotationSensitivity = v, (v) => Remap(v, 0.5f, 20f, 0f, 10f).ToString("0"));
             //leftStickDriftSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             //leftStickDriftSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             //leftStickDriftSlider.Slider.action_0 = ChangeLeftStickDriftSensitivity;
@@ -407,48 +474,53 @@ namespace TarkovVR.Source.Settings
 
             aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            aimSmoothingSlider.Slider.action_0 = SetSmoothingSensitivity;
-            aimSmoothingSlider.Text.localizationKey = "Weapon Smoothing Strength:";
-            aimSmoothingSlider.Slider.UpdateValue(11 - (settings.smoothingSensitivity / 2));
+            // smoothingSensitivity is the slerp factor used as `smoothingFactor`: lower = heavier
+            // smoothing, 50 = the special "no smoothing" value. Drive it directly so the bar spans
+            // the whole 0..50 range continuously (wider than the old ~0..22 it could reach).
+            aimSmoothingSlider.Text.localizationKey = "Weapon Smoothing (lower = smoother):";
+            MakeSliderSmooth(aimSmoothingSlider, 0f, 50f, () => settings.smoothingSensitivity,
+                (v) => settings.smoothingSensitivity = v, (v) => Remap(v, 0f, 50f, 0f, 10f).ToString("0"));
 
             scopeSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             scopeSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            scopeSmoothingSlider.Slider.action_0 = SetScopeSensitivity;
             scopeSmoothingSlider.Text.localizationKey = "Hold Breath Sensitivity:";
-            scopeSmoothingSlider.Slider.UpdateValue(settings.scopeSmoothingSensitivity);
+            MakeSliderSmooth(scopeSmoothingSlider, 0f, 20f, () => settings.scopeSmoothingSensitivity,
+                (v) => settings.scopeSmoothingSensitivity = v, (v) => Remap(v, 0f, 20f, 0f, 10f).ToString("0"));
 
             
             variableZoomSensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             variableZoomSensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            variableZoomSensitivitySlider.Slider.action_0 = SetVariableZoomSensitivity;
             variableZoomSensitivitySlider.Text.localizationKey = "Variable Zoom Sensitivity:";
-            variableZoomSensitivitySlider.Slider.UpdateValue((int)(settings.variableZoomSensitivity * 10));
+            MakeSliderSmooth(variableZoomSensitivitySlider, 0f, 2f, () => settings.variableZoomSensitivity,
+                (v) => settings.variableZoomSensitivity = v, (v) => Remap(v, 0f, 2f, 0f, 10f).ToString("0"));
             
 
             rightHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             rightHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            rightHandVerticalAngleSlider.Slider.action_0 = SetRightHandVerticalOffset;
+            // Vertical hand offsets pivot around 50 in CalculateRightHandPosOffset (>=50 positive,
+            // <50 negative), so keep 50 as the neutral centre and widen symmetrically.
             rightHandVerticalAngleSlider.Text.localizationKey = "Right hand vertical rot offset:";
-            rightHandVerticalAngleSlider.Slider.UpdateValue(settings.rightHandVerticalAngle / 10);
+            MakeSliderSmooth(rightHandVerticalAngleSlider, -30f, 130f, () => settings.rightHandVerticalAngle,
+                (v) => settings.rightHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
 
 
             rightHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             rightHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            rightHandHorizontalAngleSlider.Slider.action_0 = SetRightHandHorizontalOffset;
             rightHandHorizontalAngleSlider.Text.localizationKey = "Right hand horizontal rot offset:";
-            rightHandHorizontalAngleSlider.Slider.UpdateValue((50 - settings.rightHandHorizontalAngle) / 10);
+            MakeSliderSmooth(rightHandHorizontalAngleSlider, -90f, 90f, () => settings.rightHandHorizontalAngle,
+                (v) => settings.rightHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
 
             leftHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             leftHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            leftHandVerticalAngleSlider.Slider.action_0 = SetLeftHandVerticalOffset;
             leftHandVerticalAngleSlider.Text.localizationKey = "Left hand vertical rot offset:";
-            leftHandVerticalAngleSlider.Slider.UpdateValue((50 - settings.leftHandHorizontalAngle) / 10);
+            MakeSliderSmooth(leftHandVerticalAngleSlider, -30f, 130f, () => settings.leftHandVerticalAngle,
+                (v) => settings.leftHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
 
             leftHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             leftHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            leftHandHorizontalAngleSlider.Slider.action_0 = SetLeftHandHorizontalOffset;
             leftHandHorizontalAngleSlider.Text.localizationKey = "Left hand horizontal rot offset:";
-            leftHandHorizontalAngleSlider.Slider.UpdateValue((50 - settings.leftHandHorizontalAngle) / 10);
+            MakeSliderSmooth(leftHandHorizontalAngleSlider, -90f, 90f, () => settings.leftHandHorizontalAngle,
+                (v) => settings.leftHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
 
             handPosOffsetSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             handPosOffsetSlider.BindIndexTo(
@@ -461,19 +533,9 @@ namespace TarkovVR.Source.Settings
                     return displayValue.ToString("F2"); // Format to 2 decimal places
                 }
             );
-            handPosOffsetSlider.Slider.action_0 = SetHandPosOffset;
             handPosOffsetSlider.Text.localizationKey = "Hand position offset (up/down):";
-            int sliderValue;
-            if (settings.handPosOffset <= -0.10f)
-                sliderValue = 1;
-            else if (settings.handPosOffset >= 0.10f)
-                sliderValue = 10;
-            else
-            {
-                float normalizedValue = (settings.handPosOffset + 0.10f) / 0.20f;
-                sliderValue = Mathf.RoundToInt(normalizedValue * 9f + 1f);
-            }
-            handPosOffsetSlider.Slider.UpdateValue(sliderValue);
+            MakeSliderSmooth(handPosOffsetSlider, -0.25f, 0.25f, () => settings.handPosOffset,
+                (v) => settings.handPosOffset = v, (v) => Remap(v, -0.25f, 0.25f, -1f, 1f).ToString("0.0"));
 
             emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
@@ -506,16 +568,16 @@ namespace TarkovVR.Source.Settings
                 viveWandCrouchThresholdSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
                 viveWandCrouchThresholdSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, new ReadOnlyCollection<float>(ViveWandCrouchThresholdValues),
                     (x) => x.ToString("F1"));
-                viveWandCrouchThresholdSlider.Slider.action_0 = SetCrouchThreshold;
                 viveWandCrouchThresholdSlider.Text.localizationKey = "Crouch/Prone Trackpad Threshold (Vive):";
-                viveWandCrouchThresholdSlider.Slider.UpdateValue(CrouchThresholdToSlider(settings.viveWandCrouchTrackpadThreshold));
+                MakeSliderSmooth(viveWandCrouchThresholdSlider, 0.2f, 0.95f, () => settings.viveWandCrouchTrackpadThreshold,
+                    (v) => settings.viveWandCrouchTrackpadThreshold = v, (v) => Remap(v, 0.2f, 0.95f, 0f, 10f).ToString("0"));
 
                 viveWandVaultHoldTimeSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
                 viveWandVaultHoldTimeSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, new ReadOnlyCollection<float>(ViveWandVaultTimeValues),
                     (x) => x.ToString("F1") + "s");
-                viveWandVaultHoldTimeSlider.Slider.action_0 = SetVaultHoldTime;
                 viveWandVaultHoldTimeSlider.Text.localizationKey = "Vault/Jump Hold Time (Vive):";
-                viveWandVaultHoldTimeSlider.Slider.UpdateValue(VaultHoldTimeToSlider(settings.viveWandVaultHoldTime));
+                MakeSliderSmooth(viveWandVaultHoldTimeSlider, 0.05f, 1.5f, () => settings.viveWandVaultHoldTime,
+                    (v) => settings.viveWandVaultHoldTime = v, (v) => v.ToString("0.0") + "s");
             }
 
             /*
@@ -572,6 +634,12 @@ namespace TarkovVR.Source.Settings
                 shadowOptsToggle.DropDown.SetLabelText("Distant Shadows (FPS hit)");
             shadowOptsToggle.DropDown.gclass1626_0.Action_0 = ChangeShadowOpts;
 
+            lodBiasSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
+            lodBiasSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            lodBiasSlider.Text.localizationKey = "LOD Bias Factor (FPS Hit):";
+            MakeSliderSmooth(lodBiasSlider, 0.5f, 2f, () => settings.lodBias,
+                (v) => settings.lodBias = v, (v) => v.ToString("0.00"));
+
             emptySpacingSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
             emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
             emptySpacingSlider.Slider.gameObject.SetActive(false);
@@ -612,6 +680,13 @@ namespace TarkovVR.Source.Settings
             manualEatingToggle.Toggle.action_0 = SetManualEating;
             manualEatingToggle.Text.localizationKey = "Manual Eating";
             manualEatingToggle.Toggle.UpdateValue(settings.manualEating);
+
+            // Disable mouse input
+            disableMouseInput = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            disableMouseInput.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            disableMouseInput.Toggle.action_0 = SetDisableMouseInput;
+            disableMouseInput.Text.localizationKey = "Disable Mouse Input";
+            disableMouseInput.Toggle.UpdateValue(settings.disableMouseInput);
 
             _vrGraphicsScroll = SetupScrollbar(vrGraphics);
             vrGraphicsObject = gSoundSettings.gameObject;
@@ -728,11 +803,6 @@ namespace TarkovVR.Source.Settings
             return scrollRect;
         }
 
-        private static void ChangeRotationSensitivity(int sensitivity)
-        {
-            settings.rotationSensitivity = sensitivity;
-        }
-
         private static void ChangeLeftStickDriftSensitivity(int sensitivity)
         {
             settings.leftStickDriftSensitivity = Mathf.Clamp((float)sensitivity / 10, 0.1f, 0.9f);
@@ -795,7 +865,7 @@ namespace TarkovVR.Source.Settings
                 vrGraphicsObject.active = false;
         }
 
-        public static int GetRotationSensitivity() { 
+        public static float GetRotationSensitivity() {
             return settings.rotationSensitivity;
         }
         public static float GetLeftStickSensitivity()
@@ -807,26 +877,14 @@ namespace TarkovVR.Source.Settings
             return settings.rightStickDriftSensitivity;
         }
 
-        public static int GetSmoothingSensitivity()
+        public static float GetSmoothingSensitivity()
         {
             return settings.smoothingSensitivity;
         }
-        private static void SetSmoothingSensitivity(int sensitivity)
-        {
-            settings.smoothingSensitivity = (11 - sensitivity) * 2;
-        }
 
-        public static int GetScopeSensitivity()
+        public static float GetScopeSensitivity()
         {
             return settings.scopeSmoothingSensitivity;
-        }
-        private static void SetScopeSensitivity(int sensitivity)
-        {
-            settings.scopeSmoothingSensitivity = sensitivity;
-        }
-        private static void SetVariableZoomSensitivity(int sensitivity)
-        {
-            settings.variableZoomSensitivity = sensitivity / 10f;
         }
         public static float GetVariableZoomSensitivity()
         {
@@ -881,17 +939,14 @@ namespace TarkovVR.Source.Settings
             return settings.movementType;
         }
 
-        private static void SetLeftHandVerticalOffset(int offset) {
-            settings.leftHandVerticalAngle = offset * 10;
-        }
-        public static int GetPrimaryHandVertOffset()
+        public static float GetPrimaryHandVertOffset()
         {
             if (settings.leftHandedMode)
                 return settings.leftHandVerticalAngle;
             else
                 return settings.rightHandVerticalAngle;
         }
-        public static int GetSecondaryHandVertOffset()
+        public static float GetSecondaryHandVertOffset()
         {
             if (settings.leftHandedMode)
                 return settings.rightHandVerticalAngle;
@@ -899,41 +954,32 @@ namespace TarkovVR.Source.Settings
                 return settings.leftHandVerticalAngle;
         }
 
-        public static int GetPrimaryHandHorOffset()
+        public static float GetPrimaryHandHorOffset()
         {
             if (settings.leftHandedMode)
                 return settings.leftHandHorizontalAngle;
             else
                 return settings.rightHandHorizontalAngle;
         }
-        public static int GetSecondaryHandHorOffset()
+        public static float GetSecondaryHandHorOffset()
         {
             if (settings.leftHandedMode)
                 return settings.rightHandHorizontalAngle;
             else
                 return settings.leftHandHorizontalAngle;
+        }
+        public static float GetLodBias()
+        {
+            return settings.lodBias;
         }
 
-        public static int GetRightHandVerticalOffset()
+        public static float GetRightHandVerticalOffset()
         {
             return settings.rightHandVerticalAngle;
-        }
-        private static void SetRightHandVerticalOffset(int offset)
-        {
-            settings.rightHandVerticalAngle = offset * 10;
         }
         public static float GetHandPosOffset()
         {
             return settings.handPosOffset;
-        }
-        private static void SetHandPosOffset(int sliderValue)
-        {
-            sliderValue = Mathf.Clamp(sliderValue, 1, 10);
-
-            float normalizedValue = (sliderValue - 1f) / 9f;
-            float newValue = (normalizedValue * 0.20f) - 0.10f;
-
-            settings.handPosOffset = newValue;
         }
 
         public static bool GetSnapToGun()
@@ -979,22 +1025,14 @@ namespace TarkovVR.Source.Settings
         }
 
 
-        public static int GetRightHandHorizontalOffset()
+        public static float GetRightHandHorizontalOffset()
         {
             return settings.rightHandHorizontalAngle;
         }
-        private static void SetRightHandHorizontalOffset(int offset)
-        {
-            settings.rightHandHorizontalAngle = 50 - (offset * 10);
-        }
 
-        public static int GetLeftHandHorizontalOffset()
+        public static float GetLeftHandHorizontalOffset()
         {
             return settings.leftHandHorizontalAngle;
-        }
-        private static void SetLeftHandHorizontalOffset(int offset)
-        {
-            settings.leftHandHorizontalAngle = 50 - (offset * 10);
         }
 
         public static bool GetSharpenOn()
@@ -1054,6 +1092,14 @@ namespace TarkovVR.Source.Settings
             settings.hideLegs = turnOff;
             if (VRGlobals.legsModel)
                 VRGlobals.legsModel.transform.parent.gameObject.active = !turnOff;
+        }
+        private static void SetDisableMouseInput(bool turnOn)
+        {
+            settings.disableMouseInput = turnOn;
+        }
+        public static bool GetDisableMouseInput()
+        {
+            return settings.disableMouseInput;
         }
         private static void SetManualEating(bool turnOn)
         {
@@ -1243,45 +1289,11 @@ namespace TarkovVR.Source.Settings
         {
             return settings.viveWandCrouchTrackpadThreshold;
         }
-        
-        private static int CrouchThresholdToSlider(float v)
-        {
-            int best = 0;
-            float bestDist = float.MaxValue;
-            for (int i = 0; i < ViveWandCrouchThresholdValues.Length; i++)
-            {
-                float d = Mathf.Abs(ViveWandCrouchThresholdValues[i] - v);
-                if (d < bestDist) { bestDist = d; best = i; }
-            }
-            return best;
-        }
-        private static void SetCrouchThreshold(int index)
-        {
-            if (index >= 0 && index < ViveWandCrouchThresholdValues.Length)
-                settings.viveWandCrouchTrackpadThreshold = ViveWandCrouchThresholdValues[index];
-        }
 
         // ---- Vive Vault Hold Time ----
         public static float GetVaultHoldTime()
         {
             return settings.viveWandVaultHoldTime;
-        }
-        
-        private static int VaultHoldTimeToSlider(float v)
-        {
-            int best = 0;
-            float bestDist = float.MaxValue;
-            for (int i = 0; i < ViveWandVaultTimeValues.Length; i++)
-            {
-                float d = Mathf.Abs(ViveWandVaultTimeValues[i] - v);
-                if (d < bestDist) { bestDist = d; best = i; }
-            }
-            return best;
-        }
-        private static void SetVaultHoldTime(int index)
-        {
-            if (index >= 0 && index < ViveWandVaultTimeValues.Length)
-                settings.viveWandVaultHoldTime = ViveWandVaultTimeValues[index];
         }
     }
 }

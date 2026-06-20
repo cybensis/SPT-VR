@@ -10,7 +10,6 @@ using EFT.Visual;
 using EFT.Weather;
 using GPUInstancer;
 using HarmonyLib;
-using Microsoft.SqlServer.Server;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -181,7 +180,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(CameraLodBiasController), "SetBiasByFov")]
         private static void FixAimCulling(CameraLodBiasController __instance)
         {
-            __instance.LodBiasFactor = 1f;
+            __instance.LodBiasFactor = VRSettings.GetLodBias();
 
         }
 

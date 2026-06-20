@@ -217,7 +217,9 @@ namespace TarkovVR.Source.Controls
             private static bool releasedPullAfterFullCrouch = false;
             public void UpdateCommand(ref ECommand command)
             {
-                if (VRGlobals.player is HideoutPlayer || VRGlobals.blockRightJoystick)
+                // Block prone from activating when in a hideout or when the right joystick is being blocked
+                if (VRGlobals.player is HideoutPlayer || VRGlobals.blockRightJoystick
+                    || (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.blockCrouch))
                     return;
 
                 float crouchThreshold = VRGlobals.vrControllerType == "vive"

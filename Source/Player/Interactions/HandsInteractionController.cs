@@ -12,16 +12,19 @@ using static EFT.Player;
 using static InteractionsHandlerClass;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Settings;
+using TarkovVR.ModSupport;
+using TarkovVR.ModSupport.FIKA;
 using EFT.InventoryLogic;
 using static EFT.Interactive.WorldInteractiveObject;
 using System.Collections.Generic;
+using System.Collections;
 //using LiteNetLib.Utils;
 using Comfort.Common;
 //using LiteNetLib;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    internal class HandsInteractionController : MonoBehaviour
+    internal partial class HandsInteractionController : MonoBehaviour
     {
         public Quaternion initialHandRot;
         private static int INTERACTIVE_LAYER = 22;
@@ -73,6 +76,7 @@ namespace TarkovVR.Source.Player.Interactions
         private float lastCacheCleanupTime = 0f;
         private const float CACHE_CLEANUP_INTERVAL = 30f;
 
+        private float lastLootSyncTime;
         private Rigidbody cachedRigidbody;
         private Vector3 cachedGrabOffset;
         private Vector3 cachedItemPosition;
@@ -176,13 +180,133 @@ namespace TarkovVR.Source.Player.Interactions
                 pickupState?.Pickup(false, null);
             });
         }
-        
+
+        // Gap between releasing the VR hold and running the stow pickup (see StowHeldItemToInventory).
+        // On release the item flips from the mod's custom held-sync back onto FIKA's native loot
+        // networking; the other clients need a beat to receive that before the (separate-channel)
+        // pickup op lands there, or the world item never gets RemoveLootItem/DestroyLoot'd on them.
+        // Drops reconcile ~instantly, so this can be small — it's the code version of the human gap
+        // in "let go of grip, THEN press Take". Live-tunable in the headset.
+        public static float stowReleaseDelay = 0.3f;
+
+        /// <summary>
+        /// Quick-stow / equip the currently-held loot item into the player's equipment (the
+        /// behind-the-back backpack gesture, and the use/eat auto-stow). Returns true if the stow
+        /// was started, false if the item won't fit anywhere (the caller keeps holding / drops it).
+        ///
+        /// FIKA co-op (2026-06-19, traced via decompile): the world LootItem disappears on other
+        /// clients via LootItem.RemoveLootItem -> GameWorld.DestroyLoot, fired when the item leaves
+        /// its GClass3390 loose-loot address. Native "Take" uses the IDENTICAL
+        /// InventoryController.RunNetworkTransaction this does (GetActionsClass.Class1750), so the
+        /// mechanism is the same — the ONLY difference is item STATE. While VR-held, the item is on
+        /// the mod's CUSTOM loot-sync path on other clients (LootSyncSmoother + NeutralizeRemoteHeld-
+        /// LootPhysics, FIKA's ApplyNetPacket short-circuited); a pickup applied in that state does
+        /// NOT produce the RemoveLootItem there, so it floats / the equip never lands. Dropping the
+        /// item flips it back onto FIKA's NATIVE loot path, and only THEN does the pickup replicate.
+        /// So: release first (ForceDropHeldItem), then run the pickup a beat later (StowAfterRelease)
+        /// once that reconcile has reached the other clients — i.e. "let go, THEN Take", which works.
+        /// Fit is checked while still in hand so we never drop an item that has nowhere to go.
+        /// </summary>
+        private bool StowHeldItemToInventory()
+        {
+            if (heldItem == null || !HeldItemAlive())
+                return false;
+
+            LootItem item = heldItem;
+            try
+            {
+                var ctrl = VRGlobals.player.InventoryController;
+                GStruct154<GInterface424> probe = InteractionsHandlerClass.QuickFindAppropriatePlace(
+                    item.Item,
+                    ctrl,
+                    ctrl.Inventory.Equipment.ToEnumerable(),
+                    EMoveItemOrder.PickUp,
+                    simulate: true);
+
+                // Won't fit / can't equip — leave it in hand for the caller to decide.
+                if (!probe.Succeeded || !item.ItemOwner.CanExecute(probe.Value))
+                    return false;
+            }
+            catch
+            {
+                return false;
+            }
+
+            IPlayer lastOwner = item.LastOwner;
+            ForceDropHeldItem();                                 // flip back to FIKA's native loot path NOW
+            StartCoroutine(StowAfterRelease(item, lastOwner));   // pick it up after the reconcile gap
+            return true;
+        }
+
+        /// <summary>
+        /// One-shot helper for StowHeldItemToInventory: wait out the cross-channel reconcile gap,
+        /// then pick the (now normal world) item into the inventory. Self-terminating; bails if the
+        /// item was taken/destroyed or grabbed by another player during the wait.
+        /// </summary>
+        private IEnumerator StowAfterRelease(LootItem item, IPlayer lastOwner)
+        {
+            yield return new WaitForSeconds(stowReleaseDelay);
+
+            if (item == null || item.Item == null)
+                yield break;
+            // Another player grabbed it in the gap (FIKA steal) — leave it to them.
+            if (InstalledMods.FIKAInstalled && FIKASupport.IsRemotelyHeldRaw(item))
+                yield break;
+
+            bool ok = false;
+            GInterface424 action = default;
+            try
+            {
+                var ctrl = VRGlobals.player.InventoryController;
+                GStruct154<GInterface424> place = InteractionsHandlerClass.QuickFindAppropriatePlace(
+                    item.Item,
+                    ctrl,
+                    ctrl.Inventory.Equipment.ToEnumerable(),
+                    EMoveItemOrder.PickUp,
+                    simulate: true);
+                if (place.Succeeded && item.ItemOwner.CanExecute(place.Value))
+                {
+                    action = place.Value;
+                    ok = true;
+                }
+            }
+            catch
+            {
+                ok = false;
+            }
+
+            if (ok)
+                DirectItemTransfer(VRGlobals.player, action, item.Item, lastOwner);
+        }
+
+        /// <summary>
+        /// Native gaze "Take" reroute (UIPatches.RerouteHeldItemTake patches GetActionsClass.smethod_10):
+        /// if rootItem is the currently VR-held loot item, stow it through the SAME release-then-pickup
+        /// flow the behind-the-back gesture uses (StowHeldItemToInventory) so the equip/removal
+        /// replicates in FIKA co-op. The plain native Take runs RunNetworkTransaction while the item is
+        /// still on the mod's custom held-sync path, which doesn't replicate. Returns true if we took
+        /// ownership of the Take (the caller skips the native pickup animation + transaction entirely).
+        /// </summary>
+        public bool TryStowHeldItem(Item rootItem)
+        {
+            if (heldItem == null || !HeldItemAlive() || rootItem == null || rootItem != heldItem.Item)
+                return false;
+            StowHeldItemToInventory();
+            return true;
+        }
+
         public void Update()
         {
 
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
+            {
+                // Don't leave stale loot dots floating when we bail (sprint/support/menu).
+                ClearDots();
+                // Don't keep a body welded to the hand through a sprint/support/menu bail.
+                if (isDraggingBody) ReleaseBody();
                 return;
+            }
 
             if (Time.time > leftHandedModeCheckTimer)
             {
@@ -205,7 +329,20 @@ namespace TarkovVR.Source.Player.Interactions
             }
             */
 
+            // Physical body grab/drag: if the off-hand is on a dead-body part and grip is pressed,
+            // latch that ragdoll bone to the hand and drag the whole body. Runs first so the loot
+            // pointer and corpse loot-open see the dragging/armed state this frame. A quick grip
+            // tap on a body instead opens the corpse loot grid (HOLD = drag, TAP = loot).
+            UpdateBodyGrab();
+
             ProcessInputStates();
+
+            // Palm-cone loot pointer: detect loose items in the cone, render the white dots,
+            // and on grip summon the "main" one to the palm. This now owns ALL loose-item
+            // grabbing (a point-blank item is just the near end of the cone), so the grab
+            // always snaps the item's collider surface onto the palm. No-op while holding,
+            // summoning, or when disabled.
+            UpdateLootPointer();
 
             // Drop check runs after ProcessInputStates so backpack pickup (stateUp) is handled first
             if (heldItem != null)
@@ -232,8 +369,25 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void LateUpdate()
         {
-            if (heldItem != null)
+            // While an item is flying to the palm, the summon drives its position; once it
+            // arrives the normal held-item maintenance takes over (same cached fields).
+            if (isSummoningLoot)
+                UpdateLootSummon();
+            else if (heldItem != null)
                 UpdateHeldItemPosition();
+
+            // FIKA co-op: broadcast the held/summoning item's pose so other players see it move
+            // (throttled). Reuses FIKA's own LootSyncStruct path; no-op solo / non-networked item.
+            if ((isSummoningLoot || heldItem != null) && InstalledMods.FIKAInstalled
+                && HeldItemAlive() && Time.time - lastLootSyncTime >= lootSyncInterval)
+            {
+                lastLootSyncTime = Time.time;
+                FIKASupport.SyncHeldLootItem(heldItem);
+            }
+
+            // Relax the free off-hand open (more when a loot dot is in view). Self-gates;
+            // runs after EFT's hand animation. Must come last so it offsets the final pose.
+            UpdateLeftHandFingers();
         }
 
         private void CleanupCache()
@@ -249,6 +403,10 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 interactableCache.Remove(key);
             }
+
+            // The loot-pointer collider->LootItem cache can accumulate destroyed colliders
+            // across a raid; flush it on the same cadence.
+            lootColliderCache.Clear();
         }
 
         private void ProcessInputStates()
@@ -304,23 +462,10 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (secondaryHandGrip.stateUp)
                 {
-                    GStruct154<GInterface424> pickUpResult = InteractionsHandlerClass.QuickFindAppropriatePlace(
-                        heldItem.Item,
-                        VRGlobals.player.InventoryController,
-                        VRGlobals.player.InventoryController.Inventory.Equipment.ToEnumerable(),
-                        EMoveItemOrder.PickUp,
-                        simulate: true
-                    );
-
-                    if (pickUpResult.Succeeded && heldItem.ItemOwner.CanExecute(pickUpResult.Value))
-                    {                        
-                        DirectItemTransfer(VRGlobals.player, pickUpResult.Value, heldItem.Item, heldItem.LastOwner);
-                        if (heldItem._rigidBody == null)
-                            heldItem._rigidBody = heldItem.GetComponent<Rigidbody>();
-                        heldItem._rigidBody.useGravity = true;
-                        heldItem._rigidBody.detectCollisions = true;
-                        heldItem = null;
-                    }
+                    // Behind-the-back quick-stow / equip. StowHeldItemToInventory releases the VR
+                    // hold BEFORE running the network transaction — required for FIKA co-op, else
+                    // the equip/stow doesn't replicate to other clients (see that method).
+                    StowHeldItemToInventory();
                 }
             }
 
@@ -601,11 +746,11 @@ namespace TarkovVR.Source.Player.Interactions
             if (!secondaryHandGrip.stateDown)
                 return;
 
-            if (leftHandState.lootItem != null)
-            {
-                heldItem = leftHandState.lootItem;
-            }
-            else if (leftHandState.lootableContainer != null)
+            // NOTE: loose-item grabbing is now owned by the palm-cone loot pointer
+            // (UpdateLootPointer/BeginSummon) so that even a point-blank grab snaps the
+            // item's collider surface onto the palm. Containers/doors/corpses keep the
+            // reach-in interaction below.
+            if (leftHandState.lootableContainer != null)
             {
                 var container = leftHandState.lootableContainer;
                 VRGlobals.player.vmethod_1(container, new InteractionResult(EInteractionType.Open));
@@ -635,21 +780,19 @@ namespace TarkovVR.Source.Player.Interactions
             }
             else if (leftHandState.corpse != null)
             {
-                var corpse = leftHandState.corpse;
-                GetActionsClass.Class1748 corpseInteractionClass = new GetActionsClass.Class1748();
-                corpseInteractionClass.compoundItem = (InventoryEquipment)corpse.Item;
-                corpseInteractionClass.rootItem = (InventoryEquipment)corpse.Item;
-                corpseInteractionClass.lootItemOwner = corpse.ItemOwner;
-                corpseInteractionClass.controller = VRGlobals.player.InventoryController;
-                corpseInteractionClass.owner = PlayerOwner;
-                corpseInteractionClass.method_3();
+                // When body-grab is on, gripping a corpse is owned by UpdateBodyGrab (HOLD = drag,
+                // TAP = loot via OpenCorpseLoot). Only open the loot grid directly here when
+                // body-grab is disabled, so the old behavior is preserved.
+                if (!enableBodyGrab)
+                    OpenCorpseLoot(leftHandState.corpse);
             }
         }
 
         private void UpdateHeldItemPosition()
         {
             if (heldItem == null) return;
-            if (heldItem is not UnityEngine.Object) { ForceDropHeldItem(); return; }
+            // Taken into inventory / destroyed — drop our refs without touching the dead item.
+            if (!HeldItemAlive()) { CleanupAfterHeldItemGone(); return; }
             if (!isItemInitialized) { InitializeHeldItem(); isItemInitialized = true; }
 
             cachedRigidbody.isKinematic = true;
@@ -785,24 +928,63 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         /// <summary>
+        /// True while the held loot still exists as a world item. False once it's been TAKEN
+        /// into the inventory (item_0 nulled) or its GameObject destroyed — in which case we
+        /// must clean up our refs WITHOUT calling DropObject/InitializeHeldItem, both of which
+        /// deref item_0.TotalWeight and throw. (This was the reason Take-while-holding was
+        /// disabled originally.)
+        /// </summary>
+        private bool HeldItemAlive()
+        {
+            return heldItem != null && heldItem.Item != null && heldItem.item_0 != null;
+        }
+
+        /// <summary>
         /// Checks for grip release and drops the item. Only called when full input is active (not sprinting).
         /// </summary>
         private void UpdateHeldItemDrop()
         {
-            if (heldItem == null) 
+            if (heldItem == null)
                 return;
 
-            if (secondaryHandGrip.state) 
+            // Item was Taken into the inventory (or destroyed) — clean up without dropping it
+            // (DropObject would deref the now-null item_0 and throw).
+            if (!HeldItemAlive())
+            {
+                CleanupAfterHeldItemGone();
                 return;
-            
+            }
+
+            if (secondaryHandGrip.state)
+                return;
+
+            // Releasing grip mid-summon cancels it and drops the item where it is.
+            isSummoningLoot = false;
             isItemInitialized = false;
             cachedRigidbody.isKinematic = false;
             ConsumeThrowStamina(heldItem);
-            heldItem.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
-            WeaponPatches.DropObject(heldItem, true);
+
+            // Keep heldItem set THROUGH DropObject: it calls LootItem.method_3, and the
+            // DisableCoroutineWhenHeldItem guard must still see it as held so it does NOT start the
+            // physics-settle coroutine yet — the body is kinematic at that point, IsRigidbodyDone()
+            // is true on a kinematic body, and the coroutine's first tick would StopPhysics and
+            // destroy the rigidbody before the drop gets any physics (dropped items would freeze).
+            LootItem dropped = heldItem;
+            dropped.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
+            WeaponPatches.DropObject(dropped, true);
             heldItem = null;
             cachedRigidbody = null;
             cachedHand = null;
+            // FIKA co-op only: now that the body is non-kinematic, re-create FIKA's syncer (so the
+            // tumble+rest sync to others) and start the settle ourselves so the rigidbody is freed
+            // on rest and the syncer reaches Done (instead of broadcasting a settled drop as "still
+            // held" forever, which would mis-read as remotely-held to the grab arbitration). Solo
+            // keeps the original behavior (no early-start, no premature StopPhysics).
+            if (InstalledMods.FIKAInstalled)
+            {
+                FIKASupport.ResyncDroppedItem(dropped);
+                WeaponPatches.StartSettleCoroutine(dropped);
+            }
 
             // Restore EFT interaction state so player can interact again after drop
             try
@@ -866,18 +1048,33 @@ namespace TarkovVR.Source.Player.Interactions
 
         public void ForceDropHeldItem()
         {
-            if (heldItem != null && heldItem is UnityEngine.Object)
+            LootItem dropped = heldItem;
+            isItemInitialized = false;
+            isSummoningLoot = false;
+
+            if (dropped != null && dropped is UnityEngine.Object)
             {
                 try
                 {
-                    if (cachedRigidbody != null)
+                    Rigidbody rb = dropped.GetComponent<Rigidbody>();
+                    if (rb != null)
                     {
-                        cachedRigidbody.isKinematic = false;
-                        cachedRigidbody.useGravity = true;
-                        cachedRigidbody.detectCollisions = true;
+                        rb.isKinematic = false;
+                        rb.useGravity = true;
+                        rb.detectCollisions = true;
                     }
-                    heldItem.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
-                    WeaponPatches.DropObject(heldItem, true);
+                    dropped.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
+                    // heldItem stays set THROUGH DropObject so its method_3 doesn't start the
+                    // settle coroutine while the body is kinematic (that would StopPhysics and kill
+                    // the drop). Release after, then start the settle (FIKA only — see
+                    // UpdateHeldItemDrop). Solo keeps the original behavior.
+                    WeaponPatches.DropObject(dropped, true);
+                    heldItem = null;
+                    if (InstalledMods.FIKAInstalled)
+                    {
+                        FIKASupport.ResyncDroppedItem(dropped);
+                        WeaponPatches.StartSettleCoroutine(dropped);
+                    }
                 }
                 catch
                 {
@@ -888,7 +1085,6 @@ namespace TarkovVR.Source.Player.Interactions
             heldItem = null;
             cachedRigidbody = null;
             cachedHand = null;
-            isItemInitialized = false;
 
             // Restore EFT interaction state so player can interact again after drop
             try
@@ -903,8 +1099,97 @@ namespace TarkovVR.Source.Player.Interactions
             NotifyWeightChanged();
         }
 
+        /// <summary>
+        /// FIKA co-op "steal" hand-off: another player grabbed the item we were holding more
+        /// recently, so we hand authority to them — let go WITHOUT dropping it to physics. This is
+        /// a mirror of ForceDropHeldItem MINUS DropObject/ResyncDroppedItem: we're not the owner
+        /// anymore, the NEW owner broadcasts the item, and our copy just follows their packets via
+        /// FIKASupport.ApplyNetPacket (which keeps gravity off while they hold it). Called from that
+        /// patch when this player loses a contested grab.
+        /// </summary>
+        public void RelinquishHeldItem()
+        {
+            LootItem given = heldItem;
+            heldItem = null;
+            heldItemGrabTime = 0f;
+            isSummoningLoot = false;
+            isItemInitialized = false;
+
+            if (given != null && given is UnityEngine.Object)
+            {
+                try
+                {
+                    // Non-kinematic so the new owner's ApplyNetPacket (which sets velocity) is
+                    // valid; gravity off so it can't fall out from under their hand while they
+                    // broadcast a HELD pose (FIKASupport re-enables gravity on motion/drop/Done).
+                    Rigidbody rb = given.GetComponent<Rigidbody>();
+                    if (rb != null)
+                    {
+                        rb.isKinematic = false;
+                        rb.useGravity = false;
+                    }
+                    given.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
+                }
+                catch
+                {
+                    // ignored
+                }
+            }
+
+            cachedRigidbody = null;
+            cachedHand = null;
+
+            try
+            {
+                VRGlobals.player?.GetComponent<GamePlayerOwner>()?.InteractionsChangedHandler();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            NotifyWeightChanged();
+
+            // A noticeable pulse so it feels like the item was taken out of your hand.
+            SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.6f, secondaryInputSource);
+        }
+
+        /// <summary>
+        /// (Req 1) A use/eat began while we still physically hold a loot item. Get our hold out
+        /// of the way so the use/eat animation looks right: stow the item into the inventory if
+        /// it fits (the natural place, same path as the backpack quick-stow), otherwise drop it.
+        /// Either way our hold ends, so the finger override (gated on usingItem) also stops.
+        /// </summary>
+        private void ReleaseHeldForUse()
+        {
+            // Stow into the inventory if it fits (releasing the VR hold first so it replicates in
+            // FIKA co-op — see StowHeldItemToInventory); otherwise just drop it out of the way.
+            if (!StowHeldItemToInventory())
+                ForceDropHeldItem();
+        }
+
+        /// <summary>
+        /// FIKA attaches an ItemPositionSyncer to loose items to network-sync their physics;
+        /// once we take control (make it kinematic + reparent, or remove it into the inventory)
+        /// that syncer's NotifyDone null-refs every FixedUpdate. Strip it while we hold the item
+        /// — GetComponent BY NAME so there's no compile/run dependency on FIKA (returns null when
+        /// FIKA isn't installed). FIKA re-adds its syncer on a real physics drop.
+        /// </summary>
+        private static void RemoveFikaSyncer(LootItem item)
+        {
+            if (item == null) return;
+            Component syncer = item.GetComponent("ItemPositionSyncer");
+            if (syncer != null) Destroy(syncer);
+            // Also drop our network-pose interpolator (FIKASupport.LootSyncSmoother) if one was
+            // running — we drive the item directly now, so the smoother must not fight our hold.
+            // By name so this file keeps no FIKA compile dependency.
+            Component smoother = item.GetComponent("LootSyncSmoother");
+            if (smoother != null) Destroy(smoother);
+        }
+
         private void InitializeHeldItem()
         {
+            RemoveFikaSyncer(heldItem);
             cachedRigidbody = heldItem.GetComponent<Rigidbody>() ?? heldItem.gameObject.AddComponent<Rigidbody>();
             cachedHand = VRGlobals.vrPlayer.LeftHand.transform;
 

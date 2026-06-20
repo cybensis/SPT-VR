@@ -427,7 +427,7 @@ namespace TarkovVR.Source.Player.Interactions
         // animation holds in the LEFT hand passes holdInOffHand: true (cap hand flips too).
         private static FoodDef SodaCan(string id,
             Vector3? pos = null, Vector3? rot = null, bool holdInOffHand = false, float drinkSeconds = 0f)
-            => OpenWith(PullStart(HandPath(Drink(id, "tc_root", null, pos, rot, holdInOffHand: holdInOffHand, drinkSeconds: drinkSeconds), SodaOpenPath), 0.16f),
+            => OpenWith(PullEnd(PullStart(HandPath(Drink(id, "tc_root", null, pos, rot, holdInOffHand: holdInOffHand, drinkSeconds: drinkSeconds), SodaOpenPath), 0.16f), 0.4f),
                 OpenGestureKind.Tilt); // tab tips open by TILTING the hand (like aquamari) — keeps the
                                        // gradual HandPath replay; the Trigger kind swept the scrub in a
                                        // frame and teleported the latched hand (user preferred the path)

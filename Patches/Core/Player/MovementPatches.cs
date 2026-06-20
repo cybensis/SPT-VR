@@ -7,7 +7,6 @@ using RootMotion.FinalIK;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
-using System.Drawing.Printing;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using TarkovVR.Source.Settings;
@@ -188,7 +187,11 @@ namespace TarkovVR.Patches.Core.Player
             else
                 VRGlobals.player.MovementContext.RelativeSpeed = xAxis;
 
-            VRGlobals.player.MovementContext.SetCharacterMovementSpeed(VRGlobals.player.MovementContext.RelativeSpeed * VRGlobals.player.MovementContext.MaxSpeed);
+            // Dragging a body weighs you down: scale locomotion speed by the body-drag multiplier
+            // (1 when not dragging). Derived from the corpse's ragdoll mass on grab — see BodyGrab.cs.
+            VRGlobals.player.MovementContext.SetCharacterMovementSpeed(
+                VRGlobals.player.MovementContext.RelativeSpeed * VRGlobals.player.MovementContext.MaxSpeed
+                * Source.Player.Interactions.HandsInteractionController.bodyDragMoveSpeedMultiplier);
         }
 
 
