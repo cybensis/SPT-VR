@@ -90,6 +90,102 @@ namespace SptVrFikaSync
         }
     }
 
+    // One VR player's MANUAL-EATING state: the two rendered wrist poses (so observers drive the
+    // arms like empty hands) plus every live food prop's pose + visibility, all chest-local. The
+    // props are matched on the observer by a STABLE hash of the prop transform's name (the observed
+    // food model is the same prefab -> same bone names), and their world poses overridden after the
+    // observed meds animator, so the food rides the synced hands. Active=false is a one-shot STOP
+    // (restore hidden renderers + drop the override). Variable prop count like BodyDragPacket.
+    internal struct VREatingPacket : INetSerializable
+    {
+        public int NetId;
+        public bool Active;                                   // false = stop (restore + clear)
+        public Vector3 LeftPos;   public Quaternion LeftRot;  // rendered left wrist, chest-local
+        public Vector3 RightPos;  public Quaternion RightRot; // rendered right wrist, chest-local
+        // Food animator (ObjectInHandsAnimator) state PER LAYER, mirrored so the observer's food shows
+        // the same skinned deformation (lid bone, bag rip, chew squash) the eater is at — a seek, not a
+        // play, so it never loops. All layers (not just 0) because a food's eat can live on any of them.
+        public byte AnimLayerCount;
+        public int[] AnimHashes;
+        public float[] AnimTimes;
+        public byte PropCount;
+        public int[] NameHashes;        // stable hash of each prop transform's name
+        public Vector3[] Positions;     // chest-local
+        public Quaternion[] Rotations;  // chest-local
+        public bool[] Visible;          // mirror the local renderer-enabled state
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(NetId);
+            writer.Put(Active);
+            if (!Active)
+                return;
+            writer.PutUnmanaged(LeftPos);  writer.PutUnmanaged(LeftRot);
+            writer.PutUnmanaged(RightPos); writer.PutUnmanaged(RightRot);
+            writer.Put(AnimLayerCount);
+            for (int i = 0; i < AnimLayerCount; i++) { writer.Put(AnimHashes[i]); writer.Put(AnimTimes[i]); }
+            writer.Put(PropCount);
+            for (int i = 0; i < PropCount; i++)
+            {
+                writer.Put(NameHashes[i]);
+                writer.PutUnmanaged(Positions[i]);
+                writer.PutUnmanaged(Rotations[i]);
+                writer.Put(Visible[i]);
+            }
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            NetId = reader.GetInt();
+            Active = reader.GetBool();
+            if (!Active)
+                return;
+            LeftPos = reader.GetUnmanaged<Vector3>();   LeftRot = reader.GetUnmanaged<Quaternion>();
+            RightPos = reader.GetUnmanaged<Vector3>();  RightRot = reader.GetUnmanaged<Quaternion>();
+            AnimLayerCount = reader.GetByte();
+            AnimHashes = new int[AnimLayerCount];
+            AnimTimes = new float[AnimLayerCount];
+            for (int i = 0; i < AnimLayerCount; i++) { AnimHashes[i] = reader.GetInt(); AnimTimes[i] = reader.GetFloat(); }
+            PropCount = reader.GetByte();
+            NameHashes = new int[PropCount];
+            Positions = new Vector3[PropCount];
+            Rotations = new Quaternion[PropCount];
+            Visible = new bool[PropCount];
+            for (int i = 0; i < PropCount; i++)
+            {
+                NameHashes[i] = reader.GetInt();
+                Positions[i] = reader.GetUnmanaged<Vector3>();
+                Rotations[i] = reader.GetUnmanaged<Quaternion>();
+                Visible[i] = reader.GetBool();
+            }
+        }
+    }
+
+    // One eat SOUND event the local eater actually played — forwarded so observers hear the real
+    // gesture audio (open/scoop/gulp/bite) instead of the looping vanilla observed-meds sound (which
+    // we freeze out). Carried as a STABLE HASH of the event name, NOT the string: FIKA's bundled
+    // NetDataWriter has no runtime Put(string) (the publicized stub lies; the real DLL only has
+    // Put(string,int)/PutLargeString), so a plain Put(string) throws MissingMethodException. The
+    // observer reverse-resolves the hash against the food model's own sound bank (same prefab -> same
+    // event names). Fire-and-forget (Unreliable) — a dropped eat blip is harmless.
+    internal struct VREatingSoundPacket : INetSerializable
+    {
+        public int NetId;
+        public int NameHash;
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(NetId);
+            writer.Put(NameHash);
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            NetId = reader.GetInt();
+            NameHash = reader.GetInt();
+        }
+    }
+
     // A body drag: the FULL ragdoll pose (one world transform per RigidbodySpawner bone), or a release
     // marker. The receiver freezes the corpse's ragdoll kinematic and snaps every bone to this pose, so
     // observers see the EXACT same ragdoll the dragger does — no local-physics divergence (which caused

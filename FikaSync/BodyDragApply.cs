@@ -42,8 +42,10 @@ namespace SptVrFikaSync
             public Vector3[] dispPos;
             public Quaternion[] dispRot;
             public GStruct138[] applyBuf; // reused each frame to avoid per-frame allocation
+            public float lastPacketTime;  // for the stale-timeout safety net (dragger dropped mid-drag)
         }
         private static readonly Dictionary<int, RemoteDrag> dragging = new Dictionary<int, RemoteDrag>();
+        private static bool _startErr; // one-shot log latch for a failed ragdoll reactivate
 
         // A let-go body falling / settling locally before it freezes.
         private sealed class Settling
@@ -126,8 +128,30 @@ namespace SptVrFikaSync
                     RemoveSettling(corpse);
                 }
 
-                // First drag packet for this body: freeze the ragdoll kinematic + snap to this pose, and
-                // seed the smoothing (displayed = target = this pose, so no jump on the first frame).
+                // First drag packet for this body. It may be FROZEN (settled, kinematic) or fully TORN
+                // DOWN (a settled corpse on the ground — EFT removes its rigidbodies once it settles +
+                // leaves view) on THIS client. ForceApply/ApplyTransformSync only move the bone
+                // TRANSFORMS, so the drag still SHOWS either way — but with no live rigidbodies the body
+                // can't FALL on release (ReactivateRagdoll has nothing to drop -> it stays frozen). So
+                // recreate a live ragdoll first via Ragdoll.Start(), exactly like the local owner's
+                // BeginBodyGrab does on grab. (Skipped if it's already a live dynamic ragdoll, e.g. this
+                // client also touched it.) This is the "frozen body picked up by another player stays
+                // frozen on release" fix.
+                Rigidbody probe = bones[0] != null ? bones[0].Rigidbody : null;
+                if (probe == null || probe.isKinematic)
+                {
+                    try
+                    {
+                        corpse.Ragdoll.Start();
+                    }
+                    catch (Exception e)
+                    {
+                        if (!_startErr) { _startErr = true; FikaSyncPlugin.Log.LogError($"[FikaSync] ragdoll reactivate error: {e}"); }
+                    }
+                }
+
+                // Freeze the ragdoll kinematic + snap to this pose, and seed the smoothing (displayed =
+                // target = this pose, so no jump on the first frame).
                 corpse.Ragdoll.Bool_0 = true;        // keepRigidbody: never tear down while held
                 corpse.Ragdoll.Func_0 = NeverFreeze; // stop EFT's settle coroutine freezing it while held
                 d = new RemoteDrag
@@ -139,6 +163,7 @@ namespace SptVrFikaSync
                     dispPos = (Vector3[])packet.Positions.Clone(),
                     dispRot = (Quaternion[])packet.Rotations.Clone(),
                     applyBuf = new GStruct138[n],
+                    lastPacketTime = Time.time,
                 };
                 dragging[packet.CorpseId] = d;
                 corpse.ForceApplyTransformSync(BuildSyncs(d.applyBuf, d.dispPos, d.dispRot));
@@ -149,6 +174,7 @@ namespace SptVrFikaSync
             // every frame (arrays are sized to the corpse's fixed bone count, so n matches).
             if (d.targetPos.Length != n)
                 return;
+            d.lastPacketTime = Time.time;
             for (int i = 0; i < n; i++)
             {
                 d.targetPos[i] = packet.Positions[i];
@@ -167,6 +193,7 @@ namespace SptVrFikaSync
             float t = rate > 0f ? 1f - Mathf.Exp(-rate * Time.deltaTime) : 1f;
 
             List<int> dead = null;
+            List<RemoteDrag> stale = null;
             foreach (var kv in dragging)
             {
                 RemoteDrag d = kv.Value;
@@ -174,6 +201,14 @@ namespace SptVrFikaSync
                     || d.ragdoll.RigidbodySpawner_0.Length != d.dispPos.Length)
                 {
                     (dead ?? (dead = new List<int>())).Add(kv.Key);
+                    continue;
+                }
+                // Safety net: no drag packet for too long (dragger dropped mid-drag, no Released arrived)
+                // -> release it locally so it falls instead of staying frozen.
+                if (Time.time - d.lastPacketTime > FikaVrSync.bodyDragStaleTimeout)
+                {
+                    (dead ?? (dead = new List<int>())).Add(kv.Key);
+                    (stale ?? (stale = new List<RemoteDrag>())).Add(d);
                     continue;
                 }
                 for (int i = 0; i < d.dispPos.Length; i++)
@@ -186,6 +221,13 @@ namespace SptVrFikaSync
             if (dead != null)
                 foreach (int k in dead)
                     dragging.Remove(k);
+            if (stale != null)
+                foreach (RemoteDrag d in stale)
+                {
+                    ReactivateRagdoll(d.ragdoll);
+                    if (d.corpse != null)
+                        AddSettling(d.corpse);
+                }
         }
 
         // Per physics step (FikaSyncPlugin.FixedUpdate): settle let-go bodies.
@@ -259,10 +301,14 @@ namespace SptVrFikaSync
         }
 
         // Force every bone of the ragdoll back into active physics so the body FALLS on release. The drag
-        // froze every bone kinematic (ForceApplyTransformSync -> ForceStopRigidBody, which also unsupports
-        // them); un-kinematic + gravity + wake so it settles. No blanket SupportRigidbody — an unsupported
-        // dynamic body still falls, and re-supporting risks double-registering. Func_0 stays NeverFreeze;
-        // the settle manager freezes it on our schedule.
+        // froze every bone kinematic via ForceApplyTransformSync -> ForceStopRigidBody, which also
+        // UNSUPPORTED every bone (removed it from EFT's GClass745 physics-support system). We MUST
+        // re-SupportRigidbody each bone here, mirroring RagdollClass.Start's order (un-kinematic, gravity,
+        // support, wake) — otherwise the body simulates but its transforms/mesh don't follow and it
+        // "freezes in place" on observers while it actually falls on the owner (the original "body doesn't
+        // fall when we let go" bug). Safe to support all here: ForceStop unsupported ALL of them, so this
+        // can't double-register (unlike the LOCAL owner, which only unsupported the one grabbed bone).
+        // Func_0 stays NeverFreeze; the settle manager freezes it on our schedule.
         private static void ReactivateRagdoll(RagdollClass ragdoll)
         {
             RigidbodySpawner[] bones = ragdoll != null ? ragdoll.RigidbodySpawner_0 : null;
@@ -278,6 +324,7 @@ namespace SptVrFikaSync
                     rb.isKinematic = false;
                 rb.useGravity = true;
                 rb.detectCollisions = true;
+                EFTPhysicsClass.GClass745.SupportRigidbody(rb, 0f);
                 rb.WakeUp();
             }
         }

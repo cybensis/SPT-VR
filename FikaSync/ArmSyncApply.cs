@@ -15,7 +15,8 @@ namespace SptVrFikaSync
     //                             foregrip marker if gripping else to its synced free pose
     //   - Empty / Knife / Grenade -> drive both arm IKs to the controller hand poses (the held item
     //                             follows the hand)
-    //   - anything else (meds) -> vanilla
+    //   - Meds (eating)        -> handled by EatingSyncApply (arms + food props)
+    //   - anything else        -> vanilla
     // Runs on ANY peer with this module (incl. flatscreen), so they all see the VR arms/weapon.
     [HarmonyPatch]
     internal static class ArmSyncApply
@@ -37,13 +38,6 @@ namespace SptVrFikaSync
         // pushes the whole gun (the grip markers ride it, so the welded hands + arms follow) out so it sits
         // more naturally in front. Cosmetic only (observer-side; doesn't touch hitreg/aim). 0 = off.
         public static float weaponForwardOffset = 0.1f;
-        // Fix the observed elbow flip. EFT's observed arm LimbIKs keep the flatscreen ANIMATION's elbow
-        // bend (BendModifier.Animation), which degenerates when we move the hand to the VR pose -- the
-        // elbow stays ~90 bent or even snaps the wrong way at extreme reach (arms straight down). FinalIK's
-        // "Arm" modifier instead computes a natural human-arm elbow from the actual hand direction (it
-        // can't flip), mirrored per arm via the solver's goal. Set every frame before Update so it wins
-        // over whatever ObservedVisualPass assigned. false = leave EFT's bend (old behavior).
-        public static bool useAutoElbowBend = true;
 
         private struct RemoteArms
         {
@@ -125,9 +119,9 @@ namespace SptVrFikaSync
                     return;
                 }
 
-                // Empty hands -> drive the arms to the controller poses. (Eating/meds intentionally
-                // NOT here: it runs FIKA's vanilla observed-meds animation, which reads fine; proper
-                // VR eating sync needs the prop-reparenting to also run observed-side -- a separate job.)
+                // Empty hands -> drive the arms to the controller poses. (Eating/meds is handled by
+                // EatingSyncApply's own ObservedPlayer.LateUpdate postfix: it drives the arms the same
+                // way AND overrides the food props so they ride the synced hands.)
                 // The freshness gate stops us driving stale poses if the sender goes quiet (lag).
                 if (hc is Player.EmptyHandsController)
                 {
@@ -216,7 +210,7 @@ namespace SptVrFikaSync
                     // Free off hand: same forward nudge as the gun, so it stays out front with the weapon
                     // instead of snapping back to the torso the instant it leaves the foregrip.
                     Quaternion lr = chest.rotation * w.leftRot * Quaternion.Euler(leftHandRotOffsetEuler);
-                    DriveArm(limbs[0], chest.TransformPoint(w.leftPos) + fwdOffset, lr);
+                    DriveArm(limbs[0], chest.TransformPoint(w.leftPos), lr);
                 }
             }
 
@@ -233,28 +227,16 @@ namespace SptVrFikaSync
         {
             if (limb == null || limb.solver == null || markers == null || markers.Length <= i || markers[i] == null)
                 return;
-            ApplyElbowBend(limb);
             limb.solver.IKPosition = markers[i].position;
             limb.solver.IKRotation = markers[i].rotation;
             limb.solver.Update();
         }
 
-        // Force FinalIK's automatic human-arm elbow so the bend can't flip at extreme reach. The Arm
-        // modifier's axis tables are initialised on solver init regardless of mode, so flipping to it at
-        // runtime is safe; goal (LeftHand/RightHand) is already set per arm so the mirroring is correct.
-        private static void ApplyElbowBend(LimbIK limb)
-        {
-            if (!useAutoElbowBend || limb == null || limb.solver == null)
-                return;
-            limb.solver.bendModifier = IKSolverLimb.BendModifier.Arm;
-            limb.solver.bendModifierWeight = 1f;
-        }
-
-        private static void DriveArm(LimbIK limb, Vector3 worldPos, Quaternion worldRot)
+        // internal so EatingSyncApply can drive the observed arms the same way during a meds eat.
+        internal static void DriveArm(LimbIK limb, Vector3 worldPos, Quaternion worldRot)
         {
             if (limb == null || limb.solver == null)
                 return;
-            ApplyElbowBend(limb);
             limb.solver.IKPositionWeight = armIkWeight;
             limb.solver.IKRotationWeight = driveHandRotation ? armIkWeight : 0f;
             limb.solver.IKPosition = worldPos;

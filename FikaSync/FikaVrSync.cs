@@ -29,6 +29,7 @@ namespace SptVrFikaSync
         public static bool enableArmSync = true;
         public static bool enableWeaponSync = true;   // sync the held gun's pose (aim) while armed
         public static bool enableMeleeHitSync = true; // replay VR-melee surface hits (sparks/glass) on observers
+        public static bool enableEatingSync = true;   // sync manual-eating gestures (food rides the synced hands)
         public static bool enableBodyDragSync = true;
 
         // ---- body-drag steal arbitration: read-hooks into the VR mod's local grab state ---------
@@ -47,6 +48,11 @@ namespace SptVrFikaSync
         public static float bodyFreezeDelay = 3f;         // rest this long after landing, then freeze
         public static float bodyFreezeMaxTime = 20f;      // hard fallback freeze (jittery bodies)
         public static float bodyReleaseReorderGuard = 0.3f; // ignore a stale drag packet this long after a release
+        // Safety net: if the observer gets NO drag packet for a body this long (dragger disconnected /
+        // crashed mid-drag, so no Released ever arrives), auto-release it locally so it can't stay frozen.
+        // Generous so a lag spike during a real drag doesn't false-trigger (the reliable Released handles
+        // the normal case immediately; this only catches hard drops).
+        public static float bodyDragStaleTimeout = 2f;
         // Exponential smoothing of the synced ragdoll pose, per frame, to hide the ~20 Hz packet stepping
         // (same model as the arm/weapon sync's smoothRate). 0 = snap each packet. ~18 = smooth + responsive
         // (~1/rate s of latency, which reads as natural drag weight).
@@ -61,12 +67,15 @@ namespace SptVrFikaSync
         private static void OnNetworkManagerCreated(FikaNetworkManagerCreatedEvent ev)
         {
             ArmSyncApply.ResetState();
+            EatingSyncApply.ResetState();
             BodyDragApply.ResetState();
             if (ev.Manager is FikaServer server)
             {
                 server.RegisterPacket<VRArmsPacket, NetPeer>(OnArmsServer);
                 server.RegisterPacket<VRWeaponPacket, NetPeer>(OnWeaponServer);
                 server.RegisterPacket<VRMeleeHitPacket, NetPeer>(OnMeleeHitServer);
+                server.RegisterPacket<VREatingPacket, NetPeer>(OnEatingServer);
+                server.RegisterPacket<VREatingSoundPacket, NetPeer>(OnEatingSoundServer);
                 server.RegisterPacket<BodyDragPacket, NetPeer>(OnBodyDragServer);
             }
             else if (ev.Manager is FikaClient client)
@@ -74,6 +83,8 @@ namespace SptVrFikaSync
                 client.RegisterPacket<VRArmsPacket>(OnArmsClient);
                 client.RegisterPacket<VRWeaponPacket>(OnWeaponClient);
                 client.RegisterPacket<VRMeleeHitPacket>(OnMeleeHitClient);
+                client.RegisterPacket<VREatingPacket>(OnEatingClient);
+                client.RegisterPacket<VREatingSoundPacket>(OnEatingSoundClient);
                 client.RegisterPacket<BodyDragPacket>(OnBodyDragClient);
             }
         }
@@ -151,6 +162,117 @@ namespace SptVrFikaSync
             catch (Exception e) { LogOnce(ref _meleeErr, "melee recv", e); }
         }
 
+        // ===== MANUAL EATING (food props ride the synced hands) =====
+        // Stable FNV-1a-32 hash of a prop transform's name. MUST be deterministic across machines
+        // (string.GetHashCode is NOT), since the sender and the observer hash the same names on
+        // different processes and compare. Used to match a synced prop to the observed food model.
+        public static int StableHash(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return 0;
+            unchecked
+            {
+                uint h = 2166136261u;
+                for (int i = 0; i < s.Length; i++) { h ^= s[i]; h *= 16777619u; }
+                return (int)h;
+            }
+        }
+
+        // Reusable send buffers (one local eater per peer, sent synchronously, so a single static
+        // set is safe — grown as needed, never shrunk).
+        private static int[] _eHash = new int[0];
+        private static Vector3[] _ePos = new Vector3[0];
+        private static Quaternion[] _eRot = new Quaternion[0];
+        private static bool[] _eVis = new bool[0];
+        private static int[] _eaHash = new int[0];
+        private static float[] _eaTime = new float[0];
+
+        // Send the local eater's wrist poses + food-animator layer states + prop poses/visibility.
+        // names/pos/rot/vis are parallel (chest-local), count props taken; animHashes/animTimes are
+        // parallel per layer. Capped at 255 props / 8 anim layers.
+        public static void SendEatingPose(int netId,
+            Vector3 lPos, Quaternion lRot, Vector3 rPos, Quaternion rRot,
+            System.Collections.Generic.List<int> animHashes,
+            System.Collections.Generic.List<float> animTimes,
+            System.Collections.Generic.List<string> names,
+            System.Collections.Generic.List<Vector3> pos,
+            System.Collections.Generic.List<Quaternion> rot,
+            System.Collections.Generic.List<bool> vis, int count)
+        {
+            if (!enableEatingSync)
+                return;
+            if (count > 255) count = 255;
+            if (_eHash.Length < count)
+            {
+                _eHash = new int[count]; _ePos = new Vector3[count];
+                _eRot = new Quaternion[count]; _eVis = new bool[count];
+            }
+            for (int i = 0; i < count; i++)
+            {
+                _eHash[i] = StableHash(names[i]);
+                _ePos[i] = pos[i]; _eRot[i] = rot[i]; _eVis[i] = vis[i];
+            }
+            int aCount = animHashes != null ? animHashes.Count : 0;
+            if (aCount > 8) aCount = 8;
+            if (_eaHash.Length < aCount) { _eaHash = new int[aCount]; _eaTime = new float[aCount]; }
+            for (int i = 0; i < aCount; i++) { _eaHash[i] = animHashes[i]; _eaTime[i] = animTimes[i]; }
+            VREatingPacket p = default;
+            p.NetId = netId; p.Active = true;
+            p.LeftPos = lPos; p.LeftRot = lRot; p.RightPos = rPos; p.RightRot = rRot;
+            p.AnimLayerCount = (byte)aCount; p.AnimHashes = _eaHash; p.AnimTimes = _eaTime;
+            p.PropCount = (byte)count;
+            p.NameHashes = _eHash; p.Positions = _ePos; p.Rotations = _eRot; p.Visible = _eVis;
+            SendUnreliableBroadcast(ref p);
+        }
+
+        // Eating ended — tell observers to restore hidden renderers and drop the override.
+        public static void SendEatingStop(int netId)
+        {
+            if (!enableEatingSync)
+                return;
+            VREatingPacket p = default;
+            p.NetId = netId; p.Active = false;
+            SendUnreliableBroadcast(ref p);
+        }
+
+        private static void OnEatingServer(VREatingPacket p, NetPeer sender)
+        {
+            try { EatingSyncApply.Store(p); }
+            catch (Exception e) { LogOnce(ref _eatErr, "eating recv", e); }
+            Singleton<FikaServer>.Instance?.SendData(ref p, DeliveryMethod.Unreliable, sender);
+        }
+
+        private static void OnEatingClient(VREatingPacket p)
+        {
+            try { EatingSyncApply.Store(p); }
+            catch (Exception e) { LogOnce(ref _eatErr, "eating recv", e); }
+        }
+
+        // One eat sound (by event name) the eater actually played — observers replay it on the observed
+        // food model's sound player (the looping vanilla audio is frozen out). Sent as a stable hash
+        // (no Put(string) at runtime); the observer reverse-resolves it against the food's sound bank.
+        public static void SendEatingSound(int netId, string name)
+        {
+            if (!enableEatingSync || string.IsNullOrEmpty(name))
+                return;
+            VREatingSoundPacket p = default;
+            p.NetId = netId; p.NameHash = StableHash(name);
+            SendUnreliableBroadcast(ref p);
+        }
+
+        private static void OnEatingSoundServer(VREatingSoundPacket p, NetPeer sender)
+        {
+            try { EatingSyncApply.QueueSound(p.NetId, p.NameHash); }
+            catch (Exception e) { LogOnce(ref _eatErr, "eating sound recv", e); }
+            Singleton<FikaServer>.Instance?.SendData(ref p, DeliveryMethod.Unreliable, sender);
+        }
+
+        private static void OnEatingSoundClient(VREatingSoundPacket p)
+        {
+            try { EatingSyncApply.QueueSound(p.NetId, p.NameHash); }
+            catch (Exception e) { LogOnce(ref _eatErr, "eating sound recv", e); }
+        }
+
         // ===== BODY DRAG =====
         public static void ClearRemoteDraggedCorpse(int netId) => BodyDragApply.ClearRemote(netId);
 
@@ -185,15 +307,20 @@ namespace SptVrFikaSync
             BodyDragPacket p = default;
             p.CorpseId = corpseNetId;
             p.Released = true;
-            SendUnreliableBroadcast(ref p);
+            // RELIABLE: this is a one-shot "stop syncing, go client-only" signal — if it dropped, the
+            // observer would hold the body frozen at its last pose forever. The drag stream stays
+            // Unreliable (high-frequency, fine to lose a frame).
+            SendReliableBroadcast(ref p);
         }
 
         private static void OnBodyDragServer(BodyDragPacket p, NetPeer sender)
         {
             try { BodyDragApply.Apply(p); }
             catch (Exception e) { LogOnce(ref _bodyErr, "body recv", e); }
-            // Relay regardless so a client-driven drag is still seen everywhere.
-            Singleton<FikaServer>.Instance?.SendData(ref p, DeliveryMethod.Unreliable, sender);
+            // Relay regardless so a client-driven drag is still seen everywhere. The release marker must
+            // relay reliably too (same reason as the send).
+            Singleton<FikaServer>.Instance?.SendData(ref p,
+                p.Released ? DeliveryMethod.ReliableOrdered : DeliveryMethod.Unreliable, sender);
         }
 
         private static void OnBodyDragClient(BodyDragPacket p)
@@ -211,7 +338,15 @@ namespace SptVrFikaSync
                 Singleton<FikaClient>.Instance?.SendData(ref p, DeliveryMethod.Unreliable, broadcast: true);
         }
 
-        private static bool _armErr, _bodyErr, _meleeErr;
+        private static void SendReliableBroadcast<T>(ref T p) where T : INetSerializable
+        {
+            if (FikaBackendUtils.IsServer)
+                Singleton<FikaServer>.Instance?.SendData(ref p, DeliveryMethod.ReliableOrdered, broadcast: true);
+            else
+                Singleton<FikaClient>.Instance?.SendData(ref p, DeliveryMethod.ReliableOrdered, broadcast: true);
+        }
+
+        private static bool _armErr, _bodyErr, _meleeErr, _eatErr;
         private static void LogOnce(ref bool latch, string what, Exception e)
         {
             if (latch)

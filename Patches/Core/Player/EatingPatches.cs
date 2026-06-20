@@ -99,8 +99,24 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(BaseSoundPlayer), "OnSound")]
         public static bool OnSoundGate(BaseSoundPlayer __instance, string StringParam)
         {
-            return EatingInteractionController.AllowSound(__instance, StringParam);
+            bool allow = EatingInteractionController.AllowSound(__instance, StringParam);
+            // A sound that passes the gate on OUR eat's sound player is one we actually play — forward
+            // it so co-op observers hear the real gesture audio (they freeze out the looping vanilla
+            // observed-meds sound). FIKA-gated so the FikaPlayer-touching send only JITs with FIKA.
+            // The send is wrapped: OnSound IS the eat-audio path, so a throw here would kill the local
+            // eater's own audio (how a stale stub's bad Put(string) bricked it the first time).
+            if (allow && TarkovVR.ModSupport.InstalledMods.FIKAInstalled
+                && EatingInteractionController.IsOwnEatSound(__instance))
+            {
+                try { TarkovVR.ModSupport.FIKA.VRArmSync.SendEatSound(StringParam); }
+                catch (System.Exception e)
+                {
+                    if (!_loggedSoundFwdErr) { _loggedSoundFwdErr = true; Plugin.MyLog.LogError($"[ManualEat] eat-sound forward failed: {e}"); }
+                }
+            }
+            return allow;
         }
+        private static bool _loggedSoundFwdErr;
 
         // Our controller's clips play HEAD-LOCKED 2D (see PlayClipHeadLocked): the vanilla
         // PlayClip path leaves the pooled source 3D-blended on the (VR-reparented) weapon

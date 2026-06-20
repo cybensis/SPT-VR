@@ -50,6 +50,10 @@
       <HintPath>..\libs\Managed\Assembly-CSharp-firstpass.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="AnimationSystem.Types">
+      <HintPath>..\libs\Managed\AnimationSystem.Types.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Comfort">
       <HintPath>..\libs\Managed\Comfort.dll</HintPath>
       <Private>false</Private>
