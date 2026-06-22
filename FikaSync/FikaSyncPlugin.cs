@@ -40,7 +40,7 @@ namespace SptVrFikaSync
         private bool _bodyRenderErr;
         private void LateUpdate()
         {
-            try { BodyDragApply.RenderSmoothing(); }
+            try { BodyDragApply.RenderSmoothing(); DownedDragApply.RenderSmoothing(); }
             catch (System.Exception e)
             {
                 if (!_bodyRenderErr) { _bodyRenderErr = true; Log.LogError($"[FikaSync] body render smoothing error: {e}"); }

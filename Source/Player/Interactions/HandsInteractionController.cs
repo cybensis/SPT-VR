@@ -187,7 +187,7 @@ namespace TarkovVR.Source.Player.Interactions
         // pickup op lands there, or the world item never gets RemoveLootItem/DestroyLoot'd on them.
         // Drops reconcile ~instantly, so this can be small — it's the code version of the human gap
         // in "let go of grip, THEN press Take". Live-tunable in the headset.
-        public static float stowReleaseDelay = 0.3f;
+        public static float stowReleaseDelay = 0.2f;
 
         /// <summary>
         /// Quick-stow / equip the currently-held loot item into the player's equipment (the

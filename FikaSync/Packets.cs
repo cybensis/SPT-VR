@@ -228,4 +228,51 @@ namespace SptVrFikaSync
             }
         }
     }
+
+    // A FIKA DOWNED/revive teammate being dragged. Unlike BodyDragPacket (a dead Corpse keyed by
+    // GameWorld.ObservedPlayersCorpses), a downed teammate is a still-LIVE player keyed by NetId, and
+    // exists as two different things on different machines — so the receiver applies this two ways:
+    //   * the DOWNED player's OWN client teleports itself to RootPos, so a revive lands them where they
+    //     were dragged (their authoritative position is owned by their client; nothing else can move it);
+    //   * every OTHER client drives that player's revive-ragdoll bones to the synced world pose (the same
+    //     all-bones, no-stretch model as BodyDragPacket — one transform per RigidbodySpawner bone).
+    // RootPos is sent on EVERY packet (incl. the reliable release marker, which carries the FINAL spot so
+    // a dropped drag packet can't strand the teammate); the bone arrays are empty on the release marker.
+    internal struct DownedDragPacket : INetSerializable
+    {
+        public int NetId;            // the DOWNED player's NetId (CoopHandler.Players key)
+        public bool Released;
+        public Vector3 RootPos;      // relocate target for the downed player (ground-projected body centroid)
+        public byte BoneCount;       // 0 on release
+        public Vector3[] Positions;  // world-space, per ragdoll bone
+        public Quaternion[] Rotations;
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(NetId);
+            writer.Put(Released);
+            writer.PutUnmanaged(RootPos);
+            writer.Put(BoneCount);
+            for (int i = 0; i < BoneCount; i++)
+            {
+                writer.PutUnmanaged(Positions[i]);
+                writer.PutUnmanaged(Rotations[i]);
+            }
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            NetId = reader.GetInt();
+            Released = reader.GetBool();
+            RootPos = reader.GetUnmanaged<Vector3>();
+            BoneCount = reader.GetByte();
+            Positions = new Vector3[BoneCount];
+            Rotations = new Quaternion[BoneCount];
+            for (int i = 0; i < BoneCount; i++)
+            {
+                Positions[i] = reader.GetUnmanaged<Vector3>();
+                Rotations[i] = reader.GetUnmanaged<Quaternion>();
+            }
+        }
+    }
 }

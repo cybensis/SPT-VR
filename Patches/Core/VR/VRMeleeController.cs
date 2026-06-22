@@ -22,6 +22,10 @@ namespace TarkovVR.Patches.Core.VR
         private const float KNIFE_SWING_THRESHOLD = 4.0f;
         private const float KNIFE_SWING_RESET = 1.0f;
 
+        // Set true to log every surface hit we broadcast (pair with MeleeHitApply.debug on the observer
+        // to see send vs. apply in the BepInEx log).
+        public static bool debugMeleeSend = false;
+
         // When OUR VR melee swing hits a SURFACE (wall sparks / glass break), broadcast it so observers
         // replay the effect -- the custom collider swing runs only locally, so FIKA never replicates it
         // (unlike a normal melee/shot). Player/AI hits are NOT sent: their damage already syncs through
@@ -44,6 +48,8 @@ namespace TarkovVR.Patches.Core.VR
             float dmg = (__instance.LastKickType == EKickType.Slash)
                 ? __instance.Knife.Template.KnifeHitSlashDam
                 : __instance.Knife.Template.KnifeHitStabDam;
+            if (debugMeleeSend)
+                Plugin.MyLog.LogWarning($"[FikaSync] melee SEND surface hit: {other.collider.name} mat={bc.TypeOfMaterial} point={point} n={other.normal} dmg={dmg}");
             FikaVrSync.SendMeleeHit(point, other.normal, __instance.vector3_0, dmg);
         }
 

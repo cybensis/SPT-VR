@@ -37,7 +37,27 @@ namespace SptVrFikaSync
         // is body-anchored close to the chest, which can look shoved into the torso on an observer; this
         // pushes the whole gun (the grip markers ride it, so the welded hands + arms follow) out so it sits
         // more naturally in front. Cosmetic only (observer-side; doesn't touch hitreg/aim). 0 = off.
-        public static float weaponForwardOffset = 0.1f;
+        public static float weaponForwardOffset = 0.15f;
+        // Straighten the HELD arm regardless of aim direction: push the whole gun out along the held
+        // (right) shoulder->gun line toward the arm's OWN full length, by this fraction. Unlike
+        // weaponForwardOffset (which pushes along body-facing, so it only opens the elbow when aimed
+        // roughly forward), this follows the actual arm line, so a gun aimed up / down / sideways still
+        // gets its elbow opened. The grip markers ride the weapon, so the welded hands + arms follow it
+        // out. Self-limiting: if the gun is already at/past full reach we leave it (no rubber-arm). The
+        // observed shoulder sits at the anatomical spot (not head-tracked like the local rig), which is
+        // why the same faithful gun pose looks tucked here. 0 = off.
+        public static float weaponExtendFactor = 0f;
+        // Elbow bend DIRECTION. Without a pole the observed arm keeps the IDLE ANIMATION's elbow bend, so
+        // the elbow stays angled forward no matter where the hand goes (hands-at-sides -> elbows still
+        // jut forward; same holding a gun). The LOCAL rig fixes this by aiming its _elbowBends at fixed
+        // down-and-out pole targets; we do the same for observed arms -- aim each arm's IK bend goal at a
+        // world pole below + out from the body. This is the GOAL-pole approach the local rig uses, NOT the
+        // auto-"Arm" modifier (which read EFT's skeleton wrong). Offsets are body-local (X out, Y down,
+        // Z back). Tune if elbows point off; useElbowPole=false -> leave EFT's animation bend.
+        public static bool useElbowPole = true;
+        public static float elbowPoleWeight = 1f;
+        public static Vector3 leftElbowPoleOffset = new Vector3(-1f, -2f, -0.8f);
+        public static Vector3 rightElbowPoleOffset = new Vector3(1f, -2f, -0.8f);
 
         private struct RemoteArms
         {
@@ -153,6 +173,7 @@ namespace SptVrFikaSync
             RemoteArms a = smoothRate > 0f ? SmoothArms(p.NetId, raw) : raw;
             Quaternion leftRot = chest.rotation * a.leftRot * Quaternion.Euler(leftHandRotOffsetEuler);
             Quaternion rightRot = chest.rotation * a.rightRot * Quaternion.Euler(rightHandRotOffsetEuler);
+            SetElbowPoles(p, limbs);
             DriveArm(limbs[0], chest.TransformPoint(a.leftPos),  leftRot);
             DriveArm(limbs[1], chest.TransformPoint(a.rightPos), rightRot);
         }
@@ -182,12 +203,20 @@ namespace SptVrFikaSync
                 if (fwd.sqrMagnitude > 1e-4f)
                     fwdOffset = fwd.normalized * weaponForwardOffset;
             }
-            wr.SetPositionAndRotation(chest.TransformPoint(w.pos) + fwdOffset, chest.rotation * w.rot);
 
             LimbIK[] limbs = p._observedLimbs;
             Transform[] markers = p._observedMarkers;
+
+            // Place the gun: faithful pose + forward nudge, then extend along the held shoulder->gun line
+            // so the held arm straightens whichever way it's aimed (no-op if the limbs aren't ready).
+            Vector3 gunPos = chest.TransformPoint(w.pos) + fwdOffset;
+            gunPos = ExtendWeaponReach(limbs, gunPos);
+            wr.SetPositionAndRotation(gunPos, chest.rotation * w.rot);
+
             if (limbs == null || limbs.Length < 2)
                 return;
+
+            SetElbowPoles(p, limbs);
 
             // Right hand: always on the gun/item. For a knife/grenade FORCE the IK weight (the hand
             // always holds it) so it can't go stuck when EFT drops the weight (e.g. grenade pin-pull).
@@ -210,7 +239,7 @@ namespace SptVrFikaSync
                     // Free off hand: same forward nudge as the gun, so it stays out front with the weapon
                     // instead of snapping back to the torso the instant it leaves the foregrip.
                     Quaternion lr = chest.rotation * w.leftRot * Quaternion.Euler(leftHandRotOffsetEuler);
-                    DriveArm(limbs[0], chest.TransformPoint(w.leftPos), lr);
+                    DriveArm(limbs[0], chest.TransformPoint(w.leftPos) + fwdOffset, lr);
                 }
             }
 
@@ -220,6 +249,52 @@ namespace SptVrFikaSync
                 bool m1Child = markers != null && markers.Length > 1 && markers[1] != null && markers[1].IsChildOf(wr);
                 FikaSyncPlugin.Log.LogInfo($"[FikaSync] weapon override NetId {p.NetId}: WeaponRoot={wr.name}, marker[1] childOfWeaponRoot={m1Child} (if FALSE the hands won't follow the moved gun -- markers don't ride WeaponRoot).");
             }
+        }
+
+        // Push the gun out along the held (right) shoulder->gun line toward the arm's full length, by
+        // weaponExtendFactor, so the held arm straightens regardless of aim. The grip markers ride the
+        // weapon, so moving it carries the welded hands + arms out. Reference is the freshly-rebuilt gun
+        // pose (not a marker that rode last frame's move) so there's no feedback drift. Self-limiting:
+        // already at/past full reach -> unchanged. bone1=shoulder joint, bone2=forearm, bone3=hand.
+        private static Vector3 ExtendWeaponReach(LimbIK[] limbs, Vector3 gunPos)
+        {
+            if (weaponExtendFactor <= 0f || limbs == null || limbs.Length < 2)
+                return gunPos;
+            LimbIK held = limbs[1]; // right arm holds the gun
+            if (held == null || held.solver == null || held.solver.bone1?.transform == null
+                || held.solver.bone2?.transform == null || held.solver.bone3?.transform == null)
+                return gunPos;
+
+            Vector3 shoulder = held.solver.bone1.transform.position;
+            Vector3 dir = gunPos - shoulder;
+            float dist = dir.magnitude;
+            if (dist < 1e-4f)
+                return gunPos;
+
+            float armLen = Vector3.Distance(shoulder, held.solver.bone2.transform.position)
+                         + Vector3.Distance(held.solver.bone2.transform.position, held.solver.bone3.transform.position);
+            if (dist >= armLen)
+                return gunPos; // already at/over full reach -> leave it
+
+            float newDist = Mathf.Lerp(dist, armLen, weaponExtendFactor);
+            return shoulder + dir * (newDist / dist);
+        }
+
+        // Aim each observed arm's IK bend goal at a down-and-out world pole (body-relative), so the elbow
+        // points naturally instead of keeping the animation's forward bend. Mirrors the local rig's
+        // _elbowBends pole targets. Call before the arm Updates in a drive path; the goal is consumed by
+        // the next solve (a temporary per-solve goal, so it leaves no stale state when we stop driving).
+        internal static void SetElbowPoles(ObservedPlayer p, LimbIK[] limbs)
+        {
+            if (!useElbowPole || limbs == null || limbs.Length < 2)
+                return;
+            Transform body = p.Transform?.Original;
+            if (body == null)
+                return;
+            if (limbs[0]?.solver != null)
+                limbs[0].solver.SetBendGoalPosition(body.position + body.rotation * leftElbowPoleOffset, elbowPoleWeight);
+            if (limbs[1]?.solver != null)
+                limbs[1].solver.SetBendGoalPosition(body.position + body.rotation * rightElbowPoleOffset, elbowPoleWeight);
         }
 
         // Re-aim a limb's solver at a (now-moved) grip marker, preserving EFT's weight for this frame.
