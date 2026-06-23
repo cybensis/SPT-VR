@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>SPT-VR</AssemblyName>
 	  <Description>VR mod for Single Player Tarkov</Description>
-	  <Version>1.2.7</Version>
+	  <Version>1.3.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
@@ -18,12 +18,9 @@
 
   <ItemGroup>
     <Compile Remove="ModSupport\EFTApiSupport.cs" />
-    <!-- The FikaSync module is its own project/DLL; don't let the root glob compile it into us too. -->
     <Compile Remove="FikaSync\**\*.cs" />
   </ItemGroup>
 
-  <!-- The custom-packet FIKA sync lives in a separate, VR-free DLL so flatscreen/headless peers can
-       register the packets (no "Undefined packet" crash) and render the sync. We feed it send data. -->
   <ItemGroup>
     <ProjectReference Include="FikaSync\FikaSync.csproj" />
   </ItemGroup>

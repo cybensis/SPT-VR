@@ -20,10 +20,7 @@ namespace TarkovVR.Source.Player.Interactions
     // rigidbodies. Once a corpse settles, EFT freezes every bone KINEMATIC (a static pose), and
     // after it also leaves the camera view EFT tears the rigidbodies down (corpses are built
     // keepRigidbody:false). We reactivate a settled/torn-down ragdoll the same way the game does
-    // on a hit — `corpse.Ragdoll.Start()` — then drive the grabbed bone. This is all base-EFT;
-    // nothing here calls into HollywoodFX. (HollywoodFX, if installed, only tweaks corpse-physics
-    // VALUES — no-sleep, a ~15s settle, a low depenetration velocity — none of which this needs;
-    // it just shapes the feel/timing.)
+    // on a hit — `corpse.Ragdoll.Start()` — then drive the grabbed bone.
     //
     // Unlike loose loot, there's NO white dot / pointer: you grab a body ONLY by physically
     // putting your (off) hand on a body part and pressing grip. The bone you're touching becomes
@@ -494,8 +491,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // Restore the bones' (raised) depenetration velocity to the settled value on release, so a
-        // later interaction (e.g. shooting the corpse) doesn't pop with HollywoodFX's tame default
-        // overridden.
+        // later interaction (e.g. shooting the corpse)
         private void RestoreRagdollCollision()
         {
             RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll.RigidbodySpawner_0 : null;

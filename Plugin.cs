@@ -18,7 +18,7 @@ using TarkovVR.Source.Settings;
 
 namespace TarkovVR
 {
-    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.2.7")]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.3.0")]
     // Soft: the FikaSync module only loads its plugin when FIKA is present, so we must NOT hard-depend
     // on it (that would break solo VR). We still ship its DLL alongside ours and load after it here.
     [BepInDependency("com.matsix.sptvr.fikasync", BepInDependency.DependencyFlags.SoftDependency)]
@@ -372,17 +372,6 @@ namespace TarkovVR
             else
             {
                 MyLog.LogWarning("WeaponCustomizer dll not found, support patches will not be applied.");
-            }
-
-            // HollywoodFX — soft dependency for body dragging only. We don't apply any patches or
-            // need its types; we just note it's present so the body-drag can lean on its corpse-physics
-            // tuning (bounce/drag/mass, no auto-sleep) and skip the tweaks it already owns. Body
-            // dragging works fully without it.
-            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\HollywoodFX\\HollywoodFX.dll");
-            if (File.Exists(modDllPath))
-            {
-                InstalledMods.HollywoodFXInstalled = true;
-                MyLog.LogInfo("HollywoodFX detected — body dragging will use its ragdoll physics.");
             }
 
             // Repeat for other mods (AmandsGraphics, FIKA) as needed
