@@ -145,12 +145,9 @@ namespace TarkovVR.ModSupport.FIKA
         // the moment real motion (a throw/drop) or a Done arrives, so the physics drop still
         // simulates in sync. And if WE are the one physically holding the item, skip the apply
         // entirely so a stale/echoing syncer on another client can never disturb our own hold.
-        // How a grab of an item ANOTHER player is already holding resolves.
-        //   Steal = newest grab wins: the new grabber takes it, the previous holder yields.
-        //   Block = the loot pointer refuses to grab/point at it (no dot), so it stays with the
-        //           current holder. (No dual-ownership in either mode.)
-        public enum RemoteHeldGrabMode { Steal, Block }
-        public static RemoteHeldGrabMode remoteHeldMode = RemoteHeldGrabMode.Steal;
+        //
+        // How a grab of an item ANOTHER player is already holding resolves: newest grab wins —
+        // the new grabber steals it and the previous holder yields (no dual-ownership).
 
         // NetId -> Time.time after which the item stops counting as remote-held. Populated from
         // ApplyNetPacket whenever we receive ANOTHER player's "held" broadcast (Done=false + zero
@@ -163,6 +160,8 @@ namespace TarkovVR.ModSupport.FIKA
         // Steal mode: a player who has held the contested item longer than this yields to the more
         // recent grabber. Keep it well above the ~80ms a hand-off takes but below a realistic gap
         // between two deliberate grabs, so back-and-forth steals each resolve to the newest grab.
+        // (The leading "Steal mode" framing predates the removal of an alternative "Block" mode;
+        // stealing is now the only behavior.)
         public static float stealGraceTime = 0.4f;
 
         // Smoothing for RECEIVED held-item motion. A held item is position-synced at ~25 Hz; hard-
@@ -174,18 +173,12 @@ namespace TarkovVR.ModSupport.FIKA
         public static float lootSmoothRate = 18f;          // matches ArmSyncApply.smoothRate
         public static float lootSmoothStaleTimeout = 0.5f; // stop lerping if the holder goes quiet
 
-        /// <summary>True while another player is actively holding this loose item (raw, mode-agnostic).</summary>
+        /// <summary>True while another player is actively holding this loose item.</summary>
         public static bool IsRemotelyHeldRaw(LootItem item)
         {
             if (item == null)
                 return false;
             return remoteHeldUntil.TryGetValue(item.GetNetId(), out float until) && Time.time < until;
-        }
-
-        /// <summary>True when the loot pointer should REFUSE to grab this item (Block mode only).</summary>
-        public static bool IsRemotelyHeld(LootItem item)
-        {
-            return remoteHeldMode == RemoteHeldGrabMode.Block && IsRemotelyHeldRaw(item);
         }
 
         [HarmonyPrefix]
@@ -203,12 +196,10 @@ namespace TarkovVR.ModSupport.FIKA
             if (hic != null && ReferenceEquals(hic.heldItem, __instance))
             {
                 // We're holding it locally AND a held broadcast for it just arrived — another
-                // player has grabbed the same item. Steal mode = newest grab wins: if we grabbed
-                // it more than stealGraceTime ago we yield (hand authority to them and fall through
-                // to apply their pose); the more-recent grabber keeps it. Otherwise we keep it.
-                // (Block mode never reaches contention — the pointer refuses the grab.)
-                bool yield = remoteHeldMode == RemoteHeldGrabMode.Steal
-                             && incomingHeld
+                // player has grabbed the same item. Newest grab wins: if we grabbed it more than
+                // stealGraceTime ago we yield (hand authority to them and fall through to apply
+                // their pose); the more-recent grabber keeps it. Otherwise we keep it.
+                bool yield = incomingHeld
                              && Time.time - hic.heldItemGrabTime > stealGraceTime;
                 if (yield)
                     hic.RelinquishHeldItem();
@@ -217,7 +208,7 @@ namespace TarkovVR.ModSupport.FIKA
             }
 
             // Track who's being held remotely (cleared the moment real motion or a drop/Done
-            // arrives) so the loot pointer can block (Block mode) / arbitrate (Steal mode).
+            // arrives) so the steal arbitration above can resolve a contested grab.
             int netId = __instance.GetNetId();
             if (incomingHeld)
             {

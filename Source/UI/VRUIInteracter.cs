@@ -264,7 +264,11 @@ namespace TarkovVR.Source.UI
         }
         private GameObject RaycastFindHit(RaycastHit hit, ref PointerEventData eventData)
         {
-            var pointerPosition = Camera.main.WorldToScreenPoint(hit.point);
+            Camera mainCam = Camera.main;
+            if (mainCam == null || EventSystem.current == null)
+                return null;
+
+            var pointerPosition = mainCam.WorldToScreenPoint(hit.point);
             //Plugin.MyLog.LogWarning("WDWD: " + pointerPosition + " " + hit.point);
 
             eventData.position = pointerPosition;

@@ -348,6 +348,25 @@ namespace SptVrFikaSync
         }
 
         // ===== DOWNED/REVIVE TEAMMATE DRAG =====
+        // Resolve a downed/revive teammate's ReviveInteractable from a collider, for the VR mod's body
+        // grab. ReviveInteractable is a Fika.Core type the VR assembly (SPT-VR.dll) must NOT name in a
+        // field or signature: doing so hard-links Fika.Core into a type that ALWAYS loads, so the whole
+        // mod fails to load when FIKA isn't installed (the field type can't resolve ->
+        // BadImageFormatException). This module legitimately references Fika.Core and only loads when FIKA
+        // is present, so the lookup lives here; it hands the component back as a plain MonoBehaviour plus
+        // the EFT RagdollClass to drive. Returns null when the collider isn't a downed teammate.
+        public static MonoBehaviour FindReviveInteractable(Component col, out RagdollClass ragdoll)
+        {
+            ragdoll = null;
+            if (col == null)
+                return null;
+            ReviveInteractable revive = col.GetComponentInParent<ReviveInteractable>();
+            if (revive == null)
+                return null;
+            ragdoll = revive._ragdoll;
+            return revive;
+        }
+
         // Resolve a downed teammate's NetId from the GameObject their ReviveInteractable lives on (= their
         // player GameObject). Used by the VR mod at grab time; -1 if not a known FIKA player.
         public static int ResolveDownedNetId(GameObject bodyRoot)

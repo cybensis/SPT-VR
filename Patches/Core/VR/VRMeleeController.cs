@@ -1,6 +1,7 @@
 ﻿using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -50,8 +51,18 @@ namespace TarkovVR.Patches.Core.VR
                 : __instance.Knife.Template.KnifeHitStabDam;
             if (debugMeleeSend)
                 Plugin.MyLog.LogWarning($"[FikaSync] melee SEND surface hit: {other.collider.name} mat={bc.TypeOfMaterial} point={point} n={other.normal} dmg={dmg}");
-            FikaVrSync.SendMeleeHit(point, other.normal, __instance.vector3_0, dmg);
+            FikaSendMeleeHit(point, other.normal, __instance.vector3_0, dmg);
         }
+
+        // Companion-DLL isolation: the FikaVrSync (SPT-VR-FikaSync.dll) call lives in its own
+        // NoInlining method so it's only JITted when actually CALLED — which only happens after the
+        // InstalledMods.FIKAInstalled early-return above. Inlining it into SyncMeleeSurfaceHit would
+        // bind the cross-assembly reference at that patch method's JIT (on the first surface hit) and
+        // throw FileNotFoundException when running without the companion DLL. See the same pattern in
+        // HandsInteractionController.BodyGrab + memory note fika-softdep-no-typed-fields.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void FikaSendMeleeHit(Vector3 point, Vector3 normal, Vector3 direction, float damage)
+            => FikaVrSync.SendMeleeHit(point, normal, direction, damage);
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]

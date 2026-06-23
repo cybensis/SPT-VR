@@ -778,14 +778,6 @@ namespace TarkovVR.Source.Player.Interactions
                 else if (door.DoorState == EDoorState.Shut)
                     doorInteractionClass.method_0();
             }
-            else if (leftHandState.corpse != null)
-            {
-                // When body-grab is on, gripping a corpse is owned by UpdateBodyGrab (HOLD = drag,
-                // TAP = loot via OpenCorpseLoot). Only open the loot grid directly here when
-                // body-grab is disabled, so the old behavior is preserved.
-                if (!enableBodyGrab)
-                    OpenCorpseLoot(leftHandState.corpse);
-            }
         }
 
         private void UpdateHeldItemPosition()

@@ -13,7 +13,7 @@ namespace TarkovVR.Patches.Core.Player
     // TEMPORARY RECON — profile a food's VANILLA eat to gather everything needed to
     // author a new FoodDef in EatingInteractionController. Self-contained and decoupled
     // from the manual-eating flow (works on foods that DON'T have a FoodDef yet, since
-    // it just watches the normal eat). Delete this whole file when done.
+    // it just watches the normal eat).
     //
     // USAGE: set EatingRecon.enabled = true (Unity Explorer / UnityExplorer), then eat
     // the target food normally (let the vanilla animation play — do NOT have a FoodDef

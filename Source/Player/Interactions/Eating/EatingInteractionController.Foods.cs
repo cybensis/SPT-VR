@@ -268,16 +268,36 @@ namespace TarkovVR.Source.Player.Interactions
             BigCan("57347d8724597744596b4e76"),   // Squash
             Noodles("656df4fec921ad01000481a2"), // Rolton noodles (all wiring in the Noodles preset)
             PullStart(HandPath(OpenGrip(CanHand("5bc9c29cd4351e003562b8a3", "sprats_root", "sprats_foodpiece"), "sprats_key"), SpratsOpenPath), 0.26f), // Sprats
+            PullEnd(PullStart(HandPath(OpenGrip(CanSpoon("67586b7e49c2fa592e0d8ed9", "salad_root", "saira_spoon", "salad_foodpiece",
+                canPos: V(-0.115f, -0.025f, -0.014f), canRot: V(79.5f, 243.3f, 321f),
+                spoonPos: V(-0.112f, -0.07f, -0.012f), spoonRot: V(22.3f, 153.2f, 138.7f)),
+                "salad_cover_root"), SaladOpenPath), 0.21f), 0.6f),
             //--- Bars / bags / packs ----------------------------------------------
-            // HandPath = the authored peel; OpenGrip (sn_cover ride) is the fallback.
             PullStart(HandPath(OpenGrip(Wrapper("544fb6cc4bdc2d34748b456e", "item_slickers_LOD0", "sn_CAT", "sn_cover"), "sn_cover"), ChocolateOpenPath), 0.15f), // Chocolate bar (slickers)
-            // HandPath = the authored tear; OpenGrip (bone_ugol corner ride, ~45cm tear +
-            // toss) is the fallback if the path is removed.
             PullStart(HandPath(OpenGrip(Bag("5751487e245977207e26a315", "bone_upakovka", "bone_suharik_hold"), "bone_ugol"), CroutonOpenPath), 0.31f), // Emelya croutons
             PullStart(HandPath(OpenGrip(Bag("57347d3d245977448f7b7f61", "bone_upakovka", "bone_suharik_hold"), "bone_ugol"), CroutonOpenPath), 0.31f), // Rye croutons
-            // Held root is the bone group pack_CAT (drives the skinned mesh + holds everything),
-            // NOT item_galettte_pack_LOD0 (a SkinnedMeshRenderer whose transform is a phantom).
             HandPath(Pack("5448ff904bdc2d6f028b456e", "pack_CAT", null, "item_galette_LOD0"), GaletteOpenPath), // Galette (crackers)
+            SoundTimes(PullStart(HandPath(OpenGrip(Wrapper("57505f6224597709a92585a9", "item_alyonka_LOD0", "sn_CAT", "sn_cover",
+                barPos: V(-0.122f, -0.059f, -0.028f), barRot: V(19f, 146.5f, 10f),
+                coverPos: V(-0.136f, -0.076f, 0.038f), coverRot: V(3.9f, 60.9f, 356.3f)), "sn_cover"), AlyonkaOpenPath), 0.15f), 0.258f),
+            PullStart(HandPath(OpenGrip(Bag("57347d90245977448f7b7f65", "bone_upakovka", "bone_suharik_hold", bites: 4,
+                bagPos: V(-0.145f, -0.039f, -0.053f), bagRot: V(1.7f, 193.1f, 268.9f)), "bone_oatmeal_ugol_000"), OatmealOpenPath), 0.31f),
+            Timed(PullStart(HandPath(Wrapper("65815f0e647e3d7246384e14", "pack_root", null, "pack_cover00", bites: 1,
+                barPos: V(-0.125f, -0.084f, -0.041f), barRot: V(345.9f, 190.3f, 107.7f),
+                coverPos: V(-0.106f, -0.06f, -0.006f), coverRot: V(296.5f, 345f, 246f)), TarkaOpenPath), 0.000f)),
+            SoundTimes(PullStart(HandPath(Zones(CanHand("59e3577886f774176a362503", "item_sugar_box", "sugar_piece_000",
+                canPos: V(-0.132f, -0.072f, -0.052f), canRot: V(359.3f, 130.2f, 3.5f),
+                foodPos: V(-0.143f, -0.041f, -0.023f), foodRot: V(291.9f, 166.6f, 315.2f),
+                food2: "sugar_piece_001", food2Pos: V(-0.137f, -0.039f, -0.012f), food2Rot: V(291.9f, 188.5f, 0.1f),
+                glue: "sugar_piecese",
+                openSounds: new[] { "Open", "Open1" }),
+                openOffset: V(0f, 0f, -0.14f), takeOffset: V(0f, 0f, -0.14f)), SugarOpenPath), 0.24f), 0.233f, 0.606f),
+            PullStart(ReachPath(HandPath(Zones(ReachBag("590c5d4b86f774784e1b9c45", "IFR_CAT", "ifr_galette",
+                bagPos: V(-0.179f, -0.098f, -0.032f), bagRot: V(49.8f, 92.7f, 265.2f)),
+                openOffset: V(0f, 0f, -0.02f), takeOffset: V(0f, 0f, -0.02f), takeRadius: 0.20f), IskraOpenPath), IskraReachPath), 0.2f),
+            PullStart(ReachPath(HandPath(Zones(ReachBag("590c5f0d86f77413997acfab", "mre_CAT", "mre_galette", bites: 3,
+                bagPos: V(-0.148f, -0.076f, -0.037f), bagRot: V(49.7f, 92.6f, 272.5f)),
+                openOffset: V(0f, 0f, -0.02f), takeOffset: V(0f, 0f, -0.02f), takeRadius: 0.20f), MreOpenPath), MreReachPath), 0.2f),
             //--- Drinks (open, then HOLD at the mouth; capped bottles recap to stop) ---
             SodaCan("60b0f93284c20f0feb453da7"),  // Rat Cola
             SodaCan("5751435d24597720a27126d1"),  // Max Energy
@@ -290,21 +310,11 @@ namespace TarkovVR.Source.Player.Interactions
             JuiceBottle("57513f07245977207e26a311"), // Apple juice
             JuiceBottle("57513fcc24597720a31c09a6"), // Vitajuice
             JuiceBottle("57513f9324597720a7128161"), // Grandma's juice
-            // Condensed milk — was a Drink; switched to CanSpoon (the rig IS the saira can,
-            // same key-roll open) so it can be SPOONED or DRUNK from the can (mouthDrink:
-            // hold the can at your mouth — use-time drain, drink audio; the 2 scoops shrink
-            // with what's left, so half-drunk = one scoop and done). Its clip is the drink
-            // clip, so openSounds = just "Open"; spoon/food grips = the saira defaults.
-            // VERIFY the rig has saira_spoon/saira_foodpiece — a "Missing props" log means
-            // it fell back to vanilla and this needs its own prop names.
             PullStart(HandPath(OpenGrip(CanSpoon("5734773724597737fd047c14", "saira_root", null, null, bites: 2,
                 canPos: V(-0.125f, -0.056f, 0.02f), canRot: V(358.3f, 326.2f, 73.1f), eatSound: "Drink"), "saira_key"), CondMilkOpenPath), 0.21f),
             PullStart(HandPath(Bottle("62a09f32621468534a797acb", // Pevko Beer
                 pos: V(-0.113f, -0.065f, 0.064f), rot: V(6.8f, 349.4f, 278.3f),
                 capPos: V(-0.109f, -0.036f, -0.049f), capRot: V(280.1f, 87.5f, 39.1f)), BeerOpenPath), 0.35f),
-            // Foil ration pouch: held in the RIGHT hand (override the bottle default), no cap.
-            // OpenGrip = the foil tear bones (ration3 = the torn strip, ~5cm). NOTE mirror
-            // food: vanilla tears with the R hand, we open with the L — A/B its HandPath.
             PullStart(HandPath(OpenGrip(Bottle("60098b1705871270cd5352a1", cap: false, // Emergency water ration
                 pos: V(-0.09f, -0.092f, -0.005f), rot: V(14.6f, 44.2f, 56.9f)), "ration3"), RationOpenPath), 0.27f),
             PullStart(HandPath(Bottle("5d40407c86f774318526545a", // Vodka
@@ -316,93 +326,23 @@ namespace TarkovVR.Source.Player.Interactions
             PullStart(HandPath(Bottle("5e8f3423fd7471236e6e3b64", // Kvas (same plastic-bottle shape as the water bottle)
                 pos: V(-0.128f, -0.051f, -0.03f), rot: V(13.2f, 353.2f, 248.1f),
                 capPos: V(-0.121f, -0.042f, -0.052f), capRot: V(283.4f, 36.7f, 169.3f)), KvasOpenPath), 0.29f),
-            // Aquamari filter bottle: its own rig (fb_root) with a flip sport-cap (fb_cap, a
-            // CHILD of fb_root, so it rides the bottle and animates open on its own — cap:null,
-            // nothing to detach). Held in the LEFT hand.
             OpenWith(PullStart(HandPath(Drink("5c0fa877d174af02a012e1cf", "fb_root", null, // Aquamari filter bottle
                 drinkPos: V(-0.073f, -0.059f, -0.091f), drinkRot: V(358.7f, 335.1f, 338.7f),
                 holdInOffHand: true), AquamariOpenPath), 0.33f),
-                OpenGestureKind.Tilt), // flip sport-cap: tip the hand open
-            // Hinged flip-top: the whole "hinge" group (a sibling of mod_item) stays welded to
-            // the bottle and rides the hand — it animates open in place, nothing detaches.
-            // OpenGrip = 'cap', the flip lid INSIDE the hinge group (it animates; the glued
-            // hinge root doesn't), ~7cm flip — the fallback under the HandPath.
+                OpenGestureKind.Tilt),
             PullStart(HandPath(OpenGrip(Bottle("5d1b376e86f774252519444e", hingedCap: "hinge", // Moonshine
                 pos: V(-0.116f, -0.065f, 0.062f), rot: V(7.6f, 349.6f, 278.2f)), "cap"), MoonshineOpenPath), 0.27f),
-            // Superwater is a big jug held by the TOP HANDLE in the LEFT hand (holdInOffHand,
-            // the bottle default) — so mod_item's origin hangs ~0.18m below the grip. Left-palm
-            // bottle + right-palm cap from the recon; still approximate (the jug wobbled in the
-            // measure), so fine-tune EatBaseHolder/EatCapHolder live + DumpFoodDef.
             PullStart(HandPath(Zones(Bottle("5d1b33a686f7742523398398", // Superwater
                 pos: V(-0.021f, -0.175f, 0.067f), rot: V(300.7f, 264f, 89.6f),
                 capPos: V(-0.118f, -0.048f, -0.006f), capRot: V(276.7f, 118.7f, 315.4f)), 
                 openOffset: V(0f, 0f, 0.1f), takeOffset: V(0f, 0f, 0.1f)), SuperwaterOpenPath), 0.31f),
             PullStart(HandPath(Bottle("5448fee04bdc2dbc018b4567", // Water bottle (60/60 — drinks down partially)
                 pos: V(-0.128f, -0.051f, -0.031f), rot: V(13.3f, 353f, 248f),
-                capPos: V(-0.121f, -0.043f, -0.053f), capRot: V(283.4f, 35.5f, 162.8f)), WaterBottleOpenPath), 0.29f),
-
-            //=== New foods 2026-06-13 (recon-data batch; grips/sounds measured, HandPaths
-            //    still to capture — re-eat each VANILLA once with a FoodDef present to bake them). ===
-            // Alyonka chocolate — Wrapper, exactly like slickers (held R, LEFT peels sn_cover).
-            // Open@0.258 in STATE_USE.
-            SoundTimes(PullStart(HandPath(OpenGrip(Wrapper("57505f6224597709a92585a9", "item_alyonka_LOD0", "sn_CAT", "sn_cover",
-                barPos: V(-0.122f, -0.059f, -0.028f), barRot: V(19f, 146.5f, 10f),
-                coverPos: V(-0.136f, -0.076f, 0.038f), coverRot: V(3.9f, 60.9f, 356.3f)), "sn_cover"), AlyonkaOpenPath), 0.15f), 0.258f),
-            // Mayo — Drink held in the RIGHT hand, screw cap (mayo_cap) -> Tilt. Health 100/100
-            // drains live at the mouth. Open@0.358 in STATE_OPEN.
+                capPos: V(-0.121f, -0.043f, -0.053f), capRot: V(283.4f, 35.5f, 162.8f)), WaterBottleOpenPath), 0.29f),         
             OpenWith(SoundTimes(PullStart(HandPath(Drink("5bc9b156d4351e00367fbce9", "mayo_root", "mayo_cap",
                 drinkPos: V(-0.109f, -0.055f, 0.026f), drinkRot: V(358.6f, 199.1f, 301.5f),
-                capPos: V(-0.124f, -0.04f, 0.035f), capRot: V(274.2f, 79.4f, 303.5f)), MayoOpenPath), 0.11f), 0.358f), OpenGestureKind.Tilt),
-            // Oat flakes — Bag like croutons (held R, LEFT opens, SHAKE into the left hand).
-            // 4 shakes empty the 40/40 box (bites: 4). Corner-tear bone = bone_oatmeal_ugol_000.
-            PullStart(HandPath(OpenGrip(Bag("57347d90245977448f7b7f65", "bone_upakovka", "bone_suharik_hold", bites: 4,
-                bagPos: V(-0.145f, -0.039f, -0.053f), bagRot: V(1.7f, 193.1f, 268.9f)), "bone_oatmeal_ugol_000"), OatmealOpenPath), 0.31f),
-            // Salad box — CanSpoon, held in the LEFT hand (saira-shaped: same Open/Open2/SpoonTake
-            // sound timing, so the default openSoundTimes apply). Peel salad_cover_root, spoon scoops.
-            PullEnd(PullStart(HandPath(OpenGrip(CanSpoon("67586b7e49c2fa592e0d8ed9", "salad_root", "saira_spoon", "salad_foodpiece",
-                canPos: V(-0.115f, -0.025f, -0.014f), canRot: V(79.5f, 243.3f, 321f),
-                spoonPos: V(-0.112f, -0.07f, -0.012f), spoonRot: V(22.3f, 153.2f, 138.7f)),
-                "salad_cover_root"), SaladOpenPath), 0.21f), 0.6f),
-            
-            // Tarka dried meat (snacker_beef) — Wrapper: held R on pack_root, LEFT rips
-            // pack_cover00, then HOLD at the mouth (Timed — true to the use time). PullStart
-            // = the path's first key: without it the auto-captured scrub start sat deep into
-            // STATE_USE ("animation already progressed too far" on the first press).
-            Timed(PullStart(HandPath(Wrapper("65815f0e647e3d7246384e14", "pack_root", null, "pack_cover00", bites: 1,
-                barPos: V(-0.125f, -0.084f, -0.041f), barRot: V(345.9f, 190.3f, 107.7f),
-                coverPos: V(-0.106f, -0.06f, -0.006f), coverRot: V(296.5f, 345f, 246f)), TarkaOpenPath), 0.000f)),
-            // Sugar — CanHand mirror of sprats: box (item_sugar_box, the bone root driving the
-            // skinned mod_item mesh) held in the LEFT hand, RIGHT opens + grabs TWO cubes at
-            // once (sugar_piece_000 + _001, each on its own holder — vanilla shows a pair) +
-            // eats. The remaining pile (sugar_piecese) is a SIBLING of the box in the rig, so
-            // it's GLUED on to ride the hand. Sounds are Open/Open1 (not Open2).
-            SoundTimes(PullStart(HandPath(Zones(CanHand("59e3577886f774176a362503", "item_sugar_box", "sugar_piece_000",
-                canPos: V(-0.132f, -0.072f, -0.052f), canRot: V(359.3f, 130.2f, 3.5f),
-                foodPos: V(-0.143f, -0.041f, -0.023f), foodRot: V(291.9f, 166.6f, 315.2f),
-                food2: "sugar_piece_001", food2Pos: V(-0.137f, -0.039f, -0.012f), food2Rot: V(291.9f, 188.5f, 0.1f),
-                glue: "sugar_piecese",
-                openSounds: new[] { "Open", "Open1" }),
-                openOffset: V(0f, 0f, -0.14f), takeOffset: V(0f, 0f, -0.14f)), SugarOpenPath), 0.24f), 0.233f, 0.606f),
-            // Sausage — Snack: held R, no open; HOLD it at your mouth and it eats down the
-            // item's use-time (Timed + segmented are baked into Snack — a sausage segment
-            // hides per audible bite, tip first).
-            Snack("635a758bfefc88a93f021b8a", "bone_item_food_sausage"),
-
-            //=== Reach-into-bag: pouch held R on the bone-root group, LEFT rips the strap
-            //    top (pull-open; HandPath = the authored rip, baked 2026-06), then the LEFT
-            //    hand reaches INTO the bag mouth — see StepReachTake; the latched hand
-            //    replays the baked ReachPath. Reach segment 0.02->0.3 (headset-corrected —
-            //    tune the live statics MID-EAT only, the spawn re-seeds them). ===
-            // Iskra ration: IFR_CAT > ifr_root > ifr_galette (the cracker; the item_ifr_LOD0
-            // mesh is a skinned phantom — never hold it). Grip = recon R-palm IFR_CAT.
-            PullStart(ReachPath(HandPath(Zones(ReachBag("590c5d4b86f774784e1b9c45", "IFR_CAT", "ifr_galette",
-                bagPos: V(-0.179f, -0.098f, -0.032f), bagRot: V(49.8f, 92.7f, 265.2f)),
-                openOffset: V(0f, 0f, -0.02f), takeOffset: V(0f, 0f, -0.02f), takeRadius: 0.20f), IskraOpenPath), IskraReachPath), 0.2f),
-            // MRE: same family (mre_CAT > mre_root > mre_galette), its own grip; a bigger
-            // meal -> 3 reach->grab->eat rounds.
-            PullStart(ReachPath(HandPath(Zones(ReachBag("590c5f0d86f77413997acfab", "mre_CAT", "mre_galette", bites: 3,
-                bagPos: V(-0.148f, -0.076f, -0.037f), bagRot: V(49.7f, 92.6f, 272.5f)),
-                openOffset: V(0f, 0f, -0.02f), takeOffset: V(0f, 0f, -0.02f), takeRadius: 0.20f), MreOpenPath), MreReachPath), 0.2f),
+                capPos: V(-0.124f, -0.04f, 0.035f), capRot: V(274.2f, 79.4f, 303.5f)), MayoOpenPath), 0.11f), 0.358f), OpenGestureKind.Tilt),                    
+            Snack("635a758bfefc88a93f021b8a", "bone_item_food_sausage"),          
         };
 
         // --- Canned-food shapes ------------------------------------------------

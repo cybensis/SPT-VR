@@ -3,8 +3,95 @@
   "WorkspaceRootPath": "F:\\SPT-VR-development\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\handsinteractioncontroller.lootpointer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\handsinteractioncontroller.lootpointer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\ui\\vruiinteracter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\ui\\vruiinteracter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\handsinteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\handsinteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\handsinteractioncontroller.bodygrab.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\handsinteractioncontroller.bodygrab.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.latch.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.latch.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.sync.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.sync.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.props.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.props.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.handpaths.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.handpaths.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.gestures.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.gestures.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.foods.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.foods.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\movementpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\movementpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\eatingreconpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\eatingreconpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\modsupport\\vrarmsync.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:modsupport\\vrarmsync.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\ui\\uipatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\ui\\uipatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\settings\\vrsettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\settings\\vrsettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|F:\\SPT4.0\\SPT\\user\\mods\\SeasonRotator\\state.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{485BDA4E-005A-422D-92CF-E98137DB87BC}|FikaSync\\FikaSync.csproj|f:\\spt-vr-development\\fikasync\\eatingsyncapply.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{485BDA4E-005A-422D-92CF-E98137DB87BC}|FikaSync\\FikaSync.csproj|solutionrelative:fikasync\\eatingsyncapply.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\modsupport\\fikasupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:modsupport\\fikasupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.state.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.state.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.rig.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.rig.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\body\\dynamicelbowpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\body\\dynamicelbowpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\guninteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\guninteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\vr\\vrmeleecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -31,10 +118,6 @@
       "RelativeMoniker": "D:0:0:{485BDA4E-005A-422D-92CF-E98137DB87BC}|FikaSync\\FikaSync.csproj|solutionrelative:fikasync\\downeddragapply.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{485BDA4E-005A-422D-92CF-E98137DB87BC}|FikaSync\\FikaSync.csproj|f:\\spt-vr-development\\fikasync\\eatingsyncapply.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{485BDA4E-005A-422D-92CF-E98137DB87BC}|FikaSync\\FikaSync.csproj|solutionrelative:fikasync\\eatingsyncapply.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{485BDA4E-005A-422D-92CF-E98137DB87BC}|FikaSync\\FikaSync.csproj|f:\\spt-vr-development\\fikasync\\armsyncapply.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{485BDA4E-005A-422D-92CF-E98137DB87BC}|FikaSync\\FikaSync.csproj|solutionrelative:fikasync\\armsyncapply.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -45,18 +128,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\modsupport\\dynamicmapssupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:modsupport\\dynamicmapssupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\handsinteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\handsinteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\handsinteractioncontroller.lootpointer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\handsinteractioncontroller.lootpointer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.sync.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.sync.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\misc\\patchtracer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -87,10 +158,6 @@
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\visuals\\visualpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\ui\\uipatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\ui\\uipatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\vrmanager\\vrplayermanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\vrmanager\\vrplayermanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -103,47 +170,15 @@
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\vr\\initvrpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\modsupport\\vrarmsync.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:modsupport\\vrarmsync.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\modsupport\\fikasupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:modsupport\\fikasupport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\ikpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\ikpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\guninteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\guninteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.foods.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.foods.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\ui\\mouseinputblockpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\ui\\mouseinputblockpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\settings\\vrsettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\settings\\vrsettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|F:\\SPT4.0\\BepInEx\\plugins\\sptvr\\ModSettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.gestures.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.gestures.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\body\\dynamicelbowpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\body\\dynamicelbowpositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\graphics\\amplifygtao.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -158,10 +193,6 @@
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:claude.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.rig.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.rig.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\vrglobals.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:vrglobals.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -170,20 +201,8 @@
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\vr\\vrgrenadecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\patches\\core\\player\\eatingreconpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:patches\\core\\player\\eatingreconpatches.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\handspositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:handspositioner.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.handpaths.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.handpaths.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\player\\interactions\\eating\\eatinginteractioncontroller.props.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|solutionrelative:source\\player\\interactions\\eating\\eatinginteractioncontroller.props.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{2BA0EE98-D7BF-4CAE-9C87-DF3C0AC9580F}|TarkovVR.csproj|f:\\spt-vr-development\\source\\weapons\\vropticcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -233,7 +252,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 14,
+          "SelectedChildIndex": 11,
           "Children": [
             {
               "$type": "Bookmark",
@@ -248,8 +267,206 @@
               "Name": "ST:128:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
             },
             {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "VRUIInteracter.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\UI\\VRUIInteracter.cs",
+              "RelativeDocumentMoniker": "Source\\UI\\VRUIInteracter.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\UI\\VRUIInteracter.cs",
+              "RelativeToolTip": "Source\\UI\\VRUIInteracter.cs",
+              "ViewState": "AgIAAO8AAAAAAAAAAIAwwA8BAABUAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-23T13:28:07.868Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "HandsInteractionController.BodyGrab.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.BodyGrab.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\HandsInteractionController.BodyGrab.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.BodyGrab.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\HandsInteractionController.BodyGrab.cs",
+              "ViewState": "AgIAABADAAAAAAAAAAAowHEAAABgAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-17T01:28:18.047Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "EatingInteractionController.Latch.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Latch.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Latch.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Latch.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Latch.cs",
+              "ViewState": "AgIAAAwAAAAAAAAAAAAAAPsAAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-22T02:01:27.55Z"
+            },
+            {
               "$type": "Document",
               "DocumentIndex": 7,
+              "Title": "EatingInteractionController.HandPaths.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.HandPaths.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.HandPaths.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.HandPaths.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.HandPaths.cs",
+              "ViewState": "AgIAAIsBAAAAAAAAAAAkwLsBAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-12T18:51:55.702Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "EatingInteractionController.Props.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Props.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Props.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Props.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Props.cs",
+              "ViewState": "AgIAAKcAAAAAAAAAAAAwwCYAAAAcAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-12T16:01:37.432Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "EatingInteractionController.Sync.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Sync.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Sync.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Sync.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Sync.cs",
+              "ViewState": "AgIAADEAAAAAAAAAAAAgwB4AAAAlAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-20T17:46:17.452Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "HandsInteractionController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\HandsInteractionController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\HandsInteractionController.cs",
+              "ViewState": "AgIAABgAAAAAAAAAAAAAAAsDAAANAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-10T02:57:51.68Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "HandsInteractionController.LootPointer.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.LootPointer.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\HandsInteractionController.LootPointer.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.LootPointer.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\HandsInteractionController.LootPointer.cs",
+              "ViewState": "AgIAAJwDAAAAAAAAAAAiwHICAABCAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-15T05:41:15.89Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "EatingInteractionController.Gestures.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Gestures.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Gestures.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Gestures.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Gestures.cs",
+              "ViewState": "AgIAAHoCAAAAAAAAAAAQwDgCAABYAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-12T16:01:17.209Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "EatingInteractionController.Foods.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Foods.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Foods.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Foods.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Foods.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAABSAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-12T15:25:48.156Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "EatingInteractionController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.cs",
+              "ViewState": "AgIAACUAAAAAAAAAAAAgwKMAAAA1AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-27T02:16:46.688Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "MovementPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MovementPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\Player\\MovementPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MovementPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\Player\\MovementPatches.cs",
+              "ViewState": "AgIAAKcAAAAAAAAAAAAnwMEAAABIAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-23T00:10:15.402Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "EatingReconPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\EatingReconPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\Player\\EatingReconPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\EatingReconPatches.cs",
+              "RelativeToolTip": "Patches\\Core\\Player\\EatingReconPatches.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAAnAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-10T04:22:57.46Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "UIPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\UI\\UIPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\UI\\UIPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\UI\\UIPatches.cs",
+              "RelativeToolTip": "Patches\\UI\\UIPatches.cs",
+              "ViewState": "AgIAAO0CAAAAAAAAAAAAAAUDAAARAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-15T04:05:59.6Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "VRSettings.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Settings\\VRSettings.cs",
+              "RelativeDocumentMoniker": "Source\\Settings\\VRSettings.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Settings\\VRSettings.cs",
+              "RelativeToolTip": "Source\\Settings\\VRSettings.cs",
+              "ViewState": "AgIAAJoCAAAAAAAAAAAAAJ8CAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-10T03:07:04.11Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "state.json",
+              "DocumentMoniker": "F:\\SPT4.0\\SPT\\user\\mods\\SeasonRotator\\state.json",
+              "RelativeDocumentMoniker": "..\\SPT4.0\\SPT\\user\\mods\\SeasonRotator\\state.json",
+              "ToolTip": "F:\\SPT4.0\\SPT\\user\\mods\\SeasonRotator\\state.json",
+              "RelativeToolTip": "..\\SPT4.0\\SPT\\user\\mods\\SeasonRotator\\state.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAAUAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-06-22T02:20:56.251Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
               "Title": "EatingSyncApply.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\EatingSyncApply.cs",
               "RelativeDocumentMoniker": "FikaSync\\EatingSyncApply.cs",
@@ -257,88 +474,95 @@
               "RelativeToolTip": "FikaSync\\EatingSyncApply.cs",
               "ViewState": "AgIAACABAAAAAAAAAAAwwDsBAAAzAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-21T06:23:17.222Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-21T06:23:17.222Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "DownedDragApply.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\DownedDragApply.cs",
-              "RelativeDocumentMoniker": "FikaSync\\DownedDragApply.cs",
-              "ToolTip": "F:\\SPT-VR-development\\FikaSync\\DownedDragApply.cs",
-              "RelativeToolTip": "FikaSync\\DownedDragApply.cs",
-              "ViewState": "AgIAAFkAAAAAAAAAAAAuwHMAAABiAAAAAAAAAA==",
+              "DocumentIndex": 18,
+              "Title": "FIKASupport.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\FIKASupport.cs",
+              "RelativeDocumentMoniker": "ModSupport\\FIKASupport.cs",
+              "ToolTip": "F:\\SPT-VR-development\\ModSupport\\FIKASupport.cs",
+              "RelativeToolTip": "ModSupport\\FIKASupport.cs",
+              "ViewState": "AgIAADQAAAAAAAAAAAAqwEkAAAAJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-21T06:21:12.272Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-11T18:18:24.348Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "RevivePatch.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\RevivePatch.cs",
-              "RelativeDocumentMoniker": "FikaSync\\RevivePatch.cs",
-              "ToolTip": "F:\\SPT-VR-development\\FikaSync\\RevivePatch.cs",
-              "RelativeToolTip": "FikaSync\\RevivePatch.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAABJAAAAAAAAAA==",
+              "DocumentIndex": 19,
+              "Title": "EatingInteractionController.State.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.State.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.State.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.State.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.State.cs",
+              "ViewState": "AgIAAAkAAAAAAAAAAAAAACoAAABZAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-21T06:08:53.919Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-22T02:03:08.226Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "FikaVrSync.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\FikaVrSync.cs",
-              "RelativeDocumentMoniker": "FikaSync\\FikaVrSync.cs",
-              "ToolTip": "F:\\SPT-VR-development\\FikaSync\\FikaVrSync.cs",
-              "RelativeToolTip": "FikaSync\\FikaVrSync.cs",
-              "ViewState": "AgIAAAoAAAAAAAAAAAAmwCMAAABXAAAAAAAAAA==",
+              "DocumentIndex": 13,
+              "Title": "VRArmSync.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\VRArmSync.cs",
+              "RelativeDocumentMoniker": "ModSupport\\VRArmSync.cs",
+              "ToolTip": "F:\\SPT-VR-development\\ModSupport\\VRArmSync.cs",
+              "RelativeToolTip": "ModSupport\\VRArmSync.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABgAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-21T05:13:11.888Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "ArmSyncApply.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\ArmSyncApply.cs",
-              "RelativeDocumentMoniker": "FikaSync\\ArmSyncApply.cs",
-              "ToolTip": "F:\\SPT-VR-development\\FikaSync\\ArmSyncApply.cs",
-              "RelativeToolTip": "FikaSync\\ArmSyncApply.cs",
-              "ViewState": "AgIAAC0BAAAAAAAAAAAcwFIBAAAsAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-20T21:33:25.403Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-17T19:01:43.311Z"
             },
             {
               "$type": "Document",
               "DocumentIndex": 21,
-              "Title": "UIPatches.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\UI\\UIPatches.cs",
-              "RelativeDocumentMoniker": "Patches\\UI\\UIPatches.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\UI\\UIPatches.cs",
-              "RelativeToolTip": "Patches\\UI\\UIPatches.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAACcAAAARAAAAAAAAAA==",
+              "Title": "DynamicElbowPositioner.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Body\\DynamicElbowPositioner.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Body\\DynamicElbowPositioner.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Body\\DynamicElbowPositioner.cs",
+              "RelativeToolTip": "Source\\Player\\Body\\DynamicElbowPositioner.cs",
+              "ViewState": "AgIAAFYAAAAAAAAAAAAwwCgAAABhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-15T04:05:59.6Z"
+              "WhenOpened": "2026-06-11T18:18:22.015Z"
             },
             {
               "$type": "Document",
               "DocumentIndex": 20,
-              "Title": "VisualPatches.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\VisualPatches.cs",
-              "RelativeDocumentMoniker": "Patches\\Visuals\\VisualPatches.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\VisualPatches.cs",
-              "RelativeToolTip": "Patches\\Visuals\\VisualPatches.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAAUAAAAAAAAAA==",
+              "Title": "EatingInteractionController.Rig.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Rig.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Rig.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Rig.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Rig.cs",
+              "ViewState": "AgIAAO8BAAAAAAAAAAAwwPgAAAAbAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-14T19:24:17.497Z"
+              "WhenOpened": "2026-06-14T04:54:01.762Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 22,
+              "Title": "GunInteractionController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\GunInteractionController.cs",
+              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\GunInteractionController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\GunInteractionController.cs",
+              "RelativeToolTip": "Source\\Player\\Interactions\\GunInteractionController.cs",
+              "ViewState": "AgIAAAkDAAAAAAAAAAAAAOwBAABlAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-13T21:55:20.026Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 23,
+              "Title": "VRMeleeController.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRMeleeController.cs",
+              "RelativeDocumentMoniker": "Patches\\Core\\VR\\VRMeleeController.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRMeleeController.cs",
+              "RelativeToolTip": "Patches\\Core\\VR\\VRMeleeController.cs",
+              "ViewState": "AgIAACkAAAAAAAAAAAAgwC0AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-18T03:58:10.35Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 24,
               "Title": "EatingPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\EatingPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Core\\Player\\EatingPatches.cs",
@@ -346,12 +570,71 @@
               "RelativeToolTip": "Patches\\Core\\Player\\EatingPatches.cs",
               "ViewState": "AgIAACoAAAAAbGZmZmbuvyMAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-10T02:48:30.036Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-10T02:48:30.036Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 15,
+              "DocumentIndex": 25,
+              "Title": "AmandsGraphicsSupport.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\AmandsGraphicsSupport.cs",
+              "RelativeDocumentMoniker": "ModSupport\\AmandsGraphicsSupport.cs",
+              "ToolTip": "F:\\SPT-VR-development\\ModSupport\\AmandsGraphicsSupport.cs",
+              "RelativeToolTip": "ModSupport\\AmandsGraphicsSupport.cs",
+              "ViewState": "AgIAAAQAAAAAAAAAAAAAAAQAAAARAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-11T18:18:11.611Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 26,
+              "Title": "FikaVrSync.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\FikaVrSync.cs",
+              "RelativeDocumentMoniker": "FikaSync\\FikaVrSync.cs",
+              "ToolTip": "F:\\SPT-VR-development\\FikaSync\\FikaVrSync.cs",
+              "RelativeToolTip": "FikaSync\\FikaVrSync.cs",
+              "ViewState": "AgIAAAoAAAAAAAAAAAAmwCMAAABXAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-21T05:13:11.888Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 27,
+              "Title": "RevivePatch.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\RevivePatch.cs",
+              "RelativeDocumentMoniker": "FikaSync\\RevivePatch.cs",
+              "ToolTip": "F:\\SPT-VR-development\\FikaSync\\RevivePatch.cs",
+              "RelativeToolTip": "FikaSync\\RevivePatch.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAABJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-21T06:08:53.919Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 28,
+              "Title": "DownedDragApply.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\DownedDragApply.cs",
+              "RelativeDocumentMoniker": "FikaSync\\DownedDragApply.cs",
+              "ToolTip": "F:\\SPT-VR-development\\FikaSync\\DownedDragApply.cs",
+              "RelativeToolTip": "FikaSync\\DownedDragApply.cs",
+              "ViewState": "AgIAAFkAAAAAAAAAAAAuwHMAAABiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-21T06:21:12.272Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 29,
+              "Title": "ArmSyncApply.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\ArmSyncApply.cs",
+              "RelativeDocumentMoniker": "FikaSync\\ArmSyncApply.cs",
+              "ToolTip": "F:\\SPT-VR-development\\FikaSync\\ArmSyncApply.cs",
+              "RelativeToolTip": "FikaSync\\ArmSyncApply.cs",
+              "ViewState": "AgIAAC0BAAAAAAAAAAAcwFIBAAAsAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-20T21:33:25.403Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 33,
               "Title": "HideoutPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Misc\\HideoutPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Misc\\HideoutPatches.cs",
@@ -363,70 +646,19 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "AmandsGraphicsSupport.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\AmandsGraphicsSupport.cs",
-              "RelativeDocumentMoniker": "ModSupport\\AmandsGraphicsSupport.cs",
-              "ToolTip": "F:\\SPT-VR-development\\ModSupport\\AmandsGraphicsSupport.cs",
-              "RelativeToolTip": "ModSupport\\AmandsGraphicsSupport.cs",
-              "ViewState": "AgIAAAQAAAAAAAAAAAAAAAQAAAARAAAAAAAAAA==",
+              "DocumentIndex": 38,
+              "Title": "VisualPatches.cs",
+              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\VisualPatches.cs",
+              "RelativeDocumentMoniker": "Patches\\Visuals\\VisualPatches.cs",
+              "ToolTip": "F:\\SPT-VR-development\\Patches\\Visuals\\VisualPatches.cs",
+              "RelativeToolTip": "Patches\\Visuals\\VisualPatches.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAAUAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-11T18:18:11.611Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-14T19:24:17.497Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "VRMeleeController.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRMeleeController.cs",
-              "RelativeDocumentMoniker": "Patches\\Core\\VR\\VRMeleeController.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRMeleeController.cs",
-              "RelativeToolTip": "Patches\\Core\\VR\\VRMeleeController.cs",
-              "ViewState": "AgIAACgAAAAAAAAAAAAgwCwAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-18T03:58:10.35Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "HandsInteractionController.BodyGrab.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.BodyGrab.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\HandsInteractionController.BodyGrab.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.BodyGrab.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\HandsInteractionController.BodyGrab.cs",
-              "ViewState": "AgIAACYAAAAAAAAAAAAiwFICAAApAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-17T01:28:18.047Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 12,
-              "Title": "HandsInteractionController.LootPointer.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.LootPointer.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\HandsInteractionController.LootPointer.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.LootPointer.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\HandsInteractionController.LootPointer.cs",
-              "ViewState": "AgIAAAcAAAAAAAAAAAAqwB4AAAA1AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-15T05:41:15.89Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 11,
-              "Title": "HandsInteractionController.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\HandsInteractionController.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\HandsInteractionController.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\HandsInteractionController.cs",
-              "ViewState": "AgIAAKkAAAAAAAAAAAAuwLwAAABNAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-10T02:57:51.68Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 14,
+              "DocumentIndex": 32,
               "Title": "PatchTracer.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Misc\\PatchTracer.cs",
               "RelativeDocumentMoniker": "Source\\Misc\\PatchTracer.cs",
@@ -438,19 +670,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 13,
-              "Title": "EatingInteractionController.Sync.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Sync.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Sync.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Sync.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Sync.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAB4AAAAlAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-20T17:46:17.452Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 30,
               "Title": "BodyDragApply.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\FikaSync\\BodyDragApply.cs",
               "RelativeDocumentMoniker": "FikaSync\\BodyDragApply.cs",
@@ -458,12 +678,11 @@
               "RelativeToolTip": "FikaSync\\BodyDragApply.cs",
               "ViewState": "AgIAAEkAAAAAAAAAAAAmwHUAAAAlAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-19T02:44:41.56Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-19T02:44:41.56Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 31,
               "Title": "DynamicMapsSupport.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\DynamicMapsSupport.cs",
               "RelativeDocumentMoniker": "ModSupport\\DynamicMapsSupport.cs",
@@ -475,7 +694,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 22,
+              "DocumentIndex": 39,
               "Title": "VRPlayerManager.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\VRManager\\VRPlayerManager.cs",
               "RelativeDocumentMoniker": "Source\\Player\\VRManager\\VRPlayerManager.cs",
@@ -487,7 +706,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 23,
+              "DocumentIndex": 40,
               "Title": "InputHandlers.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Controls\\InputHandlers.cs",
               "RelativeDocumentMoniker": "Source\\Controls\\InputHandlers.cs",
@@ -499,7 +718,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 19,
+              "DocumentIndex": 37,
               "Title": "AmplifyOcclusionEffect.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionEffect.cs",
               "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyOcclusionEffect.cs",
@@ -511,7 +730,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 18,
+              "DocumentIndex": 36,
               "Title": "Rendering.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\Rendering.cs",
               "RelativeDocumentMoniker": "Patches\\Visuals\\Rendering.cs",
@@ -523,7 +742,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 17,
+              "DocumentIndex": 35,
               "Title": "WeaponPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\WeaponPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Core\\Player\\WeaponPatches.cs",
@@ -535,7 +754,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 16,
+              "DocumentIndex": 34,
               "Title": "MenuPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Misc\\MenuPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Misc\\MenuPatches.cs",
@@ -547,7 +766,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 24,
+              "DocumentIndex": 41,
               "Title": "InitVRPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\InitVRPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Core\\VR\\InitVRPatches.cs",
@@ -559,19 +778,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 25,
-              "Title": "VRArmSync.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\VRArmSync.cs",
-              "RelativeDocumentMoniker": "ModSupport\\VRArmSync.cs",
-              "ToolTip": "F:\\SPT-VR-development\\ModSupport\\VRArmSync.cs",
-              "RelativeToolTip": "ModSupport\\VRArmSync.cs",
-              "ViewState": "AgIAAB4AAAAAAAAAAAAgwGYAAAANAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-17T19:01:43.311Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 30,
+              "DocumentIndex": 43,
               "Title": "MouseInputBlockPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\UI\\MouseInputBlockPatches.cs",
               "RelativeDocumentMoniker": "Patches\\UI\\MouseInputBlockPatches.cs",
@@ -583,19 +790,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 31,
-              "Title": "VRSettings.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Settings\\VRSettings.cs",
-              "RelativeDocumentMoniker": "Source\\Settings\\VRSettings.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Settings\\VRSettings.cs",
-              "RelativeToolTip": "Source\\Settings\\VRSettings.cs",
-              "ViewState": "AgIAALgBAAAAAAAAAAAAwAABAAAcAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-10T03:07:04.11Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 27,
+              "DocumentIndex": 42,
               "Title": "IKPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\IKPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Core\\Player\\IKPatches.cs",
@@ -607,19 +802,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 29,
-              "Title": "EatingInteractionController.Foods.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Foods.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Foods.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Foods.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Foods.cs",
-              "ViewState": "AgIAAGABAAAAAAAAAAAgwNEBAABIAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-12T15:25:48.156Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 32,
+              "DocumentIndex": 44,
               "Title": "ModSettings.json",
               "DocumentMoniker": "F:\\SPT4.0\\BepInEx\\plugins\\sptvr\\ModSettings.json",
               "RelativeDocumentMoniker": "..\\SPT4.0\\BepInEx\\plugins\\sptvr\\ModSettings.json",
@@ -631,67 +814,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 28,
-              "Title": "GunInteractionController.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\GunInteractionController.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\GunInteractionController.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\GunInteractionController.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\GunInteractionController.cs",
-              "ViewState": "AgIAANkBAAAAAAAAAAAAAOwBAABlAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-13T21:55:20.026Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 26,
-              "Title": "FIKASupport.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\FIKASupport.cs",
-              "RelativeDocumentMoniker": "ModSupport\\FIKASupport.cs",
-              "ToolTip": "F:\\SPT-VR-development\\ModSupport\\FIKASupport.cs",
-              "RelativeToolTip": "ModSupport\\FIKASupport.cs",
-              "ViewState": "AgIAADQAAAAAAAAAAAAAAEkAAAAJAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-11T18:18:24.348Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 33,
-              "Title": "EatingInteractionController.Gestures.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Gestures.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Gestures.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Gestures.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Gestures.cs",
-              "ViewState": "AgIAACoCAAAAAAAAAAAowDgCAABYAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-12T16:01:17.209Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 34,
-              "Title": "DynamicElbowPositioner.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Body\\DynamicElbowPositioner.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Body\\DynamicElbowPositioner.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Body\\DynamicElbowPositioner.cs",
-              "RelativeToolTip": "Source\\Player\\Body\\DynamicElbowPositioner.cs",
-              "ViewState": "AgIAABoAAAAAAAAAAAA1wCgAAABhAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-11T18:18:22.015Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 35,
-              "Title": "EatingInteractionController.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.cs",
-              "ViewState": "AgIAAPwAAAAAAAAAAAAmwAUBAABSAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T02:16:46.688Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 36,
+              "DocumentIndex": 45,
               "Title": "AmplifyGTAO.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyGTAO.cs",
               "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyGTAO.cs",
@@ -703,7 +826,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 37,
+              "DocumentIndex": 46,
               "Title": "ImpostorCullingPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\ImpostorCullingPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Visuals\\ImpostorCullingPatches.cs",
@@ -715,7 +838,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 38,
+              "DocumentIndex": 47,
               "Title": "CLAUDE.md",
               "DocumentMoniker": "F:\\SPT-VR-development\\CLAUDE.md",
               "RelativeDocumentMoniker": "CLAUDE.md",
@@ -727,19 +850,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 39,
-              "Title": "EatingInteractionController.Rig.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Rig.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Rig.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Rig.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Rig.cs",
-              "ViewState": "AgIAAPkAAAAAAAAAAAAowPgAAAAbAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-14T04:54:01.762Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 40,
+              "DocumentIndex": 48,
               "Title": "VRGlobals.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\VRGlobals.cs",
               "RelativeDocumentMoniker": "VRGlobals.cs",
@@ -751,7 +862,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 41,
+              "DocumentIndex": 49,
               "Title": "VRGrenadeController.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\VR\\VRGrenadeController.cs",
               "RelativeDocumentMoniker": "Patches\\Core\\VR\\VRGrenadeController.cs",
@@ -763,19 +874,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 42,
-              "Title": "EatingReconPatches.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\EatingReconPatches.cs",
-              "RelativeDocumentMoniker": "Patches\\Core\\Player\\EatingReconPatches.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Patches\\Core\\Player\\EatingReconPatches.cs",
-              "RelativeToolTip": "Patches\\Core\\Player\\EatingReconPatches.cs",
-              "ViewState": "AgIAADIAAAAAAAAAAAAQwCgAAAAqAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-10T04:22:57.46Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 43,
+              "DocumentIndex": 50,
               "Title": "HandsPositioner.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\HandsPositioner.cs",
               "RelativeDocumentMoniker": "HandsPositioner.cs",
@@ -787,7 +886,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 46,
+              "DocumentIndex": 51,
               "Title": "VROpticController.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Weapons\\VROpticController.cs",
               "RelativeDocumentMoniker": "Source\\Weapons\\VROpticController.cs",
@@ -799,7 +898,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 47,
+              "DocumentIndex": 52,
               "Title": "MeshPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Core\\Player\\MeshPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Core\\Player\\MeshPatches.cs",
@@ -811,19 +910,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 45,
-              "Title": "EatingInteractionController.Props.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Props.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Props.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.Props.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.Props.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAACYAAAAcAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-12T16:01:37.432Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 48,
+              "DocumentIndex": 53,
               "Title": "InstalledMods.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\ModSupport\\InstalledMods.cs",
               "RelativeDocumentMoniker": "ModSupport\\InstalledMods.cs",
@@ -835,19 +922,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 44,
-              "Title": "EatingInteractionController.HandPaths.cs",
-              "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.HandPaths.cs",
-              "RelativeDocumentMoniker": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.HandPaths.cs",
-              "ToolTip": "F:\\SPT-VR-development\\Source\\Player\\Interactions\\Eating\\EatingInteractionController.HandPaths.cs",
-              "RelativeToolTip": "Source\\Player\\Interactions\\Eating\\EatingInteractionController.HandPaths.cs",
-              "ViewState": "AgIAAJwBAAAAAAAAAAAIwLsBAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-12T18:51:55.702Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 49,
+              "DocumentIndex": 54,
               "Title": "GPUInstancerPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\GPUInstancerPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Visuals\\GPUInstancerPatches.cs",
@@ -859,7 +934,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 50,
+              "DocumentIndex": 55,
               "Title": "FSRPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Upscalers\\FSRPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Upscalers\\FSRPatches.cs",
@@ -871,7 +946,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 51,
+              "DocumentIndex": 56,
               "Title": "DLSSPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Upscalers\\DLSSPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Upscalers\\DLSSPatches.cs",
@@ -883,7 +958,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 52,
+              "DocumentIndex": 57,
               "Title": "ControllerVelocity.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Controls\\ControllerVelocity.cs",
               "RelativeDocumentMoniker": "Source\\Controls\\ControllerVelocity.cs",
@@ -895,7 +970,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 53,
+              "DocumentIndex": 58,
               "Title": "BuildMenuLines.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Misc\\BuildMenuLines.cs",
               "RelativeDocumentMoniker": "Source\\Misc\\BuildMenuLines.cs",
@@ -907,7 +982,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 54,
+              "DocumentIndex": 59,
               "Title": "AOPatches.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Patches\\Visuals\\AOPatches.cs",
               "RelativeDocumentMoniker": "Patches\\Visuals\\AOPatches.cs",
@@ -919,7 +994,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 55,
+              "DocumentIndex": 60,
               "Title": "AmplifyOcclusionCommon.cs",
               "DocumentMoniker": "F:\\SPT-VR-development\\Source\\Graphics\\AmplifyOcclusionCommon.cs",
               "RelativeDocumentMoniker": "Source\\Graphics\\AmplifyOcclusionCommon.cs",

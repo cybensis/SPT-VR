@@ -4,6 +4,7 @@ using HarmonyLib;
 using System;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using TarkovVR.ModSupport;
 using TarkovVR.Patches.Visuals;
 using Unity.XR.OpenVR;
@@ -303,9 +304,7 @@ namespace TarkovVR
                     // needs for the body-drag steal arbitration.
                     try
                     {
-                        SptVrFikaSync.FikaVrSync.getLocalDraggedCorpseNetId = () => Source.Player.Interactions.HandsInteractionController.localDraggedCorpseNetId;
-                        SptVrFikaSync.FikaVrSync.getLocalBodyGrabTime = () => Source.Player.Interactions.HandsInteractionController.bodyGrabTime;
-                        SptVrFikaSync.FikaVrSync.onYieldBodyDrag = () => VRGlobals.handsInteractionController?.RelinquishBodyDrag();
+                        BindFikaSyncHooks();
                     }
                     catch (Exception e)
                     {
@@ -387,6 +386,20 @@ namespace TarkovVR
             }
 
             // Repeat for other mods (AmandsGraphics, FIKA) as needed
+        }
+
+        // Bind the body-drag steal-arbitration hooks into the FikaSync companion module. Isolated into
+        // its own NoInlining method (only called from the FIKA-detected branch above) so the
+        // SptVrFikaSync (SPT-VR-FikaSync.dll) references it contains are only JITted when FIKA is
+        // actually present. Inlined into Awake, they'd bind the companion assembly at Awake's JIT and
+        // throw at startup when the companion DLL isn't installed (the solo / no-FIKA deployment). Same
+        // isolation pattern as HandsInteractionController.BodyGrab; see memory fika-softdep-no-typed-fields.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void BindFikaSyncHooks()
+        {
+            SptVrFikaSync.FikaVrSync.getLocalDraggedCorpseNetId = () => Source.Player.Interactions.HandsInteractionController.localDraggedCorpseNetId;
+            SptVrFikaSync.FikaVrSync.getLocalBodyGrabTime = () => Source.Player.Interactions.HandsInteractionController.bodyGrabTime;
+            SptVrFikaSync.FikaVrSync.onYieldBodyDrag = () => VRGlobals.handsInteractionController?.RelinquishBodyDrag();
         }
 
         private void ApplyPatches(string @namespace)

@@ -84,6 +84,7 @@ namespace TarkovVR.Source.Settings
             public bool hideLegs { get; set; }
             public bool manualEating { get; set; }
             public bool disableMouseInput { get; set; }
+            public bool disableCorpseContextMenu { get; set; }
             public bool disableRunAnimation { get; set; }
             public bool disablePrismEffects { get; set; }
             public bool disablePrismFog { get; set; }
@@ -130,6 +131,7 @@ namespace TarkovVR.Source.Settings
                 hideLegs = false;
                 manualEating = false;
                 disableMouseInput = true;
+                disableCorpseContextMenu = true;
                 disableRunAnimation = true;
                 disablePrismEffects = false;
                 disablePrismFog = true;               
@@ -194,6 +196,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle hideLegsToggle;
         private static SettingToggle manualEatingToggle;
         private static SettingToggle disableMouseInput;
+        private static SettingToggle disableCorpseContextMenuToggle;
         private static SettingToggle disableRunAnimationToggle;
         private static SettingToggle seatedModeToggle;
         private static SettingToggle useVRKeyboardToggle;
@@ -688,6 +691,15 @@ namespace TarkovVR.Source.Settings
             disableMouseInput.Text.localizationKey = "Disable Mouse Input";
             disableMouseInput.Toggle.UpdateValue(settings.disableMouseInput);
 
+            // Disable corpse context menu — the loose-loot pointer suppresses the gaze "Take" menu
+            // for all world LootItems (a Corpse IS a LootItem), which inadvertently hid the body
+            // context menu too. On (default) keeps it hidden; off brings the gaze menu back for bodies.
+            disableCorpseContextMenuToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            disableCorpseContextMenuToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
+            disableCorpseContextMenuToggle.Toggle.action_0 = SetDisableCorpseContextMenu;
+            disableCorpseContextMenuToggle.Text.localizationKey = "Disable Corpse Context Menu: ";
+            disableCorpseContextMenuToggle.Toggle.UpdateValue(settings.disableCorpseContextMenu);
+
             _vrGraphicsScroll = SetupScrollbar(vrGraphics);
             vrGraphicsObject = gSoundSettings.gameObject;
             UnityEngine.Object.Destroy(gSoundSettings);
@@ -1100,6 +1112,14 @@ namespace TarkovVR.Source.Settings
         public static bool GetDisableMouseInput()
         {
             return settings.disableMouseInput;
+        }
+        private static void SetDisableCorpseContextMenu(bool turnOn)
+        {
+            settings.disableCorpseContextMenu = turnOn;
+        }
+        public static bool GetDisableCorpseContextMenu()
+        {
+            return settings.disableCorpseContextMenu;
         }
         private static void SetManualEating(bool turnOn)
         {

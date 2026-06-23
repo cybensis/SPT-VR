@@ -550,6 +550,11 @@ namespace TarkovVR.Patches.Core.Player
             {
 
                 ScopeReticle reticle = opticSight.ScopeData.Reticle;
+                // Reticle isn't always resolved when ScopeZoomHandler.Update calls this (scope just
+                // equipped / reticle bundle not loaded yet / sight mode with no reticle). Vanilla guards
+                // this null in its mesh-setup path but NOT in UpdateTransform, so skip the frame until it's ready.
+                if (reticle == null)
+                    return false;
                 __instance._renderer.transform.localPosition = reticle.Position;
                 __instance._renderer.transform.localEulerAngles = reticle.Rotation;
                 __instance.float_1 = reticle.Scale * 0.1f;

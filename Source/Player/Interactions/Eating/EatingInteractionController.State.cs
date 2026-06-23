@@ -27,7 +27,7 @@ namespace TarkovVR.Source.Player.Interactions
         // The eat anchor in HEAD-local space: the camera sits between the EYES, so anchor the
         // zone a bit below + in front (the mouth) instead of eye-center — the old zero anchor
         // is why "bring food to the mouth" felt too high. (0,0,0) = the old behavior; A/B live.
-        public static Vector3 mouthLocalOffset = new Vector3(0f, -0.08f, 0.05f);
+        public static Vector3 mouthLocalOffset = new Vector3(0f, -0.08f, 0.08f);
 
         // Reach offsets (anchor-local), seeded from the FoodDef each spawn; public for live A/B.
         // Zero = the original hand-to-hand / hand-to-mouth triggers. Radii are the statics above.

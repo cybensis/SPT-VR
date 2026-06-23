@@ -31,8 +31,6 @@ namespace TarkovVR.Source.Player.Interactions
     internal partial class HandsInteractionController
     {
         //--- Tunables ----------------------------------------------------------------
-        // Master switch. false = behave like before (reach-in grab only, gaze "Take" menu).
-        public static bool enableLootPointer = true;
 
         // When true (req #1) loose items in the WORLD no longer pop the gaze "Take" menu —
         // the dots replace it, and the menu only returns for the item that's in your hand
@@ -70,7 +68,6 @@ namespace TarkovVR.Source.Player.Interactions
         // so the dot floats just clear of the collider instead of sinking into the mesh on
         // some shapes (the box surface can sit inside a concave item).
         public static float dotSurfaceOffset = 0.03f;
-        public static bool dotsOnTop = true;
 
         // Weights the "main" pick: lower angle (more centered) wins; distance is a soft
         // tie-break (degrees-equivalent per meter).
@@ -84,12 +81,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static float summonMaxDuration = 0.35f;
         public static float summonRestDepth = 0.02f;
 
-        // Left-hand "ready to grab" pose. With useRestPose (default) the hand sits on the baked
-        // restPoseEuler and these knobs layer flex/spread DELTAS on top; the procedural fallback
-        // (useRestPose=false) flattens the animation and bends to these as absolute flex instead.
-        // handPoseWeight = how fully we override the animation (1 = our pose, 0 = pure animation).
-        public static bool enableHandOpen = true;
         public static float handPoseWeight = 1f;
+
         // Per-finger flex DELTA in finger order (index 0 = thumb, then index/middle/ring/pinky).
         // The hand eases from fingerFlexDeg (idle / free hand) to fingerReadyFlexDeg (a loot dot
         // is in view). 0 = that finger sits at the baked pose; negative opens it, positive curls
@@ -99,9 +92,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static float flexSign = 1f;
         public static float midJointScale = 0.6f;
         public static float handOpenLerp = 10f;
-        // Whether the thumb (finger index 0) is posed like the fingers. false = leave it on its
-        // animation (procedural path only; the baked replay always poses every finger).
-        public static bool includeThumb = true;
 
         // Lateral finger SPREAD (abduction) so the flattened hand fans out instead of looking
         // like a paddle. Degrees between adjacent fingers, applied at the knuckle around
@@ -110,18 +100,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static float fingerSpreadDeg = -5f; // DELTA on the baked pose (negative = fan OUT)
         public static Vector3 spreadAxis = new Vector3(0f, 1f, 0f);
 
-        // "SURE WAY" rested hand: skip the procedural flatten/flex/spread (which guesses each
-        // finger's axis) and instead BAKE the real bone rotations from a pose you like, then
-        // replay them exactly. Workflow:
-        //   1. Get the hand into a good pose (e.g. handPoseWeight=0 to see EFT's raw animation,
-        //      or tune the procedural knobs above).
-        //   2. Set captureRestPose=true (UnityExplorer) — it logs + stores the CURRENT left-
-        //      finger local rotations (a paste-ready restPoseEuler array in the BepInEx log).
-        //   3. Set useRestPose=true — the hand now holds that exact pose, Slerped from the
-        //      animation by handPoseWeight. Paste the logged array into restPoseEuler below to
-        //      persist it; hand-edit individual joints (per-joint local Euler, in finger order)
-        //      to open/adjust. null/empty restPoseEuler => fall back to the procedural pose.
-        public static bool useRestPose = true;
         public static bool captureRestPose = false;
         // Baked from EFT's natural NO-WEAPON hand animation (the empty rested hand). This is the
         // BASE pose; flex/spread layer on top as deltas (see ReplayRestPose). finger0 = thumb.
@@ -229,12 +207,6 @@ namespace TarkovVR.Source.Player.Interactions
         {
             lootDotPresent = false; // set true below once we actually have candidates
 
-            if (!enableLootPointer)
-            {
-                ClearDots();
-                return;
-            }
-
             // A body grab owns the off-hand grip — don't also point at / summon loose loot.
             if (isDraggingBody || bodyInteractionArmed)
             {
@@ -242,7 +214,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // The gaze "Take" (now allowed for the held item) can consume it into the
+            // The gaze "Take" can consume it into the
             // inventory — the item_0 nulls (and the GameObject is destroyed shortly after).
             // Reset our refs so the weight/interaction state clears and pointing resumes.
             if (!ReferenceEquals(heldItem, null) && !HeldItemAlive())
@@ -316,10 +288,6 @@ namespace TarkovVR.Source.Player.Interactions
                 LootItem li = ResolveLootItem(cols[i]);
                 if (li == null || li.Item == null)
                     continue;
-                // FIKA co-op: another player is holding it — no dot, no grab (avoids two players
-                // each holding their own copy of the same item).
-                if (IsBlockedByRemoteHold(li))
-                    continue;
                 if (!lootCandidateSet.Add(li))
                     continue; // an item we already have (multiple colliders)
 
@@ -356,7 +324,7 @@ namespace TarkovVR.Source.Player.Interactions
             // (UpdateLeftHandCollisions) already resolves the point-blank loot item, so always
             // include it — a close grab then works regardless of the cone/mask specifics.
             LootItem near = leftHandState != null ? leftHandState.lootItem : null;
-            if (near != null && near.Item != null && !IsBlockedByRemoteHold(near) && lootCandidateSet.Add(near))
+            if (near != null && near.Item != null && lootCandidateSet.Add(near))
             {
                 Vector3 nc = near._boundCollider != null ? near._boundCollider.bounds.center : near.transform.position;
                 Vector3 ns = near._boundCollider != null ? NearestBoxSurfacePoint(near._boundCollider, palm) : nc;
@@ -530,24 +498,21 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static Material MakeMarkerMaterial(Color c)
         {
-            if (dotsOnTop)
+            // "Hidden/Internal-Colored" is an engine built-in that actually honors _ZTest
+            // (Sprites/Default silently ignores it), so ZTest Always = render ON TOP of all
+            // geometry — the dot can never be hidden behind something.
+            Shader sh = Shader.Find("Hidden/Internal-Colored");
+            if (sh != null)
             {
-                // "Hidden/Internal-Colored" is an engine built-in that actually honors _ZTest
-                // (Sprites/Default silently ignores it), so ZTest Always = render ON TOP of all
-                // geometry — the dot can never be hidden behind something.
-                Shader sh = Shader.Find("Hidden/Internal-Colored");
-                if (sh != null)
-                {
-                    Material m = new Material(sh) { hideFlags = HideFlags.HideAndDontSave };
-                    m.SetColor("_Color", c);
-                    m.SetInt("_ZTest", (int)CompareFunction.Always);
-                    m.SetInt("_ZWrite", 0);
-                    m.SetInt("_Cull", (int)CullMode.Off);
-                    m.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
-                    m.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-                    m.renderQueue = 5000;
-                    return m;
-                }
+                Material m = new Material(sh) { hideFlags = HideFlags.HideAndDontSave };
+                m.SetColor("_Color", c);
+                m.SetInt("_ZTest", (int)CompareFunction.Always);
+                m.SetInt("_ZWrite", 0);
+                m.SetInt("_Cull", (int)CullMode.Off);
+                m.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+                m.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+                m.renderQueue = 5000;
+                return m;
             }
             Shader s2 = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
             return new Material(s2) { color = c };
@@ -668,20 +633,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Summon ------------------------------------------------------------------
-        // FIKA co-op: an item another player is actively holding must not be grabbable — the
-        // remote-held timestamp is maintained by FIKASupport.ApplyNetPacket from their held
-        // broadcasts. No-op solo / when FIKA isn't installed.
-        private static bool IsBlockedByRemoteHold(LootItem li)
-        {
-            return InstalledMods.FIKAInstalled && FIKASupport.IsRemotelyHeld(li);
-        }
-
         private void BeginSummon(LootItem item, Vector3 palm, Vector3 aim)
         {
-            // Final guard (besides candidate filtering): never take an item a remote player holds.
-            if (IsBlockedByRemoteHold(item))
-                return;
-
             RemoveFikaSyncer(item); // stop FIKA syncing an item we've taken control of
             cachedRigidbody = item.GetComponent<Rigidbody>() ?? item.gameObject.AddComponent<Rigidbody>();
             item._rigidBody = cachedRigidbody;
@@ -799,7 +752,7 @@ namespace TarkovVR.Source.Player.Interactions
             bool leftHandAnimating = VRGlobals.player != null && VRGlobals.player.BodyAnimatorCommon != null
                 && VRGlobals.player.BodyAnimatorCommon.GetFloat(VRPlayerManager.LEFT_HAND_ANIMATOR_HASH) == 1f;
 
-            bool free = enableHandOpen && VRGlobals.inGame && !VRGlobals.menuOpen
+            bool free = VRGlobals.inGame && !VRGlobals.menuOpen
                         && !VRGlobals.usingItem && !EatingInteractionController.ManualActive
                         && VRGlobals.vrPlayer != null && !VRGlobals.vrPlayer.isSupporting
                         && !leftHandAnimating;
@@ -827,7 +780,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             // SURE WAY: replay a baked rest pose instead of the procedural flatten/flex/spread.
-            if (useRestPose && restPoseEuler != null && restPoseEuler.Length > 0)
+            if (restPoseEuler != null && restPoseEuler.Length > 0)
             {
                 EditRestPoseLive();
                 if (handWeightBlend >= 0.01f)
@@ -840,10 +793,6 @@ namespace TarkovVR.Source.Player.Interactions
 
             for (int f = 0; f < leftFingerJoints.Length; f++)
             {
-                bool isThumb = leftFingerIsThumb != null && f < leftFingerIsThumb.Length && leftFingerIsThumb[f];
-                if (isThumb && !includeThumb)
-                    continue; // leave the thumb entirely on its animation
-
                 Transform[] joints = leftFingerJoints[f];
                 float fingerSpread = (leftFingerSpread != null && f < leftFingerSpread.Length)
                     ? leftFingerSpread[f] * fingerSpreadDeg : 0f;

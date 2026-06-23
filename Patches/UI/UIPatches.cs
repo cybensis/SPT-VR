@@ -763,6 +763,15 @@ namespace TarkovVR.Patches.UI
                 {
                     interactableObject = null;
                 }
+                // A Corpse IS a LootItem, so suppressWorldLootMenu (the loose-loot pointer change)
+                // hid the body gaze menu too. Corpses follow their own toggle instead: keep the
+                // menu hidden only when "Disable Corpse Context Menu" is on (the default). Loose
+                // loot is untouched and still uses suppressWorldLootMenu below.
+                else if (lootItem is Corpse)
+                {
+                    if (!isHeld && VRSettings.GetDisableCorpseContextMenu())
+                        interactableObject = null;
+                }
                 else if (!isHeld && (HandsInteractionController.suppressWorldLootMenu || (hic != null && hic.heldItem != null)))
                 {
                     interactableObject = null;
