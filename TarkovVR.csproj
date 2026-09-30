@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>SPT-VR</AssemblyName>
 	  <Description>VR mod for Single Player Tarkov</Description>
-	  <Version>1.3.0</Version>
+	  <Version>1.4.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RestoreAdditionalProjectSources>
@@ -33,88 +33,52 @@
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.*" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3" PrivateAssets="all" />
     <PackageReference Include="UnityEngine.Modules" Version="2019.4.39" IncludeAssets="compile" />
   </ItemGroup>
-  
+
   <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
   </ItemGroup>
-  
+
   <ItemGroup>
-    <Reference Include="Aki.Reflection">
-      <HintPath>libs\Aki.Reflection.dll</HintPath>
-    </Reference>
-    <Reference Include="AmandsGraphics">
-      <HintPath>libs\ModSupport\AmandsGraphics.dll</HintPath>
-    </Reference>
-    <Reference Include="AnimationSystem.Types">
-      <HintPath>libs\Managed\AnimationSystem.Types.dll</HintPath>
-    </Reference>
-    <Reference Include="Assembly-CSharp">
-      <HintPath>libs\Managed\Assembly-CSharp.dll</HintPath>
-    </Reference>
-    <Reference Include="Assembly-CSharp-firstpass">
-      <HintPath>libs\Managed\Assembly-CSharp-firstpass.dll</HintPath>
-    </Reference>
-    <Reference Include="Cinemachine">
-      <HintPath>libs\Managed\Cinemachine.dll</HintPath>
-    </Reference>
-    <Reference Include="Comfort">
-      <HintPath>libs\Managed\Comfort.dll</HintPath>
-    </Reference>
-    <Reference Include="Comfort.Unity">
-      <HintPath>libs\Managed\Comfort.Unity.dll</HintPath>
-    </Reference>
-    <Reference Include="CommonExtensions">
-      <HintPath>libs\Managed\CommonExtensions.dll</HintPath>
-    </Reference>
-    <Reference Include="DynamicMaps">
-      <HintPath>libs\ModSupport\DynamicMaps.dll</HintPath>
-    </Reference>
-    <Reference Include="EFTConfiguration">
-      <HintPath>libs\ModSupport\KmyTarkovConfiguration.dll</HintPath>
-    </Reference>
-    <Reference Include="Fika.Core">
-      <HintPath>libs\ModSupport\Fika.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="ItemComponent.Types">
-      <HintPath>libs\Managed\ItemComponent.Types.dll</HintPath>
-    </Reference>
-    <Reference Include="KmyTarkovConfiguration">
-      <HintPath>C:\Users\lilma\Downloads\SPT-VR-main\SPT-VR-main\libs\ModSupport\KmyTarkovConfiguration.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.CSharp">
-      <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\Microsoft.CSharp.dll</HintPath>
-    </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>libs\Managed\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="Sirenix.Serialization">
-      <HintPath>libs\Managed\Sirenix.Serialization.dll</HintPath>
-    </Reference>
-    <Reference Include="SteamVR">
-      <HintPath>libs\Managed\SteamVR.dll</HintPath>
-    </Reference>
-    <Reference Include="SteamVR_Actions">
-      <HintPath>libs\Managed\SteamVR_Actions.dll</HintPath>
-    </Reference>
-    <Reference Include="Tyfon.WeaponCustomizer">
-      <HintPath>libs backup\ModSupport\Tyfon.WeaponCustomizer.dll</HintPath>
-    </Reference>
-    <Reference Include="Unity.Postprocessing.Runtime">
-      <HintPath>libs\Managed\Unity.Postprocessing.Runtime.dll</HintPath>
-    </Reference>
-    <Reference Include="Unity.TextMeshPro">
-      <HintPath>libs\Managed\Unity.TextMeshPro.dll</HintPath>
-    </Reference>
-    <Reference Include="Unity.XR.Management">
-      <HintPath>libs\Managed\Unity.XR.Management.dll</HintPath>
-    </Reference>
-    <Reference Include="Unity.XR.OpenVR">
-      <HintPath>libs\Managed\Unity.XR.OpenVR.dll</HintPath>
-    </Reference>
-    <Reference Include="UnityEngine.UI">
-      <HintPath>libs\Managed\UnityEngine.UI.dll</HintPath>
-    </Reference>
+    <Reference Include="AmandsGraphics" HintPath="libs\ModSupport\AmandsGraphics.dll" Private="false" />
+    <Reference Include="AnimationSystem.Types" HintPath="..\..\EscapeFromTarkov_Data\Managed\AnimationSystem.Types.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath="..\..\EscapeFromTarkov_Data\Managed\Assembly-CSharp.dll" Publicize="true" PublicizeCompilerGenerated="true" Private="false" />
+    <Reference Include="Assembly-CSharp-firstpass" HintPath="..\..\EscapeFromTarkov_Data\Managed\Assembly-CSharp-firstpass.dll" Private="false" />
+    <Reference Include="Cinemachine" HintPath="..\..\EscapeFromTarkov_Data\Managed\Cinemachine.dll" Private="false" />
+    <Reference Include="Comfort" HintPath="..\..\EscapeFromTarkov_Data\Managed\Comfort.dll" Private="false" />
+    <Reference Include="Comfort.Unity" HintPath="..\..\EscapeFromTarkov_Data\Managed\Comfort.Unity.dll" Private="false" />
+    <Reference Include="CommonExtensions" HintPath="..\..\EscapeFromTarkov_Data\Managed\CommonExtensions.dll" Private="false" />
+    <Reference Include="DynamicMaps" HintPath="libs\ModSupport\DynamicMaps.dll" Publicize="true" Private="false" />
+    <Reference Include="Fika.Core" HintPath="libs\ModSupport\Fika.Core.dll" Publicize="true" Private="false" />
+    <Reference Include="ItemComponent.Types" HintPath="..\..\EscapeFromTarkov_Data\Managed\ItemComponent.Types.dll" Private="false" />
+    <Reference Include="KmyTarkovConfiguration" HintPath="libs\ModSupport\KmyTarkovConfiguration.dll" Private="false" />
+    <Reference Include="Microsoft.CSharp" HintPath="..\..\EscapeFromTarkov_Data\Managed\Microsoft.CSharp.dll" Private="false" />
+    <Reference Include="Newtonsoft.Json" HintPath="..\..\EscapeFromTarkov_Data\Managed\Newtonsoft.Json.dll" Private="false" />
+    <Reference Include="Sirenix.Serialization" HintPath="..\..\EscapeFromTarkov_Data\Managed\Sirenix.Serialization.dll" Private="false" />
+    <Reference Include="spt-reflection" HintPath="..\..\BepInEx\plugins\spt\spt-reflection.dll" Private="false" />
+    <Reference Include="SteamVR" HintPath="libs\Managed\SteamVR.dll" Private="false" />
+    <Reference Include="SteamVR_Actions" HintPath="libs\Managed\SteamVR_Actions.dll" Private="false" />
+    <Reference Include="Tyfon.WeaponCustomizer" HintPath="libs\ModSupport\Tyfon.WeaponCustomizer.dll" Publicize="true" Private="false" />
+    <Reference Include="Unity.Postprocessing.Runtime" HintPath="..\..\EscapeFromTarkov_Data\Managed\Unity.Postprocessing.Runtime.dll" Publicize="true" Private="false" />
+    <Reference Include="Unity.TextMeshPro" HintPath="..\..\EscapeFromTarkov_Data\Managed\Unity.TextMeshPro.dll" Publicize="true" Private="false" />
+    <Reference Include="Unity.XR.Management" HintPath="libs\Managed\Unity.XR.Management.dll" Publicize="true" Private="false" />
+    <Reference Include="Unity.XR.OpenVR" HintPath="libs\Managed\Unity.XR.OpenVR.dll" Private="false" />
+    <Reference Include="UnityEngine.UI" HintPath="..\..\EscapeFromTarkov_Data\Managed\UnityEngine.UI.dll" Private="false" />
   </ItemGroup>
+
+  <!-- Copy the built plugins into the SPT install so the game always runs the latest build.
+       Override with -p:SptPluginDir=... ; skipped when the SPT install isn't there (e.g. CI or another machine). -->
+  <PropertyGroup>
+    <SptPluginDir Condition="'$(SptPluginDir)' == ''">$(MSBuildProjectDirectory)\..\..\BepInEx\plugins\sptvr\</SptPluginDir>
+  </PropertyGroup>
+
+  <Target Name="DeployToSpt" AfterTargets="Build" Condition="Exists('$(SptPluginDir)..\')">
+    <ItemGroup>
+      <_SptVrPluginFiles Include="$(TargetDir)SPT-VR.dll;$(TargetDir)SPT-VR-FikaSync.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SptVrPluginFiles)" DestinationFolder="$(SptPluginDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Deployed SPT-VR plugins to $(SptPluginDir)" />
+  </Target>
 </Project>

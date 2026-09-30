@@ -18,7 +18,7 @@ using TarkovVR.Source.Settings;
 
 namespace TarkovVR
 {
-    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.3.0")]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", MyPluginInfo.PLUGIN_VERSION)]
     // Soft: the FikaSync module only loads its plugin when FIKA is present, so we must NOT hard-depend
     // on it (that would break solo VR). We still ship its DLL alongside ours and load after it here.
     [BepInDependency("com.matsix.sptvr.fikasync", BepInDependency.DependencyFlags.SoftDependency)]

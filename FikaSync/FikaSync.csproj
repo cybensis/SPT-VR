@@ -34,42 +34,22 @@
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.*" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3" PrivateAssets="all" />
     <PackageReference Include="UnityEngine.Modules" Version="2019.4.39" IncludeAssets="compile" />
   </ItemGroup>
 
-  <!-- Game + FIKA assemblies (pre-publicized stubs in ..\libs). No SteamVR / VR here on purpose.
+  <!-- Game + FIKA assemblies. No SteamVR / VR here on purpose.
        Private=false: these are provided by the game at runtime, so DON'T copy them into our output.
        (Copying them made the main project's ProjectReference see duplicate Assembly-CSharp/Fika.Core
        and drop types like LoadingScreenUI/FSR3Wrapper.) -->
   <ItemGroup>
-    <Reference Include="Assembly-CSharp">
-      <HintPath>..\libs\Managed\Assembly-CSharp.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Assembly-CSharp-firstpass">
-      <HintPath>..\libs\Managed\Assembly-CSharp-firstpass.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="AnimationSystem.Types">
-      <HintPath>..\libs\Managed\AnimationSystem.Types.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Comfort">
-      <HintPath>..\libs\Managed\Comfort.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Comfort.Unity">
-      <HintPath>..\libs\Managed\Comfort.Unity.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="ItemComponent.Types">
-      <HintPath>..\libs\Managed\ItemComponent.Types.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Fika.Core">
-      <HintPath>..\libs\ModSupport\Fika.Core.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+    <Reference Include="AnimationSystem.Types" HintPath="..\..\..\EscapeFromTarkov_Data\Managed\AnimationSystem.Types.dll" Private="false" />
+    <Reference Include="Assembly-CSharp" HintPath="..\..\..\EscapeFromTarkov_Data\Managed\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="Assembly-CSharp-firstpass" HintPath="..\..\..\EscapeFromTarkov_Data\Managed\Assembly-CSharp-firstpass.dll" Private="false" />
+    <Reference Include="Comfort" HintPath="..\..\..\EscapeFromTarkov_Data\Managed\Comfort.dll" Private="false" />
+    <Reference Include="Comfort.Unity" HintPath="..\..\..\EscapeFromTarkov_Data\Managed\Comfort.Unity.dll" Private="false" />
+    <Reference Include="ItemComponent.Types" HintPath="..\..\..\EscapeFromTarkov_Data\Managed\ItemComponent.Types.dll" Private="false" />
+    <Reference Include="Fika.Core" HintPath="..\libs\ModSupport\Fika.Core.dll" Publicize="true" Private="false" />
   </ItemGroup>
 
 </Project>
