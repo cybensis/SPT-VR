@@ -72,7 +72,7 @@ namespace TarkovVR.Source.Weapons
             {
                 Material mat = null;
                 float scale = 0.1f;
-                OpticSight sight = CameraClass.Instance?.OpticCameraManager?.CurrentOpticSight;
+                OpticSight sight = CameraManager.Instance?.OpticCameraManager?.CurrentOpticSight;
                 if (sight != null && sight.ScopeData != null && sight.ScopeData.Reticle != null)
                 {
                     mat = sight.ScopeData.Reticle.Material;

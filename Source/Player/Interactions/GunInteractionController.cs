@@ -16,6 +16,7 @@ using UnityEngine.UI;
 using UnityEngine.UIElements;
 using Valve.VR;
 using Valve.VR.InteractionSystem;
+using EFT.UI;
 using static HighLightMesh;
 using static System.Net.Mime.MediaTypeNames;
 using static TarkovVR.Source.Controls.InputHandlers;
@@ -37,9 +38,9 @@ public class GunInteractionController : MonoBehaviour
     public bool initialized = false;
     public int lastHitCompIndex = -1;
     private GamePlayerOwner playerOwner;
-    private List<ActionsReturnClass> weaponUiLists;
-    private List<Class617> meshList;
-    private List<Class617> malfunctionMeshList;
+    private List<AvailableInteractionState> weaponUiLists;
+    private List<HighLightMesh.Part> meshList;
+    private List<HighLightMesh.Part> malfunctionMeshList;
     private HighLightMesh meshHighlighter;
     public bool highlightingMesh = false;
     private int boltIndex = -1;
@@ -47,9 +48,9 @@ public class GunInteractionController : MonoBehaviour
     public bool hasExaminedAfterMalfunction = false;
     public Vector3 armsOffset = new Vector3(-0.05f, -0.075f, -0.075f);
 
-    private Dictionary<Transform, ActionsReturnClass> interactablesDictionary;
-    private Dictionary<Transform, ActionsReturnClass> tacDeviceDictionary;
-    private Dictionary<Transform, ActionsReturnClass> malfunctionMeshDictionary;
+    private Dictionary<Transform, AvailableInteractionState> interactablesDictionary;
+    private Dictionary<Transform, AvailableInteractionState> tacDeviceDictionary;
+    private Dictionary<Transform, AvailableInteractionState> malfunctionMeshDictionary;
 
     //private bool
     public void Init()
@@ -60,18 +61,18 @@ public class GunInteractionController : MonoBehaviour
         if (tacDevices == null)
             tacDevices = new List<Transform>();
         if (weaponUiLists == null)
-            weaponUiLists = new List<ActionsReturnClass>();
+            weaponUiLists = new List<AvailableInteractionState>();
         if (meshList == null)
-            meshList = new List<Class617>();
+            meshList = new List<HighLightMesh.Part>();
         if (malfunctionMeshList == null)
-            malfunctionMeshList = new List<Class617>();
+            malfunctionMeshList = new List<HighLightMesh.Part>();
 
         if (interactablesDictionary == null)
-            interactablesDictionary = new Dictionary<Transform, ActionsReturnClass>();
+            interactablesDictionary = new Dictionary<Transform, AvailableInteractionState>();
         if (tacDeviceDictionary == null)
-            tacDeviceDictionary = new Dictionary<Transform, ActionsReturnClass>();
+            tacDeviceDictionary = new Dictionary<Transform, AvailableInteractionState>();
         if (malfunctionMeshDictionary == null)
-            malfunctionMeshDictionary = new Dictionary<Transform, ActionsReturnClass>();
+            malfunctionMeshDictionary = new Dictionary<Transform, AvailableInteractionState>();
 
          transform.localEulerAngles = new Vector3(340, 340, 0);
 
@@ -98,9 +99,9 @@ public class GunInteractionController : MonoBehaviour
             gunRaycastReciever.gameObject.layer = WEAPON_COLLIDER_LAYER;
             gunRaycastReciever.GetComponent<BoxCollider>().enabled = true;
         }
-        if (VRGlobals.VRCam != null && meshHighlighter != null && meshHighlighter.commandBuffer_0 != null)
+        if (VRGlobals.VRCam != null && meshHighlighter != null && meshHighlighter._cmb != null)
         {
-            VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+            VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter._cmb);
         }
         transform.localEulerAngles = new Vector3(340, 340, 0);
 
@@ -158,9 +159,9 @@ public class GunInteractionController : MonoBehaviour
 
         if (highlightingMesh && meshHighlighter)
         {
-            if (VRGlobals.VRCam != null && meshHighlighter.commandBuffer_0 != null)
+            if (VRGlobals.VRCam != null && meshHighlighter._cmb != null)
             {
-                VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+                VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter._cmb);
             }
             meshHighlighter.enabled = false;
             highlightingMesh = false;
@@ -284,8 +285,8 @@ public class GunInteractionController : MonoBehaviour
         }
     }
     
-    private Class617[] cachedMalfunctionMeshArray;
-    private Class617[] cachedMeshArray;
+    private HighLightMesh.Part[] cachedMalfunctionMeshArray;
+    private HighLightMesh.Part[] cachedMeshArray;
     private bool malfunctionMeshArrayDirty = true;
     private bool meshArrayDirty = true;
 
@@ -319,7 +320,7 @@ public class GunInteractionController : MonoBehaviour
                 malfunctionMeshArrayDirty = false;
             }
 
-            meshHighlighter.class617_0 = cachedMalfunctionMeshArray;
+            meshHighlighter._targetParts = cachedMalfunctionMeshArray;
             EnableHighlighting(Color.red);
             initMalfunction = true;
             SetJoystickBlock(isLeftHanded, true);
@@ -336,7 +337,7 @@ public class GunInteractionController : MonoBehaviour
                 meshArrayDirty = false;
             }
 
-            meshHighlighter.class617_0 = cachedMeshArray;
+            meshHighlighter._targetParts = cachedMeshArray;
             EnableHighlighting(Color.white);
             initMalfunction = false;
             hasExaminedAfterMalfunction = false;
@@ -350,8 +351,8 @@ public class GunInteractionController : MonoBehaviour
         highlightingMesh = true;
         meshHighlighter.Color = color;
 
-        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
-        VRGlobals.VRCam.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter._cmb);
+        VRGlobals.VRCam.AddCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter._cmb);
     }
 
     private void DisableHighlighting()
@@ -382,7 +383,7 @@ public class GunInteractionController : MonoBehaviour
             {
                 int actionIndex = hasExaminedAfterMalfunction ? 1 : 0;
                 weaponUiLists[boltIndex].SelectedAction = weaponUiLists[boltIndex].Actions[actionIndex];
-                playerOwner.AvailableInteractionState.method_0(weaponUiLists[boltIndex]);
+                playerOwner.AvailableInteractionState.UpdateState(weaponUiLists[boltIndex]);
 
                 lastHitCompIndex = boltIndex;
                 VRGlobals.vrPlayer.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
@@ -400,7 +401,7 @@ public class GunInteractionController : MonoBehaviour
             if (lastHitCompIndex != index)
             {
                 weaponUiLists[index].SelectedAction = weaponUiLists[index].Actions[0];
-                playerOwner.AvailableInteractionState.method_0(weaponUiLists[index]);
+                playerOwner.AvailableInteractionState.UpdateState(weaponUiLists[index]);
                 lastHitCompIndex = index;
                 VRGlobals.vrPlayer.interactionUi.localScale = new Vector3(0.5f, 0.5f, 0.5f);
             }
@@ -413,10 +414,10 @@ public class GunInteractionController : MonoBehaviour
 
     private void ClearInteraction()
     {
-        playerOwner.AvailableInteractionState.method_0(null);
+        playerOwner.AvailableInteractionState.UpdateState(null);
         lastHitCompIndex = -1;
         VRGlobals.vrPlayer.interactionUi.localScale = Vector3.one;
-        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter._cmb);
     }
 
     private void UpdateInteractionUI(Transform cameraTransform)
@@ -467,9 +468,9 @@ public class GunInteractionController : MonoBehaviour
 
     private void ForceCleanupHighlight()
     {
-        if (meshHighlighter?.commandBuffer_0 != null && VRGlobals.VRCam != null)
+        if (meshHighlighter?._cmb != null && VRGlobals.VRCam != null)
         {
-            VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter.commandBuffer_0);
+            VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, meshHighlighter._cmb);
         }
 
         if (meshHighlighter != null)
@@ -536,7 +537,7 @@ public class GunInteractionController : MonoBehaviour
             }
         }
 
-        List<Class617> scopeMeshList = new List<Class617>();
+        List<HighLightMesh.Part> scopeMeshList = new List<HighLightMesh.Part>();
         Renderer[] componentsInChildren = scopeTransform?.GetComponentsInChildren<Renderer>(includeInactive: false);
 
         // Null check for the renderers array
@@ -550,13 +551,13 @@ public class GunInteractionController : MonoBehaviour
                 SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
                 if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
                 {
-                    scopeMeshList.Add(new Class617(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                    scopeMeshList.Add(new HighLightMesh.Part(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
                 }
                 else if (renderer is MeshRenderer && renderer.enabled &&
                          renderer.GetComponent<MeshFilter>() != null &&
                          renderer.GetComponent<MeshFilter>().sharedMesh != null)
                 {
-                    scopeMeshList.Add(new Class617(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                    scopeMeshList.Add(new HighLightMesh.Part(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
                 }
             }
         }
@@ -564,7 +565,7 @@ public class GunInteractionController : MonoBehaviour
         // Only proceed if we have items in the list and the highlighter is valid
         if (scopeMeshList.Count > 0 && meshHighlighter != null)
         {
-            meshHighlighter.class617_0 = scopeMeshList.ToArray();
+            meshHighlighter._targetParts = scopeMeshList.ToArray();
             meshHighlighter.enabled = true;
         }
     }
@@ -608,10 +609,10 @@ public class GunInteractionController : MonoBehaviour
         CreateInteractableMarker(magTransform.transform, "magMarker");
         int meshListLengthBeforeMags = meshList.Count;
         GetMesh(magTransform.transform);
-        List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
-        ActionsTypesClass checkMagazine = new ActionsTypesClass();
+        List<InteractionAction> listComponents = new List<InteractionAction>();
+        InteractionAction checkMagazine = new InteractionAction();
         checkMagazine.Name = "Check Magazine";
-        ActionsTypesClass reload = new ActionsTypesClass();
+        InteractionAction reload = new InteractionAction();
         reload.Name = "Reload";
         IInputHandler baseHandler;
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ReloadWeapon, out baseHandler);
@@ -630,7 +631,7 @@ public class GunInteractionController : MonoBehaviour
         }
         listComponents.Add(checkMagazine);
         listComponents.Add(reload);
-        ActionsReturnClass magazineList = new ActionsReturnClass();
+        AvailableInteractionState magazineList = new AvailableInteractionState();
         magazineList.Actions = listComponents;
         weaponUiLists.Add(magazineList);
         if (magazine && magazine.childCount > 0)
@@ -638,7 +639,7 @@ public class GunInteractionController : MonoBehaviour
             if (magazine.GetComponent<MeshRenderer>())
                 magazine.GetChild(0).position = magazine.GetComponent<MeshRenderer>().bounds.center;
             else if (meshList.Count > meshListLengthBeforeMags)
-                interactables[interactables.Count - 1].localPosition = meshList[meshListLengthBeforeMags].Mesh_0.bounds.center;
+                interactables[interactables.Count - 1].localPosition = meshList[meshListLengthBeforeMags]._mesh.bounds.center;
         }
     }
     //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -658,8 +659,8 @@ public class GunInteractionController : MonoBehaviour
         boltIndex = interactables.Count - 1;
         GetMesh(chargeOrBoltTransform);
         GetMalfunctionMeshes(chargeOrBoltTransform);
-        List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
-        ActionsTypesClass examineWeapon = new ActionsTypesClass();
+        List<InteractionAction> listComponents = new List<InteractionAction>();
+        InteractionAction examineWeapon = new InteractionAction();
         examineWeapon.Name = "Examine Weapon";
         IInputHandler baseHandler;
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ExamineWeapon, out baseHandler);
@@ -671,7 +672,7 @@ public class GunInteractionController : MonoBehaviour
         listComponents.Add(examineWeapon);
 
 
-        ActionsTypesClass checkChamber = new ActionsTypesClass();
+        InteractionAction checkChamber = new InteractionAction();
         checkChamber.Name = "Check Chamber/Fix Malfunction";
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.CheckChamber, out baseHandler);
         if (baseHandler != null)
@@ -682,7 +683,7 @@ public class GunInteractionController : MonoBehaviour
         listComponents.Add(checkChamber);
 
 
-        ActionsReturnClass chamberList = new ActionsReturnClass();
+        AvailableInteractionState chamberList = new AvailableInteractionState();
         chamberList.Actions = listComponents;
         weaponUiLists.Add(chamberList);
     }
@@ -690,8 +691,8 @@ public class GunInteractionController : MonoBehaviour
     public void SetFireModeSwitch(Transform fireModeSwitch) {
         CreateInteractableMarker(fireModeSwitch, "fireModeMarker");
         GetMesh(fireModeSwitch);
-        List<ActionsTypesClass> listComponents = new List<ActionsTypesClass>();
-        ActionsTypesClass toggleFireMode = new ActionsTypesClass();
+        List<InteractionAction> listComponents = new List<InteractionAction>();
+        InteractionAction toggleFireMode = new InteractionAction();
         toggleFireMode.Name = "Toggle Fire Mode";
         IInputHandler baseHandler;
         VRInputManager.inputHandlers.TryGetValue(EFT.InputSystem.ECommand.ChangeWeaponMode, out baseHandler);
@@ -704,7 +705,7 @@ public class GunInteractionController : MonoBehaviour
         listComponents.Add(toggleFireMode);
 
 
-        ActionsReturnClass fireModList = new ActionsReturnClass();
+        AvailableInteractionState fireModList = new AvailableInteractionState();
         fireModList.Actions = listComponents;
         weaponUiLists.Add(fireModList);
         this.fireModeSwitch = fireModeSwitch;
@@ -790,11 +791,11 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                meshList.Add(new Class617(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                meshList.Add(new HighLightMesh.Part(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                meshList.Add(new Class617(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                meshList.Add(new HighLightMesh.Part(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
     }
@@ -808,11 +809,11 @@ public class GunInteractionController : MonoBehaviour
             SkinnedMeshRenderer skinnedMeshRenderer = renderer as SkinnedMeshRenderer;
             if (skinnedMeshRenderer != null && skinnedMeshRenderer.enabled)
             {
-                malfunctionMeshList.Add(new Class617(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
+                malfunctionMeshList.Add(new HighLightMesh.Part(null, skinnedMeshRenderer.transform, skinnedMeshRenderer));
             }
             else if (renderer is MeshRenderer && renderer.enabled)
             {
-                malfunctionMeshList.Add(new Class617(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
+                malfunctionMeshList.Add(new HighLightMesh.Part(renderer.GetComponent<MeshFilter>().sharedMesh, renderer.transform));
             }
         }
     }

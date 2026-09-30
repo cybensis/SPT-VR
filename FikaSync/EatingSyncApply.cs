@@ -72,7 +72,7 @@ namespace SptVrFikaSync
         private static bool playingForwarded;
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseSoundPlayer), "OnSound")]
+        [HarmonyPatch(typeof(BaseSoundPlayer), "IEventsConsumer.OnSound")]
         private static bool MuteObservedEatSound(BaseSoundPlayer __instance)
         {
             try { if (!playingForwarded && __instance != null && suppressed.Contains(__instance)) return false; }
@@ -159,9 +159,9 @@ namespace SptVrFikaSync
                         var fa = meds.FirearmsAnimator;
                         if (fa != null)
                         {
-                            if (syncFoodAnimatorState && s.animHashes != null && fa.AnimatorLayersCount > 0)
+                            if (syncFoodAnimatorState && s.animHashes != null && fa._animatorLayersCount > 0)
                             {
-                                int n = Mathf.Min(s.animLayerCount, fa.AnimatorLayersCount);
+                                int n = Mathf.Min(s.animLayerCount, fa._animatorLayersCount);
                                 for (int i = 0; i < n; i++)
                                     if (s.animHashes[i] != 0) fa.Animator.Play(s.animHashes[i], i, s.animTimes[i]);
                                 fa.SetAnimationSpeed(0f);
@@ -344,7 +344,7 @@ namespace SptVrFikaSync
                 if (FikaVrSync.StableHash(name) == hash
                     || (name.Length > 3 && name.StartsWith("Snd", StringComparison.Ordinal) && FikaVrSync.StableHash(name.Substring(3)) == hash))
                 {
-                    try { sp.OnSound(name); } catch { }
+                    try { ((IEventsConsumer)sp).OnSound(name); } catch { }
                     return;
                 }
             }

@@ -6,6 +6,7 @@ using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using EFT;
 using static TarkovVR.Source.Controls.InputHandlers;
 
 namespace TarkovVR.Source.Weapons
@@ -96,7 +97,7 @@ namespace TarkovVR.Source.Weapons
 
                 if (baseZoomHandler != null)
                 {
-                    baseZoomHandler.float_1 = physicalCurrentFov;
+                    baseZoomHandler._filedOfView = physicalCurrentFov;
                     baseZoomHandler.float_2 = physicalCurrentFov;
                     baseZoomHandler.method_11();
                     PersistZoomValue(physicalCurrentFov);
@@ -147,7 +148,7 @@ namespace TarkovVR.Source.Weapons
 
             if (baseZoomHandler != null)
             {
-                baseZoomHandler.float_1 = physicalCurrentFov;
+                baseZoomHandler._filedOfView = physicalCurrentFov;
                 baseZoomHandler.float_2 = physicalCurrentFov;
                 baseZoomHandler.float_4 = physicalCurrentFov;
                 baseZoomHandler.method_8();
@@ -251,7 +252,7 @@ namespace TarkovVR.Source.Weapons
                     joystickZooming = false;
                     if (physicalState == PhysicalZoomState.Idle && baseZoomHandler != null)
                     {
-                        baseZoomHandler.float_1 = physicalCurrentFov;
+                        baseZoomHandler._filedOfView = physicalCurrentFov;
                         baseZoomHandler.float_2 = physicalCurrentFov;
                         baseZoomHandler.float_4 = physicalCurrentFov;
                         baseZoomHandler.method_8();
@@ -286,18 +287,18 @@ namespace TarkovVR.Source.Weapons
         {
             if (VRGlobals.scopes == null || VRGlobals.scopes.Count == 0) return;
 
-            var scopeStates = new List<FirearmScopeStateStruct>();
+            var scopeStates = new List<ScopeState>();
             foreach (Transform scope in VRGlobals.scopes)
             {
                 if (scope?.parent == null) continue;
-                var sightComponent = scope.parent.GetComponent<SightModVisualControllers>()?.sightComponent_0;
+                var sightComponent = scope.parent.GetComponent<SightModVisualControllers>()?._sightMod;
                 if (sightComponent == null) continue;
 
                 int scopeIndex = sightComponent.SelectedScopeIndex;
                 int maxScopeModes = sightComponent.GetScopeModesCount(scopeIndex);
                 if (maxScopeModes > 1)
                 {
-                    scopeStates.Add(new FirearmScopeStateStruct
+                    scopeStates.Add(new ScopeState
                     {
                         ScopeMode = (sightComponent.SelectedScopeMode + 1) % maxScopeModes,
                         Id = sightComponent.Item.Id
@@ -346,7 +347,7 @@ namespace TarkovVR.Source.Weapons
             foreach (Transform scope in VRGlobals.scopes)
             {
                 if (scope?.parent == null) continue;
-                var sightComponent = scope.parent.GetComponent<SightModVisualControllers>()?.sightComponent_0;
+                var sightComponent = scope.parent.GetComponent<SightModVisualControllers>()?._sightMod;
                 if (sightComponent == null) continue;
 
                 if (isSmoothZoom && VRSettings.SmoothScopeAim())
@@ -375,8 +376,8 @@ namespace TarkovVR.Source.Weapons
         // We drive zoom by writing float_1 directly, which bypasses that write, so mirror it here.
         private void PersistZoomValue(float fov)
         {
-            if (baseZoomHandler != null && baseZoomHandler.sightComponent_0 != null)
-                baseZoomHandler.sightComponent_0.ScopeZoomValue = fov;
+            if (baseZoomHandler != null && baseZoomHandler._sightComponent != null)
+                baseZoomHandler._sightComponent.ScopeZoomValue = fov;
         }
 
         private void ApplyMechanicalCatch(float rawTargetFov)

@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TarkovVR.Source.Graphics;
 using UnityEngine;
+using EFT.CameraControl;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -16,11 +17,11 @@ namespace TarkovVR.Patches.Visuals
     internal class AOPatches
     {
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(CameraClass), "SetSSAO")]
-        private static bool CustomAOSet(CameraClass __instance, ESSAOMode ssaoMode)
+        [HarmonyPatch(typeof(CameraManager), "SetSSAO")]
+        private static bool CustomAOSet(CameraManager __instance, ESSAOMode ssaoMode)
         {
-            __instance.Hbao_0.enabled = false;
-            __instance.AmbientOcclusion_0.enabled = false;
+            __instance._hbao.enabled = false;
+            __instance._ambientOcclusion.enabled = false;
             VRGlobals.ssaoMode = ssaoMode;
             AmplifyGTAO gtaoManager;
             Camera cam = __instance.Camera;

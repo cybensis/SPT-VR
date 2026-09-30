@@ -292,7 +292,7 @@ namespace TarkovVR.Source.UI
                 while (i < 5)
                 {
 
-                    if (hitObject.GetComponent<IPointerEnterHandler>() != null || hitObject.GetComponent<IBeginDragHandler>() != null || hitObject.GetComponent<IDragHandler>() != null || hitObject.GetComponent<IContainer>() != null)
+                    if (hitObject.GetComponent<IPointerEnterHandler>() != null || hitObject.GetComponent<IBeginDragHandler>() != null || hitObject.GetComponent<IDragHandler>() != null || hitObject.GetComponent<IContainerView>() != null)
                     {
                         foundValidObject = true;
                         break;

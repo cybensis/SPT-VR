@@ -4,6 +4,7 @@ using EFT;
 using Fika.Core.Main.Components;
 using Fika.Core.Main.Players;
 using UnityEngine;
+using EFT.Interactive;
 
 namespace SptVrFikaSync
 {
@@ -39,7 +40,7 @@ namespace SptVrFikaSync
         private sealed class Remote
         {
             public FikaPlayer player;
-            public RagdollClass ragdoll;
+            public CorpseRagdoll ragdoll;
             public RigidbodySpawner[] bones;
             public Vector3[] targetPos;
             public Quaternion[] targetRot;
@@ -125,16 +126,16 @@ namespace SptVrFikaSync
 
             if (!dragging.TryGetValue(p.NetId, out Remote d))
             {
-                RagdollClass ragdoll = ResolveRagdoll(player);
-                RigidbodySpawner[] bones = ragdoll != null ? ragdoll.RigidbodySpawner_0 : null;
+                CorpseRagdoll ragdoll = ResolveRagdoll(player);
+                RigidbodySpawner[] bones = ragdoll != null ? ragdoll._rigidbodySpawners : null;
                 if (ragdoll == null || bones == null || bones.Length != n)
                     return; // can't resolve/drive this body — relocation (1) still handles the gameplay
 
                 // Freeze the ragdoll kinematic + keep it from settling/tearing down while we drive it, then
                 // seed the smoothing (displayed = target = this pose, so no first-frame jump).
                 FreezeKinematic(bones);
-                ragdoll.Bool_0 = true;        // keepRigidbody: don't tear it down while held
-                ragdoll.Func_0 = NeverFreeze; // stop FIKA's settle predicate freezing it under us
+                ragdoll._keepRigidbody = true;        // keepRigidbody: don't tear it down while held
+                ragdoll._checkCorpseIsStill = NeverFreeze; // stop FIKA's settle predicate freezing it under us
                 d = new Remote
                 {
                     player = player,
@@ -237,7 +238,7 @@ namespace SptVrFikaSync
                 Rigidbody rb = bones[i] != null ? bones[i].Rigidbody : null;
                 if (rb == null)
                     continue;
-                EFTPhysicsClass.GClass745.UnsupportRigidbody(rb);
+                PhysicsExtensions.UpdateController.UnsupportRigidbody(rb);
                 rb.isKinematic = true;
                 rb.detectCollisions = true;
             }
@@ -246,22 +247,22 @@ namespace SptVrFikaSync
         // Freeze the body kinematic in place at its current pose (mirrors RagdollClass.method_1) + restore
         // Func_0 so any still-spinning settle coroutine exits cleanly. This is what keeps a released downed
         // teammate exactly where dropped (the dragger does the same locally).
-        private static void Freeze(RagdollClass ragdoll, RigidbodySpawner[] bones)
+        private static void Freeze(CorpseRagdoll ragdoll, RigidbodySpawner[] bones)
         {
             for (int b = 0; b < bones.Length; b++)
             {
                 Rigidbody rb = bones[b] != null ? bones[b].Rigidbody : null;
                 if (rb == null)
                     continue;
-                EFTPhysicsClass.GClass745.UnsupportRigidbody(rb);
+                PhysicsExtensions.UpdateController.UnsupportRigidbody(rb);
                 rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
                 rb.isKinematic = true;
             }
             if (ragdoll != null)
-                ragdoll.Func_0 = AlwaysFreeze;
+                ragdoll._checkCorpseIsStill = AlwaysFreeze;
         }
 
-        private static RagdollClass ResolveRagdoll(FikaPlayer player)
+        private static CorpseRagdoll ResolveRagdoll(FikaPlayer player)
         {
             if (player == null)
                 return null;

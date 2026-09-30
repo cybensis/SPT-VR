@@ -10,6 +10,7 @@ using EFT.UI.Ragfair;
 using RootMotion.FinalIK;
 using Valve.VR;
 using EFT.InputSystem;
+using AnimationSystem;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -57,7 +58,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer)
                 return true; // bots / other players keep vanilla smoothing
-            else if (VRGlobals.player.MovementContext.PoseLevel_1 == 0f)
+            else if (VRGlobals.player.MovementContext._poseLevel == 0f)
                 return false;
 
             var bones = __instance.PlayerBones;
@@ -122,7 +123,7 @@ namespace TarkovVR.Patches.Core.Player
             if (!bodyPose1to1 || __instance._player == null || !__instance._player.IsYourPlayer)
                 return true; // bots / other players / disabled -> vanilla smoothing
 
-            __instance.SmoothedPoseLevel = __instance.PoseLevel_1;
+            __instance.SmoothedPoseLevel = __instance._poseLevel;
             return false; // skip the per-frame Lerp -> body is 1:1 with the head
         }
 
@@ -231,13 +232,13 @@ namespace TarkovVR.Patches.Core.Player
                 smoothedShoulderRotR = Quaternion.Slerp(smoothedShoulderRotR, rightAnimRot, rt);
             }
 
-            TransformHelperClass.LerpPositionAndRotation(
+            TransformTools.LerpPositionAndRotation(
                 __instance.Shoulders[0],
                 leftTarget,
                 smoothedShoulderRotL,
                 0.65f);
 
-            TransformHelperClass.LerpPositionAndRotation(
+            TransformTools.LerpPositionAndRotation(
                 __instance.Shoulders[1],
                 rightTarget,
                 smoothedShoulderRotR,
@@ -439,7 +440,7 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player), "method_20")]
+        [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
         private static bool RemoveSprintAnimFromHands(EFT.Player __instance)
         {
             if (!__instance.IsYourPlayer)
@@ -450,7 +451,7 @@ namespace TarkovVR.Patches.Core.Player
             bool trulyInAir = airborneFreefallTime > 0f &&
                               __instance.MovementContext.FreefallTime > airborneFreefallTime;
 
-            bool disableAnim = (__instance.IsSprintEnabled && VRGlobals.player.MovementContext.PoseLevel_1 != 0 && VRSettings.GetDisableRunAnim()) || trulyInAir;
+            bool disableAnim = (__instance.IsSprintEnabled && VRGlobals.player.MovementContext._poseLevel != 0 && VRSettings.GetDisableRunAnim()) || trulyInAir;
 
             float currentTime = Time.time;
 
@@ -544,10 +545,10 @@ namespace TarkovVR.Patches.Core.Player
 
         private static bool test = true;
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GClass1446), "SetAnimator")]
-        private static void ReemoveSprintAnimFromHands(GClass1446 __instance)
+        [HarmonyPatch(typeof(UnityAnimatorWrapper), "SetAnimator")]
+        private static void ReemoveSprintAnimFromHands(UnityAnimatorWrapper __instance)
         {
-            __instance.Animator_0.SetLayerWeight(4, 0);
+            __instance._animator.SetLayerWeight(4, 0);
         }
         //[HarmonyPrefix]
         //[HarmonyPatch(typeof(EFT.Player), "method_22")]

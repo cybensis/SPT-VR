@@ -1,6 +1,7 @@
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.XR;
+using EFT.Impostors;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -39,8 +40,8 @@ namespace TarkovVR.Patches.Visuals
         public static float impostorCullVerticalWiden = 1.0f;
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(Class2098), "method_15")]
-        private static bool WidenImpostorCullFrustum(Class2098 __instance)
+        [HarmonyPatch(typeof(ImpostorsMainCameraContext), "UpdateFrustum")]
+        private static bool WidenImpostorCullFrustum(ImpostorsMainCameraContext __instance)
         {
             Camera cam = __instance.Camera;
             if (cam == null)
@@ -56,15 +57,15 @@ namespace TarkovVR.Patches.Visuals
                 proj.m11 *= impostorCullVerticalWiden;
 
             Matrix4x4 viewProj = proj * cam.worldToCameraMatrix;
-            GeometryUtility.CalculateFrustumPlanes(viewProj, __instance.Plane_0);
+            GeometryUtility.CalculateFrustumPlanes(viewProj, __instance._planes);
 
             // Pack the 6 planes into the Vector4 array the culling compute shader reads (_Frustum),
             // exactly like the original method_15.
             for (int i = 0; i < 6; i++)
             {
-                Plane p = __instance.Plane_0[i];
+                Plane p = __instance._planes[i];
                 Vector3 n = p.normal;
-                __instance.Vector4_0[i] = new Vector4(n.x, n.y, n.z, p.distance);
+                __instance._frustum[i] = new Vector4(n.x, n.y, n.z, p.distance);
             }
             return false;
         }

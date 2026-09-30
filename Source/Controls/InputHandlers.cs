@@ -675,7 +675,7 @@ namespace TarkovVR.Source.Controls
                 {
                     if (VRGlobals.player.ActiveSlot == null || WeaponPatches.rangeFinder)
                         // If the first weapon slot is null then attempt select secondary
-                        if (VRGlobals.player.Equipment.CachedSlots[0].ContainedItem != null)
+                        if (VRGlobals.player.Equipment._cachedSlots[0].ContainedItem != null)
                             command = ECommand.SelectFirstPrimaryWeapon;
                         else
                             command = ECommand.SelectSecondPrimaryWeapon;
@@ -983,7 +983,7 @@ namespace TarkovVR.Source.Controls
             {
                 if (VRGlobals.player.HandsController is BaseGrenadeHandsController grenadeController)
                 {
-                    grenadeController.method_8();
+                    grenadeController.PutGrenadeBack();
                     grenadePinResetting = true;
                     grenadePinPulled = false;
                     shootingToggled = false;
@@ -995,7 +995,7 @@ namespace TarkovVR.Source.Controls
             {
                 if (VRGlobals.player.HandsController is BaseGrenadeHandsController grenadeController)
                 {
-                    grenadeController.method_9(null, 0f, 1f, Vector3.zero, 1f, false, true);
+                    grenadeController.ThrowGrenadeInner(null, 0f, 1f, Vector3.zero, 1f, false, true);
                 }
             }
 

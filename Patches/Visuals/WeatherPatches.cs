@@ -11,7 +11,8 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.XR;
-using static GClass3809;
+using EFT.UI;
+using static EFT.UI.TraderTabGroup;
 using static SSAAImpl;
 using static UnityEngine.ParticleSystem.PlaybackState;
 
@@ -36,8 +37,8 @@ namespace TarkovVR.Patches.Visuals
 
         //Tarkov Clouds dont render correctly in VR so disable them
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(Class1821), "RenderClouds")]
-        private static bool DisableClouds(Class1821 __instance)
+        [HarmonyPatch(typeof(CloudLayerRenderer), "RenderClouds")]
+        private static bool DisableClouds(CloudLayerRenderer __instance)
         {
             return false;
         }
@@ -71,7 +72,7 @@ namespace TarkovVR.Patches.Visuals
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(PrismEffects), "method_5")]
+        [HarmonyPatch(typeof(PrismEffects), "SetFogShaderValues")]
         private static bool FixFogForVR(PrismEffects __instance, Material fogMaterial)
         {
             Camera cam = __instance.GetPrismCamera();
@@ -95,8 +96,8 @@ namespace TarkovVR.Patches.Visuals
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeatherController), "method_9")]
-        private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
+        [HarmonyPatch(typeof(WeatherController), "ControlScattering")]
+        private static void DynamicFog(WeatherController __instance, float fog, ShowStatNotificationPacket interpolatedParams)
         {
             // Initialize cameras only when needed
             if (fpsCam == null || opticCam == null)
@@ -129,7 +130,7 @@ namespace TarkovVR.Patches.Visuals
         }
         /*
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(PrismEffects), "method_12")]
+        [HarmonyPatch(typeof(PrismEffects), "OnRenderImageInternal")]
         private static void ApplyFXAAAfterAllEffects(PrismEffects __instance, RenderTexture source, RenderTexture destination)
         {
             Rendering.LoadFXAAShader();

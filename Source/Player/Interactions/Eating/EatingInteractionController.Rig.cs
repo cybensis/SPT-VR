@@ -436,7 +436,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (soundPlayer == null || string.IsNullOrEmpty(name)) return;
             playingManualSound = true;
-            try { soundPlayer.OnSound(name); }
+            try { ((IEventsConsumer)soundPlayer).OnSound(name); }
             catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] PlaySound('{name}') error: {ex}"); }
             finally { playingManualSound = false; }
         }

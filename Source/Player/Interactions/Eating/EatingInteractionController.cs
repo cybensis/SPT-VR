@@ -51,7 +51,7 @@ namespace TarkovVR.Source.Player.Interactions
 
                 Reset();
                 if (!VRSettings.GetManualEating()) return;
-                if (!(instance.Item is FoodDrinkItemClass)) return;
+                if (!(instance.Item is FoodDrink)) return;
 
                 FoodDef d = FindDef(instance.Item?.TemplateId);
                 if (d == null) return; // no manual sequence -> vanilla
@@ -114,7 +114,7 @@ namespace TarkovVR.Source.Player.Interactions
                 drinkFdc = item?.GetItemComponent<EFT.InventoryLogic.FoodDrinkComponent>();
                 if (drinkFdc != null && drinkFdc.MaxResource > 0f)
                     drinkRemainingFrac = Mathf.Clamp01(drinkFdc.HpPercent / drinkFdc.MaxResource);
-                if (drinkUseTime <= 0f && item?.Template is FoodDrinkTemplateClass t)
+                if (drinkUseTime <= 0f && item?.Template is FoodDrinkTemplate t)
                     drinkUseTime = t.UseTime;
             }
             catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] ReadDrinkState: {ex.Message}"); }
@@ -232,7 +232,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (pendingOp != null && !effectFired)
                 {
                     effectFired = true;   // AllowEffect passes it through
-                    pendingOp.method_5(); // run the real consume the gate swallowed
+                    pendingOp.GoNextBodyPart(); // run the real consume the gate swallowed
                 }
                 controller?.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
             }
@@ -242,9 +242,9 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // ===== Gates =====
-        public static bool AllowEffect(MedsController.ObservedMedsControllerClass op)
+        public static bool AllowEffect(MedsController.MedsInHandsOperation op)
         {
-            MedsController owner = op?.MedsController_0;
+            MedsController owner = op?._controller;
             if (!active || owner != controller) return true;
             pendingOp = op;
             return effectFired;
@@ -397,7 +397,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 // simulate:true BUILDS the op; RunNetworkTransaction executes it once. false would
                 // execute it here AND return it -> double-executed on a parentless item -> throw.
-                var result = InteractionsHandlerClass.Discard(item, ic, simulate: true);
+                var result = ItemManipulator.Discard(item, ic, simulate: true);
                 if (result.Succeeded)
                 {
                     ic.RunNetworkTransaction(result.Value);
@@ -470,7 +470,7 @@ namespace TarkovVR.Source.Player.Interactions
                     Plugin.MyLog.LogInfo(drinkFdc != null
                         ? $"[ManualEat] Consumed {fraction:P0} ({drinkFdc.HpPercent:F1}/{drinkFdc.MaxResource:F0} left{(emptied ? " — empty" : "")})."
                         : $"[ManualEat] Consumed {fraction:P0} (no resource component{(emptied ? " — treated as empty" : "")}).");
-                    pendingOp.method_5();   // keep — leaves the controller in the state the cancel needs
+                    pendingOp.GoNextBodyPart();   // keep — leaves the controller in the state the cancel needs
                     // SetActiveParam(false) is REQUIRED — it flips the controller out of
                     // the mid-use state into the cancellable/put-away state. Without it the
                     // controller stays frozen and the fire-cancel has nothing to act on.
@@ -497,7 +497,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 else
                 {
-                    pendingOp.method_5();   // nutrition (persists in background)
+                    pendingOp.GoNextBodyPart();   // nutrition (persists in background)
                     fa?.SetActiveParam(false, false); // use done -> animator goes to END/put-away
                     fa?.SetAnimationSpeed(spawnAnimSpeed);
                 }

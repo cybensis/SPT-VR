@@ -9,7 +9,7 @@ using EFT.Interactive;
 using System;
 using EFT;
 using static EFT.Player;
-using static InteractionsHandlerClass;
+using static EFT.InventoryLogic.ItemManipulator;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Settings;
 using TarkovVR.ModSupport;
@@ -20,6 +20,8 @@ using System.Collections.Generic;
 using System.Collections;
 //using LiteNetLib.Utils;
 using Comfort.Common;
+using Diz.LanguageExtensions;
+using Diz.Utils;
 //using LiteNetLib;
 
 namespace TarkovVR.Source.Player.Interactions
@@ -157,12 +159,12 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //Used for the backpack - This completely bypasses the pickup animation and puts the loot directly in your bag
-        private void DirectItemTransfer(EFT.Player owner, GInterface424 possibleAction, Item rootItem, IPlayer lootItemLastOwner)
+        private void DirectItemTransfer(EFT.Player owner, IItemOperationResult possibleAction, Item rootItem, IPlayer lootItemLastOwner)
         {
             isItemInitialized = false;
             // Handle magazine check if needed
-            MagazineItemClass magazineItemClass = rootItem as MagazineItemClass;
-            if (magazineItemClass != null && possibleAction is GClass3411 && lootItemLastOwner != null && lootItemLastOwner.ProfileId != owner.ProfileId)
+            Magazine magazineItemClass = rootItem as Magazine;
+            if (magazineItemClass != null && possibleAction is MoveResult && lootItemLastOwner != null && lootItemLastOwner.ProfileId != owner.ProfileId)
             {
                 owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
             }
@@ -176,7 +178,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
 
                 // Handle pickup state cleanup
-                var pickupState = owner.CurrentState as PickupStateClass;
+                var pickupState = owner.CurrentState as PickUpState;
                 pickupState?.Pickup(false, null);
             });
         }
@@ -216,7 +218,7 @@ namespace TarkovVR.Source.Player.Interactions
             try
             {
                 var ctrl = VRGlobals.player.InventoryController;
-                GStruct154<GInterface424> probe = InteractionsHandlerClass.QuickFindAppropriatePlace(
+                OperationResult<IItemOperationResult> probe = ItemManipulator.QuickFindAppropriatePlace(
                     item.Item,
                     ctrl,
                     ctrl.Inventory.Equipment.ToEnumerable(),
@@ -254,11 +256,11 @@ namespace TarkovVR.Source.Player.Interactions
                 yield break;
 
             bool ok = false;
-            GInterface424 action = default;
+            IItemOperationResult action = default;
             try
             {
                 var ctrl = VRGlobals.player.InventoryController;
-                GStruct154<GInterface424> place = InteractionsHandlerClass.QuickFindAppropriatePlace(
+                OperationResult<IItemOperationResult> place = ItemManipulator.QuickFindAppropriatePlace(
                     item.Item,
                     ctrl,
                     ctrl.Inventory.Equipment.ToEnumerable(),
@@ -753,11 +755,11 @@ namespace TarkovVR.Source.Player.Interactions
             if (leftHandState.lootableContainer != null)
             {
                 var container = leftHandState.lootableContainer;
-                VRGlobals.player.vmethod_1(container, new InteractionResult(EInteractionType.Open));
+                VRGlobals.player.ExecuteInteraction(container, new InteractionResult(EInteractionType.Open));
                 float initialDistance = Vector3.Distance(VRGlobals.player.Transform.position, container.transform.position);
                 VRGlobals.player.SetCallbackForInteraction(delegate (Action callback)
                 {
-                    GetActionsClass.smethod_22(PlayerOwner, callback, container, initialDistance);
+                    InteractionContextHelper.OnContainerOpen(PlayerOwner, callback, container, initialDistance);
                 });
                 VRGlobals.player.StartBehaviourTimer(EFTHardSettings.Instance.DelayToOpenContainer, delegate
                 {
@@ -767,7 +769,7 @@ namespace TarkovVR.Source.Player.Interactions
             else if (leftHandState.door != null)
             {
                 var door = leftHandState.door;
-                GetActionsClass.Class1757 doorInteractionClass = new GetActionsClass.Class1757();
+                InteractionContextHelper.CG_GetAvailableActions15 doorInteractionClass = new InteractionContextHelper.CG_GetAvailableActions15();
                 doorInteractionClass.door = door;
                 doorInteractionClass.owner = PlayerOwner;
 
@@ -900,7 +902,7 @@ namespace TarkovVR.Source.Player.Interactions
             const float baseHandsCapacity = 150f;
             try
             {
-                if (VRGlobals.player?.Physical is not PlayerPhysicalClass physical) 
+                if (VRGlobals.player?.Physical is not Physical physical) 
                     return;
 
                 if (physical.HandsStamina.Current <= 0f)
@@ -909,7 +911,7 @@ namespace TarkovVR.Source.Player.Interactions
                     return;
                 }
 
-                float itemWeight = heldItem.item_0.TotalWeight;
+                float itemWeight = heldItem._item.TotalWeight;
                 float drainPerSec = baseHandsCapacity * 0.0004f * Mathf.Pow(itemWeight, 1.20f);
                 physical.ConsumeAsMelee(drainPerSec * Time.deltaTime);
             }
@@ -928,7 +930,7 @@ namespace TarkovVR.Source.Player.Interactions
         /// </summary>
         private bool HeldItemAlive()
         {
-            return heldItem != null && heldItem.Item != null && heldItem.item_0 != null;
+            return heldItem != null && heldItem.Item != null && heldItem._item != null;
         }
 
         /// <summary>
@@ -1005,7 +1007,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             try
             {
-                if (VRGlobals.player?.Physical is not PlayerPhysicalClass physical)
+                if (VRGlobals.player?.Physical is not Physical physical)
                     return;
 
                 // Get controller velocity at release
@@ -1018,7 +1020,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (speed < throwVelocityThreshold)
                     return;
 
-                float itemWeight = item.item_0.TotalWeight;
+                float itemWeight = item._item.TotalWeight;
                 float speedFactor = Mathf.Clamp01((speed - throwVelocityThreshold) / 3f);
                 const float throwA = 1.340f;
                 const float throwP = 0.90f;
@@ -1189,7 +1191,7 @@ namespace TarkovVR.Source.Player.Interactions
             cachedRigidbody.isKinematic = true;
             cachedRigidbody.detectCollisions = true;
             cachedRigidbody.useGravity = false;
-            cachedRigidbody.mass = heldItem.item_0.TotalWeight;
+            cachedRigidbody.mass = heldItem._item.TotalWeight;
 
             cachedGrabOffset = cachedHand.InverseTransformPoint(heldItem.transform.position);
             cachedGrabRotation = Quaternion.Inverse(cachedHand.rotation) * heldItem.transform.rotation;

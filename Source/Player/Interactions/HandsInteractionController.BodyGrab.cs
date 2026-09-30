@@ -140,7 +140,7 @@ namespace TarkovVR.Source.Player.Interactions
         private bool isDraggingBody;
         private Rigidbody grabbedBodyRb;
         private Corpse grabbedCorpse;
-        private RagdollClass grabbedRagdoll;
+        private CorpseRagdoll grabbedRagdoll;
         // The FIKA downed/revive teammate we're dragging (their ReviveInteractable component), if this
         // is a downed player rather than a vanilla corpse. grabbedCorpse is null in that case; the
         // ragdoll comes from this component (its _ragdoll). Watched so we release the body if they get
@@ -173,7 +173,7 @@ namespace TarkovVR.Source.Player.Interactions
         // released ragdoll.
         private sealed class ReleasedBody
         {
-            public RagdollClass ragdoll;
+            public CorpseRagdoll ragdoll;
             public float restTimer;   // accumulated time below bodyLandedSpeed (resets if disturbed)
             public float releaseTime; // for the bodyFreezeMaxTime hard fallback
         }
@@ -225,7 +225,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
 
             Vector3 palm = PalmOrigin();
-            if (TryFindBodyBone(palm, out RigidbodySpawner bone, out Corpse corpse, out RagdollClass ragdoll, out MonoBehaviour reviveInteractable))
+            if (TryFindBodyBone(palm, out RigidbodySpawner bone, out Corpse corpse, out CorpseRagdoll ragdoll, out MonoBehaviour reviveInteractable))
             {
                 bodyInteractionArmed = true;
                 bodyInteractionCorpse = corpse;
@@ -244,7 +244,7 @@ namespace TarkovVR.Source.Player.Interactions
         // body's bound collider), so tap-to-loot/arming still work. bone may be null (owner found,
         // no bone); ragdoll is the RagdollClass to drive when bone is non-null.
         private bool TryFindBodyBone(Vector3 palm, out RigidbodySpawner bone, out Corpse corpse,
-            out RagdollClass ragdoll, out MonoBehaviour reviveInteractable)
+            out CorpseRagdoll ragdoll, out MonoBehaviour reviveInteractable)
         {
             bone = null;
             corpse = null;
@@ -266,7 +266,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // note above).
                 Corpse c = col.GetComponentInParent<Corpse>();
                 MonoBehaviour revive = null;
-                RagdollClass reviveRagdoll = null;
+                CorpseRagdoll reviveRagdoll = null;
                 if (c == null && InstalledMods.FIKAInstalled)
                     revive = FikaFindRevive(col, out reviveRagdoll);
                 if (c == null && revive == null)
@@ -296,7 +296,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Grab / drive / release --------------------------------------------------
-        private void BeginBodyGrab(RigidbodySpawner bone, Corpse corpse, RagdollClass ragdoll, MonoBehaviour reviveInteractable, Transform hand)
+        private void BeginBodyGrab(RigidbodySpawner bone, Corpse corpse, CorpseRagdoll ragdoll, MonoBehaviour reviveInteractable, Transform hand)
         {
             grabbedCorpse = corpse;
             grabbedRagdoll = ragdoll;
@@ -329,14 +329,14 @@ namespace TarkovVR.Source.Player.Interactions
             // you've grabbed stays draggable regardless of view/time. Left true on release (a
             // dragged body keeping its rigidbodies is desirable + costs ~nothing once it sleeps).
             if (grabbedRagdoll != null)
-                grabbedRagdoll.Bool_0 = true;
+                grabbedRagdoll._keepRigidbody = true;
 
             // Stop EFT's settle coroutine from freezing this body while we hold it. The coroutine only
             // freezes when Func_0(...) returns true; NeverFreeze keeps the body a live ragdoll for as
             // long as we hold it, so we no longer have to fight a freeze every frame. (Restored to a
             // terminating predicate when the release-settle manager finally freezes it.)
             if (grabbedRagdoll != null)
-                grabbedRagdoll.Func_0 = RagdollNeverFreeze;
+                grabbedRagdoll._checkCorpseIsStill = RagdollNeverFreeze;
 
             // Weigh the player down: slow locomotion while a body is held.
             bodyDragMoveSpeedMultiplier = bodyDragSlowsMovement ? bodyDragSpeedMultiplier : 1f;
@@ -353,7 +353,7 @@ namespace TarkovVR.Source.Player.Interactions
             // velocity each step — doing that on a KINEMATIC body spams "Setting velocity of a
             // kinematic body is not supported". The game's own freeze (RagdollClass.method_1)
             // always UNsupports first, so mirror that before going kinematic.
-            EFTPhysicsClass.GClass745.UnsupportRigidbody(grabbedBodyRb);
+            PhysicsExtensions.UpdateController.UnsupportRigidbody(grabbedBodyRb);
             grabbedBodyRb.isKinematic = true;
             grabbedBodyRb.useGravity = false;
             grabbedBodyRb.detectCollisions = true;
@@ -469,7 +469,7 @@ namespace TarkovVR.Source.Player.Interactions
         //     awake each step (this was the "freeze + stretch after a few seconds" bug).
         private void ThawRagdoll()
         {
-            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll.RigidbodySpawner_0 : null;
+            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll._rigidbodySpawners : null;
             if (bones == null)
                 return;
             for (int i = 0; i < bones.Length; i++)
@@ -494,7 +494,7 @@ namespace TarkovVR.Source.Player.Interactions
         // later interaction (e.g. shooting the corpse)
         private void RestoreRagdollCollision()
         {
-            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll.RigidbodySpawner_0 : null;
+            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll._rigidbodySpawners : null;
             if (bones == null)
                 return;
             for (int i = 0; i < bones.Length; i++)
@@ -526,7 +526,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // Re-register the bone with EFT's physics-support system (we unsupported it on
                 // grab); now non-kinematic, it rejoins the ragdoll like its siblings. Mirrors
                 // RagdollClass.Start()'s order (velocity, then SupportRigidbody at Low quality).
-                EFTPhysicsClass.GClass745.SupportRigidbody(grabbedBodyRb, 0f);
+                PhysicsExtensions.UpdateController.SupportRigidbody(grabbedBodyRb, 0f);
                 grabbedBodyRb.WakeUp();
 
                 SteamVR_Actions._default.Haptic.Execute(0, 0.05f, 1, 0.3f, secondaryInputSource);
@@ -553,7 +553,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             else if (grabbedRagdoll != null)
             {
-                grabbedRagdoll.Func_0 = (allAsleep, t) => allAsleep;
+                grabbedRagdoll._checkCorpseIsStill = (allAsleep, t) => allAsleep;
             }
 
             if (grabbedIsDownedPlayer && debugDownedRelease)
@@ -565,9 +565,9 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Diagnostic coroutine: dump bone world/local + root each frame after a downed release so we can
         // see whether the bones move themselves or just ride a moving parent/root. Gated by debugDownedRelease.
-        private System.Collections.IEnumerator LogDownedRelease(RagdollClass ragdoll, Transform playerRoot)
+        private System.Collections.IEnumerator LogDownedRelease(CorpseRagdoll ragdoll, Transform playerRoot)
         {
-            RigidbodySpawner[] bones = ragdoll != null ? ragdoll.RigidbodySpawner_0 : null;
+            RigidbodySpawner[] bones = ragdoll != null ? ragdoll._rigidbodySpawners : null;
             Transform bone = (bones != null && bones.Length > 0 && bones[0] != null) ? bones[0].transform : null;
             Rigidbody rb = (bones != null && bones.Length > 0 && bones[0] != null) ? bones[0].Rigidbody : null;
             if (bone == null)
@@ -587,13 +587,13 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Release-settle manager --------------------------------------------------
-        private void AddReleasedBody(RagdollClass ragdoll)
+        private void AddReleasedBody(CorpseRagdoll ragdoll)
         {
             RemoveReleasedBody(ragdoll);
             releasedBodies.Add(new ReleasedBody { ragdoll = ragdoll, restTimer = 0f, releaseTime = Time.time });
         }
 
-        private void RemoveReleasedBody(RagdollClass ragdoll)
+        private void RemoveReleasedBody(CorpseRagdoll ragdoll)
         {
             for (int i = releasedBodies.Count - 1; i >= 0; i--)
                 if (ReferenceEquals(releasedBodies[i].ragdoll, ragdoll))
@@ -615,7 +615,7 @@ namespace TarkovVR.Source.Player.Interactions
             for (int i = releasedBodies.Count - 1; i >= 0; i--)
             {
                 ReleasedBody body = releasedBodies[i];
-                RigidbodySpawner[] bones = body.ragdoll != null ? body.ragdoll.RigidbodySpawner_0 : null;
+                RigidbodySpawner[] bones = body.ragdoll != null ? body.ragdoll._rigidbodySpawners : null;
                 if (bones == null)
                 {
                     releasedBodies.RemoveAt(i);
@@ -665,20 +665,20 @@ namespace TarkovVR.Source.Player.Interactions
         // RagdollClass.method_1 (unsupport + Discrete + kinematic). Restores the tame depenetration
         // velocity too so a later shot doesn't pop, and restores Func_0 to a terminating predicate so
         // the settle coroutine we kept alive (NeverFreeze) exits cleanly instead of spinning forever.
-        private void FreezeReleasedBody(RagdollClass ragdoll, RigidbodySpawner[] bones)
+        private void FreezeReleasedBody(CorpseRagdoll ragdoll, RigidbodySpawner[] bones)
         {
             for (int b = 0; b < bones.Length; b++)
             {
                 Rigidbody rb = bones[b] != null ? bones[b].Rigidbody : null;
                 if (rb == null)
                     continue;
-                EFTPhysicsClass.GClass745.UnsupportRigidbody(rb);
+                PhysicsExtensions.UpdateController.UnsupportRigidbody(rb);
                 rb.maxDepenetrationVelocity = bodyDragRestDepenetrationVelocity;
                 rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
                 rb.isKinematic = true;
             }
             if (ragdoll != null)
-                ragdoll.Func_0 = RagdollAlwaysFreeze;
+                ragdoll._checkCorpseIsStill = RagdollAlwaysFreeze;
         }
 
         // Force every bone of the dragged ragdoll back into active physics (dynamic + gravity +
@@ -687,7 +687,7 @@ namespace TarkovVR.Source.Player.Interactions
         // a List_0 entry), and being unsupported doesn't stop a dynamic body from falling.
         private void ReactivateRagdollBones()
         {
-            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll.RigidbodySpawner_0 : null;
+            RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll._rigidbodySpawners : null;
             if (bones == null)
                 return;
             for (int i = 0; i < bones.Length; i++)
@@ -762,7 +762,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (corpse == null)
                 return;
-            GetActionsClass.Class1748 corpseInteractionClass = new GetActionsClass.Class1748();
+            InteractionContextHelper.CG_GetAvailableInteractionState1 corpseInteractionClass = new InteractionContextHelper.CG_GetAvailableInteractionState1();
             corpseInteractionClass.compoundItem = (InventoryEquipment)corpse.Item;
             corpseInteractionClass.rootItem = (InventoryEquipment)corpse.Item;
             corpseInteractionClass.lootItemOwner = corpse.ItemOwner;
@@ -786,7 +786,7 @@ namespace TarkovVR.Source.Player.Interactions
         // body back into the caller and reintroducing the inline reference. Same isolation pattern as
         // VRArmSync.Tick(); see memory note fika-softdep-no-typed-fields.
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static MonoBehaviour FikaFindRevive(Collider col, out RagdollClass ragdoll)
+        private static MonoBehaviour FikaFindRevive(Collider col, out CorpseRagdoll ragdoll)
             => FikaVrSync.FindReviveInteractable(col, out ragdoll);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -802,7 +802,7 @@ namespace TarkovVR.Source.Player.Interactions
             => FikaVrSync.SendDraggedBody(corpseNetId, corpse);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void FikaSendDownedDrag(int downedNetId, RagdollClass ragdoll)
+        private static void FikaSendDownedDrag(int downedNetId, CorpseRagdoll ragdoll)
             => FikaVrSync.SendDownedDrag(downedNetId, ragdoll);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -810,7 +810,7 @@ namespace TarkovVR.Source.Player.Interactions
             => FikaVrSync.SendDraggedBodyReleased(corpseNetId);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void FikaSendDownedDragReleased(int downedNetId, RagdollClass ragdoll)
+        private static void FikaSendDownedDragReleased(int downedNetId, CorpseRagdoll ragdoll)
             => FikaVrSync.SendDownedDragReleased(downedNetId, ragdoll);
     }
 }

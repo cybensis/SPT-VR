@@ -37,8 +37,11 @@ using EFT.Rendering.Clouds;
 using EFT.UI.Gestures;
 using System.Collections;
 using TarkovVR.Source.Player.Interactions;
-using Aki.Reflection.Utils;
+using SPT.Reflection.Utils;
 using TarkovVR.Patches.Visuals;
+using Diz.LanguageExtensions;
+using EFT.UI.Builds;
+using EFT.UI.Insurance;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]
@@ -151,7 +154,7 @@ namespace TarkovVR.Patches.UI
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ItemsPanel), "Show")]
-        private static void FixInventoryAfterRaid(ItemsPanel __instance, ItemContextAbstractClass sourceContext, CompoundItem lootItem, ISession session, InventoryController inventoryController, IHealthController health, Profile profile, InsuranceCompanyClass insurance, EquipmentBuildsStorageClass buildsStorage, EItemsTab currentTab, bool inRaid, bool isInventoryBlocked, [CanBeNull] InventoryEquipment equipment, Task __result)
+        private static void FixInventoryAfterRaid(ItemsPanel __instance, ItemContext sourceContext, CompoundItem lootItem, IEftSession session, InventoryController inventoryController, IHealthController health, Profile profile, InsuranceCompany insurance, EquipmentBuildsStorage buildsStorage, EItemsTab currentTab, bool inRaid, bool isInventoryBlocked, [CanBeNull] InventoryEquipment equipment, Task __result)
         {
             __result.ContinueWith(task =>
             {
@@ -159,14 +162,14 @@ namespace TarkovVR.Patches.UI
                 {
                     if (lootItem is InventoryEquipment inventoryEquipment)
                     {
-                        __instance._complexStashPanel.Show(__instance.inventoryController_0, sourceContext.CreateChild(inventoryEquipment), inventoryEquipment, __instance.profile_0.Skills, __instance.insuranceCompanyClass, __instance.itemUiContext_0);
+                        __instance._complexStashPanel.Show(__instance._inventoryController, sourceContext.CreateChild(inventoryEquipment), inventoryEquipment, __instance._profile.Skills, __instance._insurance, __instance._itemUiContext);
                         __instance.UI.AddDisposable(__instance._complexStashPanel);
                         __instance.UI.AddDisposable(__instance._complexStashPanel.UnConfigure);
 
                     }
                     else if (lootItem != null)
                     {
-                        __instance._simpleStashPanel.Show(lootItem, __instance.inventoryController_0, sourceContext.CreateChild(lootItem), inRaid, __instance.inventoryController_0.Inventory.SortingTable, SimpleStashPanel.EStashSearchAvailability.StashOnly, null, __instance.eitemsTab_0);
+                        __instance._simpleStashPanel.Show(lootItem, __instance._inventoryController, sourceContext.CreateChild(lootItem), inRaid, __instance._inventoryController.Inventory.SortingTable, SimpleStashPanel.EStashSearchAvailability.StashOnly, null, __instance._currentTab);
                         __instance.UI.AddDisposable(__instance._simpleStashPanel);
                     }
                 }
@@ -245,7 +248,7 @@ namespace TarkovVR.Patches.UI
                 extraYOffset -= 1.5f;
             else
             {
-                float poseLevel = VRGlobals.player.MovementContext.PoseLevel_1;
+                float poseLevel = VRGlobals.player.MovementContext._poseLevel;
                 float crouchOffset = (1 - poseLevel) * 0.6f; // 0.6f can be adjusted to change position of menu based on crouch
                 extraYOffset -= crouchOffset;
             }
@@ -321,7 +324,7 @@ namespace TarkovVR.Patches.UI
             VRGlobals.vrPlayer.interactionUi = __instance.transform;
         }
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(ActionPanel), "method_6")]
+        [HarmonyPatch(typeof(ActionPanel), "CG_Show")]
         private static void CopyInteractionUi(ActionPanel __instance)
         {
             __instance._pointer.gameObject.SetActive(false);
@@ -360,8 +363,8 @@ namespace TarkovVR.Patches.UI
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(ActionPanel), "method_0")]
-        private static void SetTransmitInteractionMenuActive(ActionPanel __instance, [CanBeNull] ActionsReturnClass interactionState)
+        [HarmonyPatch(typeof(ActionPanel), "AvailableInteractionStateChangedHandler")]
+        private static void SetTransmitInteractionMenuActive(ActionPanel __instance, [CanBeNull] AvailableInteractionState interactionState)
         {
             try
             {
@@ -418,8 +421,8 @@ namespace TarkovVR.Patches.UI
         // how many actions are SELECTABLE (non-disabled) - that's what the right joystick cycles through
         // (ScrollNext/Prev) - so the crouch/scroll handlers know whether the menu actually needs the stick.
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(ActionPanel), "method_0")]
-        private static void TrackInteractionActionCount([CanBeNull] ActionsReturnClass interactionState)
+        [HarmonyPatch(typeof(ActionPanel), "AvailableInteractionStateChangedHandler")]
+        private static void TrackInteractionActionCount([CanBeNull] AvailableInteractionState interactionState)
         {
             if (VRGlobals.vrPlayer == null)
                 return;
@@ -437,7 +440,7 @@ namespace TarkovVR.Patches.UI
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(TransferItemsInRaidScreen), "Show", new Type[] { typeof(TransferItemsInRaidScreen.GClass3893) })]
+        [HarmonyPatch(typeof(TransferItemsInRaidScreen), "Show", new Type[] { typeof(TransferItemsInRaidScreen.TransferItemsInRaidScreenController) })]
         private static void ShowTransitTransferMenu(TransferItemsInRaidScreen __instance) {
             UIPatches.HandleOpenInventory();
         }
@@ -456,7 +459,7 @@ namespace TarkovVR.Patches.UI
             return false;
         }
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(EftBattleUIScreen.GClass3865), "ShowAmmoCountZeroingPanel")]
+        [HarmonyPatch(typeof(EftBattleUIScreen.EftBattleUIScreenController), "ShowAmmoCountZeroingPanel")]
         private static bool HideZeroingUI(InventoryScreenQuickAccessPanel __instance)
         {
             return false;
@@ -486,7 +489,7 @@ namespace TarkovVR.Patches.UI
         // When the grid is being initialized we need to make sure the rotation is 0,0,0 otherwise the grid items don't
         // spawn in because of their weird code.
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GridViewMagnifier), "method_3")]
+        [HarmonyPatch(typeof(GridViewMagnifier), "CG_InitGridView")]
         private static void ReturnCommonUiToZeroRot(GridViewMagnifier __instance)
         {
             __instance.transform.root.rotation = Quaternion.identity;
@@ -497,8 +500,8 @@ namespace TarkovVR.Patches.UI
         // When in hideout the stash panel also gets shown which causes the UI to reposition/rotate so only rely
         // on this patch if its in raid, for hideout use PositionInHideoutInventory()
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GClass3808), "Show")]
-        private static void PositionInRaidInventory(GClass3808 __instance)
+        [HarmonyPatch(typeof(TabGroup), "Show")]
+        private static void PositionInRaidInventory(TabGroup __instance)
         {
             // Dont open inv if not in game, player is in hideout, game player isn't set and the menu isn't already open
             if (!VRGlobals.inGame || VRGlobals.vrPlayer is HideoutVRPlayerManager || !VRGlobals.player || VRGlobals.menuOpen)
@@ -524,18 +527,18 @@ namespace TarkovVR.Patches.UI
         // If the canvas roots rotation isn't 0,0,0 the grid/slot items display on an angle
         // so these patches prevent them from being on an angle
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GridView), "method_5")]
+        [HarmonyPatch(typeof(GridView), "AddItemView")]
         private static void PreventOffAxisGridItemsViews(GridView __instance, ItemView itemView)
         {
             itemView.transform.localEulerAngles = Vector3.zero;
             itemView.MainImage.transform.localEulerAngles = new Vector3(0, 0, itemView.MainImage.transform.localEulerAngles.z);
         }
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(SlotView), "method_4")]
+        [HarmonyPatch(typeof(SlotView), "CreateItemView")]
         private static void PreventOffAxisSlotItemsViews(SlotView __instance)
         {
-            __instance.itemView_0.transform.localEulerAngles = Vector3.zero;
-            __instance.itemView_0.MainImage.transform.localEulerAngles = new Vector3(0, 0, __instance.itemView_0.MainImage.transform.localEulerAngles.z);
+            __instance.ItemView.transform.localEulerAngles = Vector3.zero;
+            __instance.ItemView.MainImage.transform.localEulerAngles = new Vector3(0, 0, __instance.ItemView.MainImage.transform.localEulerAngles.z);
         }
 
         [HarmonyPostfix]
@@ -547,7 +550,7 @@ namespace TarkovVR.Patches.UI
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(UISpawnableToggle), "method_2")]
+        [HarmonyPatch(typeof(UISpawnableToggle), "InitSpawnableButton")]
         private static void PreventOffAxisSettingsTabText(UISpawnableToggle __instance)
         {
             __instance.transform.localEulerAngles = Vector3.zero;
@@ -565,7 +568,7 @@ namespace TarkovVR.Patches.UI
         // the CommonUI rotation isn't 0,0,0 so set it to that before running this code then set it back
         /*
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GridViewMagnifier), "method_1")]
+        [HarmonyPatch(typeof(GridViewMagnifier), "ProceedMagnify")]
         private static bool StopGridFromHidingItemsWhenUiRotated(GridViewMagnifier __instance, bool calculate, bool forceMagnify)
         {
             if ((object)__instance.rectTransform_0 == null || (object)__instance._gridView == null || (object)__instance._scrollRect == null)
@@ -689,7 +692,7 @@ namespace TarkovVR.Patches.UI
                 {
                     Vector3 rayDirection = VRGlobals.handsInteractionController.laser.transform.forward;
                     Vector3 rayOrigin = VRGlobals.vrPlayer.LeftHand.transform.position;
-                    if (Physics.SphereCast(rayOrigin, InteractionRayRadius, rayDirection, out hit, 0.66f, EFT.GameWorld.int_0))
+                    if (Physics.SphereCast(rayOrigin, InteractionRayRadius, rayDirection, out hit, 0.66f, EFT.GameWorld._interactiveLootMaskWPlayer))
                     {
                         gameObject = hit.collider.gameObject;
                         if (!__instance.InteractableObject || __instance.InteractableObject.gameObject != gameObject)
@@ -703,7 +706,7 @@ namespace TarkovVR.Patches.UI
                     Vector3 rayDirection = Quaternion.Euler(-5, 0, 0) * VRGlobals.VRCam.transform.forward;
                     float adjustedRayDistance = manager.rayDistance * manager.GetDistanceMultiplier(rayDirection);
 
-                    if (Physics.SphereCast(rayOrigin, InteractionRayRadius, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld.int_0))
+                    if (Physics.SphereCast(rayOrigin, InteractionRayRadius, rayDirection, out hit, adjustedRayDistance, EFT.GameWorld._interactiveLootMaskWPlayer))
                     {
                         gameObject = hit.collider.gameObject;
                         if (!__instance.InteractableObject || __instance.InteractableObject.gameObject != gameObject)
@@ -837,11 +840,11 @@ namespace TarkovVR.Patches.UI
                     interactionRay.origin = __instance.Transform.position + Vector3.up * 3f;
                     interactionRay.direction = Vector3.down;
                 }
-                __instance.Boolean_0 = GameWorld.InteractionSense(VRGlobals.VRCam.transform.position, VRGlobals.VRCam.transform.forward, radius, distance);
+                __instance.Sense = GameWorld.InteractionSense(VRGlobals.VRCam.transform.position, VRGlobals.VRCam.transform.forward, radius, distance);
             }
             else
             {
-                __instance.Boolean_0 = false;
+                __instance.Sense = false;
             }
             return false;
         }
@@ -850,13 +853,13 @@ namespace TarkovVR.Patches.UI
 
         //Disables checking item distance when looting - not sure why but 3.11 broke this and it thinks you're too far when you pick up loose loot        
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GetActionsClass.Class1750), "method_0")]
-        private static bool DisableLootDistanceCheck(GetActionsClass.Class1750 __instance)
+        [HarmonyPatch(typeof(InteractionContextHelper.CG_Class1750), "method_0")]
+        private static bool DisableLootDistanceCheck(InteractionContextHelper.CG_Class1750 __instance)
         {
-            MagazineItemClass magazineItemClass = __instance.rootItem as MagazineItemClass;
+            Magazine magazineItemClass = __instance.rootItem as Magazine;
             if (__instance.owner.IsYourPlayer)
             {
-                if (magazineItemClass != null && __instance.possibleAction is GClass3411 && __instance.lootItemLastOwner != null && __instance.lootItemLastOwner.ProfileId != __instance.owner.ProfileId)
+                if (magazineItemClass != null && __instance.possibleAction is MoveResult && __instance.lootItemLastOwner != null && __instance.lootItemLastOwner.ProfileId != __instance.owner.ProfileId)
                     __instance.owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
                 __instance.owner.InventoryController.RunNetworkTransaction(__instance.possibleAction, new Callback(__instance.method_1));
                 return false;
@@ -873,7 +876,7 @@ namespace TarkovVR.Patches.UI
         // animation entirely (user's choice) and hands off to StowHeldItemToInventory. Non-held takes
         // fall through to the normal path (DisableLootDistanceCheck handles Class1750.method_0).
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GetActionsClass), "smethod_10")]
+        [HarmonyPatch(typeof(InteractionContextHelper), "smethod_10")]
         private static bool RerouteHeldItemTake(Item rootItem)
         {
             var hic = VRGlobals.handsInteractionController;
@@ -906,7 +909,7 @@ namespace TarkovVR.Patches.UI
                 if (__instance._beaconDummy != null)
                 {
                     //if (Physics.Raycast(new Ray(Camera.main.transform.position + Camera.main.transform.forward / 2f, Camera.main.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
-                    if (Physics.Raycast(new Ray(VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward * 0.3f, VRGlobals.VRCam.transform.forward), out var hitInfo, 1.5f, LayerMaskClass.HighPolyWithTerrainMask))
+                    if (Physics.Raycast(new Ray(VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward * 0.3f, VRGlobals.VRCam.transform.forward), out var hitInfo, 1.5f, LayersMaskController.HighPolyWithTerrainMask))
                     {
                         __instance._beaconDummy.transform.position = hitInfo.point;
                         __instance._beaconDummy.transform.rotation = Quaternion.LookRotation(hitInfo.normal);
@@ -927,9 +930,9 @@ namespace TarkovVR.Patches.UI
                         __instance.AllowToPlantBeacon = false;
                     }
                 }
-                if (__instance.TripwireVisualPlacer_0 != null)
+                if (__instance.TripwirePlanner != null)
                 {
-                    __instance.TripwireVisualPlacer_0.ProcessPlacement(new Ray(VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward * 0.3f, VRGlobals.VRCam.transform.forward), __instance.WeaponRoot.position);
+                    __instance.TripwirePlanner.ProcessPlacement(new Ray(VRGlobals.VRCam.transform.position + VRGlobals.VRCam.transform.forward * 0.3f, VRGlobals.VRCam.transform.forward), __instance.WeaponRoot.position);
                 }
                 __instance.ProceduralWeaponAnimation.StartFovCoroutine(__instance);
                 __instance.PropUpdate();
@@ -1005,8 +1008,8 @@ namespace TarkovVR.Patches.UI
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(BattleUIScreen<EftBattleUIScreen.GClass3865, EEftScreenType>), "ShowAmmoDetails")]
-        private static void SetAmmoCountUi(BattleUIScreen<EftBattleUIScreen.GClass3865, EEftScreenType> __instance)
+        [HarmonyPatch(typeof(BattleUIScreen<EftBattleUIScreen.EftBattleUIScreenController, EEftScreenType>), "ShowAmmoDetails")]
+        private static void SetAmmoCountUi(BattleUIScreen<EftBattleUIScreen.EftBattleUIScreenController, EEftScreenType> __instance)
         {
             if (VRSettings.GetLeftHandedMode())
                 __instance._ammoCountPanel.transform.localScale = new Vector3(-0.25f, 0.25f, 0.25f);
@@ -1062,7 +1065,7 @@ namespace TarkovVR.Patches.UI
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(Tooltip), "method_0")]
+        [HarmonyPatch(typeof(Tooltip), "SetPosition")]
         private static bool PositionToolTips(SimpleTooltip __instance, Vector2 position)
         {
             if (MenuPatches.vrUiInteracter)
@@ -1075,10 +1078,10 @@ namespace TarkovVR.Patches.UI
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(OfferView), "method_10")]
+        [HarmonyPatch(typeof(OfferView), "AvailableOfferStatus")]
         private static void ActivateTooltipHoverArea(OfferView __instance)
         {
-            if (__instance.Offer_0.Locked)
+            if (__instance.Offer.Locked)
             {
                 __instance._hoverTooltipArea.gameObject.active = true;
                 // The hover area is constantly regenerated which means we need to run another OnEnter function
@@ -1112,7 +1115,7 @@ namespace TarkovVR.Patches.UI
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridView), "AcceptItem")]
-        private static bool FixAcceptItem(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, ref Task __result)
+        private static bool FixAcceptItem(GridView __instance, DragItemContext itemContext, ItemContext targetItemContext, ref Task __result)
         {
             // Modify the flag argument based on your logic
             bool flag = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftGrip.state : SteamVR_Actions._default.RightGrip.state;
@@ -1124,22 +1127,22 @@ namespace TarkovVR.Patches.UI
             return false;
         }
 
-        private static async Task AcceptItemModified(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, bool flag)
+        private static async Task AcceptItemModified(GridView __instance, DragItemContext itemContext, ItemContext targetItemContext, bool flag)
         {
             // Your modified version of the AcceptItem method
-            if (!__instance.CanAccept(itemContext, targetItemContext, out var operation) || !(await GClass3826.TryShowDestroyItemsDialog(operation.Value)))
+            if (!__instance.CanAccept(itemContext, targetItemContext, out var operation) || !(await UIExtensions.TryShowDestroyItemsDialog(operation.Value)))
             {
                 return;
             }
-            if (itemContext.Item is AmmoItemClass ammo)
+            if (itemContext.Item is Ammo ammo)
             {
-                Item item = __instance.method_8(targetItemContext);
+                Item item = __instance.GetTargetItem(targetItemContext);
                 if (item != null)
                 {
-                    if (item is MagazineItemClass magazineItemClass)
+                    if (item is Magazine magazineItemClass)
                     {
-                        MagazineItemClass magazineClass2 = magazineItemClass;
-                        int loadCount = GridView.smethod_0(magazineClass2, ammo);
+                        Magazine magazineClass2 = magazineItemClass;
+                        int loadCount = GridView.CG_smethod_0(magazineClass2, ammo);
                         __instance._itemController.LoadMagazine(ammo, magazineClass2, loadCount).HandleExceptions();
                         return;
                     }
@@ -1148,10 +1151,10 @@ namespace TarkovVR.Patches.UI
                         Weapon weapon2 = weapon;
                         if (weapon2.SupportsInternalReload)
                         {
-                            MagazineItemClass currentMagazine = weapon2.GetCurrentMagazine();
+                            Magazine currentMagazine = weapon2.GetCurrentMagazine();
                             if (currentMagazine != null)
                             {
-                                int num = GridView.smethod_0(currentMagazine, ammo);
+                                int num = GridView.CG_smethod_0(currentMagazine, ammo);
                                 if (num != 0)
                                 {
                                     __instance._itemController.LoadWeaponWithAmmo(weapon2, ammo, num).HandleExceptions();
@@ -1164,7 +1167,7 @@ namespace TarkovVR.Patches.UI
                             Weapon weapon3 = weapon;
                             if (weapon3.IsMultiBarrel)
                             {
-                                int ammoCount = GridView.smethod_1(weapon3, ammo);
+                                int ammoCount = GridView.CG_smethod_1(weapon3, ammo);
                                 __instance._itemController.LoadMultiBarrelWeapon(weapon3, ammo, ammoCount).HandleExceptions();
                                 return;
                             }
@@ -1174,28 +1177,28 @@ namespace TarkovVR.Patches.UI
             }
             if (!operation.Failed && __instance._itemController.CanExecute(operation.Value))
             {
-                IRaiseEvents value = operation.Value;
+                IOperationResult value = operation.Value;
                 if (value == null)
                 {
                     goto IL_0327;
                 }
-                if (!(value is GClass3424 gClass))
+                if (!(value is SplitResult gClass))
                 {
-                    if (!(value is GClass3425 gClass2))
+                    if (!(value is TransferResult gClass2))
                     {
                         goto IL_0327;
                     }
-                    GClass3425 gClass3 = gClass2;
+                    TransferResult gClass3 = gClass2;
                     itemContext.DragCancelled();
                     if (gClass3.Count > 1 && flag)
                     {
-                        __instance.itemUiContext_0.SplitDialog.Show(GClass2348.Localized("Transfer"), gClass3.Count, itemContext.CursorPosition, delegate (int count)
+                        __instance._itemUiContext.SplitDialog.Show(LocalizationExtensions.Localized("Transfer"), gClass3.Count, itemContext.CursorPosition, delegate (int count)
                         {
-                            __instance.itemUiContext_0.SplitDialog.Hide();
+                            __instance._itemUiContext.SplitDialog.Hide();
                             __instance._itemController.TryRunNetworkTransaction(gClass3.ExecuteWithNewCount(count, simulate: true));
                         }, delegate
                         {
-                            __instance.itemUiContext_0.SplitDialog.Hide();
+                            __instance._itemUiContext.SplitDialog.Hide();
                         });
                     }
                     else
@@ -1205,17 +1208,17 @@ namespace TarkovVR.Patches.UI
                 }
                 else
                 {
-                    GClass3424 gClass4 = gClass;
+                    SplitResult gClass4 = gClass;
                     itemContext.DragCancelled();
                     if (gClass4.Count > 1 && flag)
                     {
-                        __instance.itemUiContext_0.SplitDialog.Show(GClass2348.Localized("Split"), gClass4.Count, itemContext.CursorPosition, delegate (int count)
+                        __instance._itemUiContext.SplitDialog.Show(LocalizationExtensions.Localized("Split"), gClass4.Count, itemContext.CursorPosition, delegate (int count)
                         {
-                            __instance.itemUiContext_0.SplitDialog.Hide();
+                            __instance._itemUiContext.SplitDialog.Hide();
                             gClass4.ExecuteWithNewCount(__instance._itemController, count);
                         }, delegate
                         {
-                            __instance.itemUiContext_0.SplitDialog.Hide();
+                            __instance._itemUiContext.SplitDialog.Hide();
                         });
                     }
                     else
@@ -1236,14 +1239,14 @@ namespace TarkovVR.Patches.UI
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridView), "CanAccept")]
-        private static bool FixCanAccept(GridView __instance, ItemContextClass itemContext, ItemContextAbstractClass targetItemContext, out GStruct153 operation, ref bool __result)
+        private static bool FixCanAccept(GridView __instance, DragItemContext itemContext, ItemContext targetItemContext, out OperationResult operation, ref bool __result)
         {
             if (!__instance.SourceContext.DragAvailable)
             {
-                operation = new GClass1550(itemContext.Item);
+                operation = new NoPossibleActionsError(itemContext.Item);
                 return false;
             }
-            operation = default(GStruct153);
+            operation = default(OperationResult);
             if (__instance.Grid == null)
             {
                 return false;
@@ -1254,8 +1257,8 @@ namespace TarkovVR.Patches.UI
             }
             Item item = itemContext.Item;
             LocationInGrid locationInGrid = __instance.CalculateItemLocation(itemContext);
-            Item item2 = __instance.method_8(targetItemContext);
-            GClass3393 gClass = __instance.Grid.CreateItemAddress(locationInGrid);
+            Item item2 = __instance.GetTargetItem(targetItemContext);
+            GridItemAddress gClass = __instance.Grid.CreateItemAddress(locationInGrid);
             ItemAddress itemAddress = itemContext.ItemAddress;
             if (itemAddress == null)
             {
@@ -1263,7 +1266,7 @@ namespace TarkovVR.Patches.UI
             }
             if (targetItemContext != null && !targetItemContext.ModificationAvailable)
             {
-                operation = new StashGridClass.GClass1547(__instance.Grid);
+                operation = new EFT.InventoryLogic.Grid.ModificationUnavailable(__instance.Grid);
                 return false;
             }
             if (itemAddress.Container == __instance.Grid && __instance.Grid.GetItemLocation(item) == locationInGrid)
@@ -1331,7 +1334,7 @@ namespace TarkovVR.Patches.UI
         private static void FixMapTilesNotLoading(SimplePocketMap __instance)
         {
             if (__instance.Tiles.Count > 0)
-                __instance.Tiles[0].method_0();
+                __instance.Tiles[0].LoadImage();
         }
 
         [HarmonyPrefix]

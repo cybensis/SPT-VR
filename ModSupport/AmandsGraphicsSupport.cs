@@ -11,6 +11,7 @@ using Valve.VR;
 using UnityEngine.EventSystems;
 using UnityEngine.Rendering.PostProcessing;
 using AmandsGraphics;
+using AmandsGraphics.Patches;
 
 namespace TarkovVR.ModSupport.AmandsGraphics
 {
@@ -38,8 +39,8 @@ namespace TarkovVR.ModSupport.AmandsGraphics
             return false;
         }
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(AmandsGraphicsmethod_25Patch), "PatchPostFix")]
-        private static bool BlockSomeOtherOpticPatch(AmandsGraphicsmethod_25Patch __instance)
+        [HarmonyPatch(typeof(AmandsGraphicsCycleScopesPatch), "PatchPostFix")]
+        private static bool BlockSomeOtherOpticPatch(AmandsGraphicsCycleScopesPatch __instance)
         {
             return false;
         }

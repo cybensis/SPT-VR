@@ -4,6 +4,7 @@ using Comfort.Common;
 using EFT;
 using EFT.Interactive;
 using UnityEngine;
+using JsonType;
 
 namespace SptVrFikaSync
 {
@@ -36,12 +37,12 @@ namespace SptVrFikaSync
         private sealed class RemoteDrag
         {
             public ObservedCorpse corpse;
-            public RagdollClass ragdoll;
+            public CorpseRagdoll ragdoll;
             public Vector3[] targetPos;
             public Quaternion[] targetRot;
             public Vector3[] dispPos;
             public Quaternion[] dispRot;
-            public GStruct138[] applyBuf; // reused each frame to avoid per-frame allocation
+            public TransformSync[] applyBuf; // reused each frame to avoid per-frame allocation
             public float lastPacketTime;  // for the stale-timeout safety net (dragger dropped mid-drag)
         }
         private static readonly Dictionary<int, RemoteDrag> dragging = new Dictionary<int, RemoteDrag>();
@@ -51,7 +52,7 @@ namespace SptVrFikaSync
         private sealed class Settling
         {
             public ObservedCorpse corpse;
-            public RagdollClass ragdoll;
+            public CorpseRagdoll ragdoll;
             public float restTimer;   // accumulated time below bodyLandedSpeed (resets if disturbed)
             public float releaseTime; // for the reorder guard + the hard freeze fallback
         }
@@ -110,7 +111,7 @@ namespace SptVrFikaSync
             }
 
             int n = packet.BoneCount;
-            RigidbodySpawner[] bones = corpse.Ragdoll.RigidbodySpawner_0;
+            RigidbodySpawner[] bones = corpse.Ragdoll._rigidbodySpawners;
             // Guard: a bone-count mismatch makes Corpse.ApplyTransformSync call Kill() on the body.
             if (bones == null || bones.Length != n || packet.Positions == null || packet.Rotations == null)
                 return;
@@ -152,8 +153,8 @@ namespace SptVrFikaSync
 
                 // Freeze the ragdoll kinematic + snap to this pose, and seed the smoothing (displayed =
                 // target = this pose, so no jump on the first frame).
-                corpse.Ragdoll.Bool_0 = true;        // keepRigidbody: never tear down while held
-                corpse.Ragdoll.Func_0 = NeverFreeze; // stop EFT's settle coroutine freezing it while held
+                corpse.Ragdoll._keepRigidbody = true;        // keepRigidbody: never tear down while held
+                corpse.Ragdoll._checkCorpseIsStill = NeverFreeze; // stop EFT's settle coroutine freezing it while held
                 d = new RemoteDrag
                 {
                     corpse = corpse,
@@ -162,7 +163,7 @@ namespace SptVrFikaSync
                     targetRot = (Quaternion[])packet.Rotations.Clone(),
                     dispPos = (Vector3[])packet.Positions.Clone(),
                     dispRot = (Quaternion[])packet.Rotations.Clone(),
-                    applyBuf = new GStruct138[n],
+                    applyBuf = new TransformSync[n],
                     lastPacketTime = Time.time,
                 };
                 dragging[packet.CorpseId] = d;
@@ -197,8 +198,8 @@ namespace SptVrFikaSync
             foreach (var kv in dragging)
             {
                 RemoteDrag d = kv.Value;
-                if (d.corpse == null || d.ragdoll == null || d.ragdoll.RigidbodySpawner_0 == null
-                    || d.ragdoll.RigidbodySpawner_0.Length != d.dispPos.Length)
+                if (d.corpse == null || d.ragdoll == null || d.ragdoll._rigidbodySpawners == null
+                    || d.ragdoll._rigidbodySpawners.Length != d.dispPos.Length)
                 {
                     (dead ?? (dead = new List<int>())).Add(kv.Key);
                     continue;
@@ -236,7 +237,7 @@ namespace SptVrFikaSync
             SettleReleasedBodies();
         }
 
-        private static GStruct138[] BuildSyncs(GStruct138[] buf, Vector3[] pos, Quaternion[] rot)
+        private static TransformSync[] BuildSyncs(TransformSync[] buf, Vector3[] pos, Quaternion[] rot)
         {
             for (int i = 0; i < buf.Length; i++)
             {
@@ -256,7 +257,7 @@ namespace SptVrFikaSync
             for (int i = settling.Count - 1; i >= 0; i--)
             {
                 Settling s = settling[i];
-                RigidbodySpawner[] bones = (s.ragdoll != null) ? s.ragdoll.RigidbodySpawner_0 : null;
+                RigidbodySpawner[] bones = (s.ragdoll != null) ? s.ragdoll._rigidbodySpawners : null;
                 if (bones == null)
                 {
                     settling.RemoveAt(i);
@@ -309,12 +310,12 @@ namespace SptVrFikaSync
         // fall when we let go" bug). Safe to support all here: ForceStop unsupported ALL of them, so this
         // can't double-register (unlike the LOCAL owner, which only unsupported the one grabbed bone).
         // Func_0 stays NeverFreeze; the settle manager freezes it on our schedule.
-        private static void ReactivateRagdoll(RagdollClass ragdoll)
+        private static void ReactivateRagdoll(CorpseRagdoll ragdoll)
         {
-            RigidbodySpawner[] bones = ragdoll != null ? ragdoll.RigidbodySpawner_0 : null;
+            RigidbodySpawner[] bones = ragdoll != null ? ragdoll._rigidbodySpawners : null;
             if (bones == null)
                 return;
-            ragdoll.Bool_0 = true; // keep it from tearing down while it settles
+            ragdoll._keepRigidbody = true; // keep it from tearing down while it settles
             for (int i = 0; i < bones.Length; i++)
             {
                 Rigidbody rb = bones[i] != null ? bones[i].Rigidbody : null;
@@ -324,7 +325,7 @@ namespace SptVrFikaSync
                     rb.isKinematic = false;
                 rb.useGravity = true;
                 rb.detectCollisions = true;
-                EFTPhysicsClass.GClass745.SupportRigidbody(rb, 0f);
+                PhysicsExtensions.UpdateController.SupportRigidbody(rb, 0f);
                 rb.WakeUp();
             }
         }
@@ -332,19 +333,19 @@ namespace SptVrFikaSync
         // Freeze a settled body kinematic in place (the efficient "done" state), mirroring EFT's own
         // RagdollClass.method_1 (unsupport + Discrete + kinematic). Restore Func_0 so any still-spinning
         // settle coroutine exits next iteration instead of looping forever.
-        private static void Freeze(RagdollClass ragdoll, RigidbodySpawner[] bones)
+        private static void Freeze(CorpseRagdoll ragdoll, RigidbodySpawner[] bones)
         {
             for (int b = 0; b < bones.Length; b++)
             {
                 Rigidbody rb = bones[b] != null ? bones[b].Rigidbody : null;
                 if (rb == null)
                     continue;
-                EFTPhysicsClass.GClass745.UnsupportRigidbody(rb);
+                PhysicsExtensions.UpdateController.UnsupportRigidbody(rb);
                 rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
                 rb.isKinematic = true;
             }
             if (ragdoll != null)
-                ragdoll.Func_0 = AlwaysFreeze;
+                ragdoll._checkCorpseIsStill = AlwaysFreeze;
         }
 
         private static void AddSettling(ObservedCorpse corpse)

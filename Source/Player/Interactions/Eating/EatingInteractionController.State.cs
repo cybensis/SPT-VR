@@ -228,7 +228,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool reparented;
 
         private static bool effectFired;
-        private static MedsController.ObservedMedsControllerClass pendingOp;
+        private static MedsController.MedsInHandsOperation pendingOp;
         private static float prevTriggerAxis;
         private static float prevOffTriggerAxis; // off-hand trigger edge (handheld wrapper-open)
         private static bool playingManualSound; // true while WE call OnSound (so it's not suppressed)

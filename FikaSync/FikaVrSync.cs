@@ -10,6 +10,7 @@ using Fika.Core.Networking;
 using Fika.Core.Networking.LiteNetLib;
 using Fika.Core.Networking.LiteNetLib.Utils;
 using UnityEngine;
+using JsonType;
 
 namespace SptVrFikaSync
 {
@@ -301,7 +302,7 @@ namespace SptVrFikaSync
         {
             if (!enableBodyDragSync || corpse == null)
                 return;
-            GStruct138[] syncs = corpse.method_20();
+            TransformSync[] syncs = corpse.GetTransformSync();
             if (syncs == null || syncs.Length == 0 || syncs.Length > 255)
                 return;
             BodyDragPacket p = default;
@@ -355,7 +356,7 @@ namespace SptVrFikaSync
         // BadImageFormatException). This module legitimately references Fika.Core and only loads when FIKA
         // is present, so the lookup lives here; it hands the component back as a plain MonoBehaviour plus
         // the EFT RagdollClass to drive. Returns null when the collider isn't a downed teammate.
-        public static MonoBehaviour FindReviveInteractable(Component col, out RagdollClass ragdoll)
+        public static MonoBehaviour FindReviveInteractable(Component col, out CorpseRagdoll ragdoll)
         {
             ragdoll = null;
             if (col == null)
@@ -386,7 +387,7 @@ namespace SptVrFikaSync
 
         // Broadcast a downed teammate's ragdoll pose (+ a ground-projected centroid as the relocate
         // anchor). The downed player's own client teleports there; observers drive their ragdoll copy.
-        public static void SendDownedDrag(int netId, RagdollClass ragdoll)
+        public static void SendDownedDrag(int netId, CorpseRagdoll ragdoll)
         {
             if (!enableDownedDragSync || netId < 0)
                 return;
@@ -404,7 +405,7 @@ namespace SptVrFikaSync
 
         // Drag ended: send the FINAL relocate spot (reliable, so a dropped packet can't strand the
         // teammate). No bones — observers reactivate + settle their ragdoll locally from its last pose.
-        public static void SendDownedDragReleased(int netId, RagdollClass ragdoll)
+        public static void SendDownedDragReleased(int netId, CorpseRagdoll ragdoll)
         {
             if (!enableDownedDragSync || netId < 0)
                 return;
@@ -421,10 +422,10 @@ namespace SptVrFikaSync
 
         // Read fresh world pose per ragdoll bone, plus a relocate anchor = body centroid in XZ at the
         // lowest bone Y (≈ ground contact, so teleporting the downed player's root there keeps them grounded).
-        private static bool ReadRagdollWorld(RagdollClass ragdoll, out Vector3[] pos, out Quaternion[] rot, out Vector3 root)
+        private static bool ReadRagdollWorld(CorpseRagdoll ragdoll, out Vector3[] pos, out Quaternion[] rot, out Vector3 root)
         {
             pos = null; rot = null; root = Vector3.zero;
-            RigidbodySpawner[] bones = ragdoll != null ? ragdoll.RigidbodySpawner_0 : null;
+            RigidbodySpawner[] bones = ragdoll != null ? ragdoll._rigidbodySpawners : null;
             if (bones == null || bones.Length == 0 || bones.Length > 255)
                 return false;
             int n = bones.Length;

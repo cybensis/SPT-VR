@@ -58,7 +58,7 @@ namespace SptVrFikaSync
                 return;
             }
 
-            DamageInfoStruct di = default;
+            DamageInfo di = default;
             di.DamageType = EDamageType.Melee;
             di.Damage = p.Damage;
             di.ArmorDamage = 1f;

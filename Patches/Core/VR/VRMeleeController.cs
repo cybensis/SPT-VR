@@ -33,8 +33,8 @@ namespace TarkovVR.Patches.Core.VR
         // ApplyShot. method_6 is the knife collider's OnHit handler (non-virtual, fires only on the
         // swinger's collision), so this is a reliable, local-only hook.
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(BaseKnifeController), "method_6")]
-        private static void SyncMeleeSurfaceHit(BaseKnifeController __instance, GStruct182 other)
+        [HarmonyPatch(typeof(BaseKnifeController), "ProcessOverlap")]
+        private static void SyncMeleeSurfaceHit(BaseKnifeController __instance, EFT.Player.KnifeRaycastHit other)
         {
             if (!InstalledMods.FIKAInstalled || __instance?._player == null || !__instance._player.IsYourPlayer)
                 return;
@@ -51,7 +51,7 @@ namespace TarkovVR.Patches.Core.VR
                 : __instance.Knife.Template.KnifeHitStabDam;
             if (debugMeleeSend)
                 Plugin.MyLog.LogWarning($"[FikaSync] melee SEND surface hit: {other.collider.name} mat={bc.TypeOfMaterial} point={point} n={other.normal} dmg={dmg}");
-            FikaSendMeleeHit(point, other.normal, __instance.vector3_0, dmg);
+            FikaSendMeleeHit(point, other.normal, __instance.GlobalSwingDirection, dmg);
         }
 
         // Companion-DLL isolation: the FikaVrSync (SPT-VR-FikaSync.dll) call lives in its own
@@ -70,7 +70,7 @@ namespace TarkovVR.Patches.Core.VR
         {
             if (__instance == null || !__instance.IsYourPlayer) return;
             BaseKnifeController knifeController = __instance.HandsController as BaseKnifeController;
-            if (knifeController?.knifeCollider_0 == null) return;
+            if (knifeController?._knifeCollider == null) return;
 
             Vector3 controllerVelocity = VRSettings.GetLeftHandedMode()
                 ? ControllerVelocity.GetSteamVRVelocity(SteamVR_Input_Sources.LeftHand)
@@ -79,41 +79,41 @@ namespace TarkovVR.Patches.Core.VR
             float speed = worldVelocity.magnitude;
 
             // On start of swing
-            if (speed > KNIFE_SWING_THRESHOLD && !knifeController.knifeCollider_0.enabled)
+            if (speed > KNIFE_SWING_THRESHOLD && !knifeController._knifeCollider.enabled)
             {
                 knifeController.LastKickType = EKickType.Slash;
-                knifeController.knifeCollider_0.MaxDistance = knifeController.Knife.Template.PrimaryDistance;
-                knifeController.knifeCollider_0.enabled = true;
-                knifeController.knifeCollider_0.OnHit -= knifeController.method_6;
-                knifeController.knifeCollider_0.OnHit += knifeController.method_6;
-                knifeController.knifeCollider_0.OnFire();
+                knifeController._knifeCollider.MaxDistance = knifeController.Knife.Template.PrimaryDistance;
+                knifeController._knifeCollider.enabled = true;
+                knifeController._knifeCollider.OnHit -= knifeController.ProcessOverlap;
+                knifeController._knifeCollider.OnHit += knifeController.ProcessOverlap;
+                knifeController._knifeCollider.OnFire();
 
                 float staminaCost = (knifeController.LastKickType == EKickType.Slash)
                     ? knifeController.Knife.Template.PrimaryConsumption
                     : knifeController.Knife.Template.SecondaryConsumption;
                 knifeController._player.Physical.ConsumeAsMelee(staminaCost);
 
-                knifeController.firearmsAnimator_0?.SetAnimationSpeed(50f);
-                knifeController.firearmsAnimator_0?.SetFire(true);
+                knifeController._firearmsAnimator?.SetAnimationSpeed(50f);
+                knifeController._firearmsAnimator?.SetFire(true);
 
-                knifeController.vector3_1 = knifeController.knifeCollider_0.transform.position;
+                knifeController.PreviousColliderPosition = knifeController._knifeCollider.transform.position;
             }
             // While swinging
-            else if (knifeController.knifeCollider_0.enabled && speed > KNIFE_SWING_RESET)
+            else if (knifeController._knifeCollider.enabled && speed > KNIFE_SWING_RESET)
             {
-                knifeController.knifeCollider_0.ManualUpdate();
+                knifeController._knifeCollider.ManualUpdate();
 
-                Vector3 position = knifeController.knifeCollider_0.transform.position;
-                Vector3 normalized = (position - knifeController.vector3_1).normalized;
-                knifeController.vector3_0 = Vector3.Lerp(knifeController.vector3_0, normalized, 0.9f);
-                knifeController.vector3_1 = position;
-                knifeController.firearmsAnimator_0?.SetFire(false);
+                Vector3 position = knifeController._knifeCollider.transform.position;
+                Vector3 normalized = (position - knifeController.PreviousColliderPosition).normalized;
+                knifeController.GlobalSwingDirection = Vector3.Lerp(knifeController.GlobalSwingDirection, normalized, 0.9f);
+                knifeController.PreviousColliderPosition = position;
+                knifeController._firearmsAnimator?.SetFire(false);
             }
             // When swing ends
-            else if (speed < KNIFE_SWING_RESET && knifeController.knifeCollider_0.enabled)
+            else if (speed < KNIFE_SWING_RESET && knifeController._knifeCollider.enabled)
             {
-                knifeController.knifeCollider_0.enabled = false;
-                knifeController.knifeCollider_0.OnFireEnd();
+                knifeController._knifeCollider.enabled = false;
+                knifeController._knifeCollider.OnFireEnd();
             }
         }
     }

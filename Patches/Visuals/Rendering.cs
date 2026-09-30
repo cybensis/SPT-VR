@@ -19,6 +19,7 @@ using EFT.UI.Settings;
 using EFT.UI;
 using Valve.VR;
 using System.Reflection;
+using EFT.Settings;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -516,7 +517,7 @@ namespace TarkovVR.Patches.Visuals
                 }
             }
 
-            EAntialiasingMode currentAA = Singleton<SharedGameSettingsClass>.Instance.Graphics.Settings.AntiAliasing;
+            EAntialiasingMode currentAA = Singleton<SettingsManager>.Instance.Graphics.Settings.AntiAliasing;
 
             if (currentAA == EAntialiasingMode.FXAA && __instance.CurrentState != SSState.UPSCALE)
                 ApplyFXAA(source, destination);

@@ -58,7 +58,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(VolumetricLightRenderer), "OnPreRender")]
         private static bool PatchVolumetricLightingToVR(VolumetricLightRenderer __instance)
         {
-            if (UnityEngine.XR.XRSettings.enabled && __instance.camera_0 != null)
+            if (UnityEngine.XR.XRSettings.enabled && __instance._camera != null)
             {
                 var currentEye = Camera.current.stereoActiveEye;
                 if (currentEye == Camera.MonoOrStereoscopicEye.Mono)
@@ -66,24 +66,24 @@ namespace TarkovVR.Patches.Visuals
 
                 Camera.StereoscopicEye eye = (Camera.StereoscopicEye)currentEye;
 
-                __instance.method_3();
+                __instance.RecreateRTsIfNeeded();
 
-                Matrix4x4 viewMatrix = __instance.camera_0.GetStereoViewMatrix(eye);
-                Matrix4x4 projMatrix = __instance.camera_0.GetStereoProjectionMatrix(eye);
+                Matrix4x4 viewMatrix = __instance._camera.GetStereoViewMatrix(eye);
+                Matrix4x4 projMatrix = __instance._camera.GetStereoProjectionMatrix(eye);
                 projMatrix = GL.GetGPUProjectionMatrix(projMatrix, renderIntoTexture: true);
                 Matrix4x4 combinedMatrix = projMatrix * viewMatrix;
-                __instance.matrix4x4_0 = combinedMatrix;
+                __instance._viewProj = combinedMatrix;
 
-                __instance.method_4();
-                __instance.method_6();
+                __instance.InitPrePass();
+                __instance.UpdateMaterialParameters();
 
-                for (int i = 0; i < VolumetricLightRenderer.list_0.Count; i++)
+                for (int i = 0; i < VolumetricLightRenderer._lights.Count; i++)
                 {
-                    VolumetricLightRenderer.list_0[i].VolumetricLightPreRender(__instance, __instance.matrix4x4_0);
+                    VolumetricLightRenderer._lights[i].VolumetricLightPreRender(__instance, __instance._viewProj);
                 }
 
-                __instance.commandBuffer_0.SetRenderTarget(BuiltinRenderTextureType.CameraTarget, BuiltinRenderTextureType.CameraTarget);
-                __instance.method_5();
+                __instance._globalCommandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget, BuiltinRenderTextureType.CameraTarget);
+                __instance.InitPostRenderPass();
 
                 return false;
             }
@@ -93,10 +93,10 @@ namespace TarkovVR.Patches.Visuals
         private static Dictionary<HBAO, RenderTexture[]> stereoAOTargets = new();
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(HBAO), "method_4")]
+        [HarmonyPatch(typeof(HBAO), "RenderHBAO")]
         private static bool FixHBAOMethod4Stereo(HBAO __instance, RenderTexture source, RenderTexture destination,
-            Material ____hbaoMaterial, CommandBuffer ___commandBuffer_0, bool ___useTriangleBlit,
-            RenderTexture ___renderTexture_3, HBAO_Core.RenderTarget ____renderTarget)
+            Material ____hbaoMaterial, CommandBuffer ____cmdBuf, bool ___useTriangleBlit,
+            RenderTexture ____downsampledRT, HBAO_Core.RenderTarget ____renderTarget)
         {
             int eyeIndex = Camera.current?.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
 
@@ -104,19 +104,19 @@ namespace TarkovVR.Patches.Visuals
             {
                 stereoAOTargets[__instance] = new RenderTexture[2];
                 for (int i = 0; i < 2; i++)
-                    stereoAOTargets[__instance][i] = new RenderTexture(___renderTexture_3.width, ___renderTexture_3.height, 0);
+                    stereoAOTargets[__instance][i] = new RenderTexture(____downsampledRT.width, ____downsampledRT.height, 0);
             }
 
             var aoTarget = stereoAOTargets[__instance][eyeIndex];
 
-            ___commandBuffer_0.Clear();
-            ___commandBuffer_0.SetRenderTarget(aoTarget);
-            ___commandBuffer_0.ClearRenderTarget(false, true, Color.white);
-            ___commandBuffer_0.BlitFullscreenTriangle(source, aoTarget, ____hbaoMaterial, __instance.GetAoPass(), null, false, null);
+            ____cmdBuf.Clear();
+            ____cmdBuf.SetRenderTarget(aoTarget);
+            ____cmdBuf.ClearRenderTarget(false, true, Color.white);
+            ____cmdBuf.BlitFullscreenTriangle(source, aoTarget, ____hbaoMaterial, __instance.GetAoPass(), null, false, null);
 
             ____hbaoMaterial.SetTexture(ShaderProperties.hbaoTex, aoTarget);
-            ___commandBuffer_0.BlitFullscreenTriangle(source, destination, ____hbaoMaterial, __instance.GetFinalPass(), null, false, null);
-            Graphics.ExecuteCommandBuffer(___commandBuffer_0);
+            ____cmdBuf.BlitFullscreenTriangle(source, destination, ____hbaoMaterial, __instance.GetFinalPass(), null, false, null);
+            Graphics.ExecuteCommandBuffer(____cmdBuf);
 
             return false;
         }
@@ -154,9 +154,9 @@ namespace TarkovVR.Patches.Visuals
         {
             Camera.StereoscopicEye eye = (Camera.StereoscopicEye)Camera.current.stereoActiveEye;
 
-            Matrix4x4 viewMatrix = __instance.camera_0.GetStereoViewMatrix(eye);
-            __instance.method_0().SetMatrix(FakeCharacterGI.int_0, viewMatrix);
-            Graphics.Blit(src, dest, __instance.method_0());
+            Matrix4x4 viewMatrix = __instance._camera.GetStereoViewMatrix(eye);
+            __instance.GetMaterial().SetMatrix(FakeCharacterGI._inverseView, viewMatrix);
+            Graphics.Blit(src, dest, __instance.GetMaterial());
             return false;
         }
 
@@ -195,7 +195,7 @@ namespace TarkovVR.Patches.Visuals
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(ThermalVision), "method_1")]
+        [HarmonyPatch(typeof(ThermalVision), "Switch")]
         private static void FixThermalsDoubleVision(ThermalVision __instance)
         {
             __instance.IsMotionBlurred = false;

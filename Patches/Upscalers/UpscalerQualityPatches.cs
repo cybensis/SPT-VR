@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
+using EFT.CameraControl;
 
 namespace TarkovVR.Patches.Upscalers
 {
@@ -16,13 +17,13 @@ namespace TarkovVR.Patches.Upscalers
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(CameraClass), "SetAntiAliasing")]
-        private static bool UpdateVREyeResolutionForDLSS(CameraClass __instance, EAntialiasingMode quality, EDLSSMode dlssMode, EFSR2Mode fsr2Mode, EFSR3Mode fsr3Mode)
+        [HarmonyPatch(typeof(CameraManager), "SetAntiAliasing")]
+        private static bool UpdateVREyeResolutionForDLSS(CameraManager __instance, EAntialiasingMode quality, EDLSSMode dlssMode, EFSR2Mode fsr2Mode, EFSR3Mode fsr3Mode)
         {
             bool dlssOn = dlssMode > EDLSSMode.Off;
             bool fsr2On = fsr2Mode > EFSR2Mode.Off;
             bool fsr3On = fsr3Mode > EFSR3Mode.Off;
-            SSAAImpl ssaaimpl_ = __instance.Ssaaimpl_0;
+            SSAAImpl ssaaimpl_ = __instance._ssaaImpl;
             __instance.SSAA.UseJitter = dlssOn || fsr2On || fsr3On;
             if ((bool)ssaaimpl_)
             {
@@ -33,7 +34,7 @@ namespace TarkovVR.Patches.Upscalers
             {
                 if ((bool)ssaaimpl_)
                 {
-                    ssaaimpl_.DLSSQualityNext = GraphicsSettingsClass.GetDLSSQuality(dlssMode);
+                    ssaaimpl_.DLSSQualityNext = GraphicsSettingsGroup.GetDLSSQuality(dlssMode);
                     ssaaimpl_.EnableDLSS = true;
                     float num = ssaaimpl_.ComputeOptimalResamplingFactor(__instance.SSAA.GetOutputWidth(), __instance.SSAA.GetOutputHeight(), ssaaimpl_.DLSSQualityNext);
                     __instance.SSAA.Switch(num);

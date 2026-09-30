@@ -37,8 +37,8 @@ namespace TarkovVR.Patches.Core.Player
         // The gate: suppress the real DoMedEffect until the player has raised the
         // food to their mouth (returns false to skip the original method).
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(MedsController.ObservedMedsControllerClass), "method_5")]
-        public static bool GateEffect(MedsController.ObservedMedsControllerClass __instance)
+        [HarmonyPatch(typeof(MedsController.MedsInHandsOperation), "GoNextBodyPart")]
+        public static bool GateEffect(MedsController.MedsInHandsOperation __instance)
         {
             return EatingInteractionController.AllowEffect(__instance);
         }
@@ -96,7 +96,7 @@ namespace TarkovVR.Patches.Core.Player
         // Suppress our controller's animation-driven sounds so they don't burst at the
         // finish — we play the right ones per-step ourselves.
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseSoundPlayer), "OnSound")]
+        [HarmonyPatch(typeof(BaseSoundPlayer), "IEventsConsumer.OnSound")]
         public static bool OnSoundGate(BaseSoundPlayer __instance, string StringParam)
         {
             bool allow = EatingInteractionController.AllowSound(__instance, StringParam);

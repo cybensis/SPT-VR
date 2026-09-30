@@ -403,7 +403,15 @@ namespace TarkovVR
             {
                 if (type.Namespace != null && type.Namespace.StartsWith(@namespace))
                 {
-                    harmony.CreateClassProcessor(type).Patch();
+                    // One broken patch class (e.g. a member renamed by a game update) shouldn't stop the rest from applying
+                    try
+                    {
+                        harmony.CreateClassProcessor(type).Patch();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError($"Failed to apply patches in {type.FullName}: {ex}");
+                    }
                 }
             }
             

@@ -572,7 +572,7 @@ namespace TarkovVR.Patches.Core.VR
                 var methodName = method.Name;
 
                 // Check for bot-specific methods
-                if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("GClass794") && methodName.Contains("ActivateBot"))
+                if (declaringType.Contains("EFT.BotSpawner") || declaringType.Contains("TemplatesDownloader") && methodName.Contains("ActivateBot"))
                 {
                     isBotPlayer = true;
                     break;

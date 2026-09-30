@@ -51,6 +51,9 @@ using Comfort.Common;
 using TarkovVR.Patches.Core.Player;
 using GPUInstancer;
 using TarkovVR.Source.Misc;
+using EFT.HandBook;
+using EFT.Settings.Game;
+using EFT.Trading;
 
 
 
@@ -68,41 +71,41 @@ namespace TarkovVR.Patches.Misc
         public static VRUIInteracter vrUiInteracter;
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(PixelPerfectSpriteScaler), "method_1")]
+        [HarmonyPatch(typeof(PixelPerfectSpriteScaler), "UpdateScale")]
         private static bool FixMenuImagesScaling(PixelPerfectSpriteScaler __instance)
         {
             Vector3 lossyScale = new Vector3(1.333f, 1.333f, 1.333f);
             float num = 1.333f;
-            if (__instance.image_0 != null)
+            if (__instance._image != null)
             {
                 //if (num.ApproxEquals(__instance.image_0.pixelsPerUnitMultiplier))
-                if (GClass855.ApproxEquals(num, __instance.image_0.pixelsPerUnitMultiplier))
+                if (Utils.ApproxEquals(num, __instance._image.pixelsPerUnitMultiplier))
                 {
                     return false;
                 }
-                __instance.image_0.pixelsPerUnitMultiplier = num;
-                __instance.image_0.SetVerticesDirty();
+                __instance._image.pixelsPerUnitMultiplier = num;
+                __instance._image.SetVerticesDirty();
             }
-            Vector2 offsetMin = __instance.rectTransform_0.offsetMin;
-            Vector2 offsetMax = __instance.rectTransform_0.offsetMax;
+            Vector2 offsetMin = __instance._rectTransform.offsetMin;
+            Vector2 offsetMax = __instance._rectTransform.offsetMax;
             if (__instance._sidesToScale.HasFlag(EScaleSide.Top))
             {
-                offsetMax.y = __instance.vector2_1.y / num;
+                offsetMax.y = __instance._defaultOffsetMax.y / num;
             }
             if (__instance._sidesToScale.HasFlag(EScaleSide.Left))
             {
-                offsetMin.x = __instance.vector2_0.x / num;
+                offsetMin.x = __instance._defaultOffsetMin.x / num;
             }
             if (__instance._sidesToScale.HasFlag(EScaleSide.Bottom))
             {
-                offsetMin.y = __instance.vector2_0.y / num;
+                offsetMin.y = __instance._defaultOffsetMin.y / num;
             }
             if (__instance._sidesToScale.HasFlag(EScaleSide.Right))
             {
-                offsetMax.x = __instance.vector2_1.x / num;
+                offsetMax.x = __instance._defaultOffsetMax.x / num;
             }
-            __instance.rectTransform_0.offsetMin = offsetMin;
-            __instance.rectTransform_0.offsetMax = offsetMax;
+            __instance._rectTransform.offsetMin = offsetMin;
+            __instance._rectTransform.offsetMax = offsetMax;
 
             return false;
         }
@@ -144,26 +147,26 @@ namespace TarkovVR.Patches.Misc
 
         
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(MainMenuControllerClass), "method_5")]
-        private static void AddAndFixMenuVRCam(MainMenuControllerClass __instance)
+        [HarmonyPatch(typeof(MainMenuShowOperation), "Init")]
+        private static void AddAndFixMenuVRCam(MainMenuShowOperation __instance)
         {
 
             UnityEngine.Cursor.lockState = CursorLockMode.Locked;
 
-            if (__instance.EnvironmentUI_0 && __instance.EnvironmentUI_0.environmentUIRoot_0)
+            if (__instance.environmentUI_0 && __instance.environmentUI_0._currentEnvironment)
             {
                 FixMainMenuCamera();
             }
-            VRGlobals.commonUi = __instance.CommonUI_0.transform;
+            VRGlobals.commonUi = __instance.commonUI_0.transform;
             //__instance.commonUI_0.transform.GetChild(0).RectTransform().sizeDelta = new Vector2(2560, 1440);
 
-            VRGlobals.preloaderUi = __instance.PreloaderUI_0.transform;
+            VRGlobals.preloaderUi = __instance.preloaderUI_0.transform;
             //__instance.preloaderUI_0.transform.GetChild(0).RectTransform().sizeDelta = new Vector2(2560, 1440);
 
-            VRGlobals.menuUi = __instance.MenuUI_0.transform;
+            VRGlobals.menuUi = __instance.menuUI_0.transform;
             //__instance.menuUI_0.transform.GetChild(0).RectTransform().sizeDelta = new Vector2(2560, 1440);
 
-            environmentUi = __instance.EnvironmentUI_0;
+            environmentUi = __instance.environmentUI_0;
 
             if (VRGlobals.menuVRManager) {
                 VRGlobals.menuVRManager.RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
@@ -291,7 +294,7 @@ namespace TarkovVR.Patches.Misc
         {
             if (environmentUi)
             {
-                Transform camContainer = environmentUi.environmentUIRoot_0.CameraContainer.GetChild(0);
+                Transform camContainer = environmentUi._currentEnvironment.CameraContainer.GetChild(0);
                 if (!camContainer.gameObject.GetComponent<SteamVR_TrackedObject>())
                     camContainer.gameObject.AddComponent<SteamVR_TrackedObject>();
 
@@ -378,9 +381,9 @@ namespace TarkovVR.Patches.Misc
 
         public static void PositionMenuEnvironmentProps()
         {
-            if (environmentUi && environmentUi.environmentUIRoot_0.ScreenAnchors.Length > 0)
+            if (environmentUi && environmentUi._currentEnvironment.ScreenAnchors.Length > 0)
             {
-                Transform envProp = environmentUi.environmentUIRoot_0.ScreenAnchors[0].transform;
+                Transform envProp = environmentUi._currentEnvironment.ScreenAnchors[0].transform;
                 //Plugin.MyLog.LogInfo("Position Environment Props: " + envProp);
                 if (envProp.name == "CameraContainer")
                 {
@@ -399,7 +402,7 @@ namespace TarkovVR.Patches.Misc
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridView), "CalculateItemLocation")]
-        private static bool FixDragHighlighting(GridView __instance, ItemContextClass itemContext, ref LocationInGrid __result)
+        private static bool FixDragHighlighting(GridView __instance, DragItemContext itemContext, ref LocationInGrid __result)
         {
             //Plugin.MyLog.LogWarning(itemContext.ItemPosition);
             RectTransform rectTransform = __instance.transform.RectTransform();
@@ -422,7 +425,7 @@ namespace TarkovVR.Patches.Misc
             //Plugin.MyLog.LogWarning( vector2 + "   |     " + pointerPos);
 
             vector2 += vector;
-            XYCellSizeStruct gStruct = itemContext.Item.CalculateRotatedSize(itemContext.ItemRotation);
+            IntVec2 gStruct = itemContext.Item.CalculateRotatedSize(itemContext.ItemRotation);
             vector2 /= 63f;
             vector2.y = __instance.Grid.GridHeight - vector2.y;
             vector2.y -= gStruct.Y;
@@ -445,7 +448,7 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(EnvironmentUIRoot), "method_2")]
+        [HarmonyPatch(typeof(EnvironmentUIRoot), "RotateBack")]
         private static bool PreventMenuReturnCamRotatiown(EnvironmentUIRoot __instance)
         {
             return false;
@@ -523,16 +526,16 @@ namespace TarkovVR.Patches.Misc
         
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(DraggedItemView), "method_6")]
+        [HarmonyPatch(typeof(DraggedItemView), "UpdateRotation")]
         private static bool RotateInventoryItem(DraggedItemView __instance)
         {
             if (!vrUiInteracter.rotated && vrUiInteracter.rightJoyTimeHeld > 0.125)
             {
                 vrUiInteracter.rotated = true;
-                __instance.method_2(__instance.ItemContext.ItemRotation == ItemRotation.Horizontal ? ItemRotation.Vertical : ItemRotation.Horizontal);
-                if ((UnityEngine.Object)__instance.iContainer != null)
+                __instance.RotateItem(__instance.ItemContext.ItemRotation == ItemRotation.Horizontal ? ItemRotation.Vertical : ItemRotation.Horizontal);
+                if ((UnityEngine.Object)__instance._currentContainerUnderCursor != null)
                 {
-                    __instance.iContainer.HighlightItemViewPosition(__instance.ItemContext, __instance.itemContextAbstractClass, preview: false);
+                    __instance._currentContainerUnderCursor.HighlightItemViewPosition(__instance.ItemContext, __instance._currentTargetItemContext, preview: false);
                 }
                 Vector3 newRot = __instance._mainImage.transform.localEulerAngles;
                 newRot.y = Quaternion.Inverse(__instance.transform.localRotation).eulerAngles.y;
@@ -572,8 +575,8 @@ namespace TarkovVR.Patches.Misc
         // Some piece of code keeps repositioning this shit and I can't figure out what 
         // so just wait a frame and set it. This is for the delete/confirm windows
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(DialogWindow<GClass3834>), "Show")]
-        private static void DisplayDialogWindow(DialogWindow<GClass3834> __instance, string title, Action showCloseButton)
+        [HarmonyPatch(typeof(DialogWindow<DialogWindowContext>), "Show")]
+        private static void DisplayDialogWindow(DialogWindow<DialogWindowContext> __instance, string title, Action showCloseButton)
         {
             __instance.WaitOneFrame(delegate
             {
@@ -592,7 +595,7 @@ namespace TarkovVR.Patches.Misc
 
         
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(WeaponPreview), "method_2")]
+        [HarmonyPatch(typeof(WeaponPreview), "CreateWeaponPreviewCamera")]
         private static bool FixWeaponPreviewCamera(WeaponPreview __instance)
         {
             // Need to wait a bit before setting the FoV on this cam because
@@ -652,10 +655,10 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(DraggedItemView), "OnDrag")]
         private static void PositionDraggedItemIcon(DraggedItemView __instance, PointerEventData eventData)
         {
-            if (!(__instance.RectTransform_0 == null))
+            if (!(__instance.RectTransform == null))
             {
-                __instance.RectTransform_0.position = vrUiInteracter.uiPointerPos;
-                __instance.RectTransform_0.localEulerAngles = VRGlobals.commonUi.eulerAngles;
+                __instance.RectTransform.position = vrUiInteracter.uiPointerPos;
+                __instance.RectTransform.localEulerAngles = VRGlobals.commonUi.eulerAngles;
 
             }
         }
@@ -685,7 +688,7 @@ namespace TarkovVR.Patches.Misc
 
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(ItemInfoWindowLabels), "method_4")]
+        [HarmonyPatch(typeof(ItemInfoWindowLabels), "Rotate")]
         private static bool ApplyItemDetailWindowViewerRotate(ItemInfoWindowLabels __instance, PointerEventData pointerData)
         {
             //float xRot = (MenuPatches.vrUiInteracter.pressPosition.x - MenuPatches.vrUiInteracter.uiPointerPos.x) * -1 * 10;
@@ -702,20 +705,20 @@ namespace TarkovVR.Patches.Misc
             // Calculate the difference in local space, invert it to make it rotate the correction direction, then divide by 15 so it doesn't rotate so quickly
             float yRot = (localPressPosition.y - localCurrentPointerPosition.y) * -1;
             float xRot = (localPressPosition.x - localCurrentPointerPosition.x) * -1;
-            __instance.weaponPreview_0.Rotate(xRot, yRot, 0f, 0f);
+            __instance._weaponPreview.Rotate(xRot, yRot, 0f, 0f);
 
             vrUiInteracter.pressPosition = vrUiInteracter.uiPointerPos;
             return false;
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(UIDragComponent), nameof(UIDragComponent.OnDrag))]
+        [HarmonyPatch(typeof(UIDragComponent), "UnityEngine.EventSystems.IDragHandler.OnDrag")]
         private static bool FixItemDetailWindowDrag(UIDragComponent __instance, PointerEventData eventData)
         {
 
             //StackTrace stackTrace = new StackTrace();
             //Plugin.MyLog.LogError("End dragging " + stackTrace.ToString());
-            if (__instance.method_1())
+            if (__instance.CheckTarget())
             {
                 //__instance._target.localPosition = eventData.position - __instance.vector2_0;
                 __instance._target.position = eventData.worldPosition;
@@ -749,27 +752,27 @@ namespace TarkovVR.Patches.Misc
         //Inspect window position fix, doesn't seem needed anymore
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InfoWindow), "Show")]
-        private static bool PositionItemDisplayWindow(InfoWindow __instance, out GClass3829 __result, ItemContextAbstractClass itemContext, IItemOwner itemController, TraderClass trader, ItemUiContext itemUiContext, global::ItemInfoInteractionsAbstractClass<EItemInfoButton> contextInteractions)
+        private static bool PositionItemDisplayWindow(InfoWindow __instance, out WindowContext __result, ItemContext itemContext, IItemOwner itemController, Trader trader, ItemUiContext itemUiContext, global::EFT.UI.ContextInteractions<EItemInfoButton> contextInteractions)
         {
             __instance.Show();
             __instance.ShowGameObject();
             //__instance.action_1 = onSelectedAction; This doesn't seem to be used anymore
-            __instance.itemContextAbstractClass = itemContext.CreateChild(itemContext.Item);
-            __instance.UI.AddDisposable(__instance.itemContextAbstractClass);
-            __instance.item_0 = __instance.itemContextAbstractClass.Item;
-            __instance.iitemOwner_0 = __instance.item_0.Owner;
-            __instance.iitemOwner_0?.RegisterView(__instance);
-            __instance.traderClass = trader;
-            if (__instance.traderClass != null)
+            __instance._itemContext = itemContext.CreateChild(itemContext.Item);
+            __instance.UI.AddDisposable(__instance._itemContext);
+            __instance._item = __instance._itemContext.Item;
+            __instance._itemOwner = __instance._item.Owner;
+            __instance._itemOwner?.RegisterView(__instance);
+            __instance._trader = trader;
+            if (__instance._trader != null)
             {
-                __instance.UI.AddDisposable(__instance.traderClass.AssortmentChanged.Bind(__instance.method_2));
+                __instance.UI.AddDisposable(__instance._trader.AssortmentChanged.Bind(__instance.OnAssortmentChanged));
             }
-            itemUiContext.InitSpecificationPanel(__instance._itemSpecificationPanel, __instance.itemContextAbstractClass, contextInteractions);
-            __instance.method_4();
+            itemUiContext.InitSpecificationPanel(__instance._itemSpecificationPanel, __instance._itemContext, contextInteractions);
+            __instance.UpdateTag();
             System.Random rnd = new System.Random();
             __instance.transform.position = new Vector3(0f, -999.9333f, 1f);
             __instance.transform.localPosition = new Vector3(rnd.Next(-200, 201), rnd.Next(-200, 201), 0f);
-            __instance.itemContextAbstractClass.OnCloseDependentWindow += __instance.Close;
+            __instance._itemContext.OnCloseDependentWindow += __instance.Close;
             //CorrectPosition();
             __instance.WaitOneFrame(delegate
             {
@@ -791,10 +794,10 @@ namespace TarkovVR.Patches.Misc
                 SteamVR_Actions._default.LeftTrigger.axis :
                 SteamVR_Actions._default.RightTrigger.axis) >= 0.7f;
 
-            if (__instance.pointerEventData_0 != null && !triggerPressed)
+            if (__instance._lastKnownMouseEvent != null && !triggerPressed)
             {
                 vrUiInteracter.EndDrop();
-                var eventData = __instance.pointerEventData_0;
+                var eventData = __instance._lastKnownMouseEvent;
 
                 if (eventData.pointerEnter != null && eventData.pointerEnter.gameObject == null)
                     eventData.pointerEnter = null;
@@ -812,9 +815,9 @@ namespace TarkovVR.Patches.Misc
                 {
                     __instance.UpdateInfo();
                 }
-                if (Math.Abs(__instance.float_1 - __instance._mainImageAlpha) > 0.01f)
+                if (Math.Abs(__instance._previousMainImageAlpha - __instance._mainImageAlpha) > 0.01f)
                 {
-                    __instance.float_1 = __instance._mainImageAlpha;
+                    __instance._previousMainImageAlpha = __instance._mainImageAlpha;
                     Color color = __instance.MainImage.color;
                     color.a = __instance._mainImageAlpha;
                     __instance.MainImage.color = color;
@@ -832,7 +835,7 @@ namespace TarkovVR.Patches.Misc
             DropDownBox dropDown = (DropDownBox)__instance;
             if (dropDown) {
                 if (dropDown.name == "VoiceSelectorDropDown" || dropDown.name == "FaceSelectorDropdown") {
-                    dropDown.rectTransform_1 = dropDown.GetComponent<RectTransform>();
+                    dropDown._overlayLayer = dropDown.GetComponent<RectTransform>();
                 }
             }
             return true;
@@ -851,7 +854,7 @@ namespace TarkovVR.Patches.Misc
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(PlayerModelView), "Show", new Type[] { typeof(LastPlayerStateClass), typeof(InventoryController), typeof(Action), typeof(float), typeof(Vector3), typeof(bool) })]
+        [HarmonyPatch(typeof(PlayerModelView), "Show", new Type[] { typeof(PlayerVisualRepresentation), typeof(InventoryController), typeof(Action), typeof(float), typeof(Vector3), typeof(bool) })]
         private static void PositionRaidPlayerModelPreview(PlayerModelView __instance, Task __result)
         {
             __result.ContinueWith(task =>
@@ -947,7 +950,7 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(AddOfferWindow), "method_17")]
+        [HarmonyPatch(typeof(AddOfferWindow), "OnNodePriceUpdatedHandler")]
         private static void PositionOfferWindow(AddOfferWindow __instance)
         {
             foreach (Transform child in __instance.gameObject.transform)
@@ -960,7 +963,7 @@ namespace TarkovVR.Patches.Misc
 
         //Not needed anymore with the new way I'm handling opening inventory. I take that back, maybe is needed but now checking if you're in game/hideout, if so skip    
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(TransferItemsScreen), "Show", new Type[] { typeof(TransferItemsScreen.GClass3894) })]
+        [HarmonyPatch(typeof(TransferItemsScreen), "Show", new Type[] { typeof(TransferItemsScreen.TransferItemsScreenController) })]
         private static void UndoRotationOnTransferItems(TransferItemsScreen __instance)
         {
             if (VRGlobals.inGame)
@@ -980,40 +983,40 @@ namespace TarkovVR.Patches.Misc
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridWindow), "Show")]
-        private static bool PositionItemDisplayWindow(GridWindow __instance, out GClass3831 __result, CompoundItem compoundItem, ItemContextAbstractClass itemContext, TraderControllerClass itemController, ItemUiContext itemUiContext, GClass1085.EPriorityWindowMode priorityWindowMode)
+        private static bool PositionItemDisplayWindow(GridWindow __instance, out GridWindowContext __result, CompoundItem compoundItem, ItemContext itemContext, ItemController itemController, ItemUiContext itemUiContext, GameSettingsGroup.EPriorityWindowMode priorityWindowMode)
         {
             __instance.Show();
-            __instance.compoundItem_0 = compoundItem;
-            __instance.itemContextAbstractClass = itemContext.CreateChild(compoundItem);
-            __instance.UI.AddDisposable<ItemContextAbstractClass>(__instance.itemContextAbstractClass);
-            __instance.Caption.text = __instance.compoundItem_0.ShortName.Localized(null);
+            __instance._item = compoundItem;
+            __instance._itemContext = itemContext.CreateChild(compoundItem);
+            __instance.UI.AddDisposable<ItemContext>(__instance._itemContext);
+            __instance.Caption.text = __instance._item.ShortName.Localized(null);
             __instance._icon.color = __instance._iconColorIdle;
             __instance._headerBackground.color = __instance._headerBackgroundIdle;
-            __instance.traderControllerClass = itemController;
-            __instance.itemUiContext_0 = itemUiContext;
-            __instance.epriorityWindowMode_0 = priorityWindowMode;
-            __instance.iitemOwner_0 = __instance.compoundItem_0.Parent.GetOwner();
-            __instance.iitemOwner_0.RegisterView(__instance);
-            __instance.item_0 = __instance.compoundItem_0.GetAllParentItemsAndSelf(false).ToArray<Item>();
-            __instance.containedGridsView_0 = ContainedGridsView.CreateGrids(__instance.compoundItem_0, __instance._containedGridsTemplate);
-            __instance.containedGridsView_0.transform.SetParent(__instance.transform, false);
-            SearchableItemItemClass searchableItemItemClass = __instance.compoundItem_0 as SearchableItemItemClass;
+            __instance._itemController = itemController;
+            __instance._itemUiContext = itemUiContext;
+            __instance._priorityWindowMode = priorityWindowMode;
+            __instance._itemOwner = __instance._item.Parent.GetOwner();
+            __instance._itemOwner.RegisterView(__instance);
+            __instance._parents = __instance._item.GetAllParentItemsAndSelf(false).ToArray<Item>();
+            __instance._containedGrids = ContainedGridsView.CreateGrids(__instance._item, __instance._containedGridsTemplate);
+            __instance._containedGrids.transform.SetParent(__instance.transform, false);
+            SearchableItem searchableItemItemClass = __instance._item as SearchableItem;
             if (searchableItemItemClass != null && __instance._searchableView != null)
             {
-                __instance.UI.SubscribeEvent(__instance._searchableView.OnShowGrids, new Action(__instance.method_5));
-                __instance._searchableView.Show(searchableItemItemClass, __instance.traderControllerClass.SearchController as IPlayerSearchController);
+                __instance.UI.SubscribeEvent(__instance._searchableView.OnShowGrids, new Action(__instance.ShowGrids));
+                __instance._searchableView.Show(searchableItemItemClass, __instance._itemController.SearchController as IPlayerSearchController);
             }
-            __instance.method_4();
-            __instance.method_6();
+            __instance.ShowContents();
+            __instance.UpdateTag();
             if (__instance._sortPanel != null)
             {
                 InventoryController inventoryController = itemController as InventoryController;
                 if (inventoryController != null)
                 {
-                    if (inventoryController.IsAllowedToSort(__instance.compoundItem_0) && __instance.compoundItem_0.IsAllowedToSort && itemUiContext.SortAvailable)
+                    if (inventoryController.IsAllowedToSort(__instance._item) && __instance._item.IsAllowedToSort && itemUiContext.SortAvailable)
                     {
                         __instance._sortPanel.gameObject.SetActive(true);
-                        __instance._sortPanel.Show(inventoryController, __instance.compoundItem_0);
+                        __instance._sortPanel.Show(inventoryController, __instance._item);
                     }
                     else
                     {
@@ -1022,18 +1025,18 @@ namespace TarkovVR.Patches.Misc
                 }
             }
             bool active;
-            if (active = (__instance.epriorityWindowMode_0 == GClass1085.EPriorityWindowMode.Manual && GClass3831.CanSelectGridWindow(__instance.itemContextAbstractClass)))
+            if (active = (__instance._priorityWindowMode == GameSettingsGroup.EPriorityWindowMode.Manual && GridWindowContext.CanSelectGridWindow(__instance._itemContext)))
             {
-                __instance.UI.SubscribeEvent<bool>(__instance._priorityWindowToggle.OnToggle, new Action<bool>(__instance.method_2));
+                __instance.UI.SubscribeEvent<bool>(__instance._priorityWindowToggle.OnToggle, new Action<bool>(__instance.GridWindowSelectedHandler));
             }
             __instance._priorityWindowToggle.SetValueSilently(false);
             __instance._priorityWindowToggle.gameObject.SetActive(active);
-            __instance.itemContextAbstractClass.OnCloseDependentWindow += __instance.Close;
+            __instance._itemContext.OnCloseDependentWindow += __instance.Close;
             __instance.WindowContext.OnSelectedAsTarget += __instance.SetSelectedAsTargetVisual;
-            __instance.UI.AddDisposable(new Action(__instance.method_7));
-            if (priorityWindowMode == GClass1085.EPriorityWindowMode.Auto)
+            __instance.UI.AddDisposable(new Action(__instance.CG_Show));
+            if (priorityWindowMode == GameSettingsGroup.EPriorityWindowMode.Auto)
             {
-                __instance.method_2(true);
+                __instance.GridWindowSelectedHandler(true);
             }
             __instance.WaitOneFrame(delegate
             {
@@ -1048,16 +1051,16 @@ namespace TarkovVR.Patches.Misc
 
         //Dunno what this is for
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(Window<GClass3829>), "Show")]
-        private static void PositionSomeWindow(Window<GClass3829> __instance)
+        [HarmonyPatch(typeof(Window<WindowContext>), "Show")]
+        private static void PositionSomeWindow(Window<WindowContext> __instance)
         {
             __instance.transform.localPosition = Vector3.zero;
             __instance.transform.GetChild(0).localPosition = Vector3.zero;
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(WelcomeScreen<EftWelcomeScreen.GClass3907, EEftScreenType>), "Show", new Type[] { typeof(EftWelcomeScreen.GClass3907) })]
-        private static void PositionLoginWelcomeScreen(WelcomeScreen<EftWelcomeScreen.GClass3907, EEftScreenType> __instance)
+        [HarmonyPatch(typeof(WelcomeScreen<EftWelcomeScreen.EftWelcomeScreenController, EEftScreenType>), "Show", new Type[] { typeof(EftWelcomeScreen.EftWelcomeScreenController) })]
+        private static void PositionLoginWelcomeScreen(WelcomeScreen<EftWelcomeScreen.EftWelcomeScreenController, EEftScreenType> __instance)
         {
             UnityEngine.Cursor.lockState = CursorLockMode.Locked;
 
@@ -1086,8 +1089,8 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(AccountSideSelectionScreen<EftAccountSideSelectionScreen.GClass3905, EEftScreenType>), "Awake")]
-        private static void PositionLoginWelcomeScreen(AccountSideSelectionScreen<EftAccountSideSelectionScreen.GClass3905, EEftScreenType> __instance)
+        [HarmonyPatch(typeof(AccountSideSelectionScreen<EftAccountSideSelectionScreen.EftAccountSideSelectionScreenController, EEftScreenType>), "Awake")]
+        private static void PositionLoginWelcomeScreen(AccountSideSelectionScreen<EftAccountSideSelectionScreen.EftAccountSideSelectionScreenController, EEftScreenType> __instance)
         {
             UnityEngine.Cursor.lockState = CursorLockMode.Locked;
 
@@ -1117,14 +1120,14 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GClass3880), "ShowAction")]
-        private static void PositionInRaidMenu(GClass3880 __instance)
+        [HarmonyPatch(typeof(MenuScreen.RaidMainMenuScreenController), "ShowAction")]
+        private static void PositionInRaidMenu(MenuScreen.RaidMainMenuScreenController __instance)
         {
             if (!VRGlobals.inGame)
                 return;
 
             UnityEngine.Cursor.lockState = CursorLockMode.Locked;
-            Transform mainMenuCam = EnvironmentUI.Instance.environmentUIRoot_0.CameraContainer.Find("MainMenuCamera");
+            Transform mainMenuCam = EnvironmentUI.Instance._currentEnvironment.CameraContainer.Find("MainMenuCamera");
             PositionMenuEnvironmentProps();
             PositionMainMenuUi();
             UIPatches.ShowUiScreens();
@@ -1145,8 +1148,8 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(UserInterfaceClass<EFT.UI.Screens.EEftScreenType>.GClass3860<EFT.UI.MenuScreen.GClass3877, EFT.UI.MenuScreen>), "CloseScreen")]
-        private static void CloseOverlayWindows(UserInterfaceClass<EFT.UI.Screens.EEftScreenType>.GClass3860<EFT.UI.MenuScreen.GClass3877, EFT.UI.MenuScreen> __instance)
+        [HarmonyPatch(typeof(ScreenManager<EFT.UI.Screens.EEftScreenType>.ScreenController<EFT.UI.MenuScreen.MainMenuBaseScreenController, EFT.UI.MenuScreen>), "CloseScreen")]
+        private static void CloseOverlayWindows(ScreenManager<EFT.UI.Screens.EEftScreenType>.ScreenController<EFT.UI.MenuScreen.MainMenuBaseScreenController, EFT.UI.MenuScreen> __instance)
         {
             UIPatches.HideUiScreens();
             //VRGlobals.vrPlayer.enabled = true;
@@ -1209,7 +1212,7 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(CharacteristicsPanel), "method_3")]
+        [HarmonyPatch(typeof(CharacteristicsPanel), "SetState")]
         private static void FixWeapCharactericsPanelOnClick(CharacteristicsPanel __instance, bool expanded)
         {
             if (expanded)
@@ -1219,10 +1222,10 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(DropDownMenu), "method_1")]
+        [HarmonyPatch(typeof(DropDownMenu), "UpdatePosition")]
         private static bool FixWeaponModdingDropDownPosition(DropDownMenu __instance)
         {
-            __instance.transform.position = __instance.moddingScreenSlotView_0.MenuAnchor.position;
+            __instance.transform.position = __instance._slotView.MenuAnchor.position;
             return false;
         }
 
@@ -1234,24 +1237,24 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(ModdingScreenSlotView), "method_1")]
+        [HarmonyPatch(typeof(ModdingScreenSlotView), "HoverEndHandler")]
         private static bool PreventHidingDropDownMethod1(ModdingScreenSlotView __instance)
         {
-            if (__instance.bool_0)
+            if (__instance._locked)
             {
-                __instance.simpleTooltip_0.Close();
+                __instance._tooltip.Close();
                 return false;
             }
 
-            __instance.ginterface481_0.HideModHighlight(overriding: true);
+            __instance._moddingScreen.HideModHighlight(overriding: true);
             return false;
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(ModdingScreenSlotView), "method_5")]
+        [HarmonyPatch(typeof(ModdingScreenSlotView), "MenuOpenHandler")]
         private static bool PreventHidingDropDownMethod5(ModdingScreenSlotView __instance, ModdingScreenSlotView slotView)
         {
-            __instance.method_6(slotView == __instance);
+            __instance.SetMenuOpen(slotView == __instance);
             return false;
         }
 
@@ -1259,12 +1262,12 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(ModdingScreenSlotView), "CheckVisibility")]
         private static bool PreventHidingDropDownCheckVisibility(ModdingScreenSlotView __instance, EModClass visibleClasses)
         {
-            bool flag = (visibleClasses & __instance.EModClass_0) != 0;
+            bool flag = (visibleClasses & __instance.ModClass) != 0;
             __instance.gameObject.SetActive(flag);
-            if (!flag && __instance.dropDownMenu_0.Open)
+            if (!flag && __instance._menu.Open)
             {
-                if (__instance.dropDownMenu_0.Open)
-                    __instance.dropDownMenu_0.Close();
+                if (__instance._menu.Open)
+                    __instance._menu.Close();
             }
             return false;
         }
@@ -1322,7 +1325,7 @@ namespace TarkovVR.Patches.Misc
         */
         
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EditBuildScreen), nameof(EditBuildScreen.Show), new Type[] { typeof(EditBuildScreen.GClass3881) })]
+        [HarmonyPatch(typeof(EditBuildScreen), nameof(EditBuildScreen.Show), new Type[] { typeof(EditBuildScreen.EditBuildScreenController) })]
         private static void PositionWeaponPreviewEditBuild(EditBuildScreen __instance)
         {
             WeaponPreview wp = __instance._weaponPreview;
@@ -1336,12 +1339,12 @@ namespace TarkovVR.Patches.Misc
                 parent.localScale = Vector3.one * 1.5f;
 
                 if (Camera.main != null)
-                    Camera.main.cullingMask |= (1 << LayerMaskClass.WeaponPreview);
+                    Camera.main.cullingMask |= (1 << LayersMaskController.WeaponPreview);
             }
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeaponModdingScreen), nameof(WeaponModdingScreen.Show), new Type[] { typeof(WeaponModdingScreen.GClass3922) })]
+        [HarmonyPatch(typeof(WeaponModdingScreen), nameof(WeaponModdingScreen.Show), new Type[] { typeof(WeaponModdingScreen.WeaponModdingScreenController) })]
         private static void PositionWeaponPreviewModding(WeaponModdingScreen __instance)
         {
             WeaponPreview wp = __instance._weaponPreview;
@@ -1355,7 +1358,7 @@ namespace TarkovVR.Patches.Misc
                 parent.localScale = Vector3.one * 1.5f;
 
                 if (Camera.main != null)
-                    Camera.main.cullingMask |= (1 << LayerMaskClass.WeaponPreview);
+                    Camera.main.cullingMask |= (1 << LayersMaskController.WeaponPreview);
             }
         }
         
@@ -1408,10 +1411,10 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1637), "method_0")]
-        private static bool SetUiOnExtractOrDeath(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1637 __instance)
+        [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.CG_Class1637), "method_0")]
+        private static bool SetUiOnExtractOrDeath(EFT.BaseLocalGame<EftGamePlayerOwner>.CG_Class1637 __instance)
         {
-            if (__instance?.baseLocalGame_0?.PlayerOwner?.player_0 == null || !__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
+            if (__instance?.baseLocalGame_0?.PlayerOwner?._player == null || !__instance.baseLocalGame_0.PlayerOwner._player.IsYourPlayer)
                 return true;
 
             GameObject deathPositioner = new GameObject("DeathPos");
@@ -1452,12 +1455,12 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1637), "method_0")]
-        private static bool SetUiOnExtractOrDeathOther(EFT.BaseLocalGame<EftGamePlayerOwner>.Class1637 __instance)
+        [HarmonyPatch(typeof(EFT.BaseLocalGame<EftGamePlayerOwner>.CG_Class1637), "method_0")]
+        private static bool SetUiOnExtractOrDeathOther(EFT.BaseLocalGame<EftGamePlayerOwner>.CG_Class1637 __instance)
         {
 
 
-            if (!__instance.baseLocalGame_0.PlayerOwner.player_0.IsYourPlayer)
+            if (!__instance.baseLocalGame_0.PlayerOwner._player.IsYourPlayer)
                 return true;
 
             GameObject deathPositioner = new GameObject("DeathPos");
@@ -1509,7 +1512,7 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(ScavengerInventoryScreen), "method_6")]
+        [HarmonyPatch(typeof(ScavengerInventoryScreen), "UpdateSellAllButton")]
         private static void ResetRotOnScavInvScreen(ScavengerInventoryScreen __instance)
         {
             HideoutPatches.camRootRot = Vector3.zeroVector;
@@ -1535,10 +1538,10 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(ScreenPositionAnchor), "Update")]
         private static bool FixMenuPropsPositioning(ScreenPositionAnchor __instance)
         {
-            if (!(__instance._camera == null) && (Screen.width != __instance.int_1 || Screen.height != __instance.int_0))
+            if (!(__instance._camera == null) && (Screen.width != __instance._screenWidth || Screen.height != __instance._screenHeight))
             {
-                __instance.int_1 = Screen.width;
-                __instance.int_0 = Screen.height;
+                __instance._screenWidth = Screen.width;
+                __instance._screenHeight = Screen.height;
                 __instance._camera.gameObject.SetActive(value: true);
                 __instance._camera.enabled = true;
                 Vector2 vector = new Vector2(Screen.width, Screen.height);
@@ -1590,14 +1593,14 @@ namespace TarkovVR.Patches.Misc
             }
         }
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(SettingsScreen), "method_8")]
+        [HarmonyPatch(typeof(SettingsScreen), "ShowScreen")]
         private static void CloseVRSettings(SettingsScreen __instance)
         {
             VRSettings.CloseVRSettings();
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(SettingsScreen), "method_12")]
+        [HarmonyPatch(typeof(SettingsScreen), "SaveButtonAction")]
         private static void SaveVRSettings(SettingsScreen __instance)
         {
             VRSettings.SaveSettings();
@@ -1608,7 +1611,7 @@ namespace TarkovVR.Patches.Misc
                 VRGlobals.rightArmBendGoal.localPosition = VRSettings.GetLeftHandedMode() ? new Vector3(-2.5f, -2f, -0.8f) : new Vector3(2.5f, -2f, -0.8f);
             }
             if (VRGlobals.weaponHolder && VRGlobals.firearmController) {
-                Vector3 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(VRGlobals.firearmController.weaponPrefab_0.name, VRGlobals.firearmController.Weapon.WeapClass);
+                Vector3 weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(VRGlobals.firearmController._weaponPrefab.name, VRGlobals.firearmController.Weapon.WeapClass);
                 float weaponAngleOffset = VRSettings.GetRightHandVerticalOffset();
                 if (weaponAngleOffset < 50)
                 {
@@ -1691,54 +1694,54 @@ namespace TarkovVR.Patches.Misc
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InsuranceWindow), "Show")]
-        private static bool FixInsuranceWindowPosition(InsuranceWindow __instance, out GClass3829 __result, ItemContextAbstractClass itemContext, Inventory inventory, InsuranceCompanyClass insuranceCompany, MessageWindow messageWindow, SkillManager skills, WeaponPreviewPool weaponPreviewPool)
+        private static bool FixInsuranceWindowPosition(InsuranceWindow __instance, out WindowContext __result, ItemContext itemContext, Inventory inventory, InsuranceCompany insuranceCompany, MessageWindow messageWindow, SkillManager skills, WeaponPreviewPool weaponPreviewPool)
         {
-            InsuranceWindow.Class3480 @class = new InsuranceWindow.Class3480();
+            InsuranceWindow.CG_Show2 @class = new InsuranceWindow.CG_Show2();
             @class.insuranceWindow_0 = __instance;
             @class.itemContext = itemContext;
             __instance.Show();
-            __instance.CorrectPosition(default(MarginsStruct));
-            __instance.item_0 = @class.itemContext.Item;
-            __instance.item_0.UpdateAttributes();
-            __instance.insuranceCompanyClass = insuranceCompany;
-            __instance.entityNodeClass = Singleton<HandbookClass>.Instance.StructuredItems[__instance.item_0.TemplateId];
-            __instance._insurerParameters.Show(inventory, __instance.insuranceCompanyClass, new Action(__instance.method_3), skills);
-            __instance.weaponPreviewPool_0 = weaponPreviewPool;
-            __instance.weaponPreview_0 = __instance.weaponPreviewPool_0.GetWeaponPreview();
-            __instance.messageWindow_0 = messageWindow;
-            __instance._cameraImage.InitCamera(__instance.weaponPreview_0.WeaponPreviewCamera);
-            __instance._itemLabels.Show(__instance.weaponPreview_0, true);
-            __instance.iitemOwner_0 = __instance.item_0.Parent.GetOwner();
-            __instance.iitemOwner_0.RegisterView(__instance);
-            __instance.weaponPreview_0.SetupItemPreview(__instance.item_0, new Action(@class.method_0), new Action(@class.method_1), null, true, null, true);
-            __instance.weaponPreview_0.ResetRotator(-1.5f);
-            Weapon weapon = __instance.item_0 as Weapon;
+            __instance.CorrectPosition(default(MarginsRect));
+            __instance._item = @class.itemContext.Item;
+            __instance._item.UpdateAttributes();
+            __instance._insurance = insuranceCompany;
+            __instance._handbookNode = Singleton<Handbook>.Instance.StructuredItems[__instance._item.TemplateId];
+            __instance._insurerParameters.Show(inventory, __instance._insurance, new Action(__instance.UpdateInsurancePrice), skills);
+            __instance._weaponPreviewPool = weaponPreviewPool;
+            __instance._weaponPreview = __instance._weaponPreviewPool.GetWeaponPreview();
+            __instance._messageWindow = messageWindow;
+            __instance._cameraImage.InitCamera(__instance._weaponPreview.WeaponPreviewCamera);
+            __instance._itemLabels.Show(__instance._weaponPreview, true);
+            __instance._itemOwner = __instance._item.Parent.GetOwner();
+            __instance._itemOwner.RegisterView(__instance);
+            __instance._weaponPreview.SetupItemPreview(__instance._item, new Action(@class.method_0), new Action(@class.method_1), null, true, null, true);
+            __instance._weaponPreview.ResetRotator(-1.5f);
+            Weapon weapon = __instance._item as Weapon;
             __instance._masteringLabel.gameObject.SetActive(weapon != null);
             if (skills != null && weapon != null)
             {
-                InsuranceWindow.Class3481 class2 = new InsuranceWindow.Class3481();
-                class2.class3480_0 = @class;
+                InsuranceWindow.CG_Show1 class2 = new InsuranceWindow.CG_Show1();
+                class2.CG_Show2 = @class;
                 class2.mastered = skills.GetMastering(weapon.TemplateId);
-                GClass3378 gclass = new GClass3378(EItemAttributeId.Mastering);
+                RangedItemAttribute gclass = new RangedItemAttribute(EItemAttributeId.Mastering);
                 string format = "WEAPON MASTERING (0{0})";
-                MasterSkillClass mastered = class2.mastered;
+                Mastering mastered = class2.mastered;
                 gclass.Name = string.Format(format, (mastered != null) ? (mastered.Level + 1) : 1);
-                GClass3378 gclass2 = gclass;
+                RangedItemAttribute gclass2 = gclass;
                 if (class2.mastered != null)
                 {
                     gclass2.Base = new Func<float>(class2.method_0);
                 }
                 TMP_Text masteringLabel = __instance._masteringLabel;
                 string format2 = "0{0}";
-                MasterSkillClass mastered2 = class2.mastered;
+                Mastering mastered2 = class2.mastered;
                 masteringLabel.text = string.Format(format2, (mastered2 != null) ? (mastered2.Level + 1) : 1);
             }
-            __instance.method_4(new InsuranceCompanyClass.GStruct452(-1, new InsuranceCompanyClass.EInsuranceError?(InsuranceCompanyClass.EInsuranceError.NothingToInsure)));
-            __instance.method_3();
-            __instance.method_5();
-            __instance.iitemOwner_0.RefreshItemEvent += new Action<GEventArgs18>(__instance.method_2);
-            __instance.iitemOwner_0.AddItemEvent += new Action<GEventArgs2>(__instance.method_2);
-            __instance.iitemOwner_0.RemoveItemEvent += new Action<GEventArgs3>(__instance.method_2);
+            __instance.UpdatePrice(new InsuranceCompany.PriceData(-1, new InsuranceCompany.EInsuranceError?(InsuranceCompany.EInsuranceError.NothingToInsure)));
+            __instance.UpdateInsurancePrice();
+            __instance.UpdateInfoWindowParameters();
+            __instance._itemOwner.RefreshItemEvent += new Action<RefreshItemEventArgs>(__instance.UpdateStashCounters);
+            __instance._itemOwner.AddItemEvent += new Action<AddItemEventArgs>(__instance.UpdateStashCounters);
+            __instance._itemOwner.RemoveItemEvent += new Action<RemoveItemEventArgs>(__instance.UpdateStashCounters);
             @class.itemContext.OnCloseDependentWindow += __instance.Close;
             __instance.UI.AddDisposable(new Action(@class.method_2));
             __instance.WaitOneFrame(delegate
@@ -1751,7 +1754,7 @@ namespace TarkovVR.Patches.Misc
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(MatchmakerTimeHasCome), "Show", new Type[] { typeof(MatchmakerTimeHasCome.TimeHasComeScreenClass) })]
+        [HarmonyPatch(typeof(MatchmakerTimeHasCome), "Show", new Type[] { typeof(MatchmakerTimeHasCome.TimeHasComeScreenController) })]
         private static void PositionMenuAfterTransit(MatchmakerTimeHasCome __instance)
         {
             VRGlobals.menuUi = __instance.transform.root;

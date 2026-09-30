@@ -1,4 +1,5 @@
-﻿using EFT.UI;
+﻿using EFT;
+using EFT.UI;
 using EFT.UI.Ragfair;
 using EFT.UI.Settings;
 using Newtonsoft.Json;
@@ -17,6 +18,7 @@ using Unity.XR.OpenVR;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.XR;
+using EFT.CameraControl;
 using static HBAO_Core;
 
 namespace TarkovVR.Source.Settings
@@ -277,7 +279,7 @@ namespace TarkovVR.Source.Settings
             // sever action_0 here - otherwise saving pushes our slider value into the master volume
             // and mutes the game. (The old code masked this by overwriting action_0 with its own
             // ChangeX callback; the SmoothSlider rewrite dropped that, hence the muted-audio bug.)
-            sel.action_0 = null;
+            sel._onValueChanged = null;
 
             SmoothSlider cfg = sel.gameObject.GetComponent<SmoothSlider>();
             if (cfg == null)
@@ -313,7 +315,7 @@ namespace TarkovVR.Source.Settings
             {
                 UIAnimatedToggleSpawner settingsController = vrSettingsButton.GetComponent<UIAnimatedToggleSpawner>();
                 settingsController.SpawnableToggle._headerLabel.text = "VR";
-                settingsController.action_0 = ShowVRSettings;
+                settingsController._localizationSubscription = ShowVRSettings;
             }
 
             // Second custom tab: "VR Graphics" (sits next to "VR")
@@ -328,7 +330,7 @@ namespace TarkovVR.Source.Settings
             {
                 UIAnimatedToggleSpawner graphicsController = vrGraphicsButton.GetComponent<UIAnimatedToggleSpawner>();
                 graphicsController.SpawnableToggle._headerLabel.text = "VR More";
-                graphicsController.action_0 = ShowVRGraphicsSettings;
+                graphicsController._localizationSubscription = ShowVRGraphicsSettings;
             }
 
             GameObject vrSettings = UnityEngine.Object.Instantiate(settingsUi._soundSettingsScreen.gameObject);
@@ -349,7 +351,7 @@ namespace TarkovVR.Source.Settings
             GameObject.Destroy(newSoundSettings._slidersSection.parent.FindChild("VoipSection").gameObject);
             ReadOnlyCollection<string> movementMethods = new ReadOnlyCollection<string>(new List<string> { "Head-based movement", "Wand-based movement", "JoyStick only movement" });
             movementMethod = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
-            movementMethod.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.VoipDevice, movementMethods, (x) => !(x == "Head-based movement") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            movementMethod.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, movementMethods, (x) => !(x == "Head-based movement") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
             movementMethod.Text.localizationKey = "Movement method: ";
             if (settings.movementType == MovementMode.HeadBased)
                 movementMethod.DropDown.SetLabelText("Head-based movement");
@@ -358,24 +360,24 @@ namespace TarkovVR.Source.Settings
             else
                 movementMethod.DropDown.SetLabelText("JoyStick only movement");
 
-            movementMethod.DropDown.gclass1626_0.Action_0 = ChangeMovementMode;
+            movementMethod.DropDown._onValueChanged._onChange = ChangeMovementMode;
 
             ReadOnlyCollection<string> rotationsModes = new ReadOnlyCollection<string>(new List<string> { "Smooth Turn", "Snap Turn" });
             rotationMethod = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
-            rotationMethod.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.VoipDevice, rotationsModes, (x) => !(x == "Smooth Turn") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            rotationMethod.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, rotationsModes, (x) => !(x == "Smooth Turn") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
             rotationMethod.Text.localizationKey = "Rotation method: ";
             if (settings.rotationType == RotationMode.Smooth)
                 rotationMethod.DropDown.SetLabelText("Smooth Turn");
             else
                 rotationMethod.DropDown.SetLabelText("Snap Turn");
 
-            rotationMethod.DropDown.gclass1626_0.Action_0 = ChangeRotationType;
+            rotationMethod.DropDown._onValueChanged._onChange = ChangeRotationType;
 
             
 
             ReadOnlyCollection<string> snapTurnMethods = new ReadOnlyCollection<string>(new List<string> { "30", "45", "90" });
             snapTurnAmountDropDown = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
-            snapTurnAmountDropDown.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.VoipDevice, snapTurnMethods, (x) => !(x == "45") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            snapTurnAmountDropDown.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, snapTurnMethods, (x) => !(x == "45") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
             snapTurnAmountDropDown.Text.localizationKey = "Snap turn Amount: ";
             if (settings.snapTurnAmount == SnapTurnAmount.thirty)
                 snapTurnAmountDropDown.DropDown.SetLabelText("30");
@@ -385,11 +387,11 @@ namespace TarkovVR.Source.Settings
                 snapTurnAmountDropDown.DropDown.SetLabelText("90");
 
 
-            snapTurnAmountDropDown.DropDown.gclass1626_0.Action_0 = ChangeSnapAmount;
+            snapTurnAmountDropDown.DropDown._onValueChanged._onChange = ChangeSnapAmount;
 
 
             sensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            sensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            sensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             sensitivitySlider.Text.localizationKey = "Rotation Sensitivity:";
             MakeSliderSmooth(sensitivitySlider, 0.5f, 20f, () => settings.rotationSensitivity,
                 (v) => settings.rotationSensitivity = v, (v) => Remap(v, 0.5f, 20f, 0f, 10f).ToString("0"));
@@ -410,73 +412,73 @@ namespace TarkovVR.Source.Settings
 
             
             emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             emptySpacingSlider.Slider.gameObject.SetActive(false);
             emptySpacingSlider.Text.gameObject.SetActive(false);
             
 
             seatedModeToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            seatedModeToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            seatedModeToggle.Toggle.action_0 = SetSeatedMode;
+            seatedModeToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            seatedModeToggle.Toggle._onValueChanged = SetSeatedMode;
             seatedModeToggle.Text.localizationKey = "Seated Mode - Reset your height after setting";
             seatedModeToggle.Toggle.UpdateValue(settings.seatedMode);
 
             leftHandedMode = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            leftHandedMode.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            leftHandedMode.Toggle.action_0 = SetLeftHandedMode;
+            leftHandedMode.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            leftHandedMode.Toggle._onValueChanged = SetLeftHandedMode;
             leftHandedMode.Text.localizationKey = "Left Handed Mode (VERY experimental) ";
             leftHandedMode.Toggle.UpdateValue(settings.leftHandedMode);
 
             snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            snapToGunToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            snapToGunToggle.Toggle.action_0 = SetSnapToGun;
+            snapToGunToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            snapToGunToggle.Toggle._onValueChanged = SetSnapToGun;
             snapToGunToggle.Text.localizationKey = "Turn On Left Hand Snap To Weapon ";
             snapToGunToggle.Toggle.UpdateValue(settings.snapToGun);
 
             supportGunHoldToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            supportGunHoldToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            supportGunHoldToggle.Toggle.action_0 = SetSupportGunHoldToggle;
+            supportGunHoldToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            supportGunHoldToggle.Toggle._onValueChanged = SetSupportGunHoldToggle;
             supportGunHoldToggle.Text.localizationKey = "Toggle Hold Grip For Two Handing ";
             supportGunHoldToggle.Toggle.UpdateValue(settings.supportGunHoldToggle);
 
             scopeSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            scopeSmoothingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            scopeSmoothingToggle.Toggle.action_0 = ToggleScopeSmoothingSensitivity;
+            scopeSmoothingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            scopeSmoothingToggle.Toggle._onValueChanged = ToggleScopeSmoothingSensitivity;
             scopeSmoothingToggle.Text.localizationKey = "Turn On Hold Breath Sensitivity ";
             scopeSmoothingToggle.Toggle.UpdateValue(settings.scopeAimSmoothing);
 
             aimSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            aimSmoothingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            aimSmoothingToggle.Toggle.action_0 = ToggleSmoothingSensitivity;
+            aimSmoothingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            aimSmoothingToggle.Toggle._onValueChanged = ToggleSmoothingSensitivity;
             aimSmoothingToggle.Text.localizationKey = "Turn On Weapon Smoothing ";
             aimSmoothingToggle.Toggle.UpdateValue(settings.weaponAimSmoothing);
 
             weaponWeightToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            weaponWeightToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            weaponWeightToggle.Toggle.action_0 = SetWeaponWeightOn;
+            weaponWeightToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            weaponWeightToggle.Toggle._onValueChanged = SetWeaponWeightOn;
             weaponWeightToggle.Text.localizationKey = "Turn On Weapon Weight";
             weaponWeightToggle.Toggle.UpdateValue(settings.weaponWeight);
 
             weaponInertiaToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            weaponInertiaToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            weaponInertiaToggle.Toggle.action_0 = SetWeaponInertiaOn;
+            weaponInertiaToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            weaponInertiaToggle.Toggle._onValueChanged = SetWeaponInertiaOn;
             weaponInertiaToggle.Text.localizationKey = "Turn On EFT Weapon Inertia";
             weaponInertiaToggle.Toggle.UpdateValue(settings.weaponInertia);
 
             walkEffectorToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            walkEffectorToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            walkEffectorToggle.Toggle.action_0 = SetWalkEffectorOn;
+            walkEffectorToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            walkEffectorToggle.Toggle._onValueChanged = SetWalkEffectorOn;
             walkEffectorToggle.Text.localizationKey = "Turn On EFT Weapon Walk Bobbing";
             walkEffectorToggle.Toggle.UpdateValue(settings.walkEffector);
 
             heldItemWeightToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            heldItemWeightToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            heldItemWeightToggle.Toggle.action_0 = SetHeldItemWeight;
+            heldItemWeightToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            heldItemWeightToggle.Toggle._onValueChanged = SetHeldItemWeight;
             heldItemWeightToggle.Text.localizationKey = "Turn On Held Item Adds To Carry Weight";
             heldItemWeightToggle.Toggle.UpdateValue(settings.heldItemWeight);
 
             aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             // smoothingSensitivity is the slerp factor used as `smoothingFactor`: lower = heavier
             // smoothing, 50 = the special "no smoothing" value. Drive it directly so the bar spans
             // the whole 0..50 range continuously (wider than the old ~0..22 it could reach).
@@ -485,21 +487,21 @@ namespace TarkovVR.Source.Settings
                 (v) => settings.smoothingSensitivity = v, (v) => Remap(v, 0f, 50f, 0f, 10f).ToString("0"));
 
             scopeSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            scopeSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            scopeSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             scopeSmoothingSlider.Text.localizationKey = "Hold Breath Sensitivity:";
             MakeSliderSmooth(scopeSmoothingSlider, 0f, 20f, () => settings.scopeSmoothingSensitivity,
                 (v) => settings.scopeSmoothingSensitivity = v, (v) => Remap(v, 0f, 20f, 0f, 10f).ToString("0"));
 
             
             variableZoomSensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            variableZoomSensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            variableZoomSensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             variableZoomSensitivitySlider.Text.localizationKey = "Variable Zoom Sensitivity:";
             MakeSliderSmooth(variableZoomSensitivitySlider, 0f, 2f, () => settings.variableZoomSensitivity,
                 (v) => settings.variableZoomSensitivity = v, (v) => Remap(v, 0f, 2f, 0f, 10f).ToString("0"));
             
 
             rightHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            rightHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            rightHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             // Vertical hand offsets pivot around 50 in CalculateRightHandPosOffset (>=50 positive,
             // <50 negative), so keep 50 as the neutral centre and widen symmetrically.
             rightHandVerticalAngleSlider.Text.localizationKey = "Right hand vertical rot offset:";
@@ -508,27 +510,27 @@ namespace TarkovVR.Source.Settings
 
 
             rightHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            rightHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            rightHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             rightHandHorizontalAngleSlider.Text.localizationKey = "Right hand horizontal rot offset:";
             MakeSliderSmooth(rightHandHorizontalAngleSlider, -90f, 90f, () => settings.rightHandHorizontalAngle,
                 (v) => settings.rightHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
 
             leftHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            leftHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            leftHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             leftHandVerticalAngleSlider.Text.localizationKey = "Left hand vertical rot offset:";
             MakeSliderSmooth(leftHandVerticalAngleSlider, -30f, 130f, () => settings.leftHandVerticalAngle,
                 (v) => settings.leftHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
 
             leftHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            leftHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            leftHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             leftHandHorizontalAngleSlider.Text.localizationKey = "Left hand horizontal rot offset:";
             MakeSliderSmooth(leftHandHorizontalAngleSlider, -90f, 90f, () => settings.leftHandHorizontalAngle,
                 (v) => settings.leftHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
 
             handPosOffsetSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             handPosOffsetSlider.BindIndexTo(
-                settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume,
-                settingsUi._soundSettingsScreen.readOnlyCollection_0,
+                settingsUi._soundSettingsScreen._soundSettings.OverallVolume,
+                settingsUi._soundSettingsScreen._variants,
                 (sliderIndex) =>
                 {
                     float normalizedValue = sliderIndex / 100f; // Convert to 0-1 range
@@ -541,13 +543,13 @@ namespace TarkovVR.Source.Settings
                 (v) => settings.handPosOffset = v, (v) => Remap(v, -0.25f, 0.25f, -1f, 1f).ToString("0.0"));
 
             emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             emptySpacingSlider.Slider.gameObject.SetActive(false);
             emptySpacingSlider.Text.gameObject.SetActive(false);
 
             disableRunAnimationToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            disableRunAnimationToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            disableRunAnimationToggle.Toggle.action_0 = SetDisableRunAnim;
+            disableRunAnimationToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            disableRunAnimationToggle.Toggle._onValueChanged = SetDisableRunAnim;
             disableRunAnimationToggle.Text.localizationKey = "Disable Run Animation";
             disableRunAnimationToggle.Toggle.UpdateValue(settings.disableRunAnimation);
             
@@ -560,8 +562,8 @@ namespace TarkovVR.Source.Settings
             sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);
             */
             useVRKeyboardToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            useVRKeyboardToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            useVRKeyboardToggle.Toggle.action_0 = SetUseVRKeyboard;
+            useVRKeyboardToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            useVRKeyboardToggle.Toggle._onValueChanged = SetUseVRKeyboard;
             useVRKeyboardToggle.Text.localizationKey = "Use In-Game VR Keyboard";
             useVRKeyboardToggle.Toggle.UpdateValue(settings.useVRKeyboard);
 
@@ -569,14 +571,14 @@ namespace TarkovVR.Source.Settings
             if (VRGlobals.vrControllerType == "vive")
             {
                 viveWandCrouchThresholdSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-                viveWandCrouchThresholdSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, new ReadOnlyCollection<float>(ViveWandCrouchThresholdValues),
+                viveWandCrouchThresholdSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, new ReadOnlyCollection<float>(ViveWandCrouchThresholdValues),
                     (x) => x.ToString("F1"));
                 viveWandCrouchThresholdSlider.Text.localizationKey = "Crouch/Prone Trackpad Threshold (Vive):";
                 MakeSliderSmooth(viveWandCrouchThresholdSlider, 0.2f, 0.95f, () => settings.viveWandCrouchTrackpadThreshold,
                     (v) => settings.viveWandCrouchTrackpadThreshold = v, (v) => Remap(v, 0.2f, 0.95f, 0f, 10f).ToString("0"));
 
                 viveWandVaultHoldTimeSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-                viveWandVaultHoldTimeSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, new ReadOnlyCollection<float>(ViveWandVaultTimeValues),
+                viveWandVaultHoldTimeSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, new ReadOnlyCollection<float>(ViveWandVaultTimeValues),
                     (x) => x.ToString("F1") + "s");
                 viveWandVaultHoldTimeSlider.Text.localizationKey = "Vault/Jump Hold Time (Vive):";
                 MakeSliderSmooth(viveWandVaultHoldTimeSlider, 0.05f, 1.5f, () => settings.viveWandVaultHoldTime,
@@ -619,15 +621,15 @@ namespace TarkovVR.Source.Settings
             // Scope render resolution
             ReadOnlyCollection<string> opticResOpts = new ReadOnlyCollection<string>(new List<string> { "256", "512", "768", "1024 (Vanilla)" });
             opticResolutionDropDown = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, gPanel);
-            opticResolutionDropDown.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.VoipDevice, opticResOpts, (x) => !(x == "512") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            opticResolutionDropDown.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, opticResOpts, (x) => !(x == "512") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
             opticResolutionDropDown.Text.localizationKey = "Scope Render Resolution: ";
             opticResolutionDropDown.DropDown.SetLabelText(OpticResLabel(settings.opticRenderResolution));
-            opticResolutionDropDown.DropDown.gclass1626_0.Action_0 = ChangeOpticResolution;
+            opticResolutionDropDown.DropDown._onValueChanged._onChange = ChangeOpticResolution;
 
             // Shadows
             ReadOnlyCollection<string> gShadowOpts = new ReadOnlyCollection<string>(new List<string> { "Normal", "Disable Near Shadows", "Distant Shadows (FPS hit)" });
             shadowOptsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, gPanel);
-            shadowOptsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.VoipDevice, gShadowOpts, (x) => !(x == "Normal") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
+            shadowOptsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, gShadowOpts, (x) => !(x == "Normal") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
             shadowOptsToggle.Text.localizationKey = "Shadows Settings: ";
             if (settings.shadowOpt == ShadowOpt.Normal)
                 shadowOptsToggle.DropDown.SetLabelText("Normal");
@@ -635,16 +637,16 @@ namespace TarkovVR.Source.Settings
                 shadowOptsToggle.DropDown.SetLabelText("Disable Near Shadows");
             else
                 shadowOptsToggle.DropDown.SetLabelText("Distant Shadows (FPS hit)");
-            shadowOptsToggle.DropDown.gclass1626_0.Action_0 = ChangeShadowOpts;
+            shadowOptsToggle.DropDown._onValueChanged._onChange = ChangeShadowOpts;
 
             lodBiasSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            lodBiasSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            lodBiasSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             lodBiasSlider.Text.localizationKey = "LOD Bias Factor (FPS Hit):";
             MakeSliderSmooth(lodBiasSlider, 0.5f, 2f, () => settings.lodBias,
                 (v) => settings.lodBias = v, (v) => v.ToString("0.00"));
 
             emptySpacingSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
+            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             emptySpacingSlider.Slider.gameObject.SetActive(false);
             emptySpacingSlider.Text.gameObject.SetActive(false);
 
@@ -658,36 +660,36 @@ namespace TarkovVR.Source.Settings
             */
             // Fog
             disableFogToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            disableFogToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            disableFogToggle.Toggle.action_0 = SetDisableFog;
+            disableFogToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            disableFogToggle.Toggle._onValueChanged = SetDisableFog;
             disableFogToggle.Text.localizationKey = "Disable Fog - Worse aliasing if enabled";
             disableFogToggle.Toggle.UpdateValue(settings.disablePrismFog);
 
             // Hide arms
             hideArmsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            hideArmsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            hideArmsToggle.Toggle.action_0 = SetHideArms;
+            hideArmsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            hideArmsToggle.Toggle._onValueChanged = SetHideArms;
             hideArmsToggle.Text.localizationKey = "Hide Arms";
             hideArmsToggle.Toggle.UpdateValue(settings.hideArms);
 
             // Hide legs
             hideLegsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            hideLegsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            hideLegsToggle.Toggle.action_0 = SetHideLegs;
+            hideLegsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            hideLegsToggle.Toggle._onValueChanged = SetHideLegs;
             hideLegsToggle.Text.localizationKey = "Hide Legs";
             hideLegsToggle.Toggle.UpdateValue(settings.hideLegs);
 
             // Manual eating
             manualEatingToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            manualEatingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            manualEatingToggle.Toggle.action_0 = SetManualEating;
+            manualEatingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            manualEatingToggle.Toggle._onValueChanged = SetManualEating;
             manualEatingToggle.Text.localizationKey = "Manual Eating";
             manualEatingToggle.Toggle.UpdateValue(settings.manualEating);
 
             // Disable mouse input
             disableMouseInput = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            disableMouseInput.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            disableMouseInput.Toggle.action_0 = SetDisableMouseInput;
+            disableMouseInput.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            disableMouseInput.Toggle._onValueChanged = SetDisableMouseInput;
             disableMouseInput.Text.localizationKey = "Disable Mouse Input";
             disableMouseInput.Toggle.UpdateValue(settings.disableMouseInput);
 
@@ -695,8 +697,8 @@ namespace TarkovVR.Source.Settings
             // for all world LootItems (a Corpse IS a LootItem), which inadvertently hid the body
             // context menu too. On (default) keeps it hidden; off brings the gaze menu back for bodies.
             disableCorpseContextMenuToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            disableCorpseContextMenuToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            disableCorpseContextMenuToggle.Toggle.action_0 = SetDisableCorpseContextMenu;
+            disableCorpseContextMenuToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            disableCorpseContextMenuToggle.Toggle._onValueChanged = SetDisableCorpseContextMenu;
             disableCorpseContextMenuToggle.Text.localizationKey = "Disable Corpse Context Menu: ";
             disableCorpseContextMenuToggle.Toggle.UpdateValue(settings.disableCorpseContextMenu);
 
@@ -841,7 +843,7 @@ namespace TarkovVR.Source.Settings
         {
             if (settingsUi != null)
             {
-                settingsUi.settingsTab_0.gameObject.active = false;
+                settingsUi._currentTab.gameObject.active = false;
                 if (vrGraphicsObject)
                     vrGraphicsObject.active = false;
                 if (vrSettingsObject)
@@ -857,7 +859,7 @@ namespace TarkovVR.Source.Settings
         {
             if (settingsUi != null)
             {
-                settingsUi.settingsTab_0.gameObject.active = false;
+                settingsUi._currentTab.gameObject.active = false;
                 if (vrSettingsObject)
                     vrSettingsObject.active = false;
                 if (vrGraphicsObject)
@@ -1246,8 +1248,8 @@ namespace TarkovVR.Source.Settings
             // SetResolution gets intercepted by WeaponPatches.ScaleOpticResolution which reads this setting.
             try
             {
-                if (CameraClass.Exist && CameraClass.Instance.OpticCameraManager != null && CameraClass.Instance.OpticCameraManager.Camera != null)
-                    CameraClass.Instance.OpticCameraManager.SetResolution(res);
+                if (CameraManager.Exist && CameraManager.Instance.OpticCameraManager != null && CameraManager.Instance.OpticCameraManager.Camera != null)
+                    CameraManager.Instance.OpticCameraManager.SetResolution(res);
             }
             catch { }
         }

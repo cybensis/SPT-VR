@@ -244,7 +244,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             EnsureConeAim(hand);
             // Mirror the game's interactable mask (what the gaze raycast hits) unless overridden.
-            currentLootMask = lootLayerMask != 0 ? lootLayerMask : EFT.GameWorld.int_0;
+            currentLootMask = lootLayerMask != 0 ? lootLayerMask : EFT.GameWorld._interactiveLootMaskWPlayer;
 
             // Origin from the actual hand grip (the rig transform is the WRIST). Direction still
             // from the tunable coneAim (child of the hand) so the aim-euler tuning holds.
@@ -641,7 +641,7 @@ namespace TarkovVR.Source.Player.Interactions
             cachedRigidbody.isKinematic = true;
             cachedRigidbody.detectCollisions = true;
             cachedRigidbody.useGravity = false;
-            cachedRigidbody.mass = item.item_0.TotalWeight;
+            cachedRigidbody.mass = item._item.TotalWeight;
 
             cachedHand = VRGlobals.vrPlayer.LeftHand.transform;
             Vector3 itemPos = item.transform.position;

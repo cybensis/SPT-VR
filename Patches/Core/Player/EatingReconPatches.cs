@@ -113,7 +113,7 @@ namespace TarkovVR.Patches.Core.Player
             {
                 EFT.Player player = instance._player;
                 if (player == null || !player.IsYourPlayer) return;
-                if (!(instance.Item is FoodDrinkItemClass)) return;
+                if (!(instance.Item is FoodDrink)) return;
 
                 activeController = instance;
                 lastState = 0;
@@ -657,7 +657,7 @@ namespace TarkovVR.Patches.Core.Player
         private static void ReconSpawn(MedsController __instance) => EatingRecon.OnSpawn(__instance);
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseSoundPlayer), "OnSound")]
+        [HarmonyPatch(typeof(BaseSoundPlayer), "IEventsConsumer.OnSound")]
         private static void ReconSound(BaseSoundPlayer __instance, string StringParam) => EatingRecon.OnSound(__instance, StringParam);
 
         [HarmonyPostfix]

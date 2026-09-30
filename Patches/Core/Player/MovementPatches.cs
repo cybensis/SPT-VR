@@ -14,7 +14,8 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Valve.VR;
 using Valve.VR.InteractionSystem;
-using static PlayerPhysicalClass;
+using EFT.CameraControl;
+using static Physical;
 using static RootMotion.FinalIK.AimPoser;
 using static UnityEngine.UIElements.VisualElement;
 
@@ -43,8 +44,8 @@ namespace TarkovVR.Patches.Core.Player
 
         }
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(Prone2StandStateClass), "Exit")]
-        private static void SetPlayerRotateOnTransition2Stand(Prone2StandStateClass __instance)
+        [HarmonyPatch(typeof(Prone2StandState), "Exit")]
+        private static void SetPlayerRotateOnTransition2Stand(Prone2StandState __instance)
         {
 
             if (!__instance.MovementContext._player.IsYourPlayer)
@@ -53,8 +54,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(Transit2ProneStateClass), "Enter")]
-        private static void SetPlayerRotateOnTransition2Prone(Transit2ProneStateClass __instance)
+        [HarmonyPatch(typeof(Transit2ProneState), "Enter")]
+        private static void SetPlayerRotateOnTransition2Prone(Transit2ProneState __instance)
         {
 
             if (!__instance.MovementContext._player.IsYourPlayer)
@@ -82,8 +83,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(ProneIdleStateClass), "Rotate")]
-        private static bool SetPlayerRotateOnProneStationary(ProneIdleStateClass __instance, ref Vector2 deltaRotation)
+        [HarmonyPatch(typeof(PronePlayerState), "Rotate")]
+        private static bool SetPlayerRotateOnProneStationary(PronePlayerState __instance, ref Vector2 deltaRotation)
         {
 
             if (!__instance.MovementContext._player.IsYourPlayer)
@@ -101,8 +102,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(ProneMoveStateClass), "Rotate")]
-        private static bool SetPlayerRotateOnProneMoving(ProneMoveStateClass __instance, ref Vector2 deltaRotation)
+        [HarmonyPatch(typeof(ProneMovePlayerState), "Rotate")]
+        private static bool SetPlayerRotateOnProneMoving(ProneMovePlayerState __instance, ref Vector2 deltaRotation)
         {
             if (!__instance.MovementContext._player.IsYourPlayer)
                 return true;
@@ -183,14 +184,14 @@ namespace TarkovVR.Patches.Core.Player
             leftJoystickLastUsed = leftJoystickUsed;
 
             if (yAxis > xAxis)
-                VRGlobals.player.MovementContext.RelativeSpeed = yAxis;
+                VRGlobals.player.MovementContext._relativeSpeed = yAxis;
             else
-                VRGlobals.player.MovementContext.RelativeSpeed = xAxis;
+                VRGlobals.player.MovementContext._relativeSpeed = xAxis;
 
             // Dragging a body weighs you down: scale locomotion speed by the body-drag multiplier
             // (1 when not dragging). Derived from the corpse's ragdoll mass on grab — see BodyGrab.cs.
             VRGlobals.player.MovementContext.SetCharacterMovementSpeed(
-                VRGlobals.player.MovementContext.RelativeSpeed * VRGlobals.player.MovementContext.MaxSpeed
+                VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed
                 * Source.Player.Interactions.HandsInteractionController.bodyDragMoveSpeedMultiplier);
         }
 
@@ -222,11 +223,11 @@ namespace TarkovVR.Patches.Core.Player
         // GClass1913 is a class used by the PlayerCameraController to position and rotate the camera, PlayerCameraController holds the abstract class GClass1943 which this inherits
         
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(FirstPersonCameraOperationClass), "ManualLateUpdate")]
-        private static bool PositionCamera(FirstPersonCameraOperationClass __instance)
+        [HarmonyPatch(typeof(FirstPersonCameraState), "ManualLateUpdate")]
+        private static bool PositionCamera(FirstPersonCameraState __instance)
         {
             
-            if (!__instance.Player_0.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
+            if (!__instance._player.IsYourPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return true;
 
             // When medding or eating, we need to rely on this code to position the upper body, and it will set the empty hands but the current gun interaction controller should be disabled
@@ -239,7 +240,7 @@ namespace TarkovVR.Patches.Core.Player
                 
             }
             else if (!VRGlobals.emptyHands)
-                VRGlobals.camRoot.transform.position = new Vector3(__instance.Player_0.Transform.position.x, __instance.Player_0.Transform.position.y + 1.5f, __instance.Player_0.Transform.position.z);
+                VRGlobals.camRoot.transform.position = new Vector3(__instance._player.Transform.position.x, __instance._player.Transform.position.y + 1.5f, __instance._player.Transform.position.z);
             //Plugin.MyLog.LogError($"playerY={__instance.Player_0.Transform.position.y:F5}, camRootY={VRGlobals.camRoot.transform.position.y:F5}, rightHandY={VRGlobals.vrPlayer.RightHand.transform.position.y:F5}");
             return false;
         }

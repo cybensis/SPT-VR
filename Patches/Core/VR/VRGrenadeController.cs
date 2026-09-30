@@ -119,20 +119,20 @@ namespace TarkovVR.Patches.Core.VR
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
         private static void CheckGrenadeAnimation(EFT.Player __instance)
         {
-            if (!__instance.IsYourPlayer || !throwInProgress || activeGrenadeController == null || activeGrenadeController.firearmsAnimator_0 == null)
+            if (!__instance.IsYourPlayer || !throwInProgress || activeGrenadeController == null || activeGrenadeController._firearmsAnimator == null)
                 return;
 
-            AnimatorStateInfoWrapper stateInfo = activeGrenadeController.firearmsAnimator_0.Animator.GetCurrentAnimatorStateInfo(1);
+            AnimatorStateInfoWrapper stateInfo = activeGrenadeController._firearmsAnimator.Animator.GetCurrentAnimatorStateInfo(1);
 
             if (isFrozen)
             {
                 if (stateInfo.normalizedTime < lastNormalizedTime && lastNormalizedTime >= 0.3f)
-                    activeGrenadeController.firearmsAnimator_0.Animator.speed = 0f;
+                    activeGrenadeController._firearmsAnimator.Animator.speed = 0f;
 
                 if (Time.time >= freezeStartTime + freezeDuration)
                 {
-                    activeGrenadeController.firearmsAnimator_0.Animator.speed = 1f;
-                    activeGrenadeController.method_2(); // Calls OnDropFinishedAction()
+                    activeGrenadeController._firearmsAnimator.Animator.speed = 1f;
+                    activeGrenadeController.OnDropFinishedAction(); // Calls OnDropFinishedAction()
                     throwInProgress = false;
                     activeGrenadeController = null;
                     isFrozen = false;
@@ -143,8 +143,8 @@ namespace TarkovVR.Patches.Core.VR
 
             if (stateInfo.normalizedTime < lastNormalizedTime && lastNormalizedTime > 0.45f)
             {
-                activeGrenadeController.firearmsAnimator_0.Animator.Play(590329303, 1, 0f);
-                activeGrenadeController.firearmsAnimator_0.Animator.speed = 0f;
+                activeGrenadeController._firearmsAnimator.Animator.Play(590329303, 1, 0f);
+                activeGrenadeController._firearmsAnimator.Animator.speed = 0f;
                 freezeStartTime = Time.time;
                 isFrozen = true;
             }
@@ -152,7 +152,7 @@ namespace TarkovVR.Patches.Core.VR
             lastNormalizedTime = stateInfo.normalizedTime;
         }
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseGrenadeHandsController), "method_9")]
+        [HarmonyPatch(typeof(BaseGrenadeHandsController), "ThrowGrenadeInner")]
         private static bool RepositionGrenadeThrow(BaseGrenadeHandsController __instance, ref Vector3? throwPosition, float timeSinceSafetyLevelRemoved, float lowHighThrow, Vector3 direction, float forcePower, bool lowThrow, bool withVelocity)
         {
             if (!__instance._player.IsYourPlayer)
@@ -166,7 +166,7 @@ namespace TarkovVR.Patches.Core.VR
             Quaternion throwRot = ControllerVelocity.GetSteamVRRotation(SteamVR_Input_Sources.RightHand);
 
             // Starts animation around the point where hand is opening to throw
-            __instance.firearmsAnimator_0.Animator.Play(590329303, 1, 0.40f);
+            __instance._firearmsAnimator.Animator.Play(590329303, 1, 0.40f);
             throwInProgress = true;
             activeGrenadeController = __instance;
 
@@ -194,7 +194,7 @@ namespace TarkovVR.Patches.Core.VR
                 force += __instance._player.Velocity;
             }
 
-            __instance.vmethod_2(
+            __instance.ThrowGrenade(
                 timeSinceSafetyLevelRemoved,
                 VRGlobals.vrOffsetter.transform.TransformPoint(throwPos),
                 VRGlobals.vrOffsetter.transform.rotation * throwRot,

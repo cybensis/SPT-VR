@@ -76,15 +76,15 @@ namespace TarkovVR.Patches.Visuals
         private static void ForceVRComputeShader(GPUInstancerManager __instance)
         {
             // Force load the VR compute shader
-            var vrShader = (ComputeShader)Resources.Load(GClass1262.CAMERA_VR_COMPUTE_RESOURCE_PATH);
+            var vrShader = (ComputeShader)Resources.Load(GPUInstancerConstants.CAMERA_VR_COMPUTE_RESOURCE_PATH);
             if (vrShader != null)
             {
                 AccessTools.StaticFieldRefAccess<ComputeShader>(typeof(GPUInstancerManager), "_cameraComputeShader") = vrShader;
 
-                var kernelIDs = new int[GClass1262.CAMERA_COMPUTE_KERNELS.Length];
+                var kernelIDs = new int[GPUInstancerConstants.CAMERA_COMPUTE_KERNELS.Length];
                 for (int i = 0; i < kernelIDs.Length; i++)
                 {
-                    kernelIDs[i] = vrShader.FindKernel(GClass1262.CAMERA_COMPUTE_KERNELS[i]);
+                    kernelIDs[i] = vrShader.FindKernel(GPUInstancerConstants.CAMERA_COMPUTE_KERNELS[i]);
                 }
                 AccessTools.StaticFieldRefAccess<int[]>(typeof(GPUInstancerManager), "_cameraComputeKernelIDs") = kernelIDs;
             }
@@ -115,15 +115,15 @@ namespace TarkovVR.Patches.Visuals
             {
                 __instance.mvpMatrixFloats = new float[16];
             }
-            GClass1274.Matrix4x4ToFloatArray(matrix4x, __instance.mvpMatrixFloats);
-            if (__instance.hasOcclusionGenerator && __instance.hiZOcclusionGenerator.isVREnabled && GClass1262.gpuiSettings.testBothEyesForVROcclusion)
+            GPUInstancerUtility.Matrix4x4ToFloatArray(matrix4x, __instance.mvpMatrixFloats);
+            if (__instance.hasOcclusionGenerator && __instance.hiZOcclusionGenerator.isVREnabled && GPUInstancerConstants.gpuiSettings.testBothEyesForVROcclusion)
             {
                 Matrix4x4 matrix4x2 = __instance.mainCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right) * __instance.mainCamera.worldToCameraMatrix;
                 if (__instance.mvpMatrix2Floats == null || __instance.mvpMatrix2Floats.Length != 16)
                 {
                     __instance.mvpMatrix2Floats = new float[16];
                 }
-                GClass1274.Matrix4x4ToFloatArray(matrix4x2, __instance.mvpMatrix2Floats);
+                GPUInstancerUtility.Matrix4x4ToFloatArray(matrix4x2, __instance.mvpMatrix2Floats);
             }
             __instance.cameraPosition = __instance.mainCamera.transform.position;
             return false;
