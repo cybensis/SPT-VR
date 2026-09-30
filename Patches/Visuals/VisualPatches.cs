@@ -90,6 +90,33 @@ namespace TarkovVR.Patches.Visuals
             return true;
         }
 
+        // The directional (sun) volumetric light builds its far plane corners with Camera.current.ViewportToWorldPoint at
+        // farClipPlane. With the per-eye VR projection the bottom corners land just outside the frustum, so Unity logs
+        // "Screen position out of view frustum" twice every frame and doesn't return a usable point. Swap those calls for one
+        // that uses the active eye's matrices directly, matching the per-eye fix above.
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(VolumetricLight), "SetupDirectionalLight")]
+        private static IEnumerable<CodeInstruction> FixDirectionalLightFrustumCorners(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo original = AccessTools.Method(typeof(Camera), nameof(Camera.ViewportToWorldPoint), new[] { typeof(Vector3) });
+            MethodInfo replacement = AccessTools.Method(typeof(VisualPatches), nameof(EyeViewportToWorldPoint));
+            foreach (var code in instructions)
+                yield return code.Calls(original) ? new CodeInstruction(OpCodes.Call, replacement) : code;
+        }
+
+        private static Vector3 EyeViewportToWorldPoint(Camera cam, Vector3 viewport)
+        {
+            if (!XRSettings.enabled || cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Mono)
+                return cam.ViewportToWorldPoint(viewport);
+
+            Camera.StereoscopicEye eye = (Camera.StereoscopicEye)cam.stereoActiveEye;
+            // Point on the far plane through this viewport position, in view space (the camera looks down -Z),
+            // then scaled so it sits viewport.z units in front of the camera like ViewportToWorldPoint does.
+            Vector3 viewDir = cam.GetStereoProjectionMatrix(eye).inverse.MultiplyPoint(new Vector3(viewport.x * 2f - 1f, viewport.y * 2f - 1f, 1f));
+            Vector3 viewPoint = viewDir * (viewport.z / -viewDir.z);
+            return cam.GetStereoViewMatrix(eye).inverse.MultiplyPoint(viewPoint);
+        }
+
         private static Dictionary<HBAO, RenderTexture[]> stereoAOTargets = new();
 
         [HarmonyPrefix]
