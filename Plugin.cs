@@ -18,13 +18,20 @@ using TarkovVR.Source.Settings;
 
 namespace TarkovVR
 {
-    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.3.0")]
+    [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "1.3.1")]
     // Soft: the FikaSync module only loads its plugin when FIKA is present, so we must NOT hard-depend
     // on it (that would break solo VR). We still ship its DLL alongside ours and load after it here.
     [BepInDependency("com.matsix.sptvr.fikasync", BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft: ORBIT (bot-AI mod) is referenced (publicized DLL) so dragged corpses can relocate their loot
+    // waypoints, but the VR mod must still load without it. The dependency only guarantees ORBIT loads
+    // first so it's in the Chainloader registry when we detect it below.
+    [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
+        // Verbose logging for the dragged-corpse loot-relocation path (OrbitSupport): logs whether an ORBIT
+        // waypoint / vanilla DeadBody record was found and where it was moved. Off by default; flip live.
+        public static bool debugBodyDragLoot = false;
         private bool vrInitializedSuccessfully = false;
         public static GameObject WeaponModdingAnchor { get; set; }
 
@@ -44,7 +51,10 @@ namespace TarkovVR
 
             ApplyPatches("TarkovVR.Patches");
             InitializeConditionalPatches();
-            
+
+            // Ctrl+F10 in a raid: both-eyes vs left-eye-only cost measurement (logs "[StereoCost]").
+            gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>();
+
         }
 
         private bool InitializeVR()
@@ -231,7 +241,12 @@ namespace TarkovVR
             if (!vrInitializedSuccessfully)
                 return; // Skip patching if VR failed to initialize
 
-            /*string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\kmyuhkyuk-KmyTarkovApi\\KmyTarkovConfiguration.dll");
+            InstalledMods.ORBITInstalled = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("com.chazut.orbit");
+            MyLog.LogInfo(InstalledMods.ORBITInstalled
+                ? "ORBIT detected — dragged corpses will relocate their loot waypoints."
+                : "ORBIT not installed — corpse loot-relocation limited to vanilla DeadBodiesController.");
+
+            string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\kmyuhkyuk-KmyTarkovApi\\KmyTarkovConfiguration.dll");
 
             if (File.Exists(modDllPath))
             {
@@ -255,9 +270,9 @@ namespace TarkovVR
             else
             {
                 MyLog.LogWarning("EFT API dll not found, support patches will not be applied.");
-            }*/
+            }
 
-            string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
+            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
 
             if (File.Exists(modDllPath))
             {
@@ -389,6 +404,9 @@ namespace TarkovVR
             SptVrFikaSync.FikaVrSync.getLocalDraggedCorpseNetId = () => Source.Player.Interactions.HandsInteractionController.localDraggedCorpseNetId;
             SptVrFikaSync.FikaVrSync.getLocalBodyGrabTime = () => Source.Player.Interactions.HandsInteractionController.bodyGrabTime;
             SptVrFikaSync.FikaVrSync.onYieldBodyDrag = () => VRGlobals.handsInteractionController?.RelinquishBodyDrag();
+            // Corpse loot-AI sync for co-op is handled inside the companion (it runs on the headless/host
+            // where ORBIT lives; SPT-VR.dll does not). The VR mod just SENDS the grab/settle markers via
+            // FikaVrSync.SendCorpseLoot* from HandsInteractionController — no callback needed here.
         }
 
         private void ApplyPatches(string @namespace)

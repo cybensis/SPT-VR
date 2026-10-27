@@ -43,6 +43,8 @@ using Valve.VR;
 using EFT.InputSystem;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
+using static EFT.Player.FirearmController;
+using static PhysicsExtensions;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -57,10 +59,10 @@ namespace TarkovVR.Patches.Core.Player
         public static Transform currentScope;
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(FirearmController.GClass2029), "method_13")]
-        private static void UnlockHand(FirearmController.GClass2029 __instance)
+        [HarmonyPatch(typeof(AutomaticFireOperation), "SwitchToMalfunction")]
+        private static void UnlockHand(AutomaticFireOperation __instance)
         {
-            if (!__instance.Player_0.IsYourPlayer)
+            if (!__instance.Player.IsYourPlayer)
                 return;
             /*
             if (__instance.Weapon_0.MalfState.State != 0)
@@ -188,7 +190,7 @@ namespace TarkovVR.Patches.Core.Player
                 return;
             PortableRangeFinderController instance = (PortableRangeFinderController) __instance;
             rangeFinder = instance;
-            instance.tacticalRangeFinderController_0._boneToCastRay.parent.Find("linza").gameObject.SetActive(false);
+            instance._rangeFinderController._boneToCastRay.parent.Find("linza").gameObject.SetActive(false);
             VRGlobals.emptyHands = instance.ControllerGameObject.transform;
             if (VRSettings.GetLeftHandedMode())
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
@@ -237,7 +239,7 @@ namespace TarkovVR.Patches.Core.Player
 
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(PortableRangeFinderController), "method_16")]
+        [HarmonyPatch(typeof(PortableRangeFinderController), "CG_GetOperationFactoryDelegates1")]
         private static void UnequipRangeFinder(PortableRangeFinderController __instance)
         {
             if (!__instance._player.IsYourPlayer )
@@ -491,8 +493,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.KnifeController), "method_9")]
-        private static void UnequipVrKnife(EFT.Player.KnifeController __instance)
+        [HarmonyPatch(typeof(KnifeController), "method_9")]
+        private static void UnequipVrKnife(KnifeController __instance)
         {
             if (!__instance._player.IsYourPlayer)
                 return;
@@ -506,8 +508,8 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_49")]
-        private static void AddNewMagToInteractionController(EFT.Player.FirearmController __instance)
+        [HarmonyPatch(typeof(FirearmController), "method_49")]
+        private static void AddNewMagToInteractionController(FirearmController __instance)
         {
             if (!__instance._player.IsYourPlayer)
                 return;
@@ -522,15 +524,15 @@ namespace TarkovVR.Patches.Core.Player
                 }
             }
 
-            if (__instance.weaponPrefab_0)
+            if (__instance._weaponPrefab)
             {
-                if (__instance.weaponPrefab_0.Renderers != null)
+                if (__instance._weaponPrefab.Renderers != null)
                 {
-                    for (int i = 0; i < __instance.weaponPrefab_0.Renderers.Length; i++)
+                    for (int i = 0; i < __instance._weaponPrefab.Renderers.Length; i++)
                     {
-                        if (__instance.weaponPrefab_0.Renderers[i].transform.parent.GetComponent<MagazineInHandsVisualController>())
+                        if (__instance._weaponPrefab.Renderers[i].transform.parent.GetComponent<MagazineInHandsVisualController>())
                         {
-                            currentGunInteractController.SetMagazine(__instance.weaponPrefab_0.Renderers[i].transform, false);
+                            currentGunInteractController.SetMagazine(__instance._weaponPrefab.Renderers[i].transform, false);
                             return;
                         }
                     }
@@ -557,7 +559,7 @@ namespace TarkovVR.Patches.Core.Player
                     return false;
                 __instance._renderer.transform.localPosition = reticle.Position;
                 __instance._renderer.transform.localEulerAngles = reticle.Rotation;
-                __instance.float_1 = reticle.Scale * 0.1f;
+                __instance._scale = reticle.Scale * 0.1f;
                 return false;
             }
             catch (Exception ex)
@@ -568,10 +570,10 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(EFT.Player.FirearmController), "method_46")]
-        public static void AddNewTacDeviceToInteractionController(EFT.Player.FirearmController __instance)
+        [HarmonyPatch(typeof(FirearmController), "method_46")]
+        public static void AddNewTacDeviceToInteractionController(FirearmController __instance)
         {
-            if (!__instance._player.IsYourPlayer || __instance.weaponManagerClass == null)
+            if (!__instance._player.IsYourPlayer || __instance.Firearms == null)
                 return;
 
             if (VRGlobals.menuOpen)
@@ -584,9 +586,9 @@ namespace TarkovVR.Patches.Core.Player
                 }
             }
 
-            var weaponManager = __instance.weaponManagerClass;
+            var weaponManager = __instance.Firearms;
 
-            var sightControllers = weaponManager.SightModVisualControllers_0;
+            var sightControllers = weaponManager._sightModVisualControllers;
             if (sightControllers == null)
             {
                 VRGlobals.scopes.Clear();
@@ -597,7 +599,7 @@ namespace TarkovVR.Patches.Core.Player
 
             foreach (var sightController in sightControllers)
             {
-                if (sightController.scopePrefabCache_0 == null) continue;
+                if (sightController._scopePrefabCache == null) continue;
 
                 Transform scopeTransform = null;
 
@@ -642,8 +644,8 @@ namespace TarkovVR.Patches.Core.Player
 
             // This goes through all the sights currently on your gun and selects the first optic it finds as the selected sight
             // It ensures that a sight using the camera will always be the active sight
-            if (__instance.weaponManagerClass?.SightModVisualControllers_0 != null &&
-                __instance.weaponManagerClass.SightModVisualControllers_0.Length > 1)
+            if (__instance.Firearms?._sightModVisualControllers != null &&
+                __instance.Firearms._sightModVisualControllers.Length > 1)
             {
                 try
                 {
@@ -656,7 +658,7 @@ namespace TarkovVR.Patches.Core.Player
 
                     // Check each sight to find an optic
                     bool foundOptic = false;
-                    int sightCount = __instance.weaponManagerClass.SightModVisualControllers_0.Length;
+                    int sightCount = __instance.Firearms._sightModVisualControllers.Length;
 
                     for (int i = 0; i < sightCount; i++)
                     {
@@ -740,8 +742,8 @@ namespace TarkovVR.Patches.Core.Player
             {
                 var shader = Shader.Find("Hidden/HighLightMesh");
                 __instance.Mat = new Material(shader);
-                __instance.Mat.SetColor(HighLightMesh.int_2, Color.clear);
-                __instance.Mat.SetTexture(HighLightMesh.int_4, __instance.renderTexture_0);
+                __instance.Mat.SetColor(HighLightMesh._color, Color.clear);
+                __instance.Mat.SetTexture(HighLightMesh._maskRTId, __instance._maskRT);
             }
 
             if (!_highLightHandlers.ContainsKey(__instance))
@@ -783,9 +785,9 @@ namespace TarkovVR.Patches.Core.Player
                 if (existingHighlight != null)
                 {
                     // Remove any command buffers
-                    if (existingHighlight.commandBuffer_0 != null)
+                    if (existingHighlight._cmb != null)
                     {
-                        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight.commandBuffer_0);
+                        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight._cmb);
                     }
                 }
             }
@@ -837,12 +839,12 @@ namespace TarkovVR.Patches.Core.Player
 
             VRGlobals.scopes.Clear();
 
-            for (int i = 0; i < __instance.weaponManagerClass.SightModVisualControllers_0.Length; i++)
+            for (int i = 0; i < __instance.Firearms._sightModVisualControllers.Length; i++)
             {
-                if (__instance.weaponManagerClass.SightModVisualControllers_0[i].scopePrefabCache_0 == null)
+                if (__instance.Firearms._sightModVisualControllers[i]._scopePrefabCache == null)
                     continue;
 
-                Transform baseTransform = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform;
+                Transform baseTransform = __instance.Firearms._sightModVisualControllers[i].transform;
 
                 // Try to find in direct children
                 Transform scopeTransform = baseTransform.Find("mod_aim_camera") ?? baseTransform.Find("mod_aim_camera_001");
@@ -881,9 +883,9 @@ namespace TarkovVR.Patches.Core.Player
                     continue;
 
                 VRGlobals.scopes.Add(scopeTransform);
-                SightModVisualControllers visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].GetComponent<SightModVisualControllers>();
+                SightModVisualControllers visualController = __instance.Firearms._sightModVisualControllers[i].GetComponent<SightModVisualControllers>();
                 if (!visualController)
-                    visualController = __instance.weaponManagerClass.SightModVisualControllers_0[i].transform.parent.GetComponent<SightModVisualControllers>();
+                    visualController = __instance.Firearms._sightModVisualControllers[i].transform.parent.GetComponent<SightModVisualControllers>();
 
                 if (visualController && VRGlobals.vrOpticController)
                 {
@@ -902,7 +904,7 @@ namespace TarkovVR.Patches.Core.Player
             Transform leftHandMarker = __instance.HandsHierarchy.Transforms[10];
 
             // Setup custom left hand marker position for a few guns that are very misaligned
-            string prefabKey = __instance.weaponPrefab_0.name.Replace("(Clone)", "");
+            string prefabKey = __instance._weaponPrefab.name.Replace("(Clone)", "");
             if (LeftHandIKOverrides.TryGetValue(prefabKey, out Vector3 localOffset))
             {
                 Transform existing = __instance.WeaponRoot.Find("VR_LeftHandIK_Override");
@@ -997,7 +999,7 @@ namespace TarkovVR.Patches.Core.Player
                 __instance.WeaponRoot.transform.SetParent(VRGlobals.weaponHolder.transform, false);
                 VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
 
-                weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(__instance.weaponPrefab_0.name, __instance.Weapon.WeapClass);
+                weaponOffset = WeaponHolderOffsets.GetWeaponHolderOffset(__instance._weaponPrefab.name, __instance.Weapon.WeapClass);
                 float weaponAngleOffset = VRSettings.GetRightHandVerticalOffset();
                 if (weaponAngleOffset < 50)
                 {
@@ -1033,8 +1035,8 @@ namespace TarkovVR.Patches.Core.Player
 
             // This goes through all the sights currently on your gun and selects the first optic it finds as the selected sight
             // It ensures that a sight using the camera will always be the active sight
-            if (__instance.weaponManagerClass?.SightModVisualControllers_0 != null &&
-                __instance.weaponManagerClass.SightModVisualControllers_0.Length > 1)
+            if (__instance.Firearms?._sightModVisualControllers != null &&
+                __instance.Firearms._sightModVisualControllers.Length > 1)
             {
                 try
                 {
@@ -1047,7 +1049,7 @@ namespace TarkovVR.Patches.Core.Player
 
                     // Check each sight to find an optic
                     bool foundOptic = false;
-                    int sightCount = __instance.weaponManagerClass.SightModVisualControllers_0.Length;
+                    int sightCount = __instance.Firearms._sightModVisualControllers.Length;
 
                     for (int i = 0; i < sightCount; i++)
                     {
@@ -1091,7 +1093,7 @@ namespace TarkovVR.Patches.Core.Player
         public static int opticLensResolution = 1024;     // lens/reticle texture size when decoupling (sharp).
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass3687), "SetResolution")]
+        [HarmonyPatch(typeof(OpticCameraManager), "SetResolution")]
         private static void ScaleOpticResolution(ref int resolution)
         {
             // Shrink the optic camera's OWN render target to the user-selected scope resolution (grass-safe:
@@ -1102,10 +1104,10 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GClass3687), "SetResolution")]
-        private static void SetupOpticReticleDecouple(GClass3687 __instance)
+        [HarmonyPatch(typeof(OpticCameraManager), "SetResolution")]
+        private static void SetupOpticReticleDecouple(OpticCameraManager __instance)
         {
-            if (__instance == null || __instance.Camera == null || __instance.RenderTexture_0 == null)
+            if (__instance == null || __instance.Camera == null || __instance._renderTexture == null)
                 return;
 
             var decoupler = __instance.Camera.GetComponent<TarkovVR.Source.Weapons.OpticReticleDecoupler>();
@@ -1116,13 +1118,13 @@ namespace TarkovVR.Patches.Core.Player
                 // SetResolution just set). Drop the decoupler + make sure _CamTex points back at RenderTexture_0.
                 if (decoupler != null)
                 {
-                    UnityEngine.Shader.SetGlobalTexture("_CamTex", __instance.RenderTexture_0);
+                    UnityEngine.Shader.SetGlobalTexture("_CamTex", __instance._renderTexture);
                     UnityEngine.Object.Destroy(decoupler);
                 }
                 return;
             }
 
-            int lensSize = Mathf.Max(opticLensResolution, __instance.RenderTexture_0.width);
+            int lensSize = Mathf.Max(opticLensResolution, __instance._renderTexture.width);
 
             if (decoupler == null)
                 decoupler = __instance.Camera.gameObject.AddComponent<TarkovVR.Source.Weapons.OpticReticleDecoupler>();
@@ -1155,41 +1157,35 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!decoupleOpticReticle)
                 return true; // vanilla low-res draw
-            __instance.commandBuffer_0?.Clear();
+            __instance._commandBuffer?.Clear();
             return false;
         }
-
-        // CPU/GPU win: the scope re-renders the WHOLE scene every frame - the heavy part is the CPU cost of
-        // culling + submitting draw calls for everything the optic camera sees. BSG hands the optic camera the
-        // MAIN far clip (5000m), so it draws distant geometry you can't meaningfully use through a scope.
-        // Capping it culls those objects from the second render (fewer draw calls = CPU win, fewer tris = GPU).
-        // 0 = disabled (vanilla 5000). We only ever LOWER it, so thermal scopes with a smaller far clip keep it.
-        public static float opticFarClip = 1500f;
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "LateUpdate")]
         private static bool FixAdjustableOptic(EFT.CameraControl.OpticComponentUpdater __instance)
         {
-            if (__instance.MainCamera == null || __instance.transform_0 == null)
+            if (__instance.MainCamera == null || __instance.cameraPivot == null)
             {
                 return false;
             }
-            __instance.transform.position = __instance.transform_0.position;
-            __instance.transform.rotation = __instance.transform_0.rotation;
+            // The updater lives ON the optic camera, so __instance.transform IS the optic camera —
+            // move it onto the pivot (the main camera). 4.1 renamed transform_0 -> cameraPivot; do NOT
+            // let that rename touch the assignment target or the optic camera never gets positioned.
+            __instance.transform.position = __instance.cameraPivot.position;
+            __instance.transform.rotation = __instance.cameraPivot.rotation;
 
-            if (opticFarClip > 0f && __instance.camera_0 != null)
-                __instance.camera_0.farClipPlane = Mathf.Min(__instance.camera_0.farClipPlane, opticFarClip);
-            //__instance.camera_0.useOcclusionCulling = __instance.MainCamera.useOcclusionCulling;
-            if (__instance.undithering_1 != null && __instance.undithering_0 != null)
+            //__instance.opticCamera.useOcclusionCulling = __instance.MainCamera.useOcclusionCulling;
+            if (__instance.undithering != null && __instance.mainUndithering != null)
             {
-                __instance.undithering_1.enabled = __instance.undithering_0.enabled;
-                __instance.undithering_1.shader = __instance.undithering_0.shader;
+                __instance.undithering.enabled = __instance.mainUndithering.enabled;
+                __instance.undithering.shader = __instance.mainUndithering.shader;
             }
-            if (__instance.volumetricLightRenderer_1 != null && __instance.volumetricLightRenderer_0 != null)
+            if (__instance.volumetricLightRenderer != null && __instance.mainVolumetricLightRenderer != null)
             {
-                __instance.volumetricLightRenderer_1.enabled = __instance.volumetricLightRenderer_0.enabled;
-                __instance.volumetricLightRenderer_1.DefaultSpotCookie = __instance.volumetricLightRenderer_0.DefaultSpotCookie;
-                __instance.volumetricLightRenderer_1.Resolution = __instance.volumetricLightRenderer_0.Resolution;
+                __instance.volumetricLightRenderer.enabled = __instance.mainVolumetricLightRenderer.enabled;
+                __instance.volumetricLightRenderer.DefaultSpotCookie = __instance.mainVolumetricLightRenderer.DefaultSpotCookie;
+                __instance.volumetricLightRenderer.Resolution = __instance.mainVolumetricLightRenderer.Resolution;
             }
             TOD_Scattering tod_Scattering_1 = __instance.tod_Scattering_1;
             TOD_Scattering tod_Scattering_0 = __instance.tod_Scattering_0;
@@ -1197,6 +1193,8 @@ namespace TarkovVR.Patches.Core.Player
             MBOIT_Scattering mboit_Scattering_0 = __instance.mboit_Scattering_0;
             if (tod_Scattering_1 != null && tod_Scattering_0 != null)
             {
+                // Keep enabled: FogSix hijacks TOD_Scattering's image effect to draw its fog, so this is what
+                // puts fog in the scope at all.
                 tod_Scattering_1.enabled = tod_Scattering_0.enabled;
                 tod_Scattering_1.DitheringTexture = tod_Scattering_0.DitheringTexture;
                 tod_Scattering_1.GlobalDensity = tod_Scattering_0.GlobalDensity;
@@ -1219,7 +1217,7 @@ namespace TarkovVR.Patches.Core.Player
                     mboit_Scattering_1.ScatterDensityMultiplier = mboit_Scattering_0.ScatterDensityMultiplier;
                     mboit_Scattering_1.SlicesDistributionExponent = mboit_Scattering_0.SlicesDistributionExponent;
                     mboit_Scattering_1.SOFT_SCALE = mboit_Scattering_0.SOFT_SCALE;
-                    float num = Mathf.Min(Mathf.Max(__instance.float_0, 1f), 11f);
+                    float num = Mathf.Min(Mathf.Max(__instance.opticSightFov, 1f), 11f);
                     num = (num - 1f) / 10f;
                     float num2 = 1f + num * __instance.OpticScatterReductionStrength;
                     mboit_Scattering_1.ScatterDensityPower = mboit_Scattering_0.ScatterDensityPower * num2;
@@ -1231,9 +1229,9 @@ namespace TarkovVR.Patches.Core.Player
                     mboit_Scattering_1.ScatteringSlicesComputeShader = mboit_Scattering_0.ScatteringSlicesComputeShader;
                 }
             }
-            if (__instance.opticSight_0.CameraData.IsAdjustableOptic)
+            if (__instance._opticSight.CameraData.IsAdjustableOptic)
             {
-                __instance.scopeZoomHandler_0.UpdateScope();
+                __instance._scopeZoomHandler.UpdateScope();
             }
             return false;
         }
@@ -1270,8 +1268,8 @@ namespace TarkovVR.Patches.Core.Player
 
             if (visualController && VRGlobals.vrOpticController)
             {
-                VRGlobals.vrOpticController.scopeCamera = __instance.camera_0;
-                currentScope = __instance.transform_0;
+                VRGlobals.vrOpticController.scopeCamera = __instance.opticCamera;
+                currentScope = __instance.cameraPivot;
 
                 if (VRSettings.GetLeftHandedMode())
                     currentScope.parent.localScale = new Vector3(-1, 1, 1);
@@ -1342,8 +1340,8 @@ namespace TarkovVR.Patches.Core.Player
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GetActionsClass.Class1750), "method_0")]
-        private static bool PreventUsingStationaryWeapon(GetActionsClass.Class1750 __instance)
+        [HarmonyPatch(typeof(InteractionContextHelper.CG_Class1750), "method_0")]
+        private static bool PreventUsingStationaryWeapon(InteractionContextHelper.CG_Class1750 __instance)
         {
             return false;
         }
@@ -1351,24 +1349,24 @@ namespace TarkovVR.Patches.Core.Player
         //BSG changed something with how physics was being killed which caused physically holding items to break
         //This disables the coroutine that checks to disable physics until you drop the item you're holding
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(LootItem), "method_3")]
+        [HarmonyPatch(typeof(LootItem), "StartPhysics")]
         private static bool DisableCoroutineWhenHeldItem(LootItem __instance)
         {
-            __instance.bool_1 = false;
+            __instance._isWorkCollisionEnter = false;
             
             if (__instance._rigidBody == null) 
                 return false;
             
             Rigidbody rigidBody = __instance._rigidBody;
-            GClass833 visibilityChecker = __instance.GetVisibilityChecker();
-            EFTPhysicsClass.GClass745.SupportRigidbody(rigidBody, __instance.PhysicsQuality, visibilityChecker);
-            __instance.ienumerator_0 = __instance.method_4();
+            ObjectVisibility visibilityChecker = __instance.GetVisibilityChecker();
+            UpdateController.SupportRigidbody(rigidBody, __instance.PhysicsQuality, visibilityChecker);
+            __instance._physicsStopWorker = __instance.PhysicsStopWorker();
 
             bool isHeld = VRGlobals.handsInteractionController != null &&
                           VRGlobals.handsInteractionController.heldItem == __instance;
 
             if (!isHeld)
-                __instance.StartCoroutine(__instance.ienumerator_0);
+                __instance.StartCoroutine(__instance._physicsStopWorker);
             
             return false;
         }
@@ -1387,7 +1385,7 @@ namespace TarkovVR.Patches.Core.Player
 
         // Patch PlayerBridge.TotalWeight getter to include the weight of the currently held item
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(BasePhysicalClass.PlayerBridge), "TotalWeight", MethodType.Getter)]
+        [HarmonyPatch(typeof(PhysicalBase.PlayerBridge), "TotalWeight", MethodType.Getter)]
         private static void AddHeldItemWeight(ref float __result)
         {
             if (!VRSettings.GetHeldItemWeight())
@@ -1402,7 +1400,7 @@ namespace TarkovVR.Patches.Core.Player
 
             try
             {
-                __result += heldItem.item_0.TotalWeight;
+                __result += heldItem._item.TotalWeight;
             }
             catch
             {
@@ -1413,8 +1411,8 @@ namespace TarkovVR.Patches.Core.Player
         // PlayerPhysicalClass.OnWeightUpdated reads Inventory.TotalWeight directly,
         // bypassing PlayerBridge.TotalWeight. Postfix recalculates with the held item weight added.
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(PlayerPhysicalClass), "OnWeightUpdated")]
-        private static void FixWeightAfterOnWeightUpdated(PlayerPhysicalClass __instance)
+        [HarmonyPatch(typeof(Physical), "OnWeightUpdated")]
+        private static void FixWeightAfterOnWeightUpdated(Physical __instance)
         {
             if (!VRSettings.GetHeldItemWeight()) 
                 return;
@@ -1427,20 +1425,20 @@ namespace TarkovVR.Patches.Core.Player
             if (heldItem == null) 
                 return;
             
-            if (!__instance.IobserverToPlayerBridge_0.iPlayer.IsYourPlayer) 
+            if (!__instance._playerBridge.iPlayer.IsYourPlayer) 
                 return;
 
             try
             {
-                float extraWeight = heldItem.item_0.TotalWeight;
-                bool elite = __instance.IobserverToPlayerBridge_0.Skills.StrengthBuffElite;
+                float extraWeight = heldItem._item.TotalWeight;
+                bool elite = __instance._playerBridge.Skills.StrengthBuffElite;
                 float baseWeight = elite
-                    ? (float)__instance.Player_0.InventoryController.Inventory.TotalWeightEliteSkill
-                    : (float)__instance.Player_0.InventoryController.Inventory.TotalWeight;
+                    ? (float)__instance._player.InventoryController.Inventory.TotalWeightEliteSkill
+                    : (float)__instance._player.InventoryController.Inventory.TotalWeight;
                 float totalWeight = baseWeight + extraWeight;
 
                 // Inertia and acceleration
-                BackendConfigSettingsClass.InertiaSettings inertia = Singleton<BackendConfigSettingsClass>.Instance.Inertia;
+                GlobalConfiguration.InertiaSettings inertia = Singleton<GlobalConfiguration>.Instance.Inertia;
                 __instance.Inertia = __instance.CalculateValue(__instance.BaseInertiaLimits, totalWeight);
                 __instance.SprintAcceleration = inertia.SprintAccelerationLimits.InverseLerp(__instance.Inertia);
                 __instance.PreSprintAcceleration = inertia.PreSprintAccelerationLimits.Evaluate(__instance.Inertia);
@@ -1454,20 +1452,20 @@ namespace TarkovVR.Patches.Core.Player
                 __instance.Overweight = __instance.BaseOverweightLimits.InverseLerp(totalWeight);
                 __instance.WalkOverweight = __instance.WalkOverweightLimits.InverseLerp(totalWeight);
                 __instance.WalkSpeedLimit = 1f - __instance.WalkSpeedOverweightLimits.InverseLerp(totalWeight);
-                __instance.Float_3 = __instance.SprintOverweightLimits.InverseLerp(totalWeight);
+                __instance.SprintOverweight = __instance.SprintOverweightLimits.InverseLerp(totalWeight);
 
                 // Consumptions
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.OverweightIdle]
+                __instance.Consumptions[Physical.EConsumptionType.OverweightIdle]
                     .SetActive(__instance, __instance.Overweight >= 1f);
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.OverweightIdle].Delta.SetDirty();
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.SitToStand].AllowsRestoration = __instance.Overweight >= 1f;
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.StandUp].AllowsRestoration = __instance.Overweight >= 1f;
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.Walk].Delta.SetDirty();
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.Sprint].Delta.SetDirty();
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.VaultLegs].Delta.SetDirty();
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.VaultHands].Delta.SetDirty();
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.ClimbLegs].Delta.SetDirty();
-                __instance.Consumptions[PlayerPhysicalClass.EConsumptionType.ClimbHands].Delta.SetDirty();
+                __instance.Consumptions[Physical.EConsumptionType.OverweightIdle].Delta.SetDirty();
+                __instance.Consumptions[Physical.EConsumptionType.SitToStand].AllowsRestoration = __instance.Overweight >= 1f;
+                __instance.Consumptions[Physical.EConsumptionType.StandUp].AllowsRestoration = __instance.Overweight >= 1f;
+                __instance.Consumptions[Physical.EConsumptionType.Walk].Delta.SetDirty();
+                __instance.Consumptions[Physical.EConsumptionType.Sprint].Delta.SetDirty();
+                __instance.Consumptions[Physical.EConsumptionType.VaultLegs].Delta.SetDirty();
+                __instance.Consumptions[Physical.EConsumptionType.VaultHands].Delta.SetDirty();
+                __instance.Consumptions[Physical.EConsumptionType.ClimbLegs].Delta.SetDirty();
+                __instance.Consumptions[Physical.EConsumptionType.ClimbHands].Delta.SetDirty();
 
                 __instance.MaxPoseLevel = (__instance.Overweight >= 1f) ? 0.9f : 1f;
                 __instance.FallDamageMultiplier = Mathf.Lerp(1f, __instance.StaminaParameters.FallDamageMultiplier, __instance.Overweight);
@@ -1479,7 +1477,7 @@ namespace TarkovVR.Patches.Core.Player
 
                 // Re-fire WeightRelatedValuesUpdated on MovementContext so WalkInertia,
                 // TiltInertia, SprintBrakeInertia etc. are recalculated with the correct Inertia
-                __instance.Player_0.MovementContext.WeightRelatedValuesUpdated();
+                __instance._player.MovementContext.WeightRelatedValuesUpdated();
             }
             catch
             {
@@ -1490,8 +1488,8 @@ namespace TarkovVR.Patches.Core.Player
         // FixWeightAfterOnWeightUpdated handles recalculation every time OnWeightUpdated fires.
         // Trigger OnWeightUpdated every frame while holding an item so stamina stays current.
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BasePhysicalClass), "LateUpdate")]
-        private static void ForceWeightRecalcWhileHoldingItem(BasePhysicalClass __instance)
+        [HarmonyPatch(typeof(PhysicalBase), "LateUpdate")]
+        private static void ForceWeightRecalcWhileHoldingItem(PhysicalBase __instance)
         {
             if (!VRSettings.GetHeldItemWeight()) 
                 return;
@@ -1499,13 +1497,13 @@ namespace TarkovVR.Patches.Core.Player
             if (VRGlobals.handsInteractionController?.heldItem == null) 
                 return;
             
-            if (__instance.IobserverToPlayerBridge_0 == null) 
+            if (__instance._playerBridge == null) 
                 return;
             
-            if (!__instance.IobserverToPlayerBridge_0.iPlayer.IsYourPlayer) 
+            if (!__instance._playerBridge.iPlayer.IsYourPlayer) 
                 return;
             
-            __instance.Bool_1 = true;
+            __instance._weightIsOutOfDate = true;
         }
         
         public static void DropObject(LootItem val, bool useThrowVelocity = false)
@@ -1517,14 +1515,14 @@ namespace TarkovVR.Patches.Core.Player
             val._rigidBody = gameObject.GetComponent<Rigidbody>() ?? gameObject.AddComponent<Rigidbody>();
 
             if (gameObject.activeInHierarchy)
-                val.method_3();
+                val.StartPhysics();
             else
-                val.bool_2 = true;
+                val._startPhysicsOnEnable = true;
 
             if (component != null)
                 component.RegisteredComponentsToClean.Add(val._rigidBody);
 
-            val._rigidBody.mass = val.item_0.TotalWeight;
+            val._rigidBody.mass = val._item.TotalWeight;
             val._rigidBody.isKinematic = false;
             val._rigidBody.useGravity = true;
             val._rigidBody.detectCollisions = true;
@@ -1562,7 +1560,7 @@ namespace TarkovVR.Patches.Core.Player
             }
             else
             {
-                LootItem.smethod_1(gameObject, colliders, val._boundCollider);
+                LootItem.SetupBoundingCollider(gameObject, colliders, val._boundCollider);
             }
 
             val._cullingRegisterRadius = 0.005f;
@@ -1576,8 +1574,8 @@ namespace TarkovVR.Patches.Core.Player
 
             if (makeVisibleAfterDelay > 0f)
             {
-                val.method_10(isVisible: false);
-                val.StartCoroutine(val.method_11(makeVisibleAfterDelay));
+                val.MakeVisible(isVisible: false);
+                val.StartCoroutine(val.MakeVisibleTimer(makeVisibleAfterDelay));
             }
         }
 
@@ -1595,8 +1593,8 @@ namespace TarkovVR.Patches.Core.Player
             if (item == null || item._rigidBody == null || !item.gameObject.activeInHierarchy)
                 return;
             item._rigidBody.WakeUp();
-            item.ienumerator_0 = item.method_4();
-            item.StartCoroutine(item.ienumerator_0);
+            item._physicsStopWorker = item.PhysicsStopWorker();
+            item.StartCoroutine(item._physicsStopWorker);
         }
 
         [HarmonyPatch(typeof(MedsController), "Spawn")]
@@ -1610,9 +1608,9 @@ namespace TarkovVR.Patches.Core.Player
                 if (existingHighlight != null)
                 {
                     // Remove any command buffers
-                    if (existingHighlight.commandBuffer_0 != null)
+                    if (existingHighlight._cmb != null)
                     {
-                        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight.commandBuffer_0);
+                        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight._cmb);
                     }
                 }
             }

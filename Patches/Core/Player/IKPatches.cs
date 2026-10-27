@@ -10,6 +10,7 @@ using EFT.UI.Ragfair;
 using RootMotion.FinalIK;
 using Valve.VR;
 using EFT.InputSystem;
+using AnimationSystem;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -57,8 +58,23 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer)
                 return true; // bots / other players keep vanilla smoothing
-            else if (VRGlobals.player.MovementContext.PoseLevel_1 == 0f)
+            else if (VRGlobals.player.MovementContext._poseLevel == 0f)
+            {
+                // PRONE: both vanilla height interpolation and our easing are suppressed here - but a
+                // mid-glide offset left on AnimatedTransform (entering prone from a crouch glide) used
+                // to FREEZE on the body for the whole prone (nobody wrote it again): the body/gun sat
+                // displaced up to the clamp = the long-standing "weapon instability while prone".
+                // Clear it and reset the easing state so stand-up re-seeds cleanly.
+                smoothedStanceY = float.NaN;
+                var atProne = __instance.PlayerBones?.AnimatedTransform;
+                if (atProne != null && atProne.Original != null)
+                {
+                    Vector3 lpProne = atProne.localPosition;
+                    if (lpProne.y != 0f)
+                        atProne.localPosition = new Vector3(lpProne.x, 0f, lpProne.z);
+                }
                 return false;
+            }
 
             var bones = __instance.PlayerBones;
             var at = bones?.AnimatedTransform; // BifacialTransform (same one EFT's HeightInterpolation writes)
@@ -122,7 +138,7 @@ namespace TarkovVR.Patches.Core.Player
             if (!bodyPose1to1 || __instance._player == null || !__instance._player.IsYourPlayer)
                 return true; // bots / other players / disabled -> vanilla smoothing
 
-            __instance.SmoothedPoseLevel = __instance.PoseLevel_1;
+            __instance.SmoothedPoseLevel = __instance._poseLevel;
             return false; // skip the per-frame Lerp -> body is 1:1 with the head
         }
 
@@ -141,6 +157,53 @@ namespace TarkovVR.Patches.Core.Player
             // Return value = whether the original runs. Toggle in VR settings ("Turn On EFT Weapon Walk
             // Effector"): on -> let it run (weapon walk bob), off -> skip it (default; steadier weapon).
             return VRSettings.GetWalkEffectorOn();
+        }
+
+        // Physical weapon collision replaces EFT's turn-away POSE: when the barrel overlaps geometry,
+        // vanilla eases the gun through canned animation curves (Position/Rotation/elbow/camera shifts) -
+        // in VR that reads as the game steering your gun away from where you point it. Zero the effector's
+        // pose outputs for the local player AFTER Process so nothing consumes them, while OverlapValue
+        // keeps its vanilla dynamics (the aim-stop/resume and blindfire gating read it). WeaponCollision
+        // supplies the actual response (gun pressed against the surface). Bots/other players keep vanilla.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TurnAwayEffector), "Process")]
+        private static void DisableTurnAwayPose(TurnAwayEffector __instance)
+        {
+            if (!TarkovVR.Source.Player.Interactions.WeaponCollision.enabled || VRGlobals.player == null ||
+                !ReferenceEquals(VRGlobals.player.ProceduralWeaponAnimation?.TurnAway, __instance))
+                return;
+            __instance._position = Vector3.zero;
+            __instance._rotation = Vector3.zero;
+            __instance._cameraShift = Vector3.zero;
+            __instance._lElbowShift = Vector3.zero;
+            __instance._rElbowShift = Vector3.zero;
+            __instance._cameraZShift = 0f;
+        }
+
+        // Consumption-side kill for the same pose: AvoidObstacles (Player.VisualPass, LateUpdate - AFTER
+        // all the mod's Update-phase writes) applies TurnAway.Position/Rotation to WeaponRootAnim, whose
+        // locals ride PlayerBones.Offset/DeltaRotation into ShiftWeaponRoot and move the weapon-root bone
+        // chain _markers[1] hangs off - i.e. the very marker the VR gun is anchored to. The apply is gated
+        // on TurnAway.IsDirty, so clear it around the call for the local player (restored after, in case
+        // anything else reads it). Belt to DisableTurnAwayPose's suspenders.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ProceduralWeaponAnimation), "AvoidObstacles")]
+        private static void SuppressTurnAwayApply(ProceduralWeaponAnimation __instance, ref bool __state)
+        {
+            __state = false;
+            if (!TarkovVR.Source.Player.Interactions.WeaponCollision.enabled || VRGlobals.player == null ||
+                !ReferenceEquals(VRGlobals.player.ProceduralWeaponAnimation, __instance))
+                return;
+            __state = __instance.TurnAway.IsDirty;
+            __instance.TurnAway.IsDirty = false;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ProceduralWeaponAnimation), "AvoidObstacles")]
+        private static void RestoreTurnAwayDirty(ProceduralWeaponAnimation __instance, bool __state)
+        {
+            if (__state)
+                __instance.TurnAway.IsDirty = true;
         }
 
         [HarmonyPrefix]
@@ -190,9 +253,40 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 neckBase = headPos - (headForwardFlat * NeckLength * Mathf.Sin(headPitch));
             neckBase.y = headPos.y;
 
-            // Body-relative directions
+            // Body-relative directions. The shoulders normally yaw with the BODY (Player.Transform.y).
+            // That's wrong in JoyStickOnly turning: the body faces your movement/stick direction, so when
+            // you turn your head to aim, the body (and the shoulders pinned to it) stay put while your
+            // hands/gun go to the head/sight line -> the arm reaches across from a mis-yawed shoulder and
+            // the IK twists (GetBodyRotation in MovementPatches only snaps the body to the head past a
+            // 50-80 deg threshold, so under that it never lines up). Fix: yaw the shoulders toward the
+            // HEAD while aiming so the arm ROOT squares up with where you're looking, independent of body
+            // facing. No-op when head~=body (head-based mode), and eased so ADS doesn't pop the shoulders.
             float bodyYaw = __instance.Player.Transform.eulerAngles.y;
-            Quaternion yawRotation = Quaternion.Euler(0f, bodyYaw, 0f);
+            float shoulderYaw = bodyYaw;
+            if (shoulderFollowHeadYaw && VRGlobals.VRCam != null)
+            {
+                bool wantFollow = !shoulderFollowHeadYawOnlyWhenAiming || (VRGlobals.firearmController?.IsAiming ?? false);
+                float targetFollow = wantFollow ? Mathf.Clamp01(shoulderHeadYawFollowAmount) : 0f;
+                shoulderFollowLerp = Mathf.MoveTowards(shoulderFollowLerp, targetFollow,
+                    Time.deltaTime / Mathf.Max(0.0001f, shoulderFollowEaseTime));
+                if (shoulderFollowLerp > 0f)
+                {
+                    // Head yaw with the same upside-down guard GetBodyRotation uses (avoids a 180 flip when
+                    // you look straight up/down and the camera's up crosses world-down).
+                    float upDot = Vector3.Dot(VRGlobals.VRCam.transform.up, Vector3.up);
+                    float headYaw = (upDot < 0f) ? (VRGlobals.VRCam.transform.eulerAngles.y - 180f)
+                                                 : VRGlobals.VRCam.transform.eulerAngles.y;
+                    shoulderYaw = bodyYaw + Mathf.DeltaAngle(bodyYaw, headYaw) * shoulderFollowLerp;
+                }
+            }
+            // Export for DriveElbowBendNormals so the elbow reference frame turns with the head-follow.
+            lastShoulderYaw = shoulderYaw;
+            shoulderYawFrame = Time.frameCount;
+
+            // Rotate the collarbone rotation by the same yaw delta so the arm's parent frame (and the
+            // shoulder mesh) stay consistent with the shifted shoulder positions.
+            Quaternion shoulderYawDelta = Quaternion.Euler(0f, shoulderYaw - bodyYaw, 0f);
+            Quaternion yawRotation = Quaternion.Euler(0f, shoulderYaw, 0f);
             Vector3 right = yawRotation * Vector3.right;
             Vector3 forward = yawRotation * Vector3.forward;
 
@@ -231,16 +325,16 @@ namespace TarkovVR.Patches.Core.Player
                 smoothedShoulderRotR = Quaternion.Slerp(smoothedShoulderRotR, rightAnimRot, rt);
             }
 
-            TransformHelperClass.LerpPositionAndRotation(
+            TransformTools.LerpPositionAndRotation(
                 __instance.Shoulders[0],
                 leftTarget,
-                smoothedShoulderRotL,
+                shoulderYawDelta * smoothedShoulderRotL,
                 0.65f);
 
-            TransformHelperClass.LerpPositionAndRotation(
+            TransformTools.LerpPositionAndRotation(
                 __instance.Shoulders[1],
                 rightTarget,
-                smoothedShoulderRotR,
+                shoulderYawDelta * smoothedShoulderRotR,
                 0.65f);
 
             // The 0.65 lerp leaves 35% of the shoulder on the body crouch ANIMATION, which hunches the
@@ -261,6 +355,288 @@ namespace TarkovVR.Patches.Core.Player
         // Drive the shoulder HEIGHT purely from the head instead of 65%-blending it with the crouch
         // animation, which over-drops the shoulders ~3-5cm when crouched and distorts the arm IK. See use site.
         public static bool shoulderHeightFromHead = true;
+
+        // --- Shoulder yaw follows the head (JoyStickOnly-turning aim fix) ---------------------------
+        // With JoyStickOnly turning the body faces your movement/stick direction, not your head, so a
+        // head-turned aim leaves the shoulders mis-yawed and the arm IK twists. Yaw the shoulders toward
+        // the head so the arm root squares up with the sight line. Default: only while AIMING (that's when
+        // the hands are at the head/sight line; when hip-holding/empty the hands sit at body yaw and
+        // following the head would instead PULL the shoulders off the hands as you glance around). Set
+        // OnlyWhenAiming=false to also square the shoulders to your look direction while holding a weapon.
+        // Amount 0..1 (1 = shoulders fully at head yaw). No-op in head-based turning (head~=body).
+        public static bool shoulderFollowHeadYaw = true;
+        public static bool shoulderFollowHeadYawOnlyWhenAiming = false;
+        public static float shoulderHeadYawFollowAmount = 1f;
+        public static float shoulderFollowEaseTime = 0.15f;  // ease in/out so ADS doesn't pop the shoulders
+        private static float shoulderFollowLerp = 0f;
+        internal static float lastShoulderYaw = 0f;          // shoulder yaw OverrideShoulders used this frame
+        internal static int shoulderYawFrame = -1;
+
+        // --- Custom elbow bend (we own the pole; replaces the Goal/Arm bend modifiers) ---------------
+        // BendModifier.Goal has a pole singularity: a FIXED goal point vs the hand direction - when
+        // shoulder->goal goes near-parallel to shoulder->hand the cross product collapses and FLIPS the
+        // elbow ("elbow shoots up"); moving the goal only relocates the bad cone. BendModifier.Arm is
+        // unusable on this rig (see IKManager - hints resolve in the collarbone's local frame, mirrored on
+        // the right). Custom mode: each frame we set solver.bendNormal ourselves. Desired elbow direction =
+        // a shoulder-yaw-relative rest direction PROJECTED onto the circle of valid elbow positions (the
+        // plane perpendicular to shoulder->hand). At the old singularity (hand along the rest direction)
+        // the projection degenerates and we HOLD the previous direction instead of flipping - hysteresis
+        // makes a flip geometrically impossible - plus a short low-pass so the elbow glides. Rest
+        // directions seeded from the old tuned bend goals' direction from the shoulder. Left-handed mode
+        // keeps vanilla Goal (mirrored rig untested). naturalElbow=false = vanilla Goal, live-revertible.
+        public static bool naturalElbow = true;
+        public static Vector3 elbowRestDirRight = new Vector3(1.35f, -0.81f, -0.40f); // out/down/slightly back
+        public static Vector3 elbowRestDirLeft = new Vector3(-1.8f, -0.96f, -0.20f);
+        public static float elbowDirSmoothTime = 0.06f;  // seconds; 0 = raw projection
+        // Wrist-roll -> elbow deflection, ported from DynamicElbowPositioner (which moves the Goal-mode
+        // bend goals this driver ignores). Its published X delta scales onto the unit rest direction here.
+        // THE elbow-roll sensitivity knob (w1/w2 are skin-roll distribution, not this). DEP's input is now
+        // the driver's measured FULL hand roll (bigger than the old euler residual), hence the lower gain.
+        public static float elbowTwistGain = -0.04f;
+        private static Vector3 lastElbowDirL, lastElbowDirR;
+        private static bool elbowDirInitL, elbowDirInitR;
+        private static IKSolverLimb.BendModifier origBendModL, origBendModR;
+        private static bool bendModCapturedL, bendModCapturedR;
+
+        // method_20 just wrote the solvers' IK positions and method_19 (the actual solve) runs immediately
+        // after, so the bendNormal written here is exactly what this frame solves with - same phase, no lag.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
+        private static void DriveElbowBendNormals(EFT.Player __instance)
+        {
+            if (!__instance.IsYourPlayer || VRGlobals.ikManager == null)
+                return;
+
+            bool on = naturalElbow && !VRSettings.GetLeftHandedMode();
+            // Elbow reference frame: the yaw OverrideShoulders placed the shoulders with this frame
+            // (head-follow aware); body yaw when it didn't run (e.g. mounted/vanilla path).
+            float yaw = shoulderYawFrame == Time.frameCount ? lastShoulderYaw : __instance.Transform.eulerAngles.y;
+
+            DriveElbow(VRGlobals.ikManager.leftArmIk, elbowRestDirLeft,
+                       Source.Player.Body.DynamicElbowPositioner.leftTwistDeltaX, yaw, on,
+                       ref lastElbowDirL, ref elbowDirInitL, ref origBendModL, ref bendModCapturedL);
+            DriveElbow(VRGlobals.ikManager.rightArmIk, elbowRestDirRight,
+                       Source.Player.Body.DynamicElbowPositioner.rightTwistDeltaX, yaw, on,
+                       ref lastElbowDirR, ref elbowDirInitR, ref origBendModR, ref bendModCapturedR);
+        }
+
+        private static void DriveElbow(LimbIK arm, Vector3 restDir, float twistDeltaX, float yaw, bool on,
+                                       ref Vector3 lastDir, ref bool dirInit,
+                                       ref IKSolverLimb.BendModifier origMod, ref bool captured)
+        {
+            if (arm == null || arm.solver == null || arm.solver.bone1?.transform == null)
+                return;
+            if (!captured) { origMod = arm.solver.bendModifier; captured = true; }
+            if (!on)
+            {
+                if (arm.solver.bendModifier == IKSolverLimb.BendModifier.Custom)
+                    arm.solver.bendModifier = origMod; // back to vanilla Goal
+                dirInit = false;
+                return;
+            }
+            arm.solver.bendModifier = IKSolverLimb.BendModifier.Custom;
+
+            Vector3 shoulder = arm.solver.bone1.transform.position;
+            // This frame's hand target: solver.target wins inside solver.Update (empty hands/foregrip);
+            // otherwise method_20 just wrote IKPosition from the weapon markers.
+            Vector3 hand = arm.solver.target != null ? arm.solver.target.position : arm.solver.IKPosition;
+            Vector3 d = hand - shoulder;
+            float dMag = d.magnitude;
+            if (dMag < 0.05f)
+                return; // degenerate reach; last frame's normal stays in the solver
+            d /= dMag;
+
+            // Rest direction + the wrist-roll deflection (already outward-clamped/sprint-frozen upstream).
+            Vector3 rest = restDir.normalized;
+            rest.x += twistDeltaX * elbowTwistGain;
+            Vector3 e = Quaternion.Euler(0f, yaw, 0f) * rest.normalized;
+            e -= d * Vector3.Dot(e, d);      // project onto the elbow circle's plane
+            if (e.sqrMagnitude < 1e-4f)      // hand along the rest direction = the old flip pose
+            {
+                if (!dirInit) return;
+                e = lastDir - d * Vector3.Dot(lastDir, d); // hold the previous elbow direction through it
+                if (e.sqrMagnitude < 1e-6f) return;
+            }
+            e.Normalize();
+
+            if (dirInit && elbowDirSmoothTime > 0f)
+            {
+                e = Vector3.Slerp(lastDir, e, Time.deltaTime / elbowDirSmoothTime);
+                e = (e - d * Vector3.Dot(e, d)).normalized; // re-seat on the circle after smoothing
+            }
+            lastDir = e;
+            dirInit = true;
+
+            // The solve bends bone2 along Cross(handDir, bendNormal), so this puts the elbow exactly at +e.
+            arm.solver.bendNormal = Vector3.Cross(e, d);
+        }
+
+        // --- Deterministic forearm/wrist twist (owns the twist chain like DriveElbow owns the pole) ---
+        // The wrist bone itself (solver.bone3) is already IK-driven to the marker/controller rotation.
+        // The "wrist randomly twists while running" is the twist chain BETWEEN elbow and wrist (Forearm1 =
+        // solver bone2, plus Forearm2): the chain isn't direct-hierarchy so the solver re-captures bone
+        // roll from the ANIMATED pose every frame (the sprint clip leaks in), and TwistRelax is stateful
+        // (relaxes from current values), so once a bad roll gets in it wanders instead of correcting.
+        // Same cure as the elbow: post-solve, rebuild the forearm frame from geometry we own - forearm
+        // axis + our bend normal (= the elbow hinge axis, always perpendicular to the forearm) - and
+        // distribute the wrist's measured roll along the twist bones with fixed weights. Bind offsets are
+        // captured AT RIG SPAWN from the rest pose (bone axes are arbitrary on this rig - the Arm-mode
+        // lesson; spawn = deterministic, identical hideout/raid, no dependence on what the hands hold);
+        // RecaptureWristBind() re-calibrates live. Authority scales with the solver's IK weight so
+        // reload/interaction anims (weight < 1) keep their hand posing. Works with naturalElbow on or off
+        // (frame falls back to the geometric elbow plane). false = old TwistRelax / sprint-freeze behavior.
+        public static bool naturalWrist = true;
+        public static float wristTwistW1 = 0.35f;       // share of the wrist roll on Forearm1 (elbow side)
+        public static float wristTwistW2 = 0.70f;       // share on Forearm2 (nearer the wrist = more roll)
+        public static float wristTwistClampDeg = 200f;  // wrap-around safety on the measured roll
+        // Constant roll trim (deg) added to the measured twist - corrects a bind captured with the hand
+        // slightly rolled (symptom: forearm looks twisted a few degrees AT NEUTRAL; w1/w2 can't fix that,
+        // they only scale roll RESPONSE).
+        public static float wristTwistTrimL = 0f;
+        public static float wristTwistTrimR = 0f;
+        // The measured physical hand roll (deg, post-trim) - published for DynamicElbowPositioner, whose
+        // old bone-euler read now changes meaning with w1/w2 (the local euler only carries the 1-w2
+        // residual). This is the stable "how far is the hand rolled" signal regardless of distribution.
+        internal static float wristTauL, wristTauR;
+        private static bool wristBindInitL, wristBindInitR;
+        private static Quaternion wristOff1L, wristOff2L, wristOff3L;
+        private static Quaternion wristOff1R, wristOff2R, wristOff3R;
+
+        // Capture the twist-chain bind (the "zero roll" reference for the arbitrary bone axes) from the
+        // CURRENT pose of whichever arms are wired. Called from SetupIK at rig spawn - BEFORE any weapon
+        // is drawn, the same rest pose in hideout and raid - so calibration no longer depends on what the
+        // hands happen to hold at some gameplay frame (the raid-first "arms broken" bug: the old lazy
+        // capture sampled the gun-draw pose and kept that zero all session). Idempotent; also callable
+        // live from UnityExplorer to re-zero against whatever pose you're holding.
+        public static void RecaptureWristBind()
+        {
+            if (VRGlobals.ikManager == null)
+                return;
+            wristBindInitL = CaptureWristBind(VRGlobals.ikManager.leftArmIk, ref wristOff1L, ref wristOff2L, ref wristOff3L);
+            wristBindInitR = CaptureWristBind(VRGlobals.ikManager.rightArmIk, ref wristOff1R, ref wristOff2R, ref wristOff3R);
+        }
+
+        // Per-rig capture plumbing for SetupIK. SetupIK re-fires on EVERY LimbIK disable (weapon equips
+        // disable rightArmIk), so an unconditional capture there would re-zero on live gameplay poses -
+        // the raid-first bug through a side door. Instead: the fresh-rig add-block CLEARS, and each
+        // collarbone block captures its own arm ONLY IF unset - so exactly one capture per arm per rig,
+        // always at the spawn rest pose.
+        internal static void ClearWristBind() { wristBindInitL = wristBindInitR = false; }
+        internal static void CaptureWristBindLeftIfNeeded()
+        {
+            if (!wristBindInitL && VRGlobals.ikManager != null)
+                wristBindInitL = CaptureWristBind(VRGlobals.ikManager.leftArmIk, ref wristOff1L, ref wristOff2L, ref wristOff3L);
+        }
+        internal static void CaptureWristBindRightIfNeeded()
+        {
+            if (!wristBindInitR && VRGlobals.ikManager != null)
+                wristBindInitR = CaptureWristBind(VRGlobals.ikManager.rightArmIk, ref wristOff1R, ref wristOff2R, ref wristOff3R);
+        }
+
+        // The forearm frame the twist is measured in: forearm axis + an elbow-plane normal. When the
+        // elbow driver owns the solve (Custom) use its bendNormal - smooth, hysteresis-held, and
+        // well-conditioned even with the arm fully extended. Otherwise (the spawn capture runs before the
+        // driver ever solves; or naturalElbow off) use the GEOMETRIC elbow-plane normal
+        // Cross(upperarm, forearm) - the solve puts the elbow on the driver's plane, so for any bent arm
+        // the two conventions are parallel and agree; a near-straight arm gets a deterministic fallback.
+        private static bool ForearmFrame(LimbIK arm, out Transform f1, out Transform f2, out Transform wrist,
+                                         out Vector3 axis, out Quaternion F)
+        {
+            f1 = f2 = wrist = null; axis = Vector3.zero; F = Quaternion.identity;
+            if (arm == null || arm.solver == null || arm.solver.bone1?.transform == null ||
+                arm.solver.bone2?.transform == null || arm.solver.bone3?.transform == null)
+                return false;
+            Transform shoulder = arm.solver.bone1.transform; // Upperarm
+            f1 = arm.solver.bone2.transform;                 // Forearm1 (the elbow-side bone)
+            wrist = arm.solver.bone3.transform;              // Forearm3 (the IK wrist)
+            f2 = wrist.parent == f1 ? null : wrist.parent;   // Forearm2 twist bone, or none if direct
+
+            axis = wrist.position - f1.position;
+            if (axis.sqrMagnitude < 1e-8f)
+                return false;
+            axis.Normalize();
+
+            Vector3 n = arm.solver.bendModifier == IKSolverLimb.BendModifier.Custom
+                ? arm.solver.bendNormal
+                : Vector3.Cross(f1.position - shoulder.position, wrist.position - f1.position);
+            n -= axis * Vector3.Dot(n, axis);
+            if (n.sqrMagnitude < 1e-8f)
+                n = Vector3.ProjectOnPlane(Vector3.up, axis);      // straight arm: deterministic fallback
+            if (n.sqrMagnitude < 1e-8f)
+                n = Vector3.ProjectOnPlane(Vector3.forward, axis); // vertical straight arm
+            if (n.sqrMagnitude < 1e-8f)
+                return false;
+            F = Quaternion.LookRotation(axis, n.normalized);
+            return true;
+        }
+
+        private static bool CaptureWristBind(LimbIK arm, ref Quaternion off1, ref Quaternion off2, ref Quaternion off3)
+        {
+            if (!ForearmFrame(arm, out Transform f1, out Transform f2, out Transform wrist, out _, out Quaternion F))
+                return false;
+            Quaternion inv = Quaternion.Inverse(F);
+            off1 = inv * f1.rotation;
+            off2 = f2 != null ? inv * f2.rotation : Quaternion.identity;
+            off3 = inv * wrist.rotation;
+            return true;
+        }
+
+        // method_19 ran the limb solves + TwistRelax; we overwrite the twist bones after all of it.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player), "IkApply")]
+        private static void DriveWristTwist(EFT.Player __instance)
+        {
+            if (!__instance.IsYourPlayer || VRGlobals.ikManager == null)
+                return;
+            if (!naturalWrist || VRSettings.GetLeftHandedMode())
+                return;
+
+            ApplyWristTwist(VRGlobals.ikManager.leftArmIk, wristTwistTrimL, ref wristTauL, wristBindInitL, wristOff1L, wristOff2L, wristOff3L);
+            ApplyWristTwist(VRGlobals.ikManager.rightArmIk, wristTwistTrimR, ref wristTauR, wristBindInitR, wristOff1R, wristOff2R, wristOff3R);
+        }
+
+        private static void ApplyWristTwist(LimbIK arm, float trimDeg, ref float tauOut, bool bindInit,
+                                            Quaternion off1, Quaternion off2, Quaternion off3)
+        {
+            // No bind captured (spawn capture didn't land) -> leave the vanilla twist alone rather than
+            // guess a zero off a live gameplay pose (the old raid-first bug). RecaptureWristBind() re-arms.
+            if (!bindInit || arm == null || arm.solver == null)
+                return;
+            float w = arm.solver.IKPositionWeight;
+            if (w <= 0.001f)
+                return;
+            if (!ForearmFrame(arm, out Transform f1, out Transform f2, out Transform wrist, out Vector3 axis, out Quaternion F))
+                return;
+
+            // The wrist's roll beyond its bind pose, measured around the forearm axis (swing-twist).
+            float tau = TwistAngle(wrist.rotation * Quaternion.Inverse(F * off3), axis);
+            tau = Mathf.Clamp(tau + trimDeg, -wristTwistClampDeg, wristTwistClampDeg);
+            tauOut = tau;
+
+            // Re-pose the twist bones: hinge-locked base frame + their share of the wrist roll. Writing
+            // f1 moves its children, so the IK-solved wrist orientation is saved and re-asserted.
+            Quaternion wristRot = wrist.rotation;
+            Quaternion target1 = Quaternion.AngleAxis(tau * wristTwistW1, axis) * F * off1;
+            f1.rotation = w >= 1f ? target1 : Quaternion.Slerp(f1.rotation, target1, w);
+            if (f2 != null)
+            {
+                Quaternion target2 = Quaternion.AngleAxis(tau * wristTwistW2, axis) * F * off2;
+                f2.rotation = w >= 1f ? target2 : Quaternion.Slerp(f2.rotation, target2, w);
+            }
+            wrist.rotation = wristRot;
+        }
+
+        // Signed twist (deg) of q around axis, in (-180, 180] (swing-twist decomposition).
+        private static float TwistAngle(Quaternion q, Vector3 axis)
+        {
+            float proj = q.x * axis.x + q.y * axis.y + q.z * axis.z;
+            float mag = Mathf.Sqrt(proj * proj + q.w * q.w);
+            if (mag < 1e-6f)
+                return 0f;
+            float w = q.w / mag, s = proj / mag;
+            if (w < 0f) { w = -w; s = -s; }   // canonical hemisphere
+            return 2f * Mathf.Atan2(s, w) * Mathf.Rad2Deg;
+        }
 
         // --- Sprint (run-anim-disabled) shoulder/arm steadying ---------------------------------------
         // RemoveSprintAnimFromHands pins the HANDS while running, but the arm ROOT above them was still
@@ -439,7 +815,7 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(EFT.Player), "method_20")]
+        [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
         private static bool RemoveSprintAnimFromHands(EFT.Player __instance)
         {
             if (!__instance.IsYourPlayer)
@@ -450,7 +826,7 @@ namespace TarkovVR.Patches.Core.Player
             bool trulyInAir = airborneFreefallTime > 0f &&
                               __instance.MovementContext.FreefallTime > airborneFreefallTime;
 
-            bool disableAnim = (__instance.IsSprintEnabled && VRGlobals.player.MovementContext.PoseLevel_1 != 0 && VRSettings.GetDisableRunAnim()) || trulyInAir;
+            bool disableAnim = (__instance.IsSprintEnabled && VRGlobals.player.MovementContext._poseLevel != 0 && VRSettings.GetDisableRunAnim()) || trulyInAir;
 
             float currentTime = Time.time;
 
@@ -544,10 +920,10 @@ namespace TarkovVR.Patches.Core.Player
 
         private static bool test = true;
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(GClass1446), "SetAnimator")]
-        private static void ReemoveSprintAnimFromHands(GClass1446 __instance)
+        [HarmonyPatch(typeof(UnityAnimatorWrapper), "SetAnimator")]
+        private static void ReemoveSprintAnimFromHands(UnityAnimatorWrapper __instance)
         {
-            __instance.Animator_0.SetLayerWeight(4, 0);
+            __instance.Animator.SetLayerWeight(4, 0);
         }
         //[HarmonyPrefix]
         //[HarmonyPatch(typeof(EFT.Player), "method_22")]

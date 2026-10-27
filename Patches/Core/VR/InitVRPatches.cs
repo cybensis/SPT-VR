@@ -246,12 +246,11 @@ namespace TarkovVR.Patches.Core.VR
                     mainCam.gameObject.AddComponent<VRJitterComponent>();
                 }
                 mainCam.useOcclusionCulling = false;
-                // Per-layer cull distances (CPU win). Applied here for immediacy; Rendering.ProcessImageRendering
-                // re-applies it every frame so it survives the camera being reconfigured across raids.
+
                 TarkovVR.Patches.Visuals.Rendering.ApplyCullDistances(mainCam);
                 if (XRSettings.enabled)
                 {
-                    XRSettings.useOcclusionMesh = false;
+                    XRSettings.useOcclusionMesh = true;
                 }
                 if (VRGlobals.vrPlayer)
                 {
@@ -565,6 +564,24 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.transform.root.GetComponent<EFT.Player>() && !__instance.transform.root.GetComponent<EFT.Player>().IsYourPlayer)
                 return;
 
+            // The check above PASSES when the root has no EFT.Player component yet - exactly the window
+            // bot rigs hit this in (their Player attaches later in activation), and the stack heuristic
+            // below names a stale obfuscated class. A leaked bot reaches the UNCONDITIONAL
+            // ikManager/leftArmIk/rightArmIk writes below and hijacks the mod rig onto the bot's skeleton
+            // - fatal now that the elbow/wrist drivers consume those refs every frame. Two positive
+            // identity guards (Unity's fake-null makes destroyed refs skip these, so new-raid rebuilds
+            // still pass):
+            if (VRGlobals.player != null && __instance.transform.root != VRGlobals.player.gameObject.transform.root)
+            {
+                Plugin.MyLog.LogWarning($"[SetupIK] Ignoring non-local rig '{__instance.transform.root.name}' ({__instance.name}).");
+                return;
+            }
+            if (VRGlobals.ikManager != null && __instance.transform.root != VRGlobals.ikManager.transform.root)
+            {
+                Plugin.MyLog.LogWarning($"[SetupIK] Rejected rig rewire from '{__instance.transform.root.name}' ({__instance.name}) - ikManager already wired to the local rig.");
+                return;
+            }
+
             foreach (var frame in stackTrace.GetFrames())
             {
                 var method = frame.GetMethod();
@@ -591,16 +608,21 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.transform.parent.parent.FindChild("weapon_holster1"))
                 __instance.transform.parent.parent.FindChild("weapon_holster1").gameObject.active = false;
 
-            if (__instance.transform.parent.parent.GetComponent<IKManager>() == null) { 
+            if (__instance.transform.parent.parent.GetComponent<IKManager>() == null) {
                 VRGlobals.ikManager = __instance.transform.parent.parent.gameObject.AddComponent<IKManager>();
                 if (ModSupport.InstalledMods.FIKAInstalled) {
                     VRGlobals.ikManager.enabled = false;
                     VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
                 }
+                // Fresh rig: clear the wrist-twist binds so the collarbone blocks below recapture them
+                // from this rig's spawn rest pose (once per arm per rig; weapon-equip re-entries of this
+                // method - rightArmIk gets disabled on every equip - must NOT re-zero on a live pose).
+                TarkovVR.Patches.Core.Player.IKPatches.ClearWristBind();
             }
 
             if (__instance.name == "Base HumanLCollarbone") {
                 VRGlobals.ikManager.leftArmIk = __instance.transform.GetComponent<LimbIK>();
+                TarkovVR.Patches.Core.Player.IKPatches.CaptureWristBindLeftIfNeeded();
 
                 leftWrist = __instance.transform.FindChildRecursive("Base HumanLForearm3");
                 if (leftWrist != null && leftWrist.GetComponent<TwistRelax>())
@@ -627,6 +649,7 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.name == "Base HumanRCollarbone")
             {
                 VRGlobals.ikManager.rightArmIk = __instance.transform.GetComponent<LimbIK>();
+                TarkovVR.Patches.Core.Player.IKPatches.CaptureWristBindRightIfNeeded();
 
                 rightWrist = __instance.transform.FindChildRecursive("Base HumanRForearm3");
                 if (rightWrist != null && rightWrist.GetComponent<TwistRelax>())

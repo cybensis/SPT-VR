@@ -26,9 +26,15 @@ namespace TarkovVR
 
             this.transform.position = VRGlobals.vrPlayer.rawRightHand.transform.position;
             this.transform.rotation = VRGlobals.vrPlayer.rawRightHand.transform.rotation;
-            
+
             if (VRGlobals.emptyHands != null)
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
+        }
+
+        private void OnDisable()
+        {
+            // Weapon is being holstered/swapped - drop any collision pushback so it can't go stale.
+            Source.Player.Interactions.WeaponCollision.Reset();
         }
 
         private void LateUpdate()

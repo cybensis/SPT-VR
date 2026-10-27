@@ -4,12 +4,12 @@ using HarmonyLib;
 
 namespace SptVrFikaSync
 {
-    // Standalone FIKA companion plugin. Hard-depends on FIKA (useless without it) and has NO VR
-    // dependency, so it loads on flatscreen players and headless clients too. Its whole job: register
-    // the VR mod's custom packets (so those peers don't crash on an "Undefined packet"), relay them
-    // as host, and render the synced arms / dragged bodies.
     [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "1.0.0")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
+    // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module. When present we relocate a
+    // dragged corpse's loot waypoint here (the VR mod can't — it doesn't run on a headless). Soft so this
+    // module still loads on a peer without ORBIT; the dep just guarantees ORBIT is in the registry below.
+    [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
     public class FikaSyncPlugin : BaseUnityPlugin
     {
         public static ManualLogSource Log;
@@ -17,11 +17,14 @@ namespace SptVrFikaSync
         private void Awake()
         {
             Log = Logger;
+            // Detect ORBIT via the BepInEx registry (string literal → never binds an ORBIT type on a
+            // no-ORBIT peer). Gates OrbitSync's ORBIT-typed corpse-relocation.
+            OrbitSync.Available = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("com.chazut.orbit");
             // Patches ArmSyncApply (the ObservedPlayer.LateUpdate postfix). Body-drag apply is driven
             // from the packet handlers, not a patch.
             new Harmony("com.matsix.sptvr.fikasync").PatchAll();
             FikaVrSync.Init();
-            Log.LogInfo("SPT-VR FIKA Sync loaded.");
+            Log.LogInfo($"SPT-VR FIKA Sync loaded. ORBIT corpse-loot sync: {(OrbitSync.Available ? "ON" : "off (ORBIT not present)")}");
         }
 
         // Pump the body-drag receiver on every peer (incl. flatscreen/headless). FixedUpdate (physics

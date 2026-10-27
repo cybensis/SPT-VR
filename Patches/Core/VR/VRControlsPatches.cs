@@ -19,12 +19,12 @@ namespace TarkovVR.Patches.Core.VR
         private static bool _snapTurned = false;
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(InputBindingsDataClass), "UpdateInput")]
-        private static bool MasterVRControls(InputBindingsDataClass __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
+        [HarmonyPatch(typeof(InputPreset), "UpdateInput")]
+        private static bool MasterVRControls(InputPreset __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
         {
             UpdateBaseInputs(__instance);
             
-            if (__instance.Gclass2408_0 != null)
+            if (__instance._workingKeyCombinations != null)
             {
                 commands.Clear();
                 VRInputManager.UpdateCommands(ref commands);
@@ -32,7 +32,7 @@ namespace TarkovVR.Patches.Core.VR
 
             ResetAxisValues(axis);
             
-            if (__instance.Gclass2409_1 == null)
+            if (__instance._workingAxisCombinations == null)
             {
                 return false;
             }
@@ -45,23 +45,23 @@ namespace TarkovVR.Patches.Core.VR
             return false;
         }
         
-        private static void UpdateBaseInputs(InputBindingsDataClass instance)
+        private static void UpdateBaseInputs(InputPreset instance)
         {
             // Update primary input interfaces
-            if (instance.Ginterface241_0 != null)
+            if (instance._updateInputs != null)
             {
-                for (int i = 0; i < instance.Ginterface241_0.Length; i++)
+                for (int i = 0; i < instance._updateInputs.Length; i++)
                 {
-                    instance.Ginterface241_0[i].Update();
+                    instance._updateInputs[i].Update();
                 }
             }
 
             // Update secondary input interfaces
-            if (instance.Ginterface241_1 != null)
+            if (instance._laterUpdateInputs != null)
             {
-                for (int i = 0; i < instance.Ginterface241_1.Length; i++)
+                for (int i = 0; i < instance._laterUpdateInputs.Length; i++)
                 {
-                    instance.Ginterface241_1[i].Update();
+                    instance._laterUpdateInputs[i].Update();
                 }
             }
         }
@@ -74,16 +74,16 @@ namespace TarkovVR.Patches.Core.VR
             }
         }
         
-        private static void ProcessAxisInputs(InputBindingsDataClass instance, ref float[] axis)
+        private static void ProcessAxisInputs(InputPreset instance, ref float[] axis)
         {
-            for (int i = 0; i < instance.Gclass2409_1.Length; i++)
+            for (int i = 0; i < instance._workingAxisCombinations.Length; i++)
             {
-                int axisIndex = instance.Gclass2409_1[i].IntAxis;
+                int axisIndex = instance._workingAxisCombinations[i].IntAxis;
                 
                 // Apply default axis value if needed
                 if (Mathf.Abs(axis[axisIndex]) < 0.0001f)
                 {
-                    axis[axisIndex] = instance.Gclass2409_1[i].GetValue();
+                    axis[axisIndex] = instance._workingAxisCombinations[i].GetValue();
                 }
                 
                 // Handle specific axis behaviors
@@ -105,7 +105,7 @@ namespace TarkovVR.Patches.Core.VR
             }
         }
         
-        private static void ProcessRotationInput(InputBindingsDataClass instance, ref float[] axis, int axisIndex)
+        private static void ProcessRotationInput(InputPreset instance, ref float[] axis, int axisIndex)
         {
             // Reset snap turn when joystick returns to center
             if (_snapTurned && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) < JOYSTICK_DEADZONE)
@@ -160,7 +160,7 @@ namespace TarkovVR.Patches.Core.VR
             }
         }
         
-        private static void ProcessMovementInput(InputBindingsDataClass instance, ref float[] axis, int joystickAxis, int axisIndex)
+        private static void ProcessMovementInput(InputPreset instance, ref float[] axis, int joystickAxis, int axisIndex)
         {
             if (VRGlobals.blockLeftJoystick)
             {

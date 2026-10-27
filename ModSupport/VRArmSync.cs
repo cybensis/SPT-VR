@@ -18,9 +18,13 @@ namespace TarkovVR.ModSupport.FIKA
         public static bool enableArmSync = true;     // send empty-hand arm poses
         public static bool sendWeaponPose = true;     // send the held gun's pose while armed
         public static bool sendEatingPose = true;     // send manual-eating wrist+prop poses
+        public static bool sendFingerPoses = true;    // send finger poses (authored open-hand / Index curls)
         public static float sendInterval = 0.05f;     // ~20/s
+        public static float fingerSendInterval = 0.05f; // finger cadence (own timer - the shared throttle belongs to the arm/weapon packets)
 
         private static float lastSendTime;
+        private static float lastFingerSend;
+        private static bool fingersWereActive;
         private static bool wasEating;
 
         // Called every frame from VRPlayerManager.LateUpdate (guarded by InstalledMods.FIKAInstalled).
@@ -39,6 +43,26 @@ namespace TarkovVR.ModSupport.FIKA
             {
                 if (local != null) FikaVrSync.SendEatingStop(local.NetId);
                 wasEating = false;
+            }
+
+            // Finger poses: independent cadence, sent while either hand's pose system is driving
+            // (buffered by HandsInteractionController.SampleFingerSync at the end of its LateUpdate),
+            // plus ONE final all-inactive packet on the falling edge so observers release immediately
+            // (the receiver's staleTimeout is only the lost-packet fallback).
+            if (sendFingerPoses && local != null)
+            {
+                bool fingersActive = Source.Player.Interactions.HandsInteractionController.syncLeftFingersActive
+                                  || Source.Player.Interactions.HandsInteractionController.syncRightFingersActive;
+                if ((fingersActive || fingersWereActive) && Time.time - lastFingerSend >= fingerSendInterval)
+                {
+                    lastFingerSend = Time.time;
+                    FikaVrSync.SendFingerPose(local.NetId,
+                        Source.Player.Interactions.HandsInteractionController.syncLeftFingersActive,
+                        Source.Player.Interactions.HandsInteractionController.syncLeftFingerEuler,
+                        Source.Player.Interactions.HandsInteractionController.syncRightFingersActive,
+                        Source.Player.Interactions.HandsInteractionController.syncRightFingerEuler);
+                    fingersWereActive = fingersActive;
+                }
             }
 
             if (Time.time - lastSendTime < sendInterval)

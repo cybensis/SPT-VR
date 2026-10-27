@@ -400,7 +400,7 @@ namespace TarkovVR.Source.Player.VRManager
                 // will return a value that can be used to subtract the physical crouch value from and will combine the physical and joystick crouching
                 crouchLevel = Mathf.Clamp((1 - crouchHeightDiff / 0.4f) - crouchLevel, 0, 1);
 
-                VRGlobals.player.MovementContext.PoseLevel_1 = crouchLevel;
+                VRGlobals.player.MovementContext._poseLevel = crouchLevel;
                 /*
                 // Only change GameObject active states when prone state actually changes
                 bool currentProneState = VRGlobals.player.MovementContext.IsInPronePose;
@@ -424,6 +424,9 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 */
             }
+
+            // Physical hand collision: free hands can't reach through geometry (see HandCollision).
+            Interactions.HandCollision.Apply();
         }
         // localpos 0.12 0 -0.085
         // Rot 272.0235 163.5639 283.3635
@@ -437,6 +440,14 @@ namespace TarkovVR.Source.Player.VRManager
         private Vector3 inertiaVelocity;
         private float inertiaDamping = 0.95f;  // Controls how quickly inertia fades
         private float returnSpeed = 5.0f;     // Controls how quickly the gun returns to the hand
+
+        // The gun's current muzzle direction (WeaponRoot points -up along the barrel); the twist axis for
+        // WeaponWeightFeel's swing/twist split.
+        private Vector3 BarrelDir()
+        {
+            Transform wr = VRGlobals.firearmController ? VRGlobals.firearmController.WeaponRoot : null;
+            return wr != null ? -wr.up : rawRightHand.transform.forward;
+        }
 
         private void ApplyInertia(Transform handTransform, Transform targetHandTransform, Vector3 currentVelocity)
         {
@@ -663,7 +674,12 @@ namespace TarkovVR.Source.Player.VRManager
             if (VRGlobals.firearmController && isSupporting && !isWeapPistol)
             {
 
-                if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && primaryGripState.state)
+                // Joystick scope zoom rides BREATH-HOLD now, not grip: under the sling's grip-hold
+                // model the grip is always down while holding the gun, so grip-as-modifier stole the
+                // stick on every two-handed ADS. Breath-hold (off trigger while aiming) is already the
+                // deliberate "steady the shot" modifier - zooming while steadied is natural, and jump/
+                // crouch on this stick are meaningless mid-breath-hold.
+                if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && InputHandlers.BreathingHandler.isHoldingBreath)
                 {
                     VRGlobals.vrOpticController.handleJoystickZoomDial();
                     if (VRSettings.GetLeftHandedMode())
@@ -680,7 +696,11 @@ namespace TarkovVR.Source.Player.VRManager
                 }
 
 
-                Quaternion combinedRotation = Quaternion.LookRotation((LeftHand.transform.position - RightHand.transform.position).normalized, RightHand.transform.up);
+                // Virtual gunstock: with the butt seated in the shoulder pocket, the aim pivots about the
+                // shoulder instead of the (noisy) rear hand - ShoulderStock blends the base in/out.
+                // Transforms, not positions: ShoulderStock works in tracking space (hideout-safe).
+                Vector3 aimBase = ShoulderStock.UpdateAimBase(RightHand.transform, LeftHand.transform, Time.deltaTime);
+                Quaternion combinedRotation = Quaternion.LookRotation((LeftHand.transform.position - aimBase).normalized, RightHand.transform.up);
 
                 if (!isEnteringTwoHandedMode)
                 {
@@ -706,6 +726,7 @@ namespace TarkovVR.Source.Player.VRManager
                 RightHand.transform.rotation = combinedRotation;
                 RightHand.transform.localRotation *= rightHandRotationOffset;
 
+                bool weightFeel = false;
                 if (InputHandlers.BreathingHandler.isHoldingBreath && VRSettings.SmoothScopeAim())
                 {
                     if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
@@ -715,36 +736,13 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 else if (VRSettings.GetWeaponWeightOn())
                 {
-                    //smoothingFactor = 50 / VRGlobals.firearmController.ErgonomicWeight;
-                    /*
-                    float dist = Vector3.Distance(rawRightHand.transform.position, RightHand.transform.position);
-                    float acceleration = 1f + dist; // Multiplier based on lag distance
-                    smoothingFactor = (50 / VRGlobals.firearmController.ErgonomicWeight) * acceleration;
-                    */
-                    /*
+                    // Rotation gets the WeaponWeightFeel spring below; smoothingFactor keeps driving the
+                    // POSITION Slerp exactly as shipped.
                     float weight = VRGlobals.firearmController.ErgonomicWeight;
                     float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
-
-                    // As the angle between your hand and the gun increases, 
-                    // we slightly boost the smoothing factor to "pull" harder.
-                    float elasticBoost = 1f + (angleError * 0.05f);
-
-                    smoothingFactor = (50f / weight) * elasticBoost;
-                    smoothingFactor = Mathf.Clamp(smoothingFactor, 5f, 60f);
-                    */
-                    float weight = VRGlobals.firearmController.ErgonomicWeight;
-                    float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
-
-                    // Use Mathf.Sqrt so the boost 'softens' as the error gets larger.
-                    // This prevents heavy guns from losing their identity during fast moves.
                     float elasticBoost = 1f + (Mathf.Sqrt(angleError) * 0.2f);
-
-                    // We reduce the '50f' slightly because the boost is now more consistent
-                    smoothingFactor = (40f / weight) * elasticBoost;
-
-                    // IMPORTANT: Keep the max clamp reasonable. 
-                    // If this is too high, heavy guns feel like paper when flicked.
-                    smoothingFactor = Mathf.Clamp(smoothingFactor, 3f, 65f);
+                    smoothingFactor = Mathf.Clamp((40f / weight) * elasticBoost, 3f, 65f);
+                    weightFeel = true;
                 }
                 else if (VRSettings.SmoothWeaponAim())
                 {
@@ -755,7 +753,13 @@ namespace TarkovVR.Source.Player.VRManager
                     smoothingFactor = 50;
                 }
 
-                if (smoothingFactor != 50)
+                if (weightFeel)
+                {
+                    rawRightHand.transform.rotation = WeaponWeightFeel.Main.Step(rawRightHand.transform.rotation,
+                        RightHand.transform.rotation, BarrelDir(), VRGlobals.firearmController.ErgonomicWeight,
+                        true, Time.deltaTime);
+                }
+                else if (smoothingFactor != 50)
                 {
                     rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothingFactor * Time.deltaTime);
                 }
@@ -820,6 +824,7 @@ namespace TarkovVR.Source.Player.VRManager
                 Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength);
                 RightHand.transform.localPosition = virtualBasePosition + mainHandPosOffset;
 
+                bool weightFeel = false;
                 if (InputHandlers.BreathingHandler.isHoldingBreath && VRSettings.SmoothScopeAim())
                 {
                     if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
@@ -829,36 +834,13 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 else if (VRGlobals.firearmController && VRSettings.GetWeaponWeightOn())
                 {
-                    //smoothingFactor = 50 / VRGlobals.firearmController.ErgonomicWeight;
-                    /*
-                    float dist = Vector3.Distance(rawRightHand.transform.position, RightHand.transform.position);
-                    float acceleration = 1f + dist; // Multiplier based on lag distance
-                    smoothingFactor = (50 / VRGlobals.firearmController.ErgonomicWeight) * acceleration;
-                    */
-                    /*
+                    // Rotation gets the WeaponWeightFeel spring below; smoothingFactor keeps driving the
+                    // POSITION Slerp exactly as shipped.
                     float weight = VRGlobals.firearmController.ErgonomicWeight;
                     float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
-
-                    // As the angle between your hand and the gun increases, 
-                    // we slightly boost the smoothing factor to "pull" harder.
-                    float elasticBoost = 1f + (angleError * 0.05f);
-
-                    smoothingFactor = (50f / weight) * elasticBoost;
-                    smoothingFactor = Mathf.Clamp(smoothingFactor, 5f, 60f);
-                    */
-                    float weight = VRGlobals.firearmController.ErgonomicWeight;
-                    float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
-
-                    // Use Mathf.Sqrt so the boost 'softens' as the error gets larger.
-                    // This prevents heavy guns from losing their identity during fast moves.
                     float elasticBoost = 1f + (Mathf.Sqrt(angleError) * 0.2f);
-
-                    // We reduce the '50f' slightly because the boost is now more consistent
-                    smoothingFactor = (40f / weight) * elasticBoost;
-
-                    // IMPORTANT: Keep the max clamp reasonable. 
-                    // If this is too high, heavy guns feel like paper when flicked.
-                    smoothingFactor = Mathf.Clamp(smoothingFactor, 3f, 65f);
+                    smoothingFactor = Mathf.Clamp((40f / weight) * elasticBoost, 3f, 65f);
+                    weightFeel = true;
                 }
                 else if (VRSettings.SmoothWeaponAim())
                 {
@@ -869,7 +851,13 @@ namespace TarkovVR.Source.Player.VRManager
                     smoothingFactor = 50;
                 }
 
-                if (smoothingFactor != 50)
+                if (weightFeel)
+                {
+                    rawRightHand.transform.rotation = WeaponWeightFeel.Main.Step(rawRightHand.transform.rotation,
+                        RightHand.transform.rotation, BarrelDir(), VRGlobals.firearmController.ErgonomicWeight,
+                        isSupporting, Time.deltaTime);
+                }
+                else if (smoothingFactor != 50)
                 {
                     rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothingFactor * Time.deltaTime);
                 }

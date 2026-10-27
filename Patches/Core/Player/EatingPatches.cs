@@ -5,6 +5,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
 using static EFT.Player;
+using static EFT.Player.MedsController;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -37,8 +38,8 @@ namespace TarkovVR.Patches.Core.Player
         // The gate: suppress the real DoMedEffect until the player has raised the
         // food to their mouth (returns false to skip the original method).
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(MedsController.ObservedMedsControllerClass), "method_5")]
-        public static bool GateEffect(MedsController.ObservedMedsControllerClass __instance)
+        [HarmonyPatch(typeof(MedsInHandsOperation), "GoNextBodyPart")]
+        public static bool GateEffect(MedsInHandsOperation __instance)
         {
             return EatingInteractionController.AllowEffect(__instance);
         }
@@ -96,10 +97,10 @@ namespace TarkovVR.Patches.Core.Player
         // Suppress our controller's animation-driven sounds so they don't burst at the
         // finish — we play the right ones per-step ourselves.
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseSoundPlayer), "OnSound")]
-        public static bool OnSoundGate(BaseSoundPlayer __instance, string StringParam)
+        [HarmonyPatch(typeof(BaseSoundPlayer), "SoundEventHandler")]
+        public static bool OnSoundGate(BaseSoundPlayer __instance, string soundName)
         {
-            bool allow = EatingInteractionController.AllowSound(__instance, StringParam);
+            bool allow = EatingInteractionController.AllowSound(__instance, soundName);
             // A sound that passes the gate on OUR eat's sound player is one we actually play — forward
             // it so co-op observers hear the real gesture audio (they freeze out the looping vanilla
             // observed-meds sound). FIKA-gated so the FikaPlayer-touching send only JITs with FIKA.
@@ -108,7 +109,7 @@ namespace TarkovVR.Patches.Core.Player
             if (allow && TarkovVR.ModSupport.InstalledMods.FIKAInstalled
                 && EatingInteractionController.IsOwnEatSound(__instance))
             {
-                try { TarkovVR.ModSupport.FIKA.VRArmSync.SendEatSound(StringParam); }
+                try { TarkovVR.ModSupport.FIKA.VRArmSync.SendEatSound(soundName); }
                 catch (System.Exception e)
                 {
                     if (!_loggedSoundFwdErr) { _loggedSoundFwdErr = true; Plugin.MyLog.LogError($"[ManualEat] eat-sound forward failed: {e}"); }

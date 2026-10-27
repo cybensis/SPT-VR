@@ -63,6 +63,53 @@ namespace SptVrFikaSync
         }
     }
 
+    // One VR player's FINGER pose: per-hand joint local eulers (15 = 5 fingers x 3 joints, palm
+    // child-order - both rigs are the same EFT prefab so the order matches), keyed by NetId. Sent
+    // while the sender's hand-pose systems are driving (authored open poses / Index skeletal curls);
+    // an all-inactive packet is the one-shot stop so observers hand the fingers back to the animator.
+    internal struct VRFingersPacket : INetSerializable
+    {
+        public const int JointCount = 15;
+
+        public int NetId;
+        public bool LeftActive;
+        public bool RightActive;
+        public Vector3[] Left;    // joint local eulers; only valid when LeftActive
+        public Vector3[] Right;
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(NetId);
+            writer.Put(LeftActive);
+            writer.Put(RightActive);
+            if (LeftActive)
+                for (int i = 0; i < JointCount; i++)
+                    writer.PutUnmanaged(Left[i]);
+            if (RightActive)
+                for (int i = 0; i < JointCount; i++)
+                    writer.PutUnmanaged(Right[i]);
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            NetId = reader.GetInt();
+            LeftActive = reader.GetBool();
+            RightActive = reader.GetBool();
+            if (LeftActive)
+            {
+                Left = new Vector3[JointCount];
+                for (int i = 0; i < JointCount; i++)
+                    Left[i] = reader.GetUnmanaged<Vector3>();
+            }
+            if (RightActive)
+            {
+                Right = new Vector3[JointCount];
+                for (int i = 0; i < JointCount; i++)
+                    Right[i] = reader.GetUnmanaged<Vector3>();
+            }
+        }
+    }
+
     // A VR melee SURFACE hit (wall sparks / glass break). The custom VR melee runs its collider only
     // on the swinger, so observers never spawn the surface effect; this carries the hit so they can
     // replay GameWorld.HackShot at the point. Player/AI hits are NOT sent (damage already syncs).
@@ -273,6 +320,39 @@ namespace SptVrFikaSync
                 Positions[i] = reader.GetUnmanaged<Vector3>();
                 Rotations[i] = reader.GetUnmanaged<Quaternion>();
             }
+        }
+    }
+
+    // A corpse a VR player grabbed / dropped while DRAGGING it, signalled to the HOST/HEADLESS — the machine
+    // that actually runs the bots + looting AI (the VR mod SPT-VR.dll needs SteamVR, so it does NOT run on a
+    // headless; only this companion does). Lets the server keep the AI's idea of the body in sync:
+    //   * Grab  (Released=false): the body is in transit — pull its ORBIT loot waypoint so bots can't loot
+    //     it from the death spot while it's carried.
+    //   * Settle (Released=true): it's resting at RestPos — re-add the ORBIT waypoint there AND relocate the
+    //     server's ragdoll copy there (so live collider scanners like LootingBots find it where it was hidden).
+    // Keyed by the dead entity's ProfileId: the ONLY identity that's stable on a headless-local Corpse (which
+    // is never in GameWorld.ObservedPlayersCorpses — that's client-only), identical on every machine, and
+    // resolvable via GameWorld.GetEverExistedPlayerByID + matches ORBIT's corpse-waypoint Target.PlayerProfileID.
+    internal struct CorpseLootPacket : INetSerializable
+    {
+        public string ProfileId;
+        public bool Released;   // false = grabbed (in transit), true = settled at RestPos
+        public Vector3 RestPos; // resting position (only meaningful when Released)
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(ProfileId ?? string.Empty);
+            writer.Put(Released);
+            if (Released)
+                writer.PutUnmanaged(RestPos);
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            ProfileId = reader.GetString();
+            Released = reader.GetBool();
+            if (Released)
+                RestPos = reader.GetUnmanaged<Vector3>();
         }
     }
 }

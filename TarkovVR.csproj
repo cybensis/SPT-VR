@@ -17,7 +17,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="ModSupport\EFTApiSupport.cs" />
     <Compile Remove="FikaSync\**\*.cs" />
   </ItemGroup>
 
@@ -77,11 +76,15 @@
     <Reference Include="Fika.Core">
       <HintPath>libs\ModSupport\Fika.Core.dll</HintPath>
     </Reference>
+    <Reference Include="KmyTarkovConfiguration">
+      <HintPath>libs\ModSupport\KmyTarkovConfiguration.dll</HintPath>
+    </Reference>
+    <Reference Include="ORBIT">
+      <HintPath>libs\ModSupport\Orbit.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="ItemComponent.Types">
       <HintPath>libs\Managed\ItemComponent.Types.dll</HintPath>
-    </Reference>
-    <Reference Include="KmyTarkovConfiguration">
-      <HintPath>C:\Users\lilma\Downloads\SPT-VR-main\SPT-VR-main\libs\ModSupport\KmyTarkovConfiguration.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.CSharp">
       <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\Microsoft.CSharp.dll</HintPath>

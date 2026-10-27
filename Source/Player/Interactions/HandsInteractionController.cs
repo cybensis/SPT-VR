@@ -9,7 +9,7 @@ using EFT.Interactive;
 using System;
 using EFT;
 using static EFT.Player;
-using static InteractionsHandlerClass;
+using static EFT.InventoryLogic.ItemManipulator;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Settings;
 using TarkovVR.ModSupport;
@@ -20,6 +20,8 @@ using System.Collections.Generic;
 using System.Collections;
 //using LiteNetLib.Utils;
 using Comfort.Common;
+using Diz.LanguageExtensions;
+using Diz.Utils;
 //using LiteNetLib;
 
 namespace TarkovVR.Source.Player.Interactions
@@ -157,12 +159,12 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //Used for the backpack - This completely bypasses the pickup animation and puts the loot directly in your bag
-        private void DirectItemTransfer(EFT.Player owner, GInterface424 possibleAction, Item rootItem, IPlayer lootItemLastOwner)
+        private void DirectItemTransfer(EFT.Player owner, IItemOperationResult possibleAction, Item rootItem, IPlayer lootItemLastOwner)
         {
             isItemInitialized = false;
             // Handle magazine check if needed
-            MagazineItemClass magazineItemClass = rootItem as MagazineItemClass;
-            if (magazineItemClass != null && possibleAction is GClass3411 && lootItemLastOwner != null && lootItemLastOwner.ProfileId != owner.ProfileId)
+            Magazine magazineItemClass = rootItem as Magazine;
+            if (magazineItemClass != null && possibleAction is MoveResult && lootItemLastOwner != null && lootItemLastOwner.ProfileId != owner.ProfileId)
             {
                 owner.InventoryController.StrictCheckMagazine(magazineItemClass, false, 0, false, true);
             }
@@ -176,7 +178,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
 
                 // Handle pickup state cleanup
-                var pickupState = owner.CurrentState as PickupStateClass;
+                var pickupState = owner.CurrentState as PickUpState;
                 pickupState?.Pickup(false, null);
             });
         }
@@ -216,7 +218,7 @@ namespace TarkovVR.Source.Player.Interactions
             try
             {
                 var ctrl = VRGlobals.player.InventoryController;
-                GStruct154<GInterface424> probe = InteractionsHandlerClass.QuickFindAppropriatePlace(
+                OperationResult<IItemOperationResult> probe = ItemManipulator.QuickFindAppropriatePlace(
                     item.Item,
                     ctrl,
                     ctrl.Inventory.Equipment.ToEnumerable(),
@@ -254,11 +256,11 @@ namespace TarkovVR.Source.Player.Interactions
                 yield break;
 
             bool ok = false;
-            GInterface424 action = default;
+            IItemOperationResult action = default;
             try
             {
                 var ctrl = VRGlobals.player.InventoryController;
-                GStruct154<GInterface424> place = InteractionsHandlerClass.QuickFindAppropriatePlace(
+                OperationResult<IItemOperationResult> place = ItemManipulator.QuickFindAppropriatePlace(
                     item.Item,
                     ctrl,
                     ctrl.Inventory.Equipment.ToEnumerable(),
@@ -297,6 +299,27 @@ namespace TarkovVR.Source.Player.Interactions
 
         public void Update()
         {
+            // Resolve a deferred use/eat item (hidden while eating) regardless of the bail below —
+            // it must still be returned/cleaned even if the player ends the use sprinting or in a menu.
+            if (VRGlobals.inGame && pendingUseLoot != null)
+                UpdatePendingUseLoot();
+
+            // Chest sling / support-hold input: MUST run BEFORE the bail below — the bail skips the
+            // whole update while isSupporting, but taking the dominant hand off the gun while the left
+            // holds the foregrip happens exactly IN that state (and the SupportOnly machine — regrab,
+            // left-release→sling — lives there too; this was why the right hand couldn't be released
+            // while supporting). Runs while sprinting as well; menus still skip (an open hand in the
+            // inventory must not sling). Ownership states here are one frame stale — fine, the holster/
+            // radial gestures span many frames.
+            if (VRGlobals.inGame && !VRGlobals.menuOpen && primaryHandGrip != null && VRGlobals.vrPlayer != null)
+            {
+                bool hangGripOwnedElsewhere =
+                    rightHandState.inBackHolster || rightHandState.inSidearmHolster
+                    || (VRGlobals.vrPlayer.radialMenu && VRGlobals.vrPlayer.radialMenu.active)
+                    || (WeaponPatches.currentGunInteractController != null
+                        && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1);
+                ChestHang.UpdateInput(primaryHandGrip.state, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
+            }
 
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
@@ -388,6 +411,15 @@ namespace TarkovVR.Source.Player.Interactions
             // Relax the free off-hand open (more when a loot dot is in view). Self-gates;
             // runs after EFT's hand animation. Must come last so it offsets the final pose.
             UpdateLeftHandFingers();
+
+            // Same open-hand treatment for the RIGHT hand while it's off the gun (ChestHang
+            // sling / support-only) - the animator still curls it in the grip pose otherwise.
+            UpdateRightHandFingers();
+
+            // AFTER both finger updates: buffer the rendered joint locals for the FIKA finger sync
+            // (VRArmSync sends them on its own cadence).
+            if (InstalledMods.FIKAInstalled)
+                SampleFingerSync();
         }
 
         private void CleanupCache()
@@ -525,11 +557,13 @@ namespace TarkovVR.Source.Player.Interactions
                 hasEnteredScope = false;
             }
 
-            // Handle loot interactions
+            // Handle loot interactions (either free hand can open doors/containers now)
             if (leftHandState.inInteractiveCollider)
-            {
-                ProcessInteractiveObjects();
-            }
+                ProcessInteractiveObjects(false);
+            if (rightHandState.inInteractiveCollider)
+                ProcessInteractiveObjects(true);
+
+            UpdateRightCorpseTap();
         }
         private void UpdateInputReferences()
         {
@@ -592,7 +626,56 @@ namespace TarkovVR.Source.Player.Interactions
                             hasEnteredSidearmHolster = true;
                         }
                         break;
+
+                    // Point-blank world interactables for the DOMINANT hand (mirrors the left) -
+                    // feed the right-hand loot pointer / door / container / corpse-tap interactions
+                    // when the hand is off the gun.
+                    case InteractableType.LootItem:
+                        rightHandState.inInteractiveCollider = true;
+                        rightHandState.lootItem = cachedInteractable.Component as LootItem;
+                        break;
+
+                    case InteractableType.LootableContainer:
+                        rightHandState.inInteractiveCollider = true;
+                        rightHandState.lootableContainer = cachedInteractable.Component as LootableContainer;
+                        break;
+
+                    case InteractableType.Door:
+                        rightHandState.inInteractiveCollider = true;
+                        rightHandState.door = cachedInteractable.Component as Door;
+                        break;
                 }
+            }
+
+            // Second pass over the interactive/dead-body layers (the left scans these too) so the
+            // right hand also finds doors/containers/corpses whose colliders aren't on layer 3.
+            foreach (Collider collider in nearbyColliders)
+            {
+                if (collider.gameObject.layer != INTERACTIVE_LAYER && collider.transform.root.gameObject.layer != DEAD_BODY_LAYER)
+                    continue;
+                if (!interactableCache.ContainsKey(collider))
+                    interactableCache[collider] = new CachedInteractable(collider.gameObject);
+                var ci = interactableCache[collider];
+                if (ci.Type == InteractableType.None)
+                    continue;
+                rightHandState.inInteractiveCollider = true;
+                switch (ci.Type)
+                {
+                    case InteractableType.LootItem:
+                        rightHandState.lootItem = ci.Component as LootItem;
+                        break;
+                    case InteractableType.LootableContainer:
+                        rightHandState.lootableContainer = ci.Component as LootableContainer;
+                        break;
+                    case InteractableType.Door:
+                        rightHandState.door = ci.Component as Door;
+                        break;
+                    case InteractableType.Corpse:
+                        rightHandState.corpse = ci.Component as Corpse;
+                        break;
+                }
+                if (!previousState.inInteractiveCollider)
+                    SteamVR_Actions._default.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, primaryInputSource);
             }
 
             // Reset enter flags when leaving areas
@@ -600,6 +683,50 @@ namespace TarkovVR.Source.Player.Interactions
                 hasEnteredBackHolster = false;
             if (previousState.inSidearmHolster && !rightHandState.inSidearmHolster)
                 hasEnteredSidearmHolster = false;
+        }
+
+        // Grip TAP on a corpse with the free DOMINANT hand opens its loot grid (mirrors the off
+        // hand's tap-to-loot, minus the drag - body dragging stays on the off hand).
+        private bool rightCorpseTapArmed;
+        private Corpse rightCorpseTapCorpse;
+        private float rightCorpseTapTime;
+        private Vector3 rightCorpseTapPos;
+
+        private void UpdateRightCorpseTap()
+        {
+            Transform hand = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null
+                ? VRGlobals.vrPlayer.RightHand.transform : null;
+            if (hand == null || !DominantHandFree() || heldItem != null || isSummoningLoot)
+            {
+                rightCorpseTapArmed = false;
+                rightCorpseTapCorpse = null;
+                return;
+            }
+
+            if (primaryHandGrip.stateDown && rightHandState.corpse != null)
+            {
+                rightCorpseTapArmed = true;
+                rightCorpseTapCorpse = rightHandState.corpse;
+                rightCorpseTapTime = Time.time;
+                rightCorpseTapPos = hand.position;
+                return;
+            }
+
+            if (rightCorpseTapArmed && primaryHandGrip.stateUp)
+            {
+                bool wasTap = (Time.time - rightCorpseTapTime) <= bodyTapMaxTime
+                              && (hand.position - rightCorpseTapPos).sqrMagnitude <= bodyTapMaxMove * bodyTapMaxMove;
+                Corpse c = rightCorpseTapCorpse;
+                rightCorpseTapArmed = false;
+                rightCorpseTapCorpse = null;
+                if (wasTap)
+                    OpenCorpseLoot(c);
+            }
+            else if (rightCorpseTapArmed && !primaryHandGrip.state)
+            {
+                rightCorpseTapArmed = false;   // lost the grip without a clean stateUp
+                rightCorpseTapCorpse = null;
+            }
         }
 
         private void UpdateLeftHandCollisions()
@@ -730,44 +857,49 @@ namespace TarkovVR.Source.Player.Interactions
                 hasEnteredScope = false;
         }
 
-        private void ProcessInteractiveObjects()
+        private void ProcessInteractiveObjects(bool dominant)
         {
             // If heldItem is destroyed (e.g. picked up into inventory), clear the reference
             if (heldItem != null && heldItem is not UnityEngine.Object)
             {
                 ForceDropHeldItem();
             }
-            
+
             // Block all world interactions while holding an item
             if (heldItem != null)
                 return;
 
-            // Only process if button is pressed
-            if (!secondaryHandGrip.stateDown)
+            InteractionState state = dominant ? rightHandState : leftHandState;
+
+            // Only process if THAT hand's grip was pressed; the dominant hand only interacts while
+            // it's genuinely free (off the gun, outside holster zones / the slung-gun regrab).
+            if (!(dominant ? primaryHandGrip : secondaryHandGrip).stateDown)
+                return;
+            if (dominant && !DominantHandFree())
                 return;
 
             // NOTE: loose-item grabbing is now owned by the palm-cone loot pointer
             // (UpdateLootPointer/BeginSummon) so that even a point-blank grab snaps the
             // item's collider surface onto the palm. Containers/doors/corpses keep the
             // reach-in interaction below.
-            if (leftHandState.lootableContainer != null)
+            if (state.lootableContainer != null)
             {
-                var container = leftHandState.lootableContainer;
-                VRGlobals.player.vmethod_1(container, new InteractionResult(EInteractionType.Open));
+                var container = state.lootableContainer;
+                VRGlobals.player.ExecuteInteraction(container, new InteractionResult(EInteractionType.Open));
                 float initialDistance = Vector3.Distance(VRGlobals.player.Transform.position, container.transform.position);
                 VRGlobals.player.SetCallbackForInteraction(delegate (Action callback)
                 {
-                    GetActionsClass.smethod_22(PlayerOwner, callback, container, initialDistance);
+                    InteractionContextHelper.OnContainerOpen(PlayerOwner, callback, container, initialDistance);
                 });
                 VRGlobals.player.StartBehaviourTimer(EFTHardSettings.Instance.DelayToOpenContainer, delegate
                 {
                     VRGlobals.player.TryInteractionCallback(container);
                 });
             }
-            else if (leftHandState.door != null)
+            else if (state.door != null)
             {
-                var door = leftHandState.door;
-                GetActionsClass.Class1757 doorInteractionClass = new GetActionsClass.Class1757();
+                var door = state.door;
+                InteractionContextHelper.CG_GetAvailableActions15 doorInteractionClass = new InteractionContextHelper.CG_GetAvailableActions15();
                 doorInteractionClass.door = door;
                 doorInteractionClass.owner = PlayerOwner;
 
@@ -900,7 +1032,7 @@ namespace TarkovVR.Source.Player.Interactions
             const float baseHandsCapacity = 150f;
             try
             {
-                if (VRGlobals.player?.Physical is not PlayerPhysicalClass physical) 
+                if (VRGlobals.player?.Physical is not Physical physical) 
                     return;
 
                 if (physical.HandsStamina.Current <= 0f)
@@ -909,7 +1041,7 @@ namespace TarkovVR.Source.Player.Interactions
                     return;
                 }
 
-                float itemWeight = heldItem.item_0.TotalWeight;
+                float itemWeight = heldItem._item.TotalWeight;
                 float drainPerSec = baseHandsCapacity * 0.0004f * Mathf.Pow(itemWeight, 1.20f);
                 physical.ConsumeAsMelee(drainPerSec * Time.deltaTime);
             }
@@ -928,7 +1060,7 @@ namespace TarkovVR.Source.Player.Interactions
         /// </summary>
         private bool HeldItemAlive()
         {
-            return heldItem != null && heldItem.Item != null && heldItem.item_0 != null;
+            return heldItem != null && heldItem.Item != null && heldItem._item != null;
         }
 
         /// <summary>
@@ -947,7 +1079,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            if (secondaryHandGrip.state)
+            // The grip that HOLDS the item is the one that drops it (either hand can summon now).
+            if ((heldInDominantHand ? primaryHandGrip : secondaryHandGrip).state)
                 return;
 
             // Releasing grip mid-summon cancels it and drops the item where it is.
@@ -1005,7 +1138,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             try
             {
-                if (VRGlobals.player?.Physical is not PlayerPhysicalClass physical)
+                if (VRGlobals.player?.Physical is not Physical physical)
                     return;
 
                 // Get controller velocity at release
@@ -1018,7 +1151,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (speed < throwVelocityThreshold)
                     return;
 
-                float itemWeight = item.item_0.TotalWeight;
+                float itemWeight = item._item.TotalWeight;
                 float speedFactor = Mathf.Clamp01((speed - throwVelocityThreshold) / 3f);
                 const float throwA = 1.340f;
                 const float throwP = 0.90f;
@@ -1160,6 +1293,112 @@ namespace TarkovVR.Source.Player.Interactions
                 ForceDropHeldItem();
         }
 
+        //--- Deferred use/eat release (default) --------------------------------------
+        // The old ReleaseHeldForUse stowed the held loose-loot item into the inventory the instant
+        // a use/eat started. With the "use loose loot" mod that eats the item IN PLACE, moving it
+        // into a backpack mid-eat changes its address out from under the use and STOPS the eat.
+        // Instead: HIDE the held item for the duration of the use, then decide its fate when the
+        // use ENDS — fully consumed -> it's gone; cancelled / a sip of a multi-use drink -> stow
+        // if it fits, else drop it back into the world (it "reappears"). Flag so the old immediate
+        // stow/drop can be A/B'd in the headset.
+        public static bool deferUseLootRelease = true;
+
+        private LootItem pendingUseLoot;        // hidden held item awaiting the use/eat outcome
+        private Transform pendingUseLootParent; // its original world parent (for the drop-back)
+        private float pendingUseGraceUntil;     // hold off resolving until the use has settled
+
+        /// <summary>
+        /// Use/eat started while we physically hold a loose-loot item: take our hold off it and
+        /// HIDE it for the duration. Does NOT touch the inventory — the in-place use owns the item
+        /// now. Resolved later by UpdatePendingUseLoot once the use ends.
+        /// </summary>
+        private void BeginDeferredUseRelease()
+        {
+            LootItem item = heldItem;
+            if (item == null) return;
+
+            RemoveFikaSyncer(item);             // we're no longer driving its pose
+            pendingUseLoot = item;
+            pendingUseLootParent = cachedOriginalParent;
+            pendingUseGraceUntil = 0f;
+
+            // Drop our active-hold plumbing WITHOUT dropping/stowing the item — mirror of
+            // CleanupAfterHeldItemGone, except the item stays alive (just hidden).
+            heldItem = null;
+            cachedRigidbody = null;
+            cachedHand = null;
+            isItemInitialized = false;
+            isSummoningLoot = false;
+
+            try { if (item.gameObject != null) item.gameObject.SetActive(false); } catch { }
+
+            try { VRGlobals.player?.GetComponent<GamePlayerOwner>()?.InteractionsChangedHandler(); } catch { }
+            NotifyWeightChanged();
+            Plugin.MyLog.LogInfo("[ManualEat] Held loose-loot item hidden for the use/eat — outcome deferred.");
+        }
+
+        /// <summary>
+        /// Per-frame while a hidden item awaits its outcome. Waits for the use/eat to END (plus a
+        /// short settle so the finish's nutrition drain / put-away has run), then resolves:
+        ///   item gone           -> consumed by the game/mod: nothing to do.
+        ///   food emptied         -> eaten to 0 but the loose item lingered: remove the world rep.
+        ///   item still has food  -> cancelled / partial: stow if it fits, else drop it back.
+        /// Called from Update before the sprint/support/menu early-out so it always runs.
+        /// </summary>
+        private void UpdatePendingUseLoot()
+        {
+            if (pendingUseLoot == null) return; // Unity == catches a destroyed object too
+
+            bool usingOrEating = VRGlobals.usingItem || EatingInteractionController.ManualActive;
+            if (usingOrEating)
+            {
+                // Keep pushing the resolve out while the use is live (ManualActive flips off the
+                // instant the finish starts, before the drain/put-away — don't read item state yet).
+                pendingUseGraceUntil = Time.time + 0.4f;
+                return;
+            }
+            if (Time.time < pendingUseGraceUntil)
+                return;
+
+            LootItem item = pendingUseLoot;
+            pendingUseLoot = null;
+
+            // Consumed — either the game already removed it (Item null) or it was eaten to empty.
+            // Either way the eat's OWN cleanup owns the removal: DiscardFood (ConsumeFoodWhenSettled)
+            // pulls the food off its GClass3390 loose-loot address, which fires
+            // LootItem.RemoveLootItem -> GameWorld.DestroyLoot and destroys the world GO for us. So
+            // DON'T destroy it here — pre-destroying the GameObject makes that handler run on a dead
+            // object (base.transform == null) -> NullReferenceException (the bug this replaced). Just
+            // drop our hidden reference; the still-inactive GO is torn down by the discard's event.
+            if (item == null || item.Item == null || item._item == null || IsFoodEmptied(item.Item))
+            {
+                Plugin.MyLog.LogInfo("[ManualEat] Deferred use: item consumed — removal left to the eat's discard.");
+                NotifyWeightChanged();
+                return;
+            }
+
+            // Not consumed (cancelled, or a sip of a multi-use drink): give the physical item
+            // back — un-hide it and run the original stow-if-fits-else-drop path.
+            try { if (item.gameObject != null) item.gameObject.SetActive(true); } catch { }
+            heldItem = item;
+            cachedOriginalParent = pendingUseLootParent;
+            cachedHand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand?.transform : null;
+            Plugin.MyLog.LogInfo("[ManualEat] Deferred use: not consumed — returning the item (stow or drop).");
+            ReleaseHeldForUse();
+        }
+
+        // A FoodDrinkComponent whose resource hit 0 = fully consumed. No component / not food =
+        // treat as not-emptied (return it rather than wrongly destroy it).
+        private static bool IsFoodEmptied(Item item)
+        {
+            try
+            {
+                FoodDrinkComponent fdc = item?.GetItemComponent<FoodDrinkComponent>();
+                return fdc != null && fdc.HpPercent <= 0f;
+            }
+            catch { return false; }
+        }
+
         /// <summary>
         /// FIKA attaches an ItemPositionSyncer to loose items to network-sync their physics;
         /// once we take control (make it kinematic + reparent, or remove it into the inventory)
@@ -1189,7 +1428,7 @@ namespace TarkovVR.Source.Player.Interactions
             cachedRigidbody.isKinematic = true;
             cachedRigidbody.detectCollisions = true;
             cachedRigidbody.useGravity = false;
-            cachedRigidbody.mass = heldItem.item_0.TotalWeight;
+            cachedRigidbody.mass = heldItem._item.TotalWeight;
 
             cachedGrabOffset = cachedHand.InverseTransformPoint(heldItem.transform.position);
             cachedGrabRotation = Quaternion.Inverse(cachedHand.rotation) * heldItem.transform.rotation;

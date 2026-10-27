@@ -1,17 +1,15 @@
-﻿using Comfort.Common;
+using Comfort.Common;
 using EFT;
 using EFT.EnvironmentEffect;
 using EFT.Rendering.Clouds;
 using EFT.Weather;
 using HarmonyLib;
 using System;
-using System.IO;
 using System.Reflection;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.XR;
-using static GClass3809;
 using static SSAAImpl;
 using static UnityEngine.ParticleSystem.PlaybackState;
 
@@ -22,9 +20,7 @@ namespace TarkovVR.Patches.Visuals
     {
         // Cache for expensive operations
         private static Camera fpsCam;
-        private static Camera opticCam;
         private static PrismEffects fpsPrism;
-        private static PrismEffects opticPrism;
         private static GameObject cloudInstance;
         private static Renderer lowRenderer;
         private static Material lowMaterial;
@@ -34,10 +30,11 @@ namespace TarkovVR.Patches.Visuals
         public static Vector4 cloudOffset = Vector4.zero;
         public static Vector2 lastWindDirection = new Vector2(1f, 0f);
 
+
         //Tarkov Clouds dont render correctly in VR so disable them
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(Class1821), "RenderClouds")]
-        private static bool DisableClouds(Class1821 __instance)
+        [HarmonyPatch(typeof(CloudLayerRenderer), "RenderClouds")]
+        private static bool DisableClouds(CloudLayerRenderer __instance)
         {
             return false;
         }
@@ -63,15 +60,7 @@ namespace TarkovVR.Patches.Visuals
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(TOD_Scattering), "OnRenderImage")]
-        private static void FixTODScattering(TOD_Scattering __instance, RenderTexture source, RenderTexture destination)
-        {
-
-            __instance.enabled = false;
-        }
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(PrismEffects), "method_5")]
+        [HarmonyPatch(typeof(PrismEffects), "SetFogShaderValues")]
         private static bool FixFogForVR(PrismEffects __instance, Material fogMaterial)
         {
             Camera cam = __instance.GetPrismCamera();
@@ -94,12 +83,15 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
+        // Old pre-FogSix fog hack: this used to drive a white PrismEffects fog on the scope (UpdateOpticFog)
+        // since the scope had no working fog in VR. FogSix now fogs the scope properly through the optic's
+        // own tod_Scattering_1, so that hack double-fogged it with a wrong-colored constant haze — removed.
+        // Kept only to force the fps prism fog off.
         [HarmonyPostfix]
-        [HarmonyPatch(typeof(WeatherController), "method_9")]
-        private static void DynamicFog(WeatherController __instance, float fog, GStruct275 interpolatedParams)
+        [HarmonyPatch(typeof(WeatherController), "ControlScattering")]
+        private static void DynamicFog(WeatherController __instance, float fog, ShowStatNotificationPacket interpolatedParams)
         {
-            // Initialize cameras only when needed
-            if (fpsCam == null || opticCam == null)
+            if (fpsCam == null)
             {
                 InitializeCameras();
             }
@@ -112,20 +104,7 @@ namespace TarkovVR.Patches.Visuals
                 fpsPrism = fpsCam.GetComponent<PrismEffects>() ?? fpsCam.gameObject.AddComponent<PrismEffects>();
             }
 
-            float fogDistance = Mathf.Clamp(-6944.44f * __instance.tod_Scattering_0.GlobalDensity + 544.22f, 100f, 500f);
-            float fogAlpha = Mathf.Lerp(0.7f, 0.2f, (fogDistance - 100f) / 400f);
-            Color fogColor = new Color(1f, 1f, 1f, fogAlpha);
-
-            fpsPrism.useFog = !VRSettings.GetDisableFog();
-
-            if (fpsPrism.useFog)
-            {
-                fpsPrism.fogDistance = fogDistance;
-                fpsPrism.fogColor = fogColor;
-                fpsPrism.fogEndColor = fogColor;
-            }
-
-            UpdateOpticFog(fogDistance, fogColor);
+            fpsPrism.useFog = false;
         }
         /*
         [HarmonyPostfix]
@@ -147,35 +126,8 @@ namespace TarkovVR.Patches.Visuals
             {
                 if (cam.name == "FPS Camera")
                     fpsCam = cam;
-                else if (cam.name == "BaseOpticCamera(Clone)")
-                    opticCam = cam;
             }
         }
-
-        private static void UpdateOpticFog(float fogDistance, Color fogColor)
-        {
-            if (opticCam != null)
-            {
-                if (opticPrism == null)
-                    opticPrism = opticCam.GetComponent<PrismEffects>() ?? opticCam.gameObject.AddComponent<PrismEffects>();
-
-                if (VRSettings.GetDisablePrismEffects())
-                {
-                    opticPrism.enabled = false;
-                    return;
-                }
-
-                opticPrism.enabled = true;
-                opticPrism.useFog = !VRSettings.GetDisableFog();
-
-                if (opticPrism.useFog)
-                {
-                    opticPrism.fogDistance = fogDistance;
-                    opticPrism.fogColor = fogColor;
-                    opticPrism.fogEndColor = fogColor;
-                }
-            }
-        }      
     }
 
 }

@@ -1,4 +1,5 @@
-﻿using EFT.Settings.Graphics;
+﻿using EFT.CameraControl;
+using EFT.Settings.Graphics;
 using GPUInstancer;
 using HarmonyLib;
 using System;
@@ -15,12 +16,23 @@ namespace TarkovVR.Patches.Visuals
     [HarmonyPatch]
     internal class AOPatches
     {
+        // AOSix (standalone AO mod) replaces this Amplify path when installed; it owns SetSSAO then.
+        // Checked lazily: at Awake, BepInEx only lists the plugins loaded before us.
+        private static bool? aoSixInstalled;
+
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(CameraClass), "SetSSAO")]
-        private static bool CustomAOSet(CameraClass __instance, ESSAOMode ssaoMode)
+        [HarmonyPatch(typeof(CameraManager), "SetSSAO")]
+        private static bool CustomAOSet(CameraManager __instance, ESSAOMode ssaoMode)
         {
-            __instance.Hbao_0.enabled = false;
-            __instance.AmbientOcclusion_0.enabled = false;
+            aoSixInstalled ??= BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("com.matsix.aosix");
+            if (aoSixInstalled.Value)
+            {
+                VRGlobals.ssaoMode = ssaoMode;
+                return true;
+            }
+
+            __instance._hbao.enabled = false;
+            __instance._ambientOcclusion.enabled = false;
             VRGlobals.ssaoMode = ssaoMode;
             AmplifyGTAO gtaoManager;
             Camera cam = __instance.Camera;

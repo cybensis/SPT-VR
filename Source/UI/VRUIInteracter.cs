@@ -1,9 +1,12 @@
-﻿using EFT.UI;
+﻿using EFT.InventoryLogic;
+using EFT.UI;
 using EFT.UI.DragAndDrop;
 using EFT.UI.Health;
 using EFT.UI.Ragfair;
 using EFT.UI.Utilities.LightScroller;
+using System;
 using System.Collections.Generic;
+using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -18,6 +21,25 @@ namespace TarkovVR.Source.UI
 
         private float rayDistance = 100f;
         private static float DRAG_TRIGGER_THRESHOLD = 0.5f;
+
+        // Drag an item off the inventory panel and release to drop it on the ground. RAID ONLY
+        // (gated on RaidVRPlayerManager in DropDraggedItemToGround) — there is no world to drop into
+        // in the hideout/stash/loadout, and those use HideoutVRPlayerManager / no local Player, so
+        // the gesture is a no-op there. Live-tunable for A/B; promote to a VR-settings toggle later.
+        public static bool enableDragToDrop = true;
+
+        // A release over dead space only counts as a drop once the aim has been dragged this far
+        // (world metres) from the item's origin slot — measured on the inventory panel's plane. A
+        // release closer than this just cancels, so a fumbled near-miss move doesn't drop the item.
+        // Releasing over an actual grid/slot is always a move regardless of distance, so this gate
+        // only governs dead-space/off-panel releases. The panel is ~1.5 m wide in world space
+        // (canvas * 0.0006 scale), so ~0.2 m ≈ "clearly dragged off the grid". Tune in-headset.
+        public static float dropDistance = 0.5f;
+        // Where the drag started (origin slot) + the last point/normal the ray touched the panel,
+        // used to measure how far the aim has been dragged for the drop gate.
+        private Vector3 dragStartPanelPoint;
+        private Vector3 lastUiHitPoint;
+        private Vector3 lastUiHitNormal;
 
         private PointerEventData eventData;
         public GameObject lastHighlightedObject;
@@ -75,6 +97,10 @@ namespace TarkovVR.Source.UI
                 //if (hitObject)
                 //    Plugin.MyLog.LogWarning("HIT:    " + hit.collider + "    |   LAST HIT:    " + hitObject.name);
                 eventData.worldPosition = hit.point;
+                // Remember the panel surface the ray is on, so the off-panel drop gate can measure
+                // how far the aim later slides past it.
+                lastUiHitPoint = hit.point;
+                lastUiHitNormal = hit.normal;
 
                 if (hitObject)
                 {
@@ -89,9 +115,17 @@ namespace TarkovVR.Source.UI
                     ExecuteEvents.Execute(lastHighlightedObject, eventData, ExecuteEvents.pointerExitHandler);
                     lastHighlightedObject = null;
                 }
-                if (hitObject || dragObject) 
+                if (hitObject || dragObject)
                     handleDragging(hit.point);
 
+            }
+            // Ray has left every UI collider while a drag is in progress: the user has pulled the
+            // item off the inventory panel into open space. Keep the drag alive while the trigger is
+            // held; releasing here drops the item to the ground (raid only). Without this branch an
+            // off-panel release does nothing because the whole drag pipeline lives under `if (isHit)`.
+            else if (enableDragToDrop && dragObject != null)
+            {
+                HandleOffPanelDrag();
             }
             //else
             //{
@@ -220,6 +254,7 @@ namespace TarkovVR.Source.UI
                 {
                     pressedObject = hitObject;
                     pressPosition = eventData.worldPosition;
+                    dragStartPanelPoint = eventData.worldPosition; // origin slot, for the drop-distance gate
                     eventData.dragging = true;
                     eventData.pressPosition = hitPoint;
                     ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.beginDragHandler);
@@ -237,13 +272,23 @@ namespace TarkovVR.Source.UI
                     CancelDrag();
 
             }
-            else if (dragObject && hitObject)
-                DropItem();
             else if (dragObject)
+                ReleaseDrag();
+        }
+
+        private void ReleaseDrag()
+        {
+            bool overDropTarget = hitObject != null &&
+                (hitObject.GetComponentInParent<IContainerView>() != null ||
+                 hitObject.GetComponentInParent<ItemView>() != null ||
+                 hitObject.GetComponentInParent<IDropHandler>() != null);
+
+            if (overDropTarget)
+                DropItem();
+            else if (enableDragToDrop && DragAimDistanceFromStart() >= dropDistance)
+                DropDraggedItemToGround();
+            else
                 CancelDrag();
-
-
-
         }
 
         private void DropItem()
@@ -261,6 +306,102 @@ namespace TarkovVR.Source.UI
             eventData.dragging = false;
             ExecuteEvents.Execute(dragObject, eventData, ExecuteEvents.endDragHandler);
             dragObject = null;
+        }
+
+        // Mid-drag, but the pointer ray has left the inventory panel entirely (pointing off into the
+        // world). Nothing valid is under the aim, so this is the same as a dead-space release: B/Y
+        // cancels; releasing the trigger drops the item if it's been dragged far enough from origin.
+        private void HandleOffPanelDrag()
+        {
+            bool triggerHeld = (VRSettings.GetLeftHandedMode()
+                ? SteamVR_Actions._default.LeftTrigger.axis
+                : SteamVR_Actions._default.RightTrigger.axis) > DRAG_TRIGGER_THRESHOLD;
+            SteamVR_Action_Boolean cancelButton = VRSettings.GetLeftHandedMode()
+                ? SteamVR_Actions._default.ButtonY
+                : SteamVR_Actions._default.ButtonB;
+
+            if (cancelButton.stateUp)
+            {
+                CancelDrag();
+                return;
+            }
+            if (triggerHeld)
+                return; // still dragging
+
+            if (DragAimDistanceFromStart() >= dropDistance)
+                DropDraggedItemToGround();
+            else
+                CancelDrag();
+        }
+
+        // Distance (world metres) from where the drag started (the item's origin slot) to the current
+        // aim, projected onto the panel plane. Same metric on-panel and off, so the drop gate behaves
+        // consistently across the panel edge.
+        private float DragAimDistanceFromStart()
+        {
+            return Vector3.Distance(ProjectAimOntoPanel(), dragStartPanelPoint);
+        }
+
+        // Intersect the hand ray with the inventory panel's plane (through the last on-panel hit
+        // point, using its surface normal). On-panel this returns ~the current aim point; off-panel
+        // it's the extrapolated point on the panel plane. Degenerate cases (ray parallel to / behind
+        // the panel, or the panel was never touched) return a far-away point so the release drops.
+        private Vector3 ProjectAimOntoPanel()
+        {
+            Vector3 origin = transform.position;
+            Vector3 dir = transform.forward;
+            if (lastUiHitNormal != Vector3.zero)
+            {
+                float denom = Vector3.Dot(dir, lastUiHitNormal);
+                if (Mathf.Abs(denom) >= 1e-5f)
+                {
+                    float t = Vector3.Dot(lastUiHitPoint - origin, lastUiHitNormal) / denom;
+                    if (t > 0f)
+                        return origin + dir * t;
+                }
+            }
+            return dragStartPanelPoint + dir * 9999f; // "way off" — always exceeds dropDistance
+        }
+
+        // Drop the currently-dragged inventory item onto the ground via the EXACT same path as
+        // right-click -> Discard: the item's context-menu Discard interaction. In raid that throws
+        // the item to the floor as a lootable world item (and FIKA-syncs); it also respects discard
+        // limits, so quest/locked items can't be dropped (IsInteractionAvailable is false -> no-op).
+        // (The earlier InteractionsHandlerClass.Discard call was the wrong, lower-level op — it
+        // removed the item from inventory WITHOUT spawning it in the world, i.e. "it disappeared".)
+        private void DropDraggedItemToGround()
+        {
+            GameObject dragged = dragObject;
+            ItemView itemView = dragged.GetComponent<ItemView>() ?? dragged.GetComponentInParent<ItemView>();
+
+            // Clean up the native drag ghost without moving the item (null target => no AcceptItem).
+            if (eventData == null)
+                eventData = new PointerEventData(EventSystem.current);
+            eventData.button = PointerEventData.InputButton.Left;
+            eventData.pointerEnter = null;
+            eventData.pointerDrag = null;
+            eventData.dragging = false;
+            ExecuteEvents.Execute(dragged, eventData, ExecuteEvents.endDragHandler);
+            dragObject = null;
+
+            // RAID ONLY. Hideout/stash/loadout use HideoutVRPlayerManager or have no local Player —
+            // never discard there. This is the single gate that keeps the gesture out of the hideout.
+            if (!(VRGlobals.vrPlayer is RaidVRPlayerManager))
+                return;
+            if (itemView == null || itemView.Item == null)
+                return;
+
+            try
+            {
+                // NewContextInteractions == ItemUiContext.GetItemContextInteractions(ItemContext, null).
+                var interactions = itemView.NewContextInteractions;
+                if (interactions != null && interactions.IsInteractionAvailable(EItemInfoButton.Discard).Succeed)
+                    interactions.ExecuteInteraction(EItemInfoButton.Discard);
+            }
+            catch (Exception ex)
+            {
+                Plugin.MyLog.LogError($"[VRDrop] drop-to-ground failed: {ex}");
+            }
         }
         private GameObject RaycastFindHit(RaycastHit hit, ref PointerEventData eventData)
         {
@@ -292,7 +433,7 @@ namespace TarkovVR.Source.UI
                 while (i < 5)
                 {
 
-                    if (hitObject.GetComponent<IPointerEnterHandler>() != null || hitObject.GetComponent<IBeginDragHandler>() != null || hitObject.GetComponent<IDragHandler>() != null || hitObject.GetComponent<IContainer>() != null)
+                    if (hitObject.GetComponent<IPointerEnterHandler>() != null || hitObject.GetComponent<IBeginDragHandler>() != null || hitObject.GetComponent<IDragHandler>() != null || hitObject.GetComponent<IContainerView>() != null)
                     {
                         foundValidObject = true;
                         break;

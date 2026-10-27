@@ -1,24 +1,25 @@
-﻿using HarmonyLib;
+﻿using Comfort.Common;
+using EFT.Settings;
+using EFT.Settings.Graphics;
+using EFT.UI;
+using EFT.UI.Settings;
+using EFT.Visual;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
-using UnityEngine.Rendering.PostProcessing;
-using UnityEngine.Rendering;
 using UnityEngine;
-using System.IO;
-using UnityEngine.XR;
-using EFT.Visual;
-using static SSAAImpl;
-using static DLSSWrapper;
 using UnityEngine.Experimental.Rendering;
-using EFT.Settings.Graphics;
-using Comfort.Common;
-using EFT.UI.Settings;
-using EFT.UI;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.PostProcessing;
+using UnityEngine.XR;
 using Valve.VR;
-using System.Reflection;
+using static DLSSWrapper;
+using static SSAAImpl;
 
 namespace TarkovVR.Patches.Visuals
 {
@@ -516,7 +517,7 @@ namespace TarkovVR.Patches.Visuals
                 }
             }
 
-            EAntialiasingMode currentAA = Singleton<SharedGameSettingsClass>.Instance.Graphics.Settings.AntiAliasing;
+            EAntialiasingMode currentAA = Singleton<SettingsManager>.Instance.Graphics.Settings.AntiAliasing;
 
             if (currentAA == EAntialiasingMode.FXAA && __instance.CurrentState != SSState.UPSCALE)
                 ApplyFXAA(source, destination);
@@ -560,10 +561,10 @@ namespace TarkovVR.Patches.Visuals
         // If you want to push it further, lower cullDistanceMultiplier, or give Default a finite
         // distance (e.g. 1500) to trim very distant world geometry — test for building pop-in first.
         //
-        // Tunables are live (UnityExplorer): flip useLayerCullDistances / change cullDistanceMultiplier
-        // mid-raid and the next frame rebuilds + re-applies. Watch the BepInEx log for "[CullDist]".
+        // useLayerCullDistances is live (UnityExplorer); cullDistanceMultiplier follows the VR Graphics
+        // "Per-Layer Cull Distance" slider. Either change rebuilds + re-applies next frame. Log: "[CullDist]".
         public static bool useLayerCullDistances = true;   // master toggle
-        public static float cullDistanceMultiplier = 1f;   // scales the whole table; <1 = more aggressive
+        public static float cullDistanceMultiplier = 1f;   // scales the whole table; <1 = more aggressive (set from the slider)
 
         private static float[] _cullDistances;             // cached scaled array (rebuilt on multiplier change)
         private static float[] _zeroDistances;             // all-0 = far clip everywhere (restore on disable)
@@ -597,6 +598,9 @@ namespace TarkovVR.Patches.Visuals
         {
             if (cam == null)
                 return;
+
+            // Driven by the "Per-Layer Cull Distance" slider (VR Graphics); a change rebuilds the table below.
+            cullDistanceMultiplier = TarkovVR.Source.Settings.VRSettings.GetCullDistance();
 
             if (!useLayerCullDistances)
             {

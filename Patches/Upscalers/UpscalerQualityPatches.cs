@@ -1,4 +1,5 @@
-﻿using EFT.Settings.Graphics;
+﻿using EFT.CameraControl;
+using EFT.Settings.Graphics;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
@@ -16,13 +17,13 @@ namespace TarkovVR.Patches.Upscalers
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(CameraClass), "SetAntiAliasing")]
-        private static bool UpdateVREyeResolutionForDLSS(CameraClass __instance, EAntialiasingMode quality, EDLSSMode dlssMode, EFSR2Mode fsr2Mode, EFSR3Mode fsr3Mode)
+        [HarmonyPatch(typeof(CameraManager), "SetAntiAliasing")]
+        private static bool UpdateVREyeResolutionForDLSS(CameraManager __instance, EAntialiasingMode quality, EDLSSMode dlssMode, EFSR2Mode fsr2Mode, EFSR3Mode fsr3Mode)
         {
             bool dlssOn = dlssMode > EDLSSMode.Off;
             bool fsr2On = fsr2Mode > EFSR2Mode.Off;
             bool fsr3On = fsr3Mode > EFSR3Mode.Off;
-            SSAAImpl ssaaimpl_ = __instance.Ssaaimpl_0;
+            SSAAImpl ssaaimpl_ = __instance._ssaaImpl;
             __instance.SSAA.UseJitter = dlssOn || fsr2On || fsr3On;
             if ((bool)ssaaimpl_)
             {
@@ -33,7 +34,7 @@ namespace TarkovVR.Patches.Upscalers
             {
                 if ((bool)ssaaimpl_)
                 {
-                    ssaaimpl_.DLSSQualityNext = GraphicsSettingsClass.GetDLSSQuality(dlssMode);
+                    ssaaimpl_.DLSSQualityNext = GraphicsSettingsGroup.GetDLSSQuality(dlssMode);
                     ssaaimpl_.EnableDLSS = true;
                     float num = ssaaimpl_.ComputeOptimalResamplingFactor(__instance.SSAA.GetOutputWidth(), __instance.SSAA.GetOutputHeight(), ssaaimpl_.DLSSQualityNext);
                     __instance.SSAA.Switch(num);
@@ -44,12 +45,13 @@ namespace TarkovVR.Patches.Upscalers
                 if (VRGlobals.VRCam != null)
                     VRGlobals.VRCam.depthTextureMode |= DepthTextureMode.MotionVectors | DepthTextureMode.Depth;
 
+
                 float scale = dlssMode switch
                 {
-                    EDLSSMode.Quality => 0.77f,
-                    EDLSSMode.Balanced => 0.67f,
-                    EDLSSMode.Performance => 0.59f,
-                    EDLSSMode.UltraPerformance => 0.50f,
+                    EDLSSMode.Quality => 0.775f,          // 1.5x
+                    EDLSSMode.Balanced => 0.6667f,         // 1.72x (58%)
+                    EDLSSMode.Performance => 0.5814f,         // 2.0x
+                    EDLSSMode.UltraPerformance => 0.5f, // 3.0x
                     _ => 1f
                 };
 
@@ -66,10 +68,10 @@ namespace TarkovVR.Patches.Upscalers
                 {
                     scale = fsr3Mode switch
                     {
-                        EFSR3Mode.Quality => 0.77f,
-                        EFSR3Mode.Balanced => 0.67f,
-                        EFSR3Mode.Performance => 0.59f,
-                        EFSR3Mode.UltraPerformance => 0.50f,
+                        EFSR3Mode.Quality => 0.775f,          // 1.5x
+                        EFSR3Mode.Balanced => 0.6667f,         // 1.7x
+                        EFSR3Mode.Performance => 0.5882f,         // 2.0x
+                        EFSR3Mode.UltraPerformance => 0.5f, // 3.0x
                         _ => 1f
                     };
                     label = $"[VR FSR3] Set eye texture scale to {scale} for mode {fsr3Mode}";
@@ -78,10 +80,10 @@ namespace TarkovVR.Patches.Upscalers
                 {
                     scale = fsr2Mode switch
                     {
-                        EFSR2Mode.Quality => 0.77f,
-                        EFSR2Mode.Balanced => 0.67f,
-                        EFSR2Mode.Performance => 0.59f,
-                        EFSR2Mode.UltraPerformance => 0.50f,
+                        EFSR2Mode.Quality => 0.775f,          // 1.5x
+                        EFSR2Mode.Balanced => 0.6667f,         // 1.7x
+                        EFSR2Mode.Performance => 0.5882f,         // 2.0x
+                        EFSR2Mode.UltraPerformance => 0.5f, // 3.0x
                         _ => 1f
                     };
                     label = $"[VR FSR2] Set eye texture scale to {scale} for mode {fsr2Mode}";
@@ -101,85 +103,23 @@ namespace TarkovVR.Patches.Upscalers
             __instance.method_3();
             return false;
         }
-        /*
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(GClass1074), "CreateBindings")]
-        private static void SetUpscalerQuality(GClass1074 __instance)
-        {
-            EDLSSMode dlssMode = __instance.Gparam_0.DLSSMode;
-            EFSR2Mode fsr2Mode = __instance.Gparam_0.FSR2Mode;
-            EFSR3Mode fsr3Mode = __instance.Gparam_0.FSR3Mode;
+        // VR Native AA (DLAA-style): render at native (or near) and let FSR/DLSS run purely as an anti-
+        // aliaser. VR sets the camera rect DIRECTLY here (not the game's SSAA.Switch state machine), so the
+        // flatscreen NOSCALE gate that forced 0.99 there doesn't apply — 1.0 is worth trying for TRUE native.
+        // If FSR stops running at exactly 1.0 (jitter appears, same tell as flatscreen), set this to 0.99.
+        public static float NativeAAScale = 1.0f;
 
-            bool dlssOn = dlssMode > EDLSSMode.Off;
-            bool fsr2On = fsr2Mode > EFSR2Mode.Off;
-            bool fsr3On = fsr3Mode > EFSR3Mode.Off;
-            SSAAImpl ssaaimpl_ = __instance.CameraClass.Ssaaimpl_0;
-            __instance.CameraClass.SSAA.UseJitter = dlssOn || fsr2On || fsr3On;
-            if (dlssOn)
-            {
-                if (VRGlobals.VRCam != null)
-                    VRGlobals.VRCam.depthTextureMode |= DepthTextureMode.MotionVectors | DepthTextureMode.Depth;
+        // The quality mode's real scale (pre Native-AA), stashed so the menu toggle can re-apply live.
+        private static float _lastBaseScale = -1f;
+        private static bool _lastIsDlss;
 
-                float scale = dlssMode switch
-                {
-                    EDLSSMode.Quality => 0.77f,
-                    EDLSSMode.Balanced => 0.67f,
-                    EDLSSMode.Performance => 0.59f,
-                    EDLSSMode.UltraPerformance => 0.50f,
-                    _ => 1f
-                };
-
-                ApplyUpscalerScale(scale, ssaaimpl_, true);
-
-                float num = ssaaimpl_.ComputeOptimalResamplingFactor(__instance.CameraClass.SSAA.GetOutputWidth(), __instance.CameraClass.SSAA.GetOutputHeight(), ssaaimpl_.DLSSQualityNext);
-                Plugin.MyLog.LogWarning($"[VR DLSS] Set eye texture scale to {scale} for mode {dlssMode}");
-                Plugin.MyLog.LogError($"[VR DLSS] DLSS enabled with resampling factor {num} (quality {ssaaimpl_.DLSSQualityNext})");
-            }
-            else if (fsr2On || fsr3On)
-            {
-                float scale;
-                string label;
-
-                if (fsr3On)
-                {
-                    scale = fsr3Mode switch
-                    {
-                        EFSR3Mode.Quality => 0.77f,
-                        EFSR3Mode.Balanced => 0.67f,
-                        EFSR3Mode.Performance => 0.59f,
-                        EFSR3Mode.UltraPerformance => 0.50f,
-                        _ => 1f
-                    };
-                    label = $"[VR FSR3] Set eye texture scale to {scale} for mode {fsr3Mode}";
-                }
-                else
-                {
-                    scale = fsr2Mode switch
-                    {
-                        EFSR2Mode.Quality => 0.77f,
-                        EFSR2Mode.Balanced => 0.67f,
-                        EFSR2Mode.Performance => 0.59f,
-                        EFSR2Mode.UltraPerformance => 0.50f,
-                        _ => 1f
-                    };
-                    label = $"[VR FSR2] Set eye texture scale to {scale} for mode {fsr2Mode}";
-                }
-
-                ApplyUpscalerScale(scale, ssaaimpl_, false);
-                Plugin.MyLog.LogWarning(label);
-            }
-            else
-            {
-                // Reset to native when all upscalers are off
-                VRGlobals.upscalingMultiplier = 1f;
-                if (VRGlobals.VRCam != null && VRGlobals.VRCam.name == "FPS Camera")
-                    VRGlobals.VRCam.rect = new Rect(0f, 0f, 1f, 1f);
-                ssaaimpl_.EnableDLSS = false;
-            }
-        }
-        */
         private static void ApplyUpscalerScale(float scale, SSAAImpl ssaaimpl, bool isDlss)
         {
+            _lastBaseScale = scale;
+            _lastIsDlss = isDlss;
+            if (Source.Settings.VRSettings.GetNativeAA())
+                scale = NativeAAScale;
+
             VRGlobals.upscalingMultiplier = scale;
             VRJitterHelper.SetSampleCountForScale(Mathf.Min(scale, 1.0f), isDlss);
             if (VRGlobals.VRCam != null && VRGlobals.VRCam.name == "FPS Camera")
@@ -188,6 +128,14 @@ namespace TarkovVR.Patches.Upscalers
                     ? new Rect(0f, 0f, scale, scale)
                     : new Rect(0f, 0f, 1f, 1f);
             }
+        }
+
+        // Re-apply the last upscaler scale when the Native AA menu toggle flips (recomputes native vs the
+        // stored mode scale). No need to re-select the FSR quality. No-op until a mode has been applied once.
+        internal static void ReapplyForNativeAA()
+        {
+            if (_lastBaseScale > 0f)
+                ApplyUpscalerScale(_lastBaseScale, null, _lastIsDlss);
         }
     }
 }

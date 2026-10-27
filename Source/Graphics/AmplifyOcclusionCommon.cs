@@ -14,6 +14,11 @@ namespace TarkovVR.Source.Graphics
 {
     public static class AmplifyOcclusionCommon
     {
+        // VR per-eye fix: rebuild the AO depth->view reconstruction (and temporal reprojection matrices)
+        // from the actual per-eye OFF-AXIS frustum instead of the mono symmetric FOV. false = original
+        // symmetric behavior (the AO "swims" per eye because each eye's lateral frustum skew is dropped).
+        public static bool perEyeProjection = true;
+
         public static readonly int PerPixelNormalSourceCount = 4;
         public static readonly float[] m_temporalRotations = { 60.0f, 300.0f, 180.0f, 240.0f, 120.0f, 0.0f };
         public static readonly float[] m_spatialOffsets = { 0.0f, 0.5f, 0.25f, 0.75f };
@@ -138,27 +143,53 @@ namespace TarkovVR.Source.Graphics
             aTarget.oneOverWidth = 1.0f / (float)aTarget.width;
             aTarget.oneOverHeight = 1.0f / (float)aTarget.height;
 
-            float fovRad = aCamera.fieldOfView * Mathf.Deg2Rad;
-
-            float invHalfTanFov = 1.0f / Mathf.Tan(fovRad * 0.5f);
-
-            Vector2 focalLen = new Vector2(invHalfTanFov * (aTarget.height / (float)aTarget.width),
-                                            invHalfTanFov);
-
-            Vector2 invFocalLen = new Vector2(1.0f / focalLen.x, 1.0f / focalLen.y);
-
-            // Aspect Ratio
-            cb.SetGlobalVector(PropertyID._AO_UVToView, new Vector4(+2.0f * invFocalLen.x,
-                                                                      +2.0f * invFocalLen.y,
-                                                                      -1.0f * invFocalLen.x,
-                                                                      -1.0f * invFocalLen.y));
-
+            // _AO_UVToView maps a screen UV to a view-space ray: (uv.x*x + z, uv.y*y + w, -1). The mono
+            // path below builds it from a single symmetric FOV, which assumes a CENTERED frustum. VR
+            // per-eye frustums are OFF-AXIS (the horizontal skew term, projection m02, is nonzero and
+            // opposite-signed between the eyes), so the symmetric reconstruction lands the AO slightly
+            // left in one eye and right in the other -> the AO "swims" per eye. perEyeProjection rebuilds
+            // these constants from the actual per-eye projection matrix instead.
+            Vector4 uvToView;
             float projScale;
 
-            if (aCamera.orthographic)
-                projScale = ((float)aTarget.fullHeight) / aCamera.orthographicSize;
+            if (perEyeProjection && aCamera.stereoEnabled && !aCamera.orthographic)
+            {
+                Camera.StereoscopicEye eye = (aCamera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right)
+                                                ? Camera.StereoscopicEye.Right
+                                                : Camera.StereoscopicEye.Left;
+                Matrix4x4 proj = aCamera.GetStereoProjectionMatrix(eye);
+
+                // m00 = 1/(aspect*tan(fov/2)), m11 = 1/tan(fov/2); m02/m12 = the per-eye off-axis skew.
+                // scaleX = 2/m00, offsetX = (m02-1)/m00 (reduces to the symmetric -1/m00 when m02 == 0).
+                float m00 = proj.m00, m11 = proj.m11, m02 = proj.m02, m12 = proj.m12;
+
+                uvToView = new Vector4(2.0f / m00, 2.0f / m11, (m02 - 1.0f) / m00, (m12 - 1.0f) / m11);
+                projScale = aTarget.fullHeight * m11 * 0.5f;
+            }
             else
-                projScale = ((float)aTarget.fullHeight) / (Mathf.Tan(fovRad * 0.5f) * 2.0f);
+            {
+                float fovRad = aCamera.fieldOfView * Mathf.Deg2Rad;
+
+                float invHalfTanFov = 1.0f / Mathf.Tan(fovRad * 0.5f);
+
+                Vector2 focalLen = new Vector2(invHalfTanFov * (aTarget.height / (float)aTarget.width),
+                                                invHalfTanFov);
+
+                Vector2 invFocalLen = new Vector2(1.0f / focalLen.x, 1.0f / focalLen.y);
+
+                // Aspect Ratio
+                uvToView = new Vector4(+2.0f * invFocalLen.x,
+                                        +2.0f * invFocalLen.y,
+                                        -1.0f * invFocalLen.x,
+                                        -1.0f * invFocalLen.y);
+
+                if (aCamera.orthographic)
+                    projScale = ((float)aTarget.fullHeight) / aCamera.orthographicSize;
+                else
+                    projScale = ((float)aTarget.fullHeight) / (Mathf.Tan(fovRad * 0.5f) * 2.0f);
+            }
+
+            cb.SetGlobalVector(PropertyID._AO_UVToView, uvToView);
 
             if ((isDownsample == true) || (isFilterDownsample == true))
             {
@@ -183,24 +214,49 @@ namespace TarkovVR.Source.Graphics
 
         public void UpdateGlobalShaderConstants_Matrices(CommandBuffer cb, Camera aCamera, bool isUsingTemporalFilter)
         {
+                bool perEye = AmplifyOcclusionCommon.perEyeProjection && aCamera.stereoEnabled;
+                bool isRight = perEye && aCamera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right;
 
-                Matrix4x4 view = aCamera.worldToCameraMatrix;
+                // Multipass: each eye renders in its own pass and re-uploads these globals, so the shader
+                // always reads the "Left" slots and we just feed it the CURRENT eye's matrices. The
+                // prev-FRAME state, however, must be tracked separately per eye -- otherwise the left pass
+                // stores its matrix and the right pass reads it as ITS history (cross-eye reprojection
+                // ghosting). The Left/Right backing fields hold left-eye / right-eye history respectively.
+                Matrix4x4 view = perEye
+                    ? aCamera.GetStereoViewMatrix(isRight ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left)
+                    : aCamera.worldToCameraMatrix;
 
                 cb.SetGlobalMatrix(PropertyID._AO_CameraViewLeft, view);
 
                 if (isUsingTemporalFilter)
                 {
-                    Matrix4x4 proj = GL.GetGPUProjectionMatrix(aCamera.projectionMatrix, false);
+                    Matrix4x4 rawProj = perEye
+                        ? aCamera.GetStereoProjectionMatrix(isRight ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left)
+                        : aCamera.projectionMatrix;
+
+                    Matrix4x4 proj = GL.GetGPUProjectionMatrix(rawProj, false);
 
                     Matrix4x4 ViewProjMatrix = proj * view;
                     Matrix4x4 InvViewProjMatrix = Matrix4x4.Inverse(ViewProjMatrix);
 
                     cb.SetGlobalMatrix(PropertyID._AO_InvViewProjMatrixLeft, InvViewProjMatrix);
-                    cb.SetGlobalMatrix(PropertyID._AO_PrevViewProjMatrixLeft, m_prevViewProjMatrixLeft);
-                    cb.SetGlobalMatrix(PropertyID._AO_PrevInvViewProjMatrixLeft, m_prevInvViewProjMatrixLeft);
 
-                    m_prevViewProjMatrixLeft = ViewProjMatrix;
-                    m_prevInvViewProjMatrixLeft = InvViewProjMatrix;
+                    if (isRight)
+                    {
+                        cb.SetGlobalMatrix(PropertyID._AO_PrevViewProjMatrixLeft, m_prevViewProjMatrixRight);
+                        cb.SetGlobalMatrix(PropertyID._AO_PrevInvViewProjMatrixLeft, m_prevInvViewProjMatrixRight);
+
+                        m_prevViewProjMatrixRight = ViewProjMatrix;
+                        m_prevInvViewProjMatrixRight = InvViewProjMatrix;
+                    }
+                    else
+                    {
+                        cb.SetGlobalMatrix(PropertyID._AO_PrevViewProjMatrixLeft, m_prevViewProjMatrixLeft);
+                        cb.SetGlobalMatrix(PropertyID._AO_PrevInvViewProjMatrixLeft, m_prevInvViewProjMatrixLeft);
+
+                        m_prevViewProjMatrixLeft = ViewProjMatrix;
+                        m_prevInvViewProjMatrixLeft = InvViewProjMatrix;
+                    }
                 }
             }
         

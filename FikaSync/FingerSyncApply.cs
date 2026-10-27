@@ -1,0 +1,164 @@
+using System;
+using System.Collections.Generic;
+using EFT;
+using Fika.Core.Main.Players;
+using HarmonyLib;
+using UnityEngine;
+
+namespace SptVrFikaSync
+{
+    // Receive + render remote VR players' FINGER poses (authored open-hand poses / Index skeletal
+    // curls), in an ObservedPlayer.LateUpdate postfix like ArmSyncApply (after FIKA's visual pass,
+    // so the write beats the observed animator for the rendered frame). Joint identity is positional:
+    // 3 joints per finger in palm child-order under "Base HumanLPalm"/"Base HumanRPalm" - the exact
+    // order the sender samples in - valid because every player runs the same EFT hands prefab.
+    // A hand only gets driven while its Active flag is set AND the data is fresh; otherwise the
+    // observed animator keeps the fingers (vanilla look for non-VR/inactive states).
+    [HarmonyPatch]
+    internal static class FingerSyncApply
+    {
+        public static float staleTimeout = 0.5f;   // s without a packet -> hand back to the animator
+
+        private class RemoteFingers
+        {
+            public bool leftActive, rightActive;
+            public readonly Vector3[] left = new Vector3[VRFingersPacket.JointCount];
+            public readonly Vector3[] right = new Vector3[VRFingersPacket.JointCount];
+            public float recvTime;
+        }
+        private static readonly Dictionary<int, RemoteFingers> remote = new Dictionary<int, RemoteFingers>();
+
+        private class JointCache
+        {
+            public Transform[] left;    // flat 15 (3 per finger, palm child-order); entries may be null
+            public Transform[] right;
+        }
+        private static readonly Dictionary<int, JointCache> joints = new Dictionary<int, JointCache>();
+
+        public static void ResetState()
+        {
+            remote.Clear();
+            joints.Clear();
+        }
+
+        public static void Store(VRFingersPacket p)
+        {
+            if (!remote.TryGetValue(p.NetId, out RemoteFingers rf))
+            {
+                rf = new RemoteFingers();
+                remote[p.NetId] = rf;
+            }
+            rf.leftActive = p.LeftActive;
+            rf.rightActive = p.RightActive;
+            if (p.LeftActive && p.Left != null)
+                Array.Copy(p.Left, rf.left, VRFingersPacket.JointCount);
+            if (p.RightActive && p.Right != null)
+                Array.Copy(p.Right, rf.right, VRFingersPacket.JointCount);
+            rf.recvTime = Time.time;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(ObservedPlayer), nameof(ObservedPlayer.LateUpdate))]
+        private static void DriveRemoteFingers(ObservedPlayer __instance)
+        {
+            try
+            {
+                if (!FikaVrSync.enableFingerSync || __instance.IsAI)
+                    return;
+                if (!remote.TryGetValue(__instance.NetId, out RemoteFingers rf))
+                    return;
+                if (Time.time - rf.recvTime > staleTimeout || (!rf.leftActive && !rf.rightActive))
+                    return;
+
+                JointCache jc = ResolveJoints(__instance);
+                if (jc == null)
+                    return;
+                if (rf.leftActive && jc.left != null)
+                    ApplyHand(jc.left, rf.left);
+                if (rf.rightActive && jc.right != null)
+                    ApplyHand(jc.right, rf.right);
+            }
+            catch (Exception e)
+            {
+                LogOnce(e);
+            }
+        }
+
+        private static void ApplyHand(Transform[] handJoints, Vector3[] eulers)
+        {
+            for (int i = 0; i < handJoints.Length && i < eulers.Length; i++)
+                if (handJoints[i] != null)
+                    handJoints[i].localRotation = Quaternion.Euler(eulers[i]);
+        }
+
+        // Resolve (and cache) the observed player's finger joints. Cache invalidates itself if the
+        // rig was rebuilt (first cached bone destroyed).
+        private static JointCache ResolveJoints(ObservedPlayer p)
+        {
+            if (joints.TryGetValue(p.NetId, out JointCache jc))
+            {
+                bool alive = (jc.left != null && jc.left.Length > 0 && jc.left[0] != null)
+                          || (jc.right != null && jc.right.Length > 0 && jc.right[0] != null);
+                if (alive)
+                    return jc;
+                joints.Remove(p.NetId);
+            }
+
+            Transform root = p.Transform?.Original;
+            if (root == null)
+                return null;
+            Transform leftPalm = FindDeep(root, "Base HumanLPalm");
+            Transform rightPalm = FindDeep(root, "Base HumanRPalm");
+            if (leftPalm == null && rightPalm == null)
+                return null;   // rig not spawned yet - retry next frame (uncached)
+
+            jc = new JointCache
+            {
+                left = leftPalm != null ? FlattenFingers(leftPalm) : null,
+                right = rightPalm != null ? FlattenFingers(rightPalm) : null
+            };
+            joints[p.NetId] = jc;
+            return jc;
+        }
+
+        // 3 joints per finger (base -> first-child chain), palm child-order - mirrors the sender's
+        // resolve exactly so the flat indices line up.
+        private static Transform[] FlattenFingers(Transform palm)
+        {
+            var flat = new Transform[VRFingersPacket.JointCount];
+            int idx = 0;
+            for (int i = 0; i < palm.childCount && idx < flat.Length; i++)
+            {
+                Transform j = palm.GetChild(i);
+                for (int n = 0; n < 3 && idx < flat.Length; n++, idx++)
+                {
+                    flat[idx] = j;
+                    j = j != null && j.childCount > 0 ? j.GetChild(0) : null;
+                }
+            }
+            return flat;
+        }
+
+        private static Transform FindDeep(Transform t, string name)
+        {
+            if (t.name == name)
+                return t;
+            for (int i = 0; i < t.childCount; i++)
+            {
+                Transform r = FindDeep(t.GetChild(i), name);
+                if (r != null)
+                    return r;
+            }
+            return null;
+        }
+
+        private static bool logged;
+        private static void LogOnce(Exception e)
+        {
+            if (logged)
+                return;
+            logged = true;
+            FikaSyncPlugin.Log?.LogWarning($"[FingerSync] apply failed: {e}");
+        }
+    }
+}

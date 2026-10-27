@@ -9,6 +9,7 @@ using Fika.Core.Modding.Events;
 using Fika.Core.Networking;
 using Fika.Core.Networking.LiteNetLib;
 using Fika.Core.Networking.LiteNetLib.Utils;
+using JsonType;
 using UnityEngine;
 
 namespace SptVrFikaSync
@@ -85,25 +86,30 @@ namespace SptVrFikaSync
             EatingSyncApply.ResetState();
             BodyDragApply.ResetState();
             DownedDragApply.ResetState();
+            FingerSyncApply.ResetState();
             if (ev.Manager is FikaServer server)
             {
                 server.RegisterPacket<VRArmsPacket, NetPeer>(OnArmsServer);
+                server.RegisterPacket<VRFingersPacket, NetPeer>(OnFingersServer);
                 server.RegisterPacket<VRWeaponPacket, NetPeer>(OnWeaponServer);
                 server.RegisterPacket<VRMeleeHitPacket, NetPeer>(OnMeleeHitServer);
                 server.RegisterPacket<VREatingPacket, NetPeer>(OnEatingServer);
                 server.RegisterPacket<VREatingSoundPacket, NetPeer>(OnEatingSoundServer);
                 server.RegisterPacket<BodyDragPacket, NetPeer>(OnBodyDragServer);
                 server.RegisterPacket<DownedDragPacket, NetPeer>(OnDownedDragServer);
+                server.RegisterPacket<CorpseLootPacket, NetPeer>(OnCorpseLootServer);
             }
             else if (ev.Manager is FikaClient client)
             {
                 client.RegisterPacket<VRArmsPacket>(OnArmsClient);
+                client.RegisterPacket<VRFingersPacket>(OnFingersClient);
                 client.RegisterPacket<VRWeaponPacket>(OnWeaponClient);
                 client.RegisterPacket<VRMeleeHitPacket>(OnMeleeHitClient);
                 client.RegisterPacket<VREatingPacket>(OnEatingClient);
                 client.RegisterPacket<VREatingSoundPacket>(OnEatingSoundClient);
                 client.RegisterPacket<BodyDragPacket>(OnBodyDragClient);
                 client.RegisterPacket<DownedDragPacket>(OnDownedDragClient);
+                client.RegisterPacket<CorpseLootPacket>(OnCorpseLootClient);
             }
         }
 
@@ -131,6 +137,33 @@ namespace SptVrFikaSync
         {
             try { ArmSyncApply.Store(p); }
             catch (Exception e) { LogOnce(ref _armErr, "arm recv", e); }
+        }
+
+        // ===== FINGER POSES (authored open-hand / Index skeletal curls) =====
+        public static bool enableFingerSync = true;
+
+        public static void SendFingerPose(int netId, bool leftActive, Vector3[] leftEuler, bool rightActive, Vector3[] rightEuler)
+        {
+            if (!enableFingerSync)
+                return;
+            VRFingersPacket p = default;
+            p.NetId = netId;
+            p.LeftActive = leftActive;   p.Left = leftEuler;
+            p.RightActive = rightActive; p.Right = rightEuler;
+            SendUnreliableBroadcast(ref p);
+        }
+
+        private static void OnFingersServer(VRFingersPacket p, NetPeer sender)
+        {
+            try { FingerSyncApply.Store(p); }
+            catch (Exception e) { LogOnce(ref _armErr, "finger recv", e); }
+            Singleton<FikaServer>.Instance?.SendData(ref p, DeliveryMethod.Unreliable, sender);
+        }
+
+        private static void OnFingersClient(VRFingersPacket p)
+        {
+            try { FingerSyncApply.Store(p); }
+            catch (Exception e) { LogOnce(ref _armErr, "finger recv", e); }
         }
 
         // ===== WEAPON (held-gun pose) =====
@@ -301,7 +334,7 @@ namespace SptVrFikaSync
         {
             if (!enableBodyDragSync || corpse == null)
                 return;
-            GStruct138[] syncs = corpse.method_20();
+            TransformSync[] syncs = corpse.GetTransformSync();
             if (syncs == null || syncs.Length == 0 || syncs.Length > 255)
                 return;
             BodyDragPacket p = default;
@@ -347,6 +380,46 @@ namespace SptVrFikaSync
             catch (Exception e) { LogOnce(ref _bodyErr, "body recv", e); }
         }
 
+        // ===== CORPSE LOOT SYNC (keep the host's bots/AI honest about a dragged body) =====
+        // Sent by the DRAGGER (a client) so the HOST/HEADLESS — which runs the bots + looting AI but not the
+        // VR mod — pulls the body's ORBIT waypoint on grab and re-adds it (+ relocates the server ragdoll for
+        // live scanners like LootingBots) at the rest spot on settle. Reliable: a dropped grab/settle marker
+        // would leave the body lootable in the wrong place or stuck unlootable. Only clients send (the host
+        // handles its OWN drags locally via SPT-VR.dll's OrbitSupport; the headless never drags).
+        public static void SendCorpseLootGrab(string profileId)
+        {
+            if (string.IsNullOrEmpty(profileId) || !FikaBackendUtils.IsClient)
+                return;
+            CorpseLootPacket p = default;
+            p.ProfileId = profileId;
+            p.Released = false;
+            SendReliableBroadcast(ref p);
+        }
+
+        public static void SendCorpseLootSettle(string profileId, Vector3 restPos)
+        {
+            if (string.IsNullOrEmpty(profileId) || !FikaBackendUtils.IsClient)
+                return;
+            CorpseLootPacket p = default;
+            p.ProfileId = profileId;
+            p.Released = true;
+            p.RestPos = restPos;
+            SendReliableBroadcast(ref p);
+        }
+
+        private static void OnCorpseLootServer(CorpseLootPacket p, NetPeer sender)
+        {
+            // No relay — only the host (which received this) runs the bots/AI; other clients have nothing to do.
+            try { CorpseLootApply.Apply(p); }
+            catch (Exception e) { LogOnce(ref _bodyErr, "corpse-loot recv", e); }
+        }
+
+        private static void OnCorpseLootClient(CorpseLootPacket p)
+        {
+            try { CorpseLootApply.Apply(p); } // self-gates on IsServer (no-op on a client)
+            catch (Exception e) { LogOnce(ref _bodyErr, "corpse-loot recv", e); }
+        }
+
         // ===== DOWNED/REVIVE TEAMMATE DRAG =====
         // Resolve a downed/revive teammate's ReviveInteractable from a collider, for the VR mod's body
         // grab. ReviveInteractable is a Fika.Core type the VR assembly (SPT-VR.dll) must NOT name in a
@@ -355,7 +428,7 @@ namespace SptVrFikaSync
         // BadImageFormatException). This module legitimately references Fika.Core and only loads when FIKA
         // is present, so the lookup lives here; it hands the component back as a plain MonoBehaviour plus
         // the EFT RagdollClass to drive. Returns null when the collider isn't a downed teammate.
-        public static MonoBehaviour FindReviveInteractable(Component col, out RagdollClass ragdoll)
+        public static MonoBehaviour FindReviveInteractable(Component col, out CorpseRagdoll ragdoll)
         {
             ragdoll = null;
             if (col == null)
@@ -386,7 +459,7 @@ namespace SptVrFikaSync
 
         // Broadcast a downed teammate's ragdoll pose (+ a ground-projected centroid as the relocate
         // anchor). The downed player's own client teleports there; observers drive their ragdoll copy.
-        public static void SendDownedDrag(int netId, RagdollClass ragdoll)
+        public static void SendDownedDrag(int netId, CorpseRagdoll ragdoll)
         {
             if (!enableDownedDragSync || netId < 0)
                 return;
@@ -404,7 +477,7 @@ namespace SptVrFikaSync
 
         // Drag ended: send the FINAL relocate spot (reliable, so a dropped packet can't strand the
         // teammate). No bones — observers reactivate + settle their ragdoll locally from its last pose.
-        public static void SendDownedDragReleased(int netId, RagdollClass ragdoll)
+        public static void SendDownedDragReleased(int netId, CorpseRagdoll ragdoll)
         {
             if (!enableDownedDragSync || netId < 0)
                 return;
@@ -421,10 +494,10 @@ namespace SptVrFikaSync
 
         // Read fresh world pose per ragdoll bone, plus a relocate anchor = body centroid in XZ at the
         // lowest bone Y (≈ ground contact, so teleporting the downed player's root there keeps them grounded).
-        private static bool ReadRagdollWorld(RagdollClass ragdoll, out Vector3[] pos, out Quaternion[] rot, out Vector3 root)
+        private static bool ReadRagdollWorld(CorpseRagdoll ragdoll, out Vector3[] pos, out Quaternion[] rot, out Vector3 root)
         {
             pos = null; rot = null; root = Vector3.zero;
-            RigidbodySpawner[] bones = ragdoll != null ? ragdoll.RigidbodySpawner_0 : null;
+            RigidbodySpawner[] bones = ragdoll != null ? ragdoll._rigidbodySpawners : null;
             if (bones == null || bones.Length == 0 || bones.Length > 255)
                 return false;
             int n = bones.Length;

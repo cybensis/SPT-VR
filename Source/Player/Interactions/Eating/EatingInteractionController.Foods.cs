@@ -299,6 +299,7 @@ namespace TarkovVR.Source.Player.Interactions
                 bagPos: V(-0.148f, -0.076f, -0.037f), bagRot: V(49.7f, 92.6f, 272.5f)),
                 openOffset: V(0f, 0f, -0.02f), takeOffset: V(0f, 0f, -0.02f), takeRadius: 0.20f), MreOpenPath), MreReachPath), 0.2f),
             //--- Drinks (open, then HOLD at the mouth; capped bottles recap to stop) ---
+            SodaCan("57514643245977207f2c2d09"),  // Tar Cola
             SodaCan("60b0f93284c20f0feb453da7"),  // Rat Cola
             SodaCan("5751435d24597720a27126d1"),  // Max Energy
             SodaCan("575062b524597720a31c09a1"),  // Green tea

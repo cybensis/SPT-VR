@@ -105,7 +105,7 @@ namespace TarkovVR.ModSupport.FIKA
             if (item == null || !(item is ObservedLootItem))
                 return;
 
-            LootSyncStruct data = default;
+            LootSyncPacket data = default;
             data.Id = item.GetNetId();
             data.Position = item.transform.position;
             data.Rotation = item.transform.rotation;
@@ -183,11 +183,11 @@ namespace TarkovVR.ModSupport.FIKA
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ObservedLootItem), "ApplyNetPacket")]
-        private static bool NeutralizeRemoteHeldLootPhysics(ObservedLootItem __instance, LootSyncStruct packet)
+        private static bool NeutralizeRemoteHeldLootPhysics(ObservedLootItem __instance, LootSyncPacket packet)
         {
             // Copy to a local so the Harmony analyzer doesn't mistake the struct-field reads
             // for writes to a by-value patch parameter.
-            LootSyncStruct p = packet;
+            LootSyncPacket p = packet;
             bool incomingHeld = !p.Done
                                 && p.Velocity.sqrMagnitude < 1e-6f
                                 && p.AngularVelocity.sqrMagnitude < 1e-6f;
@@ -324,7 +324,7 @@ namespace TarkovVR.ModSupport.FIKA
 
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(TarkovApplication), "method_53")]
+        [HarmonyPatch(typeof(TarkovApplication), "ShowSessionResult")]
         private static bool FixExitRaid(TarkovApplication __instance)
         {
             UIPatches.HideUiScreens();
@@ -455,7 +455,7 @@ namespace TarkovVR.ModSupport.FIKA
 
             if (connectedPeers > 0)
             {
-                NotificationManagerClass.DisplayWarningNotification(GClass2348.Localized("F_Client_HostCannotExtract"));
+                NotificationManager.DisplayWarningNotification(LocalizationExtensions.Localized("F_Client_HostCannotExtract"));
                 __instance._requestQuitGame = false;
                 return false;
             }
@@ -463,7 +463,7 @@ namespace TarkovVR.ModSupport.FIKA
             bool recentDisconnect = fikaServer.TimeSinceLastPeerDisconnected > DateTime.Now.AddSeconds(-5.0);
             if (fikaServer.HasHadPeer && recentDisconnect)
             {
-                NotificationManagerClass.DisplayWarningNotification(GClass2348.Localized("F_Client_Wait5Seconds"));
+                NotificationManager.DisplayWarningNotification(LocalizationExtensions.Localized("F_Client_Wait5Seconds"));
                 __instance._requestQuitGame = false;
                 return false;
             }

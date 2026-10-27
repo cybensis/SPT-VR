@@ -51,7 +51,7 @@ namespace TarkovVR.Source.Player.Interactions
                 var fa = controller?.FirearmsAnimator;
                 if (fa != null)
                 {
-                    int n = Mathf.Min(fa.AnimatorLayersCount, 8);
+                    int n = Mathf.Min(fa._animatorLayersCount, 8);
                     for (int i = 0; i < n; i++)
                     {
                         var si = fa.Animator.GetCurrentAnimatorStateInfo(i);

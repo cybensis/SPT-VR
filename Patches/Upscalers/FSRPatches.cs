@@ -16,6 +16,7 @@ using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.XR;
 using System.Diagnostics;
 using Valve.VR;
+using TarkovVR.Source.Graphics;
 
 namespace TarkovVR.Patches.Upscalers
 {
@@ -29,8 +30,15 @@ namespace TarkovVR.Patches.Upscalers
         private static Rect _lastRect;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "TryRenderFSR3", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(CommandBuffer) })]
-        private static bool FixFSR3Render(SSAAImpl __instance, RenderTexture source, RenderTexture destination, CommandBuffer externalCommandBuffer, ref bool __result)
+        private static bool FixFSR3Render(SSAAImpl __instance, RenderTexture source, RenderTexture destination, CommandBuffer externalCommandBuffer, ref bool __result, bool __runOriginal)
         {
+            // FSR4 is handled by the standalone FSR4 Bridge mod (com.matsix.fsr4bridge), which patches
+            // this same method at higher priority. If it already drove the upscale this frame it
+            // returned false, so __runOriginal is false here — bail and let its result stand. When
+            // FSR4 Bridge isn't installed / didn't handle it, __runOriginal is true and we run the
+            // in-engine stereo FSR3 wrapper as before.
+            if (!__runOriginal)
+                return false;
 
             if (_stereoFSR3Wrapper == null)
             {
@@ -61,7 +69,7 @@ namespace TarkovVR.Patches.Upscalers
                 source,
                 destination,
                 VRJitterComponent.CurrentJitter,
-                VRGlobals.upscalingMultiplier < 0.6f ? 32 : VRJitterHelper.CurrentSampleCount,
+                VRJitterHelper.CurrentSampleCount,   // sequence length == what the jitter actually cycles
                 __instance._currentCamera,
                 __instance.OpticLensRenderer != null || __instance.CollimatorRenderer != null,
                 externalCommandBuffer
@@ -102,7 +110,7 @@ namespace TarkovVR.Patches.Upscalers
                 source,
                 destination,
                 VRJitterComponent.CurrentJitter,
-                VRGlobals.upscalingMultiplier < 0.6f ? 32 : VRJitterHelper.CurrentSampleCount,
+                VRJitterHelper.CurrentSampleCount,   // sequence length == what the jitter actually cycles
                 __instance._currentCamera,
                 __instance.OpticLensRenderer != null || __instance.CollimatorRenderer != null,
                 externalCommandBuffer
@@ -297,8 +305,9 @@ namespace TarkovVR.Patches.Upscalers
             commandBuffer.SetComputeIntParams(__instance._computeLuminancePyramidShader, "workGroupOffset", __instance.zeroIntVec);
             commandBuffer.SetComputeIntParams(__instance._computeLuminancePyramidShader, "renderSize", __instance.renderSize);
             commandBuffer.DispatchCompute(__instance._computeLuminancePyramidShader, 0, num7, num8, 1);
-            commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_motion_vectors", BuiltinRenderTextureType.MotionVectors);
-            commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_depth", BuiltinRenderTextureType.ResolvedDepth);
+            // (FsrMaskClean.Remap: with the VR hidden-area mask on, copies where the mask reads as still, empty sky)
+            commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_motion_vectors", FsrMaskClean.Remap(BuiltinRenderTextureType.MotionVectors));
+            commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_depth", FsrMaskClean.Remap(BuiltinRenderTextureType.ResolvedDepth));
             commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_color_jittered", source);
             commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "r_input_exposure", __instance._exposure);
             commandBuffer.SetComputeTextureParam(__instance._reconstructPreviousDepthShader, 0, "rw_reconstructed_previous_nearest_depth", __instance._reconstructed_previous_nearest_depth);
@@ -315,9 +324,9 @@ namespace TarkovVR.Patches.Upscalers
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_reactive_mask", __instance._reactive_mask);
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_transparency_and_composition_mask", __instance._reactive_mask);
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_previous_dilated_motion_vectors", __instance.isOddFrame ? __instance._dilated_motion_vectors1 : __instance._dilated_motion_vectors0);
-            commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_input_motion_vectors", BuiltinRenderTextureType.MotionVectors);
+            commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_input_motion_vectors", FsrMaskClean.Remap(BuiltinRenderTextureType.MotionVectors));
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_input_color_jittered", source);
-            commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_input_depth", BuiltinRenderTextureType.ResolvedDepth);
+            commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_input_depth", FsrMaskClean.Remap(BuiltinRenderTextureType.ResolvedDepth));
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "r_input_exposure", __instance._exposure);
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "rw_dilated_reactive_masks", __instance._dilated_reactive_masks);
             commandBuffer.SetComputeTextureParam(__instance._depthClipShader, 0, "rw_prepared_input_color", __instance._prepared_input_color);
@@ -335,7 +344,7 @@ namespace TarkovVR.Patches.Upscalers
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_input_exposure", __instance._exposure);
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_dilated_reactive_masks", __instance._dilated_reactive_masks);
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_dilated_motion_vectors", __instance.isOddFrame ? __instance._dilated_motion_vectors0 : __instance._dilated_motion_vectors1);
-            commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_input_motion_vectors", BuiltinRenderTextureType.MotionVectors);
+            commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_input_motion_vectors", FsrMaskClean.Remap(BuiltinRenderTextureType.MotionVectors));
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_internal_upscaled_color", __instance.isOddFrame ? __instance._internal_upscaled_color0 : __instance._internal_upscaled_color1);
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_lock_status", __instance.isOddFrame ? __instance._lock_status0 : __instance._lock_status1);
             commandBuffer.SetComputeTextureParam(__instance._accumulateShader, 0, "r_prepared_input_color", __instance._prepared_input_color);
@@ -380,6 +389,28 @@ namespace TarkovVR.Patches.Upscalers
             return false;
         }
         
+        // The game's FSR2Wrapper.PrepareOutput hands FSR the built-in depth / motion (implicit BuiltinRenderTextureType ->
+        // RenderTargetIdentifier, 5 calls): routed through FsrMaskClean.Remap like the FSR3 path above.
+        [HarmonyTranspiler]
+        [HarmonyPatch(typeof(FSR2Wrapper), "PrepareOutput")]
+        private static IEnumerable<CodeInstruction> FSR2MaskCleanInputs(IEnumerable<CodeInstruction> instructions)
+        {
+            var implicitOp = AccessTools.Method(typeof(RenderTargetIdentifier), "op_Implicit", new[] { typeof(BuiltinRenderTextureType) });
+            var remap = AccessTools.Method(typeof(FsrMaskClean), nameof(FsrMaskClean.Remap));
+            int swapped = 0;
+            foreach (var ins in instructions)
+            {
+                if (implicitOp != null && ins.Calls(implicitOp))
+                {
+                    ins.operand = remap;
+                    swapped++;
+                }
+                yield return ins;
+            }
+            if (swapped != 5)
+                Plugin.MyLog.LogWarning($"[VR FSR] FSR2 input remap: {swapped} built-in texture uses found (expected 5)");
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FSR3Wrapper), "Set_cbFSR3_Constants")]
         private static bool FixFSR3Box(FSR3Wrapper __instance, ComputeShader shader, CommandBuffer cmdBuf)
@@ -460,15 +491,20 @@ namespace TarkovVR.Patches.Upscalers
         {
             int eyeIndex = (int)cam.stereoActiveEye % NUM_EYES;
 
-            _wrappers[eyeIndex].PrepareOutput(
-                source,
-                destination,
-                jitterOffset,
-                jitterPhaseCount,
-                cam,
-                opticOrCollimator,
-                externalCommandBuffer
-            );
+            FsrMaskClean.Begin(externalCommandBuffer, source != null ? source.width : 0, source != null ? source.height : 0);
+            try
+            {
+                _wrappers[eyeIndex].PrepareOutput(
+                    source,
+                    destination,
+                    jitterOffset,
+                    jitterPhaseCount,
+                    cam,
+                    opticOrCollimator,
+                    externalCommandBuffer
+                );
+            }
+            finally { FsrMaskClean.End(); }
         }
 
         public void SetAfterTransparentRT(RenderTexture source, int eyeIndex)
@@ -533,16 +569,21 @@ namespace TarkovVR.Patches.Upscalers
             // Detect which eye is rendering
             int eyeIndex = (int)cam.stereoActiveEye % NUM_EYES;
 
-            // Use the appropriate eye's FSR3 wrapper
-            _wrappers[eyeIndex].PrepareOutput(
-                source,
-                destination,
-                jitterOffset,
-                jitterPhaseCount,
-                cam,
-                opticOrCollimator,
-                externalCommandBuffer
-            );
+            // Use the appropriate eye's FSR3 wrapper (the game's FSR2Wrapper reads the cleaned inputs via FSR2MaskCleanInputs)
+            FsrMaskClean.Begin(externalCommandBuffer, source != null ? source.width : 0, source != null ? source.height : 0);
+            try
+            {
+                _wrappers[eyeIndex].PrepareOutput(
+                    source,
+                    destination,
+                    jitterOffset,
+                    jitterPhaseCount,
+                    cam,
+                    opticOrCollimator,
+                    externalCommandBuffer
+                );
+            }
+            finally { FsrMaskClean.End(); }
         }
 
         public void SetAfterTransparentRT(RenderTexture source, int eyeIndex)

@@ -77,7 +77,7 @@ namespace TarkovVR.Patches.Upscalers
         }
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(GraphicsSettingsClass), "smethod_1")]
+        [HarmonyPatch(typeof(GraphicsSettingsGroup), "GetValidatedDLSSMode")]
         private static bool DisableResolutionCheckForDLSS(ref EDLSSMode mode, EftResolution resolution, ref EDLSSMode __result)
         {
             if (!DLSSWrapper.IsDLSSSupported())

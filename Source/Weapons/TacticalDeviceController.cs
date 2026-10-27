@@ -24,8 +24,8 @@ namespace TarkovVR.Source.Weapons
 
         public void ChangeTacDeviceSetting() {
             animator.ModToggleTrigger();
-            if (tacDeviceController.laserBeam_0.Count() > 0) 
-                tacDeviceController.LightMod.SelectedMode = (tacDeviceController.LightMod.SelectedMode + 1) % tacDeviceController.laserBeam_0.Count();
+            if (tacDeviceController._laserBeams.Count() > 0) 
+                tacDeviceController.LightMod.SelectedMode = (tacDeviceController.LightMod.SelectedMode + 1) % tacDeviceController._laserBeams.Count();
             tacDeviceController.UpdateBeams(true);
         }
     }

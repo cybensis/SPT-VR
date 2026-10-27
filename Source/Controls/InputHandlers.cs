@@ -10,7 +10,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using TarkovVR.ModSupport;
-//using TarkovVR.ModSupport.EFTApi;
+using TarkovVR.ModSupport.EFTApi;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Player.VR;
@@ -551,6 +551,18 @@ namespace TarkovVR.Source.Controls
                 if (WeaponPatches.grenadeEquipped || VRGlobals.switchingWeapon)
                     return;
 
+                // No trigger finger on the grip (slung, or support-hand-only hold) = no firing; if the
+                // release happened mid-burst, end it.
+                if (TarkovVR.Source.Player.Interactions.ChestHang.Detached)
+                {
+                    if (isShooting)
+                    {
+                        command = ECommand.EndShooting;
+                        isShooting = false;
+                    }
+                    return;
+                }
+
                 float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
 
                 if (!isShooting && primaryHandTriggerAmount > 0.5f)
@@ -562,7 +574,7 @@ namespace TarkovVR.Source.Controls
                 {
                     command = ECommand.EndShooting;
                     isShooting = false;
-                }               
+                }
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -570,16 +582,8 @@ namespace TarkovVR.Source.Controls
         {
             private bool isScrolling = false;
             private bool scrolledLastFrame = false;
-            // When the weapon/item/door/etc interaction menu is open, in right handed mode the player can still rotate left or right since
-            // the menu is just up and down, but in left handed mode it makes less sense to be able to only walk left or right so we only
-            // care if the right joystick has been disabled.
-            //if ((!VRSettings.GetLeftHandedMode() && VRGlobals.blockRightJoystick) || !VRGlobals.vrPlayer.interactMenuOpen)
             public void UpdateCommand(ref ECommand command)
             {
-                // Early-out if vrPlayer is null, or the menu doesn't need the stick to navigate.
-                // With a single (or zero) selectable action there's nothing to cycle, so we leave
-                // the right joystick free to crouch instead of consuming it for a no-op scroll
-                // (mirrors blockCrouch - both gate on interactMenuOwnsStick).
                 if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.interactMenuOwnsStick)
                     return;
 
@@ -675,7 +679,7 @@ namespace TarkovVR.Source.Controls
                 {
                     if (VRGlobals.player.ActiveSlot == null || WeaponPatches.rangeFinder)
                         // If the first weapon slot is null then attempt select secondary
-                        if (VRGlobals.player.Equipment.CachedSlots[0].ContainedItem != null)
+                        if (VRGlobals.player.Equipment._cachedSlots[0].ContainedItem != null)
                             command = ECommand.SelectFirstPrimaryWeapon;
                         else
                             command = ECommand.SelectSecondPrimaryWeapon;
@@ -906,14 +910,36 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class InteractHandler : IInputHandler
         {
+            private bool offTriggerWasDown;
+
             public void UpdateCommand(ref ECommand command)
             {
                 bool interactButtonUp = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
                 bool interactButtonDown = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonX.GetStateUp(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonA.GetStateUp(SteamVR_Input_Sources.Any);
 
-                if (interactButtonDown)
+                // Off-hand trigger executes a reach-selected weapon part (offHandInteract), mirroring
+                // the A-button's edge mapping. Gated on a part being selected - the off trigger
+                // otherwise belongs to breath-hold (ADS) and UI, and part selection already excludes
+                // aiming/supporting, so the two can't overlap.
+                bool offTriggerPress = false, offTriggerRelease = false;
+                if (GunInteractionController.offHandInteract
+                    && WeaponPatches.currentGunInteractController != null
+                    && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1)
+                {
+                    float t = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
+                    bool down = t > 0.5f;
+                    offTriggerPress = down && !offTriggerWasDown;
+                    offTriggerRelease = !down && offTriggerWasDown;
+                    offTriggerWasDown = down;
+                }
+                else
+                {
+                    offTriggerWasDown = false;
+                }
+
+                if (interactButtonDown || offTriggerRelease)
                     command = ECommand.BeginInteracting;
-                else if (interactButtonUp)
+                else if (interactButtonUp || offTriggerPress)
                     command = ECommand.EndInteracting;
             }
         }
@@ -936,10 +962,25 @@ namespace TarkovVR.Source.Controls
             private bool shootingToggled = false;
             private bool grenadePinResetting = false;
 
+            private float plantHoldStart = -1f;     // when the dominant face button started being held (-1 = up)
+            private bool tripwireToggled = false; // one mode-toggle per hold
+            private bool tripwireFireHeld = false;    // edge-detect the place-post trigger
+
             public void UpdateCommand(ref ECommand command)
             {
                 if (!WeaponPatches.grenadeEquipped)
                     return;
+
+                GrenadeHandsController grenadeController = VRGlobals.player?.HandsController as GrenadeHandsController;
+                if (grenadeController != null)
+                {
+                    HandleTripwireToggle(grenadeController);
+                    if (grenadeController.CurrentFireMode == Weapon.EFireMode.greanadePlanting)
+                    {
+                        HandleTripwirePlacement(grenadeController);
+                        return;
+                    }
+                }
 
                 float primaryTrigger = VRSettings.GetLeftHandedMode()
                     ? SteamVR_Actions._default.LeftTrigger.axis
@@ -983,7 +1024,7 @@ namespace TarkovVR.Source.Controls
             {
                 if (VRGlobals.player.HandsController is BaseGrenadeHandsController grenadeController)
                 {
-                    grenadeController.method_8();
+                    grenadeController.PutGrenadeBack();
                     grenadePinResetting = true;
                     grenadePinPulled = false;
                     shootingToggled = false;
@@ -995,7 +1036,7 @@ namespace TarkovVR.Source.Controls
             {
                 if (VRGlobals.player.HandsController is BaseGrenadeHandsController grenadeController)
                 {
-                    grenadeController.method_9(null, 0f, 1f, Vector3.zero, 1f, false, true);
+                    grenadeController.ThrowGrenadeInner(null, 0f, 1f, Vector3.zero, 1f, false, true);
                 }
             }
 
@@ -1034,6 +1075,47 @@ namespace TarkovVR.Source.Controls
                        name == "weapon_grenade_rgo.generated(Clone)" ||
                        name == "weapon_grenade_rgn.generated(Clone)" ||
                        name == "weapon_grenade_m18.generated(Clone)";
+            }
+
+            private void HandleTripwireToggle(GrenadeHandsController grenadeController)
+            {
+                SteamVR_Action_Boolean plantButton = VRSettings.GetLeftHandedMode()
+                    ? SteamVR_Actions._default.ButtonX
+                    : SteamVR_Actions._default.ButtonA;
+
+                if (plantButton.state)
+                {
+                    if (plantHoldStart < 0f)
+                        plantHoldStart = Time.time;
+                    else if (!tripwireToggled && Time.time - plantHoldStart >= VRGrenadeController.tripwireHoldDuration)
+                    {
+                        bool planting = grenadeController.CurrentFireMode == Weapon.EFireMode.greanadePlanting;
+                        grenadeController.ChangeFireMode(planting ? Weapon.EFireMode.grenadeThrowing : Weapon.EFireMode.greanadePlanting);
+                        tripwireToggled = true;
+                    }
+                }
+                else
+                {
+                    plantHoldStart = -1f;
+                    tripwireToggled = false;
+                }
+            }
+
+            private void HandleTripwirePlacement(GrenadeHandsController grenadeController)
+            {
+                float primaryTrigger = VRSettings.GetLeftHandedMode()
+                    ? SteamVR_Actions._default.LeftTrigger.axis
+                    : SteamVR_Actions._default.RightTrigger.axis;
+
+                if (!tripwireFireHeld && primaryTrigger > 0.5f)
+                {
+                    grenadeController.HandleFireInput();
+                    tripwireFireHeld = true;
+                }
+                else if (tripwireFireHeld && primaryTrigger < 0.5f)
+                {
+                    tripwireFireHeld = false;
+                }
             }
         }
 
@@ -1121,7 +1203,8 @@ namespace TarkovVR.Source.Controls
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        /*public class EFTConfigHandler : IInputHandler
+        /*
+        public class EFTConfigHandler : IInputHandler
         {
             public void UpdateCommand(ref ECommand command)
             {
@@ -1130,7 +1213,8 @@ namespace TarkovVR.Source.Controls
                 if (SteamVR_Actions._default.Start.GetStateDown(SteamVR_Input_Sources.Any))
                     EFTApiSupport.OpenCloseConfigUI();
             }
-        }*/
+        }
+        */
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class HeadMountedDeviceHandler : IInputHandler
         {

@@ -16,6 +16,7 @@ namespace TarkovVR.ModSupport.EFTApi
     [HarmonyPatch]
     internal static class EFTApiSupport
     {
+        /*
         private static EFTConfigurationView configView;
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFTConfigurationView), "CreateUI")]
@@ -47,5 +48,6 @@ namespace TarkovVR.ModSupport.EFTApi
             if (configView)
                 configView.State = !configView.State;
         }
+        */
     }
 }

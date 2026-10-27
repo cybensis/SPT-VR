@@ -113,7 +113,7 @@ namespace TarkovVR.Patches.Core.Player
             {
                 EFT.Player player = instance._player;
                 if (player == null || !player.IsYourPlayer) return;
-                if (!(instance.Item is FoodDrinkItemClass)) return;
+                if (!(instance.Item is FoodDrink)) return;
 
                 activeController = instance;
                 lastState = 0;
@@ -184,7 +184,7 @@ namespace TarkovVR.Patches.Core.Player
 
         // --- Auto grip-candidate discovery ---------------------------------------
         // Build a (prop, palm) tracker for every plausible prop vs BOTH palms. Candidates =
-        // renderer-bearing nodes (LOD meshes resolve to their parent group, e.g. the beer
+        // renderer reliant nodes (LOD meshes resolve to their parent group, e.g. the beer
         // LODs -> mod_item) + def-ish name cues for bone groups WITHOUT renderers (pack_CAT,
         // tc_root, the exact "cap" node...). The arms/finger rigs, cameras, fx and markers
         // are skipped wholesale.
@@ -657,8 +657,8 @@ namespace TarkovVR.Patches.Core.Player
         private static void ReconSpawn(MedsController __instance) => EatingRecon.OnSpawn(__instance);
 
         [HarmonyPrefix]
-        [HarmonyPatch(typeof(BaseSoundPlayer), "OnSound")]
-        private static void ReconSound(BaseSoundPlayer __instance, string StringParam) => EatingRecon.OnSound(__instance, StringParam);
+        [HarmonyPatch(typeof(BaseSoundPlayer), "SoundEventHandler")]
+        private static void ReconSound(BaseSoundPlayer __instance, string soundName) => EatingRecon.OnSound(__instance, soundName);
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]

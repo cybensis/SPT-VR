@@ -70,6 +70,10 @@
       <HintPath>..\libs\ModSupport\Fika.Core.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="ORBIT">
+      <HintPath>..\libs\ModSupport\Orbit.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

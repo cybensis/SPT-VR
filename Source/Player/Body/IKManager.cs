@@ -37,6 +37,12 @@ namespace TarkovVR.Source.Player.VR
         public LimbIK leftArmIk;
         public LimbIK rightArmIk;
 
+        // The elbow bend solve moved to IKPatches.DriveElbowBendNormals (BendModifier.Custom, our own
+        // bend normal). BendModifier.Arm was tried here and is UNUSABLE on this rig: the LimbIK sits ON
+        // the collarbone, so FinalIK's root == bone1.parent and the Arm axis hints resolve in the
+        // COLLARBONE'S LOCAL frame - mirrored on the right side of this Max-biped rig (right elbow solved
+        // exactly backwards), character-misaligned on the left. Don't re-try Arm mode.
+
         private void Awake()
         {
             VRGlobals.VRCam = Camera.main;
@@ -251,7 +257,7 @@ namespace TarkovVR.Source.Player.VR
         {
             if (!VRGlobals.vrPlayer || VRGlobals.menuOpen)
                 return;
-            
+
             if (leftUpperArm)
                 leftUpperArm.localPosition = upperArmPos;
             if (rightUpperArm)
