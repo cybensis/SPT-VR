@@ -12,6 +12,20 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(StandaloneInputModule), "Process")]
         private static void ForceNoMouseInput(StandaloneInputModule __instance)
         {
+            if (VirtualScreen.Active)
+            {
+                if (!(__instance.inputOverride is VirtualMouseInput))
+                {
+                    VirtualMouseInput virtualMouse = __instance.GetComponent<VirtualMouseInput>();
+                    if (virtualMouse == null)
+                        virtualMouse = __instance.gameObject.AddComponent<VirtualMouseInput>();
+                    __instance.inputOverride = virtualMouse;
+                }
+                return;
+            }
+            if (__instance.inputOverride is VirtualMouseInput)
+                __instance.inputOverride = null;
+
             if (!VRSettings.GetDisableMouseInput())
             {
                 if (__instance.inputOverride is VRNoMouseInput)
