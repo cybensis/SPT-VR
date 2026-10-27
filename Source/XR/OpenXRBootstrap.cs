@@ -47,14 +47,21 @@ namespace TarkovVR.Source.XR
                     var f = (OpenXRFeature)ScriptableObject.CreateInstance(t);
                     f.enabled = true;
                     return f;
-                }).ToArray();
+                }).ToList();
+                // Finger curls: our own feature; its extensions are requested through the same internal field the
+                // editor normally fills from the feature attribute.
+                var hands = ScriptableObject.CreateInstance<OpenXRHandTracking>();
+                typeof(OpenXRFeature).GetField("openxrExtensionStrings", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(hands, OpenXRHandTracking.Extensions);
+                typeof(OpenXRFeature).GetField("nameUi", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(hands, "SPT-VR Hand Tracking");
+                hands.enabled = true;
+                features.Add(hands);
                 FieldInfo featuresField = typeof(OpenXRSettings).GetField("features", BindingFlags.NonPublic | BindingFlags.Instance);
                 if (featuresField == null)
                 {
                     log.LogError("[OpenXR] OpenXRSettings.features not found - plugin version mismatch?");
                     return false;
                 }
-                featuresField.SetValue(oxr, features);
+                featuresField.SetValue(oxr, features.ToArray());
 
                 var general = ScriptableObject.CreateInstance<XRGeneralSettings>();
                 var manager = ScriptableObject.CreateInstance<XRManagerSettings>();

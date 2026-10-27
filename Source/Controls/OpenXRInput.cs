@@ -118,6 +118,8 @@ namespace TarkovVR.Source.Controls
 
         // ---------------------------------------------------------------------------------------- poses
 
+        public static bool IsIndex(int hand) => (hands[hand].deviceName ?? "").IndexOf("index", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
         public static Vector3 RawPosition(int hand) => hands[hand].rawPos;
         public static Quaternion RawRotation(int hand) => hands[hand].rawRot;
         public static Vector3 RawVelocity(int hand) => hands[hand].rawVel;

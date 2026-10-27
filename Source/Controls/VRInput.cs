@@ -37,8 +37,8 @@ namespace TarkovVR.Source.Controls
 
         public static readonly VRVibration Haptic = new VRVibration(() => SteamVR_Actions._default.Haptic);
 
-        public static readonly VRSkeleton SkeletonRightHand = new VRSkeleton(() => SteamVR_Actions._default.SkeletonRightHand);
-        public static readonly VRSkeleton SkeletonLeftHand = new VRSkeleton(() => SteamVR_Actions._default.SkeletonLeftHand);
+        public static readonly VRSkeleton SkeletonRightHand = new VRSkeleton(() => SteamVR_Actions._default.SkeletonRightHand, OpenXRInput.Right);
+        public static readonly VRSkeleton SkeletonLeftHand = new VRSkeleton(() => SteamVR_Actions._default.SkeletonLeftHand, OpenXRInput.Left);
 
         internal static bool OpenXR => OpenXRBootstrap.Active;
     }
@@ -178,14 +178,17 @@ namespace TarkovVR.Source.Controls
     {
         private readonly Func<SteamVR_Action_Skeleton> resolve;
         private SteamVR_Action_Skeleton steam;
-        internal VRSkeleton(Func<SteamVR_Action_Skeleton> resolve) { this.resolve = resolve; }
+        private readonly int hand;
+        internal VRSkeleton(Func<SteamVR_Action_Skeleton> resolve, int hand) { this.resolve = resolve; this.hand = hand; }
         private SteamVR_Action_Skeleton S => steam ?? (steam = resolve());
 
-        // OpenXR: no finger data yet (XR_EXT_hand_tracking is a later step) - reads as a standard controller, so
-        // FingerTracking keeps the baked poses.
-        public bool active => !VRInput.OpenXR && S.active;
-        public float[] fingerCurls => VRInput.OpenXR ? null : S.fingerCurls;
+        // OpenXR: curls from XR_EXT_hand_tracking (OpenXRHandTracking). Without them it reads as a standard
+        // controller ("estimated"), so FingerTracking keeps the baked poses - what SteamVR does for Touch.
+        public bool active => VRInput.OpenXR ? OpenXRHandTracking.Active(hand) : S.active;
+        public float[] fingerCurls => VRInput.OpenXR ? OpenXRHandTracking.Curls(hand) : S.fingerCurls;
         public EVRSkeletalTrackingLevel skeletalTrackingLevel
-            => VRInput.OpenXR ? EVRSkeletalTrackingLevel.VRSkeletalTracking_Estimated : S.skeletalTrackingLevel;
+            => VRInput.OpenXR
+                ? (OpenXRHandTracking.Active(hand) ? EVRSkeletalTrackingLevel.VRSkeletalTracking_Partial : EVRSkeletalTrackingLevel.VRSkeletalTracking_Estimated)
+                : S.skeletalTrackingLevel;
     }
 }
