@@ -228,6 +228,9 @@ namespace TarkovVR.Source.Player.VRManager
         private static readonly TrackedDevicePose_t[] hmdPoses = new TrackedDevicePose_t[1];
         private static bool RawHmdPose(out Vector3 pos, out Quaternion rot)
         {
+            // OpenXR: the headset device pose is already pure tracking space, the same space as the hand poses.
+            if (TarkovVR.Source.XR.OpenXRBootstrap.Active)
+                return OpenXRInput.TryGetHeadPose(out pos, out rot);
             var sys = OpenVR.System;
             if (sys == null)
             {

@@ -59,6 +59,7 @@ namespace TarkovVR
             {
                 gameObject.AddComponent<TarkovVR.Source.XR.OpenXRProbe>();
                 gameObject.AddComponent<TarkovVR.Source.XR.OpenXRFloorOrigin>();
+                gameObject.AddComponent<TarkovVR.Source.Controls.OpenXRInputDriver>();
             }
 
         }
