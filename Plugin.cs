@@ -56,7 +56,10 @@ namespace TarkovVR
             gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>();
 
             if (TarkovVR.Source.XR.OpenXRBootstrap.Active)
+            {
                 gameObject.AddComponent<TarkovVR.Source.XR.OpenXRProbe>();
+                gameObject.AddComponent<TarkovVR.Source.XR.OpenXRFloorOrigin>();
+            }
 
         }
 
