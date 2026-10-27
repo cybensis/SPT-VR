@@ -916,7 +916,8 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(TMP_InputField), "OnPointerClick")]
         private static void OpenVRKeyboard(TMP_InputField __instance)
         {
-            if (VRSettings.GetUseVRKeyboard())
+            // OpenXR has no system keyboard (SteamVR's overlay keyboard is OpenVR-only), so it always uses ours.
+            if (VRSettings.GetUseVRKeyboard() || TarkovVR.Source.XR.OpenXRBootstrap.Active)
             {
                 // Create the controller if it doesn't exist
                 if (VRKeyboardController.Instance == null)
