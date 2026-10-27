@@ -2,6 +2,7 @@ using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -154,7 +155,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 float amp = Mathf.Clamp01(approach / 3f) * hapticStrength;
                 if (amp > 0.05f)
-                    SteamVR_Actions._default.Haptic.Execute(0f, 0.05f, 90f, amp,
+                    VRInput.Haptic.Execute(0f, 0.05f, 90f, amp,
                         physRight ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
             }
             s.inContact = contactNow;

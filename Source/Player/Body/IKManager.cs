@@ -5,6 +5,7 @@ using TarkovVR.Patches.UI;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.VR
 {
@@ -172,8 +173,8 @@ namespace TarkovVR.Source.Player.VR
 
         private bool IsUsingMovementControls()
         {
-            float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
-            float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
+            float xAxis = Mathf.Abs(VRInput.LeftJoystick.axis.x);
+            float yAxis = Mathf.Abs(VRInput.LeftJoystick.axis.y);
             return (xAxis > 0 || yAxis > 0);
         }
 

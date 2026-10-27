@@ -12,6 +12,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 using static RootMotion.FinalIK.HitReaction;
 
 namespace TarkovVR.Source.UI
@@ -71,7 +72,7 @@ namespace TarkovVR.Source.UI
         //}
         public void Update()
         {
-            float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftJoystick.axis.x : SteamVR_Actions._default.RightJoystick.axis.x;
+            float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? VRInput.LeftJoystick.axis.x : VRInput.RightJoystick.axis.x;
 
             if (dragObject != null && Mathf.Abs(primaryHandJoystickAxis) > 0.7)
             {
@@ -158,9 +159,9 @@ namespace TarkovVR.Source.UI
 
         private void handleButtonClick(Vector2 hitPoint)
         {
-            SteamVR_Action_Boolean actionButton = VRSettings.GetLeftHandedMode()
-                ? SteamVR_Actions._default.ButtonX
-                : SteamVR_Actions._default.ButtonA;
+            VRBoolean actionButton = VRSettings.GetLeftHandedMode()
+                ? VRInput.ButtonX
+                : VRInput.ButtonA;
 
             bool isPointerClick = !hitObject.GetComponent<EmptyItemView>();
 
@@ -224,7 +225,7 @@ namespace TarkovVR.Source.UI
         }
         private void handleUIScrollwheel()
         {
-            float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftJoystick.axis.y : SteamVR_Actions._default.RightJoystick.axis.y;
+            float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? VRInput.LeftJoystick.axis.y : VRInput.RightJoystick.axis.y;
             if (Mathf.Abs(primaryHandJoystickAxis) > 0.4 && hitObject.GetComponentInParent<ScrollRectNoDrag>() != null)
             {
                 eventData.scrollDelta = new Vector2(0, primaryHandJoystickAxis / 1.5f);
@@ -246,9 +247,9 @@ namespace TarkovVR.Source.UI
         {
             // Use pressedObject to ensure that the object the user is trying to drag is the one they have selected,
             // not an object they selected then moved off from.
-            if ((VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis :  SteamVR_Actions._default.RightTrigger.axis) > DRAG_TRIGGER_THRESHOLD)
+            if ((VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis :  VRInput.RightTrigger.axis) > DRAG_TRIGGER_THRESHOLD)
             {
-                SteamVR_Action_Boolean cancelButton = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.ButtonY : SteamVR_Actions._default.ButtonB;
+                VRBoolean cancelButton = (VRSettings.GetLeftHandedMode()) ? VRInput.ButtonY : VRInput.ButtonB;
 
                 if (dragObject == null)
                 {
@@ -314,11 +315,11 @@ namespace TarkovVR.Source.UI
         private void HandleOffPanelDrag()
         {
             bool triggerHeld = (VRSettings.GetLeftHandedMode()
-                ? SteamVR_Actions._default.LeftTrigger.axis
-                : SteamVR_Actions._default.RightTrigger.axis) > DRAG_TRIGGER_THRESHOLD;
-            SteamVR_Action_Boolean cancelButton = VRSettings.GetLeftHandedMode()
-                ? SteamVR_Actions._default.ButtonY
-                : SteamVR_Actions._default.ButtonB;
+                ? VRInput.LeftTrigger.axis
+                : VRInput.RightTrigger.axis) > DRAG_TRIGGER_THRESHOLD;
+            VRBoolean cancelButton = VRSettings.GetLeftHandedMode()
+                ? VRInput.ButtonY
+                : VRInput.ButtonB;
 
             if (cancelButton.stateUp)
             {

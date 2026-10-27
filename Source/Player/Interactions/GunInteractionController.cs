@@ -227,7 +227,7 @@ public class GunInteractionController : MonoBehaviour
 
         // Cache frequently accessed values
         bool isLeftHanded = VRSettings.GetLeftHandedMode();
-        bool gripPressed = isLeftHanded ? SteamVR_Actions._default.LeftGrip.state : SteamVR_Actions._default.RightGrip.state;
+        bool gripPressed = isLeftHanded ? VRInput.LeftGrip.state : VRInput.RightGrip.state;
         bool menuOpen = VRGlobals.menuOpen;      
         bool radialMenuActive = VRGlobals.vrPlayer.radialMenu.active;
 

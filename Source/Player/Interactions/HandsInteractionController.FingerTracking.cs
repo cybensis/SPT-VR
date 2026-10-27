@@ -1,6 +1,7 @@
 using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Settings;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -41,11 +42,11 @@ namespace TarkovVR.Source.Player.Interactions
 
         // The skeleton action for a logical hand. Dominant = the physical RIGHT controller unless
         // left-handed mode swaps the hands.
-        private static SteamVR_Action_Skeleton HandSkeleton(bool dominant)
+        private static VRSkeleton HandSkeleton(bool dominant)
         {
             bool physRight = dominant ^ VRSettings.GetLeftHandedMode();
-            return physRight ? SteamVR_Actions._default.SkeletonRightHand
-                             : SteamVR_Actions._default.SkeletonLeftHand;
+            return physRight ? VRInput.SkeletonRightHand
+                             : VRInput.SkeletonLeftHand;
         }
 
         // True only when the controller actually senses fingers (Index = Partial/Full). Estimated

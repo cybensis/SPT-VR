@@ -6,6 +6,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 using static EFT.Player;
 using static EFT.Player.MedsController;
 
@@ -292,8 +293,8 @@ namespace TarkovVR.Source.Player.Interactions
             // Both triggers together = cancel: put the food away without consuming it (a
             // mid-drink cancel still applies whatever was actually drunk). Edge-gated so
             // holding them doesn't refire.
-            bool both = SteamVR_Actions._default.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f
-                     && SteamVR_Actions._default.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f;
+            bool both = VRInput.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f
+                     && VRInput.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) > 0.5f;
             bool bothEdge = both && !prevBothTriggers;
             prevBothTriggers = both;
             if (bothEdge)

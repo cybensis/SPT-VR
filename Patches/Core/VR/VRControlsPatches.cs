@@ -108,14 +108,14 @@ namespace TarkovVR.Patches.Core.VR
         private static void ProcessRotationInput(InputPreset instance, ref float[] axis, int axisIndex)
         {
             // Reset snap turn when joystick returns to center
-            if (_snapTurned && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) < JOYSTICK_DEADZONE)
+            if (_snapTurned && Mathf.Abs(VRInput.RightJoystick.axis.x) < JOYSTICK_DEADZONE)
             {
                 _snapTurned = false;
             }
 
             bool disableTurn = (WeaponPatches.currentGunInteractController && 
                                WeaponPatches.currentGunInteractController.highlightingMesh) || 
-                               Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y) >= JUMP_OR_STAND_CLAMP_RANGE || 
+                               Mathf.Abs(VRInput.RightJoystick.axis.y) >= JUMP_OR_STAND_CLAMP_RANGE || 
                                VRGlobals.blockRightJoystick;
             
             if (disableTurn)
@@ -127,7 +127,7 @@ namespace TarkovVR.Patches.Core.VR
             if (VRSettings.GetRotationType() == VRSettings.RotationMode.Smooth)
             {
                 // Smooth rotation
-                axis[axisIndex] = SteamVR_Actions._default.RightJoystick.axis.x * VRSettings.GetRotationSensitivity();
+                axis[axisIndex] = VRInput.RightJoystick.axis.x * VRSettings.GetRotationSensitivity();
             }
             else
             {
@@ -146,12 +146,12 @@ namespace TarkovVR.Patches.Core.VR
         
         private static void ProcessSnapTurn(ref float[] axis, int axisIndex)
         {
-            if (!_snapTurned && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > JOYSTICK_DEADZONE)
+            if (!_snapTurned && Mathf.Abs(VRInput.RightJoystick.axis.x) > JOYSTICK_DEADZONE)
             {
                 _snapTurned = true;
                 float snapTurnAmount = (float)VRSettings.GetSnapTurnAmount();
                 
-                if (SteamVR_Actions._default.RightJoystick.axis.x < 0)
+                if (VRInput.RightJoystick.axis.x < 0)
                 {
                     snapTurnAmount *= -1;
                 }
@@ -168,7 +168,7 @@ namespace TarkovVR.Patches.Core.VR
             }
             
             float threshold = VRSettings.GetLeftStickSensitivity();
-            Vector2 joystickInput = SteamVR_Actions._default.LeftJoystick.axis;
+            Vector2 joystickInput = VRInput.LeftJoystick.axis;
             
             if (joystickAxis == 0 && Mathf.Abs(joystickInput.x) > threshold)
             {

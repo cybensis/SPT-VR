@@ -404,7 +404,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!grabbedIsDownedPlayer && grabbedCorpse != null && InstalledMods.FIKAInstalled)
                 FikaSendCorpseLootGrab(grabbedCorpse.PlayerProfileID);
 
-            SteamVR_Actions._default.Haptic.Execute(0, 0.08f, 1, 0.5f, secondaryInputSource);
+            VRInput.Haptic.Execute(0, 0.08f, 1, 0.5f, secondaryInputSource);
             if (debugBodyGrab)
                 Plugin.MyLog.LogInfo($"[BodyGrab] grabbed {bone.name} on {(corpse != null ? corpse.name : "?")} netId={localDraggedCorpseNetId}");
         }
@@ -542,7 +542,7 @@ namespace TarkovVR.Source.Player.Interactions
                 PhysicsExtensions.UpdateController.SupportRigidbody(grabbedBodyRb, 0f);
                 grabbedBodyRb.WakeUp();
 
-                SteamVR_Actions._default.Haptic.Execute(0, 0.05f, 1, 0.3f, secondaryInputSource);
+                VRInput.Haptic.Execute(0, 0.05f, 1, 0.3f, secondaryInputSource);
             }
 
             // Re-enable physics on the WHOLE ragdoll so the body falls/settles instead of freezing mid-air,
@@ -758,7 +758,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!isDraggingBody)
                 return;
             RestoreRagdollCollision();
-            SteamVR_Actions._default.Haptic.Execute(0, 0.1f, 1, 0.6f, secondaryInputSource);
+            VRInput.Haptic.Execute(0, 0.1f, 1, 0.6f, secondaryInputSource);
             ResetBodyGrabState();
             bodyInteractionArmed = false;
             bodyInteractionCorpse = null;

@@ -9,6 +9,7 @@ using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -321,11 +322,11 @@ namespace TarkovVR.Source.Player.Interactions
             int slot = dominant ? 1 : 0;
             SteamVR_Input_Sources source = dominant ? primaryInputSource : secondaryInputSource;
             if (main != null && main != lastMains[slot])
-                SteamVR_Actions._default.Haptic.Execute(0, 0.04f, 1, 0.25f, source);
+                VRInput.Haptic.Execute(0, 0.04f, 1, 0.25f, source);
             lastMains[slot] = main;
 
             // Grip (of THIS hand) = summon. Guarded on heldItem == null so it never double-grabs.
-            SteamVR_Action_Boolean grip = dominant ? primaryHandGrip : secondaryHandGrip;
+            VRBoolean grip = dominant ? primaryHandGrip : secondaryHandGrip;
             if (grip.stateDown && debugLootPointer)
                 Plugin.MyLog.LogInfo($"[LootPointer] GRIP hand={(dominant ? "dom" : "off")} main={(main != null ? main.name : "null")} candidates={lootCandidates.Count} near={(nearState.lootItem != null ? nearState.lootItem.name : "null")} held={(heldItem != null ? heldItem.name : "null")}");
             if (main != null && heldItem == null && grip.stateDown)
@@ -755,7 +756,7 @@ namespace TarkovVR.Source.Player.Interactions
             NotifyWeightChanged();
             ClearDots();
 
-            SteamVR_Actions._default.Haptic.Execute(0, 0.08f, 1, 0.5f, dominant ? primaryInputSource : secondaryInputSource);
+            VRInput.Haptic.Execute(0, 0.08f, 1, 0.5f, dominant ? primaryInputSource : secondaryInputSource);
         }
 
         private void UpdateLootSummon()

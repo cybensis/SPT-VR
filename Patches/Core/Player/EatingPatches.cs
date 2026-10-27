@@ -4,6 +4,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 using static EFT.Player;
 using static EFT.Player.MedsController;
 
@@ -148,7 +149,7 @@ namespace TarkovVR.Patches.Core.Player
         // is 0.175 (VRPlayerManager). Returns false to bypass the original.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VRPlayerManager), "UpdateLeftHand")]
-        public static bool ForceLeftHandTracking(VRPlayerManager __instance, SteamVR_Action_Pose fromAction)
+        public static bool ForceLeftHandTracking(VRPlayerManager __instance, VRPose fromAction)
         {
             if (!EatingInteractionController.ManualActive) return true; // normal behavior
             GameObject lh = __instance.LeftHand;

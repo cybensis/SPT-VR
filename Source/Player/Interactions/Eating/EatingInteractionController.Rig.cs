@@ -6,6 +6,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 using static EFT.Player;
 
 namespace TarkovVR.Source.Player.Interactions
@@ -398,8 +399,8 @@ namespace TarkovVR.Source.Player.Interactions
         private static float TriggerAxisImpl(bool dominant)
         {
             SteamVR_Input_Sources src = HandSource(dominant);
-            SteamVR_Action_Single trig = src == SteamVR_Input_Sources.LeftHand
-                ? SteamVR_Actions._default.LeftTrigger : SteamVR_Actions._default.RightTrigger;
+            VRSingle trig = src == SteamVR_Input_Sources.LeftHand
+                ? VRInput.LeftTrigger : VRInput.RightTrigger;
             return trig.GetAxis(src);
         }
 
@@ -411,7 +412,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static void PulseHand(bool dominant)
         {
             if (!eatingHaptics) return;
-            SteamVR_Actions._default.Haptic.Execute(0f, 0.06f, 1f, 0.4f, HandSource(dominant));
+            VRInput.Haptic.Execute(0f, 0.06f, 1f, 0.4f, HandSource(dominant));
         }
 
         // Does this controller's sound bank actually have an element for the event name?

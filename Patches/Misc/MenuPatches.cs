@@ -45,6 +45,7 @@ using UnityEngine.UIElements;
 using UnityEngine.XR;
 using UnityStandardAssets.ImageEffects;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 using static EFT.BaseLocalGame<EFT.HideoutPlayerOwner>;
 using static EFT.UI.BattleUiVoipPanel;
 using static EFT.UI.EditBuildScreen;
@@ -473,9 +474,9 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(SimpleContextMenu), "Update")]
         private static void CloseContextMenu(SimpleContextMenu __instance)
         {
-            SteamVR_Action_Boolean actionButton = VRSettings.GetLeftHandedMode()
-                ? SteamVR_Actions._default.ButtonX
-                : SteamVR_Actions._default.ButtonA;
+            VRBoolean actionButton = VRSettings.GetLeftHandedMode()
+                ? VRInput.ButtonX
+                : VRInput.ButtonA;
 
             if (vrUiInteracter != null && vrUiInteracter.hitObject != null &&
                 vrUiInteracter.hitObject.transform.IsChildOf(__instance.transform))
@@ -619,7 +620,7 @@ namespace TarkovVR.Patches.Misc
             {
                 // Right grip = Control
                 if ((key == KeyCode.LeftControl || key == KeyCode.RightControl) &&
-                    SteamVR_Actions._default.RightGrip.state)
+                    VRInput.RightGrip.state)
                 {
                     __result = true;
                     return false;
@@ -627,7 +628,7 @@ namespace TarkovVR.Patches.Misc
 
                 // Left grip = Alt  
                 if ((key == KeyCode.LeftAlt || key == KeyCode.RightAlt) &&
-                    SteamVR_Actions._default.LeftGrip.state)
+                    VRInput.LeftGrip.state)
                 {
                     __result = true;
                     return false;
@@ -795,8 +796,8 @@ namespace TarkovVR.Patches.Misc
         private static bool FixDragAndDropButton(ItemView __instance)
         {
             bool triggerPressed = (VRSettings.GetLeftHandedMode() ?
-                SteamVR_Actions._default.LeftTrigger.axis :
-                SteamVR_Actions._default.RightTrigger.axis) >= 0.7f;
+                VRInput.LeftTrigger.axis :
+                VRInput.RightTrigger.axis) >= 0.7f;
 
             if (__instance._lastKnownMouseEvent != null && !triggerPressed)
             {

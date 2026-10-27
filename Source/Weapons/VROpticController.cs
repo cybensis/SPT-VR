@@ -123,7 +123,7 @@ namespace TarkovVR.Source.Weapons
 
             if (scopeXform != null && VRGlobals.vrPlayer?.LeftHand != null)
             {
-                Quaternion localHandRot = SteamVR_Actions._default.LeftHandPose.GetLocalRotation(zoomSource);
+                Quaternion localHandRot = VRInput.LeftHandPose.GetLocalRotation(zoomSource);
                 Quaternion worldHandRot = VRGlobals.vrPlayer.LeftHand.transform.rotation;
                 trackingToWorldSpaceMatrix = worldHandRot * Quaternion.Inverse(localHandRot);
 
@@ -171,7 +171,7 @@ namespace TarkovVR.Source.Weapons
             if (scopeXform == null) return;
 
             var zoomSource = VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
-            Quaternion localHandRot = SteamVR_Actions._default.LeftHandPose.GetLocalRotation(zoomSource);
+            Quaternion localHandRot = VRInput.LeftHandPose.GetLocalRotation(zoomSource);
             Quaternion currentWorldHandRot = trackingToWorldSpaceMatrix * localHandRot;
 
             Vector3 handUpInScopeSpace = (Quaternion.Inverse(scopeXform.rotation) * currentWorldHandRot) * Vector3.up;
@@ -216,8 +216,8 @@ namespace TarkovVR.Source.Weapons
             if (!scopeCamera) return;
 
             float input = VRSettings.GetLeftHandedMode()
-                ? SteamVR_Actions._default.LeftJoystick.axis.y
-                : SteamVR_Actions._default.RightJoystick.axis.y;
+                ? VRInput.LeftJoystick.axis.y
+                : VRInput.RightJoystick.axis.y;
 
             if (VRGlobals.scopes.Any(s => s != null && s.parent != null
                                            && s.parent.name.Contains("scope_all_eotech_hhs_1")))
@@ -438,7 +438,7 @@ namespace TarkovVR.Source.Weapons
 
         private void FireHaptic(float duration, float frequency, float amplitude, float delay = 0f)
         {
-            SteamVR_Actions._default.Haptic.Execute(delay, duration, frequency, amplitude, HapticHand);
+            VRInput.Haptic.Execute(delay, duration, frequency, amplitude, HapticHand);
         }
 
         private void HapticDetent() => FireHaptic(0.010f, 110f, 0.4f);

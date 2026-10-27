@@ -10,6 +10,7 @@ using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -382,12 +383,12 @@ namespace TarkovVR.Source.Player.Interactions
         {
             SteamVR_Input_Sources gunHand = VRSettings.GetLeftHandedMode()
                 ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
-            SteamVR_Actions._default.Haptic.Execute(0f, duration, freq, amp, gunHand);
+            VRInput.Haptic.Execute(0f, duration, freq, amp, gunHand);
             if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting)
             {
                 SteamVR_Input_Sources offHand = VRSettings.GetLeftHandedMode()
                     ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
-                SteamVR_Actions._default.Haptic.Execute(0f, duration, freq, amp * 0.7f, offHand);
+                VRInput.Haptic.Execute(0f, duration, freq, amp * 0.7f, offHand);
             }
         }
     }

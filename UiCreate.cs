@@ -167,12 +167,12 @@ public class CircularSegmentUI : MonoBehaviour
         if (numberOfSegments == 0)
             return;
         bool leftHandedMode = VRSettings.GetLeftHandedMode();
-        bool secondaryGripState = leftHandedMode ? SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand) : SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand);
-        bool primaryGripState = leftHandedMode ? SteamVR_Actions._default.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand) : SteamVR_Actions._default.RightGrip.GetState(SteamVR_Input_Sources.RightHand);
-        Vector2 joystickInput = leftHandedMode ? SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand) : SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand);
+        bool secondaryGripState = leftHandedMode ? VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand) : VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand);
+        bool primaryGripState = leftHandedMode ? VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand) : VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand);
+        Vector2 joystickInput = leftHandedMode ? VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand) : VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand);
 
         if (leftHand)
-            joystickInput = leftHandedMode ? SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand) : SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand);
+            joystickInput = leftHandedMode ? VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand) : VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand);
 
 
         if (lastSelectedSegment != -1)

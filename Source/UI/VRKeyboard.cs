@@ -99,7 +99,7 @@ namespace TarkovVR.Source.UI
             float frequency = 150f;
             float amplitude = 0.15f;
 
-            var haptic = SteamVR_Actions._default.Haptic;
+            var haptic = VRInput.Haptic;
 
             haptic?.Execute(0f, duration, frequency, amplitude, SteamVR_Input_Sources.RightHand);
         }
@@ -152,7 +152,7 @@ namespace TarkovVR.Source.UI
             }
 
             if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) ||
-                (VRInputManager.inputHandlers != null && (Valve.VR.SteamVR_Actions._default.LeftTrigger.axis > 0.5f || Valve.VR.SteamVR_Actions._default.RightTrigger.axis > 0.5f)))
+                (VRInputManager.inputHandlers != null && (VRInput.LeftTrigger.axis > 0.5f || VRInput.RightTrigger.axis > 0.5f)))
             {
                 if (TarkovVR.Patches.Misc.MenuPatches.vrUiInteracter != null)
                 {

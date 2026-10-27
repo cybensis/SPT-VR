@@ -40,6 +40,7 @@ using TarkovVR.Patches.Core.VR;
 using System.Collections;
 using EFT.UI.Matchmaker;
 using TarkovVR.Patches.Visuals;
+using TarkovVR.Source.Controls;
 
 
 
@@ -388,21 +389,21 @@ namespace TarkovVR.ModSupport.FIKA
                 }
                 PreloaderUI.Instance.transform.position = VRGlobals.VRCam.transform.position + (VRGlobals.VRCam.transform.forward * 0.6f) + (VRGlobals.VRCam.transform.up * 0.2f);
                 PreloaderUI.Instance.transform.rotation = Quaternion.Euler(0, VRGlobals.VRCam.transform.eulerAngles.y, VRGlobals.VRCam.transform.eulerAngles.z);
-                if (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y) > VRSettings.GetLeftStickSensitivity())
+                if (Mathf.Abs(VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y) > VRSettings.GetLeftStickSensitivity())
                 {
-                    __instance._cameraParent.transform.position += __instance._cameraParent.transform.forward * (SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y / 10);
+                    __instance._cameraParent.transform.position += __instance._cameraParent.transform.forward * (VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y / 10);
                 }
-                if (Mathf.Abs(SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).x) > VRSettings.GetLeftStickSensitivity())
+                if (Mathf.Abs(VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).x) > VRSettings.GetLeftStickSensitivity())
                 {
-                    __instance._cameraParent.transform.position += __instance._cameraParent.transform.right * (SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).x / 10);
+                    __instance._cameraParent.transform.position += __instance._cameraParent.transform.right * (VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).x / 10);
                 }
-                if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).x))
+                if (Mathf.Abs(VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y) > Mathf.Abs(VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).x))
                 {
-                    __instance._cameraParent.transform.position += new Vector3(0, SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y / 10, 0);
+                    __instance._cameraParent.transform.position += new Vector3(0, VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y / 10, 0);
                 }
-                else if (Mathf.Abs(SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y))
+                else if (Mathf.Abs(VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).x) > Mathf.Abs(VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y))
                 {
-                    __instance._cameraParent.transform.rotation = Quaternion.Euler(0, __instance._cameraParent.transform.eulerAngles.y + (SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).x * 6), 0);
+                    __instance._cameraParent.transform.rotation = Quaternion.Euler(0, __instance._cameraParent.transform.eulerAngles.y + (VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).x * 6), 0);
                 }
 
             }
@@ -424,8 +425,8 @@ namespace TarkovVR.ModSupport.FIKA
             EQuitState quitState = __instance.QuitState;
             // Check VR button press (B for right-handed, Y for left-handed)
             bool vrExtractPressed = VRSettings.GetLeftHandedMode()
-                ? SteamVR_Actions._default.ButtonY.stateDown
-                : SteamVR_Actions._default.ButtonB.stateDown;
+                ? VRInput.ButtonY.stateDown
+                : VRInput.ButtonB.stateDown;
 
             if (!vrExtractPressed || quitState == EQuitState.None || __instance._requestQuitGame)
                 return false;

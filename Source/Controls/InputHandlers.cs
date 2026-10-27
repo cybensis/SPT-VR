@@ -69,11 +69,11 @@ namespace TarkovVR.Source.Controls
             private void UpdateVive(ref ECommand command)
             {
                 // Physical click state (binary, no sweet-spot on Vive)
-                bool clickHeld = SteamVR_Actions._default.ClickRightJoystick.GetState(SteamVR_Input_Sources.RightHand);
-                bool clickDown = SteamVR_Actions._default.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.RightHand);
+                bool clickHeld = VRInput.ClickRightJoystick.GetState(SteamVR_Input_Sources.RightHand);
+                bool clickDown = VRInput.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.RightHand);
 
                 // Touch position — used only as a guard to separate "jump/vault" from "crouch"
-                float fingerY = SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
+                float fingerY = VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
                 bool fingerInUpperHalf = fingerY > UPPER_HALF_Y;
 
                 command = ECommand.None;
@@ -129,7 +129,7 @@ namespace TarkovVR.Source.Controls
 
             private void UpdateDefault(ref ECommand command)
             {
-                float yAxis = SteamVR_Actions._default.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
+                float yAxis = VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
 
                 if (!VRGlobals.vrPlayer.blockJump && yAxis > 0.925f)
                 {
@@ -172,7 +172,7 @@ namespace TarkovVR.Source.Controls
                 if (movementContext == null || movementContext.CharacterController == null)
                     return;
 
-                float joystickY = SteamVR_Actions._default.RightJoystick.axis.y;
+                float joystickY = VRInput.RightJoystick.axis.y;
                 float crouchThreshold = VRGlobals.vrControllerType == "vive"
                     ? VRSettings.GetCrouchThreshold()
                     : 0.8f;
@@ -225,12 +225,12 @@ namespace TarkovVR.Source.Controls
                 float crouchThreshold = VRGlobals.vrControllerType == "vive"
                     ? VRSettings.GetCrouchThreshold()
                     : 0.8f;
-                if (SteamVR_Actions._default.RightJoystick.axis.y > -crouchThreshold && ((float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) == MAX_CROUCH_HEIGHT_DIFF))
+                if (VRInput.RightJoystick.axis.y > -crouchThreshold && ((float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) == MAX_CROUCH_HEIGHT_DIFF))
                     releasedPullAfterFullCrouch = true;
                 else if (releasedPullAfterFullCrouch && (float)Math.Round(VRGlobals.vrPlayer.crouchHeightDiff, 1) != MAX_CROUCH_HEIGHT_DIFF)
                     releasedPullAfterFullCrouch = false;
 
-                if (SteamVR_Actions._default.RightJoystick.axis.y < -crouchThreshold && releasedPullAfterFullCrouch && Time.time - timeSinceLastPress > MIN_TIME_BETWEEN_PRESSES)
+                if (VRInput.RightJoystick.axis.y < -crouchThreshold && releasedPullAfterFullCrouch && Time.time - timeSinceLastPress > MIN_TIME_BETWEEN_PRESSES)
                 {
                     releasedPullAfterFullCrouch = false;
                     command = ECommand.ToggleProne;
@@ -252,7 +252,7 @@ namespace TarkovVR.Source.Controls
             public void UpdateCommand(ref ECommand command)
             {
 
-                if (SteamVR_Actions._default.ClickRightJoystick.state && !heightReset)
+                if (VRInput.ClickRightJoystick.state && !heightReset)
                 {
                     timeHeld += Time.deltaTime;
                     if (timeHeld > HEIGH_RESET_TIME_THRESHOLD)
@@ -276,7 +276,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                if (SteamVR_Actions._default.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any))
+                if (VRInput.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any))
                 {
                     if (!isSprinting)
                         command = ECommand.ToggleSprinting;
@@ -288,7 +288,7 @@ namespace TarkovVR.Source.Controls
                         command = ECommand.ToggleProne;
                     VRGlobals.vrPlayer.crouchHeightDiff = 0;
                 }
-                else if (isSprinting && SteamVR_Actions._default.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < VRSettings.GetLeftStickSensitivity())
+                else if (isSprinting && VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < VRSettings.GetLeftStickSensitivity())
                 {
                     command = ECommand.EndSprinting;
                     isSprinting = false;
@@ -311,8 +311,8 @@ namespace TarkovVR.Source.Controls
                     return;
 
                 bool reloadButton = VRSettings.GetLeftHandedMode()
-                    ? SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any)
-                    : SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
+                    ? VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any)
+                    : VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
 
                 if (reloadButton)
                 {
@@ -378,8 +378,8 @@ namespace TarkovVR.Source.Controls
                     return;
 
                 float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode()
-                    ? SteamVR_Actions._default.LeftTrigger.axis
-                    : SteamVR_Actions._default.RightTrigger.axis;
+                    ? VRInput.LeftTrigger.axis
+                    : VRInput.RightTrigger.axis;
 
                 if (WeaponPatches.rangeFinder)
                 {
@@ -563,7 +563,7 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
-                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftTrigger.axis : SteamVR_Actions._default.RightTrigger.axis;
+                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis : VRInput.RightTrigger.axis;
 
                 if (!isShooting && primaryHandTriggerAmount > 0.5f)
                 {
@@ -593,11 +593,11 @@ namespace TarkovVR.Source.Controls
                     WeaponPatches.currentGunInteractController != null &&
                     WeaponPatches.currentGunInteractController.highlightingMesh)
                 {
-                    primaryHandScrollAxis = SteamVR_Actions._default.LeftJoystick.axis.y;
+                    primaryHandScrollAxis = VRInput.LeftJoystick.axis.y;
                 }
                 else
                 {
-                    primaryHandScrollAxis = SteamVR_Actions._default.RightJoystick.axis.y;
+                    primaryHandScrollAxis = VRInput.RightJoystick.axis.y;
                 }
 
                 if (!isScrolling && primaryHandScrollAxis > 0.5f)
@@ -628,7 +628,7 @@ namespace TarkovVR.Source.Controls
                 if (!VRGlobals.firearmController)
                     return;
 
-                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
+                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
                 bool isAiming = VRGlobals.firearmController.IsAiming;
                 var physical = VRGlobals.player.Physical;
 
@@ -670,9 +670,9 @@ namespace TarkovVR.Source.Controls
             {
                 if (!VRGlobals.player)
                     return;
-                SteamVR_Action_Boolean UBGLButtonAction = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonA : SteamVR_Actions._default.ButtonX;
-                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
-                bool cancelGrenadeButtonClick = (VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any));
+                VRBoolean UBGLButtonAction = VRSettings.GetLeftHandedMode() ? VRInput.ButtonA : VRInput.ButtonX;
+                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
+                bool cancelGrenadeButtonClick = (VRSettings.GetLeftHandedMode() ? VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any));
                 bool UBGLButtonDown = UBGLButtonAction.state;
 
                 if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.grenadeEquipped && cancelGrenadeButtonClick))
@@ -835,8 +835,8 @@ namespace TarkovVR.Source.Controls
             public void UpdateCommand(ref ECommand command)
             {
                 bool changeFireModeButtonClick = VRSettings.GetLeftHandedMode()
-                    ? SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any)
-                    : SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
+                    ? VRInput.ButtonX.GetStateDown(SteamVR_Input_Sources.Any)
+                    : VRInput.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
 
                 if (changeFireMode)
                 {
@@ -914,8 +914,8 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                bool interactButtonUp = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonX.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
-                bool interactButtonDown = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonX.GetStateUp(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonA.GetStateUp(SteamVR_Input_Sources.Any);
+                bool interactButtonUp = VRSettings.GetLeftHandedMode() ? VRInput.ButtonX.GetStateDown(SteamVR_Input_Sources.Any) : VRInput.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
+                bool interactButtonDown = VRSettings.GetLeftHandedMode() ? VRInput.ButtonX.GetStateUp(SteamVR_Input_Sources.Any) : VRInput.ButtonA.GetStateUp(SteamVR_Input_Sources.Any);
 
                 // Off-hand trigger executes a reach-selected weapon part (offHandInteract), mirroring
                 // the A-button's edge mapping. Gated on a part being selected - the off trigger
@@ -926,7 +926,7 @@ namespace TarkovVR.Source.Controls
                     && WeaponPatches.currentGunInteractController != null
                     && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1)
                 {
-                    float t = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
+                    float t = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
                     bool down = t > 0.5f;
                     offTriggerPress = down && !offTriggerWasDown;
                     offTriggerRelease = !down && offTriggerWasDown;
@@ -948,8 +948,8 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
-                bool inventoryButtonUp = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonA.GetStateUp(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonX.GetStateUp(SteamVR_Input_Sources.Any);
-                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.RightTrigger.axis : SteamVR_Actions._default.LeftTrigger.axis;
+                bool inventoryButtonUp = VRSettings.GetLeftHandedMode() ? VRInput.ButtonA.GetStateUp(SteamVR_Input_Sources.Any) : VRInput.ButtonX.GetStateUp(SteamVR_Input_Sources.Any);
+                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
 
                 if (inventoryButtonUp && secondaryHandTriggerAmount < 0.1f)
                     command = ECommand.ToggleInventory;
@@ -983,12 +983,12 @@ namespace TarkovVR.Source.Controls
                 }
 
                 float primaryTrigger = VRSettings.GetLeftHandedMode()
-                    ? SteamVR_Actions._default.LeftTrigger.axis
-                    : SteamVR_Actions._default.RightTrigger.axis;
+                    ? VRInput.LeftTrigger.axis
+                    : VRInput.RightTrigger.axis;
 
                 float secondaryTrigger = VRSettings.GetLeftHandedMode()
-                    ? SteamVR_Actions._default.RightTrigger.axis
-                    : SteamVR_Actions._default.LeftTrigger.axis;
+                    ? VRInput.RightTrigger.axis
+                    : VRInput.LeftTrigger.axis;
 
                 if (primaryTrigger < 0.5f && grenadePinResetting)
                 {
@@ -1079,9 +1079,9 @@ namespace TarkovVR.Source.Controls
 
             private void HandleTripwireToggle(GrenadeHandsController grenadeController)
             {
-                SteamVR_Action_Boolean plantButton = VRSettings.GetLeftHandedMode()
-                    ? SteamVR_Actions._default.ButtonX
-                    : SteamVR_Actions._default.ButtonA;
+                VRBoolean plantButton = VRSettings.GetLeftHandedMode()
+                    ? VRInput.ButtonX
+                    : VRInput.ButtonA;
 
                 if (plantButton.state)
                 {
@@ -1104,8 +1104,8 @@ namespace TarkovVR.Source.Controls
             private void HandleTripwirePlacement(GrenadeHandsController grenadeController)
             {
                 float primaryTrigger = VRSettings.GetLeftHandedMode()
-                    ? SteamVR_Actions._default.LeftTrigger.axis
-                    : SteamVR_Actions._default.RightTrigger.axis;
+                    ? VRInput.LeftTrigger.axis
+                    : VRInput.RightTrigger.axis;
 
                 if (!tripwireFireHeld && primaryTrigger > 0.5f)
                 {
@@ -1128,8 +1128,8 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                SteamVR_Action_Boolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
-                SteamVR_Action_Boolean tacticalButtonAction = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonB : SteamVR_Actions._default.ButtonY;
+                VRBoolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.RightGrip : VRInput.LeftGrip;
+                VRBoolean tacticalButtonAction = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB : VRInput.ButtonY;
 
                 bool tacticalButtonDown = tacticalButtonAction.state && secondaryGripState.state;
 
@@ -1173,9 +1173,9 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
-                bool escapeButtonUp = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any);
-                bool backButtonUp = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : SteamVR_Actions._default.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
-                SteamVR_Action_Boolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
+                bool escapeButtonUp = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any) : VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any);
+                bool backButtonUp = VRSettings.GetLeftHandedMode() ? VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
+                VRBoolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.RightGrip : VRInput.LeftGrip;
 
                 if (secondaryGripState.state && !VRGlobals.menuOpen)
                     return;
@@ -1210,7 +1210,7 @@ namespace TarkovVR.Source.Controls
             {
                 if (!InstalledMods.EFTApiInstalled)
                     return;
-                if (SteamVR_Actions._default.Start.GetStateDown(SteamVR_Input_Sources.Any))
+                if (VRInput.Start.GetStateDown(SteamVR_Input_Sources.Any))
                     EFTApiSupport.OpenCloseConfigUI();
             }
         }

@@ -5,6 +5,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -494,7 +495,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static Quaternion SupportControllerRot(Transform lh)
         {
             var pose = VRSettings.GetLeftHandedMode()
-                ? SteamVR_Actions._default.RightHandPose : SteamVR_Actions._default.LeftHandPose;
+                ? VRInput.RightHandPose : VRInput.LeftHandPose;
             return (lh.parent != null ? lh.parent.rotation : Quaternion.identity) * pose.localRotation;
         }
 
@@ -558,7 +559,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             SteamVR_Input_Sources gunHand = VRSettings.GetLeftHandedMode()
                 ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
-            SteamVR_Actions._default.Haptic.Execute(0f, 0.07f, 95f, amp, gunHand);
+            VRInput.Haptic.Execute(0f, 0.07f, 95f, amp, gunHand);
         }
     }
 }

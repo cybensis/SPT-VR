@@ -40,6 +40,7 @@ using UnityEngine.Profiling;
 using UnityEngine.UI;
 using UnityEngine.UIElements.UIR;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 using static EFT.InventoryLogic.Grid;
 using static EFT.UI.EftBattleUIScreen;
 using static EFT.UI.ItemsPanel;
@@ -1124,7 +1125,7 @@ namespace TarkovVR.Patches.UI
         private static bool FixAcceptItem(GridView __instance, DragItemContext itemContext, ItemContext targetItemContext, ref Task __result)
         {
             // Modify the flag argument based on your logic
-            bool flag = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftGrip.state : SteamVR_Actions._default.RightGrip.state;
+            bool flag = VRSettings.GetLeftHandedMode() ? VRInput.LeftGrip.state : VRInput.RightGrip.state;
 
             // Call the original method with the modified flag
             __result = AcceptItemModified(__instance, itemContext, targetItemContext, flag);
@@ -1279,7 +1280,7 @@ namespace TarkovVR.Patches.UI
             {
                 return false;
             }
-            bool partialTransferOnly = VRSettings.GetLeftHandedMode() ? SteamVR_Actions._default.LeftGrip.state : SteamVR_Actions._default.RightGrip.state;
+            bool partialTransferOnly = VRSettings.GetLeftHandedMode() ? VRInput.LeftGrip.state : VRInput.RightGrip.state;
             if (item.CheckAction(gClass).Failed)
             {
                 return false;

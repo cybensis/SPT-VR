@@ -25,6 +25,7 @@ using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.UI;
 using Valve.VR;
 using Valve.VR.InteractionSystem;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.ModSupport.DynamicMaps
 {
@@ -168,7 +169,7 @@ namespace TarkovVR.ModSupport.DynamicMaps
             // Cast inside the method — only resolves MapView type when actually called
             dynamic mapView = _mapViewRef;
 
-            bool triggerHeld = SteamVR_Actions._default.RightTrigger.axis > 0.5f;
+            bool triggerHeld = VRInput.RightTrigger.axis > 0.5f;
             if (triggerHeld)
             {
                 Vector3 currentPos = interacter.uiPointerPos;
@@ -179,7 +180,7 @@ namespace TarkovVR.ModSupport.DynamicMaps
                     Vector3 localDelta = rt.parent.InverseTransformVector(worldDelta);
                     mapView.ShiftMap(new Vector2(localDelta.x, localDelta.y), 0, false);
 
-                    Vector2 rightStick = SteamVR_Actions._default.RightJoystick.axis;
+                    Vector2 rightStick = VRInput.RightJoystick.axis;
                     if (Mathf.Abs(rightStick.y) > 0.1f)
                     {
                         Vector3 localPoint = rt.InverseTransformPoint(currentPos);

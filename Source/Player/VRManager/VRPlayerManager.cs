@@ -232,8 +232,8 @@ namespace TarkovVR.Source.Player.VRManager
                 VRGlobals.ikManager.leftArmIk.enabled = true;
             }
 
-            SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.Any);
-            SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.Any);
+            VRInput.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.Any);
+            VRInput.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.Any);
             
             if (VRSettings.GetLeftHandedMode())
                 LeftHandedMode();
@@ -255,8 +255,8 @@ namespace TarkovVR.Source.Player.VRManager
        
         public void OnDisable()
         {
-            SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
-            SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
+            VRInput.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
+            VRInput.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
 
         }
         
@@ -478,10 +478,10 @@ namespace TarkovVR.Source.Player.VRManager
 
         public void LeftHandedMode()
         {
-            SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
-            SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
-            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
-            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+            VRInput.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
+            VRInput.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
+            VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
+            VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
             if (VRGlobals.emptyHands)
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             if (VRGlobals.ikManager && VRGlobals.ikManager.leftArmIk)
@@ -537,10 +537,10 @@ namespace TarkovVR.Source.Player.VRManager
 
         public void RightHandedMode()
         {
-            SteamVR_Actions._default.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
-            SteamVR_Actions._default.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
-            SteamVR_Actions._default.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-            SteamVR_Actions._default.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            VRInput.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
+            VRInput.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
+            VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
 
             if (VRGlobals.emptyHands)
                 VRGlobals.emptyHands.transform.localScale = new Vector3(1, 1, 1);
@@ -647,20 +647,20 @@ namespace TarkovVR.Source.Player.VRManager
         public Quaternion initialCombinedRotation;
         private Quaternion rightHandRotationOffset;
 
-        private void UpdateRightHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
+        private void UpdateRightHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
         {
             if (!RightHand)
                 return;
 
             if (VRGlobals.emptyHands != null)
                 initialCombinedRotation = VRGlobals.emptyHands.rotation;
-            SteamVR_Action_Boolean primaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.LeftGrip : SteamVR_Actions._default.RightGrip;
+            VRBoolean primaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.LeftGrip : VRInput.RightGrip;
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockLeftJoystick : VRGlobals.blockRightJoystick;
             // If the joystick is being blocked but the right grip isn't down, keep the joystick blocked until they stop pushing it beyond a certain threshold so the player
             // doesn't immediately move forward after selecting something from the radial menu
             if (blockJoystick && !primaryGripState.state)
             {
-                Vector2 joystickInput = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.LeftJoystick.axis : SteamVR_Actions._default.RightJoystick.axis;
+                Vector2 joystickInput = (VRSettings.GetLeftHandedMode()) ? VRInput.LeftJoystick.axis : VRInput.RightJoystick.axis;
                 if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
                 {
                     if (VRSettings.GetLeftHandedMode())
@@ -884,10 +884,10 @@ namespace TarkovVR.Source.Player.VRManager
             }
         }
 
-        private void UpdateLeftHand(SteamVR_Action_Pose fromAction, SteamVR_Input_Sources fromSource)
+        private void UpdateLeftHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
         {
             leftHandYRotation = fromAction.localRotation.eulerAngles.y;
-            SteamVR_Action_Boolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightGrip : SteamVR_Actions._default.LeftGrip;
+            VRBoolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.RightGrip : VRInput.LeftGrip;
 
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockRightJoystick : VRGlobals.blockLeftJoystick;
 
@@ -906,7 +906,7 @@ namespace TarkovVR.Source.Player.VRManager
             // doesn't immediately move forward after selecting something from the radial menu
             if (blockJoystick && !secondaryGripState.state)
             {
-                Vector2 joystickInput = (VRSettings.GetLeftHandedMode()) ? SteamVR_Actions._default.RightJoystick.axis : SteamVR_Actions._default.LeftJoystick.axis;
+                Vector2 joystickInput = (VRSettings.GetLeftHandedMode()) ? VRInput.RightJoystick.axis : VRInput.LeftJoystick.axis;
                 if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
                 {
                     if (VRSettings.GetLeftHandedMode())
@@ -972,7 +972,7 @@ namespace TarkovVR.Source.Player.VRManager
                     if (!hapticTriggered)
                     {
                         hapticTriggered = true;
-                        SteamVR_Actions._default.Haptic.Execute(0, 0.25f, 1, 0.4f, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);                       
+                        VRInput.Haptic.Execute(0, 0.25f, 1, 0.4f, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);                       
                     }
                 }
                 else if (!isSupporting)

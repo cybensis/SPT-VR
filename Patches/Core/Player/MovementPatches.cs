@@ -15,6 +15,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Valve.VR;
 using Valve.VR.InteractionSystem;
+using TarkovVR.Source.Controls;
 using static RootMotion.FinalIK.AimPoser;
 using static UnityEngine.UIElements.VisualElement;
 
@@ -145,11 +146,11 @@ namespace TarkovVR.Patches.Core.Player
         }
 
         private static void GetBodyRotation(Vector3 bodyForward, ref Vector2 deltaRotation) {
-            float xAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.x);
-            float yAxis = Mathf.Abs(SteamVR_Actions._default.LeftJoystick.axis.y);
+            float xAxis = Mathf.Abs(VRInput.LeftJoystick.axis.x);
+            float yAxis = Mathf.Abs(VRInput.LeftJoystick.axis.y);
 
-            float rightXAxis = Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x);
-            float rightYAxis = Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y);
+            float rightXAxis = Mathf.Abs(VRInput.RightJoystick.axis.x);
+            float rightYAxis = Mathf.Abs(VRInput.RightJoystick.axis.y);
             bool leftJoystickUsed = xAxis > VRSettings.GetLeftStickSensitivity() || yAxis > VRSettings.GetLeftStickSensitivity();
             bool rightJoystickUsed = rightXAxis > 0.2f && rightXAxis > rightYAxis;
 
@@ -181,7 +182,7 @@ namespace TarkovVR.Patches.Core.Player
                     lastYRot = VRGlobals.vrPlayer.leftHandYRotation + VRGlobals.vrOffsetter.transform.eulerAngles.y;
 
             }
-            else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.highlightingMesh) && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > 0.20f && Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.x) > Mathf.Abs(SteamVR_Actions._default.RightJoystick.axis.y))
+            else if (!(WeaponPatches.currentGunInteractController && WeaponPatches.currentGunInteractController.highlightingMesh) && Mathf.Abs(VRInput.RightJoystick.axis.x) > 0.20f && Mathf.Abs(VRInput.RightJoystick.axis.x) > Mathf.Abs(VRInput.RightJoystick.axis.y))
                 lastYRot = headY;
             else if (Mathf.Abs(rotDiff) > 10)
                 lastYRot = Mathf.LerpAngle(lastYRot, headY, Time.deltaTime * 3f);   

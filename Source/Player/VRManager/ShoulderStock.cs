@@ -1,6 +1,7 @@
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -253,8 +254,8 @@ namespace TarkovVR.Source.Player.VRManager
         {
             SteamVR_Input_Sources gunHand = VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
             SteamVR_Input_Sources offHand = VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
-            SteamVR_Actions._default.Haptic.Execute(0f, 0.06f, 110f, 0.5f, gunHand);
-            SteamVR_Actions._default.Haptic.Execute(0f, 0.06f, 110f, 0.35f, offHand);
+            VRInput.Haptic.Execute(0f, 0.06f, 110f, 0.5f, gunHand);
+            VRInput.Haptic.Execute(0f, 0.06f, 110f, 0.35f, offHand);
         }
     }
 }

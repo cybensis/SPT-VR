@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Misc
 {
@@ -140,8 +141,8 @@ namespace TarkovVR.Source.Misc
                 {
                     // Pulses run 1.5x the window so they bridge to the next one — reads as a
                     // continuous buzz, not ticks.
-                    if (renderLeft) SteamVR_Actions._default.Haptic.Execute(0f, windowSec * 1.5f, freq, amp, SteamVR_Input_Sources.LeftHand);
-                    if (renderRight) SteamVR_Actions._default.Haptic.Execute(0f, windowSec * 1.5f, freq, amp, SteamVR_Input_Sources.RightHand);
+                    if (renderLeft) VRInput.Haptic.Execute(0f, windowSec * 1.5f, freq, amp, SteamVR_Input_Sources.LeftHand);
+                    if (renderRight) VRInput.Haptic.Execute(0f, windowSec * 1.5f, freq, amp, SteamVR_Input_Sources.RightHand);
                 }
                 yield return wait;
             }
