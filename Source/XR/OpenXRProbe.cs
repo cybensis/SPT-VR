@@ -1,65 +1,70 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.XR;
 
 namespace TarkovVR.Source.XR
 {
-    // OPENXR SPIKE: answers "does controller input reach Unity's basic XR input API with the game's old Input
-    // Manager?" - every 5 s one [OpenXR-Probe] line per device (pose + main buttons/axes), and each device's
-    // feature list the first time it shows up. Read-only.
+    // Debug logging for the OpenXR test: every few seconds, the display state and each tracked device's pose,
+    // trigger, grip, stick and A/B. Each device's list of inputs is logged once when it first shows up.
     public class OpenXRProbe : MonoBehaviour
     {
-        public static float interval = 5f;
+        public static bool enabledLogging = true;
+        public static float logInterval = 5f;
 
-        private float next;
-        private readonly HashSet<string> listed = new HashSet<string>();
+        private float nextLogTime = 0f;
+        private readonly HashSet<string> devicesListed = new HashSet<string>();
 
         private void Update()
         {
-            if (Time.unscaledTime < next)
+            if (!enabledLogging || Time.unscaledTime < nextLogTime)
                 return;
-            next = Time.unscaledTime + interval;
+            nextLogTime = Time.unscaledTime + logInterval;
 
-            var displays = new List<XRDisplaySubsystem>();
-            SubsystemManager.GetInstances(displays);
-            bool running = displays.Any(d => d.running);
-            Plugin.MyLog.LogInfo($"[OpenXR-Probe] display running {running}, device '{XRSettings.loadedDeviceName}', "
+            List<XRDisplaySubsystem> displaySubsystems = new List<XRDisplaySubsystem>();
+            SubsystemManager.GetInstances(displaySubsystems);
+            bool displayRunning = false;
+            foreach (XRDisplaySubsystem displaySubsystem in displaySubsystems)
+                displayRunning |= displaySubsystem.running;
+
+            Camera mainCamera = Camera.main;
+            Plugin.MyLog.LogInfo($"[OpenXR-Probe] display running {displayRunning}, device '{XRSettings.loadedDeviceName}', "
                 + $"eye {XRSettings.eyeTextureWidth}x{XRSettings.eyeTextureHeight}, scale {XRSettings.eyeTextureResolutionScale:0.00}, "
-                + $"occlusion mesh {XRSettings.useOcclusionMesh}, main cam '{(Camera.main != null ? Camera.main.name : "none")}' "
-                + $"stereo {(Camera.main != null && Camera.main.stereoEnabled)}");
+                + $"occlusion mesh {XRSettings.useOcclusionMesh}, main camera '{(mainCamera != null ? mainCamera.name : "none")}' "
+                + $"stereo {(mainCamera != null && mainCamera.stereoEnabled)}");
 
-            Log("head", XRNode.CenterEye);
-            Log("left", XRNode.LeftHand);
-            Log("right", XRNode.RightHand);
+            LogDevice("head", XRNode.CenterEye);
+            LogDevice("left", XRNode.LeftHand);
+            LogDevice("right", XRNode.RightHand);
         }
 
-        private void Log(string label, XRNode node)
+        private void LogDevice(string label, XRNode node)
         {
-            InputDevice d = InputDevices.GetDeviceAtXRNode(node);
-            if (!d.isValid)
+            InputDevice device = InputDevices.GetDeviceAtXRNode(node);
+            if (!device.isValid)
             {
                 Plugin.MyLog.LogInfo($"[OpenXR-Probe] {label}: no device");
                 return;
             }
 
-            if (listed.Add(label + d.name))
+            if (devicesListed.Add(label + device.name))
             {
-                var usages = new List<InputFeatureUsage>();
-                d.TryGetFeatureUsages(usages);
-                Plugin.MyLog.LogInfo($"[OpenXR-Probe] {label} '{d.name}' ({d.characteristics}) features: "
-                    + string.Join(", ", usages.Select(u => u.name + ":" + u.type.Name).ToArray()));
+                List<InputFeatureUsage> inputs = new List<InputFeatureUsage>();
+                device.TryGetFeatureUsages(inputs);
+                List<string> inputNames = new List<string>();
+                foreach (InputFeatureUsage input in inputs)
+                    inputNames.Add(input.name + ":" + input.type.Name);
+                Plugin.MyLog.LogInfo($"[OpenXR-Probe] {label} '{device.name}' ({device.characteristics}) inputs: {string.Join(", ", inputNames)}");
             }
 
-            d.TryGetFeatureValue(CommonUsages.isTracked, out bool tracked);
-            d.TryGetFeatureValue(CommonUsages.devicePosition, out Vector3 pos);
-            d.TryGetFeatureValue(CommonUsages.trigger, out float trigger);
-            d.TryGetFeatureValue(CommonUsages.grip, out float grip);
-            d.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 stick);
-            d.TryGetFeatureValue(CommonUsages.primaryButton, out bool a);
-            d.TryGetFeatureValue(CommonUsages.secondaryButton, out bool b);
-            Plugin.MyLog.LogInfo($"[OpenXR-Probe] {label}: tracked {tracked} pos {pos.x:0.00},{pos.y:0.00},{pos.z:0.00} "
-                + $"trigger {trigger:0.00} grip {grip:0.00} stick {stick.x:0.00},{stick.y:0.00} A {a} B {b}");
+            device.TryGetFeatureValue(CommonUsages.isTracked, out bool isTracked);
+            device.TryGetFeatureValue(CommonUsages.devicePosition, out Vector3 position);
+            device.TryGetFeatureValue(CommonUsages.trigger, out float trigger);
+            device.TryGetFeatureValue(CommonUsages.grip, out float grip);
+            device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 stick);
+            device.TryGetFeatureValue(CommonUsages.primaryButton, out bool primaryButton);
+            device.TryGetFeatureValue(CommonUsages.secondaryButton, out bool secondaryButton);
+            Plugin.MyLog.LogInfo($"[OpenXR-Probe] {label}: tracked {isTracked} position {position.x:0.00},{position.y:0.00},{position.z:0.00} "
+                + $"trigger {trigger:0.00} grip {grip:0.00} stick {stick.x:0.00},{stick.y:0.00} A {primaryButton} B {secondaryButton}");
         }
     }
 }

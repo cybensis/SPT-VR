@@ -3,32 +3,43 @@ using UnityEngine.XR;
 
 namespace TarkovVR.Source.XR
 {
-    // OPENXR SPIKE: stands in for SteamVR_TrackedObject (index Hmd, no origin) on the camera objects - writes the
-    // headset pose in tracking space as the local pose, like SteamVR_TrackedObject does. Added next to every
-    // SteamVR_TrackedObject while OpenXR is running (OpenXRSpikePatches). Update + onBeforeRender = latest pose.
+    // Takes the place of SteamVR_TrackedObject on the camera objects while OpenXR is running, SteamVR_TrackedObject
+    // gets no poses without OpenVR. Sets the headset pose as the local pose, like SteamVR_TrackedObject does.
     public class OpenXRHeadPose : MonoBehaviour
     {
-        private InputDevice head;
+        private InputDevice headset;
 
-        private void OnEnable() { Application.onBeforeRender += Apply; }
-        private void OnDisable() { Application.onBeforeRender -= Apply; }
-        private void Update() { Apply(); }
-
-        private void Apply()
+        private void OnEnable()
         {
-            if (!head.isValid)
-                head = InputDevices.GetDeviceAtXRNode(XRNode.CenterEye);
-            if (!head.isValid)
-                head = InputDevices.GetDeviceAtXRNode(XRNode.Head);
-            if (!head.isValid)
+            Application.onBeforeRender += ApplyHeadPose;
+        }
+
+        private void OnDisable()
+        {
+            Application.onBeforeRender -= ApplyHeadPose;
+        }
+
+        private void Update()
+        {
+            ApplyHeadPose();
+        }
+
+        private void ApplyHeadPose()
+        {
+            if (!headset.isValid)
+                headset = InputDevices.GetDeviceAtXRNode(XRNode.CenterEye);
+            if (!headset.isValid)
+                headset = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+            if (!headset.isValid)
                 return;
 
-            if (head.TryGetFeatureValue(CommonUsages.centerEyePosition, out Vector3 pos)
-                || head.TryGetFeatureValue(CommonUsages.devicePosition, out pos))
-                transform.localPosition = pos;
-            if (head.TryGetFeatureValue(CommonUsages.centerEyeRotation, out Quaternion rot)
-                || head.TryGetFeatureValue(CommonUsages.deviceRotation, out rot))
-                transform.localRotation = rot;
+            if (headset.TryGetFeatureValue(CommonUsages.centerEyePosition, out Vector3 headPosition)
+                || headset.TryGetFeatureValue(CommonUsages.devicePosition, out headPosition))
+                transform.localPosition = headPosition;
+
+            if (headset.TryGetFeatureValue(CommonUsages.centerEyeRotation, out Quaternion headRotation)
+                || headset.TryGetFeatureValue(CommonUsages.deviceRotation, out headRotation))
+                transform.localRotation = headRotation;
         }
     }
 }

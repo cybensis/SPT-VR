@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using TarkovVR.Source.Controls;
 using UnityEngine;
 using UnityEngine.XR.OpenXR;
 using UnityEngine.XR.OpenXR.Features;
@@ -7,221 +8,313 @@ using UnityEngine.XR.OpenXR.Features;
 namespace TarkovVR.Source.XR
 {
     // Finger curls under OpenXR. Unity's OpenXR plugin has no hand tracking, so this feature turns on
-    // XR_EXT_hand_tracking itself and reads both hands' 26 joints through the raw OpenXR calls. Each finger's curl
-    // = its summed joint bend / a full-fist bend (0 open .. 1 fist) - the same 5 numbers SteamVR's skeleton action
-    // gave (thumb, index, middle, ring, pinky), so FingerTracking runs unchanged. UNOBSTRUCTED motion range: a full
-    // grip on the handle reads as a fist, like SteamVR's curls. Added to OpenXRSettings by OpenXRBootstrap.
+    // XR_EXT_hand_tracking and reads the hand joints through the OpenXR calls directly. Each finger's curl is
+    // its total joint bend scaled between an open hand and a fist, giving the same 5 values (thumb to pinky)
+    // that SteamVR's skeleton action gives, so FingerTracking works unchanged.
     public class OpenXRHandTracking : OpenXRFeature
     {
-        public const string Extensions = "XR_EXT_hand_tracking XR_EXT_hand_joints_motion_range XR_KHR_win32_convert_performance_counter_time";
+        public const string REQUIRED_EXTENSIONS = "XR_EXT_hand_tracking XR_EXT_hand_joints_motion_range XR_KHR_win32_convert_performance_counter_time";
 
-        // Bend (degrees, summed over a finger's joints) that reads as curl 1, and the natural bend of a relaxed
-        // open hand that reads as 0. Live knobs; calibrate with debugLog (prints the raw bends once a second).
-        public static float fingerFistDeg = 250f;
-        public static float thumbFistDeg = 100f;
-        public static float fingerOpenDeg = 10f;
-        public static float thumbOpenDeg = 10f;
-        // SteamVR reported Touch controllers as "estimated" (baked poses); keep that unless asked otherwise.
-        public static bool indexOnly = true;
-        public static bool debugLog = false;
+        // Total bend in degrees that counts as an open hand (curl 0) and as a fist (curl 1)
+        public static float fingerOpenDegrees = 10f;
+        public static float fingerFistDegrees = 250f;
+        public static float thumbOpenDegrees = 10f;
+        public static float thumbFistDegrees = 100f;
+        public static bool indexControllersOnly = true;    // SteamVR treated Touch as estimated (baked poses), keep that
+        public static bool debugLog = false;               // once a second: bend + curl per finger
 
         private static OpenXRHandTracking instance;
 
-        // ---------------------------------------------------------------------------------------- OpenXR types
+        // ------------------------------------------------------------------------------------------------------------
+        // OpenXR types and values, checked against openxr_reflection_full.h in the OpenXR package
 
-        // From openxr_reflection (the OpenXR plugin's copy): 1000051000 is SYSTEM_HAND_TRACKING_PROPERTIES - the
-        // first build was off by one here and every locate failed with XR_ERROR_VALIDATION_FAILURE (-1).
         private const int XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT = 1000051001;
         private const int XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT = 1000051002;
         private const int XR_TYPE_HAND_JOINT_LOCATIONS_EXT = 1000051003;
         private const int XR_TYPE_HAND_JOINTS_MOTION_RANGE_INFO_EXT = 1000080000;
-        private const int XR_HAND_JOINTS_MOTION_RANGE_UNOBSTRUCTED_EXT = 1;
-        private const int JointCount = 26;
-        private const ulong OrientationValid = 0x1;
+        private const int XR_HAND_LEFT_EXT = 1;
+        private const int XR_HAND_RIGHT_EXT = 2;
+        private const int XR_HAND_JOINT_SET_DEFAULT_EXT = 0;
+        private const int XR_HAND_JOINTS_MOTION_RANGE_UNOBSTRUCTED_EXT = 1;    // a full grip reads as a fist
+        private const int XR_HAND_JOINT_COUNT_EXT = 26;
+        private const ulong XR_SPACE_LOCATION_ORIENTATION_VALID_BIT = 0x1;
+        private const int XR_SUCCESS = 0;
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct HandTrackerCreateInfo { public int type; public IntPtr next; public int hand; public int handJointSet; }
+        private struct XrHandTrackerCreateInfoEXT { public int type; public IntPtr next; public int hand; public int handJointSet; }
+
         [StructLayout(LayoutKind.Sequential)]
-        private struct JointsLocateInfo { public int type; public IntPtr next; public ulong baseSpace; public long time; }
+        private struct XrHandJointsLocateInfoEXT { public int type; public IntPtr next; public ulong baseSpace; public long time; }
+
         [StructLayout(LayoutKind.Sequential)]
-        private struct MotionRangeInfo { public int type; public IntPtr next; public int range; }
+        private struct XrHandJointsMotionRangeInfoEXT { public int type; public IntPtr next; public int handJointsMotionRange; }
+
         [StructLayout(LayoutKind.Sequential)]
-        private struct JointLocations { public int type; public IntPtr next; public uint isActive; public uint jointCount; public IntPtr joints; }
+        private struct XrHandJointLocationsEXT { public int type; public IntPtr next; public uint isActive; public uint jointCount; public IntPtr jointLocations; }
+
         [StructLayout(LayoutKind.Sequential)]
-        private struct JointLocation { public ulong flags; public float qx, qy, qz, qw, px, py, pz; public float radius; }
+        private struct XrQuaternionf { public float x, y, z, w; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct XrVector3f { public float x, y, z; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct XrPosef { public XrQuaternionf orientation; public XrVector3f position; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct XrHandJointLocationEXT { public ulong locationFlags; public XrPosef pose; public float radius; }
+
+        // Joint indices of XR_EXT_hand_tracking per finger, base to tip (the tip joint is left out, it doesn't bend)
+        private static readonly int[][] fingerJoints =
+        {
+            new[] { 2, 3, 4 },          // thumb: metacarpal, proximal, distal
+            new[] { 6, 7, 8, 9 },       // index: metacarpal, proximal, intermediate, distal
+            new[] { 11, 12, 13, 14 },   // middle
+            new[] { 16, 17, 18, 19 },   // ring
+            new[] { 21, 22, 23, 24 },   // pinky
+        };
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate int GetProcAddrFn(ulong instance, [MarshalAs(UnmanagedType.LPStr)] string name, out IntPtr function);
+        private delegate int GetInstanceProcAddrDelegate(ulong instance, [MarshalAs(UnmanagedType.LPStr)] string name, out IntPtr function);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate int CreateHandTrackerFn(ulong session, ref HandTrackerCreateInfo info, out ulong tracker);
+        private delegate int CreateHandTrackerDelegate(ulong session, ref XrHandTrackerCreateInfoEXT createInfo, out ulong handTracker);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate int DestroyHandTrackerFn(ulong tracker);
+        private delegate int DestroyHandTrackerDelegate(ulong handTracker);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate int LocateHandJointsFn(ulong tracker, ref JointsLocateInfo info, ref JointLocations locations);
+        private delegate int LocateHandJointsDelegate(ulong handTracker, ref XrHandJointsLocateInfoEXT locateInfo, ref XrHandJointLocationsEXT locations);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate int ConvertPerfCounterFn(ulong instance, ref long performanceCounter, out long time);
+        private delegate int ConvertPerformanceCounterToTimeDelegate(ulong instance, ref long performanceCounter, out long time);
 
         [DllImport("kernel32.dll")]
-        private static extern bool QueryPerformanceCounter(out long count);
+        private static extern bool QueryPerformanceCounter(out long performanceCounter);
 
         private ulong xrInstance;
-        private CreateHandTrackerFn createHandTracker;
-        private DestroyHandTrackerFn destroyHandTracker;
-        private LocateHandJointsFn locateHandJoints;
-        private ConvertPerfCounterFn convertPerfCounter;
+        private CreateHandTrackerDelegate xrCreateHandTrackerEXT;
+        private DestroyHandTrackerDelegate xrDestroyHandTrackerEXT;
+        private LocateHandJointsDelegate xrLocateHandJointsEXT;
+        private ConvertPerformanceCounterToTimeDelegate xrConvertWin32PerformanceCounterToTimeKHR;
 
-        private readonly ulong[] trackers = new ulong[2];          // 0 = left, 1 = right
+        // Per hand, indexed by OpenXRInput.LEFT_HAND / OpenXRInput.RIGHT_HAND
+        private readonly ulong[] handTrackers = new ulong[2];
         private readonly IntPtr[] jointBuffers = new IntPtr[2];
-        private static readonly bool[] active = new bool[2];
-        private static readonly float[][] curls = { new float[5], new float[5] };
-        private static readonly float[][] bends = { new float[5], new float[5] };
-        private static int sampledFrame = -1;
-        private static float nextLog;
-        private static bool errorLogged;
-        private static bool firstOk;
+        private static readonly bool[] handActive = new bool[2];
+        private static readonly float[][] fingerCurls = { new float[5], new float[5] };
+        private static readonly float[][] fingerBends = { new float[5], new float[5] };
 
-        // ---------------------------------------------------------------------------------------- public reads
+        private static int lastSampledFrame = -1;
+        private static float nextDebugLogTime;
+        private static bool locateErrorLogged;
+        private static bool firstReadLogged;
 
-        public static bool Active(int hand) { Sample(); return active[hand]; }
-        public static float[] Curls(int hand) { Sample(); return active[hand] ? curls[hand] : null; }
+        // ------------------------------------------------------------------------------------------------------------
 
-        // ---------------------------------------------------------------------------------------- lifecycle
+        public static bool IsActive(int hand)
+        {
+            SampleOncePerFrame();
+            return handActive[hand];
+        }
+
+        public static float[] GetCurls(int hand)
+        {
+            SampleOncePerFrame();
+            return handActive[hand] ? fingerCurls[hand] : null;
+        }
+
+        // ------------------------------------------------------------------------------------------------------------
+        // OpenXR lifecycle (called by the OpenXR plugin)
 
         protected override bool OnInstanceCreate(ulong xrInstanceHandle)
         {
             instance = this;
             xrInstance = xrInstanceHandle;
-            var getProc = Marshal.GetDelegateForFunctionPointer<GetProcAddrFn>(xrGetInstanceProcAddr);
-            createHandTracker = Load<CreateHandTrackerFn>(getProc, "xrCreateHandTrackerEXT");
-            destroyHandTracker = Load<DestroyHandTrackerFn>(getProc, "xrDestroyHandTrackerEXT");
-            locateHandJoints = Load<LocateHandJointsFn>(getProc, "xrLocateHandJointsEXT");
-            convertPerfCounter = Load<ConvertPerfCounterFn>(getProc, "xrConvertWin32PerformanceCounterToTimeKHR");
-            return true;    // never fail the session over finger tracking
+            GetInstanceProcAddrDelegate getInstanceProcAddr = Marshal.GetDelegateForFunctionPointer<GetInstanceProcAddrDelegate>(xrGetInstanceProcAddr);
+            xrCreateHandTrackerEXT = LoadFunction<CreateHandTrackerDelegate>(getInstanceProcAddr, "xrCreateHandTrackerEXT");
+            xrDestroyHandTrackerEXT = LoadFunction<DestroyHandTrackerDelegate>(getInstanceProcAddr, "xrDestroyHandTrackerEXT");
+            xrLocateHandJointsEXT = LoadFunction<LocateHandJointsDelegate>(getInstanceProcAddr, "xrLocateHandJointsEXT");
+            xrConvertWin32PerformanceCounterToTimeKHR = LoadFunction<ConvertPerformanceCounterToTimeDelegate>(getInstanceProcAddr, "xrConvertWin32PerformanceCounterToTimeKHR");
+            // Never fail the session over finger tracking
+            return true;
         }
 
-        private T Load<T>(GetProcAddrFn getProc, string name) where T : class
+        private T LoadFunction<T>(GetInstanceProcAddrDelegate getInstanceProcAddr, string functionName) where T : class
         {
-            int r = getProc(xrInstance, name, out IntPtr fn);
-            if (r != 0 || fn == IntPtr.Zero)
+            int result = getInstanceProcAddr(xrInstance, functionName, out IntPtr functionPointer);
+            if (result != XR_SUCCESS || functionPointer == IntPtr.Zero)
             {
-                Plugin.MyLog.LogWarning($"[OpenXR-Hands] {name} unavailable (result {r}) - no finger curls");
+                Plugin.MyLog.LogWarning($"[OpenXR-Hands] {functionName} unavailable (result {result}), no finger curls");
                 return null;
             }
-            return Marshal.GetDelegateForFunctionPointer<T>(fn);
+            return Marshal.GetDelegateForFunctionPointer<T>(functionPointer);
         }
 
         protected override void OnSessionCreate(ulong xrSession)
         {
-            if (createHandTracker == null || locateHandJoints == null || convertPerfCounter == null
-                || !OpenXRRuntime.IsExtensionEnabled("XR_EXT_hand_tracking"))
+            if (xrCreateHandTrackerEXT == null || xrLocateHandJointsEXT == null || xrConvertWin32PerformanceCounterToTimeKHR == null)
                 return;
-            for (int h = 0; h < 2; h++)
+            if (!OpenXRRuntime.IsExtensionEnabled("XR_EXT_hand_tracking"))
+                return;
+
+            for (int hand = 0; hand < 2; hand++)
             {
-                var info = new HandTrackerCreateInfo { type = XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT, hand = h + 1, handJointSet = 0 };
-                int r = createHandTracker(xrSession, ref info, out trackers[h]);
-                if (r != 0)
+                XrHandTrackerCreateInfoEXT createInfo = new XrHandTrackerCreateInfoEXT
                 {
-                    Plugin.MyLog.LogWarning($"[OpenXR-Hands] xrCreateHandTrackerEXT ({(h == 0 ? "left" : "right")}) failed: {r}");
-                    trackers[h] = 0;
+                    type = XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT,
+                    hand = hand == OpenXRInput.LEFT_HAND ? XR_HAND_LEFT_EXT : XR_HAND_RIGHT_EXT,
+                    handJointSet = XR_HAND_JOINT_SET_DEFAULT_EXT,
+                };
+                int result = xrCreateHandTrackerEXT(xrSession, ref createInfo, out handTrackers[hand]);
+                if (result != XR_SUCCESS)
+                {
+                    Plugin.MyLog.LogWarning($"[OpenXR-Hands] Creating the {HandName(hand)} hand tracker failed: {result}");
+                    handTrackers[hand] = 0;
                     continue;
                 }
-                if (jointBuffers[h] == IntPtr.Zero)
-                    jointBuffers[h] = Marshal.AllocHGlobal(Marshal.SizeOf<JointLocation>() * JointCount);
+                if (jointBuffers[hand] == IntPtr.Zero)
+                    jointBuffers[hand] = Marshal.AllocHGlobal(Marshal.SizeOf<XrHandJointLocationEXT>() * XR_HAND_JOINT_COUNT_EXT);
             }
-            Plugin.MyLog.LogInfo($"[OpenXR-Hands] Hand trackers created: left {trackers[0] != 0}, right {trackers[1] != 0}");
+            Plugin.MyLog.LogInfo($"[OpenXR-Hands] Hand trackers created: left {handTrackers[OpenXRInput.LEFT_HAND] != 0}, right {handTrackers[OpenXRInput.RIGHT_HAND] != 0}");
         }
 
         protected override void OnSessionDestroy(ulong xrSession)
         {
-            for (int h = 0; h < 2; h++)
+            for (int hand = 0; hand < 2; hand++)
             {
-                if (trackers[h] != 0 && destroyHandTracker != null)
-                    destroyHandTracker(trackers[h]);
-                trackers[h] = 0;
-                active[h] = false;
+                if (handTrackers[hand] != 0 && xrDestroyHandTrackerEXT != null)
+                    xrDestroyHandTrackerEXT(handTrackers[hand]);
+                handTrackers[hand] = 0;
+                handActive[hand] = false;
             }
         }
 
-        // ---------------------------------------------------------------------------------------- sampling
+        // ------------------------------------------------------------------------------------------------------------
+        // Reading the joints
 
-        private static void Sample()
+        private static void SampleOncePerFrame()
         {
-            if (sampledFrame == Time.frameCount)
+            if (lastSampledFrame == Time.frameCount)
                 return;
-            sampledFrame = Time.frameCount;
+            lastSampledFrame = Time.frameCount;
             if (instance == null)
                 return;
-            instance.Locate();
-            if (debugLog && Time.unscaledTime >= nextLog)
+
+            instance.UpdateCurls();
+
+            if (debugLog && Time.unscaledTime >= nextDebugLogTime)
             {
-                nextLog = Time.unscaledTime + 1f;
-                for (int h = 0; h < 2; h++)
-                    Plugin.MyLog.LogInfo($"[OpenXR-Hands] {(h == 0 ? "L" : "R")} active {active[h]} bend deg "
-                        + $"{bends[h][0]:0},{bends[h][1]:0},{bends[h][2]:0},{bends[h][3]:0},{bends[h][4]:0} curls "
-                        + $"{curls[h][0]:0.00},{curls[h][1]:0.00},{curls[h][2]:0.00},{curls[h][3]:0.00},{curls[h][4]:0.00}");
+                nextDebugLogTime = Time.unscaledTime + 1f;
+                for (int hand = 0; hand < 2; hand++)
+                {
+                    float[] bends = fingerBends[hand];
+                    float[] curls = fingerCurls[hand];
+                    Plugin.MyLog.LogInfo($"[OpenXR-Hands] {HandName(hand)} active {handActive[hand]}, "
+                        + $"bend degrees {bends[0]:0},{bends[1]:0},{bends[2]:0},{bends[3]:0},{bends[4]:0}, "
+                        + $"curls {curls[0]:0.00},{curls[1]:0.00},{curls[2]:0.00},{curls[3]:0.00},{curls[4]:0.00}");
+                }
             }
         }
 
-        private unsafe void Locate()
+        private unsafe void UpdateCurls()
         {
-            ulong space = GetCurrentAppSpace();
-            if (space == 0 || !QueryPerformanceCounter(out long counter) || convertPerfCounter(xrInstance, ref counter, out long now) != 0)
-            {
-                active[0] = active[1] = false;
+            handActive[OpenXRInput.LEFT_HAND] = false;
+            handActive[OpenXRInput.RIGHT_HAND] = false;
+
+            ulong appSpace = GetCurrentAppSpace();
+            if (appSpace == 0 || !QueryPerformanceCounter(out long performanceCounter))
                 return;
-            }
-            for (int h = 0; h < 2; h++)
+            if (xrConvertWin32PerformanceCounterToTimeKHR(xrInstance, ref performanceCounter, out long currentTime) != XR_SUCCESS)
+                return;
+
+            for (int hand = 0; hand < 2; hand++)
             {
-                active[h] = false;
-                if (trackers[h] == 0)
+                if (handTrackers[hand] == 0)
                     continue;
-                if (indexOnly && !TarkovVR.Source.Controls.OpenXRInput.IsIndex(h))
+                if (indexControllersOnly && !OpenXRInput.IsIndex(hand))
                     continue;
 
-                var range = new MotionRangeInfo { type = XR_TYPE_HAND_JOINTS_MOTION_RANGE_INFO_EXT, range = XR_HAND_JOINTS_MOTION_RANGE_UNOBSTRUCTED_EXT };
-                var info = new JointsLocateInfo { type = XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT, next = (IntPtr)(&range), baseSpace = space, time = now };
-                var locs = new JointLocations { type = XR_TYPE_HAND_JOINT_LOCATIONS_EXT, jointCount = JointCount, joints = jointBuffers[h] };
-                int r = locateHandJoints(trackers[h], ref info, ref locs);
-                if (r != 0)
+                XrHandJointsMotionRangeInfoEXT motionRange = new XrHandJointsMotionRangeInfoEXT
                 {
-                    if (!errorLogged) { errorLogged = true; Plugin.MyLog.LogWarning($"[OpenXR-Hands] xrLocateHandJointsEXT failed: {r}"); }
+                    type = XR_TYPE_HAND_JOINTS_MOTION_RANGE_INFO_EXT,
+                    handJointsMotionRange = XR_HAND_JOINTS_MOTION_RANGE_UNOBSTRUCTED_EXT,
+                };
+                XrHandJointsLocateInfoEXT locateInfo = new XrHandJointsLocateInfoEXT
+                {
+                    type = XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT,
+                    next = (IntPtr)(&motionRange),
+                    baseSpace = appSpace,
+                    time = currentTime,
+                };
+                XrHandJointLocationsEXT locations = new XrHandJointLocationsEXT
+                {
+                    type = XR_TYPE_HAND_JOINT_LOCATIONS_EXT,
+                    jointCount = XR_HAND_JOINT_COUNT_EXT,
+                    jointLocations = jointBuffers[hand],
+                };
+
+                int result = xrLocateHandJointsEXT(handTrackers[hand], ref locateInfo, ref locations);
+                if (result != XR_SUCCESS)
+                {
+                    if (!locateErrorLogged)
+                    {
+                        locateErrorLogged = true;
+                        Plugin.MyLog.LogWarning($"[OpenXR-Hands] Reading the hand joints failed: {result}");
+                    }
                     continue;
                 }
-                if (!firstOk) { firstOk = true; Plugin.MyLog.LogInfo($"[OpenXR-Hands] First joint read OK ({(h == 0 ? "left" : "right")}), active {locs.isActive != 0}"); }
-                if (locs.isActive == 0)
-                    continue;
-
-                JointLocation* j = (JointLocation*)jointBuffers[h];
-                // XR_EXT_hand_tracking joints: 2-5 thumb (metacarpal, proximal, distal, tip), then index / middle /
-                // ring / little at 6, 11, 16, 21 (metacarpal, proximal, intermediate, distal, tip).
-                bool ok = Bend(j, 2, 3, out float b0) & Bend(j, 3, 4, out float b1);
-                bends[h][0] = b0 + b1;
-                for (int f = 1; f < 5 && ok; f++)
+                if (!firstReadLogged)
                 {
-                    int m = 6 + (f - 1) * 5;
-                    ok &= Bend(j, m, m + 1, out float a) & Bend(j, m + 1, m + 2, out float b) & Bend(j, m + 2, m + 3, out float c);
-                    bends[h][f] = a + b + c;
+                    firstReadLogged = true;
+                    Plugin.MyLog.LogInfo($"[OpenXR-Hands] First joint read OK ({HandName(hand)}), active {locations.isActive != 0}");
                 }
-                if (!ok)
+                if (locations.isActive == 0)
                     continue;
 
-                curls[h][0] = Mathf.Clamp01((bends[h][0] - thumbOpenDeg) / Mathf.Max(1f, thumbFistDeg - thumbOpenDeg));
-                for (int f = 1; f < 5; f++)
-                    curls[h][f] = Mathf.Clamp01((bends[h][f] - fingerOpenDeg) / Mathf.Max(1f, fingerFistDeg - fingerOpenDeg));
-                active[h] = true;
+                XrHandJointLocationEXT* joints = (XrHandJointLocationEXT*)jointBuffers[hand];
+                if (TryUpdateHand(joints, fingerBends[hand], fingerCurls[hand]))
+                    handActive[hand] = true;
             }
         }
 
-        // Angle between two adjacent bones' orientations (handedness doesn't change an angle, so raw OpenXR values).
-        private static unsafe bool Bend(JointLocation* j, int a, int b, out float degrees)
+        private static unsafe bool TryUpdateHand(XrHandJointLocationEXT* joints, float[] bends, float[] curls)
         {
-            degrees = 0f;
-            if ((j[a].flags & OrientationValid) == 0 || (j[b].flags & OrientationValid) == 0)
-                return false;
-            var qa = new Quaternion(j[a].qx, j[a].qy, j[a].qz, j[a].qw);
-            var qb = new Quaternion(j[b].qx, j[b].qy, j[b].qz, j[b].qw);
-            degrees = Quaternion.Angle(qa, qb);
+            for (int finger = 0; finger < 5; finger++)
+            {
+                if (!TryGetFingerBend(joints, fingerJoints[finger], out float bendDegrees))
+                    return false;
+                bends[finger] = bendDegrees;
+
+                bool isThumb = finger == 0;
+                float openDegrees = isThumb ? thumbOpenDegrees : fingerOpenDegrees;
+                float fistDegrees = isThumb ? thumbFistDegrees : fingerFistDegrees;
+                curls[finger] = Mathf.Clamp01((bendDegrees - openDegrees) / Mathf.Max(1f, fistDegrees - openDegrees));
+            }
             return true;
+        }
+
+        // Sum of the angles between each bone and the next one along the finger. An angle doesn't depend on
+        // handedness, so the raw OpenXR rotations are used as they are.
+        private static unsafe bool TryGetFingerBend(XrHandJointLocationEXT* joints, int[] jointIndices, out float bendDegrees)
+        {
+            bendDegrees = 0f;
+            for (int i = 0; i < jointIndices.Length - 1; i++)
+            {
+                XrHandJointLocationEXT baseJoint = joints[jointIndices[i]];
+                XrHandJointLocationEXT nextJoint = joints[jointIndices[i + 1]];
+                if ((baseJoint.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) == 0
+                    || (nextJoint.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) == 0)
+                    return false;
+                bendDegrees += Quaternion.Angle(ToQuaternion(baseJoint.pose.orientation), ToQuaternion(nextJoint.pose.orientation));
+            }
+            return true;
+        }
+
+        private static Quaternion ToQuaternion(XrQuaternionf orientation)
+        {
+            return new Quaternion(orientation.x, orientation.y, orientation.z, orientation.w);
+        }
+
+        private static string HandName(int hand)
+        {
+            return hand == OpenXRInput.LEFT_HAND ? "left" : "right";
         }
     }
 }

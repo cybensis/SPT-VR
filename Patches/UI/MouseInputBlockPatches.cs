@@ -12,8 +12,7 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(StandaloneInputModule), "Process")]
         private static void ForceNoMouseInput(StandaloneInputModule __instance)
         {
-            // OPENXR SPIKE: no controller input yet, so the mouse is the only way through the menus.
-            if (!VRSettings.GetDisableMouseInput() || TarkovVR.Source.XR.OpenXRBootstrap.Active)
+            if (!VRSettings.GetDisableMouseInput())
             {
                 if (__instance.inputOverride is VRNoMouseInput)
                     __instance.inputOverride = null;

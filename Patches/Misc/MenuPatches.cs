@@ -45,7 +45,8 @@ using UnityEngine.UIElements;
 using UnityEngine.XR;
 using UnityStandardAssets.ImageEffects;
 using Valve.VR;
-using TarkovVR.Source.Controls;
+using TarkovVR.Source.Controls;
+using TarkovVR.Source.XR;
 using static EFT.BaseLocalGame<EFT.HideoutPlayerOwner>;
 using static EFT.UI.BattleUiVoipPanel;
 using static EFT.UI.EditBuildScreen;
@@ -917,7 +918,7 @@ namespace TarkovVR.Patches.Misc
         private static void OpenVRKeyboard(TMP_InputField __instance)
         {
             // OpenXR has no system keyboard (SteamVR's overlay keyboard is OpenVR-only), so it always uses ours.
-            if (VRSettings.GetUseVRKeyboard() || TarkovVR.Source.XR.OpenXRBootstrap.Active)
+            if (VRSettings.GetUseVRKeyboard() || OpenXRBootstrap.Active)
             {
                 // Create the controller if it doesn't exist
                 if (VRKeyboardController.Instance == null)

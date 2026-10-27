@@ -4,11 +4,10 @@ using Valve.VR;
 
 namespace TarkovVR.Patches.Core.VR
 {
-    // OPENXR SPIKE: SteamVR_TrackedObject gets no poses without OpenVR, so every camera it would drive gets
-    // OpenXRHeadPose alongside it (all SPT-VR uses are index Hmd, no origin).
     [HarmonyPatch]
-    internal class OpenXRSpikePatches
+    internal class OpenXRPatches
     {
+        // SteamVR_TrackedObject gets no poses without OpenVR, so the cameras it would move get OpenXRHeadPose instead
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SteamVR_TrackedObject), "OnEnable")]
         private static void AddOpenXRHeadPose(SteamVR_TrackedObject __instance)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
@@ -10,17 +11,14 @@ using UnityEngine.XR.OpenXR.Features.Interactions;
 
 namespace TarkovVR.Source.XR
 {
-    // OPENXR SPIKE (branch openxr-spike): starts Unity's OpenXR plugin instead of the OpenVR loader, display only.
-    // Unity keeps rendering MultiPass, so every per-eye code path (ours + the Six mods) runs unchanged. SteamVR is
-    // never initialised in this mode: its action objects are created (PreInitialize) so calls return defaults, but
-    // nothing reaches OpenVR - controllers do nothing yet. Needs the player-built OpenXR files in the game folder
-    // (libs/OpenXR: managed DLLs -> Managed, native -> Plugins/x86_64, manifest -> UnitySubsystems/UnityOpenXR).
+    // Starts Unity's OpenXR plugin instead of the OpenVR loader ("useOpenXR" in ModSettings.json).
+    // Unity still renders MultiPass, so all the per-eye code keeps working. SteamVR is never started in this mode.
     public static class OpenXRBootstrap
     {
         public static bool Active { get; private set; }
 
-        // Interaction profiles the runtime may bind; without any, OpenXR reports no controllers at all.
-        private static readonly Type[] Profiles =
+        // Without at least one controller profile, OpenXR reports no controllers at all
+        private static readonly Type[] controllerProfiles =
         {
             typeof(ValveIndexControllerProfile),
             typeof(OculusTouchControllerProfile),
@@ -33,77 +31,90 @@ namespace TarkovVR.Source.XR
 
         public static bool Initialize()
         {
-            var log = Plugin.MyLog;
             try
             {
-                // No settings asset ships in the game, so this creates the runtime default (package source:
-                // OpenXRSettings.GetInstance). Features are normally added by the editor; here we add them ourselves.
-                OpenXRSettings oxr = OpenXRSettings.Instance;
-                oxr.renderMode = OpenXRSettings.RenderMode.MultiPass;
-                oxr.depthSubmissionMode = OpenXRSettings.DepthSubmissionMode.None;
+                // The game ships no OpenXR settings asset, so this creates a default one at runtime
+                OpenXRSettings openXRSettings = OpenXRSettings.Instance;
+                openXRSettings.renderMode = OpenXRSettings.RenderMode.MultiPass;
+                openXRSettings.depthSubmissionMode = OpenXRSettings.DepthSubmissionMode.None;
 
-                var features = Profiles.Select(t =>
+                if (!AddFeatures(openXRSettings))
+                    return false;
+
+                XRGeneralSettings generalSettings = ScriptableObject.CreateInstance<XRGeneralSettings>();
+                XRManagerSettings managerSettings = ScriptableObject.CreateInstance<XRManagerSettings>();
+                OpenXRLoader openXRLoader = ScriptableObject.CreateInstance<OpenXRLoader>();
+                generalSettings.Manager = managerSettings;
+                managerSettings.loaders.Clear();
+                managerSettings.loaders.Add(openXRLoader);
+
+                managerSettings.InitializeLoaderSync();
+                if (managerSettings.activeLoader == null)
                 {
-                    var f = (OpenXRFeature)ScriptableObject.CreateInstance(t);
-                    f.enabled = true;
-                    return f;
-                }).ToList();
-                // Finger curls: our own feature; its extensions are requested through the same internal field the
-                // editor normally fills from the feature attribute.
-                var hands = ScriptableObject.CreateInstance<OpenXRHandTracking>();
-                typeof(OpenXRFeature).GetField("openxrExtensionStrings", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(hands, OpenXRHandTracking.Extensions);
-                typeof(OpenXRFeature).GetField("nameUi", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(hands, "SPT-VR Hand Tracking");
-                hands.enabled = true;
-                features.Add(hands);
-                FieldInfo featuresField = typeof(OpenXRSettings).GetField("features", BindingFlags.NonPublic | BindingFlags.Instance);
-                if (featuresField == null)
-                {
-                    log.LogError("[OpenXR] OpenXRSettings.features not found - plugin version mismatch?");
+                    Plugin.MyLog.LogError("[OpenXR] Loader failed to initialize, see the OpenXR lines in Player.log");
                     return false;
                 }
-                featuresField.SetValue(oxr, features.ToArray());
-
-                var general = ScriptableObject.CreateInstance<XRGeneralSettings>();
-                var manager = ScriptableObject.CreateInstance<XRManagerSettings>();
-                var loader = ScriptableObject.CreateInstance<OpenXRLoader>();
-                general.Manager = manager;
-                manager.loaders.Clear();
-                manager.loaders.Add(loader);
-
-                manager.InitializeLoaderSync();
-                if (manager.activeLoader == null)
-                {
-                    log.LogError("[OpenXR] Loader failed to initialise (see the [XR] / OpenXR lines above in Player.log).");
-                    return false;
-                }
-                manager.StartSubsystems();
+                managerSettings.StartSubsystems();
 
                 XRSettings.useOcclusionMesh = true;
 
-                // OpenVR's standing universe puts the floor at y = 0; the rig expects that.
-                var inputs = new System.Collections.Generic.List<XRInputSubsystem>();
-                SubsystemManager.GetInstances(inputs);
-                foreach (var input in inputs)
-                {
-                    bool floor = input.TrySetTrackingOriginMode(TrackingOriginModeFlags.Floor);
-                    log.LogInfo($"[OpenXR] Tracking origin Floor: {floor} (now {input.GetTrackingOriginMode()})");
-                }
+                // The rig expects the floor at y = 0 like OpenVR's standing space. This early request reports success
+                // but doesn't stick on SteamVR - OpenXRFloorOrigin asks again once the session is running.
+                List<XRInputSubsystem> inputSubsystems = new List<XRInputSubsystem>();
+                SubsystemManager.GetInstances(inputSubsystems);
+                foreach (XRInputSubsystem inputSubsystem in inputSubsystems)
+                    inputSubsystem.TrySetTrackingOriginMode(TrackingOriginModeFlags.Floor);
 
                 Active = true;
-                log.LogInfo($"[OpenXR] Running. Runtime '{OpenXRRuntime.name}' {OpenXRRuntime.version}, API {OpenXRRuntime.apiVersion}, "
-                    + $"plugin {OpenXRRuntime.pluginVersion}. Device '{XRSettings.loadedDeviceName}', stereo {XRSettings.stereoRenderingMode}, "
-                    + $"eye texture {XRSettings.eyeTextureWidth}x{XRSettings.eyeTextureHeight}, occlusion mesh {XRSettings.useOcclusionMesh}");
-                log.LogInfo("[OpenXR] Enabled extensions: " + string.Join(" ", OpenXRRuntime.GetEnabledExtensions()));
-                string[] avail = OpenXRRuntime.GetAvailableExtensions();
-                log.LogInfo($"[OpenXR] Runtime offers {avail.Length} extensions; hand tracking: "
-                    + string.Join(" ", avail.Where(e => e.Contains("hand")).ToArray()));
+                LogRuntimeInfo();
                 return true;
             }
             catch (Exception ex)
             {
-                log.LogError("[OpenXR] Initialisation threw: " + ex);
+                Plugin.MyLog.LogError("[OpenXR] Initialization failed: " + ex);
                 return false;
             }
+        }
+
+        // Features are normally set up by the Unity editor, so their fields are internal - set them through reflection
+        private static bool AddFeatures(OpenXRSettings openXRSettings)
+        {
+            List<OpenXRFeature> features = new List<OpenXRFeature>();
+            foreach (Type profileType in controllerProfiles)
+            {
+                OpenXRFeature profile = (OpenXRFeature)ScriptableObject.CreateInstance(profileType);
+                profile.enabled = true;
+                features.Add(profile);
+            }
+
+            OpenXRHandTracking handTracking = ScriptableObject.CreateInstance<OpenXRHandTracking>();
+            FieldInfo extensionsField = typeof(OpenXRFeature).GetField("openxrExtensionStrings", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo nameField = typeof(OpenXRFeature).GetField("nameUi", BindingFlags.NonPublic | BindingFlags.Instance);
+            extensionsField?.SetValue(handTracking, OpenXRHandTracking.REQUIRED_EXTENSIONS);
+            nameField?.SetValue(handTracking, "SPT-VR Hand Tracking");
+            handTracking.enabled = true;
+            features.Add(handTracking);
+
+            FieldInfo featuresField = typeof(OpenXRSettings).GetField("features", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (featuresField == null)
+            {
+                Plugin.MyLog.LogError("[OpenXR] OpenXRSettings.features not found, wrong OpenXR plugin version?");
+                return false;
+            }
+            featuresField.SetValue(openXRSettings, features.ToArray());
+            return true;
+        }
+
+        private static void LogRuntimeInfo()
+        {
+            Plugin.MyLog.LogInfo($"[OpenXR] Running. Runtime '{OpenXRRuntime.name}' {OpenXRRuntime.version}, API {OpenXRRuntime.apiVersion}, "
+                + $"plugin {OpenXRRuntime.pluginVersion}. Device '{XRSettings.loadedDeviceName}', stereo {XRSettings.stereoRenderingMode}, "
+                + $"occlusion mesh {XRSettings.useOcclusionMesh}");
+            Plugin.MyLog.LogInfo("[OpenXR] Enabled extensions: " + string.Join(" ", OpenXRRuntime.GetEnabledExtensions()));
+
+            string[] availableExtensions = OpenXRRuntime.GetAvailableExtensions();
+            string[] handExtensions = availableExtensions.Where(extension => extension.Contains("hand")).ToArray();
+            Plugin.MyLog.LogInfo($"[OpenXR] Runtime offers {availableExtensions.Length} extensions, hand tracking: {string.Join(" ", handExtensions)}");
         }
     }
 }

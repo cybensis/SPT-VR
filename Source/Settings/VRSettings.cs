@@ -100,7 +100,7 @@ namespace TarkovVR.Source.Settings
             public int opticRenderResolution { get; set; }
             public float lodBias { get; set; }
             public float cullDistance { get; set; }
-            // OPENXR SPIKE: start Unity's OpenXR plugin instead of OpenVR/SteamVR (no menu control; edit the json)
+            // Start with OpenXR instead of SteamVR (no menu setting yet)
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }

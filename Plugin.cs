@@ -14,7 +14,9 @@ using Valve.VR;
 using static TarkovVR.Patches.Visuals.VisualPatches;
 using UnityEngine.XR;
 using System.Text;
-using TarkovVR.Source.Settings;
+using TarkovVR.Source.Settings;
+using TarkovVR.Source.XR;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR
 {
@@ -55,23 +57,22 @@ namespace TarkovVR
             // Ctrl+F10 in a raid: both-eyes vs left-eye-only cost measurement (logs "[StereoCost]").
             gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>();
 
-            if (TarkovVR.Source.XR.OpenXRBootstrap.Active)
+            if (OpenXRBootstrap.Active)
             {
-                gameObject.AddComponent<TarkovVR.Source.XR.OpenXRProbe>();
-                gameObject.AddComponent<TarkovVR.Source.XR.OpenXRFloorOrigin>();
-                gameObject.AddComponent<TarkovVR.Source.Controls.OpenXRInputDriver>();
+                gameObject.AddComponent<OpenXRProbe>();
+                gameObject.AddComponent<OpenXRFloorOrigin>();
+                gameObject.AddComponent<OpenXRInputDriver>();
             }
 
         }
 
         private bool InitializeVR()
         {
-            // OPENXR SPIKE ("useOpenXR" in ModSettings.json): SteamVR's action objects are still created so every
-            // SteamVR call returns defaults, but OpenVR is never started.
+            // OpenXR still creates SteamVR's action objects (VRInput falls back to them), but never starts OpenVR
             if (VRSettings.GetUseOpenXR())
             {
                 SteamVR_Actions.PreInitialize();
-                return TarkovVR.Source.XR.OpenXRBootstrap.Initialize();
+                return OpenXRBootstrap.Initialize();
             }
 
             try
