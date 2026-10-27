@@ -29,9 +29,11 @@ namespace TarkovVR.Source.XR
 
         // ---------------------------------------------------------------------------------------- OpenXR types
 
-        private const int XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT = 1000051000;
-        private const int XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT = 1000051001;
-        private const int XR_TYPE_HAND_JOINT_LOCATIONS_EXT = 1000051002;
+        // From openxr_reflection (the OpenXR plugin's copy): 1000051000 is SYSTEM_HAND_TRACKING_PROPERTIES - the
+        // first build was off by one here and every locate failed with XR_ERROR_VALIDATION_FAILURE (-1).
+        private const int XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT = 1000051001;
+        private const int XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT = 1000051002;
+        private const int XR_TYPE_HAND_JOINT_LOCATIONS_EXT = 1000051003;
         private const int XR_TYPE_HAND_JOINTS_MOTION_RANGE_INFO_EXT = 1000080000;
         private const int XR_HAND_JOINTS_MOTION_RANGE_UNOBSTRUCTED_EXT = 1;
         private const int JointCount = 26;
@@ -76,6 +78,7 @@ namespace TarkovVR.Source.XR
         private static int sampledFrame = -1;
         private static float nextLog;
         private static bool errorLogged;
+        private static bool firstOk;
 
         // ---------------------------------------------------------------------------------------- public reads
 
@@ -184,6 +187,7 @@ namespace TarkovVR.Source.XR
                     if (!errorLogged) { errorLogged = true; Plugin.MyLog.LogWarning($"[OpenXR-Hands] xrLocateHandJointsEXT failed: {r}"); }
                     continue;
                 }
+                if (!firstOk) { firstOk = true; Plugin.MyLog.LogInfo($"[OpenXR-Hands] First joint read OK ({(h == 0 ? "left" : "right")}), active {locs.isActive != 0}"); }
                 if (locs.isActive == 0)
                     continue;
 
