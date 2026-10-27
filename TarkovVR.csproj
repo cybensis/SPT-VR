@@ -116,6 +116,15 @@
     <Reference Include="Unity.XR.OpenVR">
       <HintPath>libs\Managed\Unity.XR.OpenVR.dll</HintPath>
     </Reference>
+    <!-- OPENXR SPIKE: player-built OpenXR 1.10.0 + its Input System dependency (from an empty Unity 2022.3 build) -->
+    <Reference Include="Unity.XR.OpenXR">
+      <HintPath>libs\OpenXR\Unity.XR.OpenXR.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.InputSystem">
+      <HintPath>libs\OpenXR\Unity.InputSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>libs\Managed\UnityEngine.UI.dll</HintPath>
     </Reference>

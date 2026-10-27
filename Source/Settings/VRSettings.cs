@@ -100,6 +100,8 @@ namespace TarkovVR.Source.Settings
             public int opticRenderResolution { get; set; }
             public float lodBias { get; set; }
             public float cullDistance { get; set; }
+            // OPENXR SPIKE: start Unity's OpenXR plugin instead of OpenVR/SteamVR (no menu control; edit the json)
+            public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
 
@@ -147,6 +149,7 @@ namespace TarkovVR.Source.Settings
                 disableFrusCulling = false;
                 lodBias = 1.0f;
                 cullDistance = 1.0f;
+                useOpenXR = false;
                 useVRKeyboard = false;
                 heldItemWeight = false;
                 virtualStock = true;
@@ -1048,6 +1051,10 @@ namespace TarkovVR.Source.Settings
         public static float GetLodBias()
         {
             return settings.lodBias;
+        }
+        public static bool GetUseOpenXR()
+        {
+            return settings.useOpenXR;
         }
         public static float GetCullDistance()
         {

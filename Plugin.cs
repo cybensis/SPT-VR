@@ -55,13 +55,24 @@ namespace TarkovVR
             // Ctrl+F10 in a raid: both-eyes vs left-eye-only cost measurement (logs "[StereoCost]").
             gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>();
 
+            if (TarkovVR.Source.XR.OpenXRBootstrap.Active)
+                gameObject.AddComponent<TarkovVR.Source.XR.OpenXRProbe>();
+
         }
 
         private bool InitializeVR()
         {
+            // OPENXR SPIKE ("useOpenXR" in ModSettings.json): SteamVR's action objects are still created so every
+            // SteamVR call returns defaults, but OpenVR is never started.
+            if (VRSettings.GetUseOpenXR())
+            {
+                SteamVR_Actions.PreInitialize();
+                return TarkovVR.Source.XR.OpenXRBootstrap.Initialize();
+            }
+
             try
             {
-                
+
                 SteamVR_Actions.PreInitialize();
                 SteamVR_Settings.instance.pauseGameWhenDashboardVisible = false;
 
