@@ -540,9 +540,16 @@ public class GunInteractionController : MonoBehaviour
             return;
         }
 
-        Vector3 differenceBetweenHands = VRGlobals.player._markers[1].transform.position - VRGlobals.weaponHolder.transform.position;
-        differenceBetweenHands = (cachedRightHandPositioner.InverseTransformDirection(differenceBetweenHands) * -1);
-        VRGlobals.weaponHolder.transform.localPosition = differenceBetweenHands + CalculateRightHandPosOffset();
+        // _markers[1] is weapon_R_IK_marker, a bone on the gun that reloads and malfunctions animate - while one plays,
+        // VRGunController keeps the gun where it was in your hand instead of following that marker
+        if (!VRGunController.TryHoldGunInHand(VRGlobals.weaponHolder.transform))
+        {
+            Vector3 differenceBetweenHands = VRGlobals.player._markers[1].transform.position - VRGlobals.weaponHolder.transform.position;
+            differenceBetweenHands = (cachedRightHandPositioner.InverseTransformDirection(differenceBetweenHands) * -1);
+            VRGlobals.weaponHolder.transform.localPosition = differenceBetweenHands + CalculateRightHandPosOffset();
+            if (!VRGunController.IsTarkovAnimatingTheGun())
+                VRGunController.RememberGunPosition(VRGlobals.weaponHolder.transform);
+        }
 
         // Physical weapon collision: after the marker anchor lands the gun, pull it back along the barrel
         // by the measured wall penetration (world-space add = last holder write of the frame, so the

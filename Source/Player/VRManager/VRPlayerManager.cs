@@ -11,6 +11,7 @@ using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
 using TarkovVR.Source.Settings;
+using TarkovVR.Source.Weapons;
 using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
@@ -939,7 +940,8 @@ namespace TarkovVR.Source.Player.VRManager
             if (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && secondaryGripState.state)
                 return;
 
-            if (VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(LEFT_HAND_ANIMATOR_HASH) == 1.0)
+            // The old rig handed the left hand to Tarkov's reload / malfunction animation here; VRGunController keeps it yours
+            if (!VRGunController.KeepLeftHandOnController() && VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(LEFT_HAND_ANIMATOR_HASH) == 1.0)
             {
                 if (!leftHandInAnimation)
                 {

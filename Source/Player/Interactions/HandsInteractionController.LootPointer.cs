@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Valve.VR;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Weapons;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -827,7 +828,9 @@ namespace TarkovVR.Source.Player.Interactions
             // case works only because isSupporting already makes us yield). Yield the fingers too:
             // free -> false eases handWeightBlend to 0 (handOpenLerp) and stops touching the bones,
             // handing the fingers back to the animation. Re-arms automatically when the float drops.
-            bool leftHandAnimating = VRGlobals.player != null && VRGlobals.player.BodyAnimatorCommon != null
+            // VRGunController keeps the left hand on the controller during those animations, so the fingers stay ours too
+            bool leftHandAnimating = !VRGunController.KeepLeftHandOnController()
+                && VRGlobals.player != null && VRGlobals.player.BodyAnimatorCommon != null
                 && VRGlobals.player.BodyAnimatorCommon.GetFloat(VRPlayerManager.LEFT_HAND_ANIMATOR_HASH) == 1f;
 
             bool free = VRGlobals.inGame && !VRGlobals.menuOpen
