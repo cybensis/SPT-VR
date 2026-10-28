@@ -13,6 +13,9 @@ namespace TarkovVR.Source.Weapons
     //    chambers on its own.
     // The bolt lock is Tarkov's bolt-catch animator flag. Tarkov clears it in its own reload; while it's on the gun
     // doesn't fire (BlocksFiring).
+    // The bolt rides back with the handle so the chamber shows: Tarkov's own locked-back pose (the "Catch" layer, or the
+    // IdlePosition blend on guns that use that instead) blended in by how far back the handle is. Only the pose; the
+    // bolt-catch flag isn't touched, and letting go puts the pose back to what that flag says.
     public static partial class VRReloadController
     {
         public static bool chargingHandle = true;
@@ -20,6 +23,7 @@ namespace TarkovVR.Source.Weapons
         public static float handleTravel = 0.08f;          // m the handle comes back (headset: 0.07 a touch short)
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
         public static float handleLateralEscape = 0.10f;   // m the controller moves sideways off the track before the hand lets go
+        public static bool boltFollowsHandle = true;       // false = only the handle model moves
 
         public static bool HoldingChargingHandle { get; private set; }
         public static bool OffHandAtChargingHandle { get; private set; }   // the trigger is the handle's here, not a weapon-part interaction
@@ -134,7 +138,14 @@ namespace TarkovVR.Source.Weapons
             LatchHand(handleView);
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] grabbed the charging handle '{handleView.name}', bolt locked back: {BoltLockedBack}, chamber: {weapon.ChamberAmmoCount}");
+            {
+                FirearmsAnimator firearmsAnimator = firearmController.FirearmsAnimator;
+                Transform[] patrons = firearmController.Firearms._patronInWeaponTransforms;
+                Transform patron = patrons != null && patrons.Length > 0 ? patrons[0] : null;
+                Plugin.MyLog.LogInfo($"[VRReload] grabbed the charging handle '{handleView.name}', bolt locked back: {BoltLockedBack}, chamber: {weapon.ChamberAmmoCount}, " +
+                    $"catch layer: {firearmsAnimator.BOLT_CATCH_LAYER_INDEX}, idle position: {firearmsAnimator.HasParameter(AnimationControllerParametersTable.FLOAT_IDLEPOSITION)}, " +
+                    $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}");
+            }
             Pulse(0.3f, 0.04f);
         }
 
@@ -165,6 +176,14 @@ namespace TarkovVR.Source.Weapons
             {
                 handleFullyBack = true;
                 BoltComesBack(handleForFirearm);
+            }
+
+            // After the rechamber above: its skip puts the bolt pose back to the catch flag, this frame would flash it closed
+            if (boltFollowsHandle)
+            {
+                FirearmsAnimator firearmsAnimator = handleForFirearm.FirearmsAnimator;
+                float boltOpen = Mathf.Clamp01(handlePull / (handleTravel * handleFullPull));
+                SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : boltOpen);
             }
 
             // Once it has been all the way back, letting go slams the bolt forward whatever the handle does after
@@ -201,12 +220,38 @@ namespace TarkovVR.Source.Weapons
             handleBone = null;
             handleView = null;
 
-            if (firearmController == null || firearmController != VRGlobals.firearmController)
+            if (firearmController == null)
                 return;
+            if (firearmController != VRGlobals.firearmController)
+            {
+                RestoreBoltPose(firearmController);
+                return;
+            }
             if (snapForward)
                 BoltSlamsForward(firearmController);
             else
                 PlayGunSound(firearmController, "HandleIn");
+            RestoreBoltPose(firearmController);
+        }
+
+        // 0 = closed, 1 = Tarkov's locked-back pose
+        private static void SetBoltOpen(FirearmsAnimator firearmsAnimator, float open)
+        {
+            IAnimator animator = firearmsAnimator?.Animator;
+            if (animator == null)
+                return;
+            if (firearmsAnimator.BOLT_CATCH_LAYER_INDEX >= 0)
+                animator.SetLayerWeight(firearmsAnimator.BOLT_CATCH_LAYER_INDEX, open);
+            if (firearmsAnimator.HasParameter(AnimationControllerParametersTable.FLOAT_IDLEPOSITION))
+                AnimationControllerParametersTable.SetIdlePosition(animator, open);
+        }
+
+        // The bolt goes where the gun's own catch flag says: forward, or held back by an empty magazine
+        private static void RestoreBoltPose(FirearmController firearmController)
+        {
+            FirearmsAnimator firearmsAnimator = firearmController.FirearmsAnimator;
+            if (firearmsAnimator != null)
+                SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : 0f);
         }
 
         // Let go from a full pull: a bolt locked back closes (unless an empty magazine holds it)
