@@ -72,6 +72,24 @@ namespace TarkovVR.Source.Weapons
         private static bool ChamberLoaded => VRGlobals.firearmController != null && VRGlobals.firearmController.Item != null
             && VRGlobals.firearmController.Item.ChamberAmmoCount > 0;
 
+        // Locked back on that round: the trigger clicks like an empty gun, it's never handed to Tarkov (it would fire)
+        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && BoltLockedBack && ChamberLoaded;
+
+        // Tarkov's own empty-gun trigger (Idling.SetTriggerPressed: SetAmmoInChamber, then SetFire) with the chamber shown
+        // empty, as it looks with the bolt open: the animator plays its dry fire, the click and the finger. Local only:
+        // FIKA's DryShot packet replays as SetFire on the other players, whose animator still has a round chambered.
+        public static void DryFireTrigger(bool pressed)
+        {
+            FirearmController firearmController = VRGlobals.firearmController;
+            if (firearmController == null || firearmController.FirearmsAnimator == null || firearmController.Item == null)
+                return;
+            if (pressed)
+                firearmController.FirearmsAnimator.SetAmmoInChamber(0f);
+            firearmController.FirearmsAnimator.SetFire(pressed);
+            if (!pressed)
+                firearmController.FirearmsAnimator.SetAmmoInChamber(firearmController.Item.ChamberAmmoCount);
+        }
+
         private static HeldMagazineSource heldSource;
         private static Magazine heldMagazine;
         private static FirearmController heldForFirearm;

@@ -562,27 +562,44 @@ namespace TarkovVR.Source.Controls
         public class FireHandler : IInputHandler
         {
             private bool isShooting = false;
+            private bool isDryFiring = false;
 
             public void UpdateCommand(ref ECommand command)
             {
                 if (WeaponPatches.grenadeEquipped || VRGlobals.switchingWeapon)
                     return;
 
+                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis : VRInput.RightTrigger.axis;
+                bool detached = TarkovVR.Source.Player.Interactions.ChestHang.Detached;
+
                 // No trigger finger on the grip (slung, or support-hand-only hold) = no firing; if the
                 // release happened mid-burst, end it. Same while VRReloadController has the gun apart: the
                 // magazine out in the hand (Tarkov still thinks it's in the gun), the charging handle being
-                // worked, or the bolt locked back.
-                if (TarkovVR.Source.Player.Interactions.ChestHang.Detached || VRReloadController.BlocksFiring)
+                // worked, or the bolt locked back on a round.
+                if (detached || VRReloadController.BlocksFiring)
                 {
                     if (isShooting)
                     {
                         command = ECommand.EndShooting;
                         isShooting = false;
                     }
+                    // Locked back on the round Tarkov's insert chambered: the trigger only clicks
+                    bool dryFiring = !detached && VRReloadController.TriggerOnlyClicks && primaryHandTriggerAmount > 0.5f;
+                    if (dryFiring != isDryFiring)
+                    {
+                        isDryFiring = dryFiring;
+                        VRReloadController.DryFireTrigger(dryFiring);
+                    }
                     return;
                 }
 
-                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis : VRInput.RightTrigger.axis;
+                // Racked with the trigger still held from a click: it fires on the next pull, not this one
+                if (isDryFiring)
+                {
+                    isDryFiring = false;
+                    VRReloadController.DryFireTrigger(pressed: false);
+                    isShooting = primaryHandTriggerAmount > 0.5f;
+                }
 
                 if (!isShooting && primaryHandTriggerAmount > 0.5f)
                 {
