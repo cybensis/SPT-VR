@@ -5,7 +5,6 @@ using EFT;
 using EFT.AssetsManager;
 using EFT.Interactive;
 using EFT.InventoryLogic;
-using EFT.UI;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
@@ -50,8 +49,7 @@ namespace TarkovVR.Source.Weapons
         public static bool magazineFingers = true;          // the animation's finger pose while holding a magazine
         public static float fingerBlendRate = 12f;          // 1/s ease of that finger pose in and out
         public static float dropAngularSpeed = 3f;          // rad/s tumble on a dropped magazine
-        public static bool sounds = true;
-        public static float soundVolume = 0.8f;
+        public static bool sounds = true;                   // the gun's own reload sounds
         public static bool haptics = true;
         public static bool debugZones = false;              // spheres: grab zone (blue), chest pouch (yellow), mag well seat radius (green)
         public static bool debugLog = false;
@@ -188,6 +186,9 @@ namespace TarkovVR.Source.Weapons
             return reloadGrip;
         }
 
+        private static FirearmController gunSoundPlayerFor;
+        private static BaseSoundPlayer gunSoundPlayer;
+
         private static readonly List<Magazine> reachableMagazines = new List<Magazine>();
         private static Transform cachedRendererRoot;
         private static Renderer[] cachedRenderers;
@@ -210,7 +211,10 @@ namespace TarkovVR.Source.Weapons
             // A click on the gun hand when the mag release goes down
             bool releaseState = MagazineReleaseHeld();
             if (releaseState && !previousReleaseState)
+            {
+                PlayGunSound(VRGlobals.firearmController, "Button");
                 PulseGunHand(0.25f, 0.03f);
+            }
             previousReleaseState = releaseState;
 
             if (expectedOperation != ExpectedOperation.None)
@@ -372,7 +376,8 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRMagazine] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
-            PlayMagazineSound(magazine, EInventorySoundType.pickup, propTransform.position);
+            if (!VRSettings.GetManualReloadOn())
+                PlayGunSound(firearmController, "Button");
             Pulse(0.35f, 0.05f);
         }
 
@@ -430,7 +435,7 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRMagazine] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
-            PlayMagazineSound(magazine, EInventorySoundType.pickup, propTransform.position);
+            PlayGunSound(firearmController, "MagPullOut");
             Pulse(0.35f, 0.05f);
         }
 
@@ -548,7 +553,7 @@ namespace TarkovVR.Source.Weapons
                 if (heldSource == HeldMagazineSource.FromGun)
                 {
                     // The gun's own magazine pushed back in: nothing changed in the inventory
-                    PlayMagazineSound(heldMagazine, EInventorySoundType.drop, magazineWell.position);
+                    PlayGunSound(heldForFirearm, "MagIn");
                     Pulse(0.6f, 0.06f);
                     CancelHold();
                     return;
@@ -621,6 +626,7 @@ namespace TarkovVR.Source.Weapons
                 freeHoldRotation = lastGrabRotation;
             }
             ReleaseHandLatch();
+            PlayGunSound(heldForFirearm, "MagOut");
             Pulse(0.5f, 0.04f);
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRMagazine] {heldMagazine.LocalizedShortName()} out of the well: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
@@ -834,6 +840,7 @@ namespace TarkovVR.Source.Weapons
             if (heldSource == HeldMagazineSource.FromPouch)
             {
                 // Never left the rig
+                PlayGunSound(heldForFirearm, "MagSbrosnik");
                 DestroyProp();
                 ClearHold();
                 return;
@@ -856,7 +863,7 @@ namespace TarkovVR.Source.Weapons
             if (atChest && TryBuildMoveToRig(magazine, out OperationResult<MoveResult> rigMove))
             {
                 CommitHold();
-                RunMoveToRig(magazine, firearmController, rigMove, handPosition);
+                RunMoveToRig(magazine, firearmController, rigMove);
             }
             else if (CanDropToGround(magazine))
             {
@@ -866,7 +873,7 @@ namespace TarkovVR.Source.Weapons
             else if (!atChest && TryBuildMoveToRig(magazine, out rigMove))
             {
                 CommitHold();
-                RunMoveToRig(magazine, firearmController, rigMove, handPosition);
+                RunMoveToRig(magazine, firearmController, rigMove);
             }
             else
             {
@@ -889,7 +896,6 @@ namespace TarkovVR.Source.Weapons
                 return false;
             }
 
-            Vector3 wellPosition = magazineWell.position;
             Magazine magazine = heldMagazine;
             FirearmController firearmController = heldForFirearm;
             CommitHold();
@@ -900,7 +906,7 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRMagazine] seated {magazine.LocalizedShortName()}");
-            PlayMagazineSound(magazine, EInventorySoundType.drop, wellPosition);
+            PlayGunSound(firearmController, "MagIn");
             Pulse(0.8f, 0.07f);
             return true;
         }
@@ -931,7 +937,7 @@ namespace TarkovVR.Source.Weapons
             return !moveResult.Failed && moveResult.Value.CanExecute(inventoryController);
         }
 
-        private static void RunMoveToRig(Magazine magazine, FirearmController firearmController, OperationResult<MoveResult> moveResult, Vector3 soundPosition)
+        private static void RunMoveToRig(Magazine magazine, FirearmController firearmController, OperationResult<MoveResult> moveResult)
         {
             ExpectOperation(ExpectedOperation.PullOut, firearmController);
             VRGlobals.player.InventoryController.TryRunNetworkTransaction(moveResult);
@@ -939,7 +945,7 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRMagazine] {magazine.LocalizedShortName()} put in the rig");
-            PlayMagazineSound(magazine, EInventorySoundType.drop, soundPosition);
+            PlayGunSound(firearmController, "MagSbrosnik");
             Pulse(0.4f, 0.05f);
         }
 
@@ -989,16 +995,26 @@ namespace TarkovVR.Source.Weapons
             if (CanDropToGround(magazine))
             {
                 // Falls out of the well with the gun's motion
+                PlayReleaseSounds(firearmController);
                 RunDrop(magazine, firearmController, magazineView.ItemView.position, magazineView.ItemView.rotation,
                     Vector3.down * 0.5f + VRGlobals.player.Velocity);
                 return true;
             }
             if (TryBuildMoveToRig(magazine, out OperationResult<MoveResult> rigMove))
             {
-                RunMoveToRig(magazine, firearmController, rigMove, magazineView.ItemView.position);
+                PlayReleaseSounds(firearmController);
+                RunMoveToRig(magazine, firearmController, rigMove);
                 return true;
             }
             return false;
+        }
+
+        // Manual Reload already played the button when B went down
+        private static void PlayReleaseSounds(FirearmController firearmController)
+        {
+            if (!VRSettings.GetManualReloadOn())
+                PlayGunSound(firearmController, "Button");
+            PlayGunSound(firearmController, "MagOut");
         }
 
         // Called from the GameWorld.ThrowItem postfix: put our dropped magazine where the hand let go of it
@@ -1341,17 +1357,20 @@ namespace TarkovVR.Source.Weapons
             VRInput.Haptic.Execute(0f, duration, 120f, amplitude, gunHand);
         }
 
-        private static void PlayMagazineSound(Item magazine, EInventorySoundType soundType, Vector3 position)
+        // The gun's own reload sounds, by the names its animation fires (WeaponRecon): Button, MagOut, MagSbrosnik (the dump
+        // pouch), MagPullOut (a new magazine from the pouch), MagIn. The gun's sound player resolves "Snd" + name; a gun
+        // without that sound stays silent.
+        private static void PlayGunSound(FirearmController firearmController, string soundName)
         {
-            if (!sounds || magazine == null)
+            if (!sounds || firearmController == null || firearmController._controllerObject == null)
                 return;
-            GUISounds guiSounds = Singleton<GUISounds>.Instance;
-            BetterAudio betterAudio = MonoBehaviourSingleton<BetterAudio>.Instance;
-            if (guiSounds == null || betterAudio == null)
-                return;
-            AudioClip clip = guiSounds.GetItemClip(magazine.ItemSound, soundType);
-            if (clip != null)
-                betterAudio.TryPlayAtPoint(out _, position, clip, BetterAudio.AudioSourceGroupType.Character, 25, soundVolume);
+            if (gunSoundPlayerFor != firearmController)
+            {
+                gunSoundPlayerFor = firearmController;
+                gunSoundPlayer = firearmController._controllerObject.GetComponentInChildren<BaseSoundPlayer>(true);
+            }
+            if (gunSoundPlayer != null)
+                gunSoundPlayer.SoundEventHandler(soundName);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
