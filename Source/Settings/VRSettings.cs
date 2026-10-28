@@ -513,7 +513,7 @@ namespace TarkovVR.Source.Settings
             chestSlingToggle.Text.localizationKey = "Turn On Chest Sling";
             chestSlingToggle.Toggle.UpdateValue(settings.chestSling);
 
-            // Manual reload (VRMagazineController): on guns with detachable magazines B stops running Tarkov's
+            // Manual reload (VRReloadController): on guns with detachable magazines B stops running Tarkov's
             // reload; hold it to release the magazine so the off hand can pull it, double tap drops it.
             manualReloadToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             manualReloadToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);

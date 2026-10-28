@@ -294,7 +294,7 @@ namespace TarkovVR.Source.Player.Interactions
             else
             {
                 // Off hand: not while it's near the foregrip trigger (Req 4), or holding / reaching for a magazine.
-                if (NearForegrip() || VRMagazineController.OwnsOffHand)
+                if (NearForegrip() || VRReloadController.OwnsOffHand)
                     return;
             }
 

@@ -924,7 +924,7 @@ namespace TarkovVR.Source.Player.VRManager
             // Must come BEFORE scopeTransform check so heldItem always wins
             // Same while holding or reaching for a magazine, so the grab never turns into a foregrip snap
             if ((VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
-                || VRMagazineController.OwnsOffHand)
+                || VRReloadController.OwnsOffHand)
             {
                 handLock = false;
                 hapticTriggered = false;

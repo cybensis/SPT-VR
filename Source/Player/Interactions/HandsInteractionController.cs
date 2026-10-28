@@ -324,7 +324,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             // Magazines by hand: also before the bail (it cancels a held magazine itself on menus)
             if (VRGlobals.inGame && VRGlobals.vrPlayer != null)
-                VRMagazineController.Tick();
+                VRReloadController.Tick();
 
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
@@ -418,7 +418,7 @@ namespace TarkovVR.Source.Player.Interactions
             UpdateLeftHandFingers();
 
             // Holding a magazine: the reload animation's finger pose on top
-            VRMagazineController.ApplyHeldFingerPose();
+            VRReloadController.ApplyHeldFingerPose();
 
             // Same open-hand treatment for the RIGHT hand while it's off the gun (ChestHang
             // sling / support-only) - the animator still curls it in the grip pose otherwise.

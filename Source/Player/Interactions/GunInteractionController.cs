@@ -355,7 +355,7 @@ public class GunInteractionController : MonoBehaviour
     {
         if (interactables == null || interactables.Count == 0 || VRGlobals.vrPlayer == null ||
             VRGlobals.vrPlayer.isSupporting || TarkovVR.Source.Player.Interactions.ChestHang.Detached ||
-            VRMagazineController.HoldingMagazine)
+            VRReloadController.HoldingMagazine || VRReloadController.HoldingChargingHandle)
             return -1;
         GameObject lh = VRGlobals.vrPlayer.LeftHand;
         if (lh == null)

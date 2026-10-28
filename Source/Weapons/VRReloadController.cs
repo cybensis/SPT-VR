@@ -26,7 +26,7 @@ namespace TarkovVR.Source.Weapons
     //    at the chest = into your rig/pockets, anywhere else = it drops to the ground where you let go
     //  - a new magazine stays in your rig until it is seated; letting go of it anywhere else puts it back
     // B double-tap (Y left-handed) drops the magazine straight out of the gun.
-    public static class VRMagazineController
+    public static partial class VRReloadController
     {
         public static bool enabled = true;
         public static float magazineGrabRadius = 0.08f;     // m palm to the gun magazine's center to grab it
@@ -55,12 +55,15 @@ namespace TarkovVR.Source.Weapons
         public static bool debugLog = false;
 
         private enum HeldMagazineSource { None, FromGun, FromPouch }
-        private enum ExpectedOperation { None, PullOut, Insert }
+        private enum ExpectedOperation { None, PullOut, Insert, Rechamber }
 
         // Off hand state, read by VRPlayerManager / the loot pointer / the weapon interact
         public static bool OwnsOffHand { get; private set; }            // holding a magazine, or reaching for one
         public static bool HoldingMagazine => heldSource != HeldMagazineSource.None;
         public static bool HoldingGunMagazine => heldSource == HeldMagazineSource.FromGun;   // still in the gun as far as Tarkov knows: no firing
+
+        // No firing: the gun's magazine is out in the hand, the charging handle is being worked, or the bolt is locked back
+        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || BoltLockedBack;
 
         private static HeldMagazineSource heldSource;
         private static Magazine heldMagazine;
@@ -227,24 +230,34 @@ namespace TarkovVR.Source.Weapons
                 else
                     UpdateHeldMagazine(gripReleased);
             }
+            if (HoldingChargingHandle)
+            {
+                if (!ChargingHandleHoldIsStillValid())
+                    LetGoOfChargingHandle(cycleAction: false);
+                else
+                    UpdateChargingHandle(gripReleased);
+            }
             UpdateHandLatch();
 
             bool reaching = false;
-            if (!HoldingMagazine && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
+            if (!HoldingMagazine && !HoldingChargingHandle && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
             {
                 Vector3 palm = OffHandPalm();
                 bool supporting = VRGlobals.vrPlayer.isSupporting;
                 bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
+                bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon, palm);
                 bool inPouchZone = !supporting && InChestPouchZone(palm);
                 // A hand on the support grip is only taken over by an actual grab, never by passing through a zone
                 // (a pistol's support hand cups right over its magazine)
-                reaching = !supporting && (inGrabZone || inPouchZone);
+                reaching = !supporting && (inGrabZone || inHandleZone || inPouchZone);
                 if (gripPressed && inGrabZone)
                     GrabFromGun(firearmController, weapon, magazineSlot);
+                else if (gripPressed && inHandleZone)
+                    GrabChargingHandle(firearmController, weapon);
                 else if (gripPressed && inPouchZone)
                     GrabFromPouch(firearmController, weapon, magazineSlot);
             }
-            OwnsOffHand = HoldingMagazine || reaching;
+            OwnsOffHand = HoldingMagazine || HoldingChargingHandle || reaching;
 
             UpdateZoneViz();
         }
@@ -375,7 +388,7 @@ namespace TarkovVR.Source.Weapons
                 SnapHandToGrip(heldReloadGrip.oldMagazinePosition, heldReloadGrip.oldMagazineRotation);
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
+                Plugin.MyLog.LogInfo($"[VRReload] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
             if (!VRSettings.GetManualReloadOn())
                 PlayGunSound(firearmController, "Button");
             Pulse(0.35f, 0.05f);
@@ -434,7 +447,7 @@ namespace TarkovVR.Source.Weapons
             railCatchArmed = true;
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
+                Plugin.MyLog.LogInfo($"[VRReload] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
             PlayGunSound(firearmController, "MagPullOut");
             Pulse(0.35f, 0.05f);
         }
@@ -601,7 +614,7 @@ namespace TarkovVR.Source.Weapons
             railBlend = pullingOut ? 1f : 0f;
             handAtRailStartInWell = magazineWell.InverseTransformPoint(VRGlobals.vrPlayer.LeftHand.transform.position);
             heldProp.transform.SetParent(magazineWell, worldPositionStays: true);
-            LatchHand();
+            LatchHand(heldProp.transform);
         }
 
         // Pulled down the track far enough: loose in the hand
@@ -629,7 +642,7 @@ namespace TarkovVR.Source.Weapons
             PlayGunSound(heldForFirearm, "MagOut");
             Pulse(0.5f, 0.04f);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] {heldMagazine.LocalizedShortName()} out of the well: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
+                Plugin.MyLog.LogInfo($"[VRReload] {heldMagazine.LocalizedShortName()} out of the well: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
         }
 
         // A magazine being put in backed out of the track or was pulled off it sideways
@@ -684,7 +697,7 @@ namespace TarkovVR.Source.Weapons
             if (debugLog)
             {
                 Vector3 middleInWell = seatedLocalRotation * Vector3.Scale(towardMiddle, seatedScale);
-                Plugin.MyLog.LogInfo($"[VRMagazine] track {(axisInProp == lengthAxis ? "along the magazine's length" : "toward its middle")}, "
+                Plugin.MyLog.LogInfo($"[VRReload] track {(axisInProp == lengthAxis ? "along the magazine's length" : "toward its middle")}, "
                     + $"{Vector3.Angle(axisInWell, middleInWell):0.#} deg off the well-to-middle direction");
             }
             return axisInWell.sqrMagnitude > 1e-8f ? axisInWell.normalized : Vector3.down;
@@ -745,14 +758,15 @@ namespace TarkovVR.Source.Weapons
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // The rendered hand on the magazine
+        // The rendered hand on what it holds (a magazine on the track, the charging handle): it rides that, from where
+        // the controller grabbed it
 
-        private static void LatchHand()
+        private static void LatchHand(Transform holder)
         {
             if (handLatch == null)
-                handLatch = new GameObject("VRMagazineHandLatch").transform;
+                handLatch = new GameObject("VRReloadHandLatch").transform;
             Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
-            handLatch.SetParent(heldProp.transform, worldPositionStays: false);
+            handLatch.SetParent(holder, worldPositionStays: false);
             handLatch.SetPositionAndRotation(leftHand.position, leftHand.rotation);
             handLatched = true;
             handLatchReleasing = false;
@@ -892,7 +906,7 @@ namespace TarkovVR.Source.Weapons
             if (moveResult.Failed || !moveResult.Value.CanExecute(inventoryController))
             {
                 if (debugLog)
-                    Plugin.MyLog.LogWarning($"[VRMagazine] can't seat {heldMagazine.LocalizedShortName()}: {(moveResult.Failed ? moveResult.Error.ToString() : "can't execute")}");
+                    Plugin.MyLog.LogWarning($"[VRReload] can't seat {heldMagazine.LocalizedShortName()}: {(moveResult.Failed ? moveResult.Error.ToString() : "can't execute")}");
                 return false;
             }
 
@@ -905,7 +919,7 @@ namespace TarkovVR.Source.Weapons
             TryForceExpectedOperation();
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] seated {magazine.LocalizedShortName()}");
+                Plugin.MyLog.LogInfo($"[VRReload] seated {magazine.LocalizedShortName()}");
             PlayGunSound(firearmController, "MagIn");
             Pulse(0.8f, 0.07f);
             return true;
@@ -944,7 +958,7 @@ namespace TarkovVR.Source.Weapons
             TryForceExpectedOperation();
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] {magazine.LocalizedShortName()} put in the rig");
+                Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} put in the rig");
             PlayGunSound(firearmController, "MagSbrosnik");
             Pulse(0.4f, 0.05f);
         }
@@ -972,7 +986,7 @@ namespace TarkovVR.Source.Weapons
             TryForceExpectedOperation();
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] {magazine.LocalizedShortName()} dropped");
+                Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} dropped");
         }
 
         // B double-tap (Y left-handed): the magazine falls out of the well (into the rig in the hideout). Returns false
@@ -1079,16 +1093,22 @@ namespace TarkovVR.Source.Weapons
                     firearmController.FirearmsAnimator.Animator.Play(firearmController.FirearmsAnimator.FullIdleStateName, 1, 0.1f);
                     FinishForcedOperation(firearmController);
                 }
+                else if (expectedOperation == ExpectedOperation.Rechamber && operation is FirearmController.RechamberOperation)
+                {
+                    // BSG's own skip, guarded by its state: the chambered round is thrown out, the next one chambered
+                    firearmController.FastForwardCurrentState();
+                    FinishForcedOperation(firearmController);
+                }
                 else if (Time.time > expectedOperationDeadline)
                 {
-                    Plugin.MyLog.LogWarning($"[VRMagazine] expected {expectedOperation} never started (current: {operation?.GetType().Name ?? "none"})");
+                    Plugin.MyLog.LogWarning($"[VRReload] expected {expectedOperation} never started (current: {operation?.GetType().Name ?? "none"})");
                     ClearPending();
                     expectedOperation = ExpectedOperation.None;
                 }
             }
             catch (System.Exception exception)
             {
-                Plugin.MyLog.LogError($"[VRMagazine] forcing {expectedOperation} failed: {exception}");
+                Plugin.MyLog.LogError($"[VRReload] forcing {expectedOperation} failed: {exception}");
                 ClearPending();
                 expectedOperation = ExpectedOperation.None;
             }
@@ -1120,8 +1140,11 @@ namespace TarkovVR.Source.Weapons
         {
             if (firearmController.CurrentOperation is FirearmController.Idling idling)
                 idling.OnIdleStartEvent();
+            // The skipped clip would have set the bolt catch: an emptied magazine holds the bolt back after the rechamber
+            if (expectedOperation == ExpectedOperation.Rechamber)
+                firearmController.FirearmsAnimator.SetBoltCatch(BoltStaysBack(firearmController.Item));
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] finished {expectedOperation} after {Time.frameCount - expectedOperationStartFrame} frames");
+                Plugin.MyLog.LogInfo($"[VRReload] finished {expectedOperation} after {Time.frameCount - expectedOperationStartFrame} frames");
             expectedOperation = ExpectedOperation.None;
         }
 
@@ -1255,8 +1278,9 @@ namespace TarkovVR.Source.Weapons
         // to those bones this frame. Eases in on a grab and back out to whatever the hand was doing on release.
         public static void ApplyHeldFingerPose()
         {
+            // The charging handle has no recording yet: the magazine pull's thumb-and-index pinch is the closest grip
             Vector3[] pose = null;
-            if (heldSource == HeldMagazineSource.FromGun)
+            if (heldSource == HeldMagazineSource.FromGun || HoldingChargingHandle)
                 pose = MAGAZINE_PULL_FINGERS;
             else if (heldSource == HeldMagazineSource.FromPouch)
                 pose = MAGAZINE_INSERT_FINGERS;
@@ -1387,10 +1411,12 @@ namespace TarkovVR.Source.Weapons
                 SetZoneViz(ref grabZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref pouchZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref wellZoneViz, false, Vector3.zero, 0f, Color.clear);
+                SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }
 
             Vector3 palm = OffHandPalm();
+            UpdateChargingHandleViz(firearmController, weapon, palm, show);
             bool hasMagazineCenter = TryGetGunMagazineCenter(firearmController, magazineSlot, out Vector3 magazineCenter);
             bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
             SetZoneViz(ref grabZoneViz, hasMagazineCenter && !HoldingMagazine, magazineCenter, magazineGrabRadius,
