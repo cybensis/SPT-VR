@@ -4,22 +4,25 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // The charging handle: the off hand grips it, pulls it straight back along the barrel on a track (the hand locked on
-    // it, the handle model moving with it) and lets go. From a full pull it snaps forward and cycles the action:
-    //  - bolt locked back (a magazine swapped by hand into an empty gun) -> the bolt goes forward. Tarkov already put
-    //    the round in the chamber when the magazine went in; it has no operation that chambers on its own.
-    //  - a round in the chamber -> Tarkov's own rechamber: that round is thrown out, the next one chambered.
+    // The charging handle: the off-hand trigger takes it, the hand pulls it straight back along the barrel on a track
+    // (locked on it, the handle model moving with it) and lets go of the trigger. Like the real thing:
+    //  - pulled all the way back with a round in the chamber -> Tarkov's own rechamber right then: that round is thrown
+    //    out and the next one chambered as the bolt comes back
+    //  - let go from a full pull -> the bolt slams forward; a bolt locked back (a magazine swapped by hand into an empty
+    //    gun) closes. Tarkov already put the round in the chamber when the magazine went in; it has no operation that
+    //    chambers on its own.
     // The bolt lock is Tarkov's bolt-catch animator flag. Tarkov clears it in its own reload; while it's on the gun
     // doesn't fire (BlocksFiring).
     public static partial class VRReloadController
     {
         public static bool chargingHandle = true;
         public static float handleGrabRadius = 0.06f;      // m palm to the back of the charging handle to grab it
-        public static float handleTravel = 0.07f;          // m the handle comes back
-        public static float handleFullPull = 0.9f;         // share of handleTravel that cycles the action on release
+        public static float handleTravel = 0.08f;          // m the handle comes back (headset: 0.07 a touch short)
+        public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
         public static float handleLateralEscape = 0.10f;   // m the controller moves sideways off the track before the hand lets go
 
         public static bool HoldingChargingHandle { get; private set; }
+        public static bool OffHandAtChargingHandle { get; private set; }   // the trigger is the handle's here, not a weapon-part interaction
 
         public static bool BoltLockedBack
         {
@@ -141,13 +144,14 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (VRGlobals.firearmController == null || VRGlobals.firearmController != handleForFirearm)
                 return false;
-            if (!(handleForFirearm.CurrentOperation is FirearmController.Idling))
+            // Our own rechamber runs for a frame while the handle is back
+            if (!(handleForFirearm.CurrentOperation is FirearmController.Idling) && expectedOperation != ExpectedOperation.Rechamber)
                 return false;
             return handleView != null && handleBone != null;
         }
 
         // The controller's travel along the barrel moves the handle back; sideways it can't go
-        private static void UpdateChargingHandle(bool gripReleased)
+        private static void UpdateChargingHandle(bool triggerReleased)
         {
             Vector3 axis = handleBone.TransformDirection(handleAxisInSlot).normalized;
             Vector3 handDelta = VRGlobals.vrPlayer.LeftHand.transform.position - handleBone.TransformPoint(handAtHandleGrabInSlot);
@@ -160,16 +164,32 @@ namespace TarkovVR.Source.Weapons
             if (!handleFullyBack && handlePull >= handleTravel * handleFullPull)
             {
                 handleFullyBack = true;
-                PlayGunSound(handleForFirearm, "HandleOut");
-                Pulse(0.5f, 0.04f);
+                BoltComesBack(handleForFirearm);
             }
 
-            // Once it has been all the way back, letting go cycles the action whatever the handle does after
-            if (gripReleased || handOffTrack > handleLateralEscape)
-                LetGoOfChargingHandle(cycleAction: handleFullyBack);
+            // Once it has been all the way back, letting go slams the bolt forward whatever the handle does after
+            if (triggerReleased || handOffTrack > handleLateralEscape)
+                LetGoOfChargingHandle(snapForward: handleFullyBack);
         }
 
-        private static void LetGoOfChargingHandle(bool cycleAction)
+        // All the way back: a round in the chamber comes out now, as the bolt comes back, and the next one goes in
+        private static void BoltComesBack(FirearmController firearmController)
+        {
+            Weapon weapon = firearmController.Item;
+            PlayGunSound(firearmController, "HandleOut");
+            Pulse(0.5f, 0.04f);
+            if (firearmController.FirearmsAnimator.GetBoltCatch() || weapon.ChamberAmmoCount == 0)
+                return;
+            if (!(firearmController.CurrentOperation is FirearmController.Idling))
+                return;
+            if (debugLog)
+                Plugin.MyLog.LogInfo("[VRReload] rechamber: the chambered round comes out");
+            ExpectOperation(ExpectedOperation.Rechamber, firearmController);
+            VRGlobals.player.InventoryController.RechamberWeapon(weapon);
+            TryForceExpectedOperation();
+        }
+
+        private static void LetGoOfChargingHandle(bool snapForward)
         {
             // The hand first, where it is, so it doesn't snap forward with the handle
             ReleaseHandLatch();
@@ -183,42 +203,33 @@ namespace TarkovVR.Source.Weapons
 
             if (firearmController == null || firearmController != VRGlobals.firearmController)
                 return;
-            if (cycleAction)
-                CycleAction(firearmController);
+            if (snapForward)
+                BoltSlamsForward(firearmController);
             else
                 PlayGunSound(firearmController, "HandleIn");
         }
 
-        // The handle snaps forward from a full pull
-        private static void CycleAction(FirearmController firearmController)
+        // Let go from a full pull: a bolt locked back closes (unless an empty magazine holds it)
+        private static void BoltSlamsForward(FirearmController firearmController)
         {
             Weapon weapon = firearmController.Item;
             PlayGunSound(firearmController, "BoltIn");
             PlayGunSound(firearmController, "HandleIn");
             Pulse(0.8f, 0.06f);
-
             if (firearmController.FirearmsAnimator.GetBoltCatch())
             {
                 if (debugLog)
                     Plugin.MyLog.LogInfo($"[VRReload] bolt released, chamber: {weapon.ChamberAmmoCount}");
                 firearmController.FirearmsAnimator.SetBoltCatch(BoltStaysBack(weapon));
-                return;
-            }
-            if (weapon.ChamberAmmoCount > 0 && firearmController.CurrentOperation is FirearmController.Idling)
-            {
-                if (debugLog)
-                    Plugin.MyLog.LogInfo("[VRReload] rechamber: the chambered round comes out");
-                ExpectOperation(ExpectedOperation.Rechamber, firearmController);
-                VRGlobals.player.InventoryController.RechamberWeapon(weapon);
-                TryForceExpectedOperation();
             }
         }
 
-        // An empty magazine catches the bolt (the follower pushes the catch up); no magazine, or rounds left, it closes
+        // An empty magazine catches the bolt (the follower pushes the catch up); no magazine, or rounds left, it closes.
+        // Same rule as Tarkov's RechamberOperation.FastForward.
         private static bool BoltStaysBack(Weapon weapon)
         {
             Magazine magazine = weapon.GetCurrentMagazine();
-            return weapon.ChamberAmmoCount == 0 && magazine != null && magazine.Count == 0;
+            return weapon.IsBoltCatch && weapon.ChamberAmmoCount == 0 && magazine != null && magazine.Count == 0;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

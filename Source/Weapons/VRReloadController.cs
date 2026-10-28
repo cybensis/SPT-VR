@@ -32,6 +32,7 @@ namespace TarkovVR.Source.Weapons
         public static float magazineGrabRadius = 0.08f;     // m palm to the gun magazine's center to grab it
         // The mag well track: a magazine in the well only slides along the well's axis, with the hand locked on it
         public static float railLength = 0.05f;             // m a magazine slides in the well before it comes free (pulling out) / from the top to seated (putting in)
+        public static float magazineCatchDistance = 0.01f;  // m Manual Reload: past this the mag catch no longer holds it, B or not
         public static float railCaptureRadius = 0.04f;      // m magazine top to the track that catches a magazine being put in
         public static float railCaptureAngle = 40f;         // deg off the seated orientation that still catches
         public static float railCaptureTime = 0.12f;        // s to ease a caught magazine onto the track
@@ -81,6 +82,8 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion seatedLocalRotation;
         private static Vector3 railAxisInWell;
         private static bool onRail;
+        private static bool magazineCatchPassed;            // Manual Reload: the gun's magazine has moved past the catch
+        private static bool grabbedWithRelease;             // taken from the support grip by pressing B: letting go of B gives it back
         private static bool railCatchArmed;                 // a magazine that just came off the track must leave the catch zone first
         private static bool railPullingOut;                 // started seated (the gun's own magazine): comes free at railLength
         private static float railPosition;                  // m out from seated
@@ -117,7 +120,9 @@ namespace TarkovVR.Source.Weapons
 
         private static bool previousGripState;
         private static bool previousReleaseState;
+        private static bool previousTriggerState;
         private static int lastTickFrame = -10;
+        private static int lastTriggerTickFrame = -10;
 
         private static ExpectedOperation expectedOperation;
         private static FirearmController expectedForFirearm;
@@ -211,9 +216,21 @@ namespace TarkovVR.Source.Weapons
             bool gripReleased = !gripState && previousGripState;
             previousGripState = gripState;
 
+            // The off-hand trigger works the charging handle (the same 0.5 / 0.35 hysteresis as the other trigger reads)
+            float offHandTrigger = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
+            if (Time.frameCount - lastTriggerTickFrame > 1)
+                previousTriggerState = offHandTrigger > 0.5f;
+            lastTriggerTickFrame = Time.frameCount;
+            bool triggerState = previousTriggerState ? offHandTrigger > 0.35f : offHandTrigger > 0.5f;
+            bool triggerPressed = triggerState && !previousTriggerState;
+            bool triggerReleased = !triggerState && previousTriggerState;
+            previousTriggerState = triggerState;
+
             // A click on the gun hand when the mag release goes down
             bool releaseState = MagazineReleaseHeld();
-            if (releaseState && !previousReleaseState)
+            bool releasePressed = releaseState && !previousReleaseState;
+            bool releaseLetGo = !releaseState && previousReleaseState;
+            if (releasePressed)
             {
                 PlayGunSound(VRGlobals.firearmController, "Button");
                 PulseGunHand(0.25f, 0.03f);
@@ -228,18 +245,19 @@ namespace TarkovVR.Source.Weapons
                 if (!HoldIsStillValid())
                     CancelHold();
                 else
-                    UpdateHeldMagazine(gripReleased);
+                    UpdateHeldMagazine(gripReleased, releaseLetGo);
             }
             if (HoldingChargingHandle)
             {
                 if (!ChargingHandleHoldIsStillValid())
-                    LetGoOfChargingHandle(cycleAction: false);
+                    LetGoOfChargingHandle(snapForward: false);
                 else
-                    UpdateChargingHandle(gripReleased);
+                    UpdateChargingHandle(triggerReleased);
             }
             UpdateHandLatch();
 
             bool reaching = false;
+            OffHandAtChargingHandle = false;
             if (!HoldingMagazine && !HoldingChargingHandle && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
             {
                 Vector3 palm = OffHandPalm();
@@ -247,12 +265,16 @@ namespace TarkovVR.Source.Weapons
                 bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
                 bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon, palm);
                 bool inPouchZone = !supporting && InChestPouchZone(palm);
+                OffHandAtChargingHandle = inHandleZone;
                 // A hand on the support grip is only taken over by an actual grab, never by passing through a zone
                 // (a pistol's support hand cups right over its magazine)
                 reaching = !supporting && (inGrabZone || inHandleZone || inPouchZone);
                 if (gripPressed && inGrabZone)
-                    GrabFromGun(firearmController, weapon, magazineSlot);
-                else if (gripPressed && inHandleZone)
+                    GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
+                // Manual Reload, two-handing with the support hand at the magazine (a pistol): the mag release takes it
+                else if (releasePressed && supporting && inGrabZone)
+                    GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: true);
+                else if (triggerPressed && inHandleZone)
                     GrabChargingHandle(firearmController, weapon);
                 else if (gripPressed && inPouchZone)
                     GrabFromPouch(firearmController, weapon, magazineSlot);
@@ -320,17 +342,11 @@ namespace TarkovVR.Source.Weapons
         {
             if (weapon.GetCurrentMagazine() == null)
                 return false;
-            // Manual reload: only while the mag release is held, on any gun. Otherwise grab-and-pull, but not on
-            // pistols (the magazine sits inside the grip where the support hand cups it) or from the support grip.
-            if (VRSettings.GetManualReloadOn())
-            {
-                if (!MagazineReleaseHeld())
-                    return false;
-            }
-            else if (VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting)
-            {
+            // Manual Reload: any gun, the mag catch holds it in the well until B is down (UpdateRail). Otherwise
+            // grab-and-pull, but not on pistols (the magazine sits inside the grip where the support hand cups it) or
+            // from the support grip.
+            if (!VRSettings.GetManualReloadOn() && (VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting))
                 return false;
-            }
             if (!TryGetGunMagazineCenter(firearmController, magazineSlot, out Vector3 magazineCenter))
                 return false;
             return (palm - magazineCenter).sqrMagnitude <= magazineGrabRadius * magazineGrabRadius;
@@ -343,7 +359,7 @@ namespace TarkovVR.Source.Weapons
             return (palm - pouchCenter).sqrMagnitude <= chestPouchRadius * chestPouchRadius;
         }
 
-        private static void GrabFromGun(FirearmController firearmController, Weapon weapon, Slot magazineSlot)
+        private static void GrabFromGun(FirearmController firearmController, Weapon weapon, Slot magazineSlot, bool takenWithRelease)
         {
             ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
             Magazine magazine = weapon.GetCurrentMagazine();
@@ -383,6 +399,8 @@ namespace TarkovVR.Source.Weapons
             heldProp = prop;
             magazineWell = magazineView.Bone;
             magazineLeftWell = false;
+            magazineCatchPassed = false;
+            grabbedWithRelease = takenWithRelease;
             StartRail(pullingOut: true, startPosition: 0f);
             if (snapHandToGrip && heldReloadGrip != null)
                 SnapHandToGrip(heldReloadGrip.oldMagazinePosition, heldReloadGrip.oldMagazineRotation);
@@ -482,10 +500,10 @@ namespace TarkovVR.Source.Weapons
             return heldProp != null && magazineWell != null && heldMagazine != null;
         }
 
-        private static void UpdateHeldMagazine(bool gripReleased)
+        private static void UpdateHeldMagazine(bool gripReleased, bool releaseLetGo)
         {
             if (onRail)
-                UpdateRail(gripReleased);
+                UpdateRail(gripReleased, releaseLetGo);
             else
                 UpdateFreeHold(gripReleased);
         }
@@ -528,7 +546,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         // On the track: the controller's travel along the well's axis moves the magazine; sideways it can't go
-        private static void UpdateRail(bool gripReleased)
+        private static void UpdateRail(bool gripReleased, bool releaseLetGo)
         {
             Vector3 axis = RailAxisWorld();
             Vector3 handDelta = VRGlobals.vrPlayer.LeftHand.transform.position - magazineWell.TransformPoint(handAtRailStartInWell);
@@ -539,15 +557,24 @@ namespace TarkovVR.Source.Weapons
 
             if (railPullingOut)
             {
-                if (gripReleased || handOffTrack > railLateralEscape)
+                // Manual Reload: the mag catch holds it seated until B is down; once past the catch it slides freely
+                bool heldByCatch = VRSettings.GetManualReloadOn() && !magazineCatchPassed && !MagazineReleaseHeld();
+                railPosition = Mathf.Clamp(trackPosition, 0f, heldByCatch ? 0f : railLength);
+                if (railPosition >= magazineCatchDistance)
+                    magazineCatchPassed = true;
+
+                // The controller away from where the hand holds the magazine: along the track too while the catch holds it
+                float handOffMagazine = (handDelta - axis * (railPosition - railPositionAtStart)).magnitude;
+                bool gaveBackToSupport = grabbedWithRelease && releaseLetGo && !magazineCatchPassed;
+                if (gripReleased || gaveBackToSupport || handOffMagazine > railLateralEscape)
                 {
-                    // Let go (or yanked sideways) before it came free: it stays in the well
+                    // Let go (or pulled away) before it came free: it stays in the well, and a hand that came off the
+                    // support grip goes back to it
                     CancelHold();
                     return;
                 }
-                railPosition = Mathf.Clamp(trackPosition, 0f, railLength);
                 PlaceOnRail();
-                if (trackPosition >= railLength)
+                if (!heldByCatch && trackPosition >= railLength)
                     ComeFreeOfWell();
                 return;
             }
@@ -1095,8 +1122,11 @@ namespace TarkovVR.Source.Weapons
                 }
                 else if (expectedOperation == ExpectedOperation.Rechamber && operation is FirearmController.RechamberOperation)
                 {
-                    // BSG's own skip, guarded by its state: the chambered round is thrown out, the next one chambered
+                    // BSG's own skip, guarded by its state: the chambered round is thrown out, the next one chambered, the
+                    // bolt catch set. Unlike the magazine skips it never sends the arms back to idle, so the rechamber
+                    // clip it started would play on (headset: "it still plays the base game charge handle pull").
                     firearmController.FastForwardCurrentState();
+                    firearmController.FirearmsAnimator.Animator.Play(firearmController.FirearmsAnimator.FullIdleStateName, 1, 0.1f);
                     FinishForcedOperation(firearmController);
                 }
                 else if (Time.time > expectedOperationDeadline)
@@ -1140,9 +1170,6 @@ namespace TarkovVR.Source.Weapons
         {
             if (firearmController.CurrentOperation is FirearmController.Idling idling)
                 idling.OnIdleStartEvent();
-            // The skipped clip would have set the bolt catch: an emptied magazine holds the bolt back after the rechamber
-            if (expectedOperation == ExpectedOperation.Rechamber)
-                firearmController.FirearmsAnimator.SetBoltCatch(BoltStaysBack(firearmController.Item));
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRReload] finished {expectedOperation} after {Time.frameCount - expectedOperationStartFrame} frames");
             expectedOperation = ExpectedOperation.None;
