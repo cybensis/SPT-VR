@@ -421,6 +421,8 @@ namespace TarkovVR.Source.Player.Interactions
             VRReloadController.ApplyHeldFingerPose();
             // Pulling the charging handle: the chambered round rides the bolt the animator just posed
             VRReloadController.ApplyChamberView();
+            // A magazine picked up off the ground: its ground item stays hidden while our model of it is held
+            VRReloadController.KeepGroundMagazineHidden();
 
             // Same open-hand treatment for the RIGHT hand while it's off the gun (ChestHang
             // sling / support-only) - the animator still curls it in the grip pose otherwise.
@@ -1093,6 +1095,12 @@ namespace TarkovVR.Source.Player.Interactions
             if ((heldInDominantHand ? primaryHandGrip : secondaryHandGrip).state)
                 return;
 
+            ReleaseHeldItem();
+        }
+
+        // Lets go of the held item: it drops with the hand's velocity, back on FIKA's own loot sync
+        private void ReleaseHeldItem()
+        {
             // Releasing grip mid-summon cancels it and drops the item where it is.
             isSummoningLoot = false;
             isItemInitialized = false;
@@ -1179,6 +1187,33 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 // ignored
             }
+        }
+
+        // A loot item that has arrived in the off hand (not mid-summon)
+        public bool HoldsLootInOffHand(out LootItem item)
+        {
+            item = heldItem;
+            return heldItem != null && !heldInDominantHand && !isSummoningLoot && HeldItemAlive();
+        }
+
+        /// <summary>
+        /// VRReloadController let go of a magazine it picked up off the ground (it held its own model
+        /// of it, the ground item hidden): the ground item is put where the hand let go and dropped
+        /// through the same release as a held item, so the throw, stamina and FIKA resync all match.
+        /// </summary>
+        public bool ThrowFromOffHand(LootItem item, Vector3 position, Quaternion rotation)
+        {
+            if (heldItem != null || item == null || item.Item == null)
+                return false;
+            RemoveFikaSyncer(item);
+            cachedRigidbody = item.GetComponent<Rigidbody>() ?? item.gameObject.AddComponent<Rigidbody>();
+            item._rigidBody = cachedRigidbody;
+            cachedOriginalParent = item.transform.parent;
+            item.transform.SetPositionAndRotation(position, rotation);
+            heldItem = item;
+            heldInDominantHand = false;
+            ReleaseHeldItem();
+            return true;
         }
 
         public void ForceDropHeldItem()

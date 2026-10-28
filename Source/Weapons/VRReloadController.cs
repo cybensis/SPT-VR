@@ -54,8 +54,9 @@ namespace TarkovVR.Source.Weapons
         public static bool haptics = true;
         public static bool debugZones = false;              // spheres: grab zone (blue), chest pouch (yellow), mag well seat radius (green)
         public static bool debugLog = false;
+        public static bool pickUpGroundMagazines = true;    // a loose magazine that fits, picked up in the off hand, is held for the reload
 
-        private enum HeldMagazineSource { None, FromGun, FromPouch }
+        private enum HeldMagazineSource { None, FromGun, FromPouch, FromGround }
         private enum ExpectedOperation { None, PullOut, Insert, Rechamber }
 
         // Off hand state, read by VRPlayerManager / the loot pointer / the weapon interact
@@ -128,6 +129,17 @@ namespace TarkovVR.Source.Weapons
         private static FirearmController expectedForFirearm;
         private static float expectedOperationDeadline;
         private static int expectedOperationStartFrame;
+
+        // A magazine picked up off the ground: the ground item stays in the world, hidden, while our model of it is held
+        private static LootItem groundMagazine;
+        private static float groundMagazineLetGoTime;       // when the loot hold let go of it (FIKA needs a beat before a move)
+        private static LootItem lastRefusedGroundItem;      // didn't fit this gun: not checked (or logged) again while it's held
+        private static FirearmController lastRefusedForFirearm;
+        // After the move that takes it off the ground: Tarkov removes the ground item when it lands; still there = it
+        // didn't, show it again
+        private static LootItem unconfirmedGroundMagazine;
+        private static Item unconfirmedGroundItem;
+        private static float unconfirmedGroundDeadline;
 
         // Placement for the magazine Tarkov throws into the world (VRMagazinePatches)
         private static Item pendingDropMagazine;
@@ -239,6 +251,7 @@ namespace TarkovVR.Source.Weapons
 
             if (expectedOperation != ExpectedOperation.None)
                 TryForceExpectedOperation();
+            CheckGroundMagazineMove();
 
             if (HoldingMagazine)
             {
@@ -255,6 +268,10 @@ namespace TarkovVR.Source.Weapons
                     UpdateChargingHandle(triggerReleased);
             }
             UpdateHandLatch();
+
+            if (!HoldingMagazine && !HoldingChargingHandle)
+                TryTakeOverGroundMagazine();
+            KeepGroundMagazineHidden();
 
             bool reaching = false;
             OffHandAtChargingHandle = false;
@@ -414,19 +431,115 @@ namespace TarkovVR.Source.Weapons
 
         private static void GrabFromPouch(FirearmController firearmController, Weapon weapon, Slot magazineSlot)
         {
-            ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
             Magazine magazine = FindMagazineToReload(weapon, magazineSlot);
-            if (magazineView == null || magazine == null)
+            if (magazine == null)
             {
                 // Nothing that fits: a short double buzz
                 Pulse(0.2f, 0.03f);
                 Pulse(0.2f, 0.03f, 0.08f);
                 return;
             }
+            if (!HoldNewMagazine(firearmController, weapon, magazineSlot, magazine, HeldMagazineSource.FromPouch, startFrom: null))
+                return;
 
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[VRReload] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
+            PlayGunSound(firearmController, "MagPullOut");
+            Pulse(0.35f, 0.05f);
+        }
+
+        // The loot hold has a magazine that fits the gun in the off hand: it becomes a magazine held for the reload, like
+        // one from the rig, eased from where it sits in the palm into the reload grip. The loot hold lets go of the
+        // ground item first, so it's back on FIKA's own loot sync before any move (the stow's order: a move on a VR-held
+        // item doesn't reach the other players); it's hidden where it lands while our model of it is in the hand.
+        private static void TryTakeOverGroundMagazine()
+        {
+            HandsInteractionController hands = VRGlobals.handsInteractionController;
+            if (!pickUpGroundMagazines || hands == null || !hands.HoldsLootInOffHand(out LootItem lootItem))
+            {
+                lastRefusedGroundItem = null;
+                return;
+            }
+            if (!(lootItem.Item is Magazine magazine))
+                return;
+            if (!TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
+                return;
+            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None || ChestHang.Detached)
+                return;
+            // No loose loot moves in the hideout (FIKA's item sync has no world there)
+            if (Singleton<GameWorld>.Instance == null || Singleton<GameWorld>.Instance is HideoutGameWorld)
+                return;
+            if (lootItem == lastRefusedGroundItem && firearmController == lastRefusedForFirearm)
+                return;
+            Option<bool> fits = ItemManipulator.CheckMoveIgnoringTargetItem(magazine, magazineSlot, VRGlobals.player.InventoryController);
+            if (fits.Failed)
+            {
+                lastRefusedGroundItem = lootItem;
+                lastRefusedForFirearm = firearmController;
+                if (debugLog)
+                    Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} picked up, not for this gun: {fits.Error}");
+                return;
+            }
+            if (!HoldNewMagazine(firearmController, weapon, magazineSlot, magazine, HeldMagazineSource.FromGround, startFrom: lootItem.transform))
+                return;
+
+            hands.ForceDropHeldItem();
+            groundMagazine = lootItem;
+            groundMagazineLetGoTime = Time.time;
+            lootItem.MakeVisible(false);
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[VRReload] picked {magazine.LocalizedShortName()} ({magazine.Count} rounds) up off the ground");
+            Pulse(0.25f, 0.04f);
+        }
+
+        // Re-asserted every Update and LateUpdate: the loot drop schedules its own make-visible a moment later
+        public static void KeepGroundMagazineHidden()
+        {
+            if (heldSource == HeldMagazineSource.FromGround && groundMagazine != null)
+                groundMagazine.MakeVisible(false);
+        }
+
+        // FIKA: the release has to reach the other players before the move, as in the stow
+        private static bool GroundMagazineMoveReady()
+        {
+            return heldSource != HeldMagazineSource.FromGround || Time.time >= groundMagazineLetGoTime + HandsInteractionController.stowReleaseDelay;
+        }
+
+        // The move that takes it off the ground has been sent; Tarkov removes the ground item when it lands
+        private static void ExpectGroundMagazineGone()
+        {
+            unconfirmedGroundMagazine = groundMagazine;
+            unconfirmedGroundItem = heldMagazine;
+            unconfirmedGroundDeadline = Time.time + 1.5f;
+        }
+
+        private static void CheckGroundMagazineMove()
+        {
+            if (ReferenceEquals(unconfirmedGroundMagazine, null))
+                return;
+            if (Time.time < unconfirmedGroundDeadline)
+                return;
+            // Still on the ground holding the same magazine: the move never landed
+            if (unconfirmedGroundMagazine != null && unconfirmedGroundMagazine.gameObject.activeInHierarchy && unconfirmedGroundMagazine.Item == unconfirmedGroundItem)
+            {
+                Plugin.MyLog.LogWarning("[VRReload] the magazine off the ground never moved, showing it again");
+                unconfirmedGroundMagazine.MakeVisible(true);
+            }
+            unconfirmedGroundMagazine = null;
+            unconfirmedGroundItem = null;
+        }
+
+        // A magazine that isn't the gun's own into the off hand, in the reload animation's grip: straight into it (from
+        // the rig), or from where startFrom is (picked up off the ground) and eased in
+        private static bool HoldNewMagazine(FirearmController firearmController, Weapon weapon, Slot magazineSlot, Magazine magazine,
+            HeldMagazineSource source, Transform startFrom)
+        {
+            ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
+            if (magazineView == null)
+                return false;
             GameObject prop = CreateProp(magazine);
             if (prop == null)
-                return;
+                return false;
 
             Transform propTransform = prop.transform;
             Transform handBone = HandBone();
@@ -445,7 +558,11 @@ namespace TarkovVR.Source.Weapons
             }
             Vector3 seatedScale = SeatedScale(prop);
             SetWorldScale(propTransform, Vector3.Scale(magazineView.Bone.lossyScale, seatedScale));
-            SetPoseIn(handBone, propTransform, freeHoldPosition, freeHoldRotation);
+            // UpdateFreeHold eases it the rest of the way into the grip
+            if (startFrom != null)
+                propTransform.SetPositionAndRotation(startFrom.position, startFrom.rotation);
+            else
+                SetPoseIn(handBone, propTransform, freeHoldPosition, freeHoldRotation);
 
             // Where it will sit in the well (ContainerCollectionView.SlotView.InsertItem), for the track
             ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
@@ -454,7 +571,7 @@ namespace TarkovVR.Source.Weapons
             propWellPointLocal = SeatedWellPointLocal(prop);
             railAxisInWell = RailAxisInWell(prop, seatedScale);
 
-            heldSource = HeldMagazineSource.FromPouch;
+            heldSource = source;
             heldMagazine = magazine;
             heldForFirearm = firearmController;
             heldProp = prop;
@@ -463,11 +580,7 @@ namespace TarkovVR.Source.Weapons
             magazineLeftWell = true;
             onRail = false;
             railCatchArmed = true;
-
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
-            PlayGunSound(firearmController, "MagPullOut");
-            Pulse(0.35f, 0.05f);
+            return true;
         }
 
         // Tarkov's reload pick (FirearmHandsInputTranslator.ReloadExternalMagazine): the fullest reachable magazine that fits
@@ -496,6 +609,9 @@ namespace TarkovVR.Source.Weapons
             if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null)
                 return false;
             if (VRGlobals.firearmController == null || VRGlobals.firearmController != heldForFirearm)
+                return false;
+            // Off the ground: still lying there as the same magazine (FIKA: nobody else took it)
+            if (heldSource == HeldMagazineSource.FromGround && (groundMagazine == null || groundMagazine.Item != heldMagazine))
                 return false;
             return heldProp != null && magazineWell != null && heldMagazine != null;
         }
@@ -598,7 +714,8 @@ namespace TarkovVR.Source.Weapons
                     CancelHold();
                     return;
                 }
-                if (heldForFirearm.Item.GetCurrentMagazine() == null && heldForFirearm.CurrentOperation is FirearmController.Idling && TryInsert())
+                if (heldForFirearm.Item.GetCurrentMagazine() == null && heldForFirearm.CurrentOperation is FirearmController.Idling
+                    && GroundMagazineMoveReady() && TryInsert())
                     return;
             }
 
@@ -886,6 +1003,26 @@ namespace TarkovVR.Source.Weapons
                 ClearHold();
                 return;
             }
+            if (heldSource == HeldMagazineSource.FromGround)
+            {
+                // At the chest: into the rig. Anywhere else (or no room): back to the ground from the hand.
+                if (InChestPouchZone(OffHandPalm()) && GroundMagazineMoveReady() && TryBuildMoveToRig(heldMagazine, out OperationResult<MoveResult> groundToRig))
+                {
+                    ExpectGroundMagazineGone();
+                    VRGlobals.player.InventoryController.TryRunNetworkTransaction(groundToRig);
+                    if (debugLog)
+                        Plugin.MyLog.LogInfo($"[VRReload] {heldMagazine.LocalizedShortName()} off the ground put in the rig");
+                    PlayGunSound(heldForFirearm, "MagSbrosnik");
+                    Pulse(0.4f, 0.05f);
+                    DestroyProp();
+                    ClearHold();
+                }
+                else
+                {
+                    CancelHold();
+                }
+                return;
+            }
 
             if (!magazineLeftWell || !(heldForFirearm.CurrentOperation is FirearmController.Idling))
             {
@@ -939,6 +1076,8 @@ namespace TarkovVR.Source.Weapons
 
             Magazine magazine = heldMagazine;
             FirearmController firearmController = heldForFirearm;
+            if (heldSource == HeldMagazineSource.FromGround)
+                ExpectGroundMagazineGone();
             CommitHold();
 
             ExpectOperation(ExpectedOperation.Insert, firearmController);
@@ -1280,16 +1419,32 @@ namespace TarkovVR.Source.Weapons
             ClearHold();
         }
 
-        // Puts everything back as it was: the gun's magazine visible again, nothing in the hand
+        // Puts everything back as it was: the gun's magazine visible again, nothing in the hand; one picked up off the
+        // ground drops from where the hand has it
         private static void CancelHold()
         {
             RestoreGunMagazineView();
+            if (heldSource == HeldMagazineSource.FromGround)
+                ReturnGroundMagazine();
             DestroyProp();
             ClearHold();
         }
 
+        // The ground item, hidden while our model was held, is put where the model is and let go like a held item
+        private static void ReturnGroundMagazine()
+        {
+            if (groundMagazine == null || groundMagazine.Item != heldMagazine)
+                return;
+            groundMagazine.MakeVisible(true);
+            bool thrown = heldProp != null && VRGlobals.handsInteractionController != null
+                && VRGlobals.handsInteractionController.ThrowFromOffHand(groundMagazine, heldProp.transform.position, heldProp.transform.rotation);
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[VRReload] {heldMagazine.LocalizedShortName()} back to the ground{(thrown ? "" : " (where it lay)")}");
+        }
+
         private static void ClearHold()
         {
+            groundMagazine = null;
             ReleaseHandLatch();
             onRail = false;
             heldSource = HeldMagazineSource.None;
@@ -1309,7 +1464,7 @@ namespace TarkovVR.Source.Weapons
             Vector3[] pose = null;
             if (heldSource == HeldMagazineSource.FromGun || HoldingChargingHandle)
                 pose = MAGAZINE_PULL_FINGERS;
-            else if (heldSource == HeldMagazineSource.FromPouch)
+            else if (heldSource == HeldMagazineSource.FromPouch || heldSource == HeldMagazineSource.FromGround)
                 pose = MAGAZINE_INSERT_FINGERS;
             if (pose != null)
                 fingerPoseShown = pose;
