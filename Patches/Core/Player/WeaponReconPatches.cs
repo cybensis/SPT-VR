@@ -126,6 +126,15 @@ namespace TarkovVR.Patches.Core.Player
         private static StableRelation oldMagazineInMarker, oldMagazineInGunPalm, newMagazineInMarker, newMagazineInGunPalm;
         private static Quaternion[] oldMagazineFingers, newMagazineFingers;
 
+        // The pull grip: the most closed fingers while the hand is on the old magazine, from the start of the reload (the
+        // hand grabs it and pulls it out well before Tarkov's "pulled out" event, and opens again to drop it in the pouch)
+        public static float pullGripReach = 0.25f;     // m magazine to the left IK marker that counts as the hand on it
+        private static float pullGripCurl;
+        private static Quaternion[] pullGripFingers;
+        private static Vector3 pullGripPosition;
+        private static Vector3 pullGripRotation;
+        private static float pullGripTime;
+
         private static bool haveRestPosition;
         private static Vector3 magazineRestPosition;
         private static Vector3 outAxis;
@@ -257,6 +266,8 @@ namespace TarkovVR.Patches.Core.Player
             newMagazineInGunPalm = new StableRelation("new mag in gun L palm");
             oldMagazineFingers = null;
             newMagazineFingers = null;
+            pullGripCurl = -1f;
+            pullGripFingers = null;
 
             Weapon weapon = firearmController.Item;
             magazineSlot = weapon.GetMagazineSlot();
@@ -292,6 +303,11 @@ namespace TarkovVR.Patches.Core.Player
                 haveRestPosition = true;
             }
 
+            // From the moment the magazine starts to move (the hand is on it; before that it's closed on the handguard)
+            bool magazineMoving = haveRestPosition && (positionInGun - magazineRestPosition).magnitude > 0.005f;
+            if (phase <= ReloadPhase.OldMagazineInHand && magazineMoving)
+                SamplePullGrip(magazineView);
+
             if (phase == ReloadPhase.OldMagazineInHand)
             {
                 if (oldMagazineInMarker.Sample(leftIkMarker, magazineView))
@@ -320,6 +336,39 @@ namespace TarkovVR.Patches.Core.Player
                 return null;
             ContainerCollectionView.SlotView magazineView = sessionFirearm.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
             return magazineView != null ? magazineView.ItemView : null;
+        }
+
+        private static void SamplePullGrip(Transform magazineView)
+        {
+            if (gunLeftPalmChildren == null || (magazineView.position - leftIkMarker.position).magnitude > pullGripReach)
+                return;
+            float curl = FingerCurl();
+            if (curl <= pullGripCurl)
+                return;
+            pullGripCurl = curl;
+            pullGripFingers = SnapshotFingers();
+            pullGripPosition = leftIkMarker.InverseTransformPoint(magazineView.position);
+            pullGripRotation = (Quaternion.Inverse(leftIkMarker.rotation) * magazineView.rotation).eulerAngles;
+            try
+            {
+                pullGripTime = VRGlobals.player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1).normalizedTime;
+            }
+            catch
+            {
+                pullGripTime = -1f;
+            }
+        }
+
+        // How closed the four fingers are: their joints' total bend (the thumb's base sits at a large fixed angle)
+        private static float FingerCurl()
+        {
+            float curl = 0f;
+            for (int i = 4; i < gunLeftPalmChildren.Length; i++)
+            {
+                if (gunLeftPalmChildren[i] != null)
+                    curl += Quaternion.Angle(Quaternion.identity, gunLeftPalmChildren[i].localRotation);
+            }
+            return curl;
         }
 
         private static Quaternion[] SnapshotFingers()
@@ -363,6 +412,11 @@ namespace TarkovVR.Patches.Core.Player
             if (TryGetInAxis(out inAxis))
                 report.AppendLine($"[WeaponRecon][AXIS] into the well, gun frame: ({inAxis.x:0.###}, {inAxis.y:0.###}, {inAxis.z:0.###})");
 
+            if (pullGripFingers != null)
+                report.AppendLine($"[WeaponRecon][GRIP] pull grip (most closed, t={pullGripTime:F3}, curl {pullGripCurl:0}): old mag in L IK marker "
+                    + $"pos new Vector3({pullGripPosition.x:0.###}f, {pullGripPosition.y:0.###}f, {pullGripPosition.z:0.###}f)  "
+                    + $"rot new Vector3({pullGripRotation.x:0.#}f, {pullGripRotation.y:0.#}f, {pullGripRotation.z:0.#}f)");
+            AppendFingers(report, "pull grip (most closed)", pullGripFingers);
             AppendFingers(report, "new mag", newMagazineFingers);
             AppendFingers(report, "old mag", oldMagazineFingers);
             Plugin.MyLog.LogInfo(report.ToString());

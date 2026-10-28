@@ -30,14 +30,20 @@ namespace TarkovVR.Source.Weapons
     {
         public static bool enabled = true;
         public static float magazineGrabRadius = 0.08f;     // m palm to the gun magazine's center to grab it
-        public static float seatDistance = 0.045f;          // m magazine top to the mag well that seats it
-        public static float unseatDistance = 0.07f;         // m the gun's own magazine must leave the well before it can be seated again
+        // The mag well track: a magazine in the well only slides along the well's axis, with the hand locked on it
+        public static float railLength = 0.05f;             // m a magazine slides in the well before it comes free (pulling out) / from the top to seated (putting in)
+        public static float railCaptureRadius = 0.04f;      // m magazine top to the track that catches a magazine being put in
+        public static float railCaptureAngle = 40f;         // deg off the seated orientation that still catches
+        public static float railCaptureTime = 0.12f;        // s to ease a caught magazine onto the track
+        public static float railExitMargin = 0.02f;         // m past the top of the track before a magazine being put in comes off it
+        public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
+        public static float handReleaseTime = 0.08f;        // s the rendered hand takes to go from the magazine back to the controller
+        public static float gripEaseRate = 10f;             // 1/s a free magazine settles into the animation's grip
         public static Vector3 chestPouchOffset = new Vector3(0f, -0.42f, 0.05f);    // headset-local, yaw-only: the chest pouch zone center (headset round 1: 0.12 forward was too far out)
         public static float chestPouchRadius = 0.16f;       // m palm to the chest pouch center
         public static Vector3 newMagazineHoldPosition = new Vector3(-0.10f, 0.02f, 0.11f);    // off hand local, used until a magazine is pulled off a gun (average of his headset grabs)
         public static Vector3 newMagazineHoldRotation = new Vector3(320f, 250f, 265f);        // off hand local euler, same
         public static bool reuseLastGrabPose = true;        // guns without a measured reload grip: new magazines sit in the hand the way the last one pulled off a gun did
-        public static float settleDistance = 0.08f;         // m the hand moves after grabbing the gun's magazine until it sits in the animation's grip
         public static bool magazineFingers = true;          // the animation's finger pose while holding a magazine
         public static float fingerBlendRate = 12f;          // 1/s ease of that finger pose in and out
         public static float dropAngularSpeed = 3f;          // rad/s tumble on a dropped magazine
@@ -63,6 +69,27 @@ namespace TarkovVR.Source.Weapons
         private static Transform magazineWell;
         private static Vector3 propWellPointLocal;          // the point on the prop that sits at the mag well when seated
         private static bool magazineLeftWell;
+        private static Vector3 freeHoldPosition;            // where a magazine off the track sits in the hand (LeftHand-local)
+        private static Quaternion freeHoldRotation;
+
+        // The track, in the mag well bone's frame: the seated pose, and the axis the magazine slides out along
+        private static Vector3 seatedLocalPosition;
+        private static Quaternion seatedLocalRotation;
+        private static Vector3 railAxisInWell;
+        private static bool onRail;
+        private static bool railCatchArmed;                 // a magazine that just came off the track must leave the catch zone first
+        private static bool railPullingOut;                 // started seated (the gun's own magazine): comes free at railLength
+        private static float railPosition;                  // m out from seated
+        private static float railPositionAtStart;
+        private static Vector3 handAtRailStartInWell;       // the controller (LeftHand), not the rendered hand
+        private static float railBlend;                     // easing a caught magazine onto the track
+        private static Vector3 railEntryHandPosition;       // the magazine's hand-local pose when it was caught
+        private static Quaternion railEntryHandRotation;
+
+        // While on the track the rendered hand holds the magazine: the left arm IK reaches for this instead of LeftHand
+        private static Transform handLatch;
+        private static bool handLatched;
+        private static bool handLatchReleasing;
         private static List<Collider> disabledPropColliders = new List<Collider>();
         private static Dictionary<Transform, int> propOriginalLayers = new Dictionary<Transform, int>();
 
@@ -70,11 +97,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 lastGrabPosition;
         private static Quaternion lastGrabRotation;
 
-        // The gun's magazine settles from where it was grabbed into the animation's grip as the hand pulls away
         private static ReloadGrip heldReloadGrip;
-        private static Vector3 grabLocalPosition;
-        private static Quaternion grabLocalRotation;
-        private static Vector3 palmAtGrabInGun;
 
         private static float fingerWeight;
         private static Vector3[] fingerPoseShown;
@@ -127,19 +150,11 @@ namespace TarkovVR.Source.Weapons
             },
         };
 
-        // The animation's left-hand finger pose, index-matched like Tarkov's HandPoser (GetComponentsInChildren of the
-        // palm; 0 is the palm itself and is left alone). Measured on the M4A1, used for every gun for now.
-        private static readonly Vector3[] MAGAZINE_PULL_FINGERS =
-        {
-            Vector3.zero,
-            new Vector3(53.7f, 114.2f, 86.6f), new Vector3(8.9f, 358.1f, 9.1f), new Vector3(7.7f, 357.6f, 16.7f),     // thumb
-            new Vector3(0.3f, 354.3f, 8.1f), new Vector3(0f, 359.9f, 25.7f), new Vector3(0.2f, 359.9f, 31.2f),        // index
-            new Vector3(0.4f, 355.9f, 13.8f), new Vector3(0f, 359.9f, 32.6f), new Vector3(0.1f, 360f, 27.2f),         // middle
-            new Vector3(0.3f, 355.2f, 10.5f), new Vector3(0f, 360f, 21.9f), new Vector3(0f, 360f, 19.4f),             // ring
-            new Vector3(0.6f, 354.4f, 5.8f), new Vector3(0f, 0f, 1.3f), new Vector3(360f, 0f, 29.7f),                 // pinky
-        };
-
-        private static readonly Vector3[] MAGAZINE_INSERT_FINGERS =
+        // The animation's left-hand finger pose holding a magazine, index-matched like Tarkov's HandPoser
+        // (GetComponentsInChildren of the palm; 0 is the palm itself and is left alone). Measured on the M4A1 while it
+        // puts the new magazine in, used for every gun and for pulling too: the first recon caught the pull while the
+        // hand was already opening to drop the magazine in the pouch.
+        private static readonly Vector3[] MAGAZINE_GRIP_FINGERS =
         {
             Vector3.zero,
             new Vector3(63.2f, 102.2f, 82.7f), new Vector3(353.7f, 359.7f, 15.9f), new Vector3(0.4f, 359.4f, 16f),    // thumb
@@ -192,6 +207,7 @@ namespace TarkovVR.Source.Weapons
                 else
                     UpdateHeldMagazine(gripReleased);
             }
+            UpdateHandLatch();
 
             bool reaching = false;
             if (!HoldingMagazine && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
@@ -312,22 +328,17 @@ namespace TarkovVR.Source.Weapons
             if (prop == null)
                 return;
 
-            // The prop takes the exact pose of the magazine on the gun, then rides the hand from there
+            // The prop takes the exact pose of the magazine on the gun (a direct child of the well bone) and starts on
+            // the track, seated, with the hand locked on it
             Transform propTransform = prop.transform;
-            propTransform.SetPositionAndRotation(magazineView.ItemView.position, magazineView.ItemView.rotation);
-            SetWorldScale(propTransform, magazineView.ItemView.lossyScale);
-            propTransform.SetParent(VRGlobals.vrPlayer.LeftHand.transform, worldPositionStays: true);
+            propTransform.SetParent(magazineView.Bone, worldPositionStays: false);
+            propTransform.localPosition = magazineView.ItemView.localPosition;
+            propTransform.localRotation = magazineView.ItemView.localRotation;
+            propTransform.localScale = magazineView.ItemView.localScale;
             propWellPointLocal = propTransform.InverseTransformPoint(magazineView.Bone.position);
-
-            lastGrabPosition = propTransform.localPosition;
-            lastGrabRotation = propTransform.localRotation;
-            hasLastGrabPose = true;
-            heldReloadGrip = FindReloadGrip(weapon);
-            grabLocalPosition = propTransform.localPosition;
-            grabLocalRotation = propTransform.localRotation;
-            palmAtGrabInGun = firearmController.WeaponRoot.InverseTransformPoint(OffHandPalm());
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] grabbed gun magazine {magazine.LocalizedShortName()}: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
+            seatedLocalPosition = propTransform.localPosition;
+            seatedLocalRotation = propTransform.localRotation;
+            railAxisInWell = RailAxisInWell(prop, magazineView.Bone);
 
             hiddenGunMagazineView = magazineView.ItemView;
             hiddenGunMagazineView.gameObject.SetActive(false);
@@ -336,9 +347,13 @@ namespace TarkovVR.Source.Weapons
             heldMagazine = magazine;
             heldForFirearm = firearmController;
             heldProp = prop;
+            heldReloadGrip = FindReloadGrip(weapon);
             magazineWell = magazineView.Bone;
             magazineLeftWell = false;
+            StartRail(pullingOut: true, startPosition: 0f);
 
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[VRMagazine] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
             PlayMagazineSound(magazine, EInventorySoundType.pickup, propTransform.position);
             Pulse(0.35f, 0.05f);
         }
@@ -364,25 +379,38 @@ namespace TarkovVR.Source.Weapons
             ReloadGrip reloadGrip = FindReloadGrip(weapon);
             if (reloadGrip != null)
             {
-                propTransform.localPosition = reloadGrip.newMagazinePosition;
-                propTransform.localRotation = Quaternion.Euler(reloadGrip.newMagazineRotation);
+                freeHoldPosition = reloadGrip.newMagazinePosition;
+                freeHoldRotation = Quaternion.Euler(reloadGrip.newMagazineRotation);
             }
             else
             {
                 bool useLastGrab = reuseLastGrabPose && hasLastGrabPose;
-                propTransform.localPosition = useLastGrab ? lastGrabPosition : newMagazineHoldPosition;
-                propTransform.localRotation = useLastGrab ? lastGrabRotation : Quaternion.Euler(newMagazineHoldRotation);
+                freeHoldPosition = useLastGrab ? lastGrabPosition : newMagazineHoldPosition;
+                freeHoldRotation = useLastGrab ? lastGrabRotation : Quaternion.Euler(newMagazineHoldRotation);
             }
-            propWellPointLocal = SeatedWellPointLocal(prop);
+            propTransform.localPosition = freeHoldPosition;
+            propTransform.localRotation = freeHoldRotation;
             Vector3 seatedScale = SeatedScale(prop);
             SetWorldScale(propTransform, Vector3.Scale(magazineView.Bone.lossyScale, seatedScale));
+
+            // Where it will sit in the well (ContainerCollectionView.SlotView.InsertItem), for the track
+            ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
+            seatedLocalPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
+            seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
+            propWellPointLocal = SeatedWellPointLocal(prop);
+            Vector3 centerInProp = MagazineCenterInProp(prop);
+            Vector3 seatedCenterInWell = seatedLocalPosition + seatedLocalRotation * Vector3.Scale(centerInProp, seatedScale);
+            railAxisInWell = seatedCenterInWell.sqrMagnitude > 1e-8f ? seatedCenterInWell.normalized : Vector3.down;
 
             heldSource = HeldMagazineSource.FromPouch;
             heldMagazine = magazine;
             heldForFirearm = firearmController;
             heldProp = prop;
+            heldReloadGrip = reloadGrip;
             magazineWell = magazineView.Bone;
             magazineLeftWell = true;
+            onRail = false;
+            railCatchArmed = true;
 
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRMagazine] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
@@ -422,23 +450,86 @@ namespace TarkovVR.Source.Weapons
 
         private static void UpdateHeldMagazine(bool gripReleased)
         {
-            if (heldSource == HeldMagazineSource.FromGun && heldReloadGrip != null)
-                SettleIntoReloadGrip();
+            if (onRail)
+                UpdateRail(gripReleased);
+            else
+                UpdateFreeHold(gripReleased);
+        }
 
-            Vector3 propWellPoint = heldProp.transform.TransformPoint(propWellPointLocal);
-            float distanceToWell = Vector3.Distance(propWellPoint, magazineWell.position);
+        // Off the track: the magazine settles into the animation's grip, and gets caught by the track near the well
+        private static void UpdateFreeHold(bool gripReleased)
+        {
+            Transform propTransform = heldProp.transform;
+            float ease = 1f - Mathf.Exp(-gripEaseRate * Time.deltaTime);
+            propTransform.localPosition = Vector3.Lerp(propTransform.localPosition, freeHoldPosition, ease);
+            propTransform.localRotation = Quaternion.Slerp(propTransform.localRotation, freeHoldRotation, ease);
 
-            if (!magazineLeftWell && distanceToWell > unseatDistance)
+            if (gripReleased)
             {
-                magazineLeftWell = true;
-                Pulse(0.15f, 0.03f);
+                ReleaseHeldMagazine();
+                return;
             }
 
-            if (magazineLeftWell && distanceToWell < seatDistance)
+            // Caught: the magazine's top near the track (up to just past its top), turned roughly the seated way
+            Vector3 axis = RailAxisWorld();
+            Vector3 seatedPosition = magazineWell.TransformPoint(seatedLocalPosition);
+            Vector3 topOffset = propTransform.TransformPoint(propWellPointLocal) - magazineWell.position;
+            float alongTrack = Vector3.Dot(topOffset, axis);
+            float offTrack = (topOffset - axis * alongTrack).magnitude;
+            float angle = Quaternion.Angle(propTransform.rotation, magazineWell.rotation * seatedLocalRotation);
+            bool inCatchZone = alongTrack >= -0.005f && alongTrack <= railLength + railExitMargin && offTrack <= railCaptureRadius && angle <= railCaptureAngle;
+            if (!railCatchArmed)
+            {
+                railCatchArmed = !inCatchZone;
+                return;
+            }
+            if (inCatchZone)
+            {
+                railEntryHandPosition = propTransform.localPosition;
+                railEntryHandRotation = propTransform.localRotation;
+                StartRail(pullingOut: false, startPosition: Mathf.Clamp(alongTrack, 0f, railLength));
+            }
+        }
+
+        // On the track: the controller's travel along the well's axis moves the magazine; sideways it can't go
+        private static void UpdateRail(bool gripReleased)
+        {
+            Vector3 axis = RailAxisWorld();
+            Vector3 handDelta = VRGlobals.vrPlayer.LeftHand.transform.position - magazineWell.TransformPoint(handAtRailStartInWell);
+            float handAlongTrack = Vector3.Dot(handDelta, axis);
+            float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
+            float trackPosition = railPositionAtStart + handAlongTrack;
+            railBlend = Mathf.MoveTowards(railBlend, 1f, Time.deltaTime / Mathf.Max(railCaptureTime, 0.001f));
+
+            if (railPullingOut)
+            {
+                if (gripReleased || handOffTrack > railLateralEscape)
+                {
+                    // Let go (or yanked sideways) before it came free: it stays in the well
+                    CancelHold();
+                    return;
+                }
+                railPosition = Mathf.Clamp(trackPosition, 0f, railLength);
+                PlaceOnRail();
+                if (trackPosition >= railLength)
+                    ComeFreeOfWell();
+                return;
+            }
+
+            if (handOffTrack > railLateralEscape || trackPosition > railLength + railExitMargin)
+            {
+                LeaveRail();
+                return;
+            }
+            railPosition = Mathf.Clamp(trackPosition, 0f, railLength);
+            PlaceOnRail();
+
+            bool seated = railPosition <= 0f && railBlend >= 1f;
+            if (seated)
             {
                 if (heldSource == HeldMagazineSource.FromGun)
                 {
-                    // Pushed back in: nothing changed in the inventory
+                    // The gun's own magazine pushed back in: nothing changed in the inventory
                     PlayMagazineSound(heldMagazine, EInventorySoundType.drop, magazineWell.position);
                     Pulse(0.6f, 0.06f);
                     CancelHold();
@@ -449,17 +540,174 @@ namespace TarkovVR.Source.Weapons
             }
 
             if (gripReleased)
-                ReleaseHeldMagazine();
+            {
+                // Let go part way into the well: the gun's own magazine stays in it, a new one goes back to the rig
+                if (heldSource == HeldMagazineSource.FromGun)
+                    CancelHold();
+                else
+                    ReleaseHeldMagazine();
+            }
         }
 
-        // Measured in the gun's frame, so walking or moving the gun hand with it doesn't count as pulling
-        private static void SettleIntoReloadGrip()
+        // The magazine at railPosition on the track, eased in from where the hand held it when it was caught
+        private static void PlaceOnRail()
         {
-            Vector3 palmInGun = heldForFirearm.WeaponRoot.InverseTransformPoint(OffHandPalm());
-            float settled = Mathf.Clamp01((palmInGun - palmAtGrabInGun).magnitude / Mathf.Max(settleDistance, 0.001f));
+            Vector3 railPositionWorld = magazineWell.TransformPoint(seatedLocalPosition) + RailAxisWorld() * railPosition;
+            Quaternion railRotationWorld = magazineWell.rotation * seatedLocalRotation;
             Transform propTransform = heldProp.transform;
-            propTransform.localPosition = Vector3.Lerp(grabLocalPosition, heldReloadGrip.oldMagazinePosition, settled);
-            propTransform.localRotation = Quaternion.Slerp(grabLocalRotation, Quaternion.Euler(heldReloadGrip.oldMagazineRotation), settled);
+            if (railBlend >= 1f || railPullingOut)
+            {
+                propTransform.SetPositionAndRotation(railPositionWorld, railRotationWorld);
+                return;
+            }
+            Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
+            Vector3 handHeldPosition = leftHand.TransformPoint(railEntryHandPosition);
+            Quaternion handHeldRotation = leftHand.rotation * railEntryHandRotation;
+            float blend = Mathf.SmoothStep(0f, 1f, railBlend);
+            propTransform.SetPositionAndRotation(Vector3.Lerp(handHeldPosition, railPositionWorld, blend),
+                Quaternion.Slerp(handHeldRotation, railRotationWorld, blend));
+        }
+
+        // The magazine moves with the gun while it's in the well, and the rendered hand holds it there
+        private static void StartRail(bool pullingOut, float startPosition)
+        {
+            onRail = true;
+            railPullingOut = pullingOut;
+            railPosition = startPosition;
+            railPositionAtStart = startPosition;
+            railBlend = pullingOut ? 1f : 0f;
+            handAtRailStartInWell = magazineWell.InverseTransformPoint(VRGlobals.vrPlayer.LeftHand.transform.position);
+            heldProp.transform.SetParent(magazineWell, worldPositionStays: true);
+            LatchHand();
+        }
+
+        // Pulled down the track far enough: loose in the hand
+        private static void ComeFreeOfWell()
+        {
+            onRail = false;
+            railCatchArmed = false;
+            magazineLeftWell = true;
+            Transform propTransform = heldProp.transform;
+            propTransform.SetParent(VRGlobals.vrPlayer.LeftHand.transform, worldPositionStays: true);
+            lastGrabPosition = propTransform.localPosition;
+            lastGrabRotation = propTransform.localRotation;
+            hasLastGrabPose = true;
+            if (heldReloadGrip != null)
+            {
+                freeHoldPosition = heldReloadGrip.oldMagazinePosition;
+                freeHoldRotation = Quaternion.Euler(heldReloadGrip.oldMagazineRotation);
+            }
+            else
+            {
+                freeHoldPosition = propTransform.localPosition;
+                freeHoldRotation = propTransform.localRotation;
+            }
+            ReleaseHandLatch();
+            Pulse(0.5f, 0.04f);
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[VRMagazine] {heldMagazine.LocalizedShortName()} out of the well: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
+        }
+
+        // A magazine being put in backed out of the track or was pulled off it sideways
+        private static void LeaveRail()
+        {
+            onRail = false;
+            railCatchArmed = false;
+            heldProp.transform.SetParent(VRGlobals.vrPlayer.LeftHand.transform, worldPositionStays: true);
+            ReleaseHandLatch();
+        }
+
+        private static Vector3 RailAxisWorld()
+        {
+            return magazineWell.TransformDirection(railAxisInWell).normalized;
+        }
+
+        // From the well (the bone's origin) toward the magazine's middle: straight down a straight magazine, down and a
+        // little forward on a curved one
+        private static Vector3 RailAxisInWell(GameObject prop, Transform well)
+        {
+            Vector3 centerInWell = well.InverseTransformPoint(prop.transform.TransformPoint(MagazineCenterInProp(prop)));
+            return centerInWell.sqrMagnitude > 1e-8f ? centerInWell.normalized : Vector3.down;
+        }
+
+        private static Vector3 MagazineCenterInProp(GameObject prop)
+        {
+            Renderer[] renderers = prop.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0)
+                return Vector3.zero;
+            Bounds bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++)
+                bounds.Encapsulate(renderers[i].bounds);
+            return prop.transform.InverseTransformPoint(bounds.center);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The rendered hand on the magazine
+
+        private static void LatchHand()
+        {
+            if (handLatch == null)
+                handLatch = new GameObject("VRMagazineHandLatch").transform;
+            Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
+            handLatch.SetParent(heldProp.transform, worldPositionStays: false);
+            handLatch.SetPositionAndRotation(leftHand.position, leftHand.rotation);
+            handLatched = true;
+            handLatchReleasing = false;
+            AssertHandLatch();
+        }
+
+        // The hand eases from the magazine back to the controller, then the arm goes back to LeftHand
+        private static void ReleaseHandLatch()
+        {
+            if (!handLatched)
+                return;
+            handLatchReleasing = true;
+            if (handLatch != null)
+                handLatch.SetParent(null, worldPositionStays: true);
+        }
+
+        private static void ReleaseHandLatchNow()
+        {
+            if (handLatch != null)
+                handLatch.SetParent(null, worldPositionStays: true);
+            if (handLatched && VRGlobals.ikManager != null && VRGlobals.ikManager.leftArmIk != null && VRGlobals.vrPlayer != null
+                && VRGlobals.ikManager.leftArmIk.solver.target == handLatch)
+                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+            handLatched = false;
+            handLatchReleasing = false;
+        }
+
+        // Re-asserted every frame: the two-handing edges in VRPlayerManager set the target back to LeftHand
+        private static void AssertHandLatch()
+        {
+            if (VRGlobals.ikManager == null || VRGlobals.ikManager.leftArmIk == null || handLatch == null)
+                return;
+            if (VRGlobals.ikManager.leftArmIk.solver.target != handLatch)
+                VRGlobals.ikManager.leftArmIk.solver.target = handLatch;
+        }
+
+        private static void UpdateHandLatch()
+        {
+            if (!handLatched)
+                return;
+            if (VRGlobals.vrPlayer == null || handLatch == null)
+            {
+                ReleaseHandLatchNow();
+                return;
+            }
+            if (handLatchReleasing)
+            {
+                Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
+                float ease = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(handReleaseTime / 3f, 0.001f));
+                handLatch.position = Vector3.Lerp(handLatch.position, leftHand.position, ease);
+                handLatch.rotation = Quaternion.Slerp(handLatch.rotation, leftHand.rotation, ease);
+                if ((handLatch.position - leftHand.position).sqrMagnitude < 0.003f * 0.003f && Quaternion.Angle(handLatch.rotation, leftHand.rotation) < 2f)
+                {
+                    ReleaseHandLatchNow();
+                    return;
+                }
+            }
+            AssertHandLatch();
         }
 
         private static void ReleaseHeldMagazine()
@@ -785,6 +1033,9 @@ namespace TarkovVR.Source.Weapons
         {
             if (prop == null)
                 return;
+            // The hand latch rides the magazine on the track; it must never go back to the pool with it
+            if (handLatch != null && handLatch.IsChildOf(prop.transform))
+                handLatch.SetParent(null, worldPositionStays: true);
             foreach (Collider collider in disabledPropColliders)
             {
                 if (collider != null)
@@ -854,6 +1105,8 @@ namespace TarkovVR.Source.Weapons
 
         private static void ClearHold()
         {
+            ReleaseHandLatch();
+            onRail = false;
             heldSource = HeldMagazineSource.None;
             heldMagazine = null;
             heldForFirearm = null;
@@ -867,11 +1120,7 @@ namespace TarkovVR.Source.Weapons
         // to those bones this frame. Eases in on a grab and back out to whatever the hand was doing on release.
         public static void ApplyHeldFingerPose()
         {
-            Vector3[] pose = null;
-            if (heldSource == HeldMagazineSource.FromGun)
-                pose = MAGAZINE_PULL_FINGERS;
-            else if (heldSource == HeldMagazineSource.FromPouch)
-                pose = MAGAZINE_INSERT_FINGERS;
+            Vector3[] pose = HoldingMagazine ? MAGAZINE_GRIP_FINGERS : null;
             if (pose != null)
                 fingerPoseShown = pose;
 
@@ -1009,9 +1258,10 @@ namespace TarkovVR.Source.Weapons
             SetZoneViz(ref pouchZoneViz, hasPouchCenter, pouchCenter, chestPouchRadius,
                 InChestPouchZone(palm) ? new Color(0f, 1f, 0f, 0.25f) : new Color(1f, 0.9f, 0f, 0.25f));
 
-            ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
-            bool hasWell = magazineView != null && magazineView.Bone != null;
-            SetZoneViz(ref wellZoneViz, hasWell && HoldingMagazine, hasWell ? magazineView.Bone.position : Vector3.zero, seatDistance, new Color(0f, 1f, 0.4f, 0.4f));
+            // The top of the track while holding a magazine: green on it, blue off it
+            bool showTrack = HoldingMagazine && magazineWell != null;
+            Vector3 trackTop = showTrack ? magazineWell.position + RailAxisWorld() * railLength : Vector3.zero;
+            SetZoneViz(ref wellZoneViz, showTrack, trackTop, railCaptureRadius, onRail ? new Color(0f, 1f, 0.4f, 0.4f) : new Color(0f, 0.4f, 1f, 0.4f));
         }
 
         private static void SetZoneViz(ref GameObject sphere, bool show, Vector3 position, float radius, Color color)
