@@ -10,6 +10,7 @@ using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
+using RootMotion.FinalIK;
 using UnityEngine;
 using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
@@ -395,7 +396,8 @@ namespace TarkovVR.Source.Weapons
                 return;
 
             Transform propTransform = prop.transform;
-            propTransform.SetParent(VRGlobals.vrPlayer.LeftHand.transform, worldPositionStays: false);
+            Transform handBone = HandBone();
+            propTransform.SetParent(handBone, worldPositionStays: false);
             ReloadGrip reloadGrip = FindReloadGrip(weapon);
             if (reloadGrip != null)
             {
@@ -408,10 +410,9 @@ namespace TarkovVR.Source.Weapons
                 freeHoldPosition = useLastGrab ? lastGrabPosition : newMagazineHoldPosition;
                 freeHoldRotation = useLastGrab ? lastGrabRotation : Quaternion.Euler(newMagazineHoldRotation);
             }
-            propTransform.localPosition = freeHoldPosition;
-            propTransform.localRotation = freeHoldRotation;
             Vector3 seatedScale = SeatedScale(prop);
             SetWorldScale(propTransform, Vector3.Scale(magazineView.Bone.lossyScale, seatedScale));
+            SetPoseIn(handBone, propTransform, freeHoldPosition, freeHoldRotation);
 
             // Where it will sit in the well (ContainerCollectionView.SlotView.InsertItem), for the track
             ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
@@ -480,9 +481,11 @@ namespace TarkovVR.Source.Weapons
         private static void UpdateFreeHold(bool gripReleased)
         {
             Transform propTransform = heldProp.transform;
+            Transform handBone = HandBone();
             float ease = 1f - Mathf.Exp(-gripEaseRate * Time.deltaTime);
-            propTransform.localPosition = Vector3.Lerp(propTransform.localPosition, freeHoldPosition, ease);
-            propTransform.localRotation = Quaternion.Slerp(propTransform.localRotation, freeHoldRotation, ease);
+            GetPoseIn(handBone, propTransform, out Vector3 handLocalPosition, out Quaternion handLocalRotation);
+            SetPoseIn(handBone, propTransform, Vector3.Lerp(handLocalPosition, freeHoldPosition, ease),
+                Quaternion.Slerp(handLocalRotation, freeHoldRotation, ease));
 
             if (gripReleased)
             {
@@ -505,8 +508,8 @@ namespace TarkovVR.Source.Weapons
             }
             if (inCatchZone)
             {
-                railEntryHandPosition = propTransform.localPosition;
-                railEntryHandRotation = propTransform.localRotation;
+                // Relative to the controller: on the track the hand follows the magazine, so it can't be the source
+                GetPoseIn(VRGlobals.vrPlayer.LeftHand.transform, propTransform, out railEntryHandPosition, out railEntryHandRotation);
                 StartRail(pullingOut: false, startPosition: Mathf.Clamp(alongTrack, 0f, railLength));
             }
         }
@@ -581,7 +584,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
             Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
-            Vector3 handHeldPosition = leftHand.TransformPoint(railEntryHandPosition);
+            Vector3 handHeldPosition = leftHand.position + leftHand.rotation * railEntryHandPosition;
             Quaternion handHeldRotation = leftHand.rotation * railEntryHandRotation;
             float blend = Mathf.SmoothStep(0f, 1f, railBlend);
             propTransform.SetPositionAndRotation(Vector3.Lerp(handHeldPosition, railPositionWorld, blend),
@@ -608,9 +611,9 @@ namespace TarkovVR.Source.Weapons
             railCatchArmed = false;
             magazineLeftWell = true;
             Transform propTransform = heldProp.transform;
-            propTransform.SetParent(VRGlobals.vrPlayer.LeftHand.transform, worldPositionStays: true);
-            lastGrabPosition = propTransform.localPosition;
-            lastGrabRotation = propTransform.localRotation;
+            Transform handBone = HandBone();
+            propTransform.SetParent(handBone, worldPositionStays: true);
+            GetPoseIn(handBone, propTransform, out lastGrabPosition, out lastGrabRotation);
             hasLastGrabPose = true;
             if (heldReloadGrip != null)
             {
@@ -619,8 +622,8 @@ namespace TarkovVR.Source.Weapons
             }
             else
             {
-                freeHoldPosition = propTransform.localPosition;
-                freeHoldRotation = propTransform.localRotation;
+                freeHoldPosition = lastGrabPosition;
+                freeHoldRotation = lastGrabRotation;
             }
             ReleaseHandLatch();
             Pulse(0.5f, 0.04f);
@@ -633,8 +636,34 @@ namespace TarkovVR.Source.Weapons
         {
             onRail = false;
             railCatchArmed = false;
-            heldProp.transform.SetParent(VRGlobals.vrPlayer.LeftHand.transform, worldPositionStays: true);
+            heldProp.transform.SetParent(HandBone(), worldPositionStays: true);
             ReleaseHandLatch();
+        }
+
+        // The hand you see: the arm IK's wrist bone. A held magazine rides it rather than LeftHand, because LeftHand gets
+        // the newest controller pose just before rendering, after the IK already placed the hand from the previous one:
+        // attached to LeftHand the magazine ran a frame ahead of the hand (headset: "slightly lags in my hand").
+        private static Transform HandBone()
+        {
+            LimbIK leftArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null;
+            if (leftArmIk != null && leftArmIk.solver != null && leftArmIk.solver.bone3 != null && leftArmIk.solver.bone3.transform != null)
+                return leftArmIk.solver.bone3.transform;
+            if (InitVRPatches.leftPalm != null)
+                return InitVRPatches.leftPalm;
+            return VRGlobals.vrPlayer.LeftHand.transform;
+        }
+
+        // A pose in a transform's frame without its scale (the grip data is in metres in the hand's frame)
+        private static void GetPoseIn(Transform frame, Transform target, out Vector3 position, out Quaternion rotation)
+        {
+            Quaternion inverseFrame = Quaternion.Inverse(frame.rotation);
+            position = inverseFrame * (target.position - frame.position);
+            rotation = inverseFrame * target.rotation;
+        }
+
+        private static void SetPoseIn(Transform frame, Transform target, Vector3 position, Quaternion rotation)
+        {
+            target.SetPositionAndRotation(frame.position + frame.rotation * position, frame.rotation * rotation);
         }
 
         private static Vector3 RailAxisWorld()
