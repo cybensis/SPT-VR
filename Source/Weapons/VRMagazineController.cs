@@ -141,7 +141,6 @@ namespace TarkovVR.Source.Weapons
             public Vector3 oldMagazineRotation;
             public Vector3 newMagazinePosition;
             public Vector3 newMagazineRotation;
-            public Vector3 wellAxis;    // the track out of the well in the gun's frame (WeaponRoot): the animation's insert path, reversed
         }
 
         // By weapon template id
@@ -153,7 +152,6 @@ namespace TarkovVR.Source.Weapons
                 {
                     oldMagazinePosition = new Vector3(-0.186f, -0.033f, 0.115f), oldMagazineRotation = new Vector3(352.6f, 250f, 271.1f),
                     newMagazinePosition = new Vector3(-0.198f, -0.198f, 0.022f), newMagazineRotation = new Vector3(337.8f, 265.3f, 180.4f),
-                    wellAxis = new Vector3(-0.61f, -0.136f, -0.781f),     // 4 recon inserts, (0.573..0.62, 0.119..0.149, 0.771..0.811)
                 }
             },
         };
@@ -357,8 +355,7 @@ namespace TarkovVR.Source.Weapons
             seatedLocalPosition = propTransform.localPosition;
             seatedLocalRotation = propTransform.localRotation;
             heldReloadGrip = FindReloadGrip(weapon);
-            Vector3 seatedCenterInWell = magazineView.Bone.InverseTransformPoint(propTransform.TransformPoint(MagazineCenterInProp(prop)));
-            railAxisInWell = RailAxisInWell(magazineView.Bone, seatedCenterInWell, firearmController, heldReloadGrip);
+            railAxisInWell = RailAxisInWell(prop, propTransform.localScale);
 
             hiddenGunMagazineView = magazineView.ItemView;
             hiddenGunMagazineView.gameObject.SetActive(false);
@@ -419,9 +416,7 @@ namespace TarkovVR.Source.Weapons
             seatedLocalPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
             seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
             propWellPointLocal = SeatedWellPointLocal(prop);
-            Vector3 centerInProp = MagazineCenterInProp(prop);
-            Vector3 seatedCenterInWell = seatedLocalPosition + seatedLocalRotation * Vector3.Scale(centerInProp, seatedScale);
-            railAxisInWell = RailAxisInWell(magazineView.Bone, seatedCenterInWell, firearmController, reloadGrip);
+            railAxisInWell = RailAxisInWell(prop, seatedScale);
 
             heldSource = HeldMagazineSource.FromPouch;
             heldMagazine = magazine;
@@ -671,18 +666,65 @@ namespace TarkovVR.Source.Weapons
             return magazineWell.TransformDirection(railAxisInWell).normalized;
         }
 
-        // The track out of the well, in the well bone's frame. Guns with a recording: Tarkov's own insert path reversed,
-        // which follows the well's real tilt. Others: from the well (the bone's origin) toward the seated magazine's
-        // middle, which comes out too upright on a forward-tilted well (headset, M4A1).
-        private static Vector3 RailAxisInWell(Transform well, Vector3 seatedCenterInWell, FirearmController firearmController, ReloadGrip reloadGrip)
+        // The track out of the well, in the well bone's frame: the magazine's own length axis, seated. Needs propWellPointLocal
+        // and seatedLocalRotation set. Tried and wrong on the M4A1 (headset): the well bone toward the magazine's middle
+        // came out too upright (the bone isn't on the magazine's centre line), and the animation's insert path pulled to
+        // the left (the clip still rotates the magazine into place over its last centimetres).
+        private static Vector3 RailAxisInWell(GameObject prop, Vector3 seatedScale)
         {
-            Vector3 shapeAxis = seatedCenterInWell.sqrMagnitude > 1e-8f ? seatedCenterInWell.normalized : Vector3.down;
-            if (reloadGrip == null || reloadGrip.wellAxis == Vector3.zero)
-                return shapeAxis;
-            Vector3 animationAxis = well.InverseTransformDirection(firearmController.WeaponRoot.TransformDirection(reloadGrip.wellAxis)).normalized;
+            Vector3 towardMiddle = MagazineCenterInProp(prop) - propWellPointLocal;
+            Vector3 axisInProp = TryGetMagazineLengthAxis(prop, out Vector3 lengthAxis) ? lengthAxis : towardMiddle;
+            Vector3 axisInWell = seatedLocalRotation * Vector3.Scale(axisInProp, seatedScale);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRMagazine] track from the animation, {Vector3.Angle(animationAxis, shapeAxis):0.#} deg off the magazine-shape direction");
-            return animationAxis;
+            {
+                Vector3 middleInWell = seatedLocalRotation * Vector3.Scale(towardMiddle, seatedScale);
+                Plugin.MyLog.LogInfo($"[VRMagazine] track {(axisInProp == lengthAxis ? "along the magazine's length" : "toward its middle")}, "
+                    + $"{Vector3.Angle(axisInWell, middleInWell):0.#} deg off the well-to-middle direction");
+            }
+            return axisInWell.sqrMagnitude > 1e-8f ? axisInWell.normalized : Vector3.down;
+        }
+
+        // The longest side of the magazine body's mesh bounds (mags are modelled upright, so that's straight down the
+        // magazine), in the prop's frame, pointing away from the well. The body is the biggest mesh; the rounds inside
+        // are separate small ones. Bounds are mesh metadata, so this works on meshes that aren't readable.
+        private static bool TryGetMagazineLengthAxis(GameObject prop, out Vector3 axisInProp)
+        {
+            axisInProp = Vector3.zero;
+            MeshFilter body = null;
+            float bodyVolume = 0f;
+            foreach (MeshFilter meshFilter in prop.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (meshFilter.sharedMesh == null)
+                    continue;
+                Vector3 size = Vector3.Scale(meshFilter.sharedMesh.bounds.size, meshFilter.transform.lossyScale);
+                float volume = Mathf.Abs(size.x * size.y * size.z);
+                if (volume > bodyVolume)
+                {
+                    bodyVolume = volume;
+                    body = meshFilter;
+                }
+            }
+            if (body == null)
+                return false;
+
+            Bounds bounds = body.sharedMesh.bounds;
+            Vector3 bodySize = Vector3.Scale(bounds.size, body.transform.lossyScale);
+            bodySize = new Vector3(Mathf.Abs(bodySize.x), Mathf.Abs(bodySize.y), Mathf.Abs(bodySize.z));
+            Vector3 lengthInMesh = Vector3.forward;
+            if (bodySize.x >= bodySize.y && bodySize.x >= bodySize.z)
+                lengthInMesh = Vector3.right;
+            else if (bodySize.y >= bodySize.z)
+                lengthInMesh = Vector3.up;
+
+            Transform propTransform = prop.transform;
+            Vector3 axis = propTransform.InverseTransformDirection(body.transform.TransformDirection(lengthInMesh));
+            Vector3 bodyCenterInProp = propTransform.InverseTransformPoint(body.transform.TransformPoint(bounds.center));
+            if (Vector3.Dot(axis, bodyCenterInProp - propWellPointLocal) < 0f)
+                axis = -axis;
+            if (axis.sqrMagnitude < 1e-8f)
+                return false;
+            axisInProp = axis.normalized;
+            return true;
         }
 
         private static Vector3 MagazineCenterInProp(GameObject prop)
