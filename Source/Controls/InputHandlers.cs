@@ -319,6 +319,10 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
+                // Manual reload on a gun with a detachable magazine: B is only the mag release (hold, see
+                // VRMagazineController) and the drop (double tap), never Tarkov's reload
+                bool manualReload = VRMagazineController.ManualReloadActive();
+
                 bool reloadButton = VRSettings.GetLeftHandedMode()
                     ? VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any)
                     : VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
@@ -331,7 +335,7 @@ namespace TarkovVR.Source.Controls
                     if (waitingForSecondTap && timeSinceLastTap < DOUBLE_TAP_WINDOW)
                     {
                         // Detachable magazines: the double tap is the mag release (drops it out of the gun)
-                        if (!VRMagazineController.TryReleaseMagazine())
+                        if (!VRMagazineController.TryReleaseMagazine() && !manualReload)
                             command = ECommand.QuickReloadWeapon;
                         waitingForSecondTap = false;
                         lastTapTime = 0f;
@@ -347,7 +351,7 @@ namespace TarkovVR.Source.Controls
                 else if (waitingForSecondTap && (Time.time - lastTapTime) >= DOUBLE_TAP_WINDOW)
                 {
                     // A new magazine already in the off hand: you're reloading by hand, no automatic reload
-                    if (!VRMagazineController.HoldingMagazine)
+                    if (!manualReload && !VRMagazineController.HoldingMagazine)
                         command = ECommand.ReloadWeapon;
                     waitingForSecondTap = false;
                 }

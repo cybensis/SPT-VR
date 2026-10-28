@@ -928,7 +928,13 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 handLock = false;
                 hapticTriggered = false;
-                if (isSupporting) isSupporting = false;
+                if (isSupporting)
+                {
+                    isSupporting = false;
+                    // Same exit as leaving the support grip below: a pistol hands the left IK target back to the hand
+                    if (isWeapPistol)
+                        VRGlobals.player._markers[0] = LeftHand.transform;
+                }
                 Vector3 freePos = (fromAction.localPosition + secondaryHandPosOffset) -
                                   fromAction.localRotation * Vector3.forward * controllerLength;
                 LeftHand.transform.localPosition = freePos;

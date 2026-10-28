@@ -604,7 +604,7 @@ namespace TarkovVR.Source.Player.Interactions
         // nudge (conePalmLocalOffset). The palm BONE sits close to the wrist so it read as
         // "coming from the wrist"; the knuckles are the real palm. Falls back to the palm bone,
         // then the cone transform.
-        private Vector3 PalmOrigin(bool dominant)
+        internal Vector3 PalmOrigin(bool dominant)
         {
             // Knuckle-line centroid of that hand's fingers (the actual grip point, well forward of
             // the wrist), thumb skipped (it's off to the side and would pull the origin sideways).

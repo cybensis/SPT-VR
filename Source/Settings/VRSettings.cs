@@ -104,6 +104,8 @@ namespace TarkovVR.Source.Settings
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
+            // B no longer runs Tarkov's reload on guns with detachable magazines: hold = mag release, double tap = drop
+            public bool manualReload { get; set; }
 
             // Vive Wand controller settings
             public float viveWandCrouchTrackpadThreshold { get; set; }
@@ -154,6 +156,7 @@ namespace TarkovVR.Source.Settings
                 heldItemWeight = false;
                 virtualStock = true;
                 chestSling = true;
+                manualReload = false;
                 opticRenderResolution = 1024;
                 viveWandCrouchTrackpadThreshold = 0.7f;
                 viveWandVaultHoldTime = 0.3f;
@@ -180,6 +183,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle weaponWeightToggle;
         private static SettingToggle virtualStockToggle;
         private static SettingToggle chestSlingToggle;
+        private static SettingToggle manualReloadToggle;
         private static SettingToggle weaponInertiaToggle;
         private static SettingToggle walkEffectorToggle;
         private static SettingSelectSlider aimSmoothingSlider;
@@ -508,6 +512,14 @@ namespace TarkovVR.Source.Settings
             chestSlingToggle.Toggle._onValueChanged = SetChestSlingOn;
             chestSlingToggle.Text.localizationKey = "Turn On Chest Sling";
             chestSlingToggle.Toggle.UpdateValue(settings.chestSling);
+
+            // Manual reload (VRMagazineController): on guns with detachable magazines B stops running Tarkov's
+            // reload; hold it to release the magazine so the off hand can pull it, double tap drops it.
+            manualReloadToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            manualReloadToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            manualReloadToggle.Toggle._onValueChanged = SetManualReloadOn;
+            manualReloadToggle.Text.localizationKey = "Turn On Manual Reload";
+            manualReloadToggle.Toggle.UpdateValue(settings.manualReload);
 
             aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
@@ -986,6 +998,15 @@ namespace TarkovVR.Source.Settings
         public static bool GetChestSlingOn()
         {
             return settings.chestSling;
+        }
+
+        private static void SetManualReloadOn(bool turnOn)
+        {
+            settings.manualReload = turnOn;
+        }
+        public static bool GetManualReloadOn()
+        {
+            return settings.manualReload;
         }
 
         private static void SetWeaponInertiaOn(bool turnOn)
