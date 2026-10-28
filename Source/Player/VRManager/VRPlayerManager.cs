@@ -922,7 +922,9 @@ namespace TarkovVR.Source.Player.VRManager
 
             // If holding a loot item, skip ALL gun/scope IK logic — just position hand freely
             // Must come BEFORE scopeTransform check so heldItem always wins
-            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            // Same while holding or reaching for a magazine, so the grab never turns into a foregrip snap
+            if ((VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+                || VRMagazineController.OwnsOffHand)
             {
                 handLock = false;
                 hapticTriggered = false;

@@ -16,6 +16,7 @@ using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Player.VR;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
+using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
 using Valve.VR.InteractionSystem;
@@ -310,6 +311,14 @@ namespace TarkovVR.Source.Controls
                 if (!VRGlobals.inGame)
                     return;
 
+                // Tarkov's reload would act on the magazine the off hand is holding out of the gun
+                if (VRMagazineController.HoldingGunMagazine)
+                {
+                    waitingForSecondTap = false;
+                    reloadTriggered = false;
+                    return;
+                }
+
                 bool reloadButton = VRSettings.GetLeftHandedMode()
                     ? VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any)
                     : VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
@@ -321,7 +330,9 @@ namespace TarkovVR.Source.Controls
 
                     if (waitingForSecondTap && timeSinceLastTap < DOUBLE_TAP_WINDOW)
                     {
-                        command = ECommand.QuickReloadWeapon;
+                        // Detachable magazines: the double tap is the mag release (drops it out of the gun)
+                        if (!VRMagazineController.TryReleaseMagazine())
+                            command = ECommand.QuickReloadWeapon;
                         waitingForSecondTap = false;
                         lastTapTime = 0f;
                     }
@@ -335,7 +346,9 @@ namespace TarkovVR.Source.Controls
                 }
                 else if (waitingForSecondTap && (Time.time - lastTapTime) >= DOUBLE_TAP_WINDOW)
                 {
-                    command = ECommand.ReloadWeapon;
+                    // A new magazine already in the off hand: you're reloading by hand, no automatic reload
+                    if (!VRMagazineController.HoldingMagazine)
+                        command = ECommand.ReloadWeapon;
                     waitingForSecondTap = false;
                 }
                 else if (reloadTriggered)
@@ -552,8 +565,9 @@ namespace TarkovVR.Source.Controls
                     return;
 
                 // No trigger finger on the grip (slung, or support-hand-only hold) = no firing; if the
-                // release happened mid-burst, end it.
-                if (TarkovVR.Source.Player.Interactions.ChestHang.Detached)
+                // release happened mid-burst, end it. Same while the off hand holds the gun's magazine out
+                // (Tarkov still thinks it's in the gun).
+                if (TarkovVR.Source.Player.Interactions.ChestHang.Detached || VRMagazineController.HoldingGunMagazine)
                 {
                     if (isShooting)
                     {

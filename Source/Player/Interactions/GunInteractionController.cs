@@ -354,7 +354,8 @@ public class GunInteractionController : MonoBehaviour
     private int OffHandNearestPart()
     {
         if (interactables == null || interactables.Count == 0 || VRGlobals.vrPlayer == null ||
-            VRGlobals.vrPlayer.isSupporting || TarkovVR.Source.Player.Interactions.ChestHang.Detached)
+            VRGlobals.vrPlayer.isSupporting || TarkovVR.Source.Player.Interactions.ChestHang.Detached ||
+            VRMagazineController.HoldingMagazine)
             return -1;
         GameObject lh = VRGlobals.vrPlayer.LeftHand;
         if (lh == null)

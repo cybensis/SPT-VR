@@ -12,6 +12,7 @@ using static EFT.Player;
 using static EFT.InventoryLogic.ItemManipulator;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Settings;
+using TarkovVR.Source.Weapons;
 using TarkovVR.ModSupport;
 using TarkovVR.ModSupport.FIKA;
 using EFT.InventoryLogic;
@@ -320,6 +321,10 @@ namespace TarkovVR.Source.Player.Interactions
                         && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1);
                 ChestHang.UpdateInput(primaryHandGrip.state, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
             }
+
+            // Magazines by hand: also before the bail (it cancels a held magazine itself on menus)
+            if (VRGlobals.inGame && VRGlobals.vrPlayer != null)
+                VRMagazineController.Tick();
 
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)

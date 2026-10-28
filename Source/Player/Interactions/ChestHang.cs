@@ -541,7 +541,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Yaw-only head frame (nodding doesn't drag the chest around; projected-up fallback keeps yaw
         // sane looking straight up/down).
-        private static Quaternion HeadYaw(out Vector3 headPos)
+        internal static Quaternion HeadYaw(out Vector3 headPos)
         {
             HeadPose(out headPos, out Quaternion headRot);
             Vector3 fwd = headRot * Vector3.forward;
