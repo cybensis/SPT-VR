@@ -65,7 +65,12 @@ namespace TarkovVR.Source.Weapons
         public static bool HoldingGunMagazine => heldSource == HeldMagazineSource.FromGun;   // still in the gun as far as Tarkov knows: no firing
 
         // No firing: the gun's magazine is out in the hand, the charging handle is being worked, or the bolt is locked back
-        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || BoltLockedBack;
+        // on a round (Tarkov's insert chambers one into a locked-back gun; it has to be racked first). Locked back on an
+        // empty chamber the trigger goes through: Tarkov dry-fires (the click, the finger) without looking at the bolt catch.
+        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || (BoltLockedBack && ChamberLoaded);
+
+        private static bool ChamberLoaded => VRGlobals.firearmController != null && VRGlobals.firearmController.Item != null
+            && VRGlobals.firearmController.Item.ChamberAmmoCount > 0;
 
         private static HeldMagazineSource heldSource;
         private static Magazine heldMagazine;
@@ -140,6 +145,9 @@ namespace TarkovVR.Source.Weapons
         private static LootItem unconfirmedGroundMagazine;
         private static Item unconfirmedGroundItem;
         private static float unconfirmedGroundDeadline;
+        private static LootItem hiddenRenderersOf;
+        private static readonly List<Renderer> hiddenGroundRenderers = new List<Renderer>();
+        private static readonly List<Renderer> rendererScratch = new List<Renderer>();
 
         // Placement for the magazine Tarkov throws into the world (VRMagazinePatches)
         private static Item pendingDropMagazine;
@@ -486,7 +494,7 @@ namespace TarkovVR.Source.Weapons
             hands.ForceDropHeldItem();
             groundMagazine = lootItem;
             groundMagazineLetGoTime = Time.time;
-            lootItem.MakeVisible(false);
+            HideGroundMagazine(lootItem);
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRReload] picked {magazine.LocalizedShortName()} ({magazine.Count} rounds) up off the ground");
             Pulse(0.25f, 0.04f);
@@ -496,7 +504,43 @@ namespace TarkovVR.Source.Weapons
         public static void KeepGroundMagazineHidden()
         {
             if (heldSource == HeldMagazineSource.FromGround && groundMagazine != null)
-                groundMagazine.MakeVisible(false);
+                HideGroundMagazine(groundMagazine);
+        }
+
+        // Tarkov's MakeVisible only covers the renderers the item cached when it spawned (the magazine body); the
+        // cartridges are added to the magazine after that, so they're switched off here too and remembered (headset:
+        // "the bullets fall to the floor as if they're in a mag")
+        private static void HideGroundMagazine(LootItem lootItem)
+        {
+            if (hiddenRenderersOf != lootItem)
+            {
+                hiddenGroundRenderers.Clear();
+                hiddenRenderersOf = lootItem;
+            }
+            lootItem.MakeVisible(false);
+            lootItem.GetComponentsInChildren(true, rendererScratch);
+            foreach (Renderer renderer in rendererScratch)
+            {
+                if (!renderer.enabled)
+                    continue;
+                renderer.enabled = false;
+                hiddenGroundRenderers.Add(renderer);
+            }
+        }
+
+        private static void ShowGroundMagazine(LootItem lootItem)
+        {
+            lootItem.MakeVisible(true);
+            if (hiddenRenderersOf == lootItem)
+            {
+                foreach (Renderer renderer in hiddenGroundRenderers)
+                {
+                    if (renderer != null)
+                        renderer.enabled = true;
+                }
+            }
+            hiddenGroundRenderers.Clear();
+            hiddenRenderersOf = null;
         }
 
         // FIKA: the release has to reach the other players before the move, as in the stow
@@ -523,7 +567,7 @@ namespace TarkovVR.Source.Weapons
             if (unconfirmedGroundMagazine != null && unconfirmedGroundMagazine.gameObject.activeInHierarchy && unconfirmedGroundMagazine.Item == unconfirmedGroundItem)
             {
                 Plugin.MyLog.LogWarning("[VRReload] the magazine off the ground never moved, showing it again");
-                unconfirmedGroundMagazine.MakeVisible(true);
+                ShowGroundMagazine(unconfirmedGroundMagazine);
             }
             unconfirmedGroundMagazine = null;
             unconfirmedGroundItem = null;
@@ -1213,6 +1257,9 @@ namespace TarkovVR.Source.Weapons
                 rigidBody.velocity = pendingDropVelocity;
                 rigidBody.angularVelocity = UnityEngine.Random.insideUnitSphere * dropAngularSpeed;
             }
+            // Tarkov hides a thrown item for a moment so it doesn't pop in at the body; this one is where the hand let go.
+            // (Its hide only covers the magazine body, so the cartridges showed on their own: "just the bullets".)
+            lootItem.MakeVisible(true);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1435,9 +1482,10 @@ namespace TarkovVR.Source.Weapons
         {
             if (groundMagazine == null || groundMagazine.Item != heldMagazine)
                 return;
-            groundMagazine.MakeVisible(true);
             bool thrown = heldProp != null && VRGlobals.handsInteractionController != null
                 && VRGlobals.handsInteractionController.ThrowFromOffHand(groundMagazine, heldProp.transform.position, heldProp.transform.rotation);
+            // After the drop: it hides the item for a moment too, and it's already where the hand let go
+            ShowGroundMagazine(groundMagazine);
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRReload] {heldMagazine.LocalizedShortName()} back to the ground{(thrown ? "" : " (where it lay)")}");
         }
