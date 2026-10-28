@@ -6,6 +6,7 @@ using EFT.AssetsManager;
 using EFT.Interactive;
 using EFT.InventoryLogic;
 using EFT.UI;
+using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
@@ -35,7 +36,10 @@ namespace TarkovVR.Source.Weapons
         public static float chestPouchRadius = 0.16f;       // m palm to the chest pouch center
         public static Vector3 newMagazineHoldPosition = new Vector3(-0.10f, 0.02f, 0.11f);    // off hand local, used until a magazine is pulled off a gun (average of his headset grabs)
         public static Vector3 newMagazineHoldRotation = new Vector3(320f, 250f, 265f);        // off hand local euler, same
-        public static bool reuseLastGrabPose = true;        // new magazines sit in the hand the way the last one pulled off a gun did
+        public static bool reuseLastGrabPose = true;        // guns without a measured reload grip: new magazines sit in the hand the way the last one pulled off a gun did
+        public static float settleDistance = 0.08f;         // m the hand moves after grabbing the gun's magazine until it sits in the animation's grip
+        public static bool magazineFingers = true;          // the animation's finger pose while holding a magazine
+        public static float fingerBlendRate = 12f;          // 1/s ease of that finger pose in and out
         public static float dropAngularSpeed = 3f;          // rad/s tumble on a dropped magazine
         public static bool sounds = true;
         public static float soundVolume = 0.8f;
@@ -66,6 +70,16 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 lastGrabPosition;
         private static Quaternion lastGrabRotation;
 
+        // The gun's magazine settles from where it was grabbed into the animation's grip as the hand pulls away
+        private static ReloadGrip heldReloadGrip;
+        private static Vector3 grabLocalPosition;
+        private static Quaternion grabLocalRotation;
+        private static Vector3 palmAtGrabInGun;
+
+        private static float fingerWeight;
+        private static Vector3[] fingerPoseShown;
+        private static Transform[] leftPalmBones;
+
         // Committed to an inventory move: the prop stays in the hand and the gun's magazine stays hidden until
         // Tarkov's operation is finished, so neither flashes for the frame in between
         private static GameObject pendingProp;
@@ -86,6 +100,62 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion pendingDropRotation;
         private static Vector3 pendingDropVelocity;
         private static float pendingDropDeadline;
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Tarkov's reload, measured from its own animation (WeaponRecon)
+
+        // Where the magazine sits relative to the left-hand IK target while the animation holds it. In VR that target
+        // is our LeftHand, so these are the prop's local pose in the hand. Old = pulling it out, new = putting it in.
+        private sealed class ReloadGrip
+        {
+            public Vector3 oldMagazinePosition;
+            public Vector3 oldMagazineRotation;
+            public Vector3 newMagazinePosition;
+            public Vector3 newMagazineRotation;
+        }
+
+        // By weapon template id
+        private static readonly Dictionary<string, ReloadGrip> reloadGrips = new Dictionary<string, ReloadGrip>
+        {
+            // M4A1 (3 reloads, identical)
+            {
+                "5447a9cd4bdc2dbd208b4567", new ReloadGrip
+                {
+                    oldMagazinePosition = new Vector3(-0.186f, -0.033f, 0.115f), oldMagazineRotation = new Vector3(352.6f, 250f, 271.1f),
+                    newMagazinePosition = new Vector3(-0.198f, -0.198f, 0.022f), newMagazineRotation = new Vector3(337.8f, 265.3f, 180.4f),
+                }
+            },
+        };
+
+        // The animation's left-hand finger pose, index-matched like Tarkov's HandPoser (GetComponentsInChildren of the
+        // palm; 0 is the palm itself and is left alone). Measured on the M4A1, used for every gun for now.
+        private static readonly Vector3[] MAGAZINE_PULL_FINGERS =
+        {
+            Vector3.zero,
+            new Vector3(53.7f, 114.2f, 86.6f), new Vector3(8.9f, 358.1f, 9.1f), new Vector3(7.7f, 357.6f, 16.7f),     // thumb
+            new Vector3(0.3f, 354.3f, 8.1f), new Vector3(0f, 359.9f, 25.7f), new Vector3(0.2f, 359.9f, 31.2f),        // index
+            new Vector3(0.4f, 355.9f, 13.8f), new Vector3(0f, 359.9f, 32.6f), new Vector3(0.1f, 360f, 27.2f),         // middle
+            new Vector3(0.3f, 355.2f, 10.5f), new Vector3(0f, 360f, 21.9f), new Vector3(0f, 360f, 19.4f),             // ring
+            new Vector3(0.6f, 354.4f, 5.8f), new Vector3(0f, 0f, 1.3f), new Vector3(360f, 0f, 29.7f),                 // pinky
+        };
+
+        private static readonly Vector3[] MAGAZINE_INSERT_FINGERS =
+        {
+            Vector3.zero,
+            new Vector3(63.2f, 102.2f, 82.7f), new Vector3(353.7f, 359.7f, 15.9f), new Vector3(0.4f, 359.4f, 16f),    // thumb
+            new Vector3(0.7f, 355.6f, 15.9f), new Vector3(0.1f, 360f, 49.8f), new Vector3(0.4f, 359.9f, 27.4f),       // index
+            new Vector3(0.2f, 355f, 46.6f), new Vector3(0.1f, 360f, 73.5f), new Vector3(0.2f, 0.2f, 67.3f),           // middle
+            new Vector3(0.1f, 354.4f, 62.1f), new Vector3(0f, 360f, 79f), new Vector3(0f, 360f, 58.3f),               // ring
+            new Vector3(0.3f, 353.8f, 73.3f), new Vector3(360f, 360f, 85f), new Vector3(360f, 0f, 61f),               // pinky
+        };
+
+        private static ReloadGrip FindReloadGrip(Weapon weapon)
+        {
+            if (weapon == null)
+                return null;
+            reloadGrips.TryGetValue(weapon.TemplateId.ToString(), out ReloadGrip reloadGrip);
+            return reloadGrip;
+        }
 
         private static readonly List<Magazine> reachableMagazines = new List<Magazine>();
         private static Transform cachedRendererRoot;
@@ -252,6 +322,10 @@ namespace TarkovVR.Source.Weapons
             lastGrabPosition = propTransform.localPosition;
             lastGrabRotation = propTransform.localRotation;
             hasLastGrabPose = true;
+            heldReloadGrip = FindReloadGrip(weapon);
+            grabLocalPosition = propTransform.localPosition;
+            grabLocalRotation = propTransform.localRotation;
+            palmAtGrabInGun = firearmController.WeaponRoot.InverseTransformPoint(OffHandPalm());
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRMagazine] grabbed gun magazine {magazine.LocalizedShortName()}: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
 
@@ -287,9 +361,18 @@ namespace TarkovVR.Source.Weapons
 
             Transform propTransform = prop.transform;
             propTransform.SetParent(VRGlobals.vrPlayer.LeftHand.transform, worldPositionStays: false);
-            bool useLastGrab = reuseLastGrabPose && hasLastGrabPose;
-            propTransform.localPosition = useLastGrab ? lastGrabPosition : newMagazineHoldPosition;
-            propTransform.localRotation = useLastGrab ? lastGrabRotation : Quaternion.Euler(newMagazineHoldRotation);
+            ReloadGrip reloadGrip = FindReloadGrip(weapon);
+            if (reloadGrip != null)
+            {
+                propTransform.localPosition = reloadGrip.newMagazinePosition;
+                propTransform.localRotation = Quaternion.Euler(reloadGrip.newMagazineRotation);
+            }
+            else
+            {
+                bool useLastGrab = reuseLastGrabPose && hasLastGrabPose;
+                propTransform.localPosition = useLastGrab ? lastGrabPosition : newMagazineHoldPosition;
+                propTransform.localRotation = useLastGrab ? lastGrabRotation : Quaternion.Euler(newMagazineHoldRotation);
+            }
             propWellPointLocal = SeatedWellPointLocal(prop);
             Vector3 seatedScale = SeatedScale(prop);
             SetWorldScale(propTransform, Vector3.Scale(magazineView.Bone.lossyScale, seatedScale));
@@ -339,6 +422,9 @@ namespace TarkovVR.Source.Weapons
 
         private static void UpdateHeldMagazine(bool gripReleased)
         {
+            if (heldSource == HeldMagazineSource.FromGun && heldReloadGrip != null)
+                SettleIntoReloadGrip();
+
             Vector3 propWellPoint = heldProp.transform.TransformPoint(propWellPointLocal);
             float distanceToWell = Vector3.Distance(propWellPoint, magazineWell.position);
 
@@ -364,6 +450,16 @@ namespace TarkovVR.Source.Weapons
 
             if (gripReleased)
                 ReleaseHeldMagazine();
+        }
+
+        // Measured in the gun's frame, so walking or moving the gun hand with it doesn't count as pulling
+        private static void SettleIntoReloadGrip()
+        {
+            Vector3 palmInGun = heldForFirearm.WeaponRoot.InverseTransformPoint(OffHandPalm());
+            float settled = Mathf.Clamp01((palmInGun - palmAtGrabInGun).magnitude / Mathf.Max(settleDistance, 0.001f));
+            Transform propTransform = heldProp.transform;
+            propTransform.localPosition = Vector3.Lerp(grabLocalPosition, heldReloadGrip.oldMagazinePosition, settled);
+            propTransform.localRotation = Quaternion.Slerp(grabLocalRotation, Quaternion.Euler(heldReloadGrip.oldMagazineRotation), settled);
         }
 
         private static void ReleaseHeldMagazine()
@@ -761,9 +857,38 @@ namespace TarkovVR.Source.Weapons
             heldSource = HeldMagazineSource.None;
             heldMagazine = null;
             heldForFirearm = null;
+            heldReloadGrip = null;
             magazineWell = null;
             magazineLeftWell = false;
             OwnsOffHand = false;
+        }
+
+        // Called from HandsInteractionController.LateUpdate right after the off-hand finger update, so it's the last write
+        // to those bones this frame. Eases in on a grab and back out to whatever the hand was doing on release.
+        public static void ApplyHeldFingerPose()
+        {
+            Vector3[] pose = null;
+            if (heldSource == HeldMagazineSource.FromGun)
+                pose = MAGAZINE_PULL_FINGERS;
+            else if (heldSource == HeldMagazineSource.FromPouch)
+                pose = MAGAZINE_INSERT_FINGERS;
+            if (pose != null)
+                fingerPoseShown = pose;
+
+            float target = pose != null && magazineFingers ? 1f : 0f;
+            fingerWeight = Mathf.Lerp(fingerWeight, target, 1f - Mathf.Exp(-fingerBlendRate * Time.deltaTime));
+            if (fingerWeight < 0.01f || fingerPoseShown == null)
+                return;
+
+            Transform leftPalm = InitVRPatches.leftPalm;
+            if (leftPalm == null)
+                return;
+            if (leftPalmBones == null || leftPalmBones.Length == 0 || leftPalmBones[0] != leftPalm)
+                leftPalmBones = leftPalm.GetComponentsInChildren<Transform>(true);
+
+            int boneCount = Mathf.Min(leftPalmBones.Length, fingerPoseShown.Length);
+            for (int i = 1; i < boneCount; i++)
+                leftPalmBones[i].localRotation = Quaternion.Slerp(leftPalmBones[i].localRotation, Quaternion.Euler(fingerPoseShown[i]), fingerWeight);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

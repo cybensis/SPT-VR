@@ -417,6 +417,9 @@ namespace TarkovVR.Source.Player.Interactions
             // runs after EFT's hand animation. Must come last so it offsets the final pose.
             UpdateLeftHandFingers();
 
+            // Holding a magazine: the reload animation's finger pose on top
+            VRMagazineController.ApplyHeldFingerPose();
+
             // Same open-hand treatment for the RIGHT hand while it's off the gun (ChestHang
             // sling / support-only) - the animator still curls it in the grip pose otherwise.
             UpdateRightHandFingers();

@@ -157,7 +157,10 @@ namespace TarkovVR.Patches.Core.Player
                 else if (callbackName == "OnMagPuttedToRig" && phase <= ReloadPhase.OldMagazineInHand)
                     phase = ReloadPhase.BetweenMagazines;
                 else if (callbackName == "OnMagAppeared" && phase <= ReloadPhase.BetweenMagazines)
+                {
                     phase = ReloadPhase.NewMagazineInHand;
+                    LogSoundPlayers("after the new magazine appeared");
+                }
                 else if (callbackName == "OnMagInsertedToWeapon" && phase <= ReloadPhase.NewMagazineInHand)
                     phase = ReloadPhase.Finished;
             }
@@ -167,12 +170,21 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        public static void OnSound(BaseSoundPlayer soundPlayer, string soundName)
+        public static void OnSound(BaseSoundPlayer soundPlayer, string soundName, string handler)
         {
             if (!enabled || sessionOperation == null || soundPlayer == null)
                 return;
             string source = soundPlayer == weaponSoundPlayer ? "gun" : soundPlayer.name;
-            Plugin.MyLog.LogInfo($"[WeaponRecon][SOUND] '{soundName}' ({source}){StateText()}");
+            Plugin.MyLog.LogInfo($"[WeaponRecon][SOUND] {handler} '{soundName}' ({source}){StateText()}");
+        }
+
+        // The clip that actually plays, and which sound player plays it
+        public static void OnPlayClip(BaseSoundPlayer soundPlayer, AudioClip clip)
+        {
+            if (!enabled || sessionOperation == null || soundPlayer == null)
+                return;
+            string source = soundPlayer == weaponSoundPlayer ? "gun" : $"{soundPlayer.name} ({soundPlayer.GetType().Name})";
+            Plugin.MyLog.LogInfo($"[WeaponRecon][PLAY] clip '{(clip != null ? clip.name : "null")}' on {source}{StateText()}");
         }
 
         public static void Tick(EFT.Player player)
@@ -263,7 +275,7 @@ namespace TarkovVR.Patches.Core.Player
             Plugin.MyLog.LogInfo($"[WeaponRecon][EVENT] Start{StateText()}");
             if (leftIkMarker == null || gunLeftPalm == null)
                 Plugin.MyLog.LogWarning("[WeaponRecon] the gun has no weapon_L_IK_marker / HumanLPalm - no grip capture");
-            LogAvailableSounds();
+            LogSoundPlayers("at the start");
         }
 
         private static void SampleMagazine()
@@ -394,20 +406,31 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        private static void LogAvailableSounds()
+        // Every sound player on the gun (the magazine model has its own), with the names it can play and how many clips
+        private static void LogSoundPlayers(string when)
         {
-            if (weaponSoundPlayer == null || weaponSoundPlayer.AdditionalSounds == null)
-            {
-                Plugin.MyLog.LogInfo("[WeaponRecon][SOUNDS] no sound player on the gun");
+            if (sessionFirearm == null || sessionFirearm._controllerObject == null)
                 return;
+            BaseSoundPlayer[] soundPlayers = sessionFirearm._controllerObject.GetComponentsInChildren<BaseSoundPlayer>(true);
+            Plugin.MyLog.LogInfo($"[WeaponRecon][SOUNDS] {soundPlayers.Length} sound players {when}");
+            foreach (BaseSoundPlayer soundPlayer in soundPlayers)
+            {
+                Plugin.MyLog.LogInfo($"[WeaponRecon][SOUNDS] '{soundPlayer.name}' ({soundPlayer.GetType().Name}) "
+                    + $"additional: {SoundNames(soundPlayer.AdditionalSounds)}  main: {SoundNames(soundPlayer.MainSounds)}");
             }
+        }
+
+        private static string SoundNames(IEnumerable<BaseSoundPlayer.SoundElement> sounds)
+        {
+            if (sounds == null)
+                return "none";
             List<string> names = new List<string>();
-            foreach (var sound in weaponSoundPlayer.AdditionalSounds)
+            foreach (BaseSoundPlayer.SoundElement sound in sounds)
             {
                 if (sound != null)
-                    names.Add(sound.EventName);
+                    names.Add($"{sound.EventName}({(sound.SoundClips != null ? sound.SoundClips.Length : 0)})");
             }
-            Plugin.MyLog.LogInfo($"[WeaponRecon][SOUNDS] '{weaponSoundPlayer.name}': {string.Join(", ", names.ToArray())}");
+            return string.Join(", ", names.ToArray());
         }
 
         private static string StateText()
@@ -432,7 +455,19 @@ namespace TarkovVR.Patches.Core.Player
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BaseSoundPlayer), "SoundEventHandler")]
-        private static void ReconSound(BaseSoundPlayer __instance, string soundName) => WeaponRecon.OnSound(__instance, soundName);
+        private static void ReconSound(BaseSoundPlayer __instance, string soundName) => WeaponRecon.OnSound(__instance, soundName, "Sound");
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BaseSoundPlayer), "SoundAtPointEventHandler")]
+        private static void ReconSoundAtPoint(BaseSoundPlayer __instance, string soundName) => WeaponRecon.OnSound(__instance, soundName, "SoundAtPoint");
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BaseSoundPlayer), "EventReceiver")]
+        private static void ReconEventReceiver(BaseSoundPlayer __instance, string eventName) => WeaponRecon.OnSound(__instance, eventName, "EventReceiver");
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(BaseSoundPlayer), "PlayClip")]
+        private static void ReconPlayClip(BaseSoundPlayer __instance, AudioClip clip) => WeaponRecon.OnPlayClip(__instance, clip);
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
