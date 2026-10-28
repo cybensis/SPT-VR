@@ -419,6 +419,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             // Holding a magazine: the reload animation's finger pose on top
             VRReloadController.ApplyHeldFingerPose();
+            // Pulling the charging handle: the chambered round rides the bolt the animator just posed
+            VRReloadController.ApplyChamberView();
 
             // Same open-hand treatment for the RIGHT hand while it's off the gun (ChestHang
             // sling / support-only) - the animator still curls it in the grip pose otherwise.
