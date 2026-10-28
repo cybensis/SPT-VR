@@ -1506,7 +1506,8 @@ namespace TarkovVR.Patches.Core.Player
             __instance._weightIsOutOfDate = true;
         }
         
-        public static void DropObject(LootItem val, bool useThrowVelocity = false)
+        // throwingHand = the physical controller that let go; the left default is the old hardcode
+        public static void DropObject(LootItem val, bool useThrowVelocity = false, SteamVR_Input_Sources throwingHand = SteamVR_Input_Sources.LeftHand)
         {
             AssetPoolObject component = val.GetComponent<AssetPoolObject>();
             GameObject gameObject = val.gameObject;
@@ -1529,7 +1530,6 @@ namespace TarkovVR.Patches.Core.Player
 
             if (useThrowVelocity)
             {
-                SteamVR_Input_Sources throwingHand = SteamVR_Input_Sources.LeftHand;
                 Vector3 throwVelocity = ControllerVelocity.GetSteamVRVelocity(throwingHand);
                 Vector3 angularVelocity = ControllerVelocity.GetSteamVRAngularVelocity(throwingHand);
 

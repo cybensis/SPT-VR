@@ -1075,6 +1075,12 @@ namespace TarkovVR.Source.Player.Interactions
             return heldItem != null && heldItem.Item != null && heldItem._item != null;
         }
 
+        // The physical controller holding the loot item (left-handed mode swaps primary/secondary)
+        private SteamVR_Input_Sources HeldItemInputSource()
+        {
+            return heldInDominantHand ? primaryInputSource : secondaryInputSource;
+        }
+
         /// <summary>
         /// Checks for grip release and drops the item. Only called when full input is active (not sprinting).
         /// </summary>
@@ -1105,7 +1111,8 @@ namespace TarkovVR.Source.Player.Interactions
             isSummoningLoot = false;
             isItemInitialized = false;
             cachedRigidbody.isKinematic = false;
-            ConsumeThrowStamina(heldItem);
+            SteamVR_Input_Sources throwingHand = HeldItemInputSource();
+            ConsumeThrowStamina(heldItem, throwingHand);
 
             // Keep heldItem set THROUGH DropObject: it calls LootItem.method_3, and the
             // DisableCoroutineWhenHeldItem guard must still see it as held so it does NOT start the
@@ -1114,7 +1121,7 @@ namespace TarkovVR.Source.Player.Interactions
             // destroy the rigidbody before the drop gets any physics (dropped items would freeze).
             LootItem dropped = heldItem;
             dropped.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
-            WeaponPatches.DropObject(dropped, true);
+            WeaponPatches.DropObject(dropped, true, throwingHand);
             heldItem = null;
             cachedRigidbody = null;
             cachedHand = null;
@@ -1146,7 +1153,7 @@ namespace TarkovVR.Source.Player.Interactions
         /// Consumes hand stamina on throw, scaled by item weight and throw speed.
         /// No cost if the item is just dropped (velocity below threshold).
         /// </summary>
-        private void ConsumeThrowStamina(LootItem item)
+        private void ConsumeThrowStamina(LootItem item, SteamVR_Input_Sources throwingHand)
         {
             // Minimum controller speed (m/s) to count as an intentional throw
             const float throwVelocityThreshold = 1.5f;
@@ -1159,9 +1166,8 @@ namespace TarkovVR.Source.Player.Interactions
                 if (VRGlobals.player?.Physical is not Physical physical)
                     return;
 
-                // Get controller velocity at release
-                Vector3 throwVelocity = ControllerVelocity.GetSteamVRVelocity(
-                    cachedLeftHandedMode ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
+                // Velocity of the controller that let go, at release
+                Vector3 throwVelocity = ControllerVelocity.GetSteamVRVelocity(throwingHand);
 
                 float speed = throwVelocity.magnitude;
 
@@ -1238,7 +1244,7 @@ namespace TarkovVR.Source.Player.Interactions
                     // settle coroutine while the body is kinematic (that would StopPhysics and kill
                     // the drop). Release after, then start the settle (FIKA only — see
                     // UpdateHeldItemDrop). Solo keeps the original behavior.
-                    WeaponPatches.DropObject(dropped, true);
+                    WeaponPatches.DropObject(dropped, true, HeldItemInputSource());
                     heldItem = null;
                     if (InstalledMods.FIKAInstalled)
                     {
