@@ -24,6 +24,8 @@ namespace TarkovVR.Source.Weapons
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
         public static float handleLateralEscape = 0.10f;   // m the controller moves sideways off the track before the hand lets go
         public static bool boltFollowsHandle = true;       // false = only the handle model moves
+        public static bool showChamberedRound = true;      // the round in the chamber shows while the bolt is open
+        public static float roundFollowsBolt = 1f;         // m the round slides back per m of handle (1 = on the bolt face, the extractor holding it)
 
         public static bool HoldingChargingHandle { get; private set; }
         public static bool OffHandAtChargingHandle { get; private set; }   // the trigger is the handle's here, not a weapon-part interaction
@@ -45,6 +47,15 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 handAtHandleGrabInSlot;      // the controller (LeftHand) when the handle was grabbed
         private static float handlePull;                    // m back from rest
         private static bool handleFullyBack;
+
+        // The chambered round while the bolt is open: Tarkov's round model sits on the patron_in_weapon bone, shown and
+        // hidden by the clips' events
+        private static bool showingChamber;
+        private static bool chamberEmptiedByPull;           // the pull threw the round out: empty until the bolt goes forward
+        private static Transform chamberBone;
+        private static bool chamberBoneWasActive;
+        private static Transform chamberedRound;
+        private static Vector3 chamberedRoundRestLocalPosition;
 
         // The handle's slot, looked up again now and then (mods only change in the inventory)
         private static FirearmController handleSlotFor;
@@ -136,6 +147,7 @@ namespace TarkovVR.Source.Weapons
             handleFullyBack = false;
             HoldingChargingHandle = true;
             LatchHand(handleView);
+            BeginChamberView(firearmController, weapon);
 
             if (debugLog)
             {
@@ -185,6 +197,7 @@ namespace TarkovVR.Source.Weapons
                 float boltOpen = Mathf.Clamp01(handlePull / (handleTravel * handleFullPull));
                 SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : boltOpen);
             }
+            UpdateChamberView();
 
             // Once it has been all the way back, letting go slams the bolt forward whatever the handle does after
             if (triggerReleased || handOffTrack > handleLateralEscape)
@@ -206,12 +219,14 @@ namespace TarkovVR.Source.Weapons
             ExpectOperation(ExpectedOperation.Rechamber, firearmController);
             VRGlobals.player.InventoryController.RechamberWeapon(weapon);
             TryForceExpectedOperation();
+            chamberEmptiedByPull = true;
         }
 
         private static void LetGoOfChargingHandle(bool snapForward)
         {
             // The hand first, where it is, so it doesn't snap forward with the handle
             ReleaseHandLatch();
+            EndChamberView();
             if (handleView != null)
                 handleView.localPosition = handleRestLocalPosition;
             HoldingChargingHandle = false;
@@ -244,6 +259,61 @@ namespace TarkovVR.Source.Weapons
                 animator.SetLayerWeight(firearmsAnimator.BOLT_CATCH_LAYER_INDEX, open);
             if (firearmsAnimator.HasParameter(AnimationControllerParametersTable.FLOAT_IDLEPOSITION))
                 AnimationControllerParametersTable.SetIdlePosition(animator, open);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        // Only a bolt this pull opens: one already locked back (a magazine swapped into an empty gun) has its next round
+        // counted in the chamber by Tarkov's insert, but it's still in the magazine until the bolt goes forward
+        private static void BeginChamberView(FirearmController firearmController, Weapon weapon)
+        {
+            chamberEmptiedByPull = false;
+            Transform[] chamberBones = firearmController.Firearms._patronInWeaponTransforms;
+            chamberBone = chamberBones != null && chamberBones.Length > 0 ? chamberBones[0] : null;
+            showingChamber = showChamberedRound && boltFollowsHandle && chamberBone != null
+                && !firearmController.FirearmsAnimator.GetBoltCatch() && weapon.ChamberAmmoCount > 0;
+            if (!showingChamber)
+            {
+                chamberBone = null;
+                chamberedRound = null;
+                return;
+            }
+            chamberBoneWasActive = chamberBone.gameObject.activeSelf;
+            chamberedRound = chamberBone.childCount > 0 ? chamberBone.GetChild(0) : null;
+            if (chamberedRound != null)
+                chamberedRoundRestLocalPosition = chamberedRound.localPosition;
+        }
+
+        // The round rides back on the bolt face; the model itself isn't animated, so its offset stays through the animator.
+        // Once the rechamber has thrown it out (its model goes back to Tarkov's pool) the next one is hidden.
+        private static void UpdateChamberView()
+        {
+            if (!showingChamber || chamberBone == null)
+                return;
+            if (chamberEmptiedByPull)
+            {
+                chamberBone.gameObject.SetActive(false);
+                return;
+            }
+            chamberBone.gameObject.SetActive(true);
+            if (chamberedRound != null && chamberedRound.parent == chamberBone)
+            {
+                Vector3 axis = handleBone.TransformDirection(handleAxisInSlot).normalized;
+                chamberedRound.localPosition = chamberedRoundRestLocalPosition + chamberBone.InverseTransformVector(axis * handlePull * roundFollowsBolt);
+            }
+        }
+
+        private static void EndChamberView()
+        {
+            if (showingChamber && chamberBone != null)
+            {
+                chamberBone.gameObject.SetActive(chamberBoneWasActive);
+                if (chamberedRound != null && chamberedRound.parent == chamberBone)
+                    chamberedRound.localPosition = chamberedRoundRestLocalPosition;
+            }
+            showingChamber = false;
+            chamberBone = null;
+            chamberedRound = null;
         }
 
         // The bolt goes where the gun's own catch flag says: forward, or held back by an empty magazine
