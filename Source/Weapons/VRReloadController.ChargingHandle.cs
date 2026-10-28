@@ -57,9 +57,9 @@ namespace TarkovVR.Source.Weapons
         private static Transform chamberedRound;
         private static Vector3 chamberedRoundRestLocalPosition;
         private static Transform[] boltParts;               // the gun's parts and where they sat with the bolt closed
-        private static Vector3[] boltPartsRestInRoot;
+        private static Vector3[] boltPartsRestInChamber;
         private static Transform boltPart;                  // the one found moving back with the bolt
-        private static Vector3 boltPartRestInRoot;
+        private static Vector3 boltPartRestInChamber;
 
         // The handle's slot, looked up again now and then (mods only change in the inventory)
         private static FirearmController handleSlotFor;
@@ -307,11 +307,13 @@ namespace TarkovVR.Source.Weapons
             Transform weaponRoot = handleForFirearm.WeaponRoot;
             if (boltParts == null)
                 RecordBoltParts(weaponRoot);
-            chamberedRound.localPosition = chamberedRoundRestLocalPosition + chamberBone.InverseTransformVector(BoltMovement(weaponRoot));
+            chamberedRound.localPosition = chamberedRoundRestLocalPosition + BoltMovementInChamber(weaponRoot.up);
         }
 
-        // Where every part of the gun sits relative to it, with the bolt closed (the grab's first frame). Left out: the
-        // handle and the round (we move those) and the gun's own arm and camera bones (they sway with the idle).
+        // Every part of the gun, and where it sits in the chamber bone's frame with the bolt closed (the grab's first
+        // frame). The chamber frame, not the gun's root: the receiver sways against the root with the idle breathing and
+        // the chamber sways with it, so only the bolt's own travel is left (measured against the root, the round bobbed).
+        // Left out: the handle and the round (we move those) and the gun's own arm and camera bones.
         private static void RecordBoltParts(Transform weaponRoot)
         {
             Transform[] parts = weaponRoot.GetComponentsInChildren<Transform>();
@@ -324,17 +326,17 @@ namespace TarkovVR.Source.Weapons
                 parts[kept++] = part;
             }
             boltParts = new Transform[kept];
-            boltPartsRestInRoot = new Vector3[kept];
+            boltPartsRestInChamber = new Vector3[kept];
             for (int index = 0; index < kept; index++)
             {
                 boltParts[index] = parts[index];
-                boltPartsRestInRoot[index] = weaponRoot.InverseTransformPoint(parts[index].position);
+                boltPartsRestInChamber[index] = chamberBone.InverseTransformPoint(parts[index].position);
             }
         }
 
         // The bolt = the part that has come furthest back along the barrel (the locked-back pose moves the whole bolt
-        // group together); followed on its own once it's clearly moving. World space.
-        private static Vector3 BoltMovement(Transform weaponRoot)
+        // group together); followed on its own once it's clearly moving. In the chamber bone's frame, = the round's.
+        private static Vector3 BoltMovementInChamber(Vector3 backWorld)
         {
             if (boltPart == null)
             {
@@ -344,8 +346,8 @@ namespace TarkovVR.Source.Weapons
                 {
                     if (boltParts[index] == null)
                         continue;
-                    Vector3 move = weaponRoot.TransformVector(weaponRoot.InverseTransformPoint(boltParts[index].position) - boltPartsRestInRoot[index]);
-                    float back = Vector3.Dot(move, weaponRoot.up);
+                    Vector3 move = chamberBone.InverseTransformPoint(boltParts[index].position) - boltPartsRestInChamber[index];
+                    float back = Vector3.Dot(chamberBone.TransformVector(move), backWorld);
                     if (back > furthestBack)
                     {
                         furthestBack = back;
@@ -354,14 +356,15 @@ namespace TarkovVR.Source.Weapons
                 }
                 if (furthestIndex < 0)
                     return Vector3.zero;
+                Vector3 furthestMove = chamberBone.InverseTransformPoint(boltParts[furthestIndex].position) - boltPartsRestInChamber[furthestIndex];
                 if (furthestBack < boltLockOnDistance || handlePull <= 0f)
-                    return weaponRoot.up * furthestBack;
+                    return furthestMove;
                 boltPart = boltParts[furthestIndex];
-                boltPartRestInRoot = boltPartsRestInRoot[furthestIndex];
+                boltPartRestInChamber = boltPartsRestInChamber[furthestIndex];
                 if (debugLog)
                     Plugin.MyLog.LogInfo($"[VRReload] the round rides '{boltPart.name}' (parent '{(boltPart.parent != null ? boltPart.parent.name : "-")}')");
             }
-            return weaponRoot.TransformVector(weaponRoot.InverseTransformPoint(boltPart.position) - boltPartRestInRoot);
+            return chamberBone.InverseTransformPoint(boltPart.position) - boltPartRestInChamber;
         }
 
         private static void EndChamberView()
