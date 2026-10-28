@@ -306,7 +306,16 @@ namespace TarkovVR.Patches.Core.Player
             // From the moment the magazine starts to move (the hand is on it; before that it's closed on the handguard)
             bool magazineMoving = haveRestPosition && (positionInGun - magazineRestPosition).magnitude > 0.005f;
             if (phase <= ReloadPhase.OldMagazineInHand && magazineMoving)
+            {
                 SamplePullGrip(magazineView);
+                // The first axisDistance of travel out of the well (it leaves at the mag-out sound, before Tarkov's
+                // "pulled out" event)
+                if (!haveOutAxis && (positionInGun - magazineRestPosition).magnitude >= axisDistance)
+                {
+                    outAxis = (positionInGun - magazineRestPosition).normalized;
+                    haveOutAxis = true;
+                }
+            }
 
             if (phase == ReloadPhase.OldMagazineInHand)
             {
@@ -314,11 +323,6 @@ namespace TarkovVR.Patches.Core.Player
                     oldMagazineFingers = SnapshotFingers();
                 if (gunLeftPalm != null)
                     oldMagazineInGunPalm.Sample(gunLeftPalm, magazineView);
-                if (haveRestPosition && !haveOutAxis && (positionInGun - magazineRestPosition).magnitude >= axisDistance)
-                {
-                    outAxis = (positionInGun - magazineRestPosition).normalized;
-                    haveOutAxis = true;
-                }
             }
             else if (phase == ReloadPhase.NewMagazineInHand)
             {

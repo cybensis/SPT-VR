@@ -140,6 +140,7 @@ namespace TarkovVR.Source.Weapons
             public Vector3 oldMagazineRotation;
             public Vector3 newMagazinePosition;
             public Vector3 newMagazineRotation;
+            public Vector3 wellAxis;    // the track out of the well in the gun's frame (WeaponRoot): the animation's insert path, reversed
         }
 
         // By weapon template id
@@ -151,6 +152,7 @@ namespace TarkovVR.Source.Weapons
                 {
                     oldMagazinePosition = new Vector3(-0.186f, -0.033f, 0.115f), oldMagazineRotation = new Vector3(352.6f, 250f, 271.1f),
                     newMagazinePosition = new Vector3(-0.198f, -0.198f, 0.022f), newMagazineRotation = new Vector3(337.8f, 265.3f, 180.4f),
+                    wellAxis = new Vector3(-0.61f, -0.136f, -0.781f),     // 4 recon inserts, (0.573..0.62, 0.119..0.149, 0.771..0.811)
                 }
             },
         };
@@ -353,7 +355,9 @@ namespace TarkovVR.Source.Weapons
             propWellPointLocal = propTransform.InverseTransformPoint(magazineView.Bone.position);
             seatedLocalPosition = propTransform.localPosition;
             seatedLocalRotation = propTransform.localRotation;
-            railAxisInWell = RailAxisInWell(prop, magazineView.Bone);
+            heldReloadGrip = FindReloadGrip(weapon);
+            Vector3 seatedCenterInWell = magazineView.Bone.InverseTransformPoint(propTransform.TransformPoint(MagazineCenterInProp(prop)));
+            railAxisInWell = RailAxisInWell(magazineView.Bone, seatedCenterInWell, firearmController, heldReloadGrip);
 
             hiddenGunMagazineView = magazineView.ItemView;
             hiddenGunMagazineView.gameObject.SetActive(false);
@@ -362,7 +366,6 @@ namespace TarkovVR.Source.Weapons
             heldMagazine = magazine;
             heldForFirearm = firearmController;
             heldProp = prop;
-            heldReloadGrip = FindReloadGrip(weapon);
             magazineWell = magazineView.Bone;
             magazineLeftWell = false;
             StartRail(pullingOut: true, startPosition: 0f);
@@ -417,7 +420,7 @@ namespace TarkovVR.Source.Weapons
             propWellPointLocal = SeatedWellPointLocal(prop);
             Vector3 centerInProp = MagazineCenterInProp(prop);
             Vector3 seatedCenterInWell = seatedLocalPosition + seatedLocalRotation * Vector3.Scale(centerInProp, seatedScale);
-            railAxisInWell = seatedCenterInWell.sqrMagnitude > 1e-8f ? seatedCenterInWell.normalized : Vector3.down;
+            railAxisInWell = RailAxisInWell(magazineView.Bone, seatedCenterInWell, firearmController, reloadGrip);
 
             heldSource = HeldMagazineSource.FromPouch;
             heldMagazine = magazine;
@@ -639,12 +642,18 @@ namespace TarkovVR.Source.Weapons
             return magazineWell.TransformDirection(railAxisInWell).normalized;
         }
 
-        // From the well (the bone's origin) toward the magazine's middle: straight down a straight magazine, down and a
-        // little forward on a curved one
-        private static Vector3 RailAxisInWell(GameObject prop, Transform well)
+        // The track out of the well, in the well bone's frame. Guns with a recording: Tarkov's own insert path reversed,
+        // which follows the well's real tilt. Others: from the well (the bone's origin) toward the seated magazine's
+        // middle, which comes out too upright on a forward-tilted well (headset, M4A1).
+        private static Vector3 RailAxisInWell(Transform well, Vector3 seatedCenterInWell, FirearmController firearmController, ReloadGrip reloadGrip)
         {
-            Vector3 centerInWell = well.InverseTransformPoint(prop.transform.TransformPoint(MagazineCenterInProp(prop)));
-            return centerInWell.sqrMagnitude > 1e-8f ? centerInWell.normalized : Vector3.down;
+            Vector3 shapeAxis = seatedCenterInWell.sqrMagnitude > 1e-8f ? seatedCenterInWell.normalized : Vector3.down;
+            if (reloadGrip == null || reloadGrip.wellAxis == Vector3.zero)
+                return shapeAxis;
+            Vector3 animationAxis = well.InverseTransformDirection(firearmController.WeaponRoot.TransformDirection(reloadGrip.wellAxis)).normalized;
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[VRMagazine] track from the animation, {Vector3.Angle(animationAxis, shapeAxis):0.#} deg off the magazine-shape direction");
+            return animationAxis;
         }
 
         private static Vector3 MagazineCenterInProp(GameObject prop)
