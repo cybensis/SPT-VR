@@ -204,7 +204,9 @@ namespace TarkovVR.Source.Player.VRManager
             if (!RightHand)
             {
                 RightHand = new GameObject("RightHand");
-                RightHand.AddComponent<SteamVR_Behaviour_Pose>();
+                // SteamVR's pose component throws without SteamVR input; under OpenXR the pose listeners above move the hands
+                if (!VRInput.UsingOpenXR)
+                    RightHand.AddComponent<SteamVR_Behaviour_Pose>();
                 //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
                 RightHand.transform.parent = VRGlobals.camHolder.transform.parent;
                 MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
@@ -215,7 +217,8 @@ namespace TarkovVR.Source.Player.VRManager
             if (!LeftHand)
             {
                 LeftHand = new GameObject("LeftHand");
-                LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
+                if (!VRInput.UsingOpenXR)
+                    LeftHand.AddComponent<SteamVR_Behaviour_Pose>();
                 LeftHand.transform.parent = VRGlobals.camHolder.transform.parent;
             }
         }

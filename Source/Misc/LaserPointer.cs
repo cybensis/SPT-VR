@@ -1,6 +1,7 @@
 ﻿using EFT;
 using UnityEngine;
 using Valve.VR;
+using TarkovVR.Source.Controls;
 
 
 namespace TarkovVR.Source.Misc
@@ -35,10 +36,10 @@ namespace TarkovVR.Source.Misc
         {
             if (pose == null)
                 pose = GetComponent<SteamVR_Behaviour_Pose>();
-            if (pose == null)
+            if (pose == null && !VRInput.UsingOpenXR)
                 Debug.LogError("No SteamVR_Behaviour_Pose component found on this object");
 
-            if (interactWithUI == null)
+            if (interactWithUI == null && !VRInput.UsingOpenXR)
                 Debug.LogError("No ui interaction action has been set on this component.");
 
             
@@ -75,6 +76,25 @@ namespace TarkovVR.Source.Misc
             //pointer.GetComponent<MeshRenderer>().material = newMaterial;
             pointerRenderer = pointer.GetComponent<MeshRenderer>();
             pointerRenderer.material = newMaterial;
+        }
+
+        // No pose component under OpenXR (MenuVRManager only adds it for SteamVR)
+        private SteamVR_Input_Sources InputSource => pose != null ? pose.inputSource : SteamVR_Input_Sources.Any;
+
+        // InteractUI is a SteamVR action with no OpenXR binding, and reading it without SteamVR input throws, so under
+        // OpenXR the laser just never shows the pressed look
+        private bool InteractHeld()
+        {
+            if (VRInput.UsingOpenXR || interactWithUI == null)
+                return false;
+            return interactWithUI.GetState(InputSource);
+        }
+
+        private bool InteractReleased()
+        {
+            if (VRInput.UsingOpenXR || interactWithUI == null)
+                return false;
+            return interactWithUI.GetStateUp(InputSource);
         }
 
         public virtual void OnPointerIn(PointerEventArgs e)
@@ -114,7 +134,7 @@ namespace TarkovVR.Source.Misc
             if (previousContact && previousContact != hit.transform)
             {
                 PointerEventArgs args = new PointerEventArgs();
-                args.fromInputSource = pose.inputSource;
+                args.fromInputSource = InputSource;
                 args.distance = 0f;
                 args.flags = 0;
                 args.target = previousContact;
@@ -124,7 +144,7 @@ namespace TarkovVR.Source.Misc
             if (bHit && previousContact != hit.transform)
             {
                 PointerEventArgs argsIn = new PointerEventArgs();
-                argsIn.fromInputSource = pose.inputSource;
+                argsIn.fromInputSource = InputSource;
                 argsIn.distance = hit.distance;
                 argsIn.flags = 0;
                 argsIn.target = hit.transform;
@@ -140,17 +160,17 @@ namespace TarkovVR.Source.Misc
                 dist = hit.distance;
             }
 
-            if (bHit && interactWithUI.GetStateUp(pose.inputSource))
+            if (bHit && InteractReleased())
             {
                 PointerEventArgs argsClick = new PointerEventArgs();
-                argsClick.fromInputSource = pose.inputSource;
+                argsClick.fromInputSource = InputSource;
                 argsClick.distance = hit.distance;
                 argsClick.flags = 0;
                 argsClick.target = hit.transform;
                 OnPointerClick(argsClick);
             }
 
-            if (interactWithUI != null && interactWithUI.GetState(pose.inputSource))
+            if (InteractHeld())
             {
                 pointer.transform.localScale = new Vector3(thickness * 5f, thickness * 5f, dist);
                 pointerRenderer.material.color = clickColor;

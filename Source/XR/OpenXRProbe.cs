@@ -8,7 +8,7 @@ namespace TarkovVR.Source.XR
     // trigger, grip, stick and A/B. Each device's list of inputs is logged once when it first shows up.
     public class OpenXRProbe : MonoBehaviour
     {
-        public static bool enabledLogging = true;
+        public static bool enabledLogging = false;    // true = log every logInterval seconds (floods the log)
         public static float logInterval = 5f;
 
         private float nextLogTime = 0f;
