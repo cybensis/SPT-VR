@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using EFT;
 using EFT.InventoryLogic;
+using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
+using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
@@ -14,14 +16,18 @@ namespace TarkovVR.Source.Weapons
     //    and is held in while B (the mag release, Manual Reload) is down or the gun's magazine is pulled out by hand.
     //    Each gun's button moves its own way, so how far and which way is measured from the gun's own insert animation
     //    the first time it's needed.
-    //  - a magazine just seated stays in the hand while the grip is held; the off-hand trigger there is the bolt release:
-    //    a locked-back bolt runs forward (Tarkov's locked-back pose eased out, the bolt catch paddle is part of it)
+    //  - a magazine just seated stays in the hand while the grip is held
+    //  - slapping the bolt catch with the open off hand releases a locked-back bolt: it runs forward (Tarkov's locked-back
+    //    pose eased out, the bolt catch paddle is part of it)
     public static partial class VRReloadController
     {
         public static bool magazineReleaseButton = true;
         public static float releaseButtonTime = 0.06f;      // s for the button to go all the way in or out (Tarkov's mag-out: ~0.1)
         public static bool holdSeatedMagazine = true;       // the hand stays on a magazine it seated while the grip is held
         public static float boltReleaseTime = 0.08f;        // s for the bolt to run forward (Tarkov: the paddle 0.07, then the bolt 0.13)
+        public static bool slapBoltRelease = true;
+        public static float boltSlapRadius = 0.07f;         // m palm to the bolt catch that counts as hitting it
+        public static float boltSlapSpeed = 1.0f;           // m/s the off hand comes in at, against the gun hand, to count as a slap
 
         public static bool HoldingSeatedMagazine => seatedHoldFor != null;
 
@@ -56,6 +62,11 @@ namespace TarkovVR.Source.Weapons
 
         private static FirearmController boltReleaseFor;
         private static float boltReleaseStartTime;
+
+        private static FirearmController boltCatchFor;
+        private static Transform boltCatchPart;
+        private static bool palmWasAtBoltCatch;
+        private static GameObject boltCatchZoneViz;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The mag release button
@@ -210,9 +221,11 @@ namespace TarkovVR.Source.Weapons
                 && partName.IndexOf("slide", StringComparison.OrdinalIgnoreCase) < 0;
         }
 
-        // Plays the gun's insert animations onto the gun itself (AnimationClip.SampleAnimation) and reads the button.
-        // The clips' paths start at Weapon_root, so they're sampled on its parent; that poses the gun for real, so every
-        // transform under it is put back right after (the clips only animate transforms).
+        // Plays the gun's insert animations onto a bare copy of its bones (AnimationClip.SampleAnimation) and reads the
+        // button. Unity only samples a Mecanim clip onto an object with an Animator ("Non-Legacy animations cannot be
+        // sampled outside the Editor without an Animator"), and the gun's own Animator is no longer above it since the gun
+        // was moved onto the rig. The copy has the gun's names and local poses from Weapon_root down, so the clips' paths
+        // match, and the live gun isn't touched.
         private static MagazineReleaseMotion MeasureReleaseMotion(FirearmController firearmController, Slot magazineSlot)
         {
             string gunName = firearmController.Item.LocalizedShortName();
@@ -231,26 +244,23 @@ namespace TarkovVR.Source.Weapons
                 return null;
             }
 
-            GameObject sampleRoot = weaponRoot.parent.gameObject;
-            Transform[] saved = sampleRoot.GetComponentsInChildren<Transform>(true);
-            Vector3[] savedPositions = new Vector3[saved.Length];
-            Quaternion[] savedRotations = new Quaternion[saved.Length];
-            Vector3[] savedScales = new Vector3[saved.Length];
-            for (int index = 0; index < saved.Length; index++)
-            {
-                savedPositions[index] = saved[index].localPosition;
-                savedRotations[index] = saved[index].localRotation;
-                savedScales[index] = saved[index].localScale;
-            }
-
+            GameObject sampler = new GameObject("VRReloadReleaseSampler");
             try
             {
+                sampler.transform.localScale = weaponRoot.parent.lossyScale;
+                sampler.AddComponent<Animator>();
+                Dictionary<Transform, Transform> copies = new Dictionary<Transform, Transform>();
+                List<Transform> sampledParts = new List<Transform>();
+                foreach (Transform part in parts)
+                    sampledParts.Add(CopyBoneChain(part, weaponRoot, sampler.transform, copies));
+                Transform sampledWell = well != null ? CopyBoneChain(well, weaponRoot, sampler.transform, copies) : null;
+
                 int measured = 0;
                 foreach (AnimationClip clip in animatorController.animationClips)
                 {
                     if (clip == null || clip.name.IndexOf("mag_in", StringComparison.OrdinalIgnoreCase) < 0)
                         continue;
-                    MagazineReleaseMotion motion = MeasureReleaseInClip(clip, sampleRoot, parts, well, gunName);
+                    MagazineReleaseMotion motion = MeasureReleaseInClip(clip, sampler, sampledParts, sampledWell, gunName);
                     if (motion != null)
                         return motion;
                     if (++measured >= maxInsertClipsMeasured)
@@ -264,17 +274,25 @@ namespace TarkovVR.Source.Weapons
             }
             finally
             {
-                for (int index = 0; index < saved.Length; index++)
-                {
-                    if (saved[index] == null)
-                        continue;
-                    saved[index].localPosition = savedPositions[index];
-                    saved[index].localRotation = savedRotations[index];
-                    saved[index].localScale = savedScales[index];
-                }
+                UnityEngine.Object.Destroy(sampler);
             }
             Plugin.MyLog.LogInfo($"[VRReload] {gunName}: the mag release doesn't move in its insert animation");
             return null;
+        }
+
+        // An empty object for the bone and each parent up to Weapon_root, named and posed like the gun's
+        private static Transform CopyBoneChain(Transform bone, Transform weaponRoot, Transform samplerRoot, Dictionary<Transform, Transform> copies)
+        {
+            if (copies.TryGetValue(bone, out Transform copy))
+                return copy;
+            Transform parentCopy = bone == weaponRoot ? samplerRoot : CopyBoneChain(bone.parent, weaponRoot, samplerRoot, copies);
+            copy = new GameObject(bone.name).transform;
+            copy.SetParent(parentCopy, worldPositionStays: false);
+            copy.localPosition = bone.localPosition;
+            copy.localRotation = bone.localRotation;
+            copy.localScale = bone.localScale;
+            copies[bone] = copy;
+            return copy;
         }
 
         private static MagazineReleaseMotion MeasureReleaseInClip(AnimationClip clip, GameObject sampleRoot, List<Transform> parts, Transform well, string gunName)
@@ -333,7 +351,7 @@ namespace TarkovVR.Source.Weapons
             if (mainPart < 0 || peakTravel < 0.5f)
             {
                 if (well != null && deepest < 0.005f)
-                    Plugin.MyLog.LogWarning($"[VRReload] {gunName}: sampling '{clip.name}' didn't move the magazine either, so the measurement doesn't work on this gun");
+                    Plugin.MyLog.LogWarning($"[VRReload] {gunName}: sampling '{clip.name}' (from '{sampleRoot.transform.GetChild(0).name}') didn't move the magazine either, so the measurement doesn't work on this gun");
                 return null;
             }
 
@@ -421,7 +439,7 @@ namespace TarkovVR.Source.Weapons
             OwnsOffHand = true;
         }
 
-        private static void UpdateSeatedHold(bool gripReleased, bool triggerPressed)
+        private static void UpdateSeatedHold(bool gripReleased)
         {
             FirearmController firearmController = seatedHoldFor;
             Weapon weapon = firearmController.Item;
@@ -436,12 +454,7 @@ namespace TarkovVR.Source.Weapons
             }
             Vector3 handOffMagazine = VRGlobals.vrPlayer.LeftHand.transform.position - seatedHoldWell.TransformPoint(handAtSeatInWell);
             if (handOffMagazine.sqrMagnitude > railLateralEscape * railLateralEscape)
-            {
                 EndSeatedHold();
-                return;
-            }
-            if (triggerPressed)
-                ReleaseBolt(firearmController);
         }
 
         private static void EndSeatedHold()
@@ -449,6 +462,67 @@ namespace TarkovVR.Source.Weapons
             seatedHoldFor = null;
             seatedHoldWell = null;
             ReleaseHandLatch();
+        }
+
+        // The open off hand coming into the bolt catch fast (against the gun hand, which carries the gun) is a slap on it,
+        // the way an AR's bolt is released. Only coming in counts: a hand already resting there has to leave first.
+        private static void UpdateBoltSlap(bool handFree)
+        {
+            FirearmController firearmController = null;
+            bool canSlap = slapBoltRelease && handFree && TryGetMagazineGun(out firearmController, out _, out _)
+                && !VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached
+                && (VRGlobals.handsInteractionController == null || VRGlobals.handsInteractionController.heldItem == null);
+            bool atCatch = false;
+            Vector3 catchPoint = Vector3.zero;
+            bool hasCatchPoint = canSlap && TryGetBoltCatchPoint(firearmController, out catchPoint);
+            if (hasCatchPoint)
+            {
+                atCatch = (OffHandPalm() - catchPoint).sqrMagnitude <= boltSlapRadius * boltSlapRadius;
+                if (atCatch && !palmWasAtBoltCatch)
+                {
+                    float speed = (ControllerVelocity.GetSteamVRVelocity(OffHandSource()) - ControllerVelocity.GetSteamVRVelocity(GunHandSource())).magnitude;
+                    if (debugLog)
+                        Plugin.MyLog.LogInfo($"[VRReload] hand at the bolt catch at {speed:0.00} m/s (slap from {boltSlapSpeed:0.00})");
+                    if (speed >= boltSlapSpeed)
+                        ReleaseBolt(firearmController);
+                }
+            }
+            palmWasAtBoltCatch = atCatch;
+            SetZoneViz(ref boltCatchZoneViz, debugZones && hasCatchPoint, catchPoint, boltSlapRadius,
+                atCatch ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0f, 1f, 0.3f));
+        }
+
+        // The bolt catch paddle (a part named like bolt_catch), else the chamber: on the gun's side by the receiver
+        private static bool TryGetBoltCatchPoint(FirearmController firearmController, out Vector3 point)
+        {
+            if (boltCatchFor != firearmController)
+            {
+                boltCatchFor = firearmController;
+                boltCatchPart = null;
+                if (firearmController.WeaponRoot != null)
+                {
+                    foreach (Transform part in firearmController.WeaponRoot.GetComponentsInChildren<Transform>(true))
+                    {
+                        if (part.name.IndexOf("bolt_catch", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            boltCatchPart = part;
+                            break;
+                        }
+                    }
+                }
+                if (boltCatchPart == null)
+                {
+                    Transform[] chamberBones = firearmController.Firearms != null ? firearmController.Firearms._patronInWeaponTransforms : null;
+                    boltCatchPart = chamberBones != null && chamberBones.Length > 0 ? chamberBones[0] : null;
+                }
+            }
+            point = boltCatchPart != null ? boltCatchPart.position : Vector3.zero;
+            return boltCatchPart != null;
+        }
+
+        private static SteamVR_Input_Sources GunHandSource()
+        {
+            return VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
         }
 
         // A locked-back bolt runs forward, unless an empty magazine on an empty chamber holds it (its follower keeps the

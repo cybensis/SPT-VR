@@ -280,7 +280,7 @@ namespace TarkovVR.Source.Weapons
             CheckGroundMagazineMove();
 
             if (HoldingSeatedMagazine)
-                UpdateSeatedHold(gripReleased, triggerPressed);
+                UpdateSeatedHold(gripReleased);
             if (HoldingMagazine)
             {
                 if (!HoldIsStillValid())
@@ -301,6 +301,7 @@ namespace TarkovVR.Source.Weapons
             UpdateMagazineReleaseButton(releaseState);
 
             bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine;
+            UpdateBoltSlap(handFree: !handBusy);
             if (!handBusy)
                 TryTakeOverGroundMagazine();
             KeepGroundMagazineHidden();
