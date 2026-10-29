@@ -279,6 +279,8 @@ namespace TarkovVR.Source.Weapons
                 TryForceExpectedOperation();
             CheckGroundMagazineMove();
 
+            if (HoldingSeatedMagazine)
+                UpdateSeatedHold(gripReleased, triggerPressed);
             if (HoldingMagazine)
             {
                 if (!HoldIsStillValid())
@@ -293,15 +295,19 @@ namespace TarkovVR.Source.Weapons
                 else
                     UpdateChargingHandle(triggerReleased);
             }
+            if (boltReleaseFor != null)
+                UpdateBoltRelease();
             UpdateHandLatch();
+            UpdateMagazineReleaseButton(releaseState);
 
-            if (!HoldingMagazine && !HoldingChargingHandle)
+            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine;
+            if (!handBusy)
                 TryTakeOverGroundMagazine();
             KeepGroundMagazineHidden();
 
             bool reaching = false;
             OffHandAtChargingHandle = false;
-            if (!HoldingMagazine && !HoldingChargingHandle && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
+            if (!handBusy && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
             {
                 Vector3 palm = OffHandPalm();
                 bool supporting = VRGlobals.vrPlayer.isSupporting;
@@ -322,7 +328,7 @@ namespace TarkovVR.Source.Weapons
                 else if (gripPressed && inPouchZone)
                     GrabFromPouch(firearmController, weapon, magazineSlot);
             }
-            OwnsOffHand = HoldingMagazine || HoldingChargingHandle || reaching;
+            OwnsOffHand = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || reaching;
 
             UpdateZoneViz();
         }
@@ -768,17 +774,26 @@ namespace TarkovVR.Source.Weapons
             bool seated = railPosition <= 0f && railBlend >= 1f;
             if (seated)
             {
+                // Seated with the grip still held, the hand stays on it (the bolt release is under it)
+                Transform well = magazineWell;
+                FirearmController firearmController = heldForFirearm;
                 if (heldSource == HeldMagazineSource.FromGun)
                 {
                     // The gun's own magazine pushed back in: nothing changed in the inventory
                     PlayGunSound(heldForFirearm, "MagIn");
                     Pulse(0.6f, 0.06f);
                     CancelHold();
+                    if (!gripReleased)
+                        BeginSeatedHold(firearmController, well);
                     return;
                 }
                 if (heldForFirearm.Item.GetCurrentMagazine() == null && heldForFirearm.CurrentOperation is FirearmController.Idling
                     && GroundMagazineMoveReady() && TryInsert())
+                {
+                    if (!gripReleased)
+                        BeginSeatedHold(firearmController, well);
                     return;
+                }
             }
 
             if (gripReleased)
@@ -1530,7 +1545,7 @@ namespace TarkovVR.Source.Weapons
             Vector3[] pose = null;
             if (heldSource == HeldMagazineSource.FromGun || HoldingChargingHandle)
                 pose = MAGAZINE_PULL_FINGERS;
-            else if (heldSource == HeldMagazineSource.FromPouch || heldSource == HeldMagazineSource.FromGround)
+            else if (heldSource == HeldMagazineSource.FromPouch || heldSource == HeldMagazineSource.FromGround || HoldingSeatedMagazine)
                 pose = MAGAZINE_INSERT_FINGERS;
             if (pose != null)
                 fingerPoseShown = pose;
