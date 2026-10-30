@@ -25,7 +25,7 @@ namespace TarkovVR.Source.Weapons
     //  - the gun's magazine is only hidden while you hold it; letting go decides: back in the well = nothing changed,
     //    at the chest = into your rig/pockets, anywhere else = it drops to the ground where you let go
     //  - a new magazine stays in your rig until it is seated; letting go of it anywhere else puts it back
-    // B double-tap (Y left-handed) drops the magazine straight out of the gun.
+    // B (Y left-handed) drops the magazine straight out of the gun: one press with Manual Reload, a double tap without.
     public static partial class VRReloadController
     {
         public static bool enabled = true;
@@ -240,8 +240,7 @@ namespace TarkovVR.Source.Weapons
         private static BaseSoundPlayer gunSoundPlayer;
 
         private static readonly List<Magazine> reachableMagazines = new List<Magazine>();
-        private static Transform cachedRendererRoot;
-        private static Renderer[] cachedRenderers;
+        private static readonly List<Renderer> magazineRenderers = new List<Renderer>();
         private static GameObject grabZoneViz, pouchZoneViz, wellZoneViz;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -333,6 +332,10 @@ namespace TarkovVR.Source.Weapons
                 else if (gripPressed && inPouchZone)
                     GrabFromPouch(firearmController, weapon, magazineSlot);
             }
+            // Manual Reload, like the real button: B lets the magazine fall out of the well, unless the off hand has it
+            // (on the track, still on it from seating it, or cupping it from the support grip just above)
+            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine)
+                TryReleaseMagazine();
             OwnsOffHand = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || reaching;
 
             UpdateZoneViz();
@@ -1244,7 +1247,7 @@ namespace TarkovVR.Source.Weapons
                 Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} dropped");
         }
 
-        // B double-tap (Y left-handed): the magazine falls out of the well (into the rig in the hideout). Returns false
+        // B (Y left-handed): the magazine falls out of the well (into the rig in the hideout). Returns false
         // when it doesn't apply, so B keeps its old job on that gun.
         public static bool TryReleaseMagazine()
         {
@@ -1604,22 +1607,18 @@ namespace TarkovVR.Source.Weapons
             ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
             if (magazineView == null || magazineView.ItemView == null)
                 return false;
-            if (cachedRendererRoot != magazineView.ItemView)
-            {
-                cachedRendererRoot = magazineView.ItemView;
-                cachedRenderers = magazineView.ItemView.GetComponentsInChildren<Renderer>();
-            }
-            if (cachedRenderers == null || cachedRenderers.Length == 0)
+            // Read fresh each time, not cached: the model and its cartridges come from Tarkov's pools, and a cached list
+            // kept cartridges that had gone back to the pool and on into a dropped magazine on the ground, pulling the
+            // center (and the grab zone) off the gun
+            magazineView.ItemView.GetComponentsInChildren(false, magazineRenderers);
+            if (magazineRenderers.Count == 0)
             {
                 magazineCenter = magazineView.ItemView.position;
                 return true;
             }
-            Bounds bounds = cachedRenderers[0].bounds;
-            for (int i = 1; i < cachedRenderers.Length; i++)
-            {
-                if (cachedRenderers[i] != null)
-                    bounds.Encapsulate(cachedRenderers[i].bounds);
-            }
+            Bounds bounds = magazineRenderers[0].bounds;
+            for (int i = 1; i < magazineRenderers.Count; i++)
+                bounds.Encapsulate(magazineRenderers[i].bounds);
             magazineCenter = bounds.center;
             return true;
         }

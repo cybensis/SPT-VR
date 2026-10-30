@@ -104,7 +104,7 @@ namespace TarkovVR.Source.Settings
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
-            // B no longer runs Tarkov's reload on guns with detachable magazines: hold = mag release, double tap = drop
+            // B no longer runs Tarkov's reload on guns with detachable magazines: a press drops the magazine, held = the off hand can pull it out
             public bool manualReload { get; set; }
 
             // Vive Wand controller settings
@@ -514,7 +514,7 @@ namespace TarkovVR.Source.Settings
             chestSlingToggle.Toggle.UpdateValue(settings.chestSling);
 
             // Manual reload (VRReloadController): on guns with detachable magazines B stops running Tarkov's
-            // reload; hold it to release the magazine so the off hand can pull it, double tap drops it.
+            // reload; a press drops the magazine, hold it so the off hand can pull it out.
             manualReloadToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             manualReloadToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
             manualReloadToggle.Toggle._onValueChanged = SetManualReloadOn;
