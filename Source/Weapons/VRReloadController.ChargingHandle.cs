@@ -73,6 +73,7 @@ namespace TarkovVR.Source.Weapons
         // The gun a magazine went into with its bolt forward on an empty chamber: Tarkov's insert chambered the top round,
         // but it's still in the magazine until the handle is racked. On the weapon, so it holds across a weapon swap.
         private static Weapon weaponWaitingForRack;
+        private static bool insertNeedsRack;                // the insert under way went in on a closed bolt and an empty chamber
 
         private static bool WaitingForRack(Weapon weapon)
         {

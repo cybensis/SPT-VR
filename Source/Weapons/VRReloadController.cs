@@ -1189,7 +1189,7 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             // Bolt forward on an empty chamber: the round the insert chambers waits for the handle (a locked-back bolt
             // already holds it off). Guns without a handle we can work keep Tarkov's chambering.
-            bool needsRack = weapon.ChamberAmmoCount == 0 && !firearmController.FirearmsAnimator.GetBoltCatch()
+            insertNeedsRack = weapon.ChamberAmmoCount == 0 && !firearmController.FirearmsAnimator.GetBoltCatch()
                 && chargingHandle && TryGetChargingHandle(firearmController, weapon, out _);
             if (heldSource == HeldMagazineSource.FromGround)
                 ExpectGroundMagazineGone();
@@ -1198,11 +1198,9 @@ namespace TarkovVR.Source.Weapons
             ExpectOperation(ExpectedOperation.Insert, firearmController);
             inventoryController.TryRunNetworkTransaction(moveResult);
             TryForceExpectedOperation();
-            if (needsRack && weapon.ChamberAmmoCount > 0)
-                weaponWaitingForRack = weapon;
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] seated {magazine.LocalizedShortName()}{(WaitingForRack(weapon) ? ", the round waits for the handle" : "")}");
+                Plugin.MyLog.LogInfo($"[VRReload] seated {magazine.LocalizedShortName()}");
             PlayGunSound(firearmController, "MagIn");
             Pulse(0.8f, 0.07f);
             return true;
@@ -1378,6 +1376,14 @@ namespace TarkovVR.Source.Weapons
                         insertOperation.OnAddAmmoInChamber();
                     firearmController.FirearmsAnimator.Animator.Play(firearmController.FirearmsAnimator.FullIdleStateName, 1, 0.1f);
                     FinishForcedOperation(firearmController);
+                    // Here, not in TryInsert: the move lands a frame later, and only then has Tarkov chambered the round
+                    // (InsertMagResult.Run, as this operation starts)
+                    if (insertNeedsRack && firearmController.Item.ChamberAmmoCount > 0)
+                    {
+                        weaponWaitingForRack = firearmController.Item;
+                        Plugin.MyLog.LogInfo($"[VRReload] {firearmController.Item.LocalizedShortName()}: magazine in on an empty chamber, the round waits for the handle");
+                    }
+                    insertNeedsRack = false;
                 }
                 else if (expectedOperation == ExpectedOperation.Rechamber && operation is FirearmController.RechamberOperation)
                 {
