@@ -64,16 +64,20 @@ namespace TarkovVR.Source.Weapons
         public static bool HoldingMagazine => heldSource != HeldMagazineSource.None;
         public static bool HoldingGunMagazine => heldSource == HeldMagazineSource.FromGun;   // still in the gun as far as Tarkov knows: no firing
 
-        // No firing: the gun's magazine is out in the hand, the charging handle is being worked, or the bolt is locked back
-        // on a round (Tarkov's insert chambers one into a locked-back gun; it has to be racked first). Locked back on an
-        // empty chamber the trigger goes through: Tarkov dry-fires (the click, the finger) without looking at the bolt catch.
-        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || (BoltLockedBack && ChamberLoaded);
+        // No firing: the gun's magazine is out in the hand, the charging handle is being worked, or the round in the chamber
+        // is still in the magazine (Tarkov's insert chambers one at once; it has to be racked first). On a truly empty
+        // chamber the trigger goes through: Tarkov dry-fires (the click, the finger) without looking at the bolt catch.
+        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine;
 
         private static bool ChamberLoaded => VRGlobals.firearmController != null && VRGlobals.firearmController.Item != null
             && VRGlobals.firearmController.Item.ChamberAmmoCount > 0;
 
-        // Locked back on that round: the trigger clicks like an empty gun, it's never handed to Tarkov (it would fire)
-        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && BoltLockedBack && ChamberLoaded;
+        // The round Tarkov's insert chambered: the bolt is locked back on it, or it went in with the bolt forward and the
+        // handle hasn't been racked
+        private static bool RoundStillInMagazine => ChamberLoaded && (BoltLockedBack || WaitingForRack(VRGlobals.firearmController.Item));
+
+        // On that round the trigger clicks like an empty gun, it's never handed to Tarkov (it would fire)
+        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && RoundStillInMagazine;
 
         // Tarkov's own empty-gun trigger (Idling.SetTriggerPressed: SetAmmoInChamber, then SetFire) with the chamber shown
         // empty, as it looks with the bolt open: the animator plays its dry fire, the click and the finger. Local only:
@@ -1154,6 +1158,11 @@ namespace TarkovVR.Source.Weapons
 
             Magazine magazine = heldMagazine;
             FirearmController firearmController = heldForFirearm;
+            Weapon weapon = firearmController.Item;
+            // Bolt forward on an empty chamber: the round the insert chambers waits for the handle (a locked-back bolt
+            // already holds it off). Guns without a handle we can work keep Tarkov's chambering.
+            bool needsRack = weapon.ChamberAmmoCount == 0 && !firearmController.FirearmsAnimator.GetBoltCatch()
+                && chargingHandle && TryGetChargingHandle(firearmController, weapon, out _);
             if (heldSource == HeldMagazineSource.FromGround)
                 ExpectGroundMagazineGone();
             CommitHold();
@@ -1161,9 +1170,11 @@ namespace TarkovVR.Source.Weapons
             ExpectOperation(ExpectedOperation.Insert, firearmController);
             inventoryController.TryRunNetworkTransaction(moveResult);
             TryForceExpectedOperation();
+            if (needsRack && weapon.ChamberAmmoCount > 0)
+                weaponWaitingForRack = weapon;
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] seated {magazine.LocalizedShortName()}");
+                Plugin.MyLog.LogInfo($"[VRReload] seated {magazine.LocalizedShortName()}{(WaitingForRack(weapon) ? ", the round waits for the handle" : "")}");
             PlayGunSound(firearmController, "MagIn");
             Pulse(0.8f, 0.07f);
             return true;

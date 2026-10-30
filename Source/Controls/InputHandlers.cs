@@ -575,7 +575,7 @@ namespace TarkovVR.Source.Controls
                 // No trigger finger on the grip (slung, or support-hand-only hold) = no firing; if the
                 // release happened mid-burst, end it. Same while VRReloadController has the gun apart: the
                 // magazine out in the hand (Tarkov still thinks it's in the gun), the charging handle being
-                // worked, or the bolt locked back on a round.
+                // worked, or the chambered round is still in the magazine (not racked yet).
                 if (detached || VRReloadController.BlocksFiring)
                 {
                     if (isShooting)
@@ -583,7 +583,7 @@ namespace TarkovVR.Source.Controls
                         command = ECommand.EndShooting;
                         isShooting = false;
                     }
-                    // Locked back on the round Tarkov's insert chambered: the trigger only clicks
+                    // On the round Tarkov's insert chambered, not racked yet: the trigger only clicks
                     bool dryFiring = !detached && VRReloadController.TriggerOnlyClicks && primaryHandTriggerAmount > 0.5f;
                     if (dryFiring != isDryFiring)
                     {

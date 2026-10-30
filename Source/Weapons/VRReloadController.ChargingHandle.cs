@@ -10,7 +10,8 @@ namespace TarkovVR.Source.Weapons
     //    out and the next one chambered as the bolt comes back
     //  - let go from a full pull -> the bolt slams forward; a bolt locked back (a magazine swapped by hand into an empty
     //    gun) closes. Tarkov already put the round in the chamber when the magazine went in; it has no operation that
-    //    chambers on its own.
+    //    chambers on its own. Same for a magazine put into a gun with its bolt forward on an empty chamber
+    //    (WaitingForRack): that round counts as in the magazine until a full pull.
     // The bolt lock is Tarkov's bolt-catch animator flag. Tarkov clears it in its own reload; while it's on the gun
     // doesn't fire (BlocksFiring).
     // The bolt rides back with the handle so the chamber shows: Tarkov's own locked-back pose (the "Catch" layer, or the
@@ -51,7 +52,7 @@ namespace TarkovVR.Source.Weapons
         // The chambered round while the bolt is open: Tarkov's round model sits on the patron_in_weapon bone, shown and
         // hidden by the clips' events
         private static bool showingChamber;
-        private static bool chamberEmptiedByPull;           // the pull threw the round out: empty until the bolt goes forward
+        private static bool chamberShownEmpty;              // the pull threw the round out, or it's still in the magazine: empty until the bolt goes forward
         private static Transform chamberBone;
         private static bool chamberBoneWasActive;
         private static Transform chamberedRound;
@@ -68,6 +69,18 @@ namespace TarkovVR.Source.Weapons
         private static Transform handleMeshesFor;
         private static MeshFilter[] handleMeshes;
         private static GameObject handleZoneViz;
+
+        // The gun a magazine went into with its bolt forward on an empty chamber: Tarkov's insert chambered the top round,
+        // but it's still in the magazine until the handle is racked. On the weapon, so it holds across a weapon swap.
+        private static Weapon weaponWaitingForRack;
+
+        private static bool WaitingForRack(Weapon weapon)
+        {
+            // The round left some other way (unloaded in the inventory)
+            if (weaponWaitingForRack != null && weaponWaitingForRack.ChamberAmmoCount == 0)
+                weaponWaitingForRack = null;
+            return weapon != null && weapon == weaponWaitingForRack;
+        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -213,7 +226,8 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             PlayGunSound(firearmController, "HandleOut");
             Pulse(0.5f, 0.04f);
-            if (firearmController.FirearmsAnimator.GetBoltCatch() || weapon.ChamberAmmoCount == 0)
+            // Nothing in the chamber to throw out (a round still in the magazine only goes in as the bolt closes)
+            if (firearmController.FirearmsAnimator.GetBoltCatch() || weapon.ChamberAmmoCount == 0 || WaitingForRack(weapon))
                 return;
             if (!(firearmController.CurrentOperation is FirearmController.Idling))
                 return;
@@ -222,7 +236,7 @@ namespace TarkovVR.Source.Weapons
             ExpectOperation(ExpectedOperation.Rechamber, firearmController);
             VRGlobals.player.InventoryController.RechamberWeapon(weapon);
             TryForceExpectedOperation();
-            chamberEmptiedByPull = true;
+            chamberShownEmpty = true;
         }
 
         private static void LetGoOfChargingHandle(bool snapForward)
@@ -267,10 +281,11 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         // Only a bolt this pull opens: one already locked back (a magazine swapped into an empty gun) has its next round
-        // counted in the chamber by Tarkov's insert, but it's still in the magazine until the bolt goes forward
+        // counted in the chamber by Tarkov's insert, but it's still in the magazine until the bolt goes forward. The same
+        // round under a bolt that was forward (WaitingForRack) is hidden while it opens.
         private static void BeginChamberView(FirearmController firearmController, Weapon weapon)
         {
-            chamberEmptiedByPull = false;
+            chamberShownEmpty = WaitingForRack(weapon);
             Transform[] chamberBones = firearmController.Firearms._patronInWeaponTransforms;
             chamberBone = chamberBones != null && chamberBones.Length > 0 ? chamberBones[0] : null;
             showingChamber = showChamberedRound && boltFollowsHandle && chamberBone != null
@@ -291,12 +306,13 @@ namespace TarkovVR.Source.Weapons
 
         // LateUpdate, after the animator has posed the bolt this frame (read in Update it trails a frame behind).
         // The round rides the bolt face; the model itself isn't animated, so its offset stays until the next write.
-        // Once the rechamber has thrown it out (its model goes back to Tarkov's pool) the next one is hidden.
+        // Once the rechamber has thrown it out (its model goes back to Tarkov's pool) the next one is hidden, and so is a
+        // round still in the magazine.
         public static void ApplyChamberView()
         {
             if (!showingChamber || chamberBone == null || handleForFirearm == null)
                 return;
-            if (chamberEmptiedByPull)
+            if (chamberShownEmpty)
             {
                 chamberBone.gameObject.SetActive(false);
                 return;
@@ -390,13 +406,20 @@ namespace TarkovVR.Source.Weapons
                 SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : 0f);
         }
 
-        // Let go from a full pull: a bolt locked back closes (unless an empty magazine holds it)
+        // Let go from a full pull: a bolt locked back closes (unless an empty magazine holds it), and a round still in the
+        // magazine goes into the chamber. With no magazine in there's nothing to strip: it keeps waiting.
         private static void BoltSlamsForward(FirearmController firearmController)
         {
             Weapon weapon = firearmController.Item;
             PlayGunSound(firearmController, "BoltIn");
             PlayGunSound(firearmController, "HandleIn");
             Pulse(0.8f, 0.06f);
+            if (WaitingForRack(weapon) && weapon.GetCurrentMagazine() != null)
+            {
+                if (debugLog)
+                    Plugin.MyLog.LogInfo("[VRReload] racked: the round goes into the chamber");
+                weaponWaitingForRack = null;
+            }
             if (firearmController.FirearmsAnimator.GetBoltCatch())
             {
                 if (debugLog)
