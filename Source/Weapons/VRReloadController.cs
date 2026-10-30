@@ -139,6 +139,7 @@ namespace TarkovVR.Source.Weapons
 
         private static float fingerWeight;
         private static Vector3[] fingerPoseShown;
+        private static Vector3[] magazineHandFingers;       // the pose the hand took on the magazine, kept until it lets go (seating, pulling it back out)
         private static Transform[] leftPalmBones;
 
         // Committed to an inventory move: the prop stays in the hand and the gun's magazine stays hidden until
@@ -283,7 +284,7 @@ namespace TarkovVR.Source.Weapons
             CheckGroundMagazineMove();
 
             if (HoldingSeatedMagazine)
-                UpdateSeatedHold(gripReleased);
+                UpdateSeatedHold(gripReleased, releasePressed);
             if (HoldingMagazine)
             {
                 if (!HoldIsStillValid())
@@ -416,7 +417,9 @@ namespace TarkovVR.Source.Weapons
             return (palm - pouchCenter).sqrMagnitude <= chestPouchRadius * chestPouchRadius;
         }
 
-        private static void GrabFromGun(FirearmController firearmController, Weapon weapon, Slot magazineSlot, bool takenWithRelease)
+        // keepHandPose: the rendered hand is already on the magazine (the seated hold) and stays exactly there, fingers too,
+        // instead of starting at the controller and snapping into the animation's grip
+        private static void GrabFromGun(FirearmController firearmController, Weapon weapon, Slot magazineSlot, bool takenWithRelease, bool keepHandPose = false)
         {
             ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
             Magazine magazine = weapon.GetCurrentMagazine();
@@ -458,9 +461,17 @@ namespace TarkovVR.Source.Weapons
             magazineLeftWell = false;
             magazineCatchPassed = false;
             grabbedWithRelease = takenWithRelease;
+            Vector3 handPosition = handLatch != null ? handLatch.position : Vector3.zero;
+            Quaternion handRotation = handLatch != null ? handLatch.rotation : Quaternion.identity;
             StartRail(pullingOut: true, startPosition: 0f);
-            if (snapHandToGrip && heldReloadGrip != null)
-                SnapHandToGrip(heldReloadGrip.oldMagazinePosition, heldReloadGrip.oldMagazineRotation);
+            if (keepHandPose)
+                handLatch.SetPositionAndRotation(handPosition, handRotation);
+            else
+            {
+                magazineHandFingers = MAGAZINE_PULL_FINGERS;
+                if (snapHandToGrip && heldReloadGrip != null)
+                    SnapHandToGrip(heldReloadGrip.oldMagazinePosition, heldReloadGrip.oldMagazineRotation);
+            }
 
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRReload] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
@@ -656,6 +667,7 @@ namespace TarkovVR.Source.Weapons
             magazineLeftWell = true;
             onRail = false;
             railCatchArmed = true;
+            magazineHandFingers = MAGAZINE_INSERT_FINGERS;
             return true;
         }
 
@@ -1059,6 +1071,19 @@ namespace TarkovVR.Source.Weapons
             }
             if (handLatchReleasing)
             {
+                // The foregrip grab took the arm while the hand was still easing back (VRPlayerManager's two-handing edge gives
+                // it to Tarkov's own left-hand IK: target null). It goes there now: asserting ours on top, then handing the
+                // arm to LeftHand when the ease ended, left the hand following the controller up the gun instead of
+                // locking onto the foregrip. (The ease never ends while the hand moves: it trails the controller.)
+                if (VRGlobals.vrPlayer.isSupporting)
+                {
+                    handLatch.SetParent(null, worldPositionStays: true);
+                    if (VRGlobals.ikManager != null && VRGlobals.ikManager.leftArmIk != null && VRGlobals.ikManager.leftArmIk.solver.target == handLatch)
+                        VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    handLatched = false;
+                    handLatchReleasing = false;
+                    return;
+                }
                 Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
                 float ease = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(handReleaseTime / 3f, 0.001f));
                 handLatch.position = Vector3.Lerp(handLatch.position, leftHand.position, ease);
@@ -1558,10 +1583,10 @@ namespace TarkovVR.Source.Weapons
         {
             // The charging handle has no recording yet: the magazine pull's thumb-and-index pinch is the closest grip
             Vector3[] pose = null;
-            if (heldSource == HeldMagazineSource.FromGun || HoldingChargingHandle)
+            if (HoldingChargingHandle)
                 pose = MAGAZINE_PULL_FINGERS;
-            else if (heldSource == HeldMagazineSource.FromPouch || heldSource == HeldMagazineSource.FromGround || HoldingSeatedMagazine)
-                pose = MAGAZINE_INSERT_FINGERS;
+            else if (HoldingMagazine || HoldingSeatedMagazine)
+                pose = magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
             if (pose != null)
                 fingerPoseShown = pose;
 

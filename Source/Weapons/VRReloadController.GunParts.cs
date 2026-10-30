@@ -616,7 +616,7 @@ namespace TarkovVR.Source.Weapons
             OwnsOffHand = true;
         }
 
-        private static void UpdateSeatedHold(bool gripReleased)
+        private static void UpdateSeatedHold(bool gripReleased, bool releasePressed)
         {
             FirearmController firearmController = seatedHoldFor;
             Weapon weapon = firearmController.Item;
@@ -627,6 +627,18 @@ namespace TarkovVR.Source.Weapons
             if (!valid || gripReleased)
             {
                 EndSeatedHold();
+                return;
+            }
+            // B with the hand still on it: the catch lets go and the hand pulls it back out, like gripping it and pressing B
+            if (releasePressed && CanStartGrab(out FirearmController grabFirearm, out Weapon grabWeapon, out Slot magazineSlot)
+                && grabFirearm == firearmController && grabWeapon.GetCurrentMagazine() != null)
+            {
+                seatedHoldFor = null;
+                seatedHoldWell = null;
+                GrabFromGun(grabFirearm, grabWeapon, magazineSlot, takenWithRelease: false, keepHandPose: true);
+                // Refused (a Feed malfunction): the hand comes off as when the hold ends
+                if (!HoldingGunMagazine)
+                    ReleaseHandLatch();
                 return;
             }
             Vector3 handOffMagazine = VRGlobals.vrPlayer.LeftHand.transform.position - seatedHoldWell.TransformPoint(handAtSeatInWell);
