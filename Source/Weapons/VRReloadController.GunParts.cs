@@ -15,7 +15,8 @@ namespace TarkovVR.Source.Weapons
     //  - the mag release button goes in while a magazine rides up the last of the well and pops back out as it seats,
     //    and is held in while B (the mag release, Manual Reload) is down or the gun's magazine is pulled out by hand.
     //    Each gun's button moves its own way, so how far and which way is measured from the gun's own insert animation
-    //    the first time it's needed.
+    //    the first time it's needed. Pressed by B or the pull-out, the gun hand's index finger presses it, posed like the
+    //    gun's own mag-out animation has it with the button all the way in.
     //  - a magazine just seated stays in the hand while the grip is held
     //  - slapping the bolt catch with the open off hand releases a locked-back bolt: it runs forward (Tarkov's locked-back
     //    pose eased out, the bolt catch paddle is part of it)
@@ -23,6 +24,7 @@ namespace TarkovVR.Source.Weapons
     {
         public static bool magazineReleaseButton = true;
         public static float releaseButtonTime = 0.06f;      // s for the button to go all the way in or out (Tarkov's mag-out: ~0.1)
+        public static bool releaseFinger = true;            // the gun hand's index finger presses the button
         public static bool holdSeatedMagazine = true;       // the hand stays on a magazine it seated while the grip is held
         public static float boltReleaseTime = 0.08f;        // s for the bolt to run forward (Tarkov: the paddle 0.07, then the bolt 0.13)
         public static bool slapBoltRelease = true;
@@ -40,6 +42,9 @@ namespace TarkovVR.Source.Weapons
             public Quaternion[] pressedRotationOffsets;
             public float pressStartDepth;
             public float pressFullDepth;
+            // The gun hand's index joints (knuckle to tip) with the button all the way in, in the mag-out animation. Its press
+            // is the finger alone: the markers the hand is placed on don't move. Null = no mag-out animation presses it.
+            public Quaternion[] pressFingerRotations;
         }
 
         // By weapon template id; null = measured, nothing to move
@@ -55,6 +60,13 @@ namespace TarkovVR.Source.Weapons
         private static bool releasePartsPressed;
         private static float releasePressTarget;
         private static float releasePressShown;
+
+        private static Transform[] releaseFingerJoints;
+        private static Quaternion[] releaseFingerAnimated;  // the animator's pose under ours
+        private static Quaternion[] releaseFingerWritten;   // ours, last frame
+        private static bool releaseFingerWriting;
+        private static float releaseFingerTarget;
+        private static float releaseFingerShown;
 
         private static FirearmController seatedHoldFor;
         private static Transform seatedHoldWell;
@@ -75,6 +87,7 @@ namespace TarkovVR.Source.Weapons
         private static void UpdateMagazineReleaseButton(bool releaseHeld)
         {
             releasePressTarget = 0f;
+            releaseFingerTarget = 0f;
             if (releasePartsFor != VRGlobals.firearmController)
                 ForgetReleaseParts();
             if (!magazineReleaseButton || !TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
@@ -83,7 +96,8 @@ namespace TarkovVR.Source.Weapons
                 return;
 
             // B, or the gun's magazine pulled out by hand without Manual Reload (that grab is the button press)
-            float target = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn()) ? 1f : 0f;
+            bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn());
+            float target = pressedByFinger ? 1f : 0f;
             bool inserting = HoldingMagazine && onRail && !railPullingOut;
             if (target <= 0f && !inserting)
                 return;
@@ -93,6 +107,8 @@ namespace TarkovVR.Source.Weapons
             if (inserting && railPosition > 0f)
                 target = Mathf.Max(target, Mathf.InverseLerp(releaseMotion.pressStartDepth, releaseMotion.pressFullDepth, railPosition));
             releasePressTarget = target;
+            // The magazine pushes it in on the way up, not the finger; a hand off the gun (slung, support-held) can't
+            releaseFingerTarget = pressedByFinger && releaseFinger && !ChestHang.Detached ? 1f : 0f;
         }
 
         // Called from HandsInteractionController.LateUpdate: the animator has posed the button this frame
@@ -101,6 +117,7 @@ namespace TarkovVR.Source.Weapons
             if (releaseParts == null || releasePartsFor == null || releasePartsFor != VRGlobals.firearmController)
                 return;
             releasePressShown = Mathf.MoveTowards(releasePressShown, releasePressTarget, Time.deltaTime / Mathf.Max(releaseButtonTime, 0.001f));
+            ApplyReleaseFinger();
             if (releasePressShown <= 0f)
             {
                 if (releasePartsPressed)
@@ -143,14 +160,61 @@ namespace TarkovVR.Source.Weapons
             releasePartsPressed = false;
         }
 
+        // The index joints from the animator's pose toward the pressed one, over the animator every frame. A joint still
+        // holding our value from last frame wasn't animated since: it blends from the pose it had under ours.
+        private static void ApplyReleaseFinger()
+        {
+            if (releaseFingerJoints == null)
+                return;
+            releaseFingerShown = Mathf.MoveTowards(releaseFingerShown, releaseFingerTarget, Time.deltaTime / Mathf.Max(releaseButtonTime, 0.001f));
+            if (releaseFingerShown <= 0f)
+            {
+                PutReleaseFingerBack();
+                return;
+            }
+            Quaternion[] pressedRotations = releaseMotion.pressFingerRotations;
+            for (int index = 0; index < releaseFingerJoints.Length; index++)
+            {
+                Transform joint = releaseFingerJoints[index];
+                if (joint == null)
+                    continue;
+                Quaternion current = joint.localRotation;
+                if (!releaseFingerWriting || current != releaseFingerWritten[index])
+                    releaseFingerAnimated[index] = current;
+                Quaternion written = Quaternion.Slerp(releaseFingerAnimated[index], pressedRotations[index], releaseFingerShown);
+                joint.localRotation = written;
+                releaseFingerWritten[index] = written;
+            }
+            releaseFingerWriting = true;
+        }
+
+        private static void PutReleaseFingerBack()
+        {
+            if (!releaseFingerWriting)
+                return;
+            if (releaseFingerJoints != null)
+            {
+                for (int index = 0; index < releaseFingerJoints.Length; index++)
+                {
+                    Transform joint = releaseFingerJoints[index];
+                    if (joint != null && joint.localRotation == releaseFingerWritten[index])
+                        joint.localRotation = releaseFingerAnimated[index];
+                }
+            }
+            releaseFingerWriting = false;
+        }
+
         private static void ForgetReleaseParts()
         {
             if (releasePartsPressed)
                 PutReleasePartsBack();
+            PutReleaseFingerBack();
             releasePartsFor = null;
             releaseMotion = null;
             releaseParts = null;
             releasePressShown = 0f;
+            releaseFingerJoints = null;
+            releaseFingerShown = 0f;
         }
 
         // This gun's button parts, measured once per gun type
@@ -182,7 +246,43 @@ namespace TarkovVR.Source.Weapons
             releaseParts = parts;
             releasePartRestPositions = new Vector3[parts.Length];
             releasePartRestRotations = new Quaternion[parts.Length];
+
+            Transform[] fingerJoints = motion.pressFingerRotations != null ? GunHandIndexFinger(out _) : null;
+            if (fingerJoints != null && fingerJoints.Length == motion.pressFingerRotations.Length)
+            {
+                releaseFingerJoints = fingerJoints;
+                releaseFingerAnimated = new Quaternion[fingerJoints.Length];
+                releaseFingerWritten = new Quaternion[fingerJoints.Length];
+            }
             return true;
+        }
+
+        // The gun hand's index finger, knuckle to tip (EFT: Base HumanRDigit21..23 under the right palm, the right arm
+        // IK's wrist bone), and the top of its arm (the collarbone: the mag-out clip's paths start there)
+        private static Transform[] GunHandIndexFinger(out Transform armTop)
+        {
+            armTop = null;
+            Transform palm = VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null && VRGlobals.ikManager.rightArmIk.solver != null
+                && VRGlobals.ikManager.rightArmIk.solver.bone3 != null ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null;
+            if (palm == null)
+                return null;
+            Transform knuckle = null;
+            for (int index = 0; index < palm.childCount; index++)
+            {
+                if (palm.GetChild(index).name.IndexOf("Digit2", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    knuckle = palm.GetChild(index);
+                    break;
+                }
+            }
+            if (knuckle == null || knuckle.childCount == 0 || knuckle.GetChild(0).childCount == 0)
+                return null;
+            armTop = palm;
+            while (armTop != null && armTop.name.IndexOf("Collarbone", StringComparison.OrdinalIgnoreCase) < 0)
+                armTop = armTop.parent;
+            if (armTop == null)
+                return null;
+            return new[] { knuckle, knuckle.GetChild(0), knuckle.GetChild(0).GetChild(0) };
         }
 
         private static Transform MagazineWellBone(FirearmController firearmController, Slot magazineSlot)
@@ -262,7 +362,10 @@ namespace TarkovVR.Source.Weapons
                         continue;
                     MagazineReleaseMotion motion = MeasureReleaseInClip(clip, sampler, sampledParts, sampledWell, gunName);
                     if (motion != null)
+                    {
+                        motion.pressFingerRotations = MeasurePressFinger(animatorController, sampler, sampledParts, copies, gunName);
                         return motion;
+                    }
                     if (++measured >= maxInsertClipsMeasured)
                         break;
                 }
@@ -280,12 +383,13 @@ namespace TarkovVR.Source.Weapons
             return null;
         }
 
-        // An empty object for the bone and each parent up to Weapon_root, named and posed like the gun's
-        private static Transform CopyBoneChain(Transform bone, Transform weaponRoot, Transform samplerRoot, Dictionary<Transform, Transform> copies)
+        // An empty object for the bone and each parent up to the top bone (Weapon_root, or the arm's collarbone: where the
+        // clips' paths start), named and posed like the live ones
+        private static Transform CopyBoneChain(Transform bone, Transform topBone, Transform samplerRoot, Dictionary<Transform, Transform> copies)
         {
             if (copies.TryGetValue(bone, out Transform copy))
                 return copy;
-            Transform parentCopy = bone == weaponRoot ? samplerRoot : CopyBoneChain(bone.parent, weaponRoot, samplerRoot, copies);
+            Transform parentCopy = bone == topBone ? samplerRoot : CopyBoneChain(bone.parent, topBone, samplerRoot, copies);
             copy = new GameObject(bone.name).transform;
             copy.SetParent(parentCopy, worldPositionStays: false);
             copy.localPosition = bone.localPosition;
@@ -405,6 +509,79 @@ namespace TarkovVR.Source.Weapons
             Plugin.MyLog.LogInfo($"[VRReload] {gunName} mag release from '{clip.name}':{partList}; goes in from {pressStart * 100f:0.0} cm to {pressFull * 100f:0.0} cm above seated"
                 + (timedFromAnimation ? "" : " (default, the animation presses it after seating)"));
             return motion;
+        }
+
+        // The gun hand's index joints at the moment a mag-out animation has the button furthest in (from its first frame,
+        // the hand on the grip). The finger's copy goes on the same sampler, from the collarbone down.
+        private static Quaternion[] MeasurePressFinger(RuntimeAnimatorController animatorController, GameObject sampler, List<Transform> sampledParts,
+            Dictionary<Transform, Transform> copies, string gunName)
+        {
+            if (!releaseFinger)
+                return null;
+            try
+            {
+                Transform[] fingerJoints = GunHandIndexFinger(out Transform armTop);
+                if (fingerJoints == null)
+                {
+                    Plugin.MyLog.LogInfo($"[VRReload] {gunName}: no gun hand index finger to press the mag release with");
+                    return null;
+                }
+                Transform[] sampledJoints = new Transform[fingerJoints.Length];
+                for (int index = 0; index < fingerJoints.Length; index++)
+                    sampledJoints[index] = CopyBoneChain(fingerJoints[index], armTop, sampler.transform, copies);
+
+                int partCount = sampledParts.Count;
+                Vector3[] restPositions = new Vector3[partCount];
+                Quaternion[] restRotations = new Quaternion[partCount];
+                int measured = 0;
+                foreach (AnimationClip clip in animatorController.animationClips)
+                {
+                    if (clip == null || clip.name.IndexOf("mag_out", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                    clip.SampleAnimation(sampler, 0f);
+                    for (int part = 0; part < partCount; part++)
+                    {
+                        restPositions[part] = sampledParts[part].localPosition;
+                        restRotations[part] = sampledParts[part].localRotation;
+                    }
+                    int sampleCount = Mathf.Max(2, Mathf.CeilToInt(clip.length * releaseSampleRate) + 1);
+                    float peakTravel = 0f;
+                    Quaternion[] peakJoints = new Quaternion[sampledJoints.Length];
+                    for (int sample = 1; sample < sampleCount; sample++)
+                    {
+                        clip.SampleAnimation(sampler, clip.length * sample / (sampleCount - 1));
+                        float travel = 0f;
+                        for (int part = 0; part < partCount; part++)
+                        {
+                            Transform parent = sampledParts[part].parent;
+                            Vector3 move = sampledParts[part].localPosition - restPositions[part];
+                            travel = Mathf.Max(travel, (parent != null ? parent.TransformVector(move).magnitude : move.magnitude) * 1000f
+                                + Quaternion.Angle(restRotations[part], sampledParts[part].localRotation));
+                        }
+                        if (travel <= peakTravel)
+                            continue;
+                        peakTravel = travel;
+                        for (int index = 0; index < sampledJoints.Length; index++)
+                            peakJoints[index] = sampledJoints[index].localRotation;
+                    }
+                    if (peakTravel >= 0.5f)
+                    {
+                        string jointList = "";
+                        for (int index = 0; index < sampledJoints.Length; index++)
+                            jointList += $" {sampledJoints[index].name} {fingerJoints[index].localEulerAngles.ToString("F1")} -> {peakJoints[index].eulerAngles.ToString("F1")}";
+                        Plugin.MyLog.LogInfo($"[VRReload] {gunName} mag release finger from '{clip.name}':{jointList}");
+                        return peakJoints;
+                    }
+                    if (++measured >= maxInsertClipsMeasured)
+                        break;
+                }
+                Plugin.MyLog.LogInfo($"[VRReload] {gunName}: no mag-out animation presses the mag release");
+            }
+            catch (Exception exception)
+            {
+                Plugin.MyLog.LogError($"[VRReload] {gunName}: measuring the mag release finger failed: {exception}");
+            }
+            return null;
         }
 
         // Going up the well: the magazine's depth when the button first reaches this share of its travel (between samples)
