@@ -226,6 +226,15 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             PlayGunSound(firearmController, "HandleOut");
             Pulse(0.5f, 0.04f);
+            // An empty magazine's follower pushes the catch up under the bolt. (With a round to throw out Tarkov's
+            // rechamber below sets it.)
+            if (!firearmController.FirearmsAnimator.GetBoltCatch() && BoltStaysBack(weapon))
+            {
+                if (debugLog)
+                    Plugin.MyLog.LogInfo("[VRReload] empty magazine: the bolt locks back");
+                firearmController.FirearmsAnimator.SetBoltCatch(true);
+                return;
+            }
             // Nothing in the chamber to throw out (a round still in the magazine only goes in as the bolt closes)
             if (firearmController.FirearmsAnimator.GetBoltCatch() || weapon.ChamberAmmoCount == 0 || WaitingForRack(weapon))
                 return;
@@ -411,9 +420,12 @@ namespace TarkovVR.Source.Weapons
         private static void BoltSlamsForward(FirearmController firearmController)
         {
             Weapon weapon = firearmController.Item;
-            PlayGunSound(firearmController, "BoltIn");
+            // Held by an empty magazine the bolt only comes onto the catch: no slam
+            bool heldOnCatch = firearmController.FirearmsAnimator.GetBoltCatch() && BoltStaysBack(weapon);
+            if (!heldOnCatch)
+                PlayGunSound(firearmController, "BoltIn");
             PlayGunSound(firearmController, "HandleIn");
-            Pulse(0.8f, 0.06f);
+            Pulse(heldOnCatch ? 0.4f : 0.8f, 0.06f);
             if (WaitingForRack(weapon) && weapon.GetCurrentMagazine() != null)
             {
                 if (debugLog)
