@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using EFT;
 using EFT.InventoryLogic;
 using TarkovVR.Source.Player.Interactions;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
 
@@ -25,6 +27,7 @@ namespace TarkovVR.Source.Weapons
     public static partial class VRReloadController
     {
         public static bool chargingHandle = true;
+        public static bool rackByHandOnDraw = true;        // false = Tarkov racks a gun drawn with an empty chamber itself
         public static float handleGrabRadius = 0.06f;      // m palm to the back of the charging handle to grab it
         public static float handleZoneBack = 0.05f;        // m the grab zone reaches on past that toward the stock (a capsule)
         public static float handleTravel = 0.08f;          // m the handle comes back (headset: 0.07 a touch short)
@@ -135,15 +138,63 @@ namespace TarkovVR.Source.Weapons
 
         // The gun a magazine went into with its bolt forward on an empty chamber: Tarkov's insert chambered the top round,
         // but it's still in the magazine until the handle is racked. On the weapon, so it holds across a weapon swap.
-        private static Weapon weaponWaitingForRack;
+        private static readonly HashSet<Weapon> weaponsWaitingForRack = new HashSet<Weapon>();
         private static bool insertNeedsRack;                // the insert under way went in on a closed bolt and an empty chamber
 
         private static bool WaitingForRack(Weapon weapon)
         {
+            if (weapon == null || !weaponsWaitingForRack.Contains(weapon))
+                return false;
             // The round left some other way (unloaded in the inventory)
-            if (weaponWaitingForRack != null && weaponWaitingForRack.ChamberAmmoCount == 0)
-                weaponWaitingForRack = null;
-            return weapon != null && weapon == weaponWaitingForRack;
+            if (weapon.ChamberAmmoCount == 0)
+            {
+                weaponsWaitingForRack.Remove(weapon);
+                return false;
+            }
+            return true;
+        }
+
+        // Tarkov's draw (SpawnOperation.Start) has just chambered a round because the chamber was empty, and the animator takes its racking
+        // draw while it still reads the chamber as empty (SPAWN -> OUT TO IDLE ARM on AmmoInChamber < 1). Placing the round now reads it as
+        // full, so it takes the plain draw; the round then waits for the hand, like one a magazine brought in. A gun the hand can't rack keeps
+        // Tarkov's. Not TryGetChargingHandle: the gun isn't on the rig yet, and that remembers what it finds.
+        public static void TakeRackOutOfDraw(FirearmController.SpawnOperation spawnOperation)
+        {
+            try
+            {
+                FirearmController firearmController = spawnOperation.Controller;
+                if (!rackByHandOnDraw || !enabled || !chargingHandle || spawnOperation._ammoFromMagToChamber == null || firearmController == null
+                    || firearmController._player == null || !firearmController._player.IsYourPlayer || !VRSettings.GetManualReloadOn())
+                    return;
+                Weapon weapon = firearmController.Item;
+                if (weapon == null || !CanBeRackedByHand(firearmController, weapon))
+                    return;
+                spawnOperation.OnAddAmmoInChamber();
+                // The clip's own event, if one still comes, has nothing left to do
+                spawnOperation._ammoFromMagToChamber = null;
+                weaponsWaitingForRack.Add(weapon);
+                Plugin.MyLog.LogInfo($"[VRReload] {weapon.LocalizedShortName()}: drawn on an empty chamber, the round waits for the handle");
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogError($"[VRReload] taking the rack out of the draw failed, Tarkov's stays: {exception}");
+            }
+        }
+
+        private static bool CanBeRackedByHand(FirearmController firearmController, Weapon weapon)
+        {
+            if (weapon.ReloadMode != Weapon.EReloadMode.ExternalMagazine && weapon.ReloadMode != Weapon.EReloadMode.ExternalMagazineWithInternalReloadSupport)
+                return false;
+            LoadRecordedGrips();
+            string family = AnimationFamily(firearmController);
+            if (slideBones.ContainsKey(family) || handleHolds.ContainsKey(family))
+                return true;
+            foreach (Slot slot in weapon.AllSlots)
+            {
+                if (slot.ID == EWeaponModType.mod_charge.ToString() && slot.ContainedItem != null)
+                    return true;
+            }
+            return false;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -670,7 +721,7 @@ namespace TarkovVR.Source.Weapons
             {
                 if (debugLog)
                     Plugin.MyLog.LogInfo("[VRReload] racked: the round goes into the chamber");
-                weaponWaitingForRack = null;
+                weaponsWaitingForRack.Remove(weapon);
             }
             if (firearmController.FirearmsAnimator.GetBoltCatch())
             {

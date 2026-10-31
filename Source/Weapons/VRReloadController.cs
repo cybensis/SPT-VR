@@ -1541,7 +1541,7 @@ namespace TarkovVR.Source.Weapons
                     // (InsertMagResult.Run, as this operation starts)
                     if (insertNeedsRack && firearmController.Item.ChamberAmmoCount > 0)
                     {
-                        weaponWaitingForRack = firearmController.Item;
+                        weaponsWaitingForRack.Add(firearmController.Item);
                         Plugin.MyLog.LogInfo($"[VRReload] {firearmController.Item.LocalizedShortName()}: magazine in on an empty chamber, the round waits for the handle");
                     }
                     insertNeedsRack = false;
