@@ -29,7 +29,7 @@ namespace TarkovVR.Source.Weapons
     public static partial class VRReloadController
     {
         public static bool enabled = true;
-        public static float magazineGrabRadius = 0.08f;     // m palm to the gun magazine's center to grab it
+        public static float magazineGrabRadius = 0.08f;     // m palm to the gun magazine to grab it: a capsule from the magazine's center down to its bottom
         // The mag well track: a magazine in the well only slides along the well's axis, with the hand locked on it
         public static float railLength = 0.05f;             // m a magazine slides in the well before it comes free (pulling out) / from the top to seated (putting in)
         public static float magazineCatchDistance = 0.01f;  // m Manual Reload: past this the mag catch no longer holds it, B or not
@@ -385,9 +385,44 @@ namespace TarkovVR.Source.Weapons
             // from the support grip.
             if (!VRSettings.GetManualReloadOn() && (VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting))
                 return false;
-            if (!TryGetGunMagazineCenter(firearmController, magazineSlot, out Vector3 magazineCenter))
+            return TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
+                && DistanceToSegment(palm, magazineCenter, magazineBottom) <= magazineGrabRadius;
+        }
+
+        private static float DistanceToSegment(Vector3 point, Vector3 segmentStart, Vector3 segmentEnd)
+        {
+            Vector3 segment = segmentEnd - segmentStart;
+            float along = segment.sqrMagnitude > 1e-8f ? Mathf.Clamp01(Vector3.Dot(point - segmentStart, segment) / segment.sqrMagnitude) : 0f;
+            return (point - (segmentStart + segment * along)).magnitude;
+        }
+
+        // The magazine's length is only read when the magazine changes (this runs every frame the hand is free); its center
+        // is read fresh, see TryGetGunMagazineCenter
+        private static Transform magazineShapeView;
+        private static Magazine magazineShapeFor;
+        private static Vector3 magazineShapeAxis;
+        private static float magazineShapeLength;
+
+        private static bool TryGetGunMagazineCapsule(FirearmController firearmController, Slot magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
+        {
+            magazineBottom = Vector3.zero;
+            if (!TryGetGunMagazineCenter(firearmController, magazineSlot, out magazineCenter))
                 return false;
-            return (palm - magazineCenter).sqrMagnitude <= magazineGrabRadius * magazineGrabRadius;
+            magazineBottom = magazineCenter;
+            ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
+            if (magazineView == null || magazineView.ItemView == null || magazineView.Bone == null)
+                return true;
+            Magazine magazine = firearmController.Item.GetCurrentMagazine();
+            if (magazineShapeView != magazineView.ItemView || magazineShapeFor != magazine)
+            {
+                magazineShapeView = magazineView.ItemView;
+                magazineShapeFor = magazine;
+                if (!TryGetMagazineShape(magazineView.ItemView.gameObject, magazineView.ItemView.InverseTransformPoint(magazineView.Bone.position),
+                    out magazineShapeAxis, out magazineShapeLength, out _))
+                    magazineShapeLength = 0f;
+            }
+            magazineBottom = magazineCenter + magazineView.ItemView.TransformDirection(magazineShapeAxis).normalized * (magazineShapeLength * 0.5f);
+            return true;
         }
 
         private static bool InChestPouchZone(Vector3 palm)
@@ -1032,13 +1067,18 @@ namespace TarkovVR.Source.Weapons
         // latched hand there, so the fingers wrap the magazine instead of sitting wherever the controller grabbed it
         private static void SnapHandToGrip(Vector3 gripPosition, Vector3 gripRotation)
         {
-            if (!handLatched || handLatch == null)
-                return;
             Transform propTransform = heldProp.transform;
             Quaternion handRotation = propTransform.rotation * Quaternion.Inverse(Quaternion.Euler(gripRotation));
-            Vector3 handPosition = propTransform.position - handRotation * gripPosition;
-            handSnapLocalPosition = propTransform.InverseTransformPoint(handPosition);
-            handSnapLocalRotation = Quaternion.Inverse(propTransform.rotation) * handRotation;
+            SnapHandTo(propTransform, propTransform.position - handRotation * gripPosition, handRotation);
+        }
+
+        // The latched hand eases to this world pose and rides what it's latched to from there
+        private static void SnapHandTo(Transform holder, Vector3 handPosition, Quaternion handRotation)
+        {
+            if (!handLatched || handLatch == null)
+                return;
+            handSnapLocalPosition = holder.InverseTransformPoint(handPosition);
+            handSnapLocalRotation = Quaternion.Inverse(holder.rotation) * handRotation;
             handLatchSnapping = true;
         }
 
@@ -1602,10 +1642,10 @@ namespace TarkovVR.Source.Weapons
         // to those bones this frame. Eases in on a grab and back out to whatever the hand was doing on release.
         public static void ApplyHeldFingerPose()
         {
-            // The charging handle has no recording yet: the magazine pull's thumb-and-index pinch is the closest grip
+            // A gun whose charging handle clip hasn't been read yet: the magazine pull's thumb-and-index pinch is the closest grip
             Vector3[] pose = null;
             if (HoldingChargingHandle)
-                pose = MAGAZINE_PULL_FINGERS;
+                pose = handleHandFingers ?? MAGAZINE_PULL_FINGERS;
             else if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
                 pose = magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
             if (pose != null)
@@ -1737,10 +1777,11 @@ namespace TarkovVR.Source.Weapons
 
             Vector3 palm = OffHandPalm();
             UpdateChargingHandleViz(firearmController, weapon, palm, show);
-            bool hasMagazineCenter = TryGetGunMagazineCenter(firearmController, magazineSlot, out Vector3 magazineCenter);
             bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
-            SetZoneViz(ref grabZoneViz, hasMagazineCenter && !HoldingMagazine, magazineCenter, magazineGrabRadius,
-                inGrabZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.4f, 1f, 0.3f));
+            if (!HoldingMagazine && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
+                SetCapsuleZoneViz(ref grabZoneViz, magazineCenter, magazineBottom, magazineGrabRadius, inGrabZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.4f, 1f, 0.3f));
+            else
+                SetZoneViz(ref grabZoneViz, false, Vector3.zero, 0f, Color.clear);
 
             bool hasPouchCenter = TryGetChestPouchCenter(out Vector3 pouchCenter);
             SetZoneViz(ref pouchZoneViz, hasPouchCenter, pouchCenter, chestPouchRadius,
@@ -1750,6 +1791,28 @@ namespace TarkovVR.Source.Weapons
             bool showTrack = HoldingMagazine && magazineWell != null;
             Vector3 trackTop = showTrack ? magazineWell.position + RailAxisWorld() * railLength : Vector3.zero;
             SetZoneViz(ref wellZoneViz, showTrack, trackTop, railCaptureRadius, onRail ? new Color(0f, 1f, 0.4f, 0.4f) : new Color(0f, 0.4f, 1f, 0.4f));
+        }
+
+        private static void SetCapsuleZoneViz(ref GameObject capsule, Vector3 start, Vector3 end, float radius, Color color)
+        {
+            if (capsule == null)
+            {
+                capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                capsule.name = "VRMagazineZone";
+                UnityEngine.Object.Destroy(capsule.GetComponent<Collider>());
+                Renderer capsuleRenderer = capsule.GetComponent<Renderer>();
+                capsuleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                capsuleRenderer.receiveShadows = false;
+                capsuleRenderer.material = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Standard"));
+            }
+            capsule.SetActive(true);
+            Vector3 segment = end - start;
+            capsule.transform.position = (start + end) * 0.5f;
+            if (segment.sqrMagnitude > 1e-8f)
+                capsule.transform.rotation = Quaternion.FromToRotation(Vector3.up, segment);
+            // Unity's capsule is 1 wide and 2 tall
+            capsule.transform.localScale = new Vector3(radius * 2f, (segment.magnitude + radius * 2f) * 0.5f, radius * 2f);
+            capsule.GetComponent<Renderer>().material.color = color;
         }
 
         private static void SetZoneViz(ref GameObject sphere, bool show, Vector3 position, float radius, Color color)

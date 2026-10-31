@@ -20,7 +20,7 @@ namespace TarkovVR.Source.Weapons
     public static partial class VRReloadController
     {
         public static bool palming = true;                  // false = no second magazine in the hand
-        public static float palmGrabRadius = 0.12f;         // m palm to the gun magazine's center; wider than an empty hand's: the new magazine is in the way
+        public static float palmGrabRadius = 0.10f;         // m palm to the gun magazine's capsule; wider than an empty hand's: the new magazine is in the way
         public static float palmMaxThickness = 0.035f;      // m; a drum or a MAG5 doesn't fit in one hand with another magazine
         public static float palmMaxLength = 0.26f;          // m
 
@@ -69,8 +69,8 @@ namespace TarkovVR.Source.Weapons
 
         private static bool InPalmZone(FirearmController firearmController, Weapon weapon, Slot magazineSlot)
         {
-            return weapon.GetCurrentMagazine() != null && TryGetGunMagazineCenter(firearmController, magazineSlot, out Vector3 magazineCenter)
-                && (OffHandPalm() - magazineCenter).sqrMagnitude <= palmGrabRadius * palmGrabRadius;
+            return weapon.GetCurrentMagazine() != null && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
+                && DistanceToSegment(OffHandPalm(), magazineCenter, magazineBottom) <= palmGrabRadius;
         }
 
         // A light buzz on coming into reach, so you know the trigger will take it

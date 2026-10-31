@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using EFT.InventoryLogic;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
@@ -21,6 +22,7 @@ namespace TarkovVR.Source.Weapons
     {
         public static bool chargingHandle = true;
         public static float handleGrabRadius = 0.06f;      // m palm to the back of the charging handle to grab it
+        public static float handleZoneBack = 0.05f;        // m the grab zone reaches on past that toward the stock (a capsule)
         public static float handleTravel = 0.08f;          // m the handle comes back (headset: 0.07 a touch short)
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
         public static float handleLateralEscape = 0.10f;   // m the controller moves sideways off the track before the hand lets go
@@ -70,6 +72,37 @@ namespace TarkovVR.Source.Weapons
         private static MeshFilter[] handleMeshes;
         private static GameObject handleZoneViz;
 
+        // The hand on the handle, read from the gun's rack clip while the handle is back: in the mod_charge bone's frame, which
+        // the clip moves back with the handle (ours stays put and the model moves, so it's the bone's pose with the handle at rest)
+        private sealed class HandleHold
+        {
+            public Vector3 position;
+            public Vector3 rotation;
+            public Vector3[] fingers;
+        }
+
+        // By animation set. m4a1_reload_charge_0 at 0.6 s: thumb and index on the left wing of the T.
+        private static readonly Dictionary<string, HandleHold> handleHolds = new Dictionary<string, HandleHold>
+        {
+            {
+                "m4a1", new HandleHold
+                {
+                    position = new Vector3(-0.1438f, 0.0636f, -0.0651f),
+                    rotation = new Vector3(324.8f, 110.6f, 32.1f),
+                    fingers = new[]
+                    {
+                        Vector3.zero,
+                        new Vector3(69.0f, 53.0f, 39.4f), new Vector3(359.8f, 358.2f, 30.9f), new Vector3(359.0f, 358.8f, 43.4f),     // thumb
+                        new Vector3(4.1f, 345.6f, 20.0f), new Vector3(360.0f, 359.2f, 59.9f), new Vector3(0.2f, 359.6f, 58.9f),       // index
+                        new Vector3(1.5f, 345.0f, 55.4f), new Vector3(0.0f, 359.7f, 79.9f), new Vector3(0.1f, 359.6f, 76.6f),         // middle
+                        new Vector3(1.9f, 344.2f, 75.0f), new Vector3(359.6f, 359.7f, 84.1f), new Vector3(360.0f, 359.6f, 83.6f),     // ring
+                        new Vector3(2.6f, 343.9f, 91.2f), new Vector3(359.8f, 359.7f, 74.2f), new Vector3(359.6f, 359.7f, 42.8f),     // pinky
+                    },
+                }
+            },
+        };
+        private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
+
         // The gun a magazine went into with its bolt forward on an empty chamber: Tarkov's insert chambered the top round,
         // but it's still in the magazine until the handle is racked. On the weapon, so it holds across a weapon swap.
         private static Weapon weaponWaitingForRack;
@@ -108,8 +141,9 @@ namespace TarkovVR.Source.Weapons
         {
             if (!chargingHandle || !TryGetChargingHandle(firearmController, weapon, out ContainerCollectionView.SlotView slotView))
                 return false;
-            Vector3 grabPoint = HandleGrabPoint(slotView.ItemView, firearmController.WeaponRoot.up);
-            return (palm - grabPoint).sqrMagnitude <= handleGrabRadius * handleGrabRadius;
+            Vector3 backWorld = firearmController.WeaponRoot.up;
+            Vector3 grabPoint = HandleGrabPoint(slotView.ItemView, backWorld);
+            return DistanceToSegment(palm, grabPoint, grabPoint + backWorld * handleZoneBack) <= handleGrabRadius;
         }
 
         // The back end of the handle (the T on an AR): the handle model is a long bar reaching forward into the receiver,
@@ -165,6 +199,12 @@ namespace TarkovVR.Source.Weapons
             handleFullyBack = false;
             HoldingChargingHandle = true;
             LatchHand(handleView);
+            handleHandFingers = null;
+            if (handleHolds.TryGetValue(AnimationFamily(firearmController), out HandleHold handleHold))
+            {
+                handleHandFingers = handleHold.fingers;
+                SnapHandTo(handleView, handleBone.position + handleBone.rotation * handleHold.position, handleBone.rotation * Quaternion.Euler(handleHold.rotation));
+            }
             BeginChamberView(firearmController, weapon);
 
             if (debugLog)
@@ -456,10 +496,16 @@ namespace TarkovVR.Source.Weapons
         {
             ContainerCollectionView.SlotView slotView = null;
             bool hasHandle = show && chargingHandle && TryGetChargingHandle(firearmController, weapon, out slotView);
-            Vector3 grabPoint = hasHandle ? HandleGrabPoint(slotView.ItemView, firearmController.WeaponRoot.up) : Vector3.zero;
-            bool inReach = hasHandle && (palm - grabPoint).sqrMagnitude <= handleGrabRadius * handleGrabRadius;
-            SetZoneViz(ref handleZoneViz, hasHandle && !HoldingChargingHandle, grabPoint, handleGrabRadius,
-                inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f));
+            if (!hasHandle || HoldingChargingHandle)
+            {
+                SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
+                return;
+            }
+            Vector3 backWorld = firearmController.WeaponRoot.up;
+            Vector3 grabPoint = HandleGrabPoint(slotView.ItemView, backWorld);
+            Vector3 zoneEnd = grabPoint + backWorld * handleZoneBack;
+            bool inReach = DistanceToSegment(palm, grabPoint, zoneEnd) <= handleGrabRadius;
+            SetCapsuleZoneViz(ref handleZoneViz, grabPoint, zoneEnd, handleGrabRadius, inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f));
         }
     }
 }
