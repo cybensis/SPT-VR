@@ -37,8 +37,9 @@ namespace TarkovVR.Source.Weapons
             {
                 "m4a1", new PalmHold
                 {
-                    newMagazine = new MagazineHold { position = new Vector3(-0.158f, -0.206f, 0.069f), rotation = new Vector3(74.9f, 299.8f, 179.8f), magazineLength = 0.19f },
-                    oldMagazine = new MagazineHold { position = new Vector3(-0.271f, -0.036f, 0.109f), rotation = new Vector3(352.3f, 300.2f, 180.2f), magazineLength = 0.19f },
+                    // The magazine model, which sits 90 deg off the clip's mod_magazine bones
+                    newMagazine = new MagazineHold { position = new Vector3(-0.158f, -0.206f, 0.069f), rotation = new Vector3(345f, 300.1f, 180f), magazineLength = 0.19f },
+                    oldMagazine = new MagazineHold { position = new Vector3(-0.271f, -0.036f, 0.109f), rotation = new Vector3(277.6f, 120.5f, 359.8f), magazineLength = 0.19f },
                     fingers = new[]
                     {
                         Vector3.zero,
