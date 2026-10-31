@@ -102,12 +102,17 @@ def magHold(g,J,mag,pull):
     qs=list(run[-1]['qs'])
     if pull:
         # The grip: the most closed moment in this hold before the hand opens to let go of the magazine (late in the clip it
-        # closes again, empty, with the bone still at the hold). The thumb is that moment's too.
-        tightest=None
-        for f in S:
+        # closes again, empty, with the bone still at the hold). The thumb is that moment's too. A drum keeps the hand far more open than
+        # that while it carries it: past the magazine's farthest point the clip is bringing the hand back, closing into a fist with the
+        # bone still riding along, so if that's what it found, the grip is the tightest moment before there.
+        tightest=None; carrying=None
+        farthest=max(range(len(S)),key=lambda i:np.linalg.norm(S[i]['inGun']-seat))
+        for index,f in enumerate(S):
             if np.linalg.norm(f['rel']-pos)>0.03: continue
             if tightest is not None and f['curl']<tightest['curl']*0.75: break
             if tightest is None or f['curl']>tightest['curl']: tightest=f
+            if index<=farthest: carrying=tightest
+        if carrying is not None and carrying['curl']<tightest['curl']*0.75: tightest=carrying
         if tightest is not None: qs=list(tightest['qs'])
     return dict(position=[round(float(x),4) for x in pos],rotation=toUnityEuler(avgQ(run)),fingers=eulerList(qs),frames=len(run),palmOff=round(float(np.mean([r['palmOff'] for r in run])),3))
 
