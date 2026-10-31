@@ -196,21 +196,24 @@ def rockIn(tree,clips,prefix,mag):
     if delta[3]<0: delta=-delta
     axis=delta[:3]/np.linalg.norm(delta[:3])
     result=dict(axis=[round(float(x),4) for x in axis],angle=round(float(angle),1),hook=round(float(hook),1),thumb=None,thumbToCatch=None)
-    catchParts=[p for p in P if re.search('release|mag_catch',p.split('/')[-1],re.I) and not re.search('bolt|slide|lod|stock|launcher',p.split('/')[-1],re.I)]
-    J=fingerPaths(P,'L')
-    if catchParts and J:
-        part=catchParts[0]; stop=float(clips[outName].m_MuscleClip.m_StopTime); rest=None; peak=0.0; peakTime=None
-        for i in range(int(stop*30)+1):
-            t=i/30; local=gOut['localAt'](part,t); position=np.array(local[0],float); rotation=np.array(local[1],float)
-            if rest is None: rest=(position,rotation)
-            move=float(np.linalg.norm(position-rest[0]))*1000+ang(rotation,rest[1])
-            if move>peak: peak=move; peakTime=t
-        if peakTime is not None and peak>=0.5:
-            c={}; catchAt,_,_=gOut['worldAt'](part,peakTime,c)
-            last,_,_=gOut['worldAt'](J[3],peakTime,c); before,_,_=gOut['worldAt'](J[2],peakTime,c)
-            result['thumbToCatch']=round(float(np.linalg.norm(last+(last-before)*0.8-catchAt)),3)
-            result['thumb']=eulerList([np.array(gOut['localAt'](j,peakTime)[1],float) for j in J[1:4]])
+    result['thumb'],result['thumbToCatch']=thumbOnCatch(gOut)
     return result
+
+# The off thumb's three joints with the catch furthest in, and that thumb's tip from the catch
+def thumbOnCatch(g):
+    P=g['prefabLocal']; J=fingerPaths(P,'L')
+    catchParts=[p for p in P if re.search('release|mag_catch',p.split('/')[-1],re.I) and not re.search('bolt|slide|lod|stock|launcher',p.split('/')[-1],re.I)]
+    if not catchParts or not J: return None,None
+    part=catchParts[0]; stop=float(g['clip'].m_MuscleClip.m_StopTime); rest=None; peak=0.0; peakTime=None
+    for i in range(int(stop*30)+1):
+        t=i/30; local=g['localAt'](part,t); position=np.array(local[0],float); rotation=np.array(local[1],float)
+        if rest is None: rest=(position,rotation)
+        move=float(np.linalg.norm(position-rest[0]))*1000+ang(rotation,rest[1])
+        if move>peak: peak=move; peakTime=t
+    if peakTime is None or peak<0.5: return None,None
+    c={}; catchAt,_,_=g['worldAt'](part,peakTime,c)
+    last,_,_=g['worldAt'](J[3],peakTime,c); before,_,_=g['worldAt'](J[2],peakTime,c)
+    return eulerList([np.array(g['localAt'](j,peakTime)[1],float) for j in J[1:4]]),round(float(np.linalg.norm(last+(last-before)*0.8-catchAt)),3)
 
 def palmHold(g,J,old,new):
     So=sample(g,old,J); Sn=sample(g,new,J)
@@ -220,7 +223,8 @@ def palmHold(g,J,old,new):
     t0,t1=runOld[0]['t'],runOld[-1]['t']
     runNew=stillRun([s for s in Sn if t0-1e-6<=s['t']<=t1+1e-6],lambda s:np.linalg.norm(s['rel'])<=0.40)
     if not runNew: return None
-    return dict(newMagazine=dict(position=[round(float(x),4) for x in np.mean([r['rel'] for r in runNew],axis=0)],rotation=toUnityEuler(avgQ(runNew))),
+    thumb,thumbToCatch=thumbOnCatch(g)
+    return dict(thumb=thumb,thumbToCatch=thumbToCatch,newMagazine=dict(position=[round(float(x),4) for x in np.mean([r['rel'] for r in runNew],axis=0)],rotation=toUnityEuler(avgQ(runNew))),
         oldMagazine=dict(position=[round(float(x),4) for x in np.mean([r['rel'] for r in runOld],axis=0)],rotation=toUnityEuler(avgQ(runOld))),
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
@@ -309,7 +313,8 @@ def run(folders,outFile=None):
             except Exception as e:
                 report.append((family,'rockIn','ERR',repr(e)[:80]))
             new=bone(P,'/mod_magazine_new')
-            for n in sorted(x for x in names if re.match(re.escape(prefix)+r'_reload_admin(_\d+)?$',x)):
+            # AK-type guns name it mag_admin
+            for n in sorted(x for x in names if re.match(re.escape(prefix)+r'_(reload|mag)_admin(_\d+)?$',x)):
                 if new:
                     try: h=palmHold(setup(tree,clips[n]),J,mag,new)
                     except Exception as e:

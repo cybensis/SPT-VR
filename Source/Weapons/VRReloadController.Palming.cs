@@ -11,7 +11,7 @@ namespace TarkovVR.Source.Weapons
 {
     // Two magazines in one hand: with a new magazine held, the off-hand trigger at the gun's magazine takes that one too (the
     // grip is already busy), B lets the catch go as on any pull and it comes out, and the new one goes in while the old
-    // stays in the hand until it lets go. Tarkov has the animation (*_reload_admin, with its
+    // stays in the hand until it lets go. Tarkov has the animation (*_reload_admin, *_mag_admin on AK-type guns, with its
     // mod_magazine_new bone) but never finished it: ReloadExternalMagOperation.SwitchToReloadWithNewMag only logs "Not
     // Implemented". The hand poses here are read from that clip; nothing plays it.
     //
@@ -29,10 +29,11 @@ namespace TarkovVR.Source.Weapons
             public MagazineHold newMagazine;
             public MagazineHold oldMagazine;
             public Vector3[] fingers;
+            public Vector3[] thumb;     // on the catch, with the new magazine in the hand; a rock-in gun's thumb works it (null = the gun's own pose)
         }
 
-        // By animation set (m4a1_reload_admin at 1.6 s); the other clips' come from ReloadHolds.json. Only 8 of the 127 magazine
-        // guns have the clip: the rest borrow the closest kind (FindPalmHold).
+        // By animation set (m4a1_reload_admin at 1.6 s); the other clips' come from ReloadHolds.json. Few guns have the clip: the rest
+        // borrow the closest kind (FindPalmHold).
         private static readonly Dictionary<string, PalmHold> palmHolds = new Dictionary<string, PalmHold>
         {
             {
@@ -99,13 +100,16 @@ namespace TarkovVR.Source.Weapons
 
         private const string RIFLE_PALM_POSE = "m4a1";
         private const string PISTOL_PALM_POSE = "p226r";
+        private const string ROCK_IN_PALM_POSE = "ak74n";
 
         private static PalmHold FindPalmHold(FirearmController firearmController)
         {
             LoadRecordedGrips();
             if (palmHolds.TryGetValue(AnimationFamily(firearmController), out PalmHold own))
                 return own;
-            palmHolds.TryGetValue(VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol ? PISTOL_PALM_POSE : RIFLE_PALM_POSE, out PalmHold borrowed);
+            string closestKind = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol ? PISTOL_PALM_POSE
+                : RockInOf(firearmController) != null ? ROCK_IN_PALM_POSE : RIFLE_PALM_POSE;
+            palmHolds.TryGetValue(closestKind, out PalmHold borrowed);
             return borrowed;
         }
 
@@ -256,6 +260,7 @@ namespace TarkovVR.Source.Weapons
             onRail = false;
             // It's right at the well already: it has to leave before the track can catch it
             railCatchArmed = false;
+            railCatchClearance = 0f;
         }
 
         // The pull it was waiting on ended without the old magazine coming free: back to an ordinary new magazine in the hand

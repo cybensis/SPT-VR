@@ -76,6 +76,7 @@ namespace TarkovVR.Source.Weapons
             public SavedHold newMagazine;
             public SavedHold oldMagazine;
             public float[] fingers;
+            public float[] thumb;
         }
 
         public sealed class SavedRockIn
@@ -389,6 +390,7 @@ namespace TarkovVR.Source.Weapons
                         newMagazine = InBoneFrame(HoldFrom(entry.Value.newMagazine)),
                         oldMagazine = InBoneFrame(HoldFrom(entry.Value.oldMagazine)),
                         fingers = FingersFrom(entry.Value.fingers),
+                        thumb = FingersFrom(entry.Value.thumb),
                     };
                 }
                 Plugin.MyLog.LogInfo($"[ReloadGrips] generated holds: {generated.grips.Count} gun and magazine types, {generated.handles.Count} charging handles, {generated.palms.Count} palming poses");

@@ -51,16 +51,16 @@ for f,h in sorted(R['gunHandHandles'].items()):
     out['gunHandHandles'][f]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=round(h['travel']*0.08/0.101,3))
 for f,h in sorted(R['rockIn'].items()):
     out['rockIn'][f]=dict(axis=h['axis'],angle=h['angle'],thumb=h['thumb'])
+for f,h in sorted(R['palms'].items()):
+    out['palms'][f]=dict(newMagazine=h['newMagazine'],oldMagazine=h['oldMagazine'],fingers=h['fingers'],thumb=h.get('thumb'))
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]
-for holds in (out['handles'],out['gunHandHandles'],out['rockIn']):
+for holds in (out['handles'],out['gunHandHandles'],out['rockIn'],out['palms']):
     for family,folder in sorted(famFolder.items()):
         mates=[f for f in sorted(holds) if famFolder.get(f)==folder]
         if family not in holds and mates:
             holds[family]=holds[mates[0]]; borrowed.append((family,mates[0]))
 print('handle holds borrowed in a folder',borrowed)
-for f,h in sorted(R['palms'].items()):
-    out['palms'][f]=dict(newMagazine=h['newMagazine'],oldMagazine=h['oldMagazine'],fingers=h['fingers'])
 os.makedirs('out',exist_ok=True)
 json.dump(out,open('out/ReloadHolds.json','w'),separators=(',',':'))
 print('grips',len(out['grips']),'handles',len(out['handles']),'gun hand handles',len(out['gunHandHandles']),'rock-in',len(out['rockIn']),'palms',len(out['palms']),'dropped',len(dropped),'bytes',os.path.getsize('out/ReloadHolds.json'))

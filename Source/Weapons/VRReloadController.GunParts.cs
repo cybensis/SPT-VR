@@ -100,7 +100,7 @@ namespace TarkovVR.Source.Weapons
             bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn());
             // A paddle catch is the off hand's thumb, not the gun hand's finger
             RockIn rockIn = RockInOf(firearmController);
-            latchThumbPose = rockIn?.thumb;
+            latchThumbPose = HoldingPalmedMagazine && activePalmHold?.thumb != null ? activePalmHold.thumb : rockIn?.thumb;
             latchThumbTarget = pressedByFinger && rockIn != null ? 1f : 0f;
             float target = pressedByFinger ? 1f : 0f;
             bool inserting = HoldingMagazine && onRail && !railPullingOut;

@@ -6,7 +6,7 @@ namespace TarkovVR.Source.Weapons
 {
     // An AK's magazine doesn't slide out of the well. The off hand holds it and that thumb pushes the paddle catch behind it (B on
     // that controller), then it rocks forward about the top of the well until it comes away; going in it hooks at that tilt and rocks
-    // back until the catch clicks. Which guns, about which axis and how far come from each gun's own magazine clips
+    // back until the catch clicks, or just gets pushed up. Which guns, about which axis and how far come from each gun's own magazine clips
     // (Tools/gen_reload_holds). The hinge runs on the same track as a straight magazine: railPosition 0 is seated and railLength fully
     // rocked, so the catch, the seat and the capture read the same.
     public static partial class VRReloadController
@@ -14,6 +14,7 @@ namespace TarkovVR.Source.Weapons
         public static bool rockInMagazines = true;          // false = these guns' magazines slide out like an M4's, with its mag release
         public static float rockInCatchStart = 0.35f;       // share of the rock left when a magazine going in starts pushing the catch
         public static float rockInCatchFull = 0.1f;         // and when it has it all the way in, just before it clicks past
+        public static float rockInInsertEscape = 0.15f;     // m the controller moves off a magazine going in before the hand lets go of the track
 
         private sealed class RockIn
         {
@@ -74,27 +75,34 @@ namespace TarkovVR.Source.Weapons
             return VRGlobals.vrPlayer.LeftHand.transform.TransformPoint(rockLeverOnHand) - magazineWell.position;
         }
 
-        // The controller's turn about the hinge since the track started, in track metres, and how far it is off the circle that point rides
+        // The controller's move since the track started as a turn about the hinge, in track metres, and how far it is off the magazine.
+        // Measured along the circle at the start rather than as an angle from the hinge: pushing up brings that point close to the
+        // hinge, where the angle jumps around (headset: pushing in knocked the magazine off the track). Going in, pushing it up seats it
+        // as well as rocking it back does, so the tilt doesn't have to be right.
         private static void MeasureHandOnRock(out float handAlongTrack, out float handOffTrack)
         {
             Vector3 hinge = magazineWell.TransformDirection(heldRockIn.axis).normalized;
             Vector3 start = magazineWell.TransformVector(rockLeverStartInWell);
-            Vector3 now = RockLeverNow();
             Vector3 startAcross = Vector3.ProjectOnPlane(start, hinge);
-            Vector3 nowAcross = Vector3.ProjectOnPlane(now, hinge);
-            handAlongTrack = Vector3.SignedAngle(startAcross, nowAcross, hinge) / heldRockIn.angle * railLength;
-            float sideways = Vector3.Dot(now - start, hinge);
-            float outward = nowAcross.magnitude - startAcross.magnitude;
-            handOffTrack = Mathf.Sqrt(sideways * sideways + outward * outward);
+            Vector3 outward = startAcross.normalized;
+            Vector3 moved = RockLeverNow() - start;
+            float rockedDegrees = Vector3.Dot(moved, Vector3.Cross(hinge, outward)) / Mathf.Max(startAcross.magnitude, 0.03f) * Mathf.Rad2Deg;
+            handAlongTrack = rockedDegrees / heldRockIn.angle * railLength;
+            if (!railPullingOut)
+                handAlongTrack = Mathf.Min(handAlongTrack, Vector3.Dot(moved, outward));
+            handOffTrack = HandOffRockingMagazine();
         }
 
-        // The controller away from where the hand holds the magazine as it sits now
+        // The controller away from where the hand holds the magazine as it sits now. Pushing further in isn't coming off it.
         private static float HandOffRockingMagazine()
         {
             Vector3 hinge = magazineWell.TransformDirection(heldRockIn.axis).normalized;
             float turned = heldRockIn.angle * (railPosition - railPositionAtStart) / railLength;
             Vector3 heldPoint = Quaternion.AngleAxis(turned, hinge) * magazineWell.TransformVector(rockLeverStartInWell);
-            return (RockLeverNow() - heldPoint).magnitude;
+            Vector3 off = RockLeverNow() - heldPoint;
+            Vector3 outward = heldPoint.normalized;
+            float alongOutward = Vector3.Dot(off, outward);
+            return (alongOutward < 0f ? off - outward * alongOutward : off).magnitude;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
