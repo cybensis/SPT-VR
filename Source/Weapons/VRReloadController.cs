@@ -277,7 +277,10 @@ namespace TarkovVR.Source.Weapons
             if (releasePressed)
             {
                 PlayGunSound(VRGlobals.firearmController, "Button");
-                PulseGunHand(0.25f, 0.03f);
+                if (RockInOf(VRGlobals.firearmController) != null)
+                    Pulse(0.25f, 0.03f);
+                else
+                    PulseGunHand(0.25f, 0.03f);
             }
             previousReleaseState = releaseState;
 
@@ -388,6 +391,13 @@ namespace TarkovVR.Source.Weapons
         {
             if (!ManualReloadActive())
                 return false;
+            // A paddle catch is the off thumb's, on the off controller's button: only with that hand on the magazine (off it, the
+            // same button is the flashlight or Tarkov's Escape)
+            if (RockInOf(VRGlobals.firearmController) != null)
+            {
+                VRBoolean thumbButton = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB : VRInput.ButtonY;
+                return thumbButton.state && ((HoldingGunMagazine && onRail) || HoldingSeatedMagazine);
+            }
             VRBoolean releaseButton = VRSettings.GetLeftHandedMode() ? VRInput.ButtonY : VRInput.ButtonB;
             return releaseButton.state;
         }
@@ -505,6 +515,7 @@ namespace TarkovVR.Source.Weapons
             seatedLocalRotation = propTransform.localRotation;
             heldReloadGrip = FindReloadGrip(firearmController, magazine, prop, propWellPointLocal);
             railAxisInWell = RailAxisInWell(prop, propTransform.localScale);
+            heldRockIn = RockInOf(firearmController);
 
             hiddenGunMagazineView = magazineView.ItemView;
             hiddenGunMagazineView.gameObject.SetActive(false);
@@ -719,6 +730,7 @@ namespace TarkovVR.Source.Weapons
             seatedLocalPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
             seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
             railAxisInWell = RailAxisInWell(prop, seatedScale);
+            heldRockIn = RockInOf(firearmController);
 
             heldSource = source;
             heldMagazine = magazine;
@@ -790,13 +802,15 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
 
-            // Caught: the magazine's top near the track (up to just past its top), turned roughly the seated way
-            Vector3 axis = RailAxisWorld();
+            // Caught: the magazine's top near the track (up to just past its top), turned roughly the seated way. One that rocks in
+            // hooks at its full tilt.
+            Vector3 axis = heldRockIn != null ? HookAxisWorld() : RailAxisWorld();
             Vector3 seatedPosition = magazineWell.TransformPoint(seatedLocalPosition);
             Vector3 topOffset = propTransform.TransformPoint(propWellPointLocal) - magazineWell.position;
             float alongTrack = Vector3.Dot(topOffset, axis);
             float offTrack = (topOffset - axis * alongTrack).magnitude;
-            float angle = Quaternion.Angle(propTransform.rotation, magazineWell.rotation * seatedLocalRotation);
+            Quaternion caughtRotation = heldRockIn != null ? RockRotation(railLength) * seatedLocalRotation : seatedLocalRotation;
+            float angle = Quaternion.Angle(propTransform.rotation, magazineWell.rotation * caughtRotation);
             bool inCatchZone = alongTrack >= -0.005f && alongTrack <= railLength + railExitMargin && offTrack <= railCaptureRadius && angle <= railCaptureAngle;
             if (!railCatchArmed)
             {
@@ -808,7 +822,7 @@ namespace TarkovVR.Source.Weapons
             {
                 // Relative to the controller: on the track the hand follows the magazine, so it can't be the source
                 GetPoseIn(VRGlobals.vrPlayer.LeftHand.transform, propTransform, out railEntryHandPosition, out railEntryHandRotation);
-                StartRail(pullingOut: false, startPosition: Mathf.Clamp(alongTrack, 0f, railLength));
+                StartRail(pullingOut: false, startPosition: heldRockIn != null ? railLength : Mathf.Clamp(alongTrack, 0f, railLength));
             }
         }
 
@@ -819,6 +833,8 @@ namespace TarkovVR.Source.Weapons
             Vector3 handDelta = VRGlobals.vrPlayer.LeftHand.transform.position - magazineWell.TransformPoint(handAtRailStartInWell);
             float handAlongTrack = Vector3.Dot(handDelta, axis);
             float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
+            if (heldRockIn != null)
+                MeasureHandOnRock(out handAlongTrack, out handOffTrack);
             float trackPosition = railPositionAtStart + handAlongTrack;
             railBlend = Mathf.MoveTowards(railBlend, 1f, Time.deltaTime / Mathf.Max(railCaptureTime, 0.001f));
 
@@ -831,7 +847,9 @@ namespace TarkovVR.Source.Weapons
                     magazineCatchPassed = true;
 
                 // The controller away from where the hand holds the magazine: along the track too while the catch holds it
-                float handOffMagazine = (handDelta - axis * (railPosition - railPositionAtStart)).magnitude;
+                float handOffMagazine = heldRockIn != null ? HandOffRockingMagazine() : (handDelta - axis * (railPosition - railPositionAtStart)).magnitude;
+                if (RockedMagazineLeaves(gripReleased, handOffMagazine))
+                    return;
                 bool gaveBackToSupport = grabbedWithRelease && releaseLetGo && !magazineCatchPassed;
                 if (gripReleased || gaveBackToSupport || handOffMagazine > railLateralEscape)
                 {
@@ -844,7 +862,8 @@ namespace TarkovVR.Source.Weapons
                     return;
                 }
                 PlaceOnRail();
-                if (railStartedPartlyOut && railPosition <= 0f)
+                // Rocked back home past the catch, or back up from partly out: the catch holds it again
+                if ((railStartedPartlyOut || (heldRockIn != null && magazineCatchPassed)) && railPosition <= 0f)
                 {
                     PushedBackIn(gripReleased);
                     return;
@@ -900,8 +919,19 @@ namespace TarkovVR.Source.Weapons
         // The magazine at railPosition on the track, eased in from where the hand held it when it was caught
         private static void PlaceOnRail()
         {
-            Vector3 railPositionWorld = magazineWell.TransformPoint(seatedLocalPosition) + RailAxisWorld() * railPosition;
-            Quaternion railRotationWorld = magazineWell.rotation * seatedLocalRotation;
+            Vector3 railPositionWorld;
+            Quaternion railRotationWorld;
+            if (heldRockIn != null)
+            {
+                Quaternion rock = RockRotation(railPosition);
+                railPositionWorld = magazineWell.TransformPoint(rock * seatedLocalPosition);
+                railRotationWorld = magazineWell.rotation * (rock * seatedLocalRotation);
+            }
+            else
+            {
+                railPositionWorld = magazineWell.TransformPoint(seatedLocalPosition) + RailAxisWorld() * railPosition;
+                railRotationWorld = magazineWell.rotation * seatedLocalRotation;
+            }
             Transform propTransform = heldProp.transform;
             if (railBlend >= 1f || railPullingOut)
             {
@@ -928,6 +958,8 @@ namespace TarkovVR.Source.Weapons
             handAtRailStartInWell = magazineWell.InverseTransformPoint(VRGlobals.vrPlayer.LeftHand.transform.position);
             heldProp.transform.SetParent(magazineWell, worldPositionStays: true);
             LatchHand(heldProp.transform);
+            if (heldRockIn != null)
+                StartRockLever();
         }
 
         // Pulled down the track far enough: loose in the hand
@@ -1698,6 +1730,7 @@ namespace TarkovVR.Source.Weapons
             heldMagazine = null;
             heldForFirearm = null;
             heldReloadGrip = null;
+            heldRockIn = null;
             magazineWell = null;
             magazineLeftWell = false;
             OwnsOffHand = false;
@@ -1708,6 +1741,7 @@ namespace TarkovVR.Source.Weapons
         public static void ApplyHeldFingerPose()
         {
             // A gun whose charging handle clip hasn't been read yet: the magazine pull's thumb-and-index pinch is the closest grip
+            latchThumbShown = Mathf.MoveTowards(latchThumbShown, latchThumbTarget, Time.deltaTime / Mathf.Max(releaseButtonTime, 0.001f));
             Vector3[] pose = null;
             if (HoldingChargingHandle && !HandleInGunHand)
                 pose = handleHandFingers ?? MAGAZINE_PULL_FINGERS;
@@ -1730,6 +1764,7 @@ namespace TarkovVR.Source.Weapons
             int boneCount = Mathf.Min(leftPalmBones.Length, fingerPoseShown.Length);
             for (int i = 1; i < boneCount; i++)
                 leftPalmBones[i].localRotation = Quaternion.Slerp(leftPalmBones[i].localRotation, Quaternion.Euler(fingerPoseShown[i]), fingerWeight);
+            ApplyLatchThumb(leftPalmBones);
         }
 
         // The same for the gun hand on the charging handle, after that hand's own finger update
@@ -1912,7 +1947,7 @@ namespace TarkovVR.Source.Weapons
 
             // The top of the track while holding a magazine: green on it, blue off it
             bool showTrack = HoldingMagazine && magazineWell != null;
-            Vector3 trackTop = showTrack ? magazineWell.position + RailAxisWorld() * railLength : Vector3.zero;
+            Vector3 trackTop = showTrack ? magazineWell.position + (heldRockIn != null ? HookAxisWorld() : RailAxisWorld()) * railLength : Vector3.zero;
             SetZoneViz(ref wellZoneViz, showTrack, trackTop, railCaptureRadius, onRail ? new Color(0f, 1f, 0.4f, 0.4f) : new Color(0f, 0.4f, 1f, 0.4f));
         }
 

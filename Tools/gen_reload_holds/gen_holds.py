@@ -171,6 +171,47 @@ def ridingHold(g,charge,side):
     qs=[np.array(g['localAt'](j,end['t'])[1],float) for j in J]
     return dict(position=[round(float(x),4) for x in end['pos']],rotation=toUnityEuler(end['rot']),fingers=eulerList(qs),travel=round(float(top),3),drift=round(drift,3),turn=round(float(turn),1),t=end['t'],moved=round(moved,3),palmOff=0.0)
 
+def magazinePath(g,mag):
+    P=g['prefabLocal']; wp=bone(P,'Weapon_root_anim/weapon'); stop=float(g['clip'].m_MuscleClip.m_StopTime); rows=[]
+    for i in range(int(stop*30)+1):
+        t=i/30; c={}
+        mp,mq,_=g['worldAt'](mag,t,c); wpp,wr,_=g['worldAt'](wp,t,c)
+        rows.append(dict(t=t,pos=g['rotate'](conj(wr),mp-wpp),rot=qmul(conj(wr),mq)))
+    return rows
+
+# A magazine that rocks out of its well (AK-type guns): both clips turn it about the well bone by a good 20 degrees with that bone
+# hardly moving, where a straight magazine's turn is under 10. Bone-local axis and angle, and the off thumb's joints with the catch
+# furthest in (on these guns that thumb is what presses it, about 1.5 cm from it in the clip).
+def rockIn(tree,clips,prefix,mag):
+    P=tree[0]
+    outName=next((n for n in (f'{prefix}_mag_out_0',f'{prefix}_mag_out') if n in clips),None); inName=next((n for n in (f'{prefix}_mag_in_0',f'{prefix}_mag_in') if n in clips),None)
+    if not outName or not inName: return None
+    gOut=setup(tree,clips[outName]); rowsOut=magazinePath(gOut,mag); seat=rowsOut[0]
+    near=[r for r in rowsOut if np.linalg.norm(r['pos']-seat['pos'])<=0.012]
+    tilted=max(near,key=lambda r:ang(r['rot'],seat['rot'])); angle=ang(tilted['rot'],seat['rot'])
+    rowsIn=magazinePath(setup(tree,clips[inName]),mag); seatIn=rowsIn[-1]
+    hook=max((ang(r['rot'],seatIn['rot']) for r in rowsIn if np.linalg.norm(r['pos']-seatIn['pos'])<=0.012),default=0.0)
+    if angle<15 or hook<12: return None
+    delta=qmul(conj(seat['rot']),tilted['rot'])
+    if delta[3]<0: delta=-delta
+    axis=delta[:3]/np.linalg.norm(delta[:3])
+    result=dict(axis=[round(float(x),4) for x in axis],angle=round(float(angle),1),hook=round(float(hook),1),thumb=None,thumbToCatch=None)
+    catchParts=[p for p in P if re.search('release|mag_catch',p.split('/')[-1],re.I) and not re.search('bolt|slide|lod|stock|launcher',p.split('/')[-1],re.I)]
+    J=fingerPaths(P,'L')
+    if catchParts and J:
+        part=catchParts[0]; stop=float(clips[outName].m_MuscleClip.m_StopTime); rest=None; peak=0.0; peakTime=None
+        for i in range(int(stop*30)+1):
+            t=i/30; local=gOut['localAt'](part,t); position=np.array(local[0],float); rotation=np.array(local[1],float)
+            if rest is None: rest=(position,rotation)
+            move=float(np.linalg.norm(position-rest[0]))*1000+ang(rotation,rest[1])
+            if move>peak: peak=move; peakTime=t
+        if peakTime is not None and peak>=0.5:
+            c={}; catchAt,_,_=gOut['worldAt'](part,peakTime,c)
+            last,_,_=gOut['worldAt'](J[3],peakTime,c); before,_,_=gOut['worldAt'](J[2],peakTime,c)
+            result['thumbToCatch']=round(float(np.linalg.norm(last+(last-before)*0.8-catchAt)),3)
+            result['thumb']=eulerList([np.array(gOut['localAt'](j,peakTime)[1],float) for j in J[1:4]])
+    return result
+
 def palmHold(g,J,old,new):
     So=sample(g,old,J); Sn=sample(g,new,J)
     seat=So[0]['inGun']
@@ -184,7 +225,7 @@ def palmHold(g,J,old,new):
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
 def run(folders,outFile=None):
-    result=dict(grips={},handles={},gunHandHandles={},palms={}); report=[]
+    result=dict(grips={},handles={},gunHandHandles={},rockIn={},palms={}); report=[]
     for folder in folders:
         d=ROOT+folder+'/'
         if not os.path.isfile(d+'client_assets.bundle'): continue
@@ -262,6 +303,11 @@ def run(folders,outFile=None):
                         h['clip']=n; best=((rank,h['drift']),h)
                 if best: result['gunHandHandles'][family]=best[1]
                 else: report.append((family,'charge','no clip racks with the right hand'))
+            try:
+                rocks=rockIn(tree,clips,prefix,mag)
+                if rocks: result['rockIn'][family]=rocks
+            except Exception as e:
+                report.append((family,'rockIn','ERR',repr(e)[:80]))
             new=bone(P,'/mod_magazine_new')
             for n in sorted(x for x in names if re.match(re.escape(prefix)+r'_reload_admin(_\d+)?$',x)):
                 if new:

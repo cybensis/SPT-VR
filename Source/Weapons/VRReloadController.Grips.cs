@@ -78,11 +78,19 @@ namespace TarkovVR.Source.Weapons
             public float[] fingers;
         }
 
+        public sealed class SavedRockIn
+        {
+            public float[] axis;
+            public float angle;
+            public float[] thumb;
+        }
+
         public sealed class GeneratedHolds
         {
             public Dictionary<string, SavedGrip> grips;
             public Dictionary<string, SavedHandleHold> handles;
             public Dictionary<string, SavedHandleHold> gunHandHandles;
+            public Dictionary<string, SavedRockIn> rockIn;
             public Dictionary<string, SavedPalmHold> palms;
         }
 
@@ -359,6 +367,18 @@ namespace TarkovVR.Source.Weapons
                 {
                     foreach (KeyValuePair<string, SavedHandleHold> entry in generated.gunHandHandles)
                         gunHandHandleHolds[entry.Key] = HandleHoldFrom(entry.Value);
+                }
+                if (generated.rockIn != null)
+                {
+                    foreach (KeyValuePair<string, SavedRockIn> entry in generated.rockIn)
+                    {
+                        rockInGuns[entry.Key] = new RockIn
+                        {
+                            axis = new Vector3(entry.Value.axis[0], entry.Value.axis[1], entry.Value.axis[2]),
+                            angle = entry.Value.angle,
+                            thumb = entry.Value.thumb != null ? FingersFrom(entry.Value.thumb) : null,
+                        };
+                    }
                 }
                 foreach (KeyValuePair<string, SavedPalmHold> entry in generated.palms)
                 {

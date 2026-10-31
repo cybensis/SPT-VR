@@ -88,6 +88,7 @@ namespace TarkovVR.Source.Weapons
         {
             releasePressTarget = 0f;
             releaseFingerTarget = 0f;
+            latchThumbTarget = 0f;
             if (releasePartsFor != VRGlobals.firearmController)
                 ForgetReleaseParts();
             if (!magazineReleaseButton || !TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
@@ -97,6 +98,10 @@ namespace TarkovVR.Source.Weapons
 
             // B, or the gun's magazine pulled out by hand without Manual Reload (that grab is the button press)
             bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn());
+            // A paddle catch is the off hand's thumb, not the gun hand's finger
+            RockIn rockIn = RockInOf(firearmController);
+            latchThumbPose = rockIn?.thumb;
+            latchThumbTarget = pressedByFinger && rockIn != null ? 1f : 0f;
             float target = pressedByFinger ? 1f : 0f;
             bool inserting = HoldingMagazine && onRail && !railPullingOut;
             if (target <= 0f && !inserting)
@@ -105,10 +110,15 @@ namespace TarkovVR.Source.Weapons
                 return;
             // Seated = back out (the catch has snapped into the magazine)
             if (inserting && railPosition > 0f)
-                target = Mathf.Max(target, Mathf.InverseLerp(releaseMotion.pressStartDepth, releaseMotion.pressFullDepth, railPosition));
+            {
+                float pushedBy = rockIn != null
+                    ? Mathf.InverseLerp(railLength * rockInCatchStart, railLength * rockInCatchFull, railPosition)
+                    : Mathf.InverseLerp(releaseMotion.pressStartDepth, releaseMotion.pressFullDepth, railPosition);
+                target = Mathf.Max(target, pushedBy);
+            }
             releasePressTarget = target;
             // The magazine pushes it in on the way up, not the finger; a hand off the gun (slung, support-held) can't
-            releaseFingerTarget = pressedByFinger && releaseFinger && !ChestHang.Detached ? 1f : 0f;
+            releaseFingerTarget = pressedByFinger && releaseFinger && rockIn == null && !ChestHang.Detached ? 1f : 0f;
         }
 
         // Called from HandsInteractionController.LateUpdate: the animator has posed the button this frame

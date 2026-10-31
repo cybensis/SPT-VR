@@ -244,6 +244,7 @@ namespace TarkovVR.Source.Weapons
             seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
             propWellPointLocal = SeatedWellPointLocal(prop);
             railAxisInWell = RailAxisInWell(prop, SeatedScale(prop));
+            heldRockIn = RockInOf(firearmController);
             heldReloadGrip = FindReloadGrip(firearmController, magazine, prop, propWellPointLocal);
 
             heldSource = source;
