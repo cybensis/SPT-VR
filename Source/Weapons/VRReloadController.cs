@@ -279,7 +279,7 @@ namespace TarkovVR.Source.Weapons
             if (releasePressed)
             {
                 PlayGunSound(VRGlobals.firearmController, "Button");
-                if (RockInOf(VRGlobals.firearmController) != null)
+                if (ThumbWorksCatch(VRGlobals.firearmController))
                     Pulse(0.25f, 0.03f);
                 else
                     PulseGunHand(0.25f, 0.03f);
@@ -395,7 +395,7 @@ namespace TarkovVR.Source.Weapons
                 return false;
             // A paddle catch is the off thumb's, on the off controller's button: only with that hand on the magazine (off it, the
             // same button is the flashlight or Tarkov's Escape)
-            if (RockInOf(VRGlobals.firearmController) != null)
+            if (ThumbWorksCatch(VRGlobals.firearmController))
             {
                 VRBoolean thumbButton = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB : VRInput.ButtonY;
                 return thumbButton.state && ((HoldingGunMagazine && onRail) || HoldingSeatedMagazine);

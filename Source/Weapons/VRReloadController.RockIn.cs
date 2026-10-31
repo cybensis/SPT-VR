@@ -34,6 +34,25 @@ namespace TarkovVR.Source.Weapons
         private static float latchThumbShown;
         private static Vector3[] latchThumbPose;
 
+        // The off thumb works these guns' catch without the magazine rocking (an MP5's paddle): the thumb's joints on it, by animation set
+        public static bool offHandThumbCatches = true;      // false = the gun hand's finger and button, like an M4
+        private static readonly Dictionary<string, Vector3[]> thumbCatches = new Dictionary<string, Vector3[]>();
+
+        // The off thumb presses this gun's catch, on the off controller's button, not the gun hand's finger
+        private static bool ThumbWorksCatch(FirearmController firearmController)
+        {
+            return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null;
+        }
+
+        private static Vector3[] ThumbCatchOf(FirearmController firearmController)
+        {
+            if (!offHandThumbCatches || firearmController == null)
+                return null;
+            LoadRecordedGrips();
+            thumbCatches.TryGetValue(AnimationFamily(firearmController), out Vector3[] thumb);
+            return thumb;
+        }
+
         private static RockIn RockInOf(FirearmController firearmController)
         {
             if (!rockInMagazines || firearmController == null)

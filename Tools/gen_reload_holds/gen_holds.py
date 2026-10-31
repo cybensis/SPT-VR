@@ -225,6 +225,7 @@ def thumbOnCatch(g):
 
 # The other way to hold an AK's handle. Each hand's clips on these guns only show it one way (the left over the top, the right from
 # below), so the other comes from a clip that shows it, the same handle on another rig, moved over through the gun's frame.
+THUMB_CATCH_GUNS=('mp5','mp5k')
 OTHER_GRIP_GUNS=('ak100','ak74n','ak74m','akm','aks74n','aks74u','rpk16','saiga12k_10')
 LEFT_UNDER_HAND=('pp-19-01','pp-19-01_charge_2')
 RIGHT_OVER_HAND=('ak74n','ak74n_reload_charge_0')
@@ -282,7 +283,7 @@ def palmHold(g,J,old,new):
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
 def run(folders,outFile=None):
-    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},slides={},rockIn={},palms={}); report=[]
+    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},thumbCatches={},slides={},rockIn={},palms={}); report=[]
     boneInGun={}; otherGrips={}
     for folder in folders:
         d=ROOT+folder+'/'
@@ -386,6 +387,10 @@ def run(folders,outFile=None):
                     if slide: result['slides'][family]=slide
                 except Exception as e:
                     report.append((family,'slide','ERR',repr(e)[:80]))
+            # Their off thumb works the catch too, but the magazine comes straight out
+            if family in THUMB_CATCH_GUNS:
+                thumb,_=thumbOnCatch(setup(tree,clips[next(n for n in (f'{prefix}_mag_out_0',f'{prefix}_mag_out') if n in clips)]))
+                if thumb: result['thumbCatches'][family]=thumb
             try:
                 rocks=rockIn(tree,clips,prefix,mag)
                 if rocks: result['rockIn'][family]=rocks

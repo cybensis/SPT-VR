@@ -35,7 +35,7 @@ def lengthFor(family,typ):
                 l=magLength(i)
                 if l>0: return round(float(l),3)
     return 0.0
-out=dict(grips={},handles={},gunHandHandles={},handleAlternates=R['handleAlternates'],gunHandHandleAlternates=R['gunHandHandleAlternates'],handleMovesWithBolt=sorted(set(R['handleMovesWithBolt'])),handleNotches=R['handleNotches'],slides={},rockIn={},palms={}); dropped=[]
+out=dict(grips={},handles={},gunHandHandles={},handleAlternates=R['handleAlternates'],gunHandHandleAlternates=R['gunHandHandleAlternates'],handleMovesWithBolt=sorted(set(R['handleMovesWithBolt'])),handleNotches=R['handleNotches'],thumbCatches=R['thumbCatches'],slides={},rockIn={},palms={}); dropped=[]
 for k,v in sorted(R['grips'].items()):
     family,typ=k.split('|'); e={}
     for half,h in v.items():

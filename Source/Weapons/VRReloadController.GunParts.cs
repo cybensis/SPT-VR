@@ -100,8 +100,9 @@ namespace TarkovVR.Source.Weapons
             bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn());
             // A paddle catch is the off hand's thumb, not the gun hand's finger
             RockIn rockIn = RockInOf(firearmController);
-            latchThumbPose = HoldingPalmedMagazine && activePalmHold?.thumb != null ? activePalmHold.thumb : rockIn?.thumb;
-            latchThumbTarget = pressedByFinger && rockIn != null ? 1f : 0f;
+            bool thumbPresses = ThumbWorksCatch(firearmController);
+            latchThumbPose = HoldingPalmedMagazine && activePalmHold?.thumb != null ? activePalmHold.thumb : rockIn?.thumb ?? ThumbCatchOf(firearmController);
+            latchThumbTarget = pressedByFinger && thumbPresses ? 1f : 0f;
             float target = pressedByFinger ? 1f : 0f;
             bool inserting = HoldingMagazine && onRail && !railPullingOut;
             if (target <= 0f && !inserting)
@@ -118,7 +119,7 @@ namespace TarkovVR.Source.Weapons
             }
             releasePressTarget = target;
             // The magazine pushes it in on the way up, not the finger; a hand off the gun (slung, support-held) can't
-            releaseFingerTarget = pressedByFinger && releaseFinger && rockIn == null && !ChestHang.Detached ? 1f : 0f;
+            releaseFingerTarget = pressedByFinger && releaseFinger && !thumbPresses && !ChestHang.Detached ? 1f : 0f;
         }
 
         // Called from HandsInteractionController.LateUpdate: the animator has posed the button this frame

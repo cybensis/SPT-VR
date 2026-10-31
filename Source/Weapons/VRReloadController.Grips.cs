@@ -108,6 +108,7 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedSlide> slides;
             public List<string> handleMovesWithBolt;
             public Dictionary<string, SavedHandleNotch> handleNotches;
+            public Dictionary<string, float[]> thumbCatches;
             public Dictionary<string, SavedPalmHold> palms;
         }
 
@@ -395,6 +396,11 @@ namespace TarkovVR.Source.Weapons
                 }
                 if (generated.handleMovesWithBolt != null)
                     handleMovesWithBolt.UnionWith(generated.handleMovesWithBolt);
+                if (generated.thumbCatches != null)
+                {
+                    foreach (KeyValuePair<string, float[]> entry in generated.thumbCatches)
+                        thumbCatches[entry.Key] = FingersFrom(entry.Value);
+                }
                 if (generated.handleNotches != null)
                 {
                     foreach (KeyValuePair<string, SavedHandleNotch> entry in generated.handleNotches)
