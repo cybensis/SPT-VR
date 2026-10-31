@@ -36,6 +36,7 @@ namespace TarkovVR.Source.Weapons
         public static float railCaptureRadius = 0.04f;      // m magazine top to the track that catches a magazine being put in
         public static float railCaptureAngle = 40f;         // deg off the seated orientation that still catches
         public static float railCaptureTime = 0.12f;        // s to ease a caught magazine onto the track
+        public static float railClearDistance = 0.10f;      // m a magazine just pulled out has to get from the well before the track can catch it again
         public static float railExitMargin = 0.02f;         // m past the top of the track before a magazine being put in comes off it
         public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
         public static float handReleaseTime = 0.08f;        // s the rendered hand takes to go from the magazine back to the controller
@@ -112,6 +113,7 @@ namespace TarkovVR.Source.Weapons
         private static bool onRail;
         private static bool magazineCatchPassed;            // Manual Reload: the gun's magazine has moved past the catch
         private static bool grabbedWithRelease;             // taken from the support grip by pressing B: letting go of B gives it back
+        private static float railCatchClearance;            // how far from the well it has to get first, on top of leaving the catch zone
         private static bool railCatchArmed;                 // a magazine that just came off the track must leave the catch zone first
         private static bool railPullingOut;                 // started seated (the gun's own magazine): comes free at railLength
         private static float railPosition;                  // m out from seated
@@ -814,7 +816,7 @@ namespace TarkovVR.Source.Weapons
             bool inCatchZone = alongTrack >= -0.005f && alongTrack <= railLength + railExitMargin && offTrack <= railCaptureRadius && angle <= railCaptureAngle;
             if (!railCatchArmed)
             {
-                railCatchArmed = !inCatchZone;
+                railCatchArmed = !inCatchZone && topOffset.magnitude >= railCatchClearance;
                 return;
             }
             // A new magazine only with the well empty (the gun's own, out in the hand, still counts as in it for Tarkov)
@@ -977,6 +979,8 @@ namespace TarkovVR.Source.Weapons
             }
             onRail = false;
             railCatchArmed = false;
+            // On its way away from the gun, not back in: passing the well again right after isn't an insert (headset)
+            railCatchClearance = railClearDistance;
             magazineLeftWell = true;
             Transform propTransform = heldProp.transform;
             Transform handBone = HandBone();
@@ -1005,6 +1009,7 @@ namespace TarkovVR.Source.Weapons
         {
             onRail = false;
             railCatchArmed = false;
+            railCatchClearance = 0f;
             heldProp.transform.SetParent(HandBone(), worldPositionStays: true);
             ReleaseHandLatch();
         }
