@@ -12,6 +12,7 @@ using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
+using TarkovVR.Source.XR;
 using UnityEngine;
 using UnityEngine.UI;
 using Valve.VR;
@@ -648,6 +649,96 @@ namespace TarkovVR.Source.Player.VRManager
         public Quaternion initialCombinedRotation;
         private Quaternion rightHandRotationOffset;
 
+        //---------------------------------------------------------------------------------------------------------
+        // Free hands: a fixed pose in the controller's frame, on Index controllers.
+        // The gun sliders only mean something for the gun; a free right hand riding them swung its fingertip ~15cm
+        // off. Rotation = the gun hand's at neutral sliders (its pointing finger is within 3 deg of Valve's openxr_poke
+        // axis), left = the mirror image of that. Wrist = what lands the pointing fingertip on openxr_poke
+        // (valve_controller_knu_1_0_*.json, no other controller's model has that point). IK aims the wrist at RightHand /
+        // LeftHand, so everything measured from those transforms keeps its relation to the rendered hand.
+        public static bool alignFreeHands = true;    // false = the old placement, for comparing in the headset
+        public static Vector3 freeRightHandWrist = new Vector3(0.0147f, 0.064f, -0.1715f);
+        public static Vector3 freeRightHandRotation = new Vector3(50f, 170f, 70f);
+        public static Vector3 freeLeftHandWrist = new Vector3(-0.0246f, 0.0468f, -0.188f);
+        public static Vector3 freeLeftHandRotation = new Vector3(-50f, 10f, 70f);
+        public static bool logHandAlignment = true;  // every 2s: rendered hand next to SteamVR's hand skeleton, both in the controller's frame
+
+        private bool rightHandPlacedFree;
+        private float nextHandAlignmentLogTime;
+
+        private static bool AlignsFreeHands => alignFreeHands && VRGlobals.vrControllerType == "index" && !VRSettings.GetLeftHandedMode();
+
+        private static bool RightHandIsFree => Interactions.ChestHang.Detached
+            || Interactions.EatingInteractionController.ManualActive
+            || (VRGlobals.player != null && VRGlobals.player.HandsIsEmpty);
+
+        private void PlaceRightHandForGun(VRPose fromAction)
+        {
+            RightHand.transform.localRotation = fromAction.localRotation;
+            RightHand.transform.Rotate(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
+            RightHand.transform.localPosition = (fromAction.localPosition + mainHandPosOffset) - fromAction.localRotation * Vector3.forward * controllerLength;
+        }
+
+        private Vector3 OffHandPosition(VRPose fromAction)
+        {
+            if (AlignsFreeHands)
+                return fromAction.localPosition + fromAction.localRotation * freeLeftHandWrist;
+            return (fromAction.localPosition + secondaryHandPosOffset) - fromAction.localRotation * Vector3.forward * controllerLength;
+        }
+
+        public void PlaceOffHand(VRPose fromAction)
+        {
+            LeftHand.transform.localPosition = OffHandPosition(fromAction);
+            LeftHand.transform.localRotation = fromAction.localRotation;
+            if (AlignsFreeHands)
+                LeftHand.transform.localRotation *= Quaternion.Euler(freeLeftHandRotation);
+            else
+                LeftHand.transform.Rotate(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x, secondaryHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
+        }
+
+        // Runs at render time, so the bones hold this frame's final pose. Hold still to read it: the IK aimed at last frame's controller pose.
+        private void LogHandAlignment(VRPose rightPose)
+        {
+            if (!AlignsFreeHands || Time.unscaledTime < nextHandAlignmentLogTime || VRGlobals.ikManager == null)
+                return;
+            nextHandAlignmentLogTime = Time.unscaledTime + 2f;
+
+            if (rightHandPlacedFree && VRGlobals.ikManager.rightArmIk != null)
+                LogOneHandAlignment("R", VRGlobals.ikManager.rightArmIk.solver.bone3.transform, "Base HumanRDigit", OpenXRInput.RIGHT_HAND, rightPose.localPosition, rightPose.localRotation);
+            if (!isSupporting && VRGlobals.ikManager.leftArmIk != null)
+                LogOneHandAlignment("L", VRGlobals.ikManager.leftArmIk.solver.bone3.transform, "Base HumanLDigit", OpenXRInput.LEFT_HAND,
+                    VRInput.LeftHandPose.GetLocalPosition(SteamVR_Input_Sources.LeftHand), VRInput.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand));
+        }
+
+        private void LogOneHandAlignment(string handName, Transform palm, string digitPrefix, int hand, Vector3 controllerPosition, Quaternion controllerRotation)
+        {
+            Transform fingerEnd = palm.Find($"{digitPrefix}21/{digitPrefix}22/{digitPrefix}23");
+            if (fingerEnd == null)
+                return;
+
+            Transform rig = VRGlobals.vrOffsetter.transform;
+            Quaternion toController = Quaternion.Inverse(controllerRotation);
+            Quaternion rigRotation = Quaternion.Inverse(rig.rotation);
+            Vector3 PointInController(Vector3 worldPoint) => toController * (rig.InverseTransformPoint(worldPoint) - controllerPosition);
+            Vector3 DirectionInController(Vector3 worldDirection) => toController * (rigRotation * worldDirection);
+
+            // The rig has no bone at the fingertip: about 2.5cm past the last joint
+            string line = $"[HandAlign] {handName} rendered wrist {PointInController(palm.position):F3} fingers {DirectionInController(-palm.right):F2} back {DirectionInController(palm.up):F2}"
+                + $" index tip {PointInController(fingerEnd.TransformPoint(-0.025f, 0f, 0f)):F3}";
+
+            if (VRInput.UsingOpenXR
+                && OpenXRHandTracking.TryGetJoint(hand, OpenXRHandTracking.WRIST_JOINT, out Vector3 wristPosition, out Quaternion wristRotation)
+                && OpenXRHandTracking.TryGetJoint(hand, OpenXRHandTracking.INDEX_TIP_JOINT, out Vector3 tipPosition, out _))
+            {
+                line += $" | skeleton wrist {(toController * (wristPosition - controllerPosition)):F3} fingers {(toController * (wristRotation * Vector3.forward)):F2} back {(toController * (wristRotation * Vector3.up)):F2}"
+                    + $" index tip {(toController * (tipPosition - controllerPosition)):F3}";
+                float[] curls = OpenXRHandTracking.GetCurls(hand);
+                if (curls != null)
+                    line += $" index curl {curls[1]:0.00}";
+            }
+            Plugin.MyLog.LogInfo(line);
+        }
+
         private void UpdateRightHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
         {
             if (!RightHand)
@@ -655,6 +746,9 @@ namespace TarkovVR.Source.Player.VRManager
 
             if (VRGlobals.emptyHands != null)
                 initialCombinedRotation = VRGlobals.emptyHands.rotation;
+            // Last frame's free pose overwrote RightHand; the code below reads it as the gun's frame (two-hand aim, weight filter)
+            if (rightHandPlacedFree)
+                PlaceRightHandForGun(fromAction);
             VRBoolean primaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.LeftGrip : VRInput.RightGrip;
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockLeftJoystick : VRGlobals.blockRightJoystick;
             // If the joystick is being blocked but the right grip isn't down, keep the joystick blocked until they stop pushing it beyond a certain threshold so the player
@@ -770,10 +864,7 @@ namespace TarkovVR.Source.Player.VRManager
                     rawRightHand.transform.localRotation *= rightHandRotationOffset;
                 }
 
-                RightHand.transform.localRotation = fromAction.localRotation;
-                RightHand.transform.Rotate(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
-                Vector3 virtualBasePosition = ((fromAction.localPosition + mainHandPosOffset) - fromAction.localRotation * Vector3.forward * controllerLength);
-                RightHand.transform.localPosition = virtualBasePosition;
+                PlaceRightHandForGun(fromAction);
 
                 if (smoothingFactor != 50)
                 {
@@ -819,11 +910,7 @@ namespace TarkovVR.Source.Player.VRManager
                     rawRightHand.transform.rotation = RightHand.transform.rotation;
                 }
 
-                RightHand.transform.localRotation = fromAction.localRotation;
-                RightHand.transform.Rotate(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
-
-                Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength);
-                RightHand.transform.localPosition = virtualBasePosition + mainHandPosOffset;
+                PlaceRightHandForGun(fromAction);
 
                 bool weightFeel = false;
                 if (InputHandlers.BreathingHandler.isHoldingBreath && VRSettings.SmoothScopeAim())
@@ -883,6 +970,16 @@ namespace TarkovVR.Source.Player.VRManager
                     framesAfterSwitching++;
                 }
             }
+
+            // Last, so rawRightHand above keeps following the gun's frame and taking the gun back doesn't swing it
+            rightHandPlacedFree = AlignsFreeHands && RightHandIsFree;
+            if (rightHandPlacedFree)
+            {
+                RightHand.transform.localPosition = fromAction.localPosition + fromAction.localRotation * freeRightHandWrist;
+                RightHand.transform.localRotation = fromAction.localRotation * Quaternion.Euler(freeRightHandRotation);
+            }
+            if (logHandAlignment)
+                LogHandAlignment(fromAction);
         }
 
         private void UpdateLeftHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
@@ -935,13 +1032,7 @@ namespace TarkovVR.Source.Player.VRManager
                     if (isWeapPistol)
                         VRGlobals.player._markers[0] = LeftHand.transform;
                 }
-                Vector3 freePos = (fromAction.localPosition + secondaryHandPosOffset) -
-                                  fromAction.localRotation * Vector3.forward * controllerLength;
-                LeftHand.transform.localPosition = freePos;
-                LeftHand.transform.localRotation = fromAction.localRotation;
-                LeftHand.transform.Rotate(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x,
-                    secondaryHandRotOffset.y,
-                    VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
+                PlaceOffHand(fromAction);
                 return;
             }
 
@@ -1037,8 +1128,7 @@ namespace TarkovVR.Source.Player.VRManager
                     // This condition should only ever happen if snapping to the gun is disabled
                     if (!isSupporting)
                     {
-                        Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + secondaryHandPosOffset;
-                        LeftHand.transform.localPosition = virtualBasePosition;
+                        LeftHand.transform.localPosition = OffHandPosition(fromAction);
                     }
                     else
                     {
@@ -1063,21 +1153,12 @@ namespace TarkovVR.Source.Player.VRManager
                         //VRGlobals.firearmController.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
 
                     }
-                    Vector3 virtualBasePosition = ((fromAction.localPosition + secondaryHandPosOffset) - fromAction.localRotation * Vector3.forward * controllerLength);
-                    LeftHand.transform.localPosition = virtualBasePosition;
-                    //if (leftHandGunIK)
-                    //LeftHand.transform.localPosition = fromAction.localPosition + leftHandOffset;
-                    LeftHand.transform.localRotation = fromAction.localRotation;
-                    LeftHand.transform.Rotate(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x, secondaryHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
-
+                    PlaceOffHand(fromAction);
                 }
             }
             else
             {
-                Vector3 virtualBasePosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength) + secondaryHandPosOffset;
-                LeftHand.transform.localPosition = virtualBasePosition;
-                LeftHand.transform.localRotation = fromAction.localRotation;
-                LeftHand.transform.Rotate(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x, secondaryHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
+                PlaceOffHand(fromAction);
             }
             //else
             //{

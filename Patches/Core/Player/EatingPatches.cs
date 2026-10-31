@@ -145,8 +145,8 @@ namespace TarkovVR.Patches.Core.Player
         // Keep the LEFT hand tracking the controller during manual eating. Normally
         // UpdateLeftHand early-returns while LEFT_HAND_ANIMATOR_HASH==1 (eat anim),
         // freezing LeftHand + disabling leftArmIk. While we're active we replicate
-        // the simple non-supporting placement and skip the original. controllerLength
-        // is 0.175 (VRPlayerManager). Returns false to bypass the original.
+        // the simple non-supporting placement and skip the original. Returns false to
+        // bypass the original.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VRPlayerManager), "UpdateLeftHand")]
         public static bool ForceLeftHandTracking(VRPlayerManager __instance, VRPose fromAction)
@@ -155,16 +155,7 @@ namespace TarkovVR.Patches.Core.Player
             GameObject lh = __instance.LeftHand;
             if (lh == null || fromAction == null) return true;
 
-            // Match the rig's normal off-hand placement (VRPlayerManager.UpdateLeftHand
-            // ~line 1020), INCLUDING the rotation offsets — omitting them left the left
-            // hand ~110° twisted vs the controller.
-            Vector3 secPosOff = __instance.secondaryHandPosOffset;
-            Vector3 secRotOff = __instance.secondaryHandRotOffset;
-
-            Transform t = lh.transform;
-            t.localPosition = (fromAction.localPosition - fromAction.localRotation * Vector3.forward * 0.175f) + secPosOff;
-            t.localRotation = fromAction.localRotation;
-            t.Rotate(VRSettings.GetSecondaryHandVertOffset() + secRotOff.x, secRotOff.y, VRSettings.GetSecondaryHandHorOffset() + secRotOff.z);
+            __instance.PlaceOffHand(fromAction);
 
             // While a pull-to-open has the LEFT hand latched onto the held item, keep
             // updating the rig target (above — so releasing lands the hand on the
@@ -173,7 +164,7 @@ namespace TarkovVR.Patches.Core.Player
             // rendered hand off the item back to the controller mid-pull.
             if (VRGlobals.ikManager?.leftArmIk != null && !EatingInteractionController.OffHandLatched)
             {
-                VRGlobals.ikManager.leftArmIk.solver.target = t;
+                VRGlobals.ikManager.leftArmIk.solver.target = lh.transform;
                 VRGlobals.ikManager.leftArmIk.enabled = true;
             }
             return false; // skip the original (which would freeze the left hand)

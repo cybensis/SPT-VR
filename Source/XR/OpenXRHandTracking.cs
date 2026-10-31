@@ -37,6 +37,8 @@ namespace TarkovVR.Source.XR
         private const int XR_HAND_JOINT_SET_DEFAULT_EXT = 0;
         private const int XR_HAND_JOINTS_MOTION_RANGE_UNOBSTRUCTED_EXT = 1;    // a full grip reads as a fist
         private const int XR_HAND_JOINT_COUNT_EXT = 26;
+        public const int WRIST_JOINT = 1;       // XR_HAND_JOINT_WRIST_EXT
+        public const int INDEX_TIP_JOINT = 10;  // XR_HAND_JOINT_INDEX_TIP_EXT
         private const ulong XR_SPACE_LOCATION_ORIENTATION_VALID_BIT = 0x1;
         private const int XR_SUCCESS = 0;
 
@@ -118,6 +120,22 @@ namespace TarkovVR.Source.XR
         {
             SampleOncePerFrame();
             return handActive[hand] ? fingerCurls[hand] : null;
+        }
+
+        // A joint of SteamVR's hand skeleton in Unity's axes (OpenXR is right handed: z flips, and so do rotations
+        // around X and Y), in the same tracking space as the controller poses
+        public static unsafe bool TryGetJoint(int hand, int joint, out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            SampleOncePerFrame();
+            if (!handActive[hand] || instance == null || instance.jointBuffers[hand] == IntPtr.Zero)
+                return false;
+
+            XrPosef pose = ((XrHandJointLocationEXT*)instance.jointBuffers[hand])[joint].pose;
+            position = new Vector3(pose.position.x, pose.position.y, -pose.position.z);
+            rotation = new Quaternion(-pose.orientation.x, -pose.orientation.y, pose.orientation.z, pose.orientation.w);
+            return true;
         }
 
         // ------------------------------------------------------------------------------------------------------------
