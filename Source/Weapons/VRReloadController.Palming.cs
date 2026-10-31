@@ -9,9 +9,9 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Two magazines in one hand: with a new magazine held, the off-hand trigger at the gun's magazine takes that one too and
-    // pulls it out (the grip is already busy, and that grab is the mag release: the gun hand's finger presses it), and the
-    // new one goes in while the old stays in the hand until it lets go. Tarkov has the animation (*_reload_admin, with its
+    // Two magazines in one hand: with a new magazine held, the off-hand trigger at the gun's magazine takes that one too (the
+    // grip is already busy), B lets the catch go as on any pull and it comes out, and the new one goes in while the old
+    // stays in the hand until it lets go. Tarkov has the animation (*_reload_admin, with its
     // mod_magazine_new bone) but never finished it: ReloadExternalMagOperation.SwitchToReloadWithNewMag only logs "Not
     // Implemented". The hand poses here are read from that clip; nothing plays it.
     //
@@ -66,7 +66,6 @@ namespace TarkovVR.Source.Weapons
         private static bool palmZoneEntered;
 
         private static bool HoldingPalmedMagazine => palmedProp != null;
-        private static bool PullingWhilePalming => HoldingPalmedMagazine && !palmedIsOld;
 
         private static bool InPalmZone(FirearmController firearmController, Weapon weapon, Slot magazineSlot)
         {
@@ -154,10 +153,6 @@ namespace TarkovVR.Source.Weapons
             magazineHandFingers = palmHold.fingers;
             if (snapHandToGrip)
                 SnapHandToGrip(oldPosition, oldRotation.eulerAngles);
-            // GrabFromGun only plays the button without Manual Reload, where the grab is the press
-            if (VRSettings.GetManualReloadOn())
-                PlayGunSound(firearmController, "Button");
-            PulseGunHand(0.25f, 0.03f);
             Plugin.MyLog.LogInfo($"[VRReload] palming {palmedMagazine.LocalizedShortName()}, pulling {heldMagazine.LocalizedShortName()}");
             return true;
         }

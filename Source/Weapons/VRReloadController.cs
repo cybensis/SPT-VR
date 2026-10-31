@@ -743,7 +743,7 @@ namespace TarkovVR.Source.Weapons
             if (railPullingOut)
             {
                 // Manual Reload: the mag catch holds it seated until B is down; once past the catch it slides freely
-                bool heldByCatch = VRSettings.GetManualReloadOn() && !magazineCatchPassed && !MagazineReleaseHeld() && !PullingWhilePalming;
+                bool heldByCatch = VRSettings.GetManualReloadOn() && !magazineCatchPassed && !MagazineReleaseHeld();
                 railPosition = Mathf.Clamp(trackPosition, 0f, heldByCatch ? 0f : railLength);
                 if (railPosition >= magazineCatchDistance)
                     magazineCatchPassed = true;
