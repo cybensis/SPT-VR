@@ -22,6 +22,10 @@ namespace TarkovVR.Source.Weapons
 
         private const string BUILT_IN_GRIP = "m4a1|0";   // tested in the headset, a recording never replaces it
         private const int HIGHEST_MAGAZINE_TYPE = 15;
+        private const int FIRST_THUMB_BONE = 1;          // palm bones in GetComponentsInChildren order: 0 is the palm
+        private const int LAST_THUMB_BONE = 3;
+        public static float sameHoldDistance = 0.04f;    // m pull and insert holds may differ and still be the same way of holding it
+        public static float sameHoldAngle = 15f;         // deg, same
         private static readonly string RELOAD_GRIPS_FILE = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\sptvr\\ReloadGrips.json");
 
         // The magazine's pose in the hand's frame: the left IK marker's while recording, since your hand takes its place
@@ -116,6 +120,7 @@ namespace TarkovVR.Source.Weapons
                 pull = ResolveHold(family, magazineType, true, lengthAxis, length, out string pullSource),
                 insert = ResolveHold(family, magazineType, false, lengthAxis, length, out string insertSource),
             };
+            grip.pull = WithInsertThumb(grip.pull, grip.insert);
             Plugin.MyLog.LogInfo($"[VRReload] {firearmController.Item.LocalizedShortName()} with {magazine.LocalizedShortName()}: animations '{family}', "
                 + $"magazine type {magazineType}, length {length * 100f:0.#} cm, pull hold {pullSource}, insert hold {insertSource}");
             return grip.pull != null || grip.insert != null ? grip : null;
@@ -139,6 +144,22 @@ namespace TarkovVR.Source.Weapons
             }
             source = "none";
             return null;
+        }
+
+        // The pull's fingers come from its most closed moment, which only looks at the four fingers: the thumb is wherever it
+        // happens to be by then (on a drum, far past the magazine). When the hand holds the magazine about the same way going
+        // in, the insert's thumb fits, and that one's taken from a long still run.
+        private static MagazineHold WithInsertThumb(MagazineHold pull, MagazineHold insert)
+        {
+            if (pull?.fingers == null || insert?.fingers == null || pull.fingers.Length <= LAST_THUMB_BONE || insert.fingers.Length <= LAST_THUMB_BONE
+                || (pull.position - insert.position).magnitude > sameHoldDistance
+                || Quaternion.Angle(Quaternion.Euler(pull.rotation), Quaternion.Euler(insert.rotation)) > sameHoldAngle)
+                return pull;
+
+            Vector3[] fingers = (Vector3[])pull.fingers.Clone();
+            for (int bone = FIRST_THUMB_BONE; bone <= LAST_THUMB_BONE; bone++)
+                fingers[bone] = insert.fingers[bone];
+            return new MagazineHold { position = pull.position, rotation = pull.rotation, magazineLength = pull.magazineLength, fingers = fingers };
         }
 
         private static MagazineHold HoldFor(string family, int magazineType, bool pull)
