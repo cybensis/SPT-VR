@@ -123,6 +123,19 @@ def handleHold(g,J,charge):
     pos=g['rotate'](conj(cr),kp-cp); rot=qmul(conj(cr),kr)
     return dict(position=[round(float(x),4) for x in pos],rotation=toUnityEuler(rot),fingers=eulerList(mid['qs']),travel=round(float(top),3),palmOff=round(mid['palmOff'],3))
 
+def leftHandTravel(g,charge):
+    P=g['prefabLocal']; mk,wp=bone(P,'/weapon_L_IK_marker'),bone(P,'Weapon_root_anim/weapon')
+    stop=float(g['clip'].m_MuscleClip.m_StopTime); rows=[]; rest=None
+    for i in range(int(stop*30)+1):
+        t=i/30; c={}
+        cp,_,_=g['worldAt'](charge,t,c); kp,_,_=g['worldAt'](mk,t,c); wpp,wr,_=g['worldAt'](wp,t,c)
+        ig=g['rotate'](conj(wr),cp-wpp)
+        if rest is None: rest=ig
+        rows.append((float(np.linalg.norm(ig-rest)),g['rotate'](conj(wr),kp-wpp)))
+    top=max(r[0] for r in rows); firstBack=next(i for i,r in enumerate(rows) if r[0]>=top-0.002)
+    lastRest=max((i for i in range(firstBack) if rows[i][0]<=0.002),default=0)
+    return float(np.linalg.norm(rows[firstBack][1]-rows[lastRest][1]))
+
 def palmHold(g,J,old,new):
     So=sample(g,old,J); Sn=sample(g,new,J)
     seat=So[0]['inGun']
@@ -179,12 +192,20 @@ def run(folders,outFile=None):
                 result['grips'].setdefault(f'{family}|{typ}',{})['pull' if pull else 'insert']=h; got.append(n)
             charge=bone(P,'/mod_charge')
             if charge:
+                # Our handle grab is the left hand. Many guns rack with the right in their low mastery clips, with the left
+                # still on the handguard: only a clip where the left hand travels with the handle says anything.
+                best=None
                 for n in sorted(x for x in names if re.match(re.escape(prefix)+r'_reload_charge(_\d+)?$',x)):
-                    try: h=handleHold(setup(tree,clips[n]),J,charge)
+                    try:
+                        g=setup(tree,clips[n]); h=handleHold(g,J,charge)
+                        if h is None: continue
+                        moved=leftHandTravel(g,charge)
                     except Exception as e:
                         report.append((family,n,'ERR',repr(e)[:80])); continue
-                    if h:
-                        result['handles'][family]=h; break
+                    if moved>=0.03 and (best is None or moved>best[0]):
+                        h['clip']=n; h['leftHandMoved']=round(moved,3); best=(moved,h)
+                if best: result['handles'][family]=best[1]
+                elif any(re.match(re.escape(prefix)+r'_reload_charge(_\d+)?$',x) for x in names): report.append((family,'charge','no clip racks with the left hand'))
             new=bone(P,'/mod_magazine_new')
             for n in sorted(x for x in names if re.match(re.escape(prefix)+r'_reload_admin(_\d+)?$',x)):
                 if new:
