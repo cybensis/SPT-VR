@@ -661,7 +661,7 @@ namespace TarkovVR.Source.Player.VRManager
         public static Vector3 freeRightHandRotation = new Vector3(50f, 170f, 70f);
         public static Vector3 freeLeftHandWrist = new Vector3(-0.0246f, 0.0468f, -0.188f);
         public static Vector3 freeLeftHandRotation = new Vector3(-50f, 10f, 70f);
-        public static bool logHandAlignment = true;  // every 2s: rendered hand next to SteamVR's hand skeleton, both in the controller's frame
+        public static bool logHandAlignment = false; // every 2s: rendered hand next to SteamVR's hand skeleton, both in the controller's frame
 
         private bool rightHandPlacedFree;
         private float nextHandAlignmentLogTime;
