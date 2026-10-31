@@ -36,7 +36,7 @@ namespace TarkovVR.Source.Weapons
         public static float railCaptureRadius = 0.04f;      // m magazine top to the track that catches a magazine being put in
         public static float railCaptureAngle = 40f;         // deg off the seated orientation that still catches
         public static float railCaptureTime = 0.12f;        // s to ease a caught magazine onto the track
-        public static float railClearDistance = 0.10f;      // m a magazine just pulled out has to get from the well before the track can catch it again
+        public static float railClearDistance = 0.05f;      // m a magazine just pulled out has to get from the well before the track can catch it again
         public static float railExitMargin = 0.02f;         // m past the top of the track before a magazine being put in comes off it
         public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
         public static float handReleaseTime = 0.08f;        // s the rendered hand takes to go from the magazine back to the controller
