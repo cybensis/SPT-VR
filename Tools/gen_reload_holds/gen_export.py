@@ -60,6 +60,88 @@ for f,axis in sorted(R['wellAxes'].items()):
 for f,h in sorted(R['slides'].items()):
     if famFolder.get(f) in pistolFolders:
         out['slides'][f]=dict(bone=h['bone'],position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=h['travel'])
+# The other grips on each pistol's slide: same place against the back and top of that slide, same turn of the hand
+def conj4(q): return np.array([-q[0],-q[1],-q[2],q[3]])
+def mul4(a,b):
+    x1,y1,z1,w1=a;x2,y2,z2,w2=b
+    return np.array([w1*x2+x1*w2+y1*z2-z1*y2,w1*y2-x1*z2+y1*w2+z1*x2,w1*z2+x1*y2-y1*x2+z1*w2,w1*w2-x1*x2-y1*y2-z1*z2])
+def turn(q,v):
+    u=np.array(q[:3]); return v+2*np.cross(u,np.cross(u,v)+q[3]*v)
+def eulerOf(q):
+    x,y,z,w=q
+    sinX=2*(w*x-y*z)
+    ex=math.degrees(math.asin(max(-1.0,min(1.0,sinX))))
+    if abs(sinX)<0.9999:
+        ey=math.degrees(math.atan2(2*(w*y+x*z),1-2*(x*x+y*y))); ez=math.degrees(math.atan2(2*(w*z+x*y),1-2*(x*x+z*z)))
+    else:
+        ey=math.degrees(math.atan2(-2*(x*z-w*y),1-2*(y*y+z*z))); ez=0.0
+    return [round(ex%360,2),round(ey%360,2),round(ez%360,2)]
+# Many guns' meshes live in the bundles their prefab depends on (Windows.json lists them)
+bundleManifest=json.load(open(BUNDLES+'Windows.json',encoding='utf-8'))
+def loadWithMeshes(key):
+    dependencies=[d for d in bundleManifest.get(key,{}).get('Dependencies',[]) if d.endswith('.bundle') and not re.search('audio|animations|textures|physics|hands',d) and os.path.exists(BUNDLES+d)]
+    return UnityPy.load(BUNDLES+key,*[BUNDLES+d for d in dependencies])
+def meshBox(env,underBone=None,nameStart=None):
+    best=None
+    for o in env.objects:
+        if o.type.name!='MeshFilter': continue
+        filterObject=o.read()
+        try: mesh=filterObject.m_Mesh.read(); go=filterObject.m_GameObject.read()
+        except Exception: continue
+        if nameStart is not None and not go.m_Name.startswith(nameStart): continue
+        center=np.array([mesh.m_LocalAABB.m_Center.x,mesh.m_LocalAABB.m_Center.y,mesh.m_LocalAABB.m_Center.z]); extent=np.array([mesh.m_LocalAABB.m_Extent.x,mesh.m_LocalAABB.m_Extent.y,mesh.m_LocalAABB.m_Extent.z])
+        if underBone is not None:
+            # Through the transforms up to the bone
+            t=go.m_Transform.read(); chain=[]; found=False
+            while True:
+                name=t.m_GameObject.read().m_Name
+                if name==underBone:
+                    found=True; break
+                chain.append(t)
+                if not t.m_Father.path_id: break
+                t=t.m_Father.read()
+            if not found: continue
+            corners=[center+extent*np.array(s) for s in ((1,1,1),(1,1,-1),(1,-1,1),(1,-1,-1),(-1,1,1),(-1,1,-1),(-1,-1,1),(-1,-1,-1))]
+            for link in chain:
+                q=np.array([link.m_LocalRotation.x,link.m_LocalRotation.y,link.m_LocalRotation.z,link.m_LocalRotation.w]); p=np.array([link.m_LocalPosition.x,link.m_LocalPosition.y,link.m_LocalPosition.z])
+                corners=[turn(q,c)+p for c in corners]
+            low=np.min(corners,axis=0); high=np.max(corners,axis=0); center=(low+high)/2; extent=(high-low)/2
+        size=float(np.prod(extent))
+        if best is None or size>best[0]: best=(size,center,extent)
+    return best
+def slideBack(family,boneName):
+    folder=famFolder.get(family)
+    gun=next((g for g in guns if g['folder']==folder),None)
+    slot=[s for s in items[gun['id']]['_props'].get('Slots',[]) if s['_name']=='mod_reciever'] if gun else []
+    box=None
+    if slot:
+        # A fitted slide's mesh comes out in the bone's frame (the mesh's -90 and its ModPlacer's +90 cancel)
+        for i in slot[0]['_props']['filters'][0]['Filter']:
+            if i in items:
+                # Its own: the bundles it depends on bring the gun's frame along too
+                try: box=meshBox(loadWithMeshes(items[i]['_props']['Prefab']['path']),nameStart=items[i]['_name'])
+                except Exception: box=None
+                if box: break
+    if box is None and gun:
+        d=ROOT_WEAPONS+folder+'/'
+        for c in sorted(os.listdir(d)):
+            if c.endswith('_container.bundle') and c.startswith('weapon_'):
+                box=meshBox(loadWithMeshes('assets/content/weapons/'+folder+'/'+c),boneName)
+                if box: break
+    if box is None: return None
+    return box[1]+box[2]   # x: the side of no use, y: its back, z: its top
+ROOT_WEAPONS='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/weapons/'
+backs={f:slideBack(f,h['bone']) for f,h in R['slides'].items() if f in out['slides']}
+sourceBacks={k:slideBack(v['family'],R['slides'][v['family']]['bone']) for k,v in R['slideGrips'].items()}
+print('slide back and top, cm:',{f:(None if b is None else [round(float(b[1])*100,1),round(float(b[2])*100,1)]) for f,b in backs.items()})
+for f in out['slides']:
+    grips=[]
+    for key,grip in sorted(R['slideGrips'].items()):
+        if backs.get(f) is None or sourceBacks.get(key) is None: continue
+        position=np.array(grip['position'],float); shift=backs[f]-sourceBacks[key]; shift[0]=0.0
+        boneInGun=np.array(R['slideBoneInGun'][f],float)
+        grips.append(dict(position=[round(float(x),4) for x in turn(conj4(boneInGun),position+shift)],rotation=eulerOf(mul4(conj4(boneInGun),np.array(grip['rotation'],float))),fingers=grip['fingers'],travel=0))
+    if grips: out['handleAlternates'][f]=grips
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]
 for holds in (out['handles'],out['gunHandHandles'],out['handleAlternates'],out['gunHandHandleAlternates'],out['rockIn'],out['palms'],out['slides'],out['wellAxes']):

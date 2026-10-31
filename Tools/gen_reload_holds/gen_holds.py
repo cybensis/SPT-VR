@@ -262,6 +262,9 @@ def holdOnBone(hand,boneInGun):
 # A pistol has no charging handle: the left hand works its slide the same way. The slide is a bone of the rig, the first of these the
 # clip moves with the hand riding it, and the hold is on that bone like a handle's.
 SLIDE_BONES=('weapon_slide','mod_reciever','slide')
+# Other ways to take a slide, from the pistols whose clips show them: palm on top, and up from below at the side. gen_export moves them onto
+# each pistol by the back and top of its slide, since the slide bone sits somewhere else on each.
+SLIDE_OTHER_GRIPS=(('over','p226r','p226r_discharge'),('below','aps','aps_misfire_1'))
 SLIDE_CLIP_RANKS=[r'reload_charge(_\d+)?$',r'(reload_)?charge_(to_)?end(_\d+)?$|reload_end_charge$',r'rechamber(_\d+)?$',r'misfire(_\d+)?$',r'discharge$',r'jam_(slide|soft|hard)']
 def slideHold(tree,clips,prefix,names):
     P=tree[0]; best=None
@@ -308,7 +311,7 @@ def palmHold(g,J,old,new):
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
 def run(folders,outFile=None):
-    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},thumbCatches={},wellAxes={},slides={},rockIn={},palms={}); report=[]
+    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},thumbCatches={},wellAxes={},slides={},slideBoneInGun={},slideGrips={},rockIn={},palms={}); report=[]
     boneInGun={}; otherGrips={}
     for folder in folders:
         d=ROOT+folder+'/'
@@ -416,7 +419,15 @@ def run(folders,outFile=None):
             if not charge:
                 try:
                     slide=slideHold(tree,clips,prefix,names)
-                    if slide: result['slides'][family]=slide
+                    if slide:
+                        result['slides'][family]=slide
+                        slidePath=bone(P,'/'+slide['bone']); g=setup(tree,clips[next(n for n in names if '_mag_in' in n)]); c={}
+                        _,slideRotation,_=g['worldAt'](slidePath,0.0,c); _,gunRotation,_=g['worldAt'](bone(P,'Weapon_root_anim/weapon'),0.0,c)
+                        result['slideBoneInGun'][family]=[float(x) for x in qmul(conj(gunRotation),slideRotation)]
+                        for key,sourceFamily,sourceClip in SLIDE_OTHER_GRIPS:
+                            if family==sourceFamily and sourceClip in clips:
+                                hand=handOnHandle(setup(tree,clips[sourceClip]),slidePath,'L')
+                                result['slideGrips'][key]=dict(family=family,clip=sourceClip,position=[float(x) for x in hand['position']],rotation=[float(x) for x in hand['rotation']],fingers=hand['fingers'])
                 except Exception as e:
                     report.append((family,'slide','ERR',repr(e)[:80]))
             # Their off thumb works the catch too, but the magazine comes straight out
