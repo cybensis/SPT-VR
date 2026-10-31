@@ -31,6 +31,9 @@ namespace TarkovVR.Source.Weapons
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
         public static float handleLateralEscape = 0.10f;   // m the controller moves sideways off the track before the hand lets go
         public static float handleLockedBackTravel = 0.02f; // m a handle on the bolt has left to give, with the bolt already locked back
+        public static float underGunPullGain = 1.6f;        // the off hand on a handle on the bolt: how much further it comes than the controller does.
+                                                            // That hand reaches under the gun and runs into the other controller over a full pull;
+                                                            // it's locked on the handle, so it doesn't show. 1 = one to one.
         public static bool boltFollowsHandle = true;       // false = only the handle model moves
         public static bool showChamberedRound = true;      // the round in the chamber shows while the bolt is open, riding the bolt face
         public static float boltLockOnDistance = 0.003f;   // m a part has to come back before it's taken as the bolt the round follows
@@ -376,7 +379,8 @@ namespace TarkovVR.Source.Weapons
             float handAlongTrack = Vector3.Dot(handDelta, axis);
             float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
 
-            handlePull = Mathf.Clamp(handAlongTrack, 0f, heldHandleTravel);
+            float pullGain = handleCarrier != null && !handleInGunHand ? underGunPullGain : 1f;
+            handlePull = Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel);
             handleView.position = handleBone.TransformPoint(handleRestLocalPosition) + axis * handlePull;
 
             if (!handleFullyBack && handlePull >= heldHandleTravel * handleFullPull)
