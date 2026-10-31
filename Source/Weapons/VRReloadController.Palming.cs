@@ -260,7 +260,6 @@ namespace TarkovVR.Source.Weapons
             onRail = false;
             // It's right at the well already: it has to leave before the track can catch it
             railCatchArmed = false;
-            railCatchClearance = 0f;
         }
 
         // The pull it was waiting on ended without the old magazine coming free: back to an ordinary new magazine in the hand
