@@ -703,8 +703,9 @@ namespace TarkovVR.Source.Player.VRManager
                 return;
             nextHandAlignmentLogTime = Time.unscaledTime + 2f;
 
-            if (rightHandPlacedFree && VRGlobals.ikManager.rightArmIk != null)
-                LogOneHandAlignment("R", VRGlobals.ikManager.rightArmIk.solver.bone3.transform, "Base HumanRDigit", OpenXRInput.RIGHT_HAND, rightPose.localPosition, rightPose.localRotation);
+            // Two-handed, the gun's aim comes from the line between the hands, so only the one-handed hold says anything about the hand
+            if ((rightHandPlacedFree || !isSupporting) && VRGlobals.ikManager.rightArmIk != null)
+                LogOneHandAlignment(rightHandPlacedFree ? "R free" : "R holding", VRGlobals.ikManager.rightArmIk.solver.bone3.transform, "Base HumanRDigit", OpenXRInput.RIGHT_HAND, rightPose.localPosition, rightPose.localRotation);
             if (!isSupporting && VRGlobals.ikManager.leftArmIk != null)
                 LogOneHandAlignment("L", VRGlobals.ikManager.leftArmIk.solver.bone3.transform, "Base HumanLDigit", OpenXRInput.LEFT_HAND,
                     VRInput.LeftHandPose.GetLocalPosition(SteamVR_Input_Sources.LeftHand), VRInput.LeftHandPose.GetLocalRotation(SteamVR_Input_Sources.LeftHand));
