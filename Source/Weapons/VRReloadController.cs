@@ -128,8 +128,14 @@ namespace TarkovVR.Source.Weapons
         private static bool handLatchSnapping;
         private static Vector3 handSnapLocalPosition;       // the animation's grip, in the magazine's frame
         private static Quaternion handSnapLocalRotation;
-        private static List<Collider> disabledPropColliders = new List<Collider>();
-        private static Dictionary<Transform, int> propOriginalLayers = new Dictionary<Transform, int>();
+
+        // What each borrowed magazine model had changed, to put back before it returns to the pool (palming holds two)
+        private sealed class PropChanges
+        {
+            public readonly List<Collider> disabledColliders = new List<Collider>();
+            public readonly Dictionary<Transform, int> originalLayers = new Dictionary<Transform, int>();
+        }
+        private static readonly Dictionary<GameObject, PropChanges> propChanges = new Dictionary<GameObject, PropChanges>();
 
         private static bool hasLastGrabPose;
         private static Vector3 lastGrabPosition;
@@ -261,6 +267,7 @@ namespace TarkovVR.Source.Weapons
                 else
                     UpdateHeldMagazine(gripReleased, releaseLetGo);
             }
+            UpdatePalmedMagazine(gripReleased);
             if (HoldingChargingHandle)
             {
                 if (!ChargingHandleHoldIsStillValid())
@@ -273,7 +280,7 @@ namespace TarkovVR.Source.Weapons
             UpdateHandLatch();
             UpdateMagazineReleaseButton(releaseState);
 
-            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine;
+            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine;
             UpdateBoltSlap(handFree: !handBusy);
             if (!handBusy)
                 TryTakeOverGroundMagazine();
@@ -304,9 +311,10 @@ namespace TarkovVR.Source.Weapons
             }
             // Manual Reload, like the real button: B lets the magazine fall out of the well, unless the off hand has it
             // (on the track, still on it from seating it, or cupping it from the support grip just above)
-            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine)
+            // A new magazine in the hand, at the gun's: the hand takes that one too (palming)
+            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine && !TryStartPalming())
                 TryReleaseMagazine();
-            OwnsOffHand = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || reaching;
+            OwnsOffHand = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || reaching;
 
             UpdateZoneViz();
         }
@@ -830,6 +838,11 @@ namespace TarkovVR.Source.Weapons
         // Pulled down the track far enough: loose in the hand
         private static void ComeFreeOfWell()
         {
+            if (HoldingPalmedMagazine && !palmedIsOld)
+            {
+                FinishPalmPull();
+                return;
+            }
             onRail = false;
             railCatchArmed = false;
             magazineLeftWell = true;
@@ -902,7 +915,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 RailAxisInWell(GameObject prop, Vector3 seatedScale)
         {
             Vector3 towardMiddle = MagazineCenterInProp(prop) - propWellPointLocal;
-            Vector3 axisInProp = TryGetMagazineShape(prop, propWellPointLocal, out Vector3 lengthAxis, out _) ? lengthAxis : towardMiddle;
+            Vector3 axisInProp = TryGetMagazineShape(prop, propWellPointLocal, out Vector3 lengthAxis, out _, out _) ? lengthAxis : towardMiddle;
             Vector3 axisInWell = seatedLocalRotation * Vector3.Scale(axisInProp, seatedScale);
             if (debugLog)
             {
@@ -919,10 +932,11 @@ namespace TarkovVR.Source.Weapons
         // Not when the longest side runs across the gun (the Beta-C dual drum is wider than it is tall): if it's nowhere near
         // the way the magazine hangs from the well, the side closest to that direction is its length.
         public static float minLengthAxisAlignment = 0.5f;   // cos of how far the longest side may be off the well to body direction
-        private static bool TryGetMagazineShape(GameObject prop, Vector3 wellPointInProp, out Vector3 axisInProp, out float length)
+        private static bool TryGetMagazineShape(GameObject prop, Vector3 wellPointInProp, out Vector3 axisInProp, out float length, out float thinnestSide)
         {
             axisInProp = Vector3.zero;
             length = 0f;
+            thinnestSide = 0f;
             MeshFilter body = null;
             float bodyVolume = 0f;
             foreach (MeshFilter meshFilter in prop.GetComponentsInChildren<MeshFilter>(true))
@@ -978,6 +992,7 @@ namespace TarkovVR.Source.Weapons
                 return false;
             axisInProp = axis.normalized;
             length = lengthSide == 0 ? bodySize.x : lengthSide == 1 ? bodySize.y : bodySize.z;
+            thinnestSide = Mathf.Min(bodySize.x, Mathf.Min(bodySize.y, bodySize.z));
             return true;
         }
 
@@ -1448,21 +1463,21 @@ namespace TarkovVR.Source.Weapons
             if (prop == null)
                 return null;
 
-            disabledPropColliders.Clear();
+            PropChanges changes = new PropChanges();
             foreach (Collider collider in prop.GetComponentsInChildren<Collider>())
             {
                 if (!collider.enabled)
                     continue;
                 collider.enabled = false;
-                disabledPropColliders.Add(collider);
+                changes.disabledColliders.Add(collider);
             }
-            propOriginalLayers.Clear();
             int gunLayer = LayerMask.NameToLayer("Player");
             foreach (Transform child in prop.GetComponentsInChildren<Transform>(includeInactive: true))
             {
-                propOriginalLayers[child] = child.gameObject.layer;
+                changes.originalLayers[child] = child.gameObject.layer;
                 child.gameObject.layer = gunLayer;
             }
+            propChanges[prop] = changes;
             prop.SetActive(true);
             return prop;
         }
@@ -1480,18 +1495,20 @@ namespace TarkovVR.Source.Weapons
             // The hand latch rides the magazine on the track; it must never go back to the pool with it
             if (handLatch != null && handLatch.IsChildOf(prop.transform))
                 handLatch.SetParent(null, worldPositionStays: true);
-            foreach (Collider collider in disabledPropColliders)
+            if (propChanges.TryGetValue(prop, out PropChanges changes))
             {
-                if (collider != null)
-                    collider.enabled = true;
+                foreach (Collider collider in changes.disabledColliders)
+                {
+                    if (collider != null)
+                        collider.enabled = true;
+                }
+                foreach (KeyValuePair<Transform, int> originalLayer in changes.originalLayers)
+                {
+                    if (originalLayer.Key != null)
+                        originalLayer.Key.gameObject.layer = originalLayer.Value;
+                }
+                propChanges.Remove(prop);
             }
-            disabledPropColliders.Clear();
-            foreach (KeyValuePair<Transform, int> originalLayer in propOriginalLayers)
-            {
-                if (originalLayer.Key != null)
-                    originalLayer.Key.gameObject.layer = originalLayer.Value;
-            }
-            propOriginalLayers.Clear();
             prop.transform.SetParent(null, worldPositionStays: false);
             AssetPoolObject.ReturnToPool(prop);
         }
@@ -1585,7 +1602,7 @@ namespace TarkovVR.Source.Weapons
             Vector3[] pose = null;
             if (HoldingChargingHandle)
                 pose = MAGAZINE_PULL_FINGERS;
-            else if (HoldingMagazine || HoldingSeatedMagazine)
+            else if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
                 pose = magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
             if (pose != null)
                 fingerPoseShown = pose;

@@ -112,7 +112,7 @@ namespace TarkovVR.Source.Weapons
             LoadRecordedGrips();
             string family = AnimationFamily(firearmController);
             int magazineType = magazine.magAnimationIndex;
-            if (!TryGetMagazineShape(prop, wellPointInProp, out Vector3 lengthAxis, out float length))
+            if (!TryGetMagazineShape(prop, wellPointInProp, out Vector3 lengthAxis, out float length, out _))
                 length = 0f;
 
             ReloadGrip grip = new ReloadGrip
@@ -189,7 +189,7 @@ namespace TarkovVR.Source.Weapons
 
         internal static float MeasureMagazineLength(Transform magazineView, Vector3 wellPosition)
         {
-            return TryGetMagazineShape(magazineView.gameObject, magazineView.InverseTransformPoint(wellPosition), out _, out float length) ? length : 0f;
+            return TryGetMagazineShape(magazineView.gameObject, magazineView.InverseTransformPoint(wellPosition), out _, out float length, out _) ? length : 0f;
         }
 
         internal static bool TrySaveHold(FirearmController firearmController, int magazineType, bool pull, Vector3 position, Vector3 rotation,
