@@ -130,6 +130,7 @@ namespace TarkovVR.Patches.Core.Player
         // The pull grip: the most closed fingers while the hand is on the old magazine, from the start of the reload (the
         // hand grabs it and pulls it out well before Tarkov's "pulled out" event, and opens again to drop it in the pouch)
         public static float pullGripReach = 0.25f;     // m magazine to the left IK marker that counts as the hand on it
+        public static float pullGripHoldTolerance = 0.03f;     // m the pull grip may be off the still hold and still be the same grip
         private static float pullGripCurl;
         private static Quaternion[] pullGripFingers;
         private static Vector3 pullGripPosition;
@@ -430,12 +431,15 @@ namespace TarkovVR.Patches.Core.Player
             bool saved = false;
             if (oldMagazineType >= 0)
             {
-                if (pullGripFingers != null)
-                    saved |= VRReloadController.TrySaveHold(sessionFirearm, oldMagazineType, true, pullGripPosition, pullGripRotation,
-                        oldMagazineLength, pullGripFingers, $"{gunName} {oldMagazineName}");
-                else if (oldMagazineInMarker.bestFrames >= stableMinimumFrames && oldMagazineFingers != null)
+                // The hold = where the magazine stays still in the hand. The most closed fingers are only its finger pose when
+                // they happened in that same hold: a drum's wide grip is less closed than the hand passing the well on its
+                // way to it (PMAG 40, D-60 and Beta-C all "gripped" there, 10 cm off, on the same reload pose)
+                if (oldMagazineInMarker.bestFrames >= stableMinimumFrames && oldMagazineFingers != null)
+                {
+                    bool pullGripInHold = pullGripFingers != null && (pullGripPosition - oldMagazineInMarker.bestPosition).magnitude <= pullGripHoldTolerance;
                     saved |= VRReloadController.TrySaveHold(sessionFirearm, oldMagazineType, true, oldMagazineInMarker.bestPosition, oldMagazineInMarker.bestRotation,
-                        oldMagazineLength, oldMagazineFingers, $"{gunName} {oldMagazineName}");
+                        oldMagazineLength, pullGripInHold ? pullGripFingers : oldMagazineFingers, $"{gunName} {oldMagazineName}");
+                }
                 else
                     Plugin.MyLog.LogWarning($"[ReloadGrips] {gunName} {oldMagazineName}: the hand never held it still, no pull hold");
             }
