@@ -1166,10 +1166,10 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                VRBoolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.RightGrip : VRInput.LeftGrip;
                 VRBoolean tacticalButtonAction = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB : VRInput.ButtonY;
 
-                bool tacticalButtonDown = tacticalButtonAction.state && secondaryGripState.state;
+                // Only with the hand on the foregrip: the same grip also holds magazines and loot
+                bool tacticalButtonDown = tacticalButtonAction.state && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
 
                 // Button just pressed
                 if (tacticalButtonDown && !tacticalButtonWasDown)

@@ -95,8 +95,8 @@ namespace TarkovVR.Source.Weapons
             if (!(firearmController.CurrentOperation is FirearmController.Idling))
                 return;
 
-            // B, or the gun's magazine pulled out by hand without Manual Reload (that grab is the button press)
-            bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn());
+            // B, or the gun's magazine pulled out by hand without Manual Reload or while palming (that grab is the button press)
+            bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && (!VRSettings.GetManualReloadOn() || PullingWhilePalming));
             float target = pressedByFinger ? 1f : 0f;
             bool inserting = HoldingMagazine && onRail && !railPullingOut;
             if (target <= 0f && !inserting)

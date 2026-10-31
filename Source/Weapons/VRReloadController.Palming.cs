@@ -9,8 +9,9 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Two magazines in one hand: with a new magazine held, B at the gun's magazine takes that one too and pulls it out, and
-    // the new one goes in while the old stays in the hand until it lets go. Tarkov has the animation (*_reload_admin, with its
+    // Two magazines in one hand: with a new magazine held, the off-hand trigger at the gun's magazine takes that one too and
+    // pulls it out (the grip is already busy, and that grab is the mag release: the gun hand's finger presses it), and the
+    // new one goes in while the old stays in the hand until it lets go. Tarkov has the animation (*_reload_admin, with its
     // mod_magazine_new bone) but never finished it: ReloadExternalMagOperation.SwitchToReloadWithNewMag only logs "Not
     // Implemented". The hand poses here are read from that clip; nothing plays it.
     //
@@ -18,7 +19,8 @@ namespace TarkovVR.Source.Weapons
     // in the hand. Letting go at the chest leaves it there; anywhere else throws it from the rig to the ground.
     public static partial class VRReloadController
     {
-        public static bool palming = true;                  // false = B with a new magazine in hand drops the gun's, as before
+        public static bool palming = true;                  // false = no second magazine in the hand
+        public static float palmGrabRadius = 0.12f;         // m palm to the gun magazine's center; wider than an empty hand's: the new magazine is in the way
         public static float palmMaxThickness = 0.035f;      // m; a drum or a MAG5 doesn't fit in one hand with another magazine
         public static float palmMaxLength = 0.26f;          // m
 
@@ -60,7 +62,33 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 palmedPosition;              // where it sits in the hand
         private static Quaternion palmedRotation;
 
+        private static bool palmZoneEntered;
+
         private static bool HoldingPalmedMagazine => palmedProp != null;
+        private static bool PullingWhilePalming => HoldingPalmedMagazine && !palmedIsOld;
+
+        private static bool InPalmZone(FirearmController firearmController, Weapon weapon, Slot magazineSlot)
+        {
+            return weapon.GetCurrentMagazine() != null && TryGetGunMagazineCenter(firearmController, magazineSlot, out Vector3 magazineCenter)
+                && (OffHandPalm() - magazineCenter).sqrMagnitude <= palmGrabRadius * palmGrabRadius;
+        }
+
+        // A light buzz on coming into reach, so you know the trigger will take it
+        private static void UpdatePalmZoneBlip()
+        {
+            bool inZone = palming && heldSource == HeldMagazineSource.FromPouch && !onRail && !HoldingPalmedMagazine
+                && TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
+                && palmHolds.ContainsKey(AnimationFamily(firearmController)) && InPalmZone(firearmController, weapon, magazineSlot);
+            if (inZone && !palmZoneEntered)
+                Pulse(0.2f, 0.03f);
+            palmZoneEntered = inZone;
+        }
+
+        private static bool RefusePalming(string reason)
+        {
+            Plugin.MyLog.LogInfo($"[VRReload] no palming: {reason}");
+            return false;
+        }
 
         private static bool MagazineFitsPalm(GameObject magazineObject, Vector3 wellPointInObject)
         {
@@ -78,24 +106,28 @@ namespace TarkovVR.Source.Weapons
 
         //-----------------------------------------------------------------------------------------------------------------------------
 
-        // B with a new magazine in the hand, at the gun's magazine. False = it doesn't apply, B drops the magazine as usual.
+        // The trigger with a new magazine in the hand. Says why not in the log: it's a gesture you can't see fail.
         private static bool TryStartPalming()
         {
-            if (!palming || !VRSettings.GetManualReloadOn() || heldSource != HeldMagazineSource.FromPouch || onRail || HoldingPalmedMagazine)
+            if (!palming || heldSource != HeldMagazineSource.FromPouch || onRail || HoldingPalmedMagazine)
                 return false;
             if (!CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
-                return false;
-            if (!palmHolds.TryGetValue(AnimationFamily(firearmController), out PalmHold palmHold))
-                return false;
-            if (weapon.MalfState.State == Weapon.EMalfunctionState.Feed || !InGunMagazineGrabZone(firearmController, weapon, magazineSlot, OffHandPalm()))
-                return false;
+                return RefusePalming("the gun isn't ready");
+            string family = AnimationFamily(firearmController);
+            if (!palmHolds.TryGetValue(family, out PalmHold palmHold))
+                return RefusePalming($"no palming pose for '{family}' yet");
+            if (weapon.MalfState.State == Weapon.EMalfunctionState.Feed)
+                return RefusePalming("feed malfunction");
+            if (!InPalmZone(firearmController, weapon, magazineSlot))
+                return RefusePalming("hand not at the gun's magazine");
 
             ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
             if (magazineView == null || magazineView.ItemView == null || magazineView.Bone == null)
-                return false;
-            if (!MagazineFitsPalm(heldProp, propWellPointLocal)
-                || !MagazineFitsPalm(magazineView.ItemView.gameObject, magazineView.ItemView.InverseTransformPoint(magazineView.Bone.position)))
-                return false;
+                return RefusePalming("no magazine model on the gun");
+            if (!MagazineFitsPalm(heldProp, propWellPointLocal))
+                return RefusePalming($"{heldMagazine.LocalizedShortName()} is too big to palm");
+            if (!MagazineFitsPalm(magazineView.ItemView.gameObject, magazineView.ItemView.InverseTransformPoint(magazineView.Bone.position)))
+                return RefusePalming("the gun's magazine is too big to palm");
 
             PoseForThisMagazine(palmHold.newMagazine, heldProp, propWellPointLocal, out palmedPosition, out palmedRotation);
             palmedProp = heldProp;
@@ -121,6 +153,10 @@ namespace TarkovVR.Source.Weapons
             magazineHandFingers = palmHold.fingers;
             if (snapHandToGrip)
                 SnapHandToGrip(oldPosition, oldRotation.eulerAngles);
+            // GrabFromGun only plays the button without Manual Reload, where the grab is the press
+            if (VRSettings.GetManualReloadOn())
+                PlayGunSound(firearmController, "Button");
+            PulseGunHand(0.25f, 0.03f);
             Plugin.MyLog.LogInfo($"[VRReload] palming {palmedMagazine.LocalizedShortName()}, pulling {heldMagazine.LocalizedShortName()}");
             return true;
         }

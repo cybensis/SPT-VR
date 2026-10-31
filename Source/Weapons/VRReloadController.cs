@@ -311,8 +311,11 @@ namespace TarkovVR.Source.Weapons
             }
             // Manual Reload, like the real button: B lets the magazine fall out of the well, unless the off hand has it
             // (on the track, still on it from seating it, or cupping it from the support grip just above)
-            // A new magazine in the hand, at the gun's: the hand takes that one too (palming)
-            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine && !TryStartPalming())
+            // A new magazine in the hand, at the gun's: the trigger takes that one too (palming)
+            UpdatePalmZoneBlip();
+            if (triggerPressed)
+                TryStartPalming();
+            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine)
                 TryReleaseMagazine();
             OwnsOffHand = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || reaching;
 
@@ -739,7 +742,7 @@ namespace TarkovVR.Source.Weapons
             if (railPullingOut)
             {
                 // Manual Reload: the mag catch holds it seated until B is down; once past the catch it slides freely
-                bool heldByCatch = VRSettings.GetManualReloadOn() && !magazineCatchPassed && !MagazineReleaseHeld();
+                bool heldByCatch = VRSettings.GetManualReloadOn() && !magazineCatchPassed && !MagazineReleaseHeld() && !PullingWhilePalming;
                 railPosition = Mathf.Clamp(trackPosition, 0f, heldByCatch ? 0f : railLength);
                 if (railPosition >= magazineCatchDistance)
                     magazineCatchPassed = true;
