@@ -3,6 +3,7 @@ using EFT.UI;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
+using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Controls;
@@ -152,7 +153,7 @@ namespace TarkovVR.Source.Player.Interactions
                     SupportOnly = false;
                     BeginHang(fc);
                 }
-                else if (grip && !prevGrip && near)
+                else if (grip && !prevGrip && near && !VRReloadController.HandleInGunHand)
                 {
                     // dominant hand takes the grip back -> normal (two-handed) hold. Reattach clears
                     // SupportOnly itself - clearing it HERE first made wasDetached/fromSupport read

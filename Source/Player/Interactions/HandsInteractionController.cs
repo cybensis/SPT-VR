@@ -428,6 +428,8 @@ namespace TarkovVR.Source.Player.Interactions
             // Same open-hand treatment for the RIGHT hand while it's off the gun (ChestHang
             // sling / support-only) - the animator still curls it in the grip pose otherwise.
             UpdateRightHandFingers();
+            // That hand on the charging handle: the rack clip's finger pose on top
+            VRReloadController.ApplyGunHandFingerPose();
 
             // AFTER both finger updates: buffer the rendered joint locals for the FIKA finger sync
             // (VRArmSync sends them on its own cadence).

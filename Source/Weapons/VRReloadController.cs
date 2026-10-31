@@ -126,6 +126,7 @@ namespace TarkovVR.Source.Weapons
         private static bool handLatched;
         private static bool handLatchReleasing;
         private static bool handLatchSnapping;
+        private static bool latchedHandIsGunHand;           // the gun hand on the charging handle; everything else latches the off hand
         private static Vector3 handSnapLocalPosition;       // the animation's grip, in the magazine's frame
         private static Quaternion handSnapLocalRotation;
 
@@ -145,6 +146,10 @@ namespace TarkovVR.Source.Weapons
 
         private static float fingerWeight;
         private static Vector3[] fingerPoseShown;
+        private static float gunHandFingerWeight;
+        private static Vector3[] gunHandFingerPoseShown;
+        private static Transform gunHandPalm;
+        private static Transform[] gunHandFingerBones;
         private static Vector3[] magazineHandFingers;       // the pose the hand took on the magazine, kept until it lets go (seating, pulling it back out)
         private static Transform[] leftPalmBones;
 
@@ -156,6 +161,7 @@ namespace TarkovVR.Source.Weapons
         private static bool previousGripState;
         private static bool previousReleaseState;
         private static bool previousTriggerState;
+        private static bool previousGunHandTriggerState;
         private static int lastTickFrame = -10;
         private static int lastTriggerTickFrame = -10;
 
@@ -212,6 +218,17 @@ namespace TarkovVR.Source.Weapons
             new Vector3(0.3f, 353.8f, 73.3f), new Vector3(360f, 360f, 85f), new Vector3(360f, 0f, 61f),               // pinky
         };
 
+        // The right hand's fingers hooked over an AR's T (m4a1_discharge), for a gun whose clips never rack with that hand
+        private static readonly Vector3[] GUN_HAND_HANDLE_FINGERS =
+        {
+            Vector3.zero,
+            new Vector3(323.6f, 322.3f, 21.1f), new Vector3(359.9f, 0.1f, 0f), new Vector3(359.4f, 0.1f, 21.5f),      // thumb
+            new Vector3(360f, 354.7f, 15.8f), new Vector3(0f, 360f, 18.2f), new Vector3(0f, 0f, 25.9f),               // index
+            new Vector3(0f, 5.7f, 25.7f), new Vector3(0f, 0f, 15.1f), new Vector3(0f, 0.1f, 25.8f),                   // middle
+            new Vector3(0.1f, 7.4f, 45.8f), new Vector3(0f, 0.1f, 45.9f), new Vector3(0f, 0.1f, 45.9f),               // ring
+            new Vector3(0.1f, 7.2f, 45.8f), new Vector3(0f, 0.1f, 45.9f), new Vector3(0f, 0.2f, 45.9f),               // pinky
+        };
+
         private static FirearmController gunSoundPlayerFor;
         private static BaseSoundPlayer gunSoundPlayer;
 
@@ -235,13 +252,23 @@ namespace TarkovVR.Source.Weapons
 
             // The off-hand trigger works the charging handle (the same 0.5 / 0.35 hysteresis as the other trigger reads)
             float offHandTrigger = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
-            if (Time.frameCount - lastTriggerTickFrame > 1)
+            bool triggerResumed = Time.frameCount - lastTriggerTickFrame > 1;
+            if (triggerResumed)
                 previousTriggerState = offHandTrigger > 0.5f;
             lastTriggerTickFrame = Time.frameCount;
             bool triggerState = previousTriggerState ? offHandTrigger > 0.35f : offHandTrigger > 0.5f;
             bool triggerPressed = triggerState && !previousTriggerState;
             bool triggerReleased = !triggerState && previousTriggerState;
             previousTriggerState = triggerState;
+
+            // The gun hand's trigger works the handle too, once that hand is off the grip (it can't fire then)
+            float gunHandTrigger = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis : VRInput.RightTrigger.axis;
+            if (triggerResumed)
+                previousGunHandTriggerState = gunHandTrigger > 0.5f;
+            bool gunHandTriggerState = previousGunHandTriggerState ? gunHandTrigger > 0.35f : gunHandTrigger > 0.5f;
+            bool gunHandTriggerPressed = gunHandTriggerState && !previousGunHandTriggerState;
+            bool gunHandTriggerReleased = !gunHandTriggerState && previousGunHandTriggerState;
+            previousGunHandTriggerState = gunHandTriggerState;
 
             // A click on the gun hand when the mag release goes down
             bool releaseState = MagazineReleaseHeld();
@@ -274,7 +301,7 @@ namespace TarkovVR.Source.Weapons
                 if (!ChargingHandleHoldIsStillValid())
                     LetGoOfChargingHandle(snapForward: false);
                 else
-                    UpdateChargingHandle(triggerReleased);
+                    UpdateChargingHandle(HandleInGunHand ? gunHandTriggerReleased : triggerReleased);
             }
             if (boltReleaseFor != null)
                 UpdateBoltRelease();
@@ -310,6 +337,10 @@ namespace TarkovVR.Source.Weapons
                 else if (gripPressed && inPouchZone)
                     GrabFromPouch(firearmController, weapon, magazineSlot);
             }
+            // The gun hand off the grip, the off hand holding the gun up (ChestHang's support hold): that hand can take the handle
+            if (!handBusy && gunHandTriggerPressed && ChestHang.SupportOnly && CanWorkGun(out FirearmController heldFirearm, out Weapon heldWeapon, out _)
+                && InChargingHandleZone(heldFirearm, heldWeapon, gunHand: true))
+                GrabChargingHandle(heldFirearm, heldWeapon, gunHand: true);
             // Manual Reload, like the real button: B lets the magazine fall out of the well, unless the off hand has it
             // (on the track, still on it from seating it, or cupping it from the support grip just above)
             // A new magazine in the hand, at the gun's: the trigger takes that one too (palming)
@@ -318,7 +349,8 @@ namespace TarkovVR.Source.Weapons
                 TryStartPalming();
             if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine && !TrySlideMagazineOntoHand())
                 TryReleaseMagazine();
-            OwnsOffHand = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || reaching;
+            // The gun hand on the handle leaves the off hand where it is: on the foregrip, holding the gun up
+            OwnsOffHand = HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine || reaching;
 
             UpdateZoneViz();
         }
@@ -328,13 +360,16 @@ namespace TarkovVR.Source.Weapons
 
         private static bool CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
         {
+            return CanWorkGun(out firearmController, out weapon, out magazineSlot) && !ChestHang.Detached;
+        }
+
+        private static bool CanWorkGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
+        {
             weapon = null;
             magazineSlot = null;
             if (!TryGetMagazineGun(out firearmController, out weapon, out magazineSlot))
                 return false;
             if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
-                return false;
-            if (ChestHang.Detached)
                 return false;
             if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
                 return false;
@@ -1070,13 +1105,18 @@ namespace TarkovVR.Source.Weapons
         // The rendered hand on what it holds (a magazine on the track, the charging handle): it rides that, from where
         // the controller grabbed it
 
-        private static void LatchHand(Transform holder)
+        private static Transform LatchedHandRig => (latchedHandIsGunHand ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand).transform;
+
+        private static LimbIK LatchedArmIk => VRGlobals.ikManager == null ? null : latchedHandIsGunHand ? VRGlobals.ikManager.rightArmIk : VRGlobals.ikManager.leftArmIk;
+
+        private static void LatchHand(Transform holder, bool gunHand = false)
         {
             if (handLatch == null)
                 handLatch = new GameObject("VRReloadHandLatch").transform;
-            Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
+            latchedHandIsGunHand = gunHand;
+            Transform handRig = LatchedHandRig;
             handLatch.SetParent(holder, worldPositionStays: false);
-            handLatch.SetPositionAndRotation(leftHand.position, leftHand.rotation);
+            handLatch.SetPositionAndRotation(handRig.position, handRig.rotation);
             handLatched = true;
             handLatchReleasing = false;
             handLatchSnapping = false;
@@ -1117,9 +1157,9 @@ namespace TarkovVR.Source.Weapons
         {
             if (handLatch != null)
                 handLatch.SetParent(null, worldPositionStays: true);
-            if (handLatched && VRGlobals.ikManager != null && VRGlobals.ikManager.leftArmIk != null && VRGlobals.vrPlayer != null
-                && VRGlobals.ikManager.leftArmIk.solver.target == handLatch)
-                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+            LimbIK armIk = LatchedArmIk;
+            if (handLatched && armIk != null && VRGlobals.vrPlayer != null && armIk.solver.target == handLatch)
+                armIk.solver.target = LatchedHandRig;
             handLatched = false;
             handLatchReleasing = false;
         }
@@ -1127,10 +1167,11 @@ namespace TarkovVR.Source.Weapons
         // Re-asserted every frame: the two-handing edges in VRPlayerManager set the target back to LeftHand
         private static void AssertHandLatch()
         {
-            if (VRGlobals.ikManager == null || VRGlobals.ikManager.leftArmIk == null || handLatch == null)
+            LimbIK armIk = LatchedArmIk;
+            if (armIk == null || handLatch == null)
                 return;
-            if (VRGlobals.ikManager.leftArmIk.solver.target != handLatch)
-                VRGlobals.ikManager.leftArmIk.solver.target = handLatch;
+            if (armIk.solver.target != handLatch)
+                armIk.solver.target = handLatch;
         }
 
         private static void UpdateHandLatch()
@@ -1148,20 +1189,22 @@ namespace TarkovVR.Source.Weapons
                 // it to Tarkov's own left-hand IK: target null). It goes there now: asserting ours on top, then handing the
                 // arm to LeftHand when the ease ended, left the hand following the controller up the gun instead of
                 // locking onto the foregrip. (The ease never ends while the hand moves: it trails the controller.)
-                if (VRGlobals.vrPlayer.isSupporting)
+                // The gun hand: taking the grip back gives its arm to the gun the same way (ChestHang.Reattach).
+                if (latchedHandIsGunHand ? !ChestHang.Detached : VRGlobals.vrPlayer.isSupporting)
                 {
                     handLatch.SetParent(null, worldPositionStays: true);
-                    if (VRGlobals.ikManager != null && VRGlobals.ikManager.leftArmIk != null && VRGlobals.ikManager.leftArmIk.solver.target == handLatch)
-                        VRGlobals.ikManager.leftArmIk.solver.target = null;
+                    LimbIK armIk = LatchedArmIk;
+                    if (armIk != null && armIk.solver.target == handLatch)
+                        armIk.solver.target = null;
                     handLatched = false;
                     handLatchReleasing = false;
                     return;
                 }
-                Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
+                Transform handRig = LatchedHandRig;
                 float ease = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(handReleaseTime / 3f, 0.001f));
-                handLatch.position = Vector3.Lerp(handLatch.position, leftHand.position, ease);
-                handLatch.rotation = Quaternion.Slerp(handLatch.rotation, leftHand.rotation, ease);
-                if ((handLatch.position - leftHand.position).sqrMagnitude < 0.003f * 0.003f && Quaternion.Angle(handLatch.rotation, leftHand.rotation) < 2f)
+                handLatch.position = Vector3.Lerp(handLatch.position, handRig.position, ease);
+                handLatch.rotation = Quaternion.Slerp(handLatch.rotation, handRig.rotation, ease);
+                if ((handLatch.position - handRig.position).sqrMagnitude < 0.003f * 0.003f && Quaternion.Angle(handLatch.rotation, handRig.rotation) < 2f)
                 {
                     ReleaseHandLatchNow();
                     return;
@@ -1665,7 +1708,7 @@ namespace TarkovVR.Source.Weapons
         {
             // A gun whose charging handle clip hasn't been read yet: the magazine pull's thumb-and-index pinch is the closest grip
             Vector3[] pose = null;
-            if (HoldingChargingHandle)
+            if (HoldingChargingHandle && !HandleInGunHand)
                 pose = handleHandFingers ?? MAGAZINE_PULL_FINGERS;
             else if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
                 pose = magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
@@ -1686,6 +1729,53 @@ namespace TarkovVR.Source.Weapons
             int boneCount = Mathf.Min(leftPalmBones.Length, fingerPoseShown.Length);
             for (int i = 1; i < boneCount; i++)
                 leftPalmBones[i].localRotation = Quaternion.Slerp(leftPalmBones[i].localRotation, Quaternion.Euler(fingerPoseShown[i]), fingerWeight);
+        }
+
+        // The same for the gun hand on the charging handle, after that hand's own finger update
+        public static void ApplyGunHandFingerPose()
+        {
+            Vector3[] pose = HandleInGunHand ? handleHandFingers ?? GUN_HAND_HANDLE_FINGERS : null;
+            if (pose != null)
+                gunHandFingerPoseShown = pose;
+
+            float target = pose != null && magazineFingers ? 1f : 0f;
+            gunHandFingerWeight = Mathf.Lerp(gunHandFingerWeight, target, 1f - Mathf.Exp(-fingerBlendRate * Time.deltaTime));
+            if (gunHandFingerWeight < 0.01f || gunHandFingerPoseShown == null)
+                return;
+
+            LimbIK rightArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null;
+            Transform palm = rightArmIk != null && rightArmIk.solver != null && rightArmIk.solver.bone3 != null ? rightArmIk.solver.bone3.transform : null;
+            if (palm == null)
+                return;
+            if (gunHandFingerBones == null || gunHandPalm != palm)
+            {
+                gunHandPalm = palm;
+                gunHandFingerBones = FingerBonesInPoseOrder(palm);
+            }
+
+            int boneCount = Mathf.Min(gunHandFingerBones.Length, gunHandFingerPoseShown.Length);
+            for (int i = 1; i < boneCount; i++)
+            {
+                if (gunHandFingerBones[i] != null)
+                    gunHandFingerBones[i].localRotation = Quaternion.Slerp(gunHandFingerBones[i].localRotation, Quaternion.Euler(gunHandFingerPoseShown[i]), gunHandFingerWeight);
+            }
+        }
+
+        // The palm, then three joints a finger, thumb first. Found by name: the palm also carries attach points.
+        private static Transform[] FingerBonesInPoseOrder(Transform palm)
+        {
+            Transform[] palmBones = palm.GetComponentsInChildren<Transform>(true);
+            Transform[] ordered = new Transform[16];
+            ordered[0] = palm;
+            for (int finger = 1; finger <= 5; finger++)
+            {
+                for (int joint = 1; joint <= 3; joint++)
+                {
+                    string boneEnding = "Digit" + finger + joint;
+                    ordered[(finger - 1) * 3 + joint] = System.Array.Find(palmBones, palmBone => palmBone.name.EndsWith(boneEnding));
+                }
+            }
+            return ordered;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1752,6 +1842,15 @@ namespace TarkovVR.Source.Weapons
         {
             if (haptics)
                 VRInput.Haptic.Execute(delay, duration, 120f, amplitude, OffHandSource());
+        }
+
+        // Whichever hand has the charging handle
+        private static void PulseHandleHand(float amplitude, float duration)
+        {
+            if (handleInGunHand)
+                PulseGunHand(amplitude, duration);
+            else
+                Pulse(amplitude, duration);
         }
 
         private static void PulseGunHand(float amplitude, float duration)

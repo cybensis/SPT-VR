@@ -82,6 +82,7 @@ namespace TarkovVR.Source.Weapons
         {
             public Dictionary<string, SavedGrip> grips;
             public Dictionary<string, SavedHandleHold> handles;
+            public Dictionary<string, SavedHandleHold> gunHandHandles;
             public Dictionary<string, SavedPalmHold> palms;
         }
 
@@ -352,13 +353,12 @@ namespace TarkovVR.Source.Weapons
                 {
                     if (handleHolds.ContainsKey(entry.Key))
                         continue;
-                    handleHolds[entry.Key] = new HandleHold
-                    {
-                        position = new Vector3(entry.Value.position[0], entry.Value.position[1], entry.Value.position[2]),
-                        rotation = new Vector3(entry.Value.rotation[0], entry.Value.rotation[1], entry.Value.rotation[2]),
-                        fingers = FingersFrom(entry.Value.fingers),
-                        travel = entry.Value.travel,
-                    };
+                    handleHolds[entry.Key] = HandleHoldFrom(entry.Value);
+                }
+                if (generated.gunHandHandles != null)
+                {
+                    foreach (KeyValuePair<string, SavedHandleHold> entry in generated.gunHandHandles)
+                        gunHandHandleHolds[entry.Key] = HandleHoldFrom(entry.Value);
                 }
                 foreach (KeyValuePair<string, SavedPalmHold> entry in generated.palms)
                 {
@@ -384,6 +384,17 @@ namespace TarkovVR.Source.Weapons
             if (hold != null)
                 hold.inBoneFrame = true;
             return hold;
+        }
+
+        private static HandleHold HandleHoldFrom(SavedHandleHold saved)
+        {
+            return new HandleHold
+            {
+                position = new Vector3(saved.position[0], saved.position[1], saved.position[2]),
+                rotation = new Vector3(saved.rotation[0], saved.rotation[1], saved.rotation[2]),
+                fingers = FingersFrom(saved.fingers),
+                travel = saved.travel,
+            };
         }
 
         private static Vector3[] FingersFrom(float[] numbers)

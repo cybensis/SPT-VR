@@ -599,16 +599,21 @@ namespace TarkovVR.Source.Player.Interactions
             return Vector3.Distance(lh.position, grip.position) < foregripBlockDistance;
         }
 
-        // The off hand's palm, knuckles and fingertips, for a zone the hand counts as in as soon as any of it is. The rig has no
+        // A hand's palm, knuckles and fingertips, for a zone the hand counts as in as soon as any of it is. The rig has no
         // bone at the fingertip: about 2.5cm past the last joint, along the finger.
-        internal void GetOffHandTouchPoints(List<Vector3> points)
+        internal void GetHandTouchPoints(bool dominant, List<Vector3> points)
         {
             points.Clear();
-            points.Add(PalmOrigin(false));
-            if (!fingersResolved) ResolveLeftFingers();
-            if (leftFingerJoints == null)
+            points.Add(PalmOrigin(dominant));
+            if (dominant)
+            {
+                if (!rightFingersResolved) ResolveRightFingers();
+            }
+            else if (!fingersResolved) ResolveLeftFingers();
+            Transform[][] fingerJoints = dominant ? rightFingerJoints : leftFingerJoints;
+            if (fingerJoints == null)
                 return;
-            foreach (Transform[] joints in leftFingerJoints)
+            foreach (Transform[] joints in fingerJoints)
             {
                 if (joints == null || joints.Length == 0)
                     continue;

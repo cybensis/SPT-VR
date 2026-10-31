@@ -1,8 +1,8 @@
-# Do the generated handle holds put the fingers on the handle? Fingertips against the handle model, per animation set.
+# Do the generated handle holds put the fingers on the handle? Fingertips against the handle model, per animation set and hand.
 import sys,json,re,os
 sys.path.insert(0,'.')
 exec(open('gen_holds.py',encoding='utf-8').read().split("if __name__=='__main__':")[0])
-gen=json.load(open('gen_all.json')); H=gen['result']['handles']
+gen=json.load(open('gen_all.json'))
 items=json.load(open('F:/SPT4.1/SPT_Runtime/SPT_Data/database/templates/items.json',encoding='utf-8')); guns=json.load(open('guns.json')); census=json.load(open('clip_census.json'))
 famFolder={}
 for folder,v in census.items():
@@ -25,36 +25,40 @@ def handleMesh(folder):
                                 return items[i]['_name'],np.array([a.m_Center.x,a.m_Center.y,a.m_Center.z]),np.array([a.m_Extent.x,a.m_Extent.y,a.m_Extent.z])
                     except Exception: pass
     return None,None,None
-for family,h in sorted(H.items()):
-    folder=famFolder[family]; d=ROOT+folder+'/'
-    clips={}
-    for o in UnityPy.load(d+'client_assets.bundle').objects:
-        if o.type.name=='AnimationClip':
-            try:
-                c=o.read(); clips[c.m_Name]=c
-            except Exception: pass
-    tree=None
-    for c in os.listdir(d):
-        if c.endswith('_container.bundle') and c.startswith('weapon_'):
-            t=loadTree(d+c)
-            if bone(t[0],'/mod_charge') and bone(t[0],'/Base HumanLPalm'):
-                tree=t; break
-    g=setup(tree,clips[h['clip']]); P=tree[0]; ch=bone(P,'/mod_charge')
-    # the moment the hold is read: handle all the way back
-    stop=float(clips[h['clip']].m_MuscleClip.m_StopTime); wp=bone(P,'Weapon_root_anim/weapon'); rows=[]; rest=None
-    for i in range(int(stop*30)+1):
-        t=i/30; c={}; cp,_,_=g['worldAt'](ch,t,c); wpp,wr,_=g['worldAt'](wp,t,c); ig=g['rotate'](conj(wr),cp-wpp)
-        if rest is None: rest=ig
-        rows.append((t,float(np.linalg.norm(ig-rest))))
-    top=max(r[1] for r in rows); back=[r[0] for r in rows if r[1]>=top-0.001]; t=back[len(back)//2]
-    c={}; cp,cr,_=g['worldAt'](ch,t,c)
-    name,center,extent=handleMesh(folder)
-    dist={}
-    for label,fi in (('thumb',1),('index',2),('middle',3)):
-        a=bone(P,f'/Base HumanLDigit{fi}3'); jp,_,_=g['worldAt'](a,t,c); pa,_,_=g['worldAt'](g['parentOf'][a],t,c)
-        tip=g['rotate'](conj(cr),jp+(jp-pa)*0.8-cp)
-        if center is not None:
-            off=np.maximum(np.abs(tip-center)-extent,0); dist[label]=round(float(np.linalg.norm(off))*100,1)
-        else: dist[label]=None
-    print(f"{family:12s} {h['clip']:30s} left hand moved {h['leftHandMoved']*100:4.1f} cm, handle back {h['travel']*100:4.1f} cm | fingertip to handle model cm {dist} ({name})")
-print('no left hand clip:',[r for r in gen['report'] if len(r)>2 and r[1]=='charge'])
+for side,holds in (('L',gen['result']['handles']),('R',gen['result']['gunHandHandles'])):
+    print('=== hand',side,len(holds))
+    for family,h in sorted(holds.items()):
+        folder=famFolder[family]; d=ROOT+folder+'/'
+        clips={}
+        for o in UnityPy.load(d+'client_assets.bundle').objects:
+            if o.type.name=='AnimationClip':
+                try:
+                    c=o.read(); clips[c.m_Name]=c
+                except Exception: pass
+        tree=None
+        for c in os.listdir(d):
+            if c.endswith('_container.bundle') and c.startswith('weapon_'):
+                t=loadTree(d+c)
+                if bone(t[0],'/mod_charge') and bone(t[0],f'/Base Human{side}Palm'):
+                    tree=t; break
+        g=setup(tree,clips[h['clip']]); P=tree[0]; ch=bone(P,'/mod_charge')
+        # the moment the hold is read: handle all the way back
+        stop=float(clips[h['clip']].m_MuscleClip.m_StopTime); wp=bone(P,'Weapon_root_anim/weapon'); rows=[]; rest=None
+        for i in range(int(stop*30)+1):
+            t=i/30; c={}; cp,_,_=g['worldAt'](ch,t,c); wpp,wr,_=g['worldAt'](wp,t,c); ig=g['rotate'](conj(wr),cp-wpp)
+            if rest is None: rest=ig
+            rows.append((t,float(np.linalg.norm(ig-rest))))
+        top=max(r[1] for r in rows); back=[r[0] for r in rows if r[1]>=top-0.001]
+        t=h.get('t',back[len(back)//2])
+        c={}; cp,cr,_=g['worldAt'](ch,t,c)
+        name,center,extent=handleMesh(folder)
+        dist={}
+        for label,fi in (('thumb',1),('index',2),('middle',3)):
+            a=bone(P,f'/Base Human{side}Digit{fi}3'); jp,_,_=g['worldAt'](a,t,c); pa,_,_=g['worldAt'](g['parentOf'][a],t,c)
+            tip=g['rotate'](conj(cr),jp+(jp-pa)*0.8-cp)
+            if center is not None:
+                off=np.maximum(np.abs(tip-center)-extent,0); dist[label]=round(float(np.linalg.norm(off))*100,1)
+            else: dist[label]=None
+        extra=f"drift {h['drift']*100:.1f} cm, turn {h['turn']:.0f} deg" if side=='R' else f"left hand moved {h['leftHandMoved']*100:.1f} cm"
+        print(f"{family:12s} {h['clip']:30s} {extra}, handle back {h['travel']*100:4.1f} cm | fingertip to handle model cm {dist} ({name})",flush=True)
+print('no clip:',[r for r in gen['report'] if len(r)>2 and r[1]=='charge'])

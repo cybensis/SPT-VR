@@ -35,7 +35,7 @@ def lengthFor(family,typ):
                 l=magLength(i)
                 if l>0: return round(float(l),3)
     return 0.0
-out=dict(grips={},handles={},palms={}); dropped=[]
+out=dict(grips={},handles={},gunHandHandles={},palms={}); dropped=[]
 for k,v in sorted(R['grips'].items()):
     family,typ=k.split('|'); e={}
     for half,h in v.items():
@@ -47,11 +47,21 @@ for f,h in sorted(R['handles'].items()):
     if h['palmOff']>0.03:
         dropped.append((f,'handle',h['palmOff'])); continue
     out['handles'][f]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=round(h['travel']*0.08/0.101,3))
+for f,h in sorted(R['gunHandHandles'].items()):
+    out['gunHandHandles'][f]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=round(h['travel']*0.08/0.101,3))
+# Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
+borrowed=[]
+for holds in (out['handles'],out['gunHandHandles']):
+    for family,folder in sorted(famFolder.items()):
+        mates=[f for f in sorted(holds) if famFolder.get(f)==folder]
+        if family not in holds and mates:
+            holds[family]=holds[mates[0]]; borrowed.append((family,mates[0]))
+print('handle holds borrowed in a folder',borrowed)
 for f,h in sorted(R['palms'].items()):
     out['palms'][f]=dict(newMagazine=h['newMagazine'],oldMagazine=h['oldMagazine'],fingers=h['fingers'])
 os.makedirs('out',exist_ok=True)
 json.dump(out,open('out/ReloadHolds.json','w'),separators=(',',':'))
-print('grips',len(out['grips']),'handles',len(out['handles']),'palms',len(out['palms']),'dropped',len(dropped),'bytes',os.path.getsize('out/ReloadHolds.json'))
+print('grips',len(out['grips']),'handles',len(out['handles']),'gun hand handles',len(out['gunHandHandles']),'palms',len(out['palms']),'dropped',len(dropped),'bytes',os.path.getsize('out/ReloadHolds.json'))
 print('dropped:',dropped[:14])
 known=sum(1 for v in out['grips'].values() for h in v.values() if h['magazineLength']>0); total=sum(len(v) for v in out['grips'].values())
 print('holds with a known magazine length',known,'of',total)

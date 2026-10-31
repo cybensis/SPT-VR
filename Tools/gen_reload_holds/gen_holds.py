@@ -54,12 +54,12 @@ def bone(P,s):
     m=[p for p in P if p.endswith(s)]
     return m[0] if m else None
 
-def fingerPaths(P):
-    palm=bone(P,'/Base HumanLPalm')
+def fingerPaths(P,side='L'):
+    palm=bone(P,f'/Base Human{side}Palm')
     if palm is None: return None
     out=[palm]
     for f in range(1,6):
-        a=f'{palm}/Base HumanLDigit{f}1'; b=f'{a}/Base HumanLDigit{f}2'; c=f'{b}/Base HumanLDigit{f}3'
+        a=f'{palm}/Base Human{side}Digit{f}1'; b=f'{a}/Base Human{side}Digit{f}2'; c=f'{b}/Base Human{side}Digit{f}3'
         if a not in P or b not in P or c not in P: return None
         out+=[a,b,c]
     return out
@@ -136,6 +136,41 @@ def leftHandTravel(g,charge):
     lastRest=max((i for i in range(firstBack) if rows[i][0]<=0.002),default=0)
     return float(np.linalg.norm(rows[firstBack][1]-rows[lastRest][1]))
 
+# Clips that may show a hand working the handle, best first: a rack, then the clips that rack on the way to something else.
+# Guns name their rack clips differently, and two of these are misspelt in the game's files.
+RACK_CLIP_RANKS=[r'reload_charge(_\d+)?$',r'charge(_inv)?(_\d+)?$',r'rech[ae]mber(_\d+)?$',r'misfire(_\d+)?$',r'disch\w*$',r'(jam|ammo_)']
+def rackClipRank(suffix):
+    if re.search('check|shell|catch|bolt_open',suffix): return None
+    for rank,pattern in enumerate(RACK_CLIP_RANKS):
+        if re.match(pattern,suffix): return rank
+    return None
+
+# A palm's pose in the handle bone's frame, from a clip where it rides the handle: it has to travel in the gun's frame, and over the
+# back half of the pull move as one with the handle. Either alone isn't enough: a fast pull has only a frame or two in that back half,
+# which a hand still on the grip passes, and a hand also moves in clips where it only reaches over or gets out of the way.
+def ridingHold(g,charge,side):
+    P=g['prefabLocal']; palm,wp=bone(P,f'/Base Human{side}Palm'),bone(P,'Weapon_root_anim/weapon'); J=fingerPaths(P,side)
+    if palm is None or J is None: return None
+    stop=float(g['clip'].m_MuscleClip.m_StopTime); rows=[]; rest=None
+    for i in range(int(stop*30)+1):
+        t=i/30; c={}
+        cp,cr,_=g['worldAt'](charge,t,c); pp,pr,_=g['worldAt'](palm,t,c); wpp,wr,_=g['worldAt'](wp,t,c)
+        inGun=g['rotate'](conj(wr),cp-wpp)
+        if rest is None: rest=inGun
+        rows.append(dict(t=t,back=float(np.linalg.norm(inGun-rest)),pos=g['rotate'](conj(cr),pp-cp),rot=qmul(conj(cr),pr),palmInGun=g['rotate'](conj(wr),pp-wpp)))
+    top=max(r['back'] for r in rows)
+    if top<0.03: return None
+    firstBack=next(i for i,r in enumerate(rows) if r['back']>=top-0.002)
+    lastRest=max((i for i in range(firstBack) if rows[i]['back']<=0.002),default=0)
+    riding=[r for r in rows[lastRest:firstBack+1] if r['back']>=top*0.5]
+    if len(riding)<2: return None
+    end=riding[-1]
+    drift=max(float(np.linalg.norm(r['pos']-end['pos'])) for r in riding); turn=max(ang(r['rot'],end['rot']) for r in riding)
+    moved=float(np.linalg.norm(end['palmInGun']-rows[lastRest]['palmInGun']))
+    if drift>0.015 or turn>20 or moved<top*0.5: return None
+    qs=[np.array(g['localAt'](j,end['t'])[1],float) for j in J]
+    return dict(position=[round(float(x),4) for x in end['pos']],rotation=toUnityEuler(end['rot']),fingers=eulerList(qs),travel=round(float(top),3),drift=round(drift,3),turn=round(float(turn),1),t=end['t'],moved=round(moved,3),palmOff=0.0)
+
 def palmHold(g,J,old,new):
     So=sample(g,old,J); Sn=sample(g,new,J)
     seat=So[0]['inGun']
@@ -149,7 +184,7 @@ def palmHold(g,J,old,new):
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
 def run(folders,outFile=None):
-    result=dict(grips={},handles={},palms={}); report=[]
+    result=dict(grips={},handles={},gunHandHandles={},palms={}); report=[]
     for folder in folders:
         d=ROOT+folder+'/'
         if not os.path.isfile(d+'client_assets.bundle'): continue
@@ -195,17 +230,38 @@ def run(folders,outFile=None):
                 # Our handle grab is the left hand. Many guns rack with the right in their low mastery clips, with the left
                 # still on the handguard: only a clip where the left hand travels with the handle says anything.
                 best=None
-                for n in sorted(x for x in names if re.match(re.escape(prefix)+r'_reload_charge(_\d+)?$',x)):
+                for n in sorted(names):
+                    rank=rackClipRank(n[len(prefix)+1:])
+                    if rank is None: continue
                     try:
-                        g=setup(tree,clips[n]); h=handleHold(g,J,charge)
-                        if h is None: continue
-                        moved=leftHandTravel(g,charge)
+                        g=setup(tree,clips[n])
+                        if rank==0:
+                            h=handleHold(g,J,charge)
+                            if h is None: continue
+                            moved=leftHandTravel(g,charge)
+                            if moved<0.03: continue
+                        else:
+                            h=ridingHold(g,charge,'L')
+                            if h is None: continue
+                            moved=h['moved']
                     except Exception as e:
                         report.append((family,n,'ERR',repr(e)[:80])); continue
-                    if moved>=0.03 and (best is None or moved>best[0]):
-                        h['clip']=n; h['leftHandMoved']=round(moved,3); best=(moved,h)
+                    if best is None or (rank,-moved)<best[0]:
+                        h['clip']=n; h['leftHandMoved']=round(moved,3); best=((rank,-moved),h)
                 if best: result['handles'][family]=best[1]
-                elif any(re.match(re.escape(prefix)+r'_reload_charge(_\d+)?$',x) for x in names): report.append((family,'charge','no clip racks with the left hand'))
+                else: report.append((family,'charge','no clip racks with the left hand'))
+                # The gun hand's grab, once it's off the grip: the first kind of clip that shows it, the steadiest of those
+                best=None
+                for n in sorted(names):
+                    rank=rackClipRank(n[len(prefix)+1:])
+                    if rank is None: continue
+                    try: h=ridingHold(setup(tree,clips[n]),charge,'R')
+                    except Exception as e:
+                        report.append((family,n,'ERR',repr(e)[:80])); continue
+                    if h and (best is None or (rank,h['drift'])<best[0]):
+                        h['clip']=n; best=((rank,h['drift']),h)
+                if best: result['gunHandHandles'][family]=best[1]
+                else: report.append((family,'charge','no clip racks with the right hand'))
             new=bone(P,'/mod_magazine_new')
             for n in sorted(x for x in names if re.match(re.escape(prefix)+r'_reload_admin(_\d+)?$',x)):
                 if new:
