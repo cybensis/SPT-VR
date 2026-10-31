@@ -63,7 +63,7 @@ namespace TarkovVR.Source.Weapons
             public SavedHold insert;
         }
 
-        public sealed class SavedHandleHold
+        public class SavedHandleHold
         {
             public float[] position;
             public float[] rotation;
@@ -77,6 +77,11 @@ namespace TarkovVR.Source.Weapons
             public SavedHold oldMagazine;
             public float[] fingers;
             public float[] thumb;
+        }
+
+        public sealed class SavedSlide : SavedHandleHold
+        {
+            public string bone;
         }
 
         public sealed class SavedRockIn
@@ -94,6 +99,8 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, List<SavedHandleHold>> handleAlternates;
             public Dictionary<string, List<SavedHandleHold>> gunHandHandleAlternates;
             public Dictionary<string, SavedRockIn> rockIn;
+            public Dictionary<string, SavedSlide> slides;
+            public List<string> handleMovesWithBolt;
             public Dictionary<string, SavedPalmHold> palms;
         }
 
@@ -371,6 +378,16 @@ namespace TarkovVR.Source.Weapons
                     foreach (KeyValuePair<string, SavedHandleHold> entry in generated.gunHandHandles)
                         gunHandHandleHolds[entry.Key] = HandleHoldFrom(entry.Value);
                 }
+                if (generated.slides != null)
+                {
+                    foreach (KeyValuePair<string, SavedSlide> entry in generated.slides)
+                    {
+                        slideBones[entry.Key] = entry.Value.bone;
+                        handleHolds[entry.Key] = HandleHoldFrom(entry.Value);
+                    }
+                }
+                if (generated.handleMovesWithBolt != null)
+                    handleMovesWithBolt.UnionWith(generated.handleMovesWithBolt);
                 LoadHandleAlternates(generated.handleAlternates, handleAlternates);
                 LoadHandleAlternates(generated.gunHandHandleAlternates, gunHandHandleAlternates);
                 if (generated.rockIn != null)

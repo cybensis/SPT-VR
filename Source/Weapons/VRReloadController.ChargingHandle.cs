@@ -18,7 +18,7 @@ namespace TarkovVR.Source.Weapons
     // The bolt lock is Tarkov's bolt-catch animator flag. Tarkov clears it in its own reload; while it's on the gun
     // doesn't fire (BlocksFiring).
     // A handle on the bolt (AK-type guns, VAL, SCAR, SVD: the mod_charge bone sits on the carrier, and the slot is usually empty
-    // because the handle is part of the carrier's mesh) brings the whole carrier back with it.
+    // because the handle is part of the carrier's mesh) brings the whole carrier back with it. A pistol's slide is worked the same way.
     // The bolt rides back with the handle so the chamber shows: Tarkov's own locked-back pose (the "Catch" layer, or the
     // IdlePosition blend on guns that use that instead) blended in by how far back the handle is. Only the pose; the
     // bolt-catch flag isn't touched, and letting go puts the pose back to what that flag says.
@@ -87,8 +87,10 @@ namespace TarkovVR.Source.Weapons
         private static Transform foundHandleBone;           // the mod_charge bone
         private static Transform foundHandleModel;          // the handle model in its slot, null with none fitted
         private static Transform foundHandleCarrier;        // the part that bone sits on when that part is the bolt, else null
-        private static FirearmController handleRigBoneFor;
-        private static Transform handleRigBone;             // mod_charge in the gun's rig, for a gun with no slot for it
+        private static FirearmController rigBonesFor;
+        private static readonly Dictionary<string, Transform> rigBones = new Dictionary<string, Transform>();
+        private static readonly Dictionary<string, string> slideBones = new Dictionary<string, string>();   // by animation set: the bone that is a pistol's slide
+        private static readonly HashSet<string> handleMovesWithBolt = new HashSet<string>();                // by animation set: the held bolt pose moves the handle bone
         private static Transform handleMeshesFor;
         private static MeshFilter[] handleMeshes;
         private static GameObject handleZoneViz;
@@ -169,33 +171,52 @@ namespace TarkovVR.Source.Weapons
                 }
                 // No slot for one (SVD), but the rig can still have the bone. A bolt-action's is the bolt, not a handle.
                 if (foundHandleBone == null && !weapon.BoltAction)
-                    foundHandleBone = FindHandleRigBone(firearmController);
-                Transform handleParent = foundHandleBone != null ? foundHandleBone.parent : null;
-                if (handleParent != null && (handleParent.name.IndexOf("bolt", System.StringComparison.OrdinalIgnoreCase) >= 0
-                    || handleParent.name.IndexOf("charg", System.StringComparison.OrdinalIgnoreCase) >= 0))
-                    foundHandleCarrier = handleParent;
+                    foundHandleBone = FindRigBone(firearmController, EWeaponModType.mod_charge.ToString());
+                LoadRecordedGrips();
+                string family = AnimationFamily(firearmController);
+                if (foundHandleBone == null)
+                {
+                    // A pistol: the slide is the handle and its own carrier, its meshes say where the back of it is
+                    if (slideBones.TryGetValue(family, out string slideBone))
+                        foundHandleBone = FindRigBone(firearmController, slideBone);
+                    foundHandleModel = foundHandleBone;
+                    foundHandleCarrier = foundHandleBone;
+                }
+                else
+                {
+                    Transform handleParent = foundHandleBone.parent;
+                    if (handleParent != null && (handleParent.name.IndexOf("bolt", System.StringComparison.OrdinalIgnoreCase) >= 0
+                        || handleParent.name.IndexOf("charg", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                        foundHandleCarrier = handleParent;
+                    // The bolt pose moves this bone, and the pull would be measured against that: the pose follows the pull, the pull
+                    // follows the pose (headset, MP5: the hand shakes on the handle). Worked like a carrier, nothing measures from it.
+                    else if (handleMovesWithBolt.Contains(family))
+                        foundHandleCarrier = foundHandleBone;
+                }
             }
             // An empty slot on a gun whose handle slides on its own: there's nothing there to take hold of
             return foundHandleBone != null && (foundHandleModel != null || foundHandleCarrier != null);
         }
 
-        private static Transform FindHandleRigBone(FirearmController firearmController)
+        private static Transform FindRigBone(FirearmController firearmController, string boneName)
         {
-            if (handleRigBoneFor != firearmController)
+            if (rigBonesFor != firearmController)
             {
-                handleRigBoneFor = firearmController;
-                handleRigBone = null;
-                string boneName = EWeaponModType.mod_charge.ToString();
-                foreach (Transform part in firearmController.WeaponRoot.GetComponentsInChildren<Transform>(true))
+                rigBonesFor = firearmController;
+                rigBones.Clear();
+            }
+            if (rigBones.TryGetValue(boneName, out Transform found))
+                return found;
+            foreach (Transform part in firearmController.WeaponRoot.GetComponentsInChildren<Transform>(true))
+            {
+                if (part.name == boneName)
                 {
-                    if (part.name == boneName)
-                    {
-                        handleRigBone = part;
-                        break;
-                    }
+                    found = part;
+                    break;
                 }
             }
-            return handleRigBone;
+            rigBones[boneName] = found;
+            return found;
         }
 
         // Where the hand takes it: the back of the fitted handle, or the bone where a handle built into the carrier sits
@@ -404,7 +425,7 @@ namespace TarkovVR.Source.Weapons
             float handAlongTrack = Vector3.Dot(handDelta, axis);
             float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
 
-            float pullGain = handleCarrier != null && !handleInGunHand ? underGunPullGain : 1f;
+            float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !handleInGunHand ? underGunPullGain : 1f;
             handlePull = Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel);
             handleView.position = handleBone.TransformPoint(handleRestLocalPosition) + axis * handlePull;
 
@@ -431,7 +452,7 @@ namespace TarkovVR.Source.Weapons
         private static void BoltComesBack(FirearmController firearmController)
         {
             Weapon weapon = firearmController.Item;
-            PlayGunSound(firearmController, "HandleOut");
+            PlayFirstGunSound(firearmController, "HandleOut", "SlideOut", "BoltOut");
             PulseHandleHand(0.5f, 0.04f);
             // An empty magazine's follower pushes the catch up under the bolt. (With a round to throw out Tarkov's
             // rechamber below sets it.)
@@ -483,7 +504,7 @@ namespace TarkovVR.Source.Weapons
             if (snapForward)
                 BoltSlamsForward(firearmController);
             else
-                PlayGunSound(firearmController, "HandleIn");
+                PlayFirstGunSound(firearmController, "HandleIn", "SlideIn");
             RestoreBoltPose(firearmController);
         }
 
@@ -635,7 +656,7 @@ namespace TarkovVR.Source.Weapons
             // Held by an empty magazine the bolt only comes onto the catch: no slam
             bool heldOnCatch = firearmController.FirearmsAnimator.GetBoltCatch() && BoltStaysBack(weapon);
             if (!heldOnCatch)
-                PlayGunSound(firearmController, "BoltIn");
+                PlayFirstGunSound(firearmController, "BoltIn", "SlideIn");
             PlayGunSound(firearmController, "HandleIn");
             PulseHandleHand(heldOnCatch ? 0.4f : 0.8f, 0.06f);
             if (WaitingForRack(weapon) && weapon.GetCurrentMagazine() != null)

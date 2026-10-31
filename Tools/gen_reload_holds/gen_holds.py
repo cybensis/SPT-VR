@@ -93,7 +93,10 @@ def avgQ(run):
 
 def eulerList(qs): return [x for q in qs for x in toUnityEuler(q)]
 
-def magHold(g,J,mag,pull):
+# The tightest moment isn't the grip on these guns (headset, SCAR: the fingers don't hold the magazine), the carrying part of the clip is
+CARRYING_GRIP_GUNS=('scar_16','scar_17')
+
+def magHold(g,J,mag,pull,family=None):
     S=sample(g,mag,J)
     seat=S[0]['inGun'] if pull else S[-1]['inGun']
     run=stillRun(S,lambda s:np.linalg.norm(s['inGun']-seat)>=0.03 and np.linalg.norm(s['rel'])<=0.35)
@@ -112,7 +115,7 @@ def magHold(g,J,mag,pull):
             if tightest is not None and f['curl']<tightest['curl']*0.75: break
             if tightest is None or f['curl']>tightest['curl']: tightest=f
             if index<=farthest: carrying=tightest
-        if carrying is not None and carrying['curl']<tightest['curl']*0.75: tightest=carrying
+        if carrying is not None and (carrying['curl']<tightest['curl']*0.75 or family in CARRYING_GRIP_GUNS): tightest=carrying
         if tightest is not None: qs=list(tightest['qs'])
     return dict(position=[round(float(x),4) for x in pos],rotation=toUnityEuler(avgQ(run)),fingers=eulerList(qs),frames=len(run),palmOff=round(float(np.mean([r['palmOff'] for r in run])),3))
 
@@ -244,6 +247,27 @@ def holdOnBone(hand,boneInGun):
     onBone=position+2*np.cross(axis,np.cross(axis,position)+inverse[3]*position)
     return dict(position=[round(float(x),4) for x in onBone],rotation=toUnityEuler(qmul(conj(boneInGun),hand['rotation'])),fingers=hand['fingers'])
 
+# A pistol has no charging handle: the left hand works its slide the same way. The slide is a bone of the rig, the first of these the
+# clip moves with the hand riding it, and the hold is on that bone like a handle's.
+SLIDE_BONES=('weapon_slide','mod_reciever','slide')
+SLIDE_CLIP_RANKS=[r'reload_charge(_\d+)?$',r'(reload_)?charge_(to_)?end(_\d+)?$|reload_end_charge$',r'rechamber(_\d+)?$',r'misfire(_\d+)?$',r'discharge$',r'jam_(slide|soft|hard)']
+def slideHold(tree,clips,prefix,names):
+    P=tree[0]; best=None
+    for n in sorted(names):
+        suffix=n[len(prefix)+1:]
+        rank=next((r for r,pattern in enumerate(SLIDE_CLIP_RANKS) if re.match(pattern,suffix)),None)
+        if rank is None or re.search('idle|shell|inspect|check',suffix): continue
+        g=setup(tree,clips[n])
+        for boneName in SLIDE_BONES:
+            path=bone(P,'/'+boneName)
+            if path is None: continue
+            h=ridingHold(g,path,'L')
+            if h is None: continue
+            if best is None or (rank,h['drift'])<best[0]:
+                h['bone']=boneName; h['clip']=n; best=((rank,h['drift']),h)
+            break
+    return best[1] if best else None
+
 def palmHold(g,J,old,new):
     So=sample(g,old,J); Sn=sample(g,new,J)
     seat=So[0]['inGun']
@@ -258,7 +282,7 @@ def palmHold(g,J,old,new):
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
 def run(folders,outFile=None):
-    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},rockIn={},palms={}); report=[]
+    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],slides={},rockIn={},palms={}); report=[]
     boneInGun={}; otherGrips={}
     for folder in folders:
         d=ROOT+folder+'/'
@@ -294,7 +318,7 @@ def run(folders,outFile=None):
                 m=re.match(re.escape(prefix)+r'_mag_(in|out)(?:_(\d+))?$',n)
                 if not m: continue
                 pull=m.group(1)=='out'; typ=int(m.group(2) or 0)
-                try: h=magHold(setup(tree,clips[n]),J,mag,pull)
+                try: h=magHold(setup(tree,clips[n]),J,mag,pull,family)
                 except Exception as e:
                     report.append((family,n,'ERR',repr(e)[:80])); continue
                 if h is None:
@@ -340,8 +364,22 @@ def run(folders,outFile=None):
                 g=setup(tree,clips[next(n for n in names if '_mag_in' in n)]); c={}
                 _,chargeRotation,_=g['worldAt'](charge,0.0,c); _,gunRotation,_=g['worldAt'](bone(P,'Weapon_root_anim/weapon'),0.0,c)
                 boneInGun[family]=qmul(conj(gunRotation),chargeRotation)
+                # Some guns' held bolt pose moves the handle bone itself (an MP5's handle locks back on its own)
+                handleAtRest,_,_=g['worldAt'](charge,0.0,c); gunAtRest,_,_=g['worldAt'](bone(P,'Weapon_root_anim/weapon'),0.0,c)
+                handleAtRest=g['rotate'](conj(gunRotation),handleAtRest-gunAtRest)
+                for n in sorted(x for x in names if re.search(r'(catch_on|on_catch)$',x)):
+                    held=setup(tree,clips[n]); c2={}
+                    handleHeld,_,_=held['worldAt'](charge,0.0,c2); gunHeld,gunHeldRotation,_=held['worldAt'](bone(P,'Weapon_root_anim/weapon'),0.0,c2)
+                    if np.linalg.norm(held['rotate'](conj(gunHeldRotation),handleHeld-gunHeld)-handleAtRest)>=0.02:
+                        result['handleMovesWithBolt'].append(family); break
                 for (sourceFamily,sourceClip),side,key in ((LEFT_UNDER_HAND,'L','left'),(RIGHT_OVER_HAND,'R','right')):
                     if family==sourceFamily: otherGrips[key]=handOnHandle(setup(tree,clips[sourceClip]),charge,side)
+            if not charge:
+                try:
+                    slide=slideHold(tree,clips,prefix,names)
+                    if slide: result['slides'][family]=slide
+                except Exception as e:
+                    report.append((family,'slide','ERR',repr(e)[:80]))
             try:
                 rocks=rockIn(tree,clips,prefix,mag)
                 if rocks: result['rockIn'][family]=rocks

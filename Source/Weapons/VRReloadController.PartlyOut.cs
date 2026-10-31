@@ -13,7 +13,8 @@ namespace TarkovVR.Source.Weapons
     // and it falls. No hand under the well: the release drops it straight away, as on any gun.
     public static partial class VRReloadController
     {
-        public static float partlyOutDistance = 0.03f;      // m the magazine slides out onto the hand
+        public static float partlyOutDistance = 0.045f;     // m the magazine slides out onto the hand (headset: at 0.03 the hands were too close to take it)
+        public static float partlyOutPullLeft = 0.02f;      // m from there to it coming free in the hand
         public static float partlyOutSpeed = 0.4f;          // m/s
         public static float belowWellDepth = 0.10f;         // m below the magazine that counts as the hand under it
         public static float belowWellRadius = 0.08f;        // m

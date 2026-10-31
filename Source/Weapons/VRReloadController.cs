@@ -846,7 +846,8 @@ namespace TarkovVR.Source.Weapons
             {
                 // Manual Reload: the mag catch holds it seated until B is down; once past the catch it slides freely
                 bool heldByCatch = VRSettings.GetManualReloadOn() && !magazineCatchPassed && !MagazineReleaseHeld();
-                railPosition = Mathf.Clamp(trackPosition, 0f, heldByCatch ? 0f : railLength);
+                float pullLength = railStartedPartlyOut ? partlyOutDistance + partlyOutPullLeft : railLength;
+                railPosition = Mathf.Clamp(trackPosition, 0f, heldByCatch ? 0f : pullLength);
                 if (railPosition >= magazineCatchDistance)
                     magazineCatchPassed = true;
 
@@ -872,7 +873,7 @@ namespace TarkovVR.Source.Weapons
                     PushedBackIn(gripReleased);
                     return;
                 }
-                if (!heldByCatch && trackPosition >= railLength)
+                if (!heldByCatch && trackPosition >= pullLength)
                     ComeFreeOfWell();
                 return;
             }
@@ -1921,6 +1922,29 @@ namespace TarkovVR.Source.Weapons
             }
             if (gunSoundPlayer != null)
                 gunSoundPlayer.SoundEventHandler(soundName);
+        }
+
+        // The first of these the gun has: guns name the same sound differently (an AR's HandleOut, a pistol's SlideOut, an AK's BoltOut)
+        private static void PlayFirstGunSound(FirearmController firearmController, params string[] soundNames)
+        {
+            if (!sounds || firearmController == null || firearmController._controllerObject == null)
+                return;
+            if (gunSoundPlayerFor != firearmController)
+            {
+                gunSoundPlayerFor = firearmController;
+                gunSoundPlayer = firearmController._controllerObject.GetComponentInChildren<BaseSoundPlayer>(true);
+            }
+            if (gunSoundPlayer == null)
+                return;
+            foreach (string soundName in soundNames)
+            {
+                string eventName = "Snd" + soundName;
+                if (gunSoundPlayer.AdditionalSounds.Exists(sound => sound.EventName == soundName || sound.EventName == eventName))
+                {
+                    gunSoundPlayer.SoundEventHandler(soundName);
+                    return;
+                }
+            }
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
