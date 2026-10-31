@@ -293,7 +293,7 @@ namespace TarkovVR.Source.Weapons
                 Vector3 palm = OffHandPalm();
                 bool supporting = VRGlobals.vrPlayer.isSupporting;
                 bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
-                bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon, palm);
+                bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon);
                 bool inPouchZone = !supporting && InChestPouchZone(palm);
                 OffHandAtChargingHandle = inHandleZone;
                 // A hand on the support grip is only taken over by an actual grab, never by passing through a zone
@@ -1776,7 +1776,7 @@ namespace TarkovVR.Source.Weapons
             }
 
             Vector3 palm = OffHandPalm();
-            UpdateChargingHandleViz(firearmController, weapon, palm, show);
+            UpdateChargingHandleViz(firearmController, weapon, show);
             bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
             if (!HoldingMagazine && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
                 SetCapsuleZoneViz(ref grabZoneViz, magazineCenter, magazineBottom, magazineGrabRadius, inGrabZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.4f, 1f, 0.3f));

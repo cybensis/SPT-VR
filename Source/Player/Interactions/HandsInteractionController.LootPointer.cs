@@ -599,6 +599,27 @@ namespace TarkovVR.Source.Player.Interactions
             return Vector3.Distance(lh.position, grip.position) < foregripBlockDistance;
         }
 
+        // The off hand's palm, knuckles and fingertips, for a zone the hand counts as in as soon as any of it is. The rig has no
+        // bone at the fingertip: about 2.5cm past the last joint, along the finger.
+        internal void GetOffHandTouchPoints(List<Vector3> points)
+        {
+            points.Clear();
+            points.Add(PalmOrigin(false));
+            if (!fingersResolved) ResolveLeftFingers();
+            if (leftFingerJoints == null)
+                return;
+            foreach (Transform[] joints in leftFingerJoints)
+            {
+                if (joints == null || joints.Length == 0)
+                    continue;
+                if (joints[0] != null)
+                    points.Add(joints[0].position);
+                Transform lastJoint = joints[joints.Length - 1];
+                if (lastJoint != null)
+                    points.Add(lastJoint.TransformPoint(-0.025f, 0f, 0f));
+            }
+        }
+
         // The cone/probe origin: the centroid of the FINGER-BASE joints (the knuckle line at the
         // front of the palm — the actual grip point, well forward of the wrist), + a hand-frame
         // nudge (conePalmLocalOffset). The palm BONE sits close to the wrist so it read as

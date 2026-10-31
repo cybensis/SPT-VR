@@ -137,13 +137,28 @@ namespace TarkovVR.Source.Weapons
             return slotView != null && slotView.ItemView != null && slotView.Bone != null;
         }
 
-        private static bool InChargingHandleZone(FirearmController firearmController, Weapon weapon, Vector3 palm)
+        private static bool InChargingHandleZone(FirearmController firearmController, Weapon weapon)
         {
             if (!chargingHandle || !TryGetChargingHandle(firearmController, weapon, out ContainerCollectionView.SlotView slotView))
                 return false;
             Vector3 backWorld = firearmController.WeaponRoot.up;
             Vector3 grabPoint = HandleGrabPoint(slotView.ItemView, backWorld);
-            return DistanceToSegment(palm, grabPoint, grabPoint + backWorld * handleZoneBack) <= handleGrabRadius;
+            return OffHandTouchesCapsule(grabPoint, grabPoint + backWorld * handleZoneBack, handleGrabRadius);
+        }
+
+        // Any part of the hand: one point on it read as out with the fingers plainly in the zone (headset)
+        private static readonly List<Vector3> offHandTouchPoints = new List<Vector3>();
+        private static bool OffHandTouchesCapsule(Vector3 start, Vector3 end, float radius)
+        {
+            if (VRGlobals.handsInteractionController == null)
+                return DistanceToSegment(OffHandPalm(), start, end) <= radius;
+            VRGlobals.handsInteractionController.GetOffHandTouchPoints(offHandTouchPoints);
+            foreach (Vector3 point in offHandTouchPoints)
+            {
+                if (DistanceToSegment(point, start, end) <= radius)
+                    return true;
+            }
+            return false;
         }
 
         // The back end of the handle (the T on an AR): the handle model is a long bar reaching forward into the receiver,
@@ -492,7 +507,7 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         // The grab point (green when the palm is in reach)
-        private static void UpdateChargingHandleViz(FirearmController firearmController, Weapon weapon, Vector3 palm, bool show)
+        private static void UpdateChargingHandleViz(FirearmController firearmController, Weapon weapon, bool show)
         {
             ContainerCollectionView.SlotView slotView = null;
             bool hasHandle = show && chargingHandle && TryGetChargingHandle(firearmController, weapon, out slotView);
@@ -504,7 +519,7 @@ namespace TarkovVR.Source.Weapons
             Vector3 backWorld = firearmController.WeaponRoot.up;
             Vector3 grabPoint = HandleGrabPoint(slotView.ItemView, backWorld);
             Vector3 zoneEnd = grabPoint + backWorld * handleZoneBack;
-            bool inReach = DistanceToSegment(palm, grabPoint, zoneEnd) <= handleGrabRadius;
+            bool inReach = OffHandTouchesCapsule(grabPoint, zoneEnd, handleGrabRadius);
             SetCapsuleZoneViz(ref handleZoneViz, grabPoint, zoneEnd, handleGrabRadius, inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f));
         }
     }
