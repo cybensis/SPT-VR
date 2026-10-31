@@ -822,7 +822,9 @@ namespace TarkovVR.Source.Weapons
             {
                 // Relative to the controller: on the track the hand follows the magazine, so it can't be the source
                 GetPoseIn(VRGlobals.vrPlayer.LeftHand.transform, propTransform, out railEntryHandPosition, out railEntryHandRotation);
-                StartRail(pullingOut: false, startPosition: heldRockIn != null ? railLength : Mathf.Clamp(alongTrack, 0f, railLength));
+                // Always from the start of the track, wherever it was caught: from the side, high up, it would start nearly seated
+                // and go in through the wall of the well
+                StartRail(pullingOut: false, startPosition: railLength);
             }
         }
 
