@@ -37,7 +37,10 @@ namespace TarkovVR.Source.Weapons
         public static float railCaptureAngle = 40f;         // deg off the seated orientation that still catches
         public static float railCaptureTime = 0.12f;        // s to ease a caught magazine onto the track
         public static float railClearDistance = 0.05f;      // m a magazine just pulled out has to get from the well before the track can catch it again
-        public static float pistolPushGain = 2f;            // how much further a pistol's magazine goes in than the hand pushes it. 1 = one to one.
+        public static float pistolPushGain = 2.5f;          // how much further a pistol's magazine goes in than the hand pushes it. 1 = one to one.
+        public static float pistolInsertStart = 0.08f;      // m below seated a pistol's magazine starts on the track going in
+        public static float pistolCatchReach = 0.11f;       // m below seated the track catches it: about its tip at the bottom of the grip (headset: at 0.07 it had to be nearly in)
+        public static float pistolCatchRadius = 0.05f;      // m off the track that still catches it
         public static float railExitMargin = 0.02f;         // m past the top of the track before a magazine being put in comes off it
         public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
         public static float handReleaseTime = 0.08f;        // s the rendered hand takes to go from the magazine back to the controller
@@ -814,7 +817,10 @@ namespace TarkovVR.Source.Weapons
             float offTrack = (topOffset - axis * alongTrack).magnitude;
             Quaternion caughtRotation = heldRockIn != null ? RockRotation(railLength) * seatedLocalRotation : seatedLocalRotation;
             float angle = Quaternion.Angle(propTransform.rotation, magazineWell.rotation * caughtRotation);
-            bool inCatchZone = alongTrack >= -0.005f && alongTrack <= railLength + railExitMargin && offTrack <= railCaptureRadius && angle <= railCaptureAngle;
+            bool pistolTrack = heldRockIn == null && VRGlobals.vrPlayer.isWeapPistol;
+            float catchReach = pistolTrack ? pistolCatchReach : railLength + railExitMargin;
+            float catchRadius = pistolTrack ? pistolCatchRadius : railCaptureRadius;
+            bool inCatchZone = alongTrack >= -0.005f && alongTrack <= catchReach && offTrack <= catchRadius && angle <= railCaptureAngle;
             if (!railCatchArmed)
             {
                 railCatchArmed = !inCatchZone && topOffset.magnitude >= railCatchClearance;
@@ -827,9 +833,12 @@ namespace TarkovVR.Source.Weapons
                 GetPoseIn(VRGlobals.vrPlayer.LeftHand.transform, propTransform, out railEntryHandPosition, out railEntryHandRotation);
                 // Always from the start of the track, wherever it was caught: from the side, high up, it would start nearly seated
                 // and go in through the wall of the well
-                StartRail(pullingOut: false, startPosition: railLength);
+                StartRail(pullingOut: false, startPosition: InsertTrackLength);
             }
         }
+
+        // How far a magazine going in is from seated when it starts on the track
+        private static float InsertTrackLength => heldRockIn == null && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol ? pistolInsertStart : railLength;
 
         // On the track: the controller's travel along the well's axis moves the magazine; sideways it can't go
         private static void UpdateRail(bool gripReleased, bool releaseLetGo)
@@ -884,13 +893,13 @@ namespace TarkovVR.Source.Weapons
 
             // Rocking in, only coming away from the magazine lets go of it: tilted too far it stays hooked
             bool cameOffTrack = heldRockIn != null ? handOffTrack > rockInInsertEscape
-                : handOffTrack > railLateralEscape || trackPosition > railLength + railExitMargin;
+                : handOffTrack > railLateralEscape || trackPosition > InsertTrackLength + railExitMargin;
             if (cameOffTrack)
             {
                 LeaveRail();
                 return;
             }
-            railPosition = Mathf.Clamp(trackPosition, 0f, railLength);
+            railPosition = Mathf.Clamp(trackPosition, 0f, InsertTrackLength);
             PlaceOnRail();
 
             bool seated = railPosition <= 0f && railBlend >= 1f;
@@ -1993,7 +2002,7 @@ namespace TarkovVR.Source.Weapons
 
             // The top of the track while holding a magazine: green on it, blue off it
             bool showTrack = HoldingMagazine && magazineWell != null;
-            Vector3 trackTop = showTrack ? magazineWell.position + (heldRockIn != null ? HookAxisWorld() : RailAxisWorld()) * railLength : Vector3.zero;
+            Vector3 trackTop = showTrack ? magazineWell.position + (heldRockIn != null ? HookAxisWorld() : RailAxisWorld()) * InsertTrackLength : Vector3.zero;
             SetZoneViz(ref wellZoneViz, showTrack, trackTop, railCaptureRadius, onRail ? new Color(0f, 1f, 0.4f, 0.4f) : new Color(0f, 0.4f, 1f, 0.4f));
         }
 
