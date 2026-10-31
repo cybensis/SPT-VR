@@ -137,6 +137,15 @@ namespace TarkovVR.Patches.Core.Player
         private static Vector3 pullGripRotation;
         private static float pullGripTime;
 
+        // Every frame the old magazine is on its way out, to find the most closed moment once the still hold is known
+        private struct PullSample
+        {
+            public Vector3 position;
+            public float curl;
+            public Quaternion[] fingers;
+        }
+        private static readonly List<PullSample> pullSamples = new List<PullSample>();
+
         private static bool haveRestPosition;
         private static Vector3 magazineRestPosition;
         private static Vector3 outAxis;
@@ -275,6 +284,7 @@ namespace TarkovVR.Patches.Core.Player
             newMagazineFingers = null;
             pullGripCurl = -1f;
             pullGripFingers = null;
+            pullSamples.Clear();
 
             Weapon weapon = firearmController.Item;
             magazineSlot = weapon.GetMagazineSlot();
@@ -317,6 +327,8 @@ namespace TarkovVR.Patches.Core.Player
             bool magazineMoving = haveRestPosition && (positionInGun - magazineRestPosition).magnitude > 0.005f;
             if (phase <= ReloadPhase.OldMagazineInHand && magazineMoving)
             {
+                if (gunLeftPalmChildren != null)
+                    pullSamples.Add(new PullSample { position = leftIkMarker.InverseTransformPoint(magazineView.position), curl = FingerCurl(), fingers = SnapshotFingers() });
                 SamplePullGrip(magazineView);
                 // The first axisDistance of travel out of the well (it leaves at the mag-out sound, before Tarkov's
                 // "pulled out" event)
@@ -431,14 +443,23 @@ namespace TarkovVR.Patches.Core.Player
             bool saved = false;
             if (oldMagazineType >= 0)
             {
-                // The hold = where the magazine stays still in the hand. The most closed fingers are only its finger pose when
-                // they happened in that same hold: a drum's wide grip is less closed than the hand passing the well on its
-                // way to it (PMAG 40, D-60 and Beta-C all "gripped" there, 10 cm off, on the same reload pose)
+                // The hold = where the magazine stays still in the hand. Its fingers = the most closed moment IN that hold: a
+                // drum's wide grip is less closed than the hand passing the well on its way there (PMAG 40, D-60 and Beta-C all
+                // "gripped" at that pass, 10 cm off), and the still run itself ends with the hand opening over the pouch.
                 if (oldMagazineInMarker.bestFrames >= stableMinimumFrames && oldMagazineFingers != null)
                 {
-                    bool pullGripInHold = pullGripFingers != null && (pullGripPosition - oldMagazineInMarker.bestPosition).magnitude <= pullGripHoldTolerance;
+                    Quaternion[] holdFingers = oldMagazineFingers;
+                    float mostClosed = -1f;
+                    foreach (PullSample sample in pullSamples)
+                    {
+                        if (sample.curl > mostClosed && (sample.position - oldMagazineInMarker.bestPosition).magnitude <= pullGripHoldTolerance)
+                        {
+                            mostClosed = sample.curl;
+                            holdFingers = sample.fingers;
+                        }
+                    }
                     saved |= VRReloadController.TrySaveHold(sessionFirearm, oldMagazineType, true, oldMagazineInMarker.bestPosition, oldMagazineInMarker.bestRotation,
-                        oldMagazineLength, pullGripInHold ? pullGripFingers : oldMagazineFingers, $"{gunName} {oldMagazineName}");
+                        oldMagazineLength, holdFingers, $"{gunName} {oldMagazineName}");
                 }
                 else
                     Plugin.MyLog.LogWarning($"[ReloadGrips] {gunName} {oldMagazineName}: the hand never held it still, no pull hold");
