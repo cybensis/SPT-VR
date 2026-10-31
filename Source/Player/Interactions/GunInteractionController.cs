@@ -242,7 +242,7 @@ public class GunInteractionController : MonoBehaviour
         Vector3 cameraEulerAngles = cameraTransform.eulerAngles;
 
         // Force cleanup if we're in a state where highlight should not be active
-        bool interactCommon = !menuOpen && !radialMenuActive && !isAiming && !WeaponPatches.grenadeEquipped;
+        bool interactCommon = !menuOpen && !radialMenuActive && !isAiming && !WeaponPatches.grenadeEquipped && !ManualReloadReplacesMenu();
         int nearestPartIdx = -1;
         bool shouldShowHighlight;
         if (offHandInteract)
@@ -317,6 +317,13 @@ public class GunInteractionController : MonoBehaviour
         }
     }
     
+    // Manual Reload on a gun with a magazine: the hands do what this menu did. A jam still needs it, there's no clearing one by hand yet.
+    private static bool ManualReloadReplacesMenu()
+    {
+        return VRReloadController.ManualReloadActive()
+            && VRGlobals.firearmController.Weapon.MalfState.State == EFT.InventoryLogic.Weapon.EMalfunctionState.None;
+    }
+
     private Part[] cachedMalfunctionMeshArray;
     private Part[] cachedMeshArray;
     private bool malfunctionMeshArrayDirty = true;

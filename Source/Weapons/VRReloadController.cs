@@ -325,8 +325,9 @@ namespace TarkovVR.Source.Weapons
                 bool inPouchZone = !supporting && InChestPouchZone(palm);
                 OffHandAtChargingHandle = inHandleZone;
                 // A hand on the support grip is only taken over by an actual grab, never by passing through a zone
-                // (a pistol's support hand cups right over its magazine)
-                reaching = !supporting && (inGrabZone || inHandleZone || inPouchZone);
+                // (a pistol's support hand cups right over its magazine). Not the handle's zone: that's the trigger's, the
+                // foregrip's the grip's, and on an AK the two are 12 cm apart, so this would keep the foregrip from being taken.
+                reaching = !supporting && (inGrabZone || inPouchZone);
                 if (gripPressed && inGrabZone)
                     GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
                 // Manual Reload, two-handing with the support hand at the magazine (a pistol): the mag release takes it
@@ -1306,7 +1307,7 @@ namespace TarkovVR.Source.Weapons
             // Bolt forward on an empty chamber: the round the insert chambers waits for the handle (a locked-back bolt
             // already holds it off). Guns without a handle we can work keep Tarkov's chambering.
             insertNeedsRack = weapon.ChamberAmmoCount == 0 && !firearmController.FirearmsAnimator.GetBoltCatch()
-                && chargingHandle && TryGetChargingHandle(firearmController, weapon, out _);
+                && chargingHandle && TryGetChargingHandle(firearmController, weapon);
             if (heldSource == HeldMagazineSource.FromGround)
                 ExpectGroundMagazineGone();
             CommitHold();

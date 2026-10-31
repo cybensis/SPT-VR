@@ -419,7 +419,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             // Holding a magazine: the reload animation's finger pose on top
             VRReloadController.ApplyHeldFingerPose();
-            // Pulling the charging handle: the chambered round rides the bolt the animator just posed
+            // Pulling the charging handle: a handle on the bolt brings the carrier back, then the chambered round rides the bolt
+            VRReloadController.ApplyHandleCarrier();
             VRReloadController.ApplyChamberView();
             VRReloadController.ApplyMagazineReleaseButton();
             // A magazine picked up off the ground: its ground item stays hidden while our model of it is held

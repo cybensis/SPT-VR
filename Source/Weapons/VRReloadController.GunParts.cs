@@ -658,7 +658,7 @@ namespace TarkovVR.Source.Weapons
         private static void UpdateBoltSlap(bool handFree)
         {
             FirearmController firearmController = null;
-            bool canSlap = slapBoltRelease && handFree && TryGetMagazineGun(out firearmController, out _, out _)
+            bool canSlap = slapBoltRelease && handFree && TryGetMagazineGun(out firearmController, out Weapon slappedWeapon, out _) && slappedWeapon.IsBoltCatch
                 && !VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached
                 && (VRGlobals.handsInteractionController == null || VRGlobals.handsInteractionController.heldItem == null);
             bool atCatch = false;

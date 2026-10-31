@@ -17,6 +17,8 @@ namespace TarkovVR.Source.Weapons
     //    (WaitingForRack): that round counts as in the magazine until a full pull.
     // The bolt lock is Tarkov's bolt-catch animator flag. Tarkov clears it in its own reload; while it's on the gun
     // doesn't fire (BlocksFiring).
+    // A handle on the bolt (AK-type guns, VAL, SCAR, SVD: the mod_charge bone sits on the carrier, and the slot is usually empty
+    // because the handle is part of the carrier's mesh) brings the whole carrier back with it.
     // The bolt rides back with the handle so the chamber shows: Tarkov's own locked-back pose (the "Catch" layer, or the
     // IdlePosition blend on guns that use that instead) blended in by how far back the handle is. Only the pose; the
     // bolt-catch flag isn't touched, and letting go puts the pose back to what that flag says.
@@ -28,6 +30,7 @@ namespace TarkovVR.Source.Weapons
         public static float handleTravel = 0.08f;          // m the handle comes back (headset: 0.07 a touch short)
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
         public static float handleLateralEscape = 0.10f;   // m the controller moves sideways off the track before the hand lets go
+        public static float handleLockedBackTravel = 0.02f; // m a handle on the bolt has left to give, with the bolt already locked back
         public static bool boltFollowsHandle = true;       // false = only the handle model moves
         public static bool showChamberedRound = true;      // the round in the chamber shows while the bolt is open, riding the bolt face
         public static float boltLockOnDistance = 0.003f;   // m a part has to come back before it's taken as the bolt the round follows
@@ -68,10 +71,21 @@ namespace TarkovVR.Source.Weapons
         private static Transform boltPart;                  // the one found moving back with the bolt
         private static Vector3 boltPartRestInChamber;
 
-        // The handle's slot, looked up again now and then (mods only change in the inventory)
+        // The carrier the held handle is part of, and our own transforms on the gun's body standing in for handleBone and handleView
+        private static Transform handleCarrier;
+        private static Vector3 handleCarrierRestLocalPosition;
+        private static Vector3 handleCarrierAxis;           // one metre back, in the carrier's parent's frame
+        private static Transform handleFrame;
+        private static Transform handleRider;
+
+        // The gun's handle, looked up again now and then (mods only change in the inventory)
         private static FirearmController handleSlotFor;
-        private static ContainerCollectionView.SlotView handleSlotView;
         private static float handleSlotLookupTime;
+        private static Transform foundHandleBone;           // the mod_charge bone
+        private static Transform foundHandleModel;          // the handle model in its slot, null with none fitted
+        private static Transform foundHandleCarrier;        // the part that bone sits on when that part is the bolt, else null
+        private static FirearmController handleRigBoneFor;
+        private static Transform handleRigBone;             // mod_charge in the gun's rig, for a gun with no slot for it
         private static Transform handleMeshesFor;
         private static MeshFilter[] handleMeshes;
         private static GameObject handleZoneViz;
@@ -126,31 +140,71 @@ namespace TarkovVR.Source.Weapons
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        private static bool TryGetChargingHandle(FirearmController firearmController, Weapon weapon, out ContainerCollectionView.SlotView slotView)
+        private static bool TryGetChargingHandle(FirearmController firearmController, Weapon weapon)
         {
             if (handleSlotFor != firearmController || Time.time > handleSlotLookupTime)
             {
                 handleSlotFor = firearmController;
                 handleSlotLookupTime = Time.time + 2f;
-                handleSlotView = null;
+                foundHandleBone = null;
+                foundHandleModel = null;
+                foundHandleCarrier = null;
                 foreach (Slot slot in weapon.AllSlots)
                 {
-                    if (slot.ID != EWeaponModType.mod_charge.ToString() || slot.ContainedItem == null)
+                    if (slot.ID != EWeaponModType.mod_charge.ToString())
                         continue;
-                    handleSlotView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(slot);
-                    break;
+                    ContainerCollectionView.SlotView slotView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(slot);
+                    if (slotView == null)
+                        continue;
+                    foundHandleBone = slotView.Bone;
+                    foundHandleModel = slot.ContainedItem != null ? slotView.ItemView : null;
+                    if (foundHandleModel != null)
+                        break;
                 }
+                // No slot for one (SVD), but the rig can still have the bone. A bolt-action's is the bolt, not a handle.
+                if (foundHandleBone == null && !weapon.BoltAction)
+                    foundHandleBone = FindHandleRigBone(firearmController);
+                Transform handleParent = foundHandleBone != null ? foundHandleBone.parent : null;
+                if (handleParent != null && (handleParent.name.IndexOf("bolt", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || handleParent.name.IndexOf("charg", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                    foundHandleCarrier = handleParent;
             }
-            slotView = handleSlotView;
-            return slotView != null && slotView.ItemView != null && slotView.Bone != null;
+            // An empty slot on a gun whose handle slides on its own: there's nothing there to take hold of
+            return foundHandleBone != null && (foundHandleModel != null || foundHandleCarrier != null);
         }
 
+        private static Transform FindHandleRigBone(FirearmController firearmController)
+        {
+            if (handleRigBoneFor != firearmController)
+            {
+                handleRigBoneFor = firearmController;
+                handleRigBone = null;
+                string boneName = EWeaponModType.mod_charge.ToString();
+                foreach (Transform part in firearmController.WeaponRoot.GetComponentsInChildren<Transform>(true))
+                {
+                    if (part.name == boneName)
+                    {
+                        handleRigBone = part;
+                        break;
+                    }
+                }
+            }
+            return handleRigBone;
+        }
+
+        // Where the hand takes it: the back of the fitted handle, or the bone where a handle built into the carrier sits
+        private static Vector3 ChargingHandleGrabPoint(Vector3 backWorld)
+        {
+            return foundHandleModel != null ? HandleGrabPoint(foundHandleModel, backWorld) : foundHandleBone.position;
+        }
+
+        // Not on a jammed gun: clearing one is still the interaction menu's, which this zone would keep from coming up
         private static bool InChargingHandleZone(FirearmController firearmController, Weapon weapon, bool gunHand = false)
         {
-            if (!chargingHandle || !TryGetChargingHandle(firearmController, weapon, out ContainerCollectionView.SlotView slotView))
+            if (!chargingHandle || weapon.MalfState.State != Weapon.EMalfunctionState.None || !TryGetChargingHandle(firearmController, weapon))
                 return false;
             Vector3 backWorld = firearmController.WeaponRoot.up;
-            Vector3 grabPoint = HandleGrabPoint(slotView.ItemView, backWorld);
+            Vector3 grabPoint = ChargingHandleGrabPoint(backWorld);
             return HandTouchesCapsule(gunHand, grabPoint, grabPoint + backWorld * handleZoneBack, handleGrabRadius);
         }
 
@@ -213,15 +267,24 @@ namespace TarkovVR.Source.Weapons
 
         private static void GrabChargingHandle(FirearmController firearmController, Weapon weapon, bool gunHand = false)
         {
-            if (!TryGetChargingHandle(firearmController, weapon, out ContainerCollectionView.SlotView slotView))
+            if (!TryGetChargingHandle(firearmController, weapon))
                 return;
 
             handleForFirearm = firearmController;
-            handleBone = slotView.Bone;
-            handleView = slotView.ItemView;
-            handleRestLocalPosition = handleView.localPosition;
             // WeaponRoot -up is toward the muzzle, so +up is back toward the stock
-            handleAxisInSlot = handleBone.InverseTransformDirection(firearmController.WeaponRoot.up).normalized;
+            Vector3 backWorld = firearmController.WeaponRoot.up;
+            handleCarrier = foundHandleCarrier;
+            if (handleCarrier != null)
+            {
+                FrameHandleOnCarrier(backWorld);
+            }
+            else
+            {
+                handleBone = foundHandleBone;
+                handleView = foundHandleModel;
+            }
+            handleRestLocalPosition = handleView.localPosition;
+            handleAxisInSlot = handleBone.InverseTransformDirection(backWorld).normalized;
             handleInGunHand = gunHand;
             handlePull = 0f;
             handleFullyBack = false;
@@ -241,6 +304,8 @@ namespace TarkovVR.Source.Weapons
                 heldHandleTravel = handleHold.travel;
             else if (otherHandHold != null && otherHandHold.travel > 0f)
                 heldHandleTravel = otherHandHold.travel;
+            if (handleCarrier != null && BoltLockedBack)
+                heldHandleTravel = Mathf.Min(heldHandleTravel, handleLockedBackTravel);
             if (handleHold != null)
             {
                 handleHandFingers = handleHold.fingers;
@@ -255,9 +320,37 @@ namespace TarkovVR.Source.Weapons
                 Transform patron = patrons != null && patrons.Length > 0 ? patrons[0] : null;
                 Plugin.MyLog.LogInfo($"[VRReload] grabbed the charging handle '{handleView.name}', bolt locked back: {BoltLockedBack}, chamber: {weapon.ChamberAmmoCount}, " +
                     $"catch layer: {firearmsAnimator.BOLT_CATCH_LAYER_INDEX}, idle position: {firearmsAnimator.HasParameter(AnimationControllerParametersTable.FLOAT_IDLEPOSITION)}, " +
-                    $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}, gun hand: {gunHand}, hold from a clip: {handleHold != null}");
+                    $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}, gun hand: {gunHand}, hold from a clip: {handleHold != null}, carrier: {(handleCarrier != null ? handleCarrier.name : "none")}");
             }
             PulseHandleHand(0.3f, 0.04f);
+        }
+
+        // The carrier is animated and we move it, so the pull can't be measured against it: two transforms of ours on the gun's
+        // body, where the mod_charge bone sits now. The hand rides the second; the carrier follows in ApplyHandleCarrier.
+        private static void FrameHandleOnCarrier(Vector3 backWorld)
+        {
+            if (handleFrame == null || handleRider == null)
+            {
+                handleFrame = new GameObject("VRChargingHandleFrame").transform;
+                handleRider = new GameObject("VRChargingHandleRider").transform;
+                handleRider.SetParent(handleFrame, worldPositionStays: false);
+            }
+            Transform gunBody = handleCarrier.parent;
+            handleFrame.SetParent(gunBody, worldPositionStays: false);
+            handleFrame.SetPositionAndRotation(foundHandleBone.position, foundHandleBone.rotation);
+            handleRider.localPosition = Vector3.zero;
+            handleRider.localRotation = Quaternion.identity;
+            handleBone = handleFrame;
+            handleView = handleRider;
+            handleCarrierRestLocalPosition = handleCarrier.localPosition;
+            handleCarrierAxis = gunBody.InverseTransformVector(backWorld);
+        }
+
+        // LateUpdate, after the animator has posed the carrier this frame
+        public static void ApplyHandleCarrier()
+        {
+            if (HoldingChargingHandle && handleCarrier != null)
+                handleCarrier.localPosition = handleCarrierRestLocalPosition + handleCarrierAxis * handlePull;
         }
 
         private static bool ChargingHandleHoldIsStillValid()
@@ -340,6 +433,11 @@ namespace TarkovVR.Source.Weapons
             EndChamberView();
             if (handleView != null)
                 handleView.localPosition = handleRestLocalPosition;
+            if (handleCarrier != null)
+                handleCarrier.localPosition = handleCarrierRestLocalPosition;
+            handleCarrier = null;
+            if (handleFrame != null)
+                handleFrame.SetParent(null, worldPositionStays: false);
             HoldingChargingHandle = false;
             FirearmController firearmController = handleForFirearm;
             handleForFirearm = null;
@@ -538,15 +636,14 @@ namespace TarkovVR.Source.Weapons
         // The grab point (green when the palm is in reach)
         private static void UpdateChargingHandleViz(FirearmController firearmController, Weapon weapon, bool show)
         {
-            ContainerCollectionView.SlotView slotView = null;
-            bool hasHandle = show && chargingHandle && TryGetChargingHandle(firearmController, weapon, out slotView);
+            bool hasHandle = show && chargingHandle && TryGetChargingHandle(firearmController, weapon);
             if (!hasHandle || HoldingChargingHandle)
             {
                 SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }
             Vector3 backWorld = firearmController.WeaponRoot.up;
-            Vector3 grabPoint = HandleGrabPoint(slotView.ItemView, backWorld);
+            Vector3 grabPoint = ChargingHandleGrabPoint(backWorld);
             Vector3 zoneEnd = grabPoint + backWorld * handleZoneBack;
             bool inReach = OffHandTouchesCapsule(grabPoint, zoneEnd, handleGrabRadius)
                 || (ChestHang.SupportOnly && HandTouchesCapsule(true, grabPoint, zoneEnd, handleGrabRadius));
