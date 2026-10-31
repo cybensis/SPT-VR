@@ -87,7 +87,9 @@ namespace TarkovVR.Source.Weapons
             partlyOutSlot = magazineSlot;
             partlyOutView = magazineView.ItemView;
             partlyOutRestLocalPosition = partlyOutView.localPosition;
-            partlyOutAxisInParent = partlyOutView.parent.InverseTransformDirection(downTheMagazine.normalized);
+            LoadRecordedGrips();
+            partlyOutAxisInParent = wellAxes.TryGetValue(AnimationFamily(firearmController), out Vector3 wellAxis) ? wellAxis
+                : partlyOutView.parent.InverseTransformDirection(downTheMagazine.normalized);
             partlyOutPosition = position;
             partlyOutTarget = target;
             partlyOutHandLeftTime = -1f;

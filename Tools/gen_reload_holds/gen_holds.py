@@ -269,6 +269,20 @@ def slideHold(tree,clips,prefix,names):
             break
     return best[1] if best else None
 
+# Which way a magazine leaves its well, in the well bone's frame, from the clip: a pistol's goes down the raked grip, which the box of its
+# mesh can't say (the mesh is modelled upright around it). Only where the clip moves it in a straight line, unturned.
+def wellAxis(g,mag):
+    rows=magazinePath(g,mag); seat=rows[0]; directions=[]
+    for r in rows:
+        off=r['pos']-seat['pos']; distance=float(np.linalg.norm(off))
+        if distance>0.09: break
+        if distance>=0.01 and ang(r['rot'],seat['rot'])<=5: directions.append(off/distance)
+    if len(directions)<2: return None
+    mean=np.mean(directions,axis=0); mean=mean/np.linalg.norm(mean)
+    spread=max(math.degrees(math.acos(min(1.0,float(np.dot(d,mean))))) for d in directions)
+    if spread>8: return None
+    return [round(float(x),4) for x in g['rotate'](conj(seat['rot']),mean)]
+
 def palmHold(g,J,old,new):
     So=sample(g,old,J); Sn=sample(g,new,J)
     seat=So[0]['inGun']
@@ -283,7 +297,7 @@ def palmHold(g,J,old,new):
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
 def run(folders,outFile=None):
-    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},thumbCatches={},slides={},rockIn={},palms={}); report=[]
+    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},thumbCatches={},wellAxes={},slides={},rockIn={},palms={}); report=[]
     boneInGun={}; otherGrips={}
     for folder in folders:
         d=ROOT+folder+'/'
@@ -381,6 +395,13 @@ def run(folders,outFile=None):
                         break
                 for (sourceFamily,sourceClip),side,key in ((LEFT_UNDER_HAND,'L','left'),(RIGHT_OVER_HAND,'R','right')):
                     if family==sourceFamily: otherGrips[key]=handOnHandle(setup(tree,clips[sourceClip]),charge,side)
+            outClip=next((n for n in (f'{prefix}_mag_out_0',f'{prefix}_mag_out') if n in clips),None)
+            if outClip:
+                try:
+                    axis=wellAxis(setup(tree,clips[outClip]),mag)
+                    if axis: result['wellAxes'][family]=axis
+                except Exception as e:
+                    report.append((family,'wellAxis','ERR',repr(e)[:80]))
             if not charge:
                 try:
                     slide=slideHold(tree,clips,prefix,names)

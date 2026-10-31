@@ -37,6 +37,7 @@ namespace TarkovVR.Source.Weapons
         public static float railCaptureAngle = 40f;         // deg off the seated orientation that still catches
         public static float railCaptureTime = 0.12f;        // s to ease a caught magazine onto the track
         public static float railClearDistance = 0.05f;      // m a magazine just pulled out has to get from the well before the track can catch it again
+        public static float pistolPushGain = 2f;            // how much further a pistol's magazine goes in than the hand pushes it. 1 = one to one.
         public static float railExitMargin = 0.02f;         // m past the top of the track before a magazine being put in comes off it
         public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
         public static float handReleaseTime = 0.08f;        // s the rendered hand takes to go from the magazine back to the controller
@@ -516,7 +517,7 @@ namespace TarkovVR.Source.Weapons
             seatedLocalPosition = propTransform.localPosition;
             seatedLocalRotation = propTransform.localRotation;
             heldReloadGrip = FindReloadGrip(firearmController, magazine, prop, propWellPointLocal);
-            railAxisInWell = RailAxisInWell(prop, propTransform.localScale);
+            railAxisInWell = RailAxisInWell(firearmController, prop, propTransform.localScale);
             heldRockIn = RockInOf(firearmController);
 
             hiddenGunMagazineView = magazineView.ItemView;
@@ -731,7 +732,7 @@ namespace TarkovVR.Source.Weapons
             ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
             seatedLocalPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
             seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
-            railAxisInWell = RailAxisInWell(prop, seatedScale);
+            railAxisInWell = RailAxisInWell(firearmController, prop, seatedScale);
             heldRockIn = RockInOf(firearmController);
 
             heldSource = source;
@@ -839,6 +840,9 @@ namespace TarkovVR.Source.Weapons
             float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
             if (heldRockIn != null)
                 MeasureHandOnRock(out handAlongTrack, out handOffTrack);
+            // A pistol's magazine goes in right under the gun hand: the controllers meet (headset), so it goes further than the hand does
+            else if (handAlongTrack < 0f && VRGlobals.vrPlayer.isWeapPistol)
+                handAlongTrack *= pistolPushGain;
             float trackPosition = railPositionAtStart + handAlongTrack;
             railBlend = Mathf.MoveTowards(railBlend, 1f, Time.deltaTime / Mathf.Max(railCaptureTime, 0.001f));
 
@@ -1044,6 +1048,14 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 RailAxisWorld()
         {
             return magazineWell.TransformDirection(railAxisInWell).normalized;
+        }
+
+        // A pistol's comes from its clip: its magazine goes down the raked grip, 14 to 20 degrees back from the mesh's upright box
+        // (headset, Glock: along that box it came out through the front of the grip)
+        private static Vector3 RailAxisInWell(FirearmController firearmController, GameObject prop, Vector3 seatedScale)
+        {
+            LoadRecordedGrips();
+            return wellAxes.TryGetValue(AnimationFamily(firearmController), out Vector3 axis) ? axis : RailAxisInWell(prop, seatedScale);
         }
 
         // The track out of the well, in the well bone's frame: the magazine's own length axis, seated. Needs propWellPointLocal

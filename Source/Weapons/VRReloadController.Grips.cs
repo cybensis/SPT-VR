@@ -109,8 +109,12 @@ namespace TarkovVR.Source.Weapons
             public List<string> handleMovesWithBolt;
             public Dictionary<string, SavedHandleNotch> handleNotches;
             public Dictionary<string, float[]> thumbCatches;
+            public Dictionary<string, float[]> wellAxes;
             public Dictionary<string, SavedPalmHold> palms;
         }
+
+        // By animation set: the way the magazine leaves the well, in the well bone's frame, where the mesh can't say
+        private static readonly Dictionary<string, Vector3> wellAxes = new Dictionary<string, Vector3>();
 
         private static readonly Dictionary<string, ReloadGrip> reloadGrips = new Dictionary<string, ReloadGrip>
         {
@@ -396,6 +400,11 @@ namespace TarkovVR.Source.Weapons
                 }
                 if (generated.handleMovesWithBolt != null)
                     handleMovesWithBolt.UnionWith(generated.handleMovesWithBolt);
+                if (generated.wellAxes != null)
+                {
+                    foreach (KeyValuePair<string, float[]> entry in generated.wellAxes)
+                        wellAxes[entry.Key] = new Vector3(entry.Value[0], entry.Value[1], entry.Value[2]);
+                }
                 if (generated.thumbCatches != null)
                 {
                     foreach (KeyValuePair<string, float[]> entry in generated.thumbCatches)
