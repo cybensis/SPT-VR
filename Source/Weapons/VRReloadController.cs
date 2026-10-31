@@ -441,6 +441,10 @@ namespace TarkovVR.Source.Weapons
             // A pistol's has to come down onto the hand first (the release, with the hand under the well)
             if (MagazineSlidesOntoHand && !MagazinePartlyOut)
                 return false;
+            // Resting on the hand: wherever it counts as on the hand, the hand can take it (headset: it stayed up on the hand and still
+            // couldn't be grabbed, the palm had to be right at the magazine)
+            if (MagazinePartlyOut)
+                return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
             return TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
                 && DistanceToSegment(palm, magazineCenter, magazineBottom) <= magazineGrabRadius;
         }

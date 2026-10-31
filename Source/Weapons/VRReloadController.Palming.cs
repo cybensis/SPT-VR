@@ -71,6 +71,8 @@ namespace TarkovVR.Source.Weapons
 
         private static bool InPalmZone(FirearmController firearmController, Weapon weapon, Slot magazineSlot)
         {
+            if (MagazinePartlyOut)
+                return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
             return weapon.GetCurrentMagazine() != null && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
                 && DistanceToSegment(OffHandPalm(), magazineCenter, magazineBottom) <= palmGrabRadius;
         }

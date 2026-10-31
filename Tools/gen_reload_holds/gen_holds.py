@@ -96,6 +96,16 @@ def eulerList(qs): return [x for q in qs for x in toUnityEuler(q)]
 # The tightest moment isn't the grip on these guns (headset, SCAR: the fingers don't hold the magazine), the carrying part of the clip is
 CARRYING_GRIP_GUNS=('scar_16','scar_17')
 
+# A pistol's insert: the last frame of the hold is the hand already opening to let the magazine go (headset, Glock: "he doesn't seem to be
+# holding it", fingertips 1-2.5 cm off it), so the grip is the middle of the longest stretch where the fingers keep still
+PISTOLS=('aps','deagle','glock','glock18c','m1911a1','m9','mp443','p226r','pb','pl15','pm','sr1mp','tt','usp')
+def steadyFingers(run):
+    best=(0,0); start=0
+    for end in range(len(run)):
+        while abs(run[end]['curl']-run[start]['curl'])>run[start]['curl']*0.1: start+=1
+        if end-start>best[1]-best[0]: best=(start,end)
+    return run[(best[0]+best[1])//2]['qs']
+
 def magHold(g,J,mag,pull,family=None):
     S=sample(g,mag,J)
     seat=S[0]['inGun'] if pull else S[-1]['inGun']
@@ -103,6 +113,7 @@ def magHold(g,J,mag,pull,family=None):
     if not run: return None
     pos=np.mean([r['rel'] for r in run],axis=0)
     qs=list(run[-1]['qs'])
+    if not pull and family in PISTOLS: qs=list(steadyFingers(run))
     if pull:
         # The grip: the most closed moment in this hold before the hand opens to let go of the magazine (late in the clip it
         # closes again, empty, with the bone still at the hold). The thumb is that moment's too. A drum keeps the hand far more open than
