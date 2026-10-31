@@ -180,34 +180,11 @@ namespace TarkovVR.Source.Weapons
         private static float pendingDropDeadline;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Tarkov's reload, measured from its own animation (WeaponRecon)
-
-        // Where the magazine sits relative to the left-hand IK target while the animation holds it. In VR that target
-        // is our LeftHand, so these are the prop's local pose in the hand. Old = pulling it out, new = putting it in.
-        private sealed class ReloadGrip
-        {
-            public Vector3 oldMagazinePosition;
-            public Vector3 oldMagazineRotation;
-            public Vector3 newMagazinePosition;
-            public Vector3 newMagazineRotation;
-        }
-
-        // By weapon template id
-        private static readonly Dictionary<string, ReloadGrip> reloadGrips = new Dictionary<string, ReloadGrip>
-        {
-            // M4A1 (3 reloads, identical)
-            {
-                "5447a9cd4bdc2dbd208b4567", new ReloadGrip
-                {
-                    oldMagazinePosition = new Vector3(-0.186f, -0.033f, 0.115f), oldMagazineRotation = new Vector3(352.6f, 250f, 271.1f),
-                    newMagazinePosition = new Vector3(-0.198f, -0.198f, 0.022f), newMagazineRotation = new Vector3(337.8f, 265.3f, 180.4f),
-                }
-            },
-        };
+        // Tarkov's reload, measured from its own animation (WeaponRecon). The holds themselves: VRReloadController.Grips.cs
 
         // The animation's left-hand finger poses holding a magazine, index-matched like Tarkov's HandPoser
         // (GetComponentsInChildren of the palm; 0 is the palm itself and is left alone). Measured on the M4A1, used for
-        // every gun for now. Pull = the most closed moment while the hand is on the old magazine (the mag-out sound).
+        // any magazine with no recording of its own. Pull = the most closed moment while the hand is on the old magazine (the mag-out sound).
         private static readonly Vector3[] MAGAZINE_PULL_FINGERS =
         {
             Vector3.zero,
@@ -228,14 +205,6 @@ namespace TarkovVR.Source.Weapons
             new Vector3(0.1f, 354.4f, 62.1f), new Vector3(0f, 360f, 79f), new Vector3(0f, 360f, 58.3f),               // ring
             new Vector3(0.3f, 353.8f, 73.3f), new Vector3(360f, 360f, 85f), new Vector3(360f, 0f, 61f),               // pinky
         };
-
-        private static ReloadGrip FindReloadGrip(Weapon weapon)
-        {
-            if (weapon == null)
-                return null;
-            reloadGrips.TryGetValue(weapon.TemplateId.ToString(), out ReloadGrip reloadGrip);
-            return reloadGrip;
-        }
 
         private static FirearmController gunSoundPlayerFor;
         private static BaseSoundPlayer gunSoundPlayer;
@@ -447,7 +416,7 @@ namespace TarkovVR.Source.Weapons
             propWellPointLocal = propTransform.InverseTransformPoint(magazineView.Bone.position);
             seatedLocalPosition = propTransform.localPosition;
             seatedLocalRotation = propTransform.localRotation;
-            heldReloadGrip = FindReloadGrip(weapon);
+            heldReloadGrip = FindReloadGrip(firearmController, magazine, prop, propWellPointLocal);
             railAxisInWell = RailAxisInWell(prop, propTransform.localScale);
 
             hiddenGunMagazineView = magazineView.ItemView;
@@ -468,9 +437,9 @@ namespace TarkovVR.Source.Weapons
                 handLatch.SetPositionAndRotation(handPosition, handRotation);
             else
             {
-                magazineHandFingers = MAGAZINE_PULL_FINGERS;
-                if (snapHandToGrip && heldReloadGrip != null)
-                    SnapHandToGrip(heldReloadGrip.oldMagazinePosition, heldReloadGrip.oldMagazineRotation);
+                magazineHandFingers = heldReloadGrip?.pull?.fingers ?? MAGAZINE_PULL_FINGERS;
+                if (snapHandToGrip && heldReloadGrip?.pull != null)
+                    SnapHandToGrip(heldReloadGrip.pull.position, heldReloadGrip.pull.rotation);
             }
 
             if (debugLog)
@@ -631,11 +600,14 @@ namespace TarkovVR.Source.Weapons
             Transform propTransform = prop.transform;
             Transform handBone = HandBone();
             propTransform.SetParent(handBone, worldPositionStays: false);
-            ReloadGrip reloadGrip = FindReloadGrip(weapon);
-            if (reloadGrip != null)
+            Vector3 seatedScale = SeatedScale(prop);
+            SetWorldScale(propTransform, Vector3.Scale(magazineView.Bone.lossyScale, seatedScale));
+            propWellPointLocal = SeatedWellPointLocal(prop);
+            ReloadGrip reloadGrip = FindReloadGrip(firearmController, magazine, prop, propWellPointLocal);
+            if (reloadGrip?.insert != null)
             {
-                freeHoldPosition = reloadGrip.newMagazinePosition;
-                freeHoldRotation = Quaternion.Euler(reloadGrip.newMagazineRotation);
+                freeHoldPosition = reloadGrip.insert.position;
+                freeHoldRotation = Quaternion.Euler(reloadGrip.insert.rotation);
             }
             else
             {
@@ -643,8 +615,6 @@ namespace TarkovVR.Source.Weapons
                 freeHoldPosition = useLastGrab ? lastGrabPosition : newMagazineHoldPosition;
                 freeHoldRotation = useLastGrab ? lastGrabRotation : Quaternion.Euler(newMagazineHoldRotation);
             }
-            Vector3 seatedScale = SeatedScale(prop);
-            SetWorldScale(propTransform, Vector3.Scale(magazineView.Bone.lossyScale, seatedScale));
             // UpdateFreeHold eases it the rest of the way into the grip
             if (startFrom != null)
                 propTransform.SetPositionAndRotation(startFrom.position, startFrom.rotation);
@@ -655,7 +625,6 @@ namespace TarkovVR.Source.Weapons
             ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
             seatedLocalPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
             seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
-            propWellPointLocal = SeatedWellPointLocal(prop);
             railAxisInWell = RailAxisInWell(prop, seatedScale);
 
             heldSource = source;
@@ -667,7 +636,7 @@ namespace TarkovVR.Source.Weapons
             magazineLeftWell = true;
             onRail = false;
             railCatchArmed = true;
-            magazineHandFingers = MAGAZINE_INSERT_FINGERS;
+            magazineHandFingers = reloadGrip?.insert?.fingers ?? MAGAZINE_INSERT_FINGERS;
             return true;
         }
 
@@ -869,10 +838,10 @@ namespace TarkovVR.Source.Weapons
             propTransform.SetParent(handBone, worldPositionStays: true);
             GetPoseIn(handBone, propTransform, out lastGrabPosition, out lastGrabRotation);
             hasLastGrabPose = true;
-            if (heldReloadGrip != null)
+            if (heldReloadGrip?.pull != null)
             {
-                freeHoldPosition = heldReloadGrip.oldMagazinePosition;
-                freeHoldRotation = Quaternion.Euler(heldReloadGrip.oldMagazineRotation);
+                freeHoldPosition = heldReloadGrip.pull.position;
+                freeHoldRotation = Quaternion.Euler(heldReloadGrip.pull.rotation);
             }
             else
             {
@@ -933,7 +902,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 RailAxisInWell(GameObject prop, Vector3 seatedScale)
         {
             Vector3 towardMiddle = MagazineCenterInProp(prop) - propWellPointLocal;
-            Vector3 axisInProp = TryGetMagazineLengthAxis(prop, out Vector3 lengthAxis) ? lengthAxis : towardMiddle;
+            Vector3 axisInProp = TryGetMagazineShape(prop, propWellPointLocal, out Vector3 lengthAxis, out _) ? lengthAxis : towardMiddle;
             Vector3 axisInWell = seatedLocalRotation * Vector3.Scale(axisInProp, seatedScale);
             if (debugLog)
             {
@@ -947,9 +916,13 @@ namespace TarkovVR.Source.Weapons
         // The longest side of the magazine body's mesh bounds (mags are modelled upright, so that's straight down the
         // magazine), in the prop's frame, pointing away from the well. The body is the biggest mesh; the rounds inside
         // are separate small ones. Bounds are mesh metadata, so this works on meshes that aren't readable.
-        private static bool TryGetMagazineLengthAxis(GameObject prop, out Vector3 axisInProp)
+        // Not when the longest side runs across the gun (the Beta-C dual drum is wider than it is tall): if it's nowhere near
+        // the way the magazine hangs from the well, the side closest to that direction is its length.
+        public static float minLengthAxisAlignment = 0.5f;   // cos of how far the longest side may be off the well to body direction
+        private static bool TryGetMagazineShape(GameObject prop, Vector3 wellPointInProp, out Vector3 axisInProp, out float length)
         {
             axisInProp = Vector3.zero;
+            length = 0f;
             MeshFilter body = null;
             float bodyVolume = 0f;
             foreach (MeshFilter meshFilter in prop.GetComponentsInChildren<MeshFilter>(true))
@@ -970,20 +943,41 @@ namespace TarkovVR.Source.Weapons
             Bounds bounds = body.sharedMesh.bounds;
             Vector3 bodySize = Vector3.Scale(bounds.size, body.transform.lossyScale);
             bodySize = new Vector3(Mathf.Abs(bodySize.x), Mathf.Abs(bodySize.y), Mathf.Abs(bodySize.z));
-            Vector3 lengthInMesh = Vector3.forward;
+            int lengthSide = 2;
             if (bodySize.x >= bodySize.y && bodySize.x >= bodySize.z)
-                lengthInMesh = Vector3.right;
+                lengthSide = 0;
             else if (bodySize.y >= bodySize.z)
-                lengthInMesh = Vector3.up;
+                lengthSide = 1;
 
             Transform propTransform = prop.transform;
-            Vector3 axis = propTransform.InverseTransformDirection(body.transform.TransformDirection(lengthInMesh));
-            Vector3 bodyCenterInProp = propTransform.InverseTransformPoint(body.transform.TransformPoint(bounds.center));
-            if (Vector3.Dot(axis, bodyCenterInProp - propWellPointLocal) < 0f)
+            Vector3 towardBody = propTransform.InverseTransformPoint(body.transform.TransformPoint(bounds.center)) - wellPointInProp;
+            Vector3[] sides =
+            {
+                propTransform.InverseTransformDirection(body.transform.right),
+                propTransform.InverseTransformDirection(body.transform.up),
+                propTransform.InverseTransformDirection(body.transform.forward),
+            };
+            if (towardBody.sqrMagnitude > 1e-6f && Mathf.Abs(Vector3.Dot(sides[lengthSide].normalized, towardBody.normalized)) < minLengthAxisAlignment)
+            {
+                float closest = -1f;
+                for (int side = 0; side < sides.Length; side++)
+                {
+                    float alignment = Mathf.Abs(Vector3.Dot(sides[side].normalized, towardBody.normalized));
+                    if (alignment > closest)
+                    {
+                        closest = alignment;
+                        lengthSide = side;
+                    }
+                }
+            }
+
+            Vector3 axis = sides[lengthSide];
+            if (Vector3.Dot(axis, towardBody) < 0f)
                 axis = -axis;
             if (axis.sqrMagnitude < 1e-8f)
                 return false;
             axisInProp = axis.normalized;
+            length = lengthSide == 0 ? bodySize.x : lengthSide == 1 ? bodySize.y : bodySize.z;
             return true;
         }
 
