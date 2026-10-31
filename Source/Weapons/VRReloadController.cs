@@ -721,7 +721,8 @@ namespace TarkovVR.Source.Weapons
                 railCatchArmed = !inCatchZone;
                 return;
             }
-            if (inCatchZone)
+            // A new magazine only with the well empty (the gun's own, out in the hand, still counts as in it for Tarkov)
+            if (inCatchZone && (heldSource == HeldMagazineSource.FromGun || heldForFirearm.Item.GetCurrentMagazine() == null))
             {
                 // Relative to the controller: on the track the hand follows the magazine, so it can't be the source
                 GetPoseIn(VRGlobals.vrPlayer.LeftHand.transform, propTransform, out railEntryHandPosition, out railEntryHandRotation);
