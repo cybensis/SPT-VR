@@ -226,7 +226,8 @@ namespace TarkovVR.Patches.Core.Player
             // Height-based scaling
             float baselineHeight = VRSettings.GetSeatedMode() ? SITTING_BASELINE : STANDING_BASELINE;
             float heightRatio = VRGlobals.vrPlayer.initPos.y / baselineHeight;
-            float armLengthOffset = (heightRatio - 1f) * 0.25f;
+            // The arm itself is the right length now (ArmLength), so the shoulders stay put
+            float armLengthOffset = TarkovVR.Source.Player.VR.ArmLength.enabled ? 0f : (heightRatio - 1f) * 0.25f;
 
             // State-based offsets
             bool isSprinting = __instance.Player.IsSprintEnabled;
@@ -406,6 +407,8 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer || VRGlobals.ikManager == null)
                 return;
+
+            TarkovVR.Source.Player.VR.ArmLength.Apply();
 
             bool on = naturalElbow && !VRSettings.GetLeftHandedMode();
             // Elbow reference frame: the yaw OverrideShoulders placed the shoulders with this frame

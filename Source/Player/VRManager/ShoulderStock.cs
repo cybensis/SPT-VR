@@ -227,7 +227,7 @@ namespace TarkovVR.Source.Player.VRManager
         // The HMD's pose straight from OpenVR, in the app's current tracking universe (the same frame
         // the SteamVR hand-pose actions report in).
         private static readonly TrackedDevicePose_t[] hmdPoses = new TrackedDevicePose_t[1];
-        private static bool RawHmdPose(out Vector3 pos, out Quaternion rot)
+        internal static bool RawHmdPose(out Vector3 pos, out Quaternion rot)
         {
             // OpenXR's headset pose is already in the same tracking space as the hand poses
             if (OpenXRBootstrap.Active)

@@ -104,6 +104,7 @@ namespace TarkovVR.Source.Settings
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
+            public float armLength { get; set; }    // m, shoulder joint to wrist; 0 = never measured
             // B no longer runs Tarkov's reload on guns with detachable magazines: a press drops the magazine, held = the off hand can pull it out
             public bool manualReload { get; set; }
 
@@ -1086,6 +1087,17 @@ namespace TarkovVR.Source.Settings
         {
             return settings.rightHandVerticalAngle;
         }
+        public static float GetArmLength()
+        {
+            return settings.armLength;
+        }
+
+        public static void SetArmLength(float armLength)
+        {
+            settings.armLength = armLength;
+            SaveSettings();
+        }
+
         public static float GetHandPosOffset()
         {
             return settings.handPosOffset;
