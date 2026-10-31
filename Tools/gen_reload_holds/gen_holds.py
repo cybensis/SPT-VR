@@ -220,6 +220,30 @@ def thumbOnCatch(g):
     last,_,_=g['worldAt'](J[3],peakTime,c); before,_,_=g['worldAt'](J[2],peakTime,c)
     return eulerList([np.array(g['localAt'](j,peakTime)[1],float) for j in J[1:4]]),round(float(np.linalg.norm(last+(last-before)*0.8-catchAt)),3)
 
+# The other way to hold an AK's handle. Each hand's clips on these guns only show it one way (the left over the top, the right from
+# below), so the other comes from a clip that shows it, the same handle on another rig, moved over through the gun's frame.
+OTHER_GRIP_GUNS=('ak100','ak74n','ak74m','akm','aks74n','aks74u','rpk16','saiga12k_10')
+LEFT_UNDER_HAND=('pp-19-01','pp-19-01_charge_2')
+RIGHT_OVER_HAND=('ak74n','ak74n_reload_charge_0')
+
+# A palm against the handle in the gun's frame, with the handle all the way back
+def handOnHandle(g,charge,side):
+    P=g['prefabLocal']; palm,wp=bone(P,f'/Base Human{side}Palm'),bone(P,'Weapon_root_anim/weapon'); J=fingerPaths(P,side)
+    stop=float(g['clip'].m_MuscleClip.m_StopTime); rest=None; rows=[]
+    for i in range(int(stop*30)+1):
+        t=i/30; c={}
+        cp,_,_=g['worldAt'](charge,t,c); wpp,wr,_=g['worldAt'](wp,t,c); inGun=g['rotate'](conj(wr),cp-wpp)
+        if rest is None: rest=inGun
+        rows.append((t,float(np.linalg.norm(inGun-rest))))
+    top=max(r[1] for r in rows); t=next(r[0] for r in rows if r[1]>=top-0.002)
+    c={}; cp,_,_=g['worldAt'](charge,t,c); pp,pr,_=g['worldAt'](palm,t,c); wpp,wr,_=g['worldAt'](wp,t,c)
+    return dict(position=g['rotate'](conj(wr),pp-cp),rotation=qmul(conj(wr),pr),fingers=eulerList([np.array(g['localAt'](j,t)[1],float) for j in J]))
+
+def holdOnBone(hand,boneInGun):
+    inverse=conj(boneInGun); axis=inverse[:3]; position=hand['position']
+    onBone=position+2*np.cross(axis,np.cross(axis,position)+inverse[3]*position)
+    return dict(position=[round(float(x),4) for x in onBone],rotation=toUnityEuler(qmul(conj(boneInGun),hand['rotation'])),fingers=hand['fingers'])
+
 def palmHold(g,J,old,new):
     So=sample(g,old,J); Sn=sample(g,new,J)
     seat=So[0]['inGun']
@@ -234,7 +258,8 @@ def palmHold(g,J,old,new):
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
 def run(folders,outFile=None):
-    result=dict(grips={},handles={},gunHandHandles={},rockIn={},palms={}); report=[]
+    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},rockIn={},palms={}); report=[]
+    boneInGun={}; otherGrips={}
     for folder in folders:
         d=ROOT+folder+'/'
         if not os.path.isfile(d+'client_assets.bundle'): continue
@@ -312,6 +337,11 @@ def run(folders,outFile=None):
                         h['clip']=n; best=((rank,h['drift']),h)
                 if best: result['gunHandHandles'][family]=best[1]
                 else: report.append((family,'charge','no clip racks with the right hand'))
+                g=setup(tree,clips[next(n for n in names if '_mag_in' in n)]); c={}
+                _,chargeRotation,_=g['worldAt'](charge,0.0,c); _,gunRotation,_=g['worldAt'](bone(P,'Weapon_root_anim/weapon'),0.0,c)
+                boneInGun[family]=qmul(conj(gunRotation),chargeRotation)
+                for (sourceFamily,sourceClip),side,key in ((LEFT_UNDER_HAND,'L','left'),(RIGHT_OVER_HAND,'R','right')):
+                    if family==sourceFamily: otherGrips[key]=handOnHandle(setup(tree,clips[sourceClip]),charge,side)
             try:
                 rocks=rockIn(tree,clips,prefix,mag)
                 if rocks: result['rockIn'][family]=rocks
@@ -328,6 +358,10 @@ def run(folders,outFile=None):
                         result['palms'][family]=h; break
             print(f'{folder}/{family}: {len(got)} mag clips, handle {family in result["handles"]}, palm {family in result["palms"]}, {time.time()-t0:.0f}s',flush=True)
             if outFile: json.dump(dict(result=result,report=report),open(outFile,'w'))
+    for family in OTHER_GRIP_GUNS:
+        if family not in boneInGun: continue
+        if 'left' in otherGrips: result['handleAlternates'][family]=[holdOnBone(otherGrips['left'],boneInGun[family])]
+        if 'right' in otherGrips: result['gunHandHandleAlternates'][family]=[holdOnBone(otherGrips['right'],boneInGun[family])]
     return result,report
 
 if __name__=='__main__':

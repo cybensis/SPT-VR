@@ -35,7 +35,7 @@ def lengthFor(family,typ):
                 l=magLength(i)
                 if l>0: return round(float(l),3)
     return 0.0
-out=dict(grips={},handles={},gunHandHandles={},rockIn={},palms={}); dropped=[]
+out=dict(grips={},handles={},gunHandHandles={},handleAlternates=R['handleAlternates'],gunHandHandleAlternates=R['gunHandHandleAlternates'],rockIn={},palms={}); dropped=[]
 for k,v in sorted(R['grips'].items()):
     family,typ=k.split('|'); e={}
     for half,h in v.items():
@@ -55,7 +55,7 @@ for f,h in sorted(R['palms'].items()):
     out['palms'][f]=dict(newMagazine=h['newMagazine'],oldMagazine=h['oldMagazine'],fingers=h['fingers'],thumb=h.get('thumb'))
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]
-for holds in (out['handles'],out['gunHandHandles'],out['rockIn'],out['palms']):
+for holds in (out['handles'],out['gunHandHandles'],out['handleAlternates'],out['gunHandHandleAlternates'],out['rockIn'],out['palms']):
     for family,folder in sorted(famFolder.items()):
         mates=[f for f in sorted(holds) if famFolder.get(f)==folder]
         if family not in holds and mates:

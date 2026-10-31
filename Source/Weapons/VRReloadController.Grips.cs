@@ -91,6 +91,8 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedGrip> grips;
             public Dictionary<string, SavedHandleHold> handles;
             public Dictionary<string, SavedHandleHold> gunHandHandles;
+            public Dictionary<string, List<SavedHandleHold>> handleAlternates;
+            public Dictionary<string, List<SavedHandleHold>> gunHandHandleAlternates;
             public Dictionary<string, SavedRockIn> rockIn;
             public Dictionary<string, SavedPalmHold> palms;
         }
@@ -369,6 +371,8 @@ namespace TarkovVR.Source.Weapons
                     foreach (KeyValuePair<string, SavedHandleHold> entry in generated.gunHandHandles)
                         gunHandHandleHolds[entry.Key] = HandleHoldFrom(entry.Value);
                 }
+                LoadHandleAlternates(generated.handleAlternates, handleAlternates);
+                LoadHandleAlternates(generated.gunHandHandleAlternates, gunHandHandleAlternates);
                 if (generated.rockIn != null)
                 {
                     foreach (KeyValuePair<string, SavedRockIn> entry in generated.rockIn)
@@ -406,6 +410,19 @@ namespace TarkovVR.Source.Weapons
             if (hold != null)
                 hold.inBoneFrame = true;
             return hold;
+        }
+
+        private static void LoadHandleAlternates(Dictionary<string, List<SavedHandleHold>> saved, Dictionary<string, List<HandleHold>> holds)
+        {
+            if (saved == null)
+                return;
+            foreach (KeyValuePair<string, List<SavedHandleHold>> entry in saved)
+            {
+                List<HandleHold> others = new List<HandleHold>();
+                foreach (SavedHandleHold hold in entry.Value)
+                    others.Add(HandleHoldFrom(hold));
+                holds[entry.Key] = others;
+            }
         }
 
         private static HandleHold HandleHoldFrom(SavedHandleHold saved)

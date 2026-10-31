@@ -125,6 +125,9 @@ namespace TarkovVR.Source.Weapons
         };
         // Same for the gun hand, from a clip where the right hand racks; all from ReloadHolds.json
         private static readonly Dictionary<string, HandleHold> gunHandHandleHolds = new Dictionary<string, HandleHold>();
+        // Another way to hold the same handle (an AK's from over the top or from below): whichever the hand is turned closest to as it takes it
+        private static readonly Dictionary<string, List<HandleHold>> handleAlternates = new Dictionary<string, List<HandleHold>>();
+        private static readonly Dictionary<string, List<HandleHold>> gunHandHandleAlternates = new Dictionary<string, List<HandleHold>>();
         private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
         private static float heldHandleTravel;              // m this gun's handle comes back
 
@@ -311,8 +314,9 @@ namespace TarkovVR.Source.Weapons
                 heldHandleTravel = Mathf.Min(heldHandleTravel, handleLockedBackTravel);
             if (handleHold != null)
             {
-                handleHandFingers = handleHold.fingers;
-                SnapHandTo(handleView, handleBone.position + handleBone.rotation * handleHold.position, handleBone.rotation * Quaternion.Euler(handleHold.rotation));
+                HandleHold grip = HoldHandIsTurnedTo(handleHold, gunHand ? gunHandHandleAlternates : handleAlternates, family);
+                handleHandFingers = grip.fingers;
+                SnapHandTo(handleView, handleBone.position + handleBone.rotation * grip.position, handleBone.rotation * Quaternion.Euler(grip.rotation));
             }
             BeginChamberView(firearmController, weapon);
 
@@ -326,6 +330,27 @@ namespace TarkovVR.Source.Weapons
                     $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}, gun hand: {gunHand}, hold from a clip: {handleHold != null}, carrier: {(handleCarrier != null ? handleCarrier.name : "none")}");
             }
             PulseHandleHand(0.3f, 0.04f);
+        }
+
+        private static HandleHold HoldHandIsTurnedTo(HandleHold main, Dictionary<string, List<HandleHold>> alternates, string family)
+        {
+            HandleHold closest = main;
+            if (!alternates.TryGetValue(family, out List<HandleHold> others))
+                return closest;
+            Quaternion handRotation = LatchedHandRig.rotation;
+            float smallestTurn = Quaternion.Angle(handRotation, handleBone.rotation * Quaternion.Euler(main.rotation));
+            foreach (HandleHold other in others)
+            {
+                float turn = Quaternion.Angle(handRotation, handleBone.rotation * Quaternion.Euler(other.rotation));
+                if (turn < smallestTurn)
+                {
+                    smallestTurn = turn;
+                    closest = other;
+                }
+            }
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[VRReload] charging handle: {(closest == main ? "main" : "other")} grip, {smallestTurn:0} deg from the hand");
+            return closest;
         }
 
         // The carrier is animated and we move it, so the pull can't be measured against it: two transforms of ours on the gun's
