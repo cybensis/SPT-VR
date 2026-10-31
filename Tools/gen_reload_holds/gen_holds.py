@@ -262,9 +262,9 @@ def holdOnBone(hand,boneInGun):
 # A pistol has no charging handle: the left hand works its slide the same way. The slide is a bone of the rig, the first of these the
 # clip moves with the hand riding it, and the hold is on that bone like a handle's.
 SLIDE_BONES=('weapon_slide','mod_reciever','slide')
-# Other ways to take a slide, from the pistols whose clips show them: palm on top, and up from below at the side. gen_export moves them onto
-# each pistol by the back and top of its slide, since the slide bone sits somewhere else on each.
-SLIDE_OTHER_GRIPS=(('over','p226r','p226r_discharge'),('below','aps','aps_misfire_1'))
+# Another way to take a slide, from a pistol whose clips show it: palm on top. gen_export moves it onto each pistol by the back and top of
+# its slide, since the slide bone sits somewhere else on each.
+SLIDE_OTHER_GRIPS=(('over','p226r','p226r_discharge'),)
 SLIDE_CLIP_RANKS=[r'reload_charge(_\d+)?$',r'(reload_)?charge_(to_)?end(_\d+)?$|reload_end_charge$',r'rechamber(_\d+)?$',r'misfire(_\d+)?$',r'discharge$',r'jam_(slide|soft|hard)']
 def slideHold(tree,clips,prefix,names):
     P=tree[0]; best=None
