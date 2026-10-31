@@ -31,7 +31,8 @@ namespace TarkovVR.Source.Weapons
             public Vector3[] fingers;
         }
 
-        // By animation set (m4a1_reload_admin at 1.6 s). Only 8 of the 127 magazine guns have the clip.
+        // By animation set (m4a1_reload_admin at 1.6 s); the other clips' come from ReloadHolds.json. Only 8 of the 127 magazine
+        // guns have the clip: the rest borrow the closest kind (FindPalmHold).
         private static readonly Dictionary<string, PalmHold> palmHolds = new Dictionary<string, PalmHold>
         {
             {
@@ -78,7 +79,7 @@ namespace TarkovVR.Source.Weapons
         {
             bool inZone = palming && heldSource == HeldMagazineSource.FromPouch && !onRail && !HoldingPalmedMagazine
                 && TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
-                && palmHolds.ContainsKey(AnimationFamily(firearmController)) && InPalmZone(firearmController, weapon, magazineSlot);
+                && (!MagazineSlidesOntoHand || MagazinePartlyOut) && FindPalmHold(firearmController) != null && InPalmZone(firearmController, weapon, magazineSlot);
             if (inZone && !palmZoneEntered)
                 Pulse(0.2f, 0.03f);
             palmZoneEntered = inZone;
@@ -96,8 +97,21 @@ namespace TarkovVR.Source.Weapons
                 && length <= palmMaxLength && thinnestSide <= palmMaxThickness;
         }
 
+        private const string RIFLE_PALM_POSE = "m4a1";
+        private const string PISTOL_PALM_POSE = "p226r";
+
+        private static PalmHold FindPalmHold(FirearmController firearmController)
+        {
+            LoadRecordedGrips();
+            if (palmHolds.TryGetValue(AnimationFamily(firearmController), out PalmHold own))
+                return own;
+            palmHolds.TryGetValue(VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol ? PISTOL_PALM_POSE : RIFLE_PALM_POSE, out PalmHold borrowed);
+            return borrowed;
+        }
+
         private static void PoseForThisMagazine(MagazineHold hold, GameObject prop, Vector3 wellPointInProp, out Vector3 position, out Quaternion rotation)
         {
+            hold = InModelFrame(hold, prop);
             if (TryGetMagazineShape(prop, wellPointInProp, out Vector3 lengthAxis, out float length, out _))
                 hold = MoveAlongMagazine(hold, lengthAxis, length);
             position = hold.position;
@@ -113,9 +127,11 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (!CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return RefusePalming("the gun isn't ready");
-            string family = AnimationFamily(firearmController);
-            if (!palmHolds.TryGetValue(family, out PalmHold palmHold))
-                return RefusePalming($"no palming pose for '{family}' yet");
+            if (MagazineSlidesOntoHand && !MagazinePartlyOut)
+                return RefusePalming("a pistol's magazine has to come down onto the hand first: the release, with the hand under the well");
+            PalmHold palmHold = FindPalmHold(firearmController);
+            if (palmHold == null)
+                return RefusePalming($"no palming pose for '{AnimationFamily(firearmController)}'");
             if (weapon.MalfState.State == Weapon.EMalfunctionState.Feed)
                 return RefusePalming("feed malfunction");
             if (!InPalmZone(firearmController, weapon, magazineSlot))

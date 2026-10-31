@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using EFT;
+using EFT.AssetsManager;
 using EFT.InventoryLogic;
 using Newtonsoft.Json;
 using TarkovVR.Source.Controls;
@@ -27,6 +28,8 @@ namespace TarkovVR.Source.Weapons
         public static float sameHoldDistance = 0.04f;    // m pull and insert holds may differ and still be the same way of holding it
         public static float sameHoldAngle = 15f;         // deg, same
         private static readonly string RELOAD_GRIPS_FILE = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\sptvr\\ReloadGrips.json");
+        // Generated from every gun's own clips (Tools/gen_reload_holds), for all that haven't been recorded. Recordings win.
+        private static readonly string GENERATED_HOLDS_FILE = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\sptvr\\Assets\\ReloadHolds.json");
 
         // The magazine's pose in the hand's frame: the left IK marker's while recording, since your hand takes its place
         private sealed class MagazineHold
@@ -35,6 +38,7 @@ namespace TarkovVR.Source.Weapons
             public Vector3 rotation;
             public float magazineLength;
             public Vector3[] fingers;        // null = the M4A1's
+            public bool inBoneFrame;         // generated: the pose of the magazine's slot bone (the clips move the bone, not the model)
         }
 
         private sealed class ReloadGrip
@@ -57,6 +61,28 @@ namespace TarkovVR.Source.Weapons
         {
             public SavedHold pull;
             public SavedHold insert;
+        }
+
+        public sealed class SavedHandleHold
+        {
+            public float[] position;
+            public float[] rotation;
+            public float[] fingers;
+            public float travel;
+        }
+
+        public sealed class SavedPalmHold
+        {
+            public SavedHold newMagazine;
+            public SavedHold oldMagazine;
+            public float[] fingers;
+        }
+
+        public sealed class GeneratedHolds
+        {
+            public Dictionary<string, SavedGrip> grips;
+            public Dictionary<string, SavedHandleHold> handles;
+            public Dictionary<string, SavedPalmHold> palms;
         }
 
         private static readonly Dictionary<string, ReloadGrip> reloadGrips = new Dictionary<string, ReloadGrip>
@@ -117,8 +143,8 @@ namespace TarkovVR.Source.Weapons
 
             ReloadGrip grip = new ReloadGrip
             {
-                pull = ResolveHold(family, magazineType, true, lengthAxis, length, out string pullSource),
-                insert = ResolveHold(family, magazineType, false, lengthAxis, length, out string insertSource),
+                pull = ResolveHold(family, magazineType, true, prop, lengthAxis, length, out string pullSource),
+                insert = ResolveHold(family, magazineType, false, prop, lengthAxis, length, out string insertSource),
             };
             grip.pull = WithInsertThumb(grip.pull, grip.insert);
             Plugin.MyLog.LogInfo($"[VRReload] {firearmController.Item.LocalizedShortName()} with {magazine.LocalizedShortName()}: animations '{family}', "
@@ -126,13 +152,13 @@ namespace TarkovVR.Source.Weapons
             return grip.pull != null || grip.insert != null ? grip : null;
         }
 
-        private static MagazineHold ResolveHold(string family, int magazineType, bool pull, Vector3 lengthAxis, float length, out string source)
+        private static MagazineHold ResolveHold(string family, int magazineType, bool pull, GameObject prop, Vector3 lengthAxis, float length, out string source)
         {
             MagazineHold exact = HoldFor(family, magazineType, pull);
             if (exact != null)
             {
-                source = "recorded";
-                return exact;
+                source = exact.inBoneFrame ? "generated" : "recorded";
+                return InModelFrame(exact, prop);
             }
             for (int otherType = 0; otherType <= HIGHEST_MAGAZINE_TYPE; otherType++)
             {
@@ -140,10 +166,28 @@ namespace TarkovVR.Source.Weapons
                 if (borrowed == null)
                     continue;
                 source = $"borrowed from type {otherType}";
-                return MoveAlongMagazine(borrowed, lengthAxis, length);
+                return MoveAlongMagazine(InModelFrame(borrowed, prop), lengthAxis, length);
             }
             source = "none";
             return null;
+        }
+
+        // The model sits off its slot bone by its ModPlacer (SlotView.InsertItem), per magazine
+        private static MagazineHold InModelFrame(MagazineHold hold, GameObject prop)
+        {
+            if (!hold.inBoneFrame)
+                return hold;
+            ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
+            Vector3 seatedPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
+            Quaternion seatedRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
+            Quaternion boneRotation = Quaternion.Euler(hold.rotation);
+            return new MagazineHold
+            {
+                position = hold.position + boneRotation * seatedPosition,
+                rotation = (boneRotation * seatedRotation).eulerAngles,
+                magazineLength = hold.magazineLength,
+                fingers = hold.fingers,
+            };
         }
 
         // The pull's fingers come from its most closed moment, which only looks at the four fingers: the thumb is wherever it
@@ -199,7 +243,8 @@ namespace TarkovVR.Source.Weapons
             string family = AnimationFamily(firearmController);
             string key = GripKey(family, magazineType);
             string holdName = pull ? "pull" : "insert";
-            if (key == BUILT_IN_GRIP || (HoldFor(family, magazineType, pull) != null && !rerecordReloadGrips))
+            MagazineHold existing = HoldFor(family, magazineType, pull);
+            if (key == BUILT_IN_GRIP || (existing != null && !existing.inBoneFrame && !rerecordReloadGrips))
             {
                 Plugin.MyLog.LogInfo($"[ReloadGrips] {key} {holdName}: already have it");
                 return false;
@@ -262,6 +307,7 @@ namespace TarkovVR.Source.Weapons
             if (savedGrips != null)
                 return;
             savedGrips = new Dictionary<string, SavedGrip>();
+            LoadGeneratedHolds();
             if (!File.Exists(RELOAD_GRIPS_FILE))
                 return;
             try
@@ -271,7 +317,10 @@ namespace TarkovVR.Source.Weapons
                 {
                     if (entry.Key == BUILT_IN_GRIP || entry.Value == null)
                         continue;
-                    reloadGrips[entry.Key] = new ReloadGrip { pull = HoldFrom(entry.Value.pull), insert = HoldFrom(entry.Value.insert) };
+                    if (!reloadGrips.TryGetValue(entry.Key, out ReloadGrip grip))
+                        reloadGrips[entry.Key] = grip = new ReloadGrip();
+                    grip.pull = HoldFrom(entry.Value.pull) ?? grip.pull;
+                    grip.insert = HoldFrom(entry.Value.insert) ?? grip.insert;
                 }
                 Plugin.MyLog.LogInfo($"[ReloadGrips] loaded {savedGrips.Count} recordings");
             }
@@ -281,23 +330,82 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
+        // Fills in what isn't tested in the headset or recorded
+        private static void LoadGeneratedHolds()
+        {
+            if (!File.Exists(GENERATED_HOLDS_FILE))
+            {
+                Plugin.MyLog.LogWarning($"[ReloadGrips] {GENERATED_HOLDS_FILE} is missing: only recorded guns have reload holds");
+                return;
+            }
+            try
+            {
+                GeneratedHolds generated = JsonConvert.DeserializeObject<GeneratedHolds>(File.ReadAllText(GENERATED_HOLDS_FILE));
+                foreach (KeyValuePair<string, SavedGrip> entry in generated.grips)
+                {
+                    if (!reloadGrips.TryGetValue(entry.Key, out ReloadGrip grip))
+                        reloadGrips[entry.Key] = grip = new ReloadGrip();
+                    grip.pull = grip.pull ?? InBoneFrame(HoldFrom(entry.Value.pull));
+                    grip.insert = grip.insert ?? InBoneFrame(HoldFrom(entry.Value.insert));
+                }
+                foreach (KeyValuePair<string, SavedHandleHold> entry in generated.handles)
+                {
+                    if (handleHolds.ContainsKey(entry.Key))
+                        continue;
+                    handleHolds[entry.Key] = new HandleHold
+                    {
+                        position = new Vector3(entry.Value.position[0], entry.Value.position[1], entry.Value.position[2]),
+                        rotation = new Vector3(entry.Value.rotation[0], entry.Value.rotation[1], entry.Value.rotation[2]),
+                        fingers = FingersFrom(entry.Value.fingers),
+                        travel = entry.Value.travel,
+                    };
+                }
+                foreach (KeyValuePair<string, SavedPalmHold> entry in generated.palms)
+                {
+                    if (palmHolds.ContainsKey(entry.Key))
+                        continue;
+                    palmHolds[entry.Key] = new PalmHold
+                    {
+                        newMagazine = InBoneFrame(HoldFrom(entry.Value.newMagazine)),
+                        oldMagazine = InBoneFrame(HoldFrom(entry.Value.oldMagazine)),
+                        fingers = FingersFrom(entry.Value.fingers),
+                    };
+                }
+                Plugin.MyLog.LogInfo($"[ReloadGrips] generated holds: {generated.grips.Count} gun and magazine types, {generated.handles.Count} charging handles, {generated.palms.Count} palming poses");
+            }
+            catch (Exception exception)
+            {
+                Plugin.MyLog.LogError($"[ReloadGrips] couldn't read {GENERATED_HOLDS_FILE}: {exception.Message}");
+            }
+        }
+
+        private static MagazineHold InBoneFrame(MagazineHold hold)
+        {
+            if (hold != null)
+                hold.inBoneFrame = true;
+            return hold;
+        }
+
+        private static Vector3[] FingersFrom(float[] numbers)
+        {
+            if (numbers == null || numbers.Length < 3)
+                return null;
+            Vector3[] fingers = new Vector3[numbers.Length / 3];
+            for (int i = 0; i < fingers.Length; i++)
+                fingers[i] = new Vector3(numbers[i * 3], numbers[i * 3 + 1], numbers[i * 3 + 2]);
+            return fingers;
+        }
+
         private static MagazineHold HoldFrom(SavedHold saved)
         {
             if (saved == null || saved.position == null || saved.position.Length != 3 || saved.rotation == null || saved.rotation.Length != 3)
                 return null;
-            Vector3[] fingers = null;
-            if (saved.fingers != null && saved.fingers.Length >= 3)
-            {
-                fingers = new Vector3[saved.fingers.Length / 3];
-                for (int i = 0; i < fingers.Length; i++)
-                    fingers[i] = new Vector3(saved.fingers[i * 3], saved.fingers[i * 3 + 1], saved.fingers[i * 3 + 2]);
-            }
             return new MagazineHold
             {
                 position = new Vector3(saved.position[0], saved.position[1], saved.position[2]),
                 rotation = new Vector3(saved.rotation[0], saved.rotation[1], saved.rotation[2]),
                 magazineLength = saved.magazineLength,
-                fingers = fingers,
+                fingers = FingersFrom(saved.fingers),
             };
         }
     }

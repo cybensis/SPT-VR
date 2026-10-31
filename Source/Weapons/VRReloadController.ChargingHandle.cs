@@ -79,9 +79,10 @@ namespace TarkovVR.Source.Weapons
             public Vector3 position;
             public Vector3 rotation;
             public Vector3[] fingers;
+            public float travel;            // m; 0 = handleTravel
         }
 
-        // By animation set. m4a1_reload_charge_0 at 0.6 s: thumb and index on the left wing of the T.
+        // By animation set; the other guns' come from ReloadHolds.json. m4a1_reload_charge_0 at 0.6 s: thumb and index on the left wing of the T.
         private static readonly Dictionary<string, HandleHold> handleHolds = new Dictionary<string, HandleHold>
         {
             {
@@ -102,6 +103,7 @@ namespace TarkovVR.Source.Weapons
             },
         };
         private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
+        private static float heldHandleTravel;              // m this gun's handle comes back
 
         // The gun a magazine went into with its bolt forward on an empty chamber: Tarkov's insert chambered the top round,
         // but it's still in the magazine until the handle is racked. On the weapon, so it holds across a weapon swap.
@@ -215,9 +217,13 @@ namespace TarkovVR.Source.Weapons
             HoldingChargingHandle = true;
             LatchHand(handleView);
             handleHandFingers = null;
+            heldHandleTravel = handleTravel;
+            LoadRecordedGrips();
             if (handleHolds.TryGetValue(AnimationFamily(firearmController), out HandleHold handleHold))
             {
                 handleHandFingers = handleHold.fingers;
+                if (handleHold.travel > 0f)
+                    heldHandleTravel = handleHold.travel;
                 SnapHandTo(handleView, handleBone.position + handleBone.rotation * handleHold.position, handleBone.rotation * Quaternion.Euler(handleHold.rotation));
             }
             BeginChamberView(firearmController, weapon);
@@ -254,10 +260,10 @@ namespace TarkovVR.Source.Weapons
             float handAlongTrack = Vector3.Dot(handDelta, axis);
             float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
 
-            handlePull = Mathf.Clamp(handAlongTrack, 0f, handleTravel);
+            handlePull = Mathf.Clamp(handAlongTrack, 0f, heldHandleTravel);
             handleView.position = handleBone.TransformPoint(handleRestLocalPosition) + axis * handlePull;
 
-            if (!handleFullyBack && handlePull >= handleTravel * handleFullPull)
+            if (!handleFullyBack && handlePull >= heldHandleTravel * handleFullPull)
             {
                 handleFullyBack = true;
                 BoltComesBack(handleForFirearm);
@@ -267,7 +273,7 @@ namespace TarkovVR.Source.Weapons
             if (boltFollowsHandle)
             {
                 FirearmsAnimator firearmsAnimator = handleForFirearm.FirearmsAnimator;
-                float boltOpen = Mathf.Clamp01(handlePull / (handleTravel * handleFullPull));
+                float boltOpen = Mathf.Clamp01(handlePull / (heldHandleTravel * handleFullPull));
                 SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : boltOpen);
             }
 

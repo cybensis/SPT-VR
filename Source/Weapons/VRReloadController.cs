@@ -67,7 +67,7 @@ namespace TarkovVR.Source.Weapons
         // No firing: the gun's magazine is out in the hand, the charging handle is being worked, or the round in the chamber
         // is still in the magazine (Tarkov's insert chambers one at once; it has to be racked first). On a truly empty
         // chamber the trigger goes through: Tarkov dry-fires (the click, the finger) without looking at the bolt catch.
-        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine;
+        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine || MagazinePartlyOut;
 
         private static bool ChamberLoaded => VRGlobals.firearmController != null && VRGlobals.firearmController.Item != null
             && VRGlobals.firearmController.Item.ChamberAmmoCount > 0;
@@ -268,6 +268,7 @@ namespace TarkovVR.Source.Weapons
                     UpdateHeldMagazine(gripReleased, releaseLetGo);
             }
             UpdatePalmedMagazine(gripReleased);
+            UpdateMagazinePartlyOut();
             if (HoldingChargingHandle)
             {
                 if (!ChargingHandleHoldIsStillValid())
@@ -302,7 +303,7 @@ namespace TarkovVR.Source.Weapons
                 if (gripPressed && inGrabZone)
                     GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
                 // Manual Reload, two-handing with the support hand at the magazine (a pistol): the mag release takes it
-                else if (releasePressed && supporting && inGrabZone)
+                else if (releasePressed && supporting && inGrabZone && !MagazineSlidesOntoHand)
                     GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: true);
                 else if (triggerPressed && inHandleZone)
                     GrabChargingHandle(firearmController, weapon);
@@ -315,7 +316,7 @@ namespace TarkovVR.Source.Weapons
             UpdatePalmZoneBlip();
             if (triggerPressed)
                 TryStartPalming();
-            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine)
+            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine && !TrySlideMagazineOntoHand())
                 TryReleaseMagazine();
             OwnsOffHand = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || reaching;
 
@@ -385,6 +386,9 @@ namespace TarkovVR.Source.Weapons
             // from the support grip.
             if (!VRSettings.GetManualReloadOn() && (VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting))
                 return false;
+            // A pistol's has to come down onto the hand first (the release, with the hand under the well)
+            if (MagazineSlidesOntoHand && !MagazinePartlyOut)
+                return false;
             return TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
                 && DistanceToSegment(palm, magazineCenter, magazineBottom) <= magazineGrabRadius;
         }
@@ -448,6 +452,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
 
+            float startPosition = TakePartlyOutMagazine();
             GameObject prop = CreateProp(magazine);
             if (prop == null)
                 return;
@@ -478,7 +483,13 @@ namespace TarkovVR.Source.Weapons
             grabbedWithRelease = takenWithRelease;
             Vector3 handPosition = handLatch != null ? handLatch.position : Vector3.zero;
             Quaternion handRotation = handLatch != null ? handLatch.rotation : Quaternion.identity;
-            StartRail(pullingOut: true, startPosition: 0f);
+            StartRail(pullingOut: true, startPosition: startPosition);
+            if (startPosition > 0f)
+            {
+                railStartedPartlyOut = true;
+                magazineCatchPassed = true;
+                PlaceOnRail();
+            }
             if (keepHandPose)
                 handLatch.SetPositionAndRotation(handPosition, handRotation);
             else
@@ -790,10 +801,18 @@ namespace TarkovVR.Source.Weapons
                 {
                     // Let go (or pulled away) before it came free: it stays in the well, and a hand that came off the
                     // support grip goes back to it
-                    CancelHold();
+                    if (railStartedPartlyOut && railPosition > 0f)
+                        ReturnToPartlyOut();
+                    else
+                        CancelHold();
                     return;
                 }
                 PlaceOnRail();
+                if (railStartedPartlyOut && railPosition <= 0f)
+                {
+                    PushedBackIn(gripReleased);
+                    return;
+                }
                 if (!heldByCatch && trackPosition >= railLength)
                     ComeFreeOfWell();
                 return;
@@ -865,6 +884,7 @@ namespace TarkovVR.Source.Weapons
         private static void StartRail(bool pullingOut, float startPosition)
         {
             onRail = true;
+            railStartedPartlyOut = false;
             railPullingOut = pullingOut;
             railPosition = startPosition;
             railPositionAtStart = startPosition;
@@ -1323,7 +1343,8 @@ namespace TarkovVR.Source.Weapons
                 Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} dropped");
         }
 
-        // B (Y left-handed): the magazine falls out of the well (into the rig in the hideout). Returns false
+        // B (Y left-handed): the magazine falls out of the well (into the rig in the hideout; a pistol's with a hand under
+        // the well stops on it first, see VRReloadController.PartlyOut.cs). Returns false
         // when it doesn't apply, so B keeps its old job on that gun.
         public static bool TryReleaseMagazine()
         {
@@ -1772,11 +1793,13 @@ namespace TarkovVR.Source.Weapons
                 SetZoneViz(ref pouchZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref wellZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
+                SetZoneViz(ref belowWellZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }
 
             Vector3 palm = OffHandPalm();
             UpdateChargingHandleViz(firearmController, weapon, show);
+            UpdateBelowWellViz(firearmController, magazineSlot);
             bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
             if (!HoldingMagazine && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
                 SetCapsuleZoneViz(ref grabZoneViz, magazineCenter, magazineBottom, magazineGrabRadius, inGrabZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.4f, 1f, 0.3f));
