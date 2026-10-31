@@ -664,7 +664,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The open off hand coming into the bolt catch fast (against the gun hand, which carries the gun) is a slap on it,
-        // the way an AR's bolt is released. Only coming in counts: a hand already resting there has to leave first.
+        // the way an AR's bolt is released (and an MP5's: there it's the handle in its notch). Only coming in counts: a hand already resting there has to leave first.
         private static void UpdateBoltSlap(bool handFree)
         {
             FirearmController firearmController = null;
@@ -676,7 +676,9 @@ namespace TarkovVR.Source.Weapons
             bool hasCatchPoint = canSlap && TryGetBoltCatchPoint(firearmController, out catchPoint);
             if (hasCatchPoint)
             {
-                atCatch = (OffHandPalm() - catchPoint).sqrMagnitude <= boltSlapRadius * boltSlapRadius;
+                // A handle is slapped with whatever part of the hand gets there first
+                atCatch = HandleNotchOf(firearmController) != null ? OffHandTouchesCapsule(catchPoint, catchPoint, boltSlapRadius)
+                    : (OffHandPalm() - catchPoint).sqrMagnitude <= boltSlapRadius * boltSlapRadius;
                 if (atCatch && !palmWasAtBoltCatch)
                 {
                     float speed = (ControllerVelocity.GetSteamVRVelocity(OffHandSource()) - ControllerVelocity.GetSteamVRVelocity(GunHandSource())).magnitude;
@@ -694,6 +696,12 @@ namespace TarkovVR.Source.Weapons
         // The bolt catch paddle (a part named like bolt_catch), else the chamber: on the gun's side by the receiver
         private static bool TryGetBoltCatchPoint(FirearmController firearmController, out Vector3 point)
         {
+            // Held back in a notch, the handle is what's slapped
+            if (HandleNotchOf(firearmController) != null && TryGetChargingHandle(firearmController, firearmController.Item))
+            {
+                point = ChargingHandleGrabPoint(firearmController.WeaponRoot.up);
+                return true;
+            }
             if (boltCatchFor != firearmController)
             {
                 boltCatchFor = firearmController;

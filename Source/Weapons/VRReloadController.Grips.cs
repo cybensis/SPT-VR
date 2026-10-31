@@ -84,6 +84,12 @@ namespace TarkovVR.Source.Weapons
             public string bone;
         }
 
+        public sealed class SavedHandleNotch
+        {
+            public float[] axis;
+            public float angle;
+        }
+
         public sealed class SavedRockIn
         {
             public float[] axis;
@@ -101,6 +107,7 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedRockIn> rockIn;
             public Dictionary<string, SavedSlide> slides;
             public List<string> handleMovesWithBolt;
+            public Dictionary<string, SavedHandleNotch> handleNotches;
             public Dictionary<string, SavedPalmHold> palms;
         }
 
@@ -388,6 +395,11 @@ namespace TarkovVR.Source.Weapons
                 }
                 if (generated.handleMovesWithBolt != null)
                     handleMovesWithBolt.UnionWith(generated.handleMovesWithBolt);
+                if (generated.handleNotches != null)
+                {
+                    foreach (KeyValuePair<string, SavedHandleNotch> entry in generated.handleNotches)
+                        handleNotches[entry.Key] = new HandleNotch { axis = new Vector3(entry.Value.axis[0], entry.Value.axis[1], entry.Value.axis[2]), angle = entry.Value.angle };
+                }
                 LoadHandleAlternates(generated.handleAlternates, handleAlternates);
                 LoadHandleAlternates(generated.gunHandHandleAlternates, gunHandHandleAlternates);
                 if (generated.rockIn != null)

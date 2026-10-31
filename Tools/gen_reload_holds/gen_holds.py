@@ -282,7 +282,7 @@ def palmHold(g,J,old,new):
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
 def run(folders,outFile=None):
-    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],slides={},rockIn={},palms={}); report=[]
+    result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},slides={},rockIn={},palms={}); report=[]
     boneInGun={}; otherGrips={}
     for folder in folders:
         d=ROOT+folder+'/'
@@ -371,7 +371,13 @@ def run(folders,outFile=None):
                     held=setup(tree,clips[n]); c2={}
                     handleHeld,_,_=held['worldAt'](charge,0.0,c2); gunHeld,gunHeldRotation,_=held['worldAt'](bone(P,'Weapon_root_anim/weapon'),0.0,c2)
                     if np.linalg.norm(held['rotate'](conj(gunHeldRotation),handleHeld-gunHeld)-handleAtRest)>=0.02:
-                        result['handleMovesWithBolt'].append(family); break
+                        result['handleMovesWithBolt'].append(family)
+                        # Turned as well: it locks in a notch
+                        turn=qmul(conj(np.array(g['localAt'](charge,0.0)[1],float)),np.array(held['localAt'](charge,0.0)[1],float))
+                        if turn[3]<0: turn=-turn
+                        turnAngle=2*math.degrees(math.acos(min(1.0,float(turn[3]))))
+                        if turnAngle>=15: result['handleNotches'][family]=dict(axis=[round(float(x),4) for x in turn[:3]/np.linalg.norm(turn[:3])],angle=round(turnAngle,1))
+                        break
                 for (sourceFamily,sourceClip),side,key in ((LEFT_UNDER_HAND,'L','left'),(RIGHT_OVER_HAND,'R','right')):
                     if family==sourceFamily: otherGrips[key]=handOnHandle(setup(tree,clips[sourceClip]),charge,side)
             if not charge:

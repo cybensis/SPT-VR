@@ -318,6 +318,7 @@ namespace TarkovVR.Source.Weapons
             HoldingChargingHandle = true;
             LatchHand(handleView, gunHand);
             handAtHandleGrabInSlot = handleBone.InverseTransformPoint(LatchedHandRig.position);
+            StartHandleNotch(firearmController, backWorld);
             handleHandFingers = null;
             heldHandleTravel = handleTravel;
             LoadRecordedGrips();
@@ -398,8 +399,10 @@ namespace TarkovVR.Source.Weapons
         // LateUpdate, after the animator has posed the carrier this frame
         public static void ApplyHandleCarrier()
         {
-            if (HoldingChargingHandle && handleCarrier != null)
-                handleCarrier.localPosition = handleCarrierRestLocalPosition + handleCarrierAxis * handlePull;
+            if (!HoldingChargingHandle || handleCarrier == null)
+                return;
+            handleCarrier.localPosition = handleCarrierRestLocalPosition + handleCarrierAxis * handlePull;
+            ApplyHandleNotch();
         }
 
         private static bool ChargingHandleHoldIsStillValid()
@@ -428,6 +431,7 @@ namespace TarkovVR.Source.Weapons
             float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !handleInGunHand ? underGunPullGain : 1f;
             handlePull = Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel);
             handleView.position = handleBone.TransformPoint(handleRestLocalPosition) + axis * handlePull;
+            UpdateHandleNotch();
 
             if (!handleFullyBack && handlePull >= heldHandleTravel * handleFullPull)
             {
@@ -481,6 +485,7 @@ namespace TarkovVR.Source.Weapons
             // The hand first, where it is, so it doesn't snap forward with the handle
             ReleaseHandLatch();
             EndChamberView();
+            bool staysInNotch = EndHandleNotch();
             if (handleView != null)
                 handleView.localPosition = handleRestLocalPosition;
             if (handleCarrier != null)
@@ -501,7 +506,9 @@ namespace TarkovVR.Source.Weapons
                 RestoreBoltPose(firearmController);
                 return;
             }
-            if (snapForward)
+            if (staysInNotch)
+                firearmController.FirearmsAnimator.SetBoltCatch(true);
+            else if (snapForward)
                 BoltSlamsForward(firearmController);
             else
                 PlayFirstGunSound(firearmController, "HandleIn", "SlideIn");
@@ -674,11 +681,11 @@ namespace TarkovVR.Source.Weapons
         }
 
         // An empty magazine catches the bolt (the follower pushes the catch up); no magazine, or rounds left, it closes.
-        // Same rule as Tarkov's RechamberOperation.FastForward.
+        // Same rule as Tarkov's RechamberOperation.FastForward. Not on a gun whose catch is its handle: nothing but the hand holds that back.
         private static bool BoltStaysBack(Weapon weapon)
         {
             Magazine magazine = weapon.GetCurrentMagazine();
-            return weapon.IsBoltCatch && weapon.ChamberAmmoCount == 0 && magazine != null && magazine.Count == 0;
+            return weapon.IsBoltCatch && !weapon.ManualBoltCatch && weapon.ChamberAmmoCount == 0 && magazine != null && magazine.Count == 0;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
