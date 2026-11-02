@@ -95,6 +95,11 @@ namespace TarkovVR.Source.XR
             handTracking.enabled = true;
             features.Add(handTracking);
 
+            OpenXRHapticFrequency hapticFrequency = ScriptableObject.CreateInstance<OpenXRHapticFrequency>();
+            nameField?.SetValue(hapticFrequency, "SPT-VR Haptic Frequency");
+            hapticFrequency.enabled = true;
+            features.Add(hapticFrequency);
+
             FieldInfo featuresField = typeof(OpenXRSettings).GetField("features", BindingFlags.NonPublic | BindingFlags.Instance);
             if (featuresField == null)
             {

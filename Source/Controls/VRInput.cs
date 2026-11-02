@@ -249,7 +249,7 @@ namespace TarkovVR.Source.Controls
         public void Execute(float secondsFromNow, float durationSeconds, float frequency, float amplitude, SteamVR_Input_Sources inputSource)
         {
             if (VRInput.UsingOpenXR)
-                OpenXRInput.SendHaptic(secondsFromNow, durationSeconds, amplitude, inputSource);
+                OpenXRInput.SendHaptic(secondsFromNow, durationSeconds, frequency, amplitude, inputSource);
             else
                 SteamAction.Execute(secondsFromNow, durationSeconds, frequency, amplitude, inputSource);
         }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TarkovVR.Source.XR;
 using UnityEngine;
 using UnityEngine.XR;
 using Valve.VR;
@@ -87,6 +88,7 @@ namespace TarkovVR.Source.Controls
         {
             public float fireTime;
             public float duration;
+            public float frequency;
             public float amplitude;
             public SteamVR_Input_Sources inputSource;
         }
@@ -247,8 +249,8 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Haptics
 
-        // Unity's XR haptics have no frequency setting, so the frequency is dropped
-        public static void SendHaptic(float delaySeconds, float duration, float amplitude, SteamVR_Input_Sources inputSource)
+        // Unity's XR haptics have no frequency setting: OpenXRHapticFrequency puts it into the OpenXR call on the way out
+        public static void SendHaptic(float delaySeconds, float duration, float frequency, float amplitude, SteamVR_Input_Sources inputSource)
         {
             if (delaySeconds > 0.001f)
             {
@@ -256,6 +258,7 @@ namespace TarkovVR.Source.Controls
                 {
                     fireTime = Time.unscaledTime + delaySeconds,
                     duration = duration,
+                    frequency = frequency,
                     amplitude = amplitude,
                     inputSource = inputSource,
                 });
@@ -274,6 +277,7 @@ namespace TarkovVR.Source.Controls
                     device.TryGetHapticCapabilities(out HapticCapabilities capabilities);
                     Plugin.MyLog.LogInfo($"[OpenXR-Input] Haptics: impulse {capabilities.supportsImpulse}, channels {capabilities.numChannels}");
                 }
+                OpenXRHapticFrequency.SetFrequency(hand, frequency);
                 device.SendHapticImpulse(0, Mathf.Clamp01(amplitude), Mathf.Max(duration, 0.001f));
             }
         }
@@ -286,7 +290,7 @@ namespace TarkovVR.Source.Controls
                 if (Time.unscaledTime < haptic.fireTime)
                     continue;
                 queuedHaptics.RemoveAt(i);
-                SendHaptic(0f, haptic.duration, haptic.amplitude, haptic.inputSource);
+                SendHaptic(0f, haptic.duration, haptic.frequency, haptic.amplitude, haptic.inputSource);
             }
         }
 
