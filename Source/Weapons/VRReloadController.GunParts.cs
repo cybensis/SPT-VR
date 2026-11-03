@@ -747,6 +747,7 @@ namespace TarkovVR.Source.Weapons
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[VRReload] bolt release, chamber: {weapon.ChamberAmmoCount}");
             firearmsAnimator.SetBoltCatch(false);
+            BoltStripsRound(weapon);
             // SetBoltCatch snaps the pose shut; it runs forward instead (UpdateBoltRelease)
             SetBoltOpen(firearmsAnimator, 1f);
             boltReleaseFor = firearmController;

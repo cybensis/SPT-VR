@@ -717,18 +717,24 @@ namespace TarkovVR.Source.Weapons
                 PlayFirstGunSound(firearmController, HandleSoundHand, "BoltIn", "SlideIn");
             PlayGunSound(firearmController, "HandleIn", HandleSoundHand);
             PulseHandleHand(heldOnCatch ? 0.4f : 0.8f, 0.06f);
-            if (WaitingForRack(weapon) && weapon.GetCurrentMagazine() != null)
-            {
-                if (debugLog)
-                    Plugin.MyLog.LogInfo("[VRReload] racked: the round goes into the chamber");
-                weaponsWaitingForRack.Remove(weapon);
-            }
+            BoltStripsRound(weapon);
             if (firearmController.FirearmsAnimator.GetBoltCatch())
             {
                 if (debugLog)
                     Plugin.MyLog.LogInfo($"[VRReload] bolt released, chamber: {weapon.ChamberAmmoCount}");
                 firearmController.FirearmsAnimator.SetBoltCatch(BoltStaysBack(weapon));
             }
+        }
+
+        // The bolt going forward takes the round a magazine brought in on a closed bolt into the chamber, however it was let go:
+        // the handle from a full pull, or slapped (an MP5's out of its notch, which it went into from that same pull)
+        private static void BoltStripsRound(Weapon weapon)
+        {
+            if (!WaitingForRack(weapon) || weapon.GetCurrentMagazine() == null)
+                return;
+            if (debugLog)
+                Plugin.MyLog.LogInfo("[VRReload] racked: the round goes into the chamber");
+            weaponsWaitingForRack.Remove(weapon);
         }
 
         // An empty magazine catches the bolt (the follower pushes the catch up); no magazine, or rounds left, it closes.
