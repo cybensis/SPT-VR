@@ -7,6 +7,7 @@ using EFT.Interactive;
 using EFT.InventoryLogic;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Misc;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using RootMotion.FinalIK;
@@ -57,7 +58,10 @@ namespace TarkovVR.Source.Weapons
         public static float dropAngularSpeed = 3f;          // rad/s tumble on a dropped magazine
         public static bool sounds = true;                   // the gun's own reload sounds
         public static bool haptics = true;
-        public static bool debugZones = false;              // spheres: grab zone (blue), chest pouch (yellow), mag well seat radius (green)
+        public static bool soundHaptics = true;             // the reload sounds also play on the controller doing the work, through the eating sounds' audio tap
+        public static float soundHapticsStrength = 1f;
+        public static float soundHapticsIdleStop = 0.5f;    // s after a sound ends that the tap comes off: the gun hands its source back to the pool 1 s after
+        public static bool debugZones = false;             // spheres: grab zone (blue), chest pouch (yellow), mag well seat radius (green)
         public static bool debugLog = false;
         public static bool pickUpGroundMagazines = true;    // a loose magazine that fits, picked up in the off hand, is held for the reload
 
@@ -238,6 +242,11 @@ namespace TarkovVR.Source.Weapons
         private static FirearmController gunSoundPlayerFor;
         private static BaseSoundPlayer gunSoundPlayer;
 
+        // Which controller(s) feel a reload sound: the hand doing it
+        private enum SoundHand { OffHand, GunHand, BothHands }
+        private static SoundHand playingSoundHand;
+        private static bool playingOwnSound;                // true inside our SoundEventHandler call: the clip it plays is ours
+
         private static readonly List<Magazine> reachableMagazines = new List<Magazine>();
         private static readonly List<Renderer> magazineRenderers = new List<Renderer>();
         private static GameObject grabZoneViz, pouchZoneViz, wellZoneViz;
@@ -282,7 +291,7 @@ namespace TarkovVR.Source.Weapons
             bool releaseLetGo = !releaseState && previousReleaseState;
             if (releasePressed)
             {
-                PlayGunSound(VRGlobals.firearmController, "Button");
+                PlayGunSound(VRGlobals.firearmController, "Button", ReleasePressingHand(VRGlobals.firearmController));
                 if (ThumbWorksCatch(VRGlobals.firearmController))
                     Pulse(0.25f, 0.03f);
                 else
@@ -1494,8 +1503,15 @@ namespace TarkovVR.Source.Weapons
         private static void PlayReleaseSounds(FirearmController firearmController)
         {
             if (!VRSettings.GetManualReloadOn())
-                PlayGunSound(firearmController, "Button");
-            PlayGunSound(firearmController, "MagOut");
+                PlayGunSound(firearmController, "Button", ReleasePressingHand(firearmController));
+            // Falls out of the gun the gun hand holds
+            PlayGunSound(firearmController, "MagOut", SoundHand.GunHand);
+        }
+
+        // The off thumb on an AK / MP5's latch, the gun hand's finger on the others
+        private static SoundHand ReleasePressingHand(FirearmController firearmController)
+        {
+            return ThumbWorksCatch(firearmController) ? SoundHand.OffHand : SoundHand.GunHand;
         }
 
         // Called from the GameWorld.ThrowItem postfix: put our dropped magazine where the hand let go of it
@@ -1916,6 +1932,8 @@ namespace TarkovVR.Source.Weapons
                 VRInput.Haptic.Execute(delay, duration, 120f, amplitude, OffHandSource());
         }
 
+        private static SoundHand HandleSoundHand => handleInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
+
         // Whichever hand has the charging handle
         private static void PulseHandleHand(float amplitude, float duration)
         {
@@ -1936,40 +1954,68 @@ namespace TarkovVR.Source.Weapons
         // The gun's own reload sounds, by the names its animation fires (WeaponRecon): Button, MagOut, MagSbrosnik (the dump
         // pouch), MagPullOut (a new magazine from the pouch), MagIn. The gun's sound player resolves "Snd" + name; a gun
         // without that sound stays silent.
-        private static void PlayGunSound(FirearmController firearmController, string soundName)
+        private static void PlayGunSound(FirearmController firearmController, string soundName, SoundHand hand = SoundHand.OffHand)
         {
-            if (!sounds || firearmController == null || firearmController._controllerObject == null)
-                return;
-            if (gunSoundPlayerFor != firearmController)
-            {
-                gunSoundPlayerFor = firearmController;
-                gunSoundPlayer = firearmController._controllerObject.GetComponentInChildren<BaseSoundPlayer>(true);
-            }
-            if (gunSoundPlayer != null)
-                gunSoundPlayer.SoundEventHandler(soundName);
+            BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
+            if (soundPlayer != null)
+                PlayFelt(soundPlayer, soundName, hand);
         }
 
         // The first of these the gun has: guns name the same sound differently (an AR's HandleOut, a pistol's SlideOut, an AK's BoltOut)
-        private static void PlayFirstGunSound(FirearmController firearmController, params string[] soundNames)
+        private static void PlayFirstGunSound(FirearmController firearmController, SoundHand hand, params string[] soundNames)
         {
-            if (!sounds || firearmController == null || firearmController._controllerObject == null)
-                return;
-            if (gunSoundPlayerFor != firearmController)
-            {
-                gunSoundPlayerFor = firearmController;
-                gunSoundPlayer = firearmController._controllerObject.GetComponentInChildren<BaseSoundPlayer>(true);
-            }
-            if (gunSoundPlayer == null)
+            BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
+            if (soundPlayer == null)
                 return;
             foreach (string soundName in soundNames)
             {
                 string eventName = "Snd" + soundName;
-                if (gunSoundPlayer.AdditionalSounds.Exists(sound => sound.EventName == soundName || sound.EventName == eventName))
+                if (soundPlayer.AdditionalSounds.Exists(sound => sound.EventName == soundName || sound.EventName == eventName))
                 {
-                    gunSoundPlayer.SoundEventHandler(soundName);
+                    PlayFelt(soundPlayer, soundName, hand);
                     return;
                 }
             }
+        }
+
+        private static BaseSoundPlayer GunSoundPlayerOf(FirearmController firearmController)
+        {
+            if (!sounds || firearmController == null || firearmController._controllerObject == null)
+                return null;
+            if (gunSoundPlayerFor != firearmController)
+            {
+                gunSoundPlayerFor = firearmController;
+                gunSoundPlayer = firearmController._controllerObject.GetComponentInChildren<BaseSoundPlayer>(true);
+            }
+            return gunSoundPlayer;
+        }
+
+        // SoundEventHandler plays its clip before returning (BaseSoundPlayer.PlayClip), where OnGunClipPlayed picks it up
+        private static void PlayFelt(BaseSoundPlayer soundPlayer, string soundName, SoundHand hand)
+        {
+            playingSoundHand = hand;
+            playingOwnSound = true;
+            try
+            {
+                soundPlayer.SoundEventHandler(soundName);
+            }
+            finally
+            {
+                playingOwnSound = false;
+            }
+        }
+
+        // BaseSoundPlayer.PlayClip postfix (VRMagazinePatches): one of our reload sounds also plays on the controller(s) doing
+        // the work, live off the audio like the eating sounds (AudioHaptics). The source carries every clip still ringing on it.
+        public static void OnGunClipPlayed(BaseSoundPlayer soundPlayer, AudioClip clip)
+        {
+            if (!playingOwnSound || !haptics || !soundHaptics || soundPlayer == null || soundPlayer != gunSoundPlayer || clip == null)
+                return;
+            bool offHand = playingSoundHand != SoundHand.GunHand;
+            bool gunHand = playingSoundHand != SoundHand.OffHand;
+            bool offIsLeft = OffHandSource() == SteamVR_Input_Sources.LeftHand;
+            AudioHaptics.OnClipPlayed(soundPlayer._clipsSource, clip, offIsLeft ? offHand : gunHand, offIsLeft ? gunHand : offHand,
+                soundHapticsStrength, soundHapticsIdleStop);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

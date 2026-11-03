@@ -20,5 +20,13 @@ namespace TarkovVR.Patches.Core.Player
                 return;
             VRReloadController.PlaceDroppedMagazine(item, __result);
         }
+
+        // Every clip a sound player plays comes through here: the reload sounds VRReloadController plays are felt too
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(BaseSoundPlayer), nameof(BaseSoundPlayer.PlayClip))]
+        private static void FeelReloadSound(BaseSoundPlayer __instance, AudioClip clip)
+        {
+            VRReloadController.OnGunClipPlayed(__instance, clip);
+        }
     }
 }

@@ -67,7 +67,7 @@ namespace TarkovVR.Source.Weapons
                 if (notchTurn >= handleNotchHold && !notchClicked)
                 {
                     notchClicked = true;
-                    PlayFirstGunSound(handleForFirearm, "BoltUp", "BoltCatch");
+                    PlayFirstGunSound(handleForFirearm, HandleSoundHand, "BoltUp", "BoltCatch");
                     PulseHandleHand(0.5f, 0.04f);
                 }
             }

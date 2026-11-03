@@ -751,7 +751,7 @@ namespace TarkovVR.Source.Weapons
             SetBoltOpen(firearmsAnimator, 1f);
             boltReleaseFor = firearmController;
             boltReleaseStartTime = Time.time;
-            PlayGunSound(firearmController, "BoltInFast");
+            PlayGunSound(firearmController, "BoltInFast", SoundHand.BothHands);
             Pulse(0.7f, 0.05f);
             PulseGunHand(0.6f, 0.05f);
         }

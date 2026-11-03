@@ -9,7 +9,8 @@ namespace TarkovVR.Source.Misc
     // AudioSource that's actually playing the eating sound publishes per-buffer RMS +
     // zero-crossing rate from the AUDIO THREAD; a main-thread pump converts those into
     // SteamVR haptic pulses (one Haptic.Execute per ~20ms window, both hands) so you
-    // feel exactly what you hear — the lid roll's ratchet, each gulp, the holster thump.
+    // feel exactly what you hear — the lid roll's ratchet, each gulp, the holster thump,
+    // and the gun's reload sounds (VRReloadController.OnGunClipPlayed).
     //
     // WHY a live tap: a clip-sampling envelope (AudioClip.GetData) was tried first and
     // is a DEAD END — EFT's foley is compressed/streaming (not DecompressOnLoad), GetData
@@ -37,16 +38,22 @@ namespace TarkovVR.Source.Misc
         private static BetterSource trackedBs;      // the BetterSource the clip was played on
         private static string expectedClipName;     // what should be playing for us to render
         private static bool renderLeft, renderRight; // which controller(s) get the pulses
+        private static float clipStrength = 1f;      // the caller's scale on top of strength
+        private static float clipIdleStop = 1f;      // the caller's idleStopSec
         private static Coroutine pump;
 
         // Called (main thread) whenever a clip is audibly played for us — re-points the
         // tap at the source actually used (the pool re-issues sources between clips),
         // picks the hand(s) to render on, and makes sure the pump is running.
-        public static void OnClipPlayed(BetterSource bs, AudioClip clip, bool leftHand = true, bool rightHand = true)
+        // idleStop < 0 = idleStopSec; it must end before the clip's owner hands the source
+        // back to the pool (see DestroyTap).
+        public static void OnClipPlayed(BetterSource bs, AudioClip clip, bool leftHand = true, bool rightHand = true, float scale = 1f, float idleStop = -1f)
         {
             if (!enabled || bs == null || bs.source1 == null || clip == null || VRGlobals.vrPlayer == null) return;
             renderLeft = leftHand;
             renderRight = rightHand;
+            clipStrength = scale;
+            clipIdleStop = idleStop < 0f ? idleStopSec : idleStop;
             if (tap == null || tap.gameObject != bs.source1.gameObject)
             {
                 DestroyTap(); // never leave a filter script behind on a pooled source GO
@@ -113,7 +120,7 @@ namespace TarkovVR.Source.Misc
                     && trackedBs.PlayBackState == BetterSource.EPlayBackState.Playing
                     && trackedBs._lastPlayingClipName == expectedClipName;
                 if (live) idle = 0f;
-                else if ((idle += windowSec) >= idleStopSec)
+                else if ((idle += windowSec) >= clipIdleStop)
                 {
                     DestroyTap();
                     trackedBs = null; expectedClipName = null;
@@ -128,7 +135,7 @@ namespace TarkovVR.Source.Misc
                         lastBuffers = b;
                         float rms = tap.Rms;
                         peak = Mathf.Max(peak * peakDecay, rms, 0.02f);
-                        amp = Mathf.Clamp01(rms / peak) * strength;
+                        amp = Mathf.Clamp01(rms / peak) * strength * clipStrength;
                         // The raw audio ZCR runs hundreds of Hz..kHz — LOG-map it into the
                         // LRA band so textures differentiate (a thuddy glug lands low, a
                         // crinkle lands high; linear clamping pegged everything at max).
