@@ -165,6 +165,11 @@ for f in T_HANDLE_FROM_M4:
     position=list(m4Grip['position']); position[1]=round(position[1]+back-m4Back,4)
     out['handles'][f]=dict(position=position,rotation=m4Grip['rotation'],fingers=m4Grip['fingers'],travel=round(own['travel']*0.08/0.101,3) if own else m4Grip['travel'])
 print('T handle grips from the M4:',{f:out['handles'][f] for f in T_HANDLE_FROM_M4 if f in out['handles']})
+# Rocked in like an AK though the gun's own clips only tilt the magazine 9 deg (headset, Mk47: "mag should tilt in like an AK"): it takes
+# AK magazines, and its seated magazine bone sits in the gun like the AKM's (both square to the gun), so the AKM's rock carries over as is
+ROCK_IN_FROM={'mk47':'akm'}
+for f,source in ROCK_IN_FROM.items():
+    if source in out['rockIn']: out['rockIn'][f]=out['rockIn'][source]
 # gen_extras.py: bolts the handle moves itself, and side handles. A side handle's travel is scaled like the others, and its slider's lag with it.
 extras=json.load(open('extras.json')) if os.path.exists('extras.json') else dict(boltBones={},sideHandles={})
 out['boltBones']=extras['boltBones']

@@ -407,9 +407,11 @@ namespace TarkovVR.Source.Weapons
         {
             if (!ManualReloadActive())
                 return false;
+            if (EitherHandWorksCatch(VRGlobals.firearmController))
+                return GunHandReleaseButton.state || OffHandReleaseHeld();
             if (ThumbWorksCatch(VRGlobals.firearmController))
                 return OffHandReleaseHeld();
-            return GunHandReleaseButton.state || (EitherHandWorksCatch(VRGlobals.firearmController) && OffHandReleaseHeld());
+            return GunHandReleaseButton.state;
         }
 
         private static VRBoolean GunHandReleaseButton => VRSettings.GetLeftHandedMode() ? VRInput.ButtonY : VRInput.ButtonB;
@@ -425,9 +427,9 @@ namespace TarkovVR.Source.Weapons
         // The off thumb on an AK / MP5's latch, and on a gun either hand works when it's that button down; the gun hand's finger otherwise
         private static bool OffHandPressesCatch(FirearmController firearmController)
         {
-            if (ThumbWorksCatch(firearmController))
-                return true;
-            return EitherHandWorksCatch(firearmController) && !GunHandReleaseButton.state && OffHandReleaseHeld();
+            if (EitherHandWorksCatch(firearmController))
+                return !GunHandReleaseButton.state && OffHandReleaseHeld();
+            return ThumbWorksCatch(firearmController);
         }
 
         // A held gun with a detachable magazine, in our player's hands

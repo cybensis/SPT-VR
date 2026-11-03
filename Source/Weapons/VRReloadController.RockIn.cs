@@ -45,14 +45,13 @@ namespace TarkovVR.Source.Weapons
         }
 
         // These guns' catch answers either hand's button: the gun hand's, as on an M4, or the off controller's with that hand on the
-        // magazine, as on a thumb catch
+        // magazine, as on a thumb catch. Ahead of the rock-in's off-thumb-only rule (the Mk47 rocks its AK magazines in too).
         public static bool eitherHandCatches = true;
         private static readonly HashSet<string> eitherHandCatchGuns = new HashSet<string> { "mk47" };
 
         private static bool EitherHandWorksCatch(FirearmController firearmController)
         {
-            return eitherHandCatches && firearmController != null && !ThumbWorksCatch(firearmController)
-                && eitherHandCatchGuns.Contains(AnimationFamily(firearmController));
+            return eitherHandCatches && firearmController != null && eitherHandCatchGuns.Contains(AnimationFamily(firearmController));
         }
 
         private static Vector3[] ThumbCatchOf(FirearmController firearmController)
