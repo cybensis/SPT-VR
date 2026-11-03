@@ -201,7 +201,7 @@ def magazinePath(g,mag):
 # A magazine that rocks out of its well (AK-type guns): both clips turn it about the well bone by a good 20 degrees with that bone
 # hardly moving, where a straight magazine's turn is under 10. Bone-local axis and angle, and the off thumb's joints with the catch
 # furthest in (on these guns that thumb is what presses it, about 1.5 cm from it in the clip).
-def rockIn(tree,clips,prefix,mag):
+def rockIn(tree,clips,prefix,mag,minAngle=15,minHook=12):
     P=tree[0]
     outName=next((n for n in (f'{prefix}_mag_out_0',f'{prefix}_mag_out') if n in clips),None); inName=next((n for n in (f'{prefix}_mag_in_0',f'{prefix}_mag_in') if n in clips),None)
     if not outName or not inName: return None
@@ -210,7 +210,7 @@ def rockIn(tree,clips,prefix,mag):
     tilted=max(near,key=lambda r:ang(r['rot'],seat['rot'])); angle=ang(tilted['rot'],seat['rot'])
     rowsIn=magazinePath(setup(tree,clips[inName]),mag); seatIn=rowsIn[-1]
     hook=max((ang(r['rot'],seatIn['rot']) for r in rowsIn if np.linalg.norm(r['pos']-seatIn['pos'])<=0.012),default=0.0)
-    if angle<15 or hook<12: return None
+    if angle<minAngle or hook<minHook: return None
     delta=qmul(conj(seat['rot']),tilted['rot'])
     if delta[3]<0: delta=-delta
     axis=delta[:3]/np.linalg.norm(delta[:3])

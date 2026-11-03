@@ -201,7 +201,22 @@ namespace TarkovVR.Source.Weapons
             return grip.pull != null || grip.insert != null ? grip : null;
         }
 
+        // Animation sets whose clips gave no hold at all, on guns that take another set's magazines: that set's holds, which are where
+        // the magazine sits in the hand, not on the gun (MCX .300 BLK: its clips leave the hand marker off the palm; M4 magazines)
+        private static readonly Dictionary<string, string> magazineHoldsFrom = new Dictionary<string, string> { { "mcx_4", "m4a1" } };
+
         private static MagazineHold ResolveHold(string family, int magazineType, bool pull, GameObject prop, Vector3 lengthAxis, float length, out string source)
+        {
+            MagazineHold hold = ResolveHoldIn(family, magazineType, pull, prop, lengthAxis, length, out source);
+            if (hold == null && magazineHoldsFrom.TryGetValue(family, out string otherFamily))
+            {
+                hold = ResolveHoldIn(otherFamily, magazineType, pull, prop, lengthAxis, length, out source);
+                source += $", {otherFamily}'s";
+            }
+            return hold;
+        }
+
+        private static MagazineHold ResolveHoldIn(string family, int magazineType, bool pull, GameObject prop, Vector3 lengthAxis, float length, out string source)
         {
             MagazineHold exact = HoldFor(family, magazineType, pull);
             if (exact != null)

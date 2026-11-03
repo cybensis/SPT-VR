@@ -38,10 +38,14 @@ namespace TarkovVR.Source.Weapons
         public static bool offHandThumbCatches = true;      // false = the gun hand's finger and button, like an M4
         private static readonly Dictionary<string, Vector3[]> thumbCatches = new Dictionary<string, Vector3[]>();
 
+        // The off hand works these guns' catch though their clips don't put the thumb on it (the AUG's release behind the magazine)
+        private static readonly HashSet<string> offHandCatchGuns = new HashSet<string> { "aug" };
+
         // The off thumb presses this gun's catch, on the off controller's button, not the gun hand's finger
         private static bool ThumbWorksCatch(FirearmController firearmController)
         {
-            return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null;
+            return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null
+                || (offHandThumbCatches && firearmController != null && offHandCatchGuns.Contains(AnimationFamily(firearmController)));
         }
 
         // These guns' catch answers either hand's button: the gun hand's, as on an M4, or the off controller's with that hand on the

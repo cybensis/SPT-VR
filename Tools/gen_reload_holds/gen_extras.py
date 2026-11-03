@@ -5,6 +5,8 @@
 #  - sideHandles: a second handle that isn't mod_charge, on a part of the gun (the Spear's folding side handle on its upper receiver):
 #    the knob folds out, the base slides back under the hand, the slider it runs in follows once the base has come sliderLag back.
 #    The grip is the palm in the base's frame at full pull.
+#  - rockIn: guns whose magazine tilts out less than gen_holds' 15 deg but still tilts (AK-50: 9.9 deg about the AKs' axis, then away
+#    down; headset: its straight track ran toward the stock)
 import sys, json, re, os, zlib
 exec(open('gen_holds.py',encoding='utf-8').read().split("if __name__=='__main__':")[0])
 gen=json.load(open('gen_all.json')); R=gen['result']; census=json.load(open('clip_census.json'))
@@ -89,4 +91,12 @@ for family,spec in SIDE_HANDLE_GUNS.items():
         position=[round(float(x),4) for x in g['rotate'](conj(br),pp-bp)],rotation=toUnityEuler(qmul(conj(br),pr)),
         fingers=eulerList([np.array(g['localAt'](j,t)[1],float) for j in fingerPaths(P,spec['side'])]),clip=spec['clip'])
     print(f'{family} side handle:',{k:v for k,v in sideHandles[family].items() if k!='fingers'},flush=True)
-json.dump(dict(boltBones=boltBones,sideHandles=sideHandles),open('extras.json','w'))
+LOW_ROCK_GUNS=('ak50',)
+rockIns={}
+for family in LOW_ROCK_GUNS:
+    tree,clips=loadFolder(famFolder[family]); mag=bone(tree[0],'/mod_magazine')
+    rocks=rockIn(tree,clips,family,mag,minAngle=5) if mag else None
+    if rocks:
+        rockIns[family]=dict(axis=rocks['axis'],angle=rocks['angle'],thumb=rocks['thumb'])
+        print(f'{family} rock-in:',{k:v for k,v in rocks.items() if k!='thumb'},flush=True)
+json.dump(dict(boltBones=boltBones,sideHandles=sideHandles,rockIn=rockIns),open('extras.json','w'))
