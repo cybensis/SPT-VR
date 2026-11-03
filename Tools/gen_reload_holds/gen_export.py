@@ -142,6 +142,29 @@ for f in out['slides']:
         boneInGun=np.array(R['slideBoneInGun'][f],float)
         grips.append(dict(position=[round(float(x),4) for x in turn(conj4(boneInGun),position+shift)],rotation=eulerOf(mul4(conj4(boneInGun),np.array(grip['rotation'],float))),fingers=grip['fingers'],travel=0))
     if grips: out['handleAlternates'][f]=grips
+# The off hand on an AR-style T handle the gun's own clips never show it on: the Spear's racks its side handle (fingertips 7 cm and more
+# off the T, headset: "locks to a position but it's not correct"), the Mk47's only with the right. Their handle bone sits in the gun like
+# the M4's (0 deg apart) and the M4's fingertips land on either T as on its own (thumb 0.3-0.8 cm, index 0), so the M4's grip, moved
+# so the two handles' back ends line up. The travel stays the gun's own.
+T_HANDLE_FROM_M4=('spear','mk47')
+def handleBack(family):
+    folder=famFolder.get(family)
+    gun=next((g for g in guns if g['folder']==folder),None)
+    slot=[s for s in items[gun['id']]['_props'].get('Slots',[]) if s['_name']=='mod_charge'] if gun else []
+    for i in (slot[0]['_props']['filters'][0]['Filter'] if slot else []):
+        if i in items:
+            try: box=meshBox(UnityPy.load(BUNDLES+items[i]['_props']['Prefab']['path']))
+            except Exception: box=None
+            if box: return float(box[1][1]+box[2][1])
+    return None
+m4Back=handleBack('m4a1'); m4Grip=out['handles']['m4a1']
+for f in T_HANDLE_FROM_M4:
+    back=handleBack(f)
+    if back is None or m4Back is None: continue
+    own=R['handles'].get(f) or R['gunHandHandles'].get(f)
+    position=list(m4Grip['position']); position[1]=round(position[1]+back-m4Back,4)
+    out['handles'][f]=dict(position=position,rotation=m4Grip['rotation'],fingers=m4Grip['fingers'],travel=round(own['travel']*0.08/0.101,3) if own else m4Grip['travel'])
+print('T handle grips from the M4:',{f:out['handles'][f] for f in T_HANDLE_FROM_M4 if f in out['handles']})
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]
 for holds in (out['handles'],out['gunHandHandles'],out['handleAlternates'],out['gunHandHandleAlternates'],out['rockIn'],out['palms'],out['slides'],out['wellAxes']):

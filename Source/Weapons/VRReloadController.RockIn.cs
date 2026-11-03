@@ -44,6 +44,17 @@ namespace TarkovVR.Source.Weapons
             return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null;
         }
 
+        // These guns' catch answers either hand's button: the gun hand's, as on an M4, or the off controller's with that hand on the
+        // magazine, as on a thumb catch
+        public static bool eitherHandCatches = true;
+        private static readonly HashSet<string> eitherHandCatchGuns = new HashSet<string> { "mk47" };
+
+        private static bool EitherHandWorksCatch(FirearmController firearmController)
+        {
+            return eitherHandCatches && firearmController != null && !ThumbWorksCatch(firearmController)
+                && eitherHandCatchGuns.Contains(AnimationFamily(firearmController));
+        }
+
         private static Vector3[] ThumbCatchOf(FirearmController firearmController)
         {
             if (!offHandThumbCatches || firearmController == null)

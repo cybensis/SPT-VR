@@ -292,7 +292,7 @@ namespace TarkovVR.Source.Weapons
             if (releasePressed)
             {
                 PlayGunSound(VRGlobals.firearmController, "Button", ReleasePressingHand(VRGlobals.firearmController));
-                if (ThumbWorksCatch(VRGlobals.firearmController))
+                if (OffHandPressesCatch(VRGlobals.firearmController))
                     Pulse(0.25f, 0.03f);
                 else
                     PulseGunHand(0.25f, 0.03f);
@@ -406,15 +406,27 @@ namespace TarkovVR.Source.Weapons
         {
             if (!ManualReloadActive())
                 return false;
-            // A paddle catch is the off thumb's, on the off controller's button: only with that hand on the magazine (off it, the
-            // same button is the flashlight or Tarkov's Escape)
             if (ThumbWorksCatch(VRGlobals.firearmController))
-            {
-                VRBoolean thumbButton = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB : VRInput.ButtonY;
-                return thumbButton.state && ((HoldingGunMagazine && onRail) || HoldingSeatedMagazine);
-            }
-            VRBoolean releaseButton = VRSettings.GetLeftHandedMode() ? VRInput.ButtonY : VRInput.ButtonB;
-            return releaseButton.state;
+                return OffHandReleaseHeld();
+            return GunHandReleaseButton.state || (EitherHandWorksCatch(VRGlobals.firearmController) && OffHandReleaseHeld());
+        }
+
+        private static VRBoolean GunHandReleaseButton => VRSettings.GetLeftHandedMode() ? VRInput.ButtonY : VRInput.ButtonB;
+
+        // A paddle catch is the off thumb's, on the off controller's button: only with that hand on the magazine (off it, the
+        // same button is the flashlight or Tarkov's Escape)
+        private static bool OffHandReleaseHeld()
+        {
+            VRBoolean thumbButton = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB : VRInput.ButtonY;
+            return thumbButton.state && ((HoldingGunMagazine && onRail) || HoldingSeatedMagazine);
+        }
+
+        // The off thumb on an AK / MP5's latch, and on a gun either hand works when it's that button down; the gun hand's finger otherwise
+        private static bool OffHandPressesCatch(FirearmController firearmController)
+        {
+            if (ThumbWorksCatch(firearmController))
+                return true;
+            return EitherHandWorksCatch(firearmController) && !GunHandReleaseButton.state && OffHandReleaseHeld();
         }
 
         // A held gun with a detachable magazine, in our player's hands
@@ -1508,10 +1520,9 @@ namespace TarkovVR.Source.Weapons
             PlayGunSound(firearmController, "MagOut", SoundHand.GunHand);
         }
 
-        // The off thumb on an AK / MP5's latch, the gun hand's finger on the others
         private static SoundHand ReleasePressingHand(FirearmController firearmController)
         {
-            return ThumbWorksCatch(firearmController) ? SoundHand.OffHand : SoundHand.GunHand;
+            return OffHandPressesCatch(firearmController) ? SoundHand.OffHand : SoundHand.GunHand;
         }
 
         // Called from the GameWorld.ThrowItem postfix: put our dropped magazine where the hand let go of it
