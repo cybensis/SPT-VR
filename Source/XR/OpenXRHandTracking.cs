@@ -77,8 +77,6 @@ namespace TarkovVR.Source.XR
         };
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate int GetInstanceProcAddrDelegate(ulong instance, [MarshalAs(UnmanagedType.LPStr)] string name, out IntPtr function);
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int CreateHandTrackerDelegate(ulong session, ref XrHandTrackerCreateInfoEXT createInfo, out ulong handTracker);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int DestroyHandTrackerDelegate(ulong handTracker);
@@ -145,19 +143,26 @@ namespace TarkovVR.Source.XR
         {
             instance = this;
             xrInstance = xrInstanceHandle;
-            GetInstanceProcAddrDelegate getInstanceProcAddr = Marshal.GetDelegateForFunctionPointer<GetInstanceProcAddrDelegate>(xrGetInstanceProcAddr);
-            xrCreateHandTrackerEXT = LoadFunction<CreateHandTrackerDelegate>(getInstanceProcAddr, "xrCreateHandTrackerEXT");
-            xrDestroyHandTrackerEXT = LoadFunction<DestroyHandTrackerDelegate>(getInstanceProcAddr, "xrDestroyHandTrackerEXT");
-            xrLocateHandJointsEXT = LoadFunction<LocateHandJointsDelegate>(getInstanceProcAddr, "xrLocateHandJointsEXT");
-            xrConvertWin32PerformanceCounterToTimeKHR = LoadFunction<ConvertPerformanceCounterToTimeDelegate>(getInstanceProcAddr, "xrConvertWin32PerformanceCounterToTimeKHR");
-            // Never fail the session over finger tracking
+            // Never fail the session over finger tracking: an exception here stops the whole OpenXR start
+            try
+            {
+                xrCreateHandTrackerEXT = LoadFunction<CreateHandTrackerDelegate>("xrCreateHandTrackerEXT");
+                xrDestroyHandTrackerEXT = LoadFunction<DestroyHandTrackerDelegate>("xrDestroyHandTrackerEXT");
+                xrLocateHandJointsEXT = LoadFunction<LocateHandJointsDelegate>("xrLocateHandJointsEXT");
+                xrConvertWin32PerformanceCounterToTimeKHR = LoadFunction<ConvertPerformanceCounterToTimeDelegate>("xrConvertWin32PerformanceCounterToTimeKHR");
+            }
+            catch (Exception exception)
+            {
+                xrCreateHandTrackerEXT = null;
+                Plugin.MyLog.LogError($"[OpenXR-Hands] function lookup failed, no finger curls: {exception}");
+            }
             return true;
         }
 
-        private T LoadFunction<T>(GetInstanceProcAddrDelegate getInstanceProcAddr, string functionName) where T : class
+        private T LoadFunction<T>(string functionName) where T : class
         {
-            int result = getInstanceProcAddr(xrInstance, functionName, out IntPtr functionPointer);
-            if (result != XR_SUCCESS || functionPointer == IntPtr.Zero)
+            IntPtr functionPointer = OpenXRFunctions.Find(xrGetInstanceProcAddr, xrInstance, functionName, out int result);
+            if (functionPointer == IntPtr.Zero)
             {
                 Plugin.MyLog.LogWarning($"[OpenXR-Hands] {functionName} unavailable (result {result}), no finger curls");
                 return null;

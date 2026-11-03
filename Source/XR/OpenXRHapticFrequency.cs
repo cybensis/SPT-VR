@@ -27,16 +27,14 @@ namespace TarkovVR.Source.XR
         private struct XrHapticVibration { public int type; public IntPtr next; public long duration; public float frequency; public float amplitude; }
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-        private delegate int GetInstanceProcAddrDelegate(ulong instance, IntPtr name, IntPtr function);
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int ApplyHapticFeedbackDelegate(ulong session, IntPtr hapticActionInfo, IntPtr hapticFeedback);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int StringToPathDelegate(ulong instance, [MarshalAs(UnmanagedType.LPStr)] string pathString, out ulong path);
 
-        // Native code holds pointers to these, so they're kept for good
-        private static readonly GetInstanceProcAddrDelegate ourGetInstanceProcAddr = LookUpFunction;
+        // Native code holds pointers to these, so they're kept for good. The lookup's type is the shared one (OpenXRFunctions).
+        private static readonly OpenXRFunctions.GetInstanceProcAddrDelegate ourGetInstanceProcAddr = LookUpFunction;
         private static readonly ApplyHapticFeedbackDelegate ourApplyHapticFeedback = ApplyHapticFeedback;
-        private static GetInstanceProcAddrDelegate nextGetInstanceProcAddr;
+        private static OpenXRFunctions.GetInstanceProcAddrDelegate nextGetInstanceProcAddr;
         private static ApplyHapticFeedbackDelegate runtimeApplyHapticFeedback;
 
         // Per hand, indexed by OpenXRInput.LEFT_HAND / OpenXRInput.RIGHT_HAND
@@ -56,35 +54,30 @@ namespace TarkovVR.Source.XR
 
         protected override IntPtr HookGetInstanceProcAddr(IntPtr func)
         {
-            nextGetInstanceProcAddr = Marshal.GetDelegateForFunctionPointer<GetInstanceProcAddrDelegate>(func);
+            nextGetInstanceProcAddr = Marshal.GetDelegateForFunctionPointer<OpenXRFunctions.GetInstanceProcAddrDelegate>(func);
             return Marshal.GetFunctionPointerForDelegate(ourGetInstanceProcAddr);
         }
 
         protected override bool OnInstanceCreate(ulong xrInstanceHandle)
         {
-            // The two hands' paths, to tell which one a vibration is for
-            IntPtr functionPointer = IntPtr.Zero;
-            GetInstanceProcAddrDelegate getInstanceProcAddr = Marshal.GetDelegateForFunctionPointer<GetInstanceProcAddrDelegate>(xrGetInstanceProcAddr);
-            IntPtr namePointer = Marshal.StringToHGlobalAnsi("xrStringToPath");
-            IntPtr resultPointer = Marshal.AllocHGlobal(IntPtr.Size);
+            // Never fail the session over haptics: an exception here stops the whole OpenXR start. Without the hand paths
+            // each vibration takes the last frequency set.
             try
             {
-                if (getInstanceProcAddr(xrInstanceHandle, namePointer, resultPointer) == XR_SUCCESS)
-                    functionPointer = Marshal.ReadIntPtr(resultPointer);
+                // The two hands' paths, to tell which one a vibration is for
+                IntPtr functionPointer = OpenXRFunctions.Find(xrGetInstanceProcAddr, xrInstanceHandle, "xrStringToPath", out _);
+                if (functionPointer != IntPtr.Zero)
+                {
+                    StringToPathDelegate stringToPath = Marshal.GetDelegateForFunctionPointer<StringToPathDelegate>(functionPointer);
+                    stringToPath(xrInstanceHandle, "/user/hand/left", out handPaths[OpenXRInput.LEFT_HAND]);
+                    stringToPath(xrInstanceHandle, "/user/hand/right", out handPaths[OpenXRInput.RIGHT_HAND]);
+                }
+                Plugin.MyLog.LogInfo($"[OpenXR-Haptics] frequency hook {(runtimeApplyHapticFeedback != null ? "in place" : "NOT in place yet")}, hand paths {handPaths[0]}/{handPaths[1]}");
             }
-            finally
+            catch (Exception exception)
             {
-                Marshal.FreeHGlobal(namePointer);
-                Marshal.FreeHGlobal(resultPointer);
+                Plugin.MyLog.LogError($"[OpenXR-Haptics] hand path lookup failed: {exception}");
             }
-            if (functionPointer != IntPtr.Zero)
-            {
-                StringToPathDelegate stringToPath = Marshal.GetDelegateForFunctionPointer<StringToPathDelegate>(functionPointer);
-                stringToPath(xrInstanceHandle, "/user/hand/left", out handPaths[OpenXRInput.LEFT_HAND]);
-                stringToPath(xrInstanceHandle, "/user/hand/right", out handPaths[OpenXRInput.RIGHT_HAND]);
-            }
-            Plugin.MyLog.LogInfo($"[OpenXR-Haptics] frequency hook {(runtimeApplyHapticFeedback != null ? "in place" : "NOT in place yet")}, hand paths {handPaths[0]}/{handPaths[1]}");
-            // Never fail the session over haptics
             return true;
         }
 
