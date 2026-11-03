@@ -340,8 +340,9 @@ namespace TarkovVR.Source.Weapons
                 bool supporting = VRGlobals.vrPlayer.isSupporting;
                 bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
                 bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon);
+                bool inSideHandleZone = !supporting && !inHandleZone && InSideHandleZone(firearmController, weapon);
                 bool inPouchZone = !supporting && InChestPouchZone(palm);
-                OffHandAtChargingHandle = inHandleZone;
+                OffHandAtChargingHandle = inHandleZone || inSideHandleZone;
                 // A hand on the support grip is only taken over by an actual grab, never by passing through a zone
                 // (a pistol's support hand cups right over its magazine). Not the handle's zone: that's the trigger's, the
                 // foregrip's the grip's, and on an AK the two are 12 cm apart, so this would keep the foregrip from being taken.
@@ -351,8 +352,8 @@ namespace TarkovVR.Source.Weapons
                 // Manual Reload, two-handing with the support hand at the magazine (a pistol): the mag release takes it
                 else if (releasePressed && supporting && inGrabZone && !MagazineSlidesOntoHand)
                     GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: true);
-                else if (triggerPressed && inHandleZone)
-                    GrabChargingHandle(firearmController, weapon);
+                else if (triggerPressed && (inHandleZone || inSideHandleZone))
+                    GrabChargingHandle(firearmController, weapon, sideHandle: inSideHandleZone);
                 else if (gripPressed && inPouchZone)
                     GrabFromPouch(firearmController, weapon, magazineSlot);
             }
@@ -2044,6 +2045,7 @@ namespace TarkovVR.Source.Weapons
                 SetZoneViz(ref pouchZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref wellZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
+                SetZoneViz(ref sideHandleZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref belowWellZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }

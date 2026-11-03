@@ -343,16 +343,20 @@ namespace TarkovVR.Source.Weapons
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        private static void GrabChargingHandle(FirearmController firearmController, Weapon weapon, bool gunHand = false)
+        private static void GrabChargingHandle(FirearmController firearmController, Weapon weapon, bool gunHand = false, bool sideHandle = false)
         {
             if (!TryGetChargingHandle(firearmController, weapon))
                 return;
 
-            handleForFirearm = firearmController;
             // WeaponRoot -up is toward the muzzle, so +up is back toward the stock
             Vector3 backWorld = firearmController.WeaponRoot.up;
-            handleCarrier = foundHandleCarrier;
-            if (handleCarrier != null)
+            handleCarrier = sideHandle ? null : foundHandleCarrier;
+            if (sideHandle)
+            {
+                if (!FrameHandleOnSidePart(firearmController, backWorld))
+                    return;
+            }
+            else if (handleCarrier != null)
             {
                 FrameHandleOnCarrier(backWorld);
             }
@@ -361,6 +365,7 @@ namespace TarkovVR.Source.Weapons
                 handleBone = foundHandleBone;
                 handleView = foundHandleModel;
             }
+            handleForFirearm = firearmController;
             handleRestLocalPosition = handleView.localPosition;
             handleAxisInSlot = handleBone.InverseTransformDirection(backWorld).normalized;
             handleInGunHand = gunHand;
@@ -376,9 +381,9 @@ namespace TarkovVR.Source.Weapons
             string family = AnimationFamily(firearmController);
             handleHolds.TryGetValue(family, out HandleHold offHandHold);
             gunHandHandleHolds.TryGetValue(family, out HandleHold gunHandHold);
-            HandleHold handleHold = gunHand ? gunHandHold : offHandHold;
+            HandleHold handleHold = sideHandle ? heldSideHandle.hold : gunHand ? gunHandHold : offHandHold;
             // The same handle goes back as far whichever hand has it, and a gun's clips may only ever rack with one
-            HandleHold otherHandHold = gunHand ? offHandHold : gunHandHold;
+            HandleHold otherHandHold = sideHandle ? null : gunHand ? offHandHold : gunHandHold;
             if (handleHold != null && handleHold.travel > 0f)
                 heldHandleTravel = handleHold.travel;
             else if (otherHandHold != null && otherHandHold.travel > 0f)
@@ -387,10 +392,11 @@ namespace TarkovVR.Source.Weapons
                 heldHandleTravel = Mathf.Min(heldHandleTravel, handleLockedBackTravel);
             if (handleHold != null)
             {
-                HandleHold grip = HoldHandIsTurnedTo(handleHold, gunHand ? gunHandHandleAlternates : handleAlternates, family);
+                HandleHold grip = sideHandle ? handleHold : HoldHandIsTurnedTo(handleHold, gunHand ? gunHandHandleAlternates : handleAlternates, family);
                 handleHandFingers = grip.fingers;
                 SnapHandTo(handleView, handleBone.position + handleBone.rotation * grip.position, handleBone.rotation * Quaternion.Euler(grip.rotation));
             }
+            StartMovedBolts(firearmController, backWorld);
             BeginChamberView(firearmController, weapon);
 
             if (debugLog)
@@ -430,12 +436,7 @@ namespace TarkovVR.Source.Weapons
         // body, where the mod_charge bone sits now. The hand rides the second; the carrier follows in ApplyHandleCarrier.
         private static void FrameHandleOnCarrier(Vector3 backWorld)
         {
-            if (handleFrame == null || handleRider == null)
-            {
-                handleFrame = new GameObject("VRChargingHandleFrame").transform;
-                handleRider = new GameObject("VRChargingHandleRider").transform;
-                handleRider.SetParent(handleFrame, worldPositionStays: false);
-            }
+            EnsureHandleFrame();
             Transform gunBody = handleCarrier.parent;
             handleFrame.SetParent(gunBody, worldPositionStays: false);
             handleFrame.SetPositionAndRotation(foundHandleBone.position, foundHandleBone.rotation);
@@ -447,10 +448,23 @@ namespace TarkovVR.Source.Weapons
             handleCarrierAxis = gunBody.InverseTransformVector(backWorld);
         }
 
+        private static void EnsureHandleFrame()
+        {
+            if (handleFrame == null || handleRider == null)
+            {
+                handleFrame = new GameObject("VRChargingHandleFrame").transform;
+                handleRider = new GameObject("VRChargingHandleRider").transform;
+                handleRider.SetParent(handleFrame, worldPositionStays: false);
+            }
+        }
+
         // LateUpdate, after the animator has posed the carrier this frame
         public static void ApplyHandleCarrier()
         {
-            if (!HoldingChargingHandle || handleCarrier == null)
+            if (!HoldingChargingHandle)
+                return;
+            ApplyHandleMovedParts();
+            if (handleCarrier == null)
                 return;
             handleCarrier.localPosition = handleCarrierRestLocalPosition + handleCarrierAxis * handlePull;
             ApplyHandleNotch();
@@ -537,6 +551,7 @@ namespace TarkovVR.Source.Weapons
             ReleaseHandLatch();
             EndChamberView();
             bool staysInNotch = EndHandleNotch();
+            EndHandleMovedParts();
             if (handleView != null)
                 handleView.localPosition = handleRestLocalPosition;
             if (handleCarrier != null)
@@ -750,6 +765,7 @@ namespace TarkovVR.Source.Weapons
         // The grab point (green when the palm is in reach)
         private static void UpdateChargingHandleViz(FirearmController firearmController, Weapon weapon, bool show)
         {
+            UpdateSideHandleViz(firearmController, weapon, show);
             bool hasHandle = show && chargingHandle && TryGetChargingHandle(firearmController, weapon);
             if (!hasHandle || HoldingChargingHandle)
             {

@@ -165,6 +165,11 @@ for f in T_HANDLE_FROM_M4:
     position=list(m4Grip['position']); position[1]=round(position[1]+back-m4Back,4)
     out['handles'][f]=dict(position=position,rotation=m4Grip['rotation'],fingers=m4Grip['fingers'],travel=round(own['travel']*0.08/0.101,3) if own else m4Grip['travel'])
 print('T handle grips from the M4:',{f:out['handles'][f] for f in T_HANDLE_FROM_M4 if f in out['handles']})
+# gen_extras.py: bolts the handle moves itself, and side handles. A side handle's travel is scaled like the others, and its slider's lag with it.
+extras=json.load(open('extras.json')) if os.path.exists('extras.json') else dict(boltBones={},sideHandles={})
+out['boltBones']=extras['boltBones']
+out['sideHandles']={f:dict({k:v for k,v in h.items() if k!='clip'},travel=round(h['travel']*0.08/0.101,3),sliderLag=round(h['sliderLag']*0.08/0.101,3)) for f,h in extras['sideHandles'].items()}
+print('bolts the handle moves:',out['boltBones'],'side handles:',{f:(h['travel'],h['sliderLag']) for f,h in out['sideHandles'].items()})
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]
 for holds in (out['handles'],out['gunHandHandles'],out['handleAlternates'],out['gunHandHandleAlternates'],out['rockIn'],out['palms'],out['slides'],out['wellAxes']):

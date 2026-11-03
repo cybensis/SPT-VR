@@ -84,6 +84,22 @@ namespace TarkovVR.Source.Weapons
             public string bone;
         }
 
+        public sealed class SavedBoltBone
+        {
+            public string bone;
+            public float ratio;
+        }
+
+        public sealed class SavedSideHandle : SavedHandleHold
+        {
+            public string sliderBone;
+            public string baseBone;
+            public string knobBone;
+            public float sliderLag;
+            public float[] foldAxis;
+            public float foldAngle;
+        }
+
         public sealed class SavedHandleNotch
         {
             public float[] axis;
@@ -111,6 +127,8 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, float[]> thumbCatches;
             public Dictionary<string, float[]> wellAxes;
             public Dictionary<string, SavedPalmHold> palms;
+            public Dictionary<string, List<SavedBoltBone>> boltBones;
+            public Dictionary<string, SavedSideHandle> sideHandles;
         }
 
         // By animation set: the way the magazine leaves the well, in the well bone's frame, where the mesh can't say
@@ -417,6 +435,28 @@ namespace TarkovVR.Source.Weapons
                 }
                 LoadHandleAlternates(generated.handleAlternates, handleAlternates);
                 LoadHandleAlternates(generated.gunHandHandleAlternates, gunHandHandleAlternates);
+                if (generated.boltBones != null)
+                {
+                    foreach (KeyValuePair<string, List<SavedBoltBone>> entry in generated.boltBones)
+                        boltBonesByFamily[entry.Key] = entry.Value;
+                }
+                if (generated.sideHandles != null)
+                {
+                    foreach (KeyValuePair<string, SavedSideHandle> entry in generated.sideHandles)
+                    {
+                        SavedSideHandle saved = entry.Value;
+                        sideHandles[entry.Key] = new SideHandle
+                        {
+                            hold = HandleHoldFrom(saved),
+                            sliderBone = saved.sliderBone,
+                            baseBone = saved.baseBone,
+                            knobBone = saved.knobBone,
+                            sliderLag = saved.sliderLag,
+                            foldAxis = new Vector3(saved.foldAxis[0], saved.foldAxis[1], saved.foldAxis[2]),
+                            foldAngle = saved.foldAngle,
+                        };
+                    }
+                }
                 if (generated.rockIn != null)
                 {
                     foreach (KeyValuePair<string, SavedRockIn> entry in generated.rockIn)
