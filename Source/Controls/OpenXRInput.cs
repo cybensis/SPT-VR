@@ -65,6 +65,8 @@ namespace TarkovVR.Source.Controls
             public ButtonStates current;
             public ButtonStates previous;
             public float triggerValue;
+            public bool triggerTouched;
+            public bool hasTriggerTouch;    // the controller senses a finger on the trigger (Index, Touch); a Vive wand doesn't
             public float squeezeValue;
             public Vector2 stickAxis;
 
@@ -79,6 +81,9 @@ namespace TarkovVR.Source.Controls
             new ControllerState { node = XRNode.LeftHand },
             new ControllerState { node = XRNode.RightHand },
         };
+
+        // Not in CommonUsages: the controller profiles' own usage name for /input/trigger/touch (Index and Touch both)
+        private static readonly InputFeatureUsage<bool> triggerTouchUsage = new InputFeatureUsage<bool>("TriggerTouch");
 
         private static int lastButtonSampleFrame = -1;
         private static int lastPoseSampleFrame = -1;
@@ -147,6 +152,14 @@ namespace TarkovVR.Source.Controls
             return controllers[hand].triggerValue;
         }
 
+        // False = the controller can't tell (no touch sensor on its trigger)
+        public static bool TryGetTriggerTouch(int hand, out bool touched)
+        {
+            SampleButtonsOncePerFrame();
+            touched = controllers[hand].triggerTouched;
+            return controllers[hand].hasTriggerTouch;
+        }
+
         public static Vector2 GetStick(int hand)
         {
             SampleButtonsOncePerFrame();
@@ -167,6 +180,8 @@ namespace TarkovVR.Source.Controls
                 {
                     controller.current = new ButtonStates();
                     controller.triggerValue = 0f;
+                    controller.triggerTouched = false;
+                    controller.hasTriggerTouch = false;
                     controller.squeezeValue = 0f;
                     controller.stickAxis = Vector2.zero;
                     continue;
@@ -174,6 +189,7 @@ namespace TarkovVR.Source.Controls
 
                 InputDevice device = controller.device;
                 device.TryGetFeatureValue(CommonUsages.trigger, out controller.triggerValue);
+                controller.hasTriggerTouch = device.TryGetFeatureValue(triggerTouchUsage, out controller.triggerTouched);
                 device.TryGetFeatureValue(CommonUsages.grip, out controller.squeezeValue);
                 device.TryGetFeatureValue(CommonUsages.primary2DAxis, out controller.stickAxis);
                 device.TryGetFeatureValue(CommonUsages.primaryButton, out controller.current.primary);

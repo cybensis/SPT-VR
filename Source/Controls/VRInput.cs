@@ -101,6 +101,14 @@ namespace TarkovVR.Source.Controls
 
         public float axis => VRInput.UsingOpenXR ? OpenXRInput.GetTrigger(hand) : SteamAction.axis;
 
+        // A finger resting on the trigger. False = can't tell: SteamVR has no touch action in the mod's manifest, and some
+        // controllers have no sensor there.
+        public bool TryGetTouch(out bool touched)
+        {
+            touched = false;
+            return VRInput.UsingOpenXR && OpenXRInput.TryGetTriggerTouch(hand, out touched);
+        }
+
         public float GetAxis(SteamVR_Input_Sources inputSource)
         {
             if (VRInput.UsingOpenXR)

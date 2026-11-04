@@ -416,6 +416,8 @@ namespace TarkovVR.Source.Player.Interactions
             // Relax the free off-hand open (more when a loot dot is in view). Self-gates;
             // runs after EFT's hand animation. Must come last so it offsets the final pose.
             UpdateLeftHandFingers();
+            // The gun hand's finger off the trigger lies straight along the gun; the mag release press below starts from it
+            UpdateTriggerDiscipline();
 
             // Holding a magazine: the reload animation's finger pose on top
             VRReloadController.ApplyHeldFingerPose();
