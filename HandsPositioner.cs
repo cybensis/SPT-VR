@@ -26,6 +26,8 @@ namespace TarkovVR
 
             this.transform.position = VRGlobals.vrPlayer.rawRightHand.transform.position;
             this.transform.rotation = VRGlobals.vrPlayer.rawRightHand.transform.rotation;
+            // A gun held by the support hand alone or slung is stamped in world space under this: put it back after the move
+            Source.Player.Interactions.ChestHang.RestampDetached();
 
             if (VRGlobals.emptyHands != null)
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);

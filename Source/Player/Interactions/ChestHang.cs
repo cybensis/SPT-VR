@@ -34,7 +34,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float attachTime = 0.10f;         // s fly-in to the sling spot, then the mount is rigid
         public static float rotAttachRate = 10f;        // 1/s rotation tuck-in
         public static float slingDelay = 0.25f;         // s the grip must stay fully released before letting go (debounce)
-        public static float regrabRadius = 0.10f;       // m RightHand rig transform to the regrab zone (the left hand's proven system uses 0.1)
+        public static float regrabRadius = 0.13f;       // m RightHand rig transform to the regrab zone (0.10, the left hand's foregrip radius, read a little short)
         public static float regrabForwardOffset = 0.07f;// m the zone sits toward the MUZZLE from the R-hand marker (marker alone still read "a bit far back")
         public static bool hangHaptics = true;
         public static bool debugLog = false;            // 1/sec chain dump while detached + save/restore lines (for the prone-corrupts-regrab hunt)
@@ -500,9 +500,32 @@ namespace TarkovVR.Source.Player.Interactions
             return (lh.parent != null ? lh.parent.rotation : Quaternion.identity) * pose.localRotation;
         }
 
+        private static Vector3 stampedPosition;
+        private static Quaternion stampedRotation = Quaternion.identity;
+        private static int stampedFrame = -1;
+
+        private static void StampWeaponRoot(Vector3 pos, Quaternion rot)
+        {
+            stampedPosition = pos;
+            stampedRotation = rot;
+            stampedFrame = Time.frameCount;
+            PlaceWeaponRoot(pos, rot);
+        }
+
+        // The holder hangs off RightHandPositioner, which HandsPositioner moves onto the free gun hand every Update, and Unity doesn't
+        // order that against the stamp: when it runs after, the detached gun rides that hand's motion for the frame (headset: the
+        // support-only hold "jittery", where the gun hand's hold is local to that same parent). HandsPositioner calls this after it moves.
+        internal static void RestampDetached()
+        {
+            if (!Detached || stampedFrame != Time.frameCount || VRGlobals.firearmController == null
+                || VRGlobals.firearmController.WeaponRoot == null || VRGlobals.weaponHolder == null)
+                return;
+            PlaceWeaponRoot(stampedPosition, stampedRotation);
+        }
+
         // Place WeaponRoot at the given world pose via the holder (rigid delta re-derived from the
         // current state every frame - absolute target, nothing accumulates).
-        private static void StampWeaponRoot(Vector3 pos, Quaternion rot)
+        private static void PlaceWeaponRoot(Vector3 pos, Quaternion rot)
         {
             Transform wr = VRGlobals.firearmController.WeaponRoot;
             Transform holder = VRGlobals.weaponHolder.transform;
