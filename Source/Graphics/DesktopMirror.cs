@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -14,7 +15,9 @@ namespace TarkovVR.Source.Graphics
     // image shows. Field of view (across, and up if set apart from the window's shape: that squashes the picture), smoothing and
     // a downward tilt of the view: VR Graphics sliders.
     // Drawn by a camera of our own that renders nothing and comes last of the cameras: after the eyes, before the screen overlays
-    // (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end of the frame covered.
+    // (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end of the frame covered. A frame that camera didn't
+    // draw (headset: it never drew, the window stayed Unity's mirror: why is logged once) is drawn at the very end of the frame
+    // instead, the way it was first built.
     public class DesktopMirror : MonoBehaviour
     {
         public static bool stabilized = true;           // false = Unity's own mirror of the eye texture
@@ -47,6 +50,11 @@ namespace TarkovVR.Source.Graphics
         private bool loggedStart;
         private bool loggedError;
         private bool loggedTooWide;
+        private int drawnFrame = -1;                    // the frame the window was drawn in (once a frame: the smoothing steps with it)
+        private bool cameraEverRendered;
+        private string cameraFailure;                   // why the camera's draw didn't happen this frame
+        private bool loggedCameraFailure;
+        private bool loggedEndOfFrameDraw;
 
         // Where each eye's lens mask is, over its image (0..1 both ways, rows up from the bottom of the view)
         private sealed class LensMask
@@ -68,6 +76,11 @@ namespace TarkovVR.Source.Graphics
         private void Awake()
         {
             Camera windowCamera = gameObject.AddComponent<Camera>();
+            if (windowCamera == null)
+            {
+                Plugin.MyLog.LogWarning("[DesktopMirror] couldn't add the window camera: the window is drawn at the end of the frame");
+                return;
+            }
             windowCamera.cullingMask = 0;
             windowCamera.clearFlags = CameraClearFlags.Nothing;
             windowCamera.depth = cameraDepth;
@@ -80,13 +93,46 @@ namespace TarkovVR.Source.Graphics
             windowCamera.allowHDR = false;
             windowCamera.allowMSAA = false;
             windowCamera.renderingPath = RenderingPath.Forward;
+            Plugin.MyLog.LogInfo($"[DesktopMirror] window camera made (enabled {windowCamera.enabled}, depth {windowCamera.depth:0})");
         }
 
+        // The camera's draw: before the overlays
         private void OnPostRender()
+        {
+            if (!cameraEverRendered)
+            {
+                cameraEverRendered = true;
+                Plugin.MyLog.LogInfo($"[DesktopMirror] window camera renders (frame {Time.frameCount})");
+            }
+            cameraFailure = Guarded(fromCamera: true);
+        }
+
+        // A frame the camera didn't draw: drawn now, at the very end (over the overlays), or Unity's mirror
+        private IEnumerator Start()
+        {
+            WaitForEndOfFrame endOfFrame = new WaitForEndOfFrame();
+            while (true)
+            {
+                yield return endOfFrame;
+                if (drawnFrame == Time.frameCount)
+                    continue;
+                string failure = Guarded(fromCamera: false);
+                if (failure != null || !stabilized)
+                    continue;
+                if (!loggedEndOfFrameDraw)
+                {
+                    loggedEndOfFrameDraw = true;
+                    Plugin.MyLog.LogWarning($"[DesktopMirror] the window camera didn't draw ({(cameraEverRendered ? cameraFailure ?? "no reason" : "it never rendered")}): "
+                        + "drawn at the end of the frame instead, over the F7 / F12 menus");
+                }
+            }
+        }
+
+        private string Guarded(bool fromCamera)
         {
             try
             {
-                DrawWindow();
+                return DrawWindow(fromCamera);
             }
             catch (Exception exception)
             {
@@ -97,26 +143,43 @@ namespace TarkovVR.Source.Graphics
                 }
                 stabilized = false;
                 SetMirrorMode(Display(), UnityMirror);
+                return "failed";
             }
         }
 
-        private void DrawWindow()
+        // null = drawn. The camera's attempt never puts Unity's mirror back (the end of the frame decides that, once a frame).
+        private string DrawWindow(bool fromCamera)
         {
+            if (drawnFrame == Time.frameCount)
+                return null;
             XRDisplaySubsystem display = Display();
-            if (display == null)
-                return;
-            if (!stabilized || Screen.width <= 0 || Screen.height <= 0 || !TryGetEye(display, out RenderTexture eyeTexture, out Camera eyeCamera, out Camera.StereoscopicEye eye))
-            {
-                SetMirrorMode(display, UnityMirror);
-                haveSmoothedRotation = false;
-                return;
-            }
-            if (!EnsureMaterial())
+            RenderTexture eyeTexture = null;
+            Camera eyeCamera = null;
+            Camera.StereoscopicEye eye = Camera.StereoscopicEye.Left;
+            string failure = display == null ? "no running XR display"
+                : !stabilized ? "switched off"
+                : Screen.width <= 0 || Screen.height <= 0 ? "no window"
+                : TryGetEye(display, out eyeTexture, out eyeCamera, out eye);
+            if (failure == null && !EnsureMaterial())
             {
                 stabilized = false;
-                SetMirrorMode(display, UnityMirror);
-                return;
+                failure = "no blit shader";
             }
+            if (failure != null)
+            {
+                if (fromCamera && !loggedCameraFailure)
+                {
+                    loggedCameraFailure = true;
+                    Plugin.MyLog.LogWarning($"[DesktopMirror] the window camera can't draw: {failure}");
+                }
+                if (!fromCamera)
+                {
+                    SetMirrorMode(display, UnityMirror);
+                    haveSmoothedRotation = false;
+                }
+                return failure;
+            }
+            drawnFrame = Time.frameCount;
             SetMirrorMode(display, NoMirror);
 
             int pass = eye == Camera.StereoscopicEye.Right ? 1 : 0;
@@ -140,19 +203,25 @@ namespace TarkovVR.Source.Graphics
                     + $"window {Screen.width}x{Screen.height}, {fieldOfView:0} deg across, render passes {display.GetRenderPassCount()}");
             }
             Draw(eyeTexture, view, projection, tanHalfAcross, tanHalfUp);
+            return null;
         }
 
         // MultiPass: one render pass per eye, each its own texture (pass 0 left, 1 right). Single-pass would be one texture array,
-        // which this can't sample: Unity's mirror then.
-        private static bool TryGetEye(XRDisplaySubsystem display, out RenderTexture eyeTexture, out Camera eyeCamera, out Camera.StereoscopicEye eye)
+        // which this can't sample: Unity's mirror then. null = found; else what's missing.
+        private static string TryGetEye(XRDisplaySubsystem display, out RenderTexture eyeTexture, out Camera eyeCamera, out Camera.StereoscopicEye eye)
         {
             eyeTexture = null;
             eye = VRSettings.GetDesktopViewRightEye() ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left;
             eyeCamera = EyeCamera();
-            if (eyeCamera == null || display.GetRenderPassCount() < 2)
-                return false;
+            if (eyeCamera == null)
+                return "no headset camera";
+            int passes = display.GetRenderPassCount();
+            if (passes < 2)
+                return $"{passes} render passes";
             eyeTexture = display.GetRenderTextureForRenderPass(eye == Camera.StereoscopicEye.Right ? 1 : 0);
-            return eyeTexture != null && eyeTexture.dimension == UnityEngine.Rendering.TextureDimension.Tex2D;
+            if (eyeTexture == null)
+                return "no eye texture";
+            return eyeTexture.dimension == UnityEngine.Rendering.TextureDimension.Tex2D ? null : $"eye texture is a {eyeTexture.dimension}";
         }
 
         // The camera that rendered the eyes: the headset camera in a raid, Camera.main in the hideout and the menus (VRCam is unset there)
