@@ -775,7 +775,10 @@ namespace TarkovVR.Source.Player.VRManager
                 // stick on every two-handed ADS. Breath-hold (off trigger while aiming) is already the
                 // deliberate "steady the shot" modifier - zooming while steadied is natural, and jump/
                 // crouch on this stick are meaningless mid-breath-hold.
-                if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && InputHandlers.BreathingHandler.isHoldingBreath)
+                // Or the gun hand SQUEEZING its grip (Index force), the old grip modifier: squeezing is a deliberate act apart from
+                // holding the gun, so it doesn't take the stick on every aim (headset: "can't hold grip and zoom anymore").
+                bool squeezingGrip = primaryGripState.TryGetSqueeze(out bool squeezed) && squeezed;
+                if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && (InputHandlers.BreathingHandler.isHoldingBreath || squeezingGrip))
                 {
                     VRGlobals.vrOpticController.handleJoystickZoomDial();
                     if (VRSettings.GetLeftHandedMode())

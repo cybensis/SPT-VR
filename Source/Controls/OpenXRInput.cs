@@ -19,6 +19,10 @@ namespace TarkovVR.Source.Controls
 
         // The grip "button" comes from the analog squeeze value (on Index: how far your fingers wrap the handle)
         public static float gripPressThreshold = 0.65f;     // kept above the release so the grip can't flicker on and off at one value
+        // Index: a grab is a squeeze, as in the mod's SteamVR bindings (force 0.4); the wrap alone read every touch of the handle as a grab.
+        // Still let go by the wrap (gripReleaseThreshold), so a gun stays held without squeezing the whole time.
+        public static float gripForcePressThreshold = 0.4f;
+        public static float gripForceLetUpThreshold = 0.25f; // squeezing (the scope zoom's modifier) ends under this
         public static float gripReleaseThreshold = 0.5f;    // 0.25 waited for a nearly open hand (headset: "takes a second to let go")
 
         // Extra correction on top of the grip -> raw conversion, in the raw pose's own space
@@ -68,6 +72,9 @@ namespace TarkovVR.Source.Controls
             public bool triggerTouched;
             public bool hasTriggerTouch;    // the controller senses a finger on the trigger (Index, Touch); a Vive wand doesn't
             public float squeezeValue;
+            public float gripForce;
+            public bool hasGripForce;       // a force sensor in the handle (Index)
+            public bool squeezing;          // squeezing it, not just holding it
             public Vector2 stickAxis;
 
             public Vector3 rawPosition;
@@ -84,6 +91,8 @@ namespace TarkovVR.Source.Controls
 
         // Not in CommonUsages: the controller profiles' own usage name for /input/trigger/touch (Index and Touch both)
         private static readonly InputFeatureUsage<bool> triggerTouchUsage = new InputFeatureUsage<bool>("TriggerTouch");
+        // The Index profile's /input/squeeze/force (CommonUsages.grip is /input/squeeze/value, how far the fingers wrap the handle)
+        private static readonly InputFeatureUsage<float> gripForceUsage = new InputFeatureUsage<float>("GripForce");
 
         private static int lastButtonSampleFrame = -1;
         private static int lastPoseSampleFrame = -1;
@@ -152,6 +161,14 @@ namespace TarkovVR.Source.Controls
             return controllers[hand].triggerValue;
         }
 
+        // False = the controller can't tell (no force sensor in its handle)
+        public static bool TryGetGripSqueeze(int hand, out bool squeezing)
+        {
+            SampleButtonsOncePerFrame();
+            squeezing = controllers[hand].squeezing;
+            return controllers[hand].hasGripForce;
+        }
+
         // False = the controller can't tell (no touch sensor on its trigger)
         public static bool TryGetTriggerTouch(int hand, out bool touched)
         {
@@ -183,6 +200,9 @@ namespace TarkovVR.Source.Controls
                     controller.triggerTouched = false;
                     controller.hasTriggerTouch = false;
                     controller.squeezeValue = 0f;
+                    controller.gripForce = 0f;
+                    controller.hasGripForce = false;
+                    controller.squeezing = false;
                     controller.stickAxis = Vector2.zero;
                     continue;
                 }
@@ -197,11 +217,15 @@ namespace TarkovVR.Source.Controls
                 device.TryGetFeatureValue(CommonUsages.primary2DAxisClick, out controller.current.stickClick);
                 device.TryGetFeatureValue(CommonUsages.secondary2DAxisTouch, out controller.current.trackpadTouch);
 
+                controller.hasGripForce = device.TryGetFeatureValue(gripForceUsage, out controller.gripForce);
+                controller.squeezing = controller.hasGripForce
+                    && (controller.squeezing ? controller.gripForce > gripForceLetUpThreshold : controller.gripForce >= gripForcePressThreshold);
+
                 // Separate press and release points so the grip doesn't flicker around one value
                 if (controller.previous.grip)
                     controller.current.grip = controller.squeezeValue > gripReleaseThreshold;
                 else
-                    controller.current.grip = controller.squeezeValue >= gripPressThreshold;
+                    controller.current.grip = controller.hasGripForce ? controller.squeezing : controller.squeezeValue >= gripPressThreshold;
             }
         }
 
