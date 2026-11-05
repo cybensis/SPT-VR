@@ -163,6 +163,14 @@ namespace TarkovVR.Source.Weapons
             return $"{family}|{magazineType}";
         }
 
+        // Where a clip's name says a magazine going in or out, -1 if it doesn't: "_mag_in" on every gun but the Five-seveN, whose
+        // clips spell it "_magin" (fiveseven_magin_0; missed, it had no animation set and so no data at all)
+        private static int MagazineClipNameEnd(string clipName, bool goingIn)
+        {
+            int nameEnd = clipName.IndexOf(goingIn ? "_mag_in" : "_mag_out", StringComparison.OrdinalIgnoreCase);
+            return nameEnd >= 0 ? nameEnd : clipName.IndexOf(goingIn ? "_magin" : "_magout", StringComparison.OrdinalIgnoreCase);
+        }
+
         // The name the gun's reload clips start with (m4a1_mag_in_0 = m4a1). No magazine clips: its own template id.
         private static string AnimationFamily(FirearmController firearmController)
         {
@@ -174,13 +182,19 @@ namespace TarkovVR.Source.Weapons
             RuntimeAnimatorController animatorController = firearmController.FirearmsAnimator?.Animator?.runtimeAnimatorController;
             if (animatorController != null)
             {
-                foreach (AnimationClip clip in animatorController.animationClips)
+                // Then "_reload_in", the SR-2M's magazine clips (sr2m_reload_in_0), only with no magazine clip at all: on other guns
+                // reload_in is a grenade launcher's or sits beside their own mag_in
+                for (int pass = 0; pass < 2 && family == templateId; pass++)
                 {
-                    int nameEnd = clip != null ? clip.name.IndexOf("_mag_in", StringComparison.OrdinalIgnoreCase) : -1;
-                    if (nameEnd > 0)
+                    foreach (AnimationClip clip in animatorController.animationClips)
                     {
-                        family = clip.name.Substring(0, nameEnd).ToLowerInvariant();
-                        break;
+                        int nameEnd = clip == null ? -1
+                            : pass == 0 ? MagazineClipNameEnd(clip.name, goingIn: true) : clip.name.IndexOf("_reload_in", StringComparison.OrdinalIgnoreCase);
+                        if (nameEnd > 0)
+                        {
+                            family = clip.name.Substring(0, nameEnd).ToLowerInvariant();
+                            break;
+                        }
                     }
                 }
             }

@@ -310,6 +310,8 @@ def palmHold(g,J,old,new):
         oldMagazine=dict(position=[round(float(x),4) for x in np.mean([r['rel'] for r in runOld],axis=0)],rotation=toUnityEuler(avgQ(runOld))),
         fingers=eulerList(runNew[len(runNew)//2]['qs']))
 
+from clip_names import magClipName
+
 def run(folders,outFile=None):
     result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},thumbCatches={},wellAxes={},slides={},slideBoneInGun={},slideGrips={},rockIn={},palms={}); report=[]
     boneInGun={}; otherGrips={}
@@ -325,6 +327,8 @@ def run(folders,outFile=None):
                     except Exception: pass
         except Exception as e:
             report.append((folder,'ERR load',repr(e)[:80])); continue
+        for name in list(clips):
+            clips.setdefault(magClipName(folder,name),clips[name])
         prefixes=sorted(set(m.group(1) for m in (re.match(r'(.+?)_mag_in(?:_\d+)?$',n) for n in clips) if m))
         if not prefixes: continue
         trees={}

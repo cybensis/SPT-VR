@@ -1,6 +1,7 @@
 # Filters the generated holds, adds each magazine type's length (for borrowing a hold) and writes the file the mod loads.
 import json, math, os, re, sys
 import numpy as np, UnityPy
+from clip_names import magClipName
 ITEMS='F:/SPT4.1/SPT_Runtime/SPT_Data/database/templates/items.json'
 BUNDLES='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/'
 gen=json.load(open('gen_all.json')); R=gen['result']
@@ -12,7 +13,7 @@ items=json.load(open(ITEMS,encoding='utf-8')); guns=json.load(open('guns.json'))
 famFolder={}
 for folder,v in census.items():
     for c in v.get('clips',[]):
-        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',c)
+        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,c))
         if m: famFolder[m.group(1).lower()]=folder
 lengthCache={}
 def magLength(templateId):

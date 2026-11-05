@@ -13,7 +13,7 @@ def isReleasePart(name):
 
 def pickTree(folder, family, clips, prefix):
     d = ROOT + folder + '/'
-    probe = next((n for n in clips if n.startswith(prefix + '_mag_in')), None)
+    probe = next((n for n in clips if re.match(re.escape(prefix) + r'_mag_?in', n)), None)
     hashes = [b.path for b in clips[probe].m_ClipBindingConstant.genericBindings] if probe else []
     best = None
     for c in sorted(os.listdir(d)):
@@ -59,7 +59,7 @@ done = set()
 for folder, v in sorted(census.items()):
     if not os.path.isdir(ROOT + folder):
         continue
-    names = v.get('clips', [])
+    names = [magClipName(folder, n) for n in v.get('clips', [])]
     prefixes = sorted({re.match(r'(.+?)_mag_in(?:_\d+)?$', n).group(1) for n in names if re.match(r'(.+?)_mag_in(?:_\d+)?$', n)})
     if not prefixes:
         continue
@@ -71,6 +71,8 @@ for folder, v in sorted(census.items()):
                     c = o.read(); clips[c.m_Name] = c
                 except Exception:
                     pass
+        for name in list(clips):
+            clips.setdefault(magClipName(folder, name), clips[name])
     except Exception as e:
         print(folder, 'ERR clips', repr(e)[:80], flush=True); continue
     for prefix in prefixes:
@@ -85,7 +87,7 @@ for folder, v in sorted(census.items()):
             _, container, tree = picked
             P = tree[0]
             parts = [p for p in P if isReleasePart(p.split('/')[-1]) and '/mod_magazine/' not in p + '/' and not p.endswith('/mod_magazine')]
-            outs = sorted(n for n in clips if re.match(re.escape(prefix) + r'_mag_out(_\d+)?$', n))
+            outs = sorted(n for n in clips if re.match(re.escape(prefix) + r'_mag_?out(_\d+)?$', n))
             found = None
             for clipName in outs:
                 g = setup(tree, clips[clipName]); stop = float(clips[clipName].m_MuscleClip.m_StopTime)

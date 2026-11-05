@@ -14,7 +14,7 @@ gen=json.load(open('gen_all.json')); R=gen['result']; census=json.load(open('cli
 famFolder={}
 for folder,v in census.items():
     for c in v.get('clips',[]):
-        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',c)
+        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,c))
         if m: famFolder[m.group(1).lower()]=folder
 ITEM_BUNDLES='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/items/mods/'
 
@@ -25,6 +25,7 @@ def loadFolder(folder):
             try:
                 c=o.read(); clips[c.m_Name]=c
             except Exception: pass
+    for name in list(clips): clips.setdefault(magClipName(folder,name),clips[name])
     for c in sorted(os.listdir(d)):
         if c.endswith('_container.bundle') and c.startswith('weapon_'):
             tree=loadTree(d+c)
@@ -43,18 +44,19 @@ def fullBackTime(g,path,wp):
 # Guns with no slot for a handle whose rig bone isn't mod_charge, the only name gen_holds looks for: by rig (a substring of its
 # container), the bone each one's own rack clips move back, every animation set in that folder (checked 2026-11-05: each bone moves
 # 6-13 cm straight back and carries the handle's meshes). MP7 7.2 cm, SA58 11.1, UMP 8.1, Vector 6.2 (its knob's fold not shown),
-# PKM 13.3, RFB 12.5 (its forward handle), Uzi 9.3, Mk-18 Mjolnir 13.2, RSASS 12.3. Left out: the RPD (no clip moves its handle bones),
-# the SR-2M (no magazine clips by its name: its set is its template id at runtime) and the VSK-94 (no clips of its own).
+# PKM 13.3, RFB 12.5 (its forward handle), Uzi 9.3, Mk-18 Mjolnir 13.2, RSASS 12.3, SR-2M (its magazine clips spelt reload_in/out,
+# clip_names). Left out: the RPD (no clip moves its handle bones) and the VSK-94 (no clips of its own).
 # gen_holds' own left/right hold search on that bone, merged into its handles by gen_export; handleBones tells the runtime the bone.
 HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghing_handle','hk_ump':'weapon_charge','tdi_kriss_vector':'weapon_charge',
-                  'zid_pkm':'weapon_charge','kel_tec_rfb':'weapon_charge','iwi_uzi_9x19':'weapon_charge','sword_int_mk_18':'weapon_charge','r11_rsass':'weapon_charghing_000'}
+                  'zid_pkm':'weapon_charge','kel_tec_rfb':'weapon_charge','iwi_uzi_9x19':'weapon_charge','sword_int_mk_18':'weapon_charge','r11_rsass':'weapon_charghing_000',
+                  'tochmash_sr2m':'weapon_charging_handle'}
 HANDLE_BONE_GUNS={}
 for folder,v in census.items():
     if not os.path.isdir(ROOT+folder): continue
     containers=[c for c in sorted(os.listdir(ROOT+folder)) if c.endswith('_container.bundle') and c.startswith('weapon_')]
     matching=[(c,b) for c in containers for k,b in HANDLE_BONE_RIGS.items() if k in c]
     for clip in v.get('clips',[]):
-        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',clip)
+        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,clip))
         if matching and m:
             family=m.group(1).lower()
             HANDLE_BONE_GUNS[family]=(folder,)+next(((c,b) for c,b in matching if family in c),matching[0])
