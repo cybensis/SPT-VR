@@ -58,6 +58,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool ReplacesBackZone => Active;
         public static bool ReplacesHipZone => Active && ViewOf(EquipmentSlot.Holster) != null;
 
+        internal static bool IsActive => Active;
+
         private static bool Active => enabled && VRGlobals.player != null && VRGlobals.player.IsYourPlayer && VRGlobals.vrPlayer != null
             && VRGlobals.vrPlayer.RightHand != null && VRGlobals.player.PlayerBody != null;
 
@@ -353,21 +355,30 @@ namespace TarkovVR.Source.Player.Interactions
                 PlayerBody.SlotView view = ViewOf(slot);
                 GameObject model = view?.Model;
                 if (model != null)
+                {
+                    lostSince.Remove(slot);
                     KeepSlotBoneOn(view, model);
+                }
+                else if (view != null)
+                {
+                    RebuildIfLost(slot, view, inHandsItem);
+                }
                 if (model == null || !model.activeInHierarchy)
                     continue;
                 currentModels.Add(model);
                 if (!tarkovPoses.ContainsKey(model))
                     tarkovPoses[model] = new Pose(model.transform.localPosition, model.transform.localRotation);
-                // The gun in hands keeps its body model for your own player (PlayerBody isn't given what's in your hands, so its
-                // slot view doesn't drop it): hidden, or it doubles the real one (headset: "two pistols on my hip")
-                bool inHands = inHandsItem != null && SlotItem(slot) == inHandsItem && !(Switching && model == standIn);
+                // Hidden (Tarkov's own state for your player): an empty slot (walking out of the range empties them, the models
+                // stayed: "when you leave the shooting range all the guns should deactivate"), and the gun in hands, whose body
+                // model Tarkov doesn't always drop (the range's hands item doesn't reach the body: "two pistols on my hip")
+                Item slotItem = SlotItem(slot);
+                bool hidden = slotItem == null || (inHandsItem != null && slotItem == inHandsItem && !(Switching && model == standIn));
                 foreach (Renderer renderer in view.Renderers)
                 {
-                    if (renderer != null && renderer.enabled == inHands)
-                        renderer.enabled = !inHands;
+                    if (renderer != null && renderer.enabled == hidden)
+                        renderer.enabled = !hidden;
                 }
-                if (inHands)
+                if (hidden)
                     continue;
                 if (Switching && model == standIn)
                 {
@@ -400,6 +411,34 @@ namespace TarkovVR.Source.Player.Interactions
         // every equip) and both primaries' models hang under them: hidden and never in reach (headset log: both primaries INACTIVE,
         // the pistol on its own bone fine). The slot's own bone back on while this runs; the Player layer they're on isn't collided.
         private static readonly List<GameObject> bonesTurnedOn = new List<GameObject>();
+
+        // A slot holding a gun that isn't in your hands, with no model and none being built: Tarkov dropped it and didn't build it
+        // again (range log: the Mk47 and the pistol had none after their second draw - not seen, not grabbable). Built again the
+        // way its slot view does it, at most once a second.
+        private static readonly Dictionary<EquipmentSlot, float> lostSince = new Dictionary<EquipmentSlot, float>();
+
+        private static void RebuildIfLost(EquipmentSlot slot, PlayerBody.SlotView view, Item inHandsItem)
+        {
+            Item item = SlotItem(slot);
+            if (slot == EquipmentSlot.Scabbard || item == null || item == inHandsItem || (view.LoadingJob != null && !view.LoadingJob.IsCompleted))
+            {
+                lostSince.Remove(slot);
+                return;
+            }
+            if (!lostSince.TryGetValue(slot, out float since))
+            {
+                lostSince[slot] = Time.time;
+                return;
+            }
+            if (Time.time - since < 1f)
+                return;
+            lostSince[slot] = Time.time;
+            if (debugLog)
+                Plugin.MyLog.LogWarning($"[BodyWeapons] {slot}: {item.LocalizedShortName()} has no body model, building it again");
+            view.CancelCreating();
+            view._item = item;
+            view.LoadItem();
+        }
 
         private static void KeepSlotBoneOn(PlayerBody.SlotView view, GameObject model)
         {

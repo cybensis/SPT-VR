@@ -67,6 +67,8 @@ namespace TarkovVR.Source.Player.Interactions
         private static float releaseTimer;
         private static int lastTickFrame = -10;
         private static object lastHandsController;
+        private static object lastPlayer;
+        private static float hangOnArrivalUntil = -1f;  // the gun Tarkov hands you (raid start, walking into the range) goes to its spot
         // Holder local pose from BEFORE the first detach; the anchor only re-stamps rotation at equip,
         // so it MUST be restored when the gun returns to the hand - and preserved across a
         // SupportOnly -> sling transition (holderSaved guards the save).
@@ -96,6 +98,14 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             var player = VRGlobals.player;
+            if (!ReferenceEquals(player, lastPlayer))
+            {
+                lastPlayer = player;
+                if (player != null)
+                    HangOnArrival();   // a raid start: its gun is already in your hands
+            }
+            if (hangOnArrivalUntil > 0f && Time.time > hangOnArrivalUntil)
+                hangOnArrivalUntil = -1f;
             var fc = VRGlobals.firearmController;
             bool holdingFirearm = player != null && fc != null && fc.Item != null
                 && !WeaponPatches.grenadeEquipped
@@ -156,6 +166,20 @@ namespace TarkovVR.Source.Player.Interactions
                     Reattach(restore: true);
                 prevGrip = grip;
                 return;
+            }
+
+            // The gun Tarkov put in your hands at a raid start or the range: straight to its spot (headset: "the gun doesn't start
+            // in your hand but on the sling"). Its draw skipped, and the hang only once it's idle: the holder is stamped for it by then.
+            if (hangOnArrivalUntil > 0f && !Detached && !grip && !supporting && BodyWeapons.IsActive)
+            {
+                if (!(fc.CurrentOperation is EFT.Player.FirearmController.Idling))
+                    fc.FastForwardCurrentState();
+                else
+                {
+                    BeginHang(fc, snap: true);
+                    if (Hanging)
+                        hangOnArrivalUntil = -1f;
+                }
             }
 
             if (Detached)
@@ -231,7 +255,14 @@ namespace TarkovVR.Source.Player.Interactions
 
         // ---- state transitions ----
 
-        private static void BeginHang(EFT.Player.FirearmController fc)
+        // Armed for a while: the range's gun comes after its bundles load
+        internal static void HangOnArrival(float seconds = 15f)
+        {
+            hangOnArrivalUntil = Time.time + seconds;
+        }
+
+        // snap: placed at its spot at once, no fly-in from the hand and no haptic (a gun that starts there)
+        private static void BeginHang(EFT.Player.FirearmController fc, bool snap = false)
         {
             Transform wr = fc.WeaponRoot;
             if (wr == null || VRGlobals.weaponHolder == null || VRGlobals.ikManager == null ||
@@ -253,10 +284,15 @@ namespace TarkovVR.Source.Player.Interactions
             slingLocalPos = Quaternion.Inverse(yawRot) * (wr.position - headPos);
             slingLocalRot = Quaternion.Inverse(yawRot) * wr.rotation;
             posVel = Vector3.zero;
+            if (snap && HandsGunSpotPose(fc, out Vector3 spotPos, out Quaternion spotRot))
+            {
+                slingLocalPos = Quaternion.Inverse(yawRot) * (spotPos - headPos);
+                slingLocalRot = Quaternion.Inverse(yawRot) * spotRot;
+            }
 
             DetachCommon();
             Hanging = true;
-            if (hangHaptics)
+            if (hangHaptics && !snap)
                 Pulse(0.6f);
         }
 
@@ -537,6 +573,7 @@ namespace TarkovVR.Source.Player.Interactions
         internal static void TakenFromBody(Item item)
         {
             gripSeenFor = item;
+            hangOnArrivalUntil = -1f;   // a gun you took yourself
         }
 
         // Where a gun lives on the body when it isn't in your hand, as its Weapon_root's pose: BodyWeapons draws the others there,
