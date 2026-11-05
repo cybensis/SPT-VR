@@ -14,11 +14,10 @@ namespace TarkovVR.Source.Graphics
     // is looked up in the eye image through that eye's own view and projection. Rotation only: where the eye was is what the
     // image shows. Field of view (across, and up if set apart from the window's shape: that squashes the picture), smoothing and
     // a downward tilt of the view: VR Graphics sliders.
-    // Drawn right after the last eye pass of the last camera drawing into the headset (uiCam's right eye, normally): after the eyes,
-    // before the screen overlays (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end of the frame covered.
-    // It was a camera of our own that renders nothing (drawAfterLastEyeCamera = false brings it back): measured 0.69 ms of the main
-    // thread on Customs, 0.45 of it Unity's work for any camera, even one that draws nothing. A frame neither drew is drawn at the very
-    // end of the frame instead, the way it was first built.
+    // Drawn by a camera of our own that renders nothing and comes last of the cameras: after the eyes, before the screen overlays
+    // (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end of the frame covered. A frame that camera didn't
+    // draw (headset: it never drew, the window stayed Unity's mirror: why is logged once) is drawn at the very end of the frame
+    // instead, the way it was first built.
     public class DesktopMirror : MonoBehaviour
     {
         public static bool stabilized = true;           // false = Unity's own mirror of the eye texture
@@ -32,15 +31,6 @@ namespace TarkovVR.Source.Graphics
         public static int gridColumns = 24;             // the window is drawn as a grid; each corner looked up exactly, straight in between
         public static int gridRows = 14;
         public static float cameraDepth = 100000f;      // after every other camera
-        public static bool drawAfterLastEyeCamera = true;   // false = drawn by the window's own camera (costs a camera's work a frame)
-        // Drawn right after an eye pass the window can come out the other way up: Unity keeps that pass's projection flip. Headset: after
-        // the raid's uiCam upside down, after the main menu's uiCam (which drew into a texture of its own, 'TempBuffer') not. -1 = by the
-        // camera (flipped back when it drew straight into the eye image - inferred from those two, logged once per camera), 0 = never,
-        // 1 = always.
-        public static int flipAfterEyePass = -1;
-        private bool drawingAfterEyePass;
-        private bool flipThisDraw;
-        private readonly HashSet<int> loggedFlipCameras = new HashSet<int>();
 
         // The game's (Unity 2022) XRMirrorViewBlitMode values: Default 0 = Unity's own mirror, None -6. Not the constants: they compile
         // in from the 2019 references this builds against, where None is 0 (= 2022's Default). (The render pass structs below are
@@ -65,11 +55,6 @@ namespace TarkovVR.Source.Graphics
         private string cameraFailure;                   // why the camera's draw didn't happen this frame
         private bool loggedCameraFailure;
         private bool loggedEndOfFrameDraw;
-        private Camera windowCamera;
-        private Camera[] cameraList = new Camera[16];
-        private Camera lastEyeCamera;                   // the last camera drawing into the headset this frame
-        private int lastEyeCameraFrame = -1;
-        private Camera loggedLastEyeCamera;
 
         // Where each eye's lens mask is, over its image (0..1 both ways, rows up from the bottom of the view)
         private sealed class LensMask
@@ -87,7 +72,7 @@ namespace TarkovVR.Source.Graphics
         {
             GameObject cameraObject = new GameObject("VRDesktopMirrorCamera");
             cameraObject.transform.SetParent(transform, worldPositionStays: false);
-            windowCamera = cameraObject.AddComponent<Camera>();
+            Camera windowCamera = cameraObject.AddComponent<Camera>();
             if (windowCamera == null)
             {
                 Plugin.MyLog.LogWarning("[DesktopMirror] couldn't add the window camera: the window is drawn at the end of the frame");
@@ -106,77 +91,7 @@ namespace TarkovVR.Source.Graphics
             windowCamera.allowHDR = false;
             windowCamera.allowMSAA = false;
             windowCamera.renderingPath = RenderingPath.Forward;
-            windowCamera.enabled = !drawAfterLastEyeCamera;
             Plugin.MyLog.LogInfo($"[DesktopMirror] window camera made (enabled {windowCamera.enabled}, active {cameraObject.activeInHierarchy}, depth {windowCamera.depth:0}, on '{name}')");
-        }
-
-        private void OnEnable() { Camera.onPostRender += OnAnyCameraPostRender; }
-        private void OnDisable() { Camera.onPostRender -= OnAnyCameraPostRender; }
-
-        // Every camera's post-render: draws after the last eye pass of the last camera that draws into the headset
-        private void OnAnyCameraPostRender(Camera camera)
-        {
-            if (!drawAfterLastEyeCamera || camera == null || camera == windowCamera || drawnFrame == Time.frameCount)
-                return;
-            if (camera != LastEyeCamera() || !IsLastEye(camera))
-                return;
-            if (loggedLastEyeCamera != camera)
-            {
-                loggedLastEyeCamera = camera;
-                Plugin.MyLog.LogInfo($"[DesktopMirror] drawn after '{camera.name}' (depth {camera.depth:0}), its {camera.stereoActiveEye} eye");
-            }
-            RenderTexture active = RenderTexture.active;
-            flipThisDraw = FlipAfter(camera, active);
-            drawingAfterEyePass = true;
-            cameraFailure = Guarded(fromCamera: true);
-            drawingAfterEyePass = false;
-            RenderTexture.active = active;   // the camera's own target back for whatever Unity does after
-        }
-
-        // Whether the eye pass just drawn leaves the window flipped: the camera drew straight into this eye's image (not a texture of its own)
-        private bool FlipAfter(Camera camera, RenderTexture active)
-        {
-            RenderTexture eyeImage = null;
-            XRDisplaySubsystem display = Display();
-            if (display != null && display.GetRenderPassCount() >= 2)
-                eyeImage = display.GetRenderTextureForRenderPass(camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Left ? 0 : 1);
-            RenderTexture cameraTexture = camera.activeTexture;
-            bool ownTexture = cameraTexture != null && cameraTexture != eyeImage;
-            bool flip = flipAfterEyePass == 1 || (flipAfterEyePass < 0 && !ownTexture);
-            if (loggedFlipCameras.Add(camera.GetInstanceID()))
-                Plugin.MyLog.LogInfo($"[DesktopMirror] after '{camera.name}': its texture {Describe(cameraTexture)}, active {Describe(active)}, eye image {Describe(eyeImage)} "
-                    + $"-> {(flip ? "flipped back" : "as is")} (flipAfterEyePass {flipAfterEyePass})");
-            return flip;
-        }
-
-        private static string Describe(RenderTexture texture) => texture == null ? "none" : $"'{texture.name}' {texture.width}x{texture.height}";
-
-        // The highest-depth enabled camera drawing into the headset (stereo, no texture of its own), found once a frame
-        private Camera LastEyeCamera()
-        {
-            if (lastEyeCameraFrame == Time.frameCount)
-                return lastEyeCamera;
-            lastEyeCameraFrame = Time.frameCount;
-            lastEyeCamera = null;
-            if (Camera.allCamerasCount > cameraList.Length)
-                cameraList = new Camera[Camera.allCamerasCount + 8];
-            int count = Camera.GetAllCameras(cameraList);
-            for (int index = 0; index < count; index++)
-            {
-                Camera candidate = cameraList[index];
-                if (candidate == null || candidate == windowCamera || !candidate.stereoEnabled || candidate.targetTexture != null)
-                    continue;
-                if (lastEyeCamera == null || candidate.depth > lastEyeCamera.depth)
-                    lastEyeCamera = candidate;
-            }
-            return lastEyeCamera;
-        }
-
-        // Its last eye this frame: the right one unless it draws the left eye only
-        private static bool IsLastEye(Camera camera)
-        {
-            Camera.MonoOrStereoscopicEye eye = camera.stereoActiveEye;
-            return camera.stereoTargetEye == StereoTargetEyeMask.Left ? eye == Camera.MonoOrStereoscopicEye.Left : eye == Camera.MonoOrStereoscopicEye.Right;
         }
 
         // The camera's draw (DesktopMirrorCamera.OnPostRender): before the overlays
@@ -199,8 +114,6 @@ namespace TarkovVR.Source.Graphics
             while (true)
             {
                 yield return endOfFrame;
-                if (windowCamera != null && windowCamera.enabled == drawAfterLastEyeCamera)
-                    windowCamera.enabled = !drawAfterLastEyeCamera;   // the switch is live
                 if (drawnFrame == Time.frameCount)
                     continue;
                 string failure = Guarded(fromCamera: false);
@@ -214,9 +127,8 @@ namespace TarkovVR.Source.Graphics
                 if (!loggedEndOfFrameDraw)
                 {
                     loggedEndOfFrameDraw = true;
-                    string why = drawAfterLastEyeCamera ? (loggedLastEyeCamera != null ? cameraFailure ?? "no reason" : "no camera drawing into the headset ended its last eye")
-                        : cameraEverRendered ? cameraFailure ?? "no reason" : "the window camera never rendered";
-                    Plugin.MyLog.LogWarning($"[DesktopMirror] not drawn after the eyes ({why}): drawn at the end of the frame instead, over the F7 / F12 menus");
+                    Plugin.MyLog.LogWarning($"[DesktopMirror] the window camera didn't draw ({(cameraEverRendered ? cameraFailure ?? "no reason" : "it never rendered")}): "
+                        + "drawn at the end of the frame instead, over the F7 / F12 menus");
                 }
             }
         }
@@ -537,7 +449,6 @@ namespace TarkovVR.Source.Graphics
             int rows = Mathf.Max(1, gridRows);
 
             RenderTexture.active = null;
-            GL.Viewport(new Rect(0f, 0f, Screen.width, Screen.height));   // drawn after an eye pass, the eye's viewport is still set
             GL.PushMatrix();
             GL.LoadOrtho();
             GL.Clear(true, true, Color.black);
@@ -566,7 +477,7 @@ namespace TarkovVR.Source.Graphics
         private void Corner(float across, float up, float tanHalfAcross, float tanHalfUp, Matrix4x4 view, Matrix4x4 projection)
         {
             Vector2 uv = EyeImagePoint(smoothedRotation * viewTilt, across, up, tanHalfAcross, tanHalfUp, view, projection);
-            if (flipVertical != (drawingAfterEyePass && flipThisDraw))
+            if (flipVertical)
                 uv.y = 1f - uv.y;
             GL.TexCoord2(uv.x, uv.y);
             GL.Vertex3(across, up, 0f);
