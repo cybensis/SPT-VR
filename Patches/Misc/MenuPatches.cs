@@ -327,6 +327,7 @@ namespace TarkovVR.Patches.Misc
                         uiCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
                         uiCam.cullingMask = 32;
                         uiCam.clearFlags = CameraClearFlags.Depth;
+                        TarkovVR.Patches.Core.VR.InitVRPatches.MakeUiCameraLight(uiCam);
                     }
                     //mainMenuCam.cullingMask = -1;
                     mainMenuCam.RemoveAllCommandBuffers();

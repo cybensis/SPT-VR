@@ -29,8 +29,9 @@ namespace TarkovVR.Source.Misc
         {
             public string name;
             public bool onCameraObject;                     // a camera's own message: goes by the object it's on
-            public readonly double[,] ms = new double[2, 3];   // [mode, bucket: 0 other, 1 left eye, 2 right eye]
-            public readonly long[,] calls = new long[2, 3];
+            public bool script;                             // an Update / LateUpdate / FixedUpdate, timed in the scripts segment only
+            public readonly double[,] ms = new double[ModeCount, 3];   // [mode, bucket: 0 other, 1 left eye, 2 right eye]
+            public readonly long[,] calls = new long[ModeCount, 3];
         }
         private static readonly List<MainItem> mainItems = new List<MainItem>();
         private static readonly Dictionary<MethodBase, int> mainMethodItem = new Dictionary<MethodBase, int>();
@@ -174,6 +175,7 @@ namespace TarkovVR.Source.Misc
             foreach (int k in order)
             {
                 MainItem item = mainItems[k];
+                if (item.script) continue;
                 double left = item.ms[both, 1] / frames, right = item.ms[both, 2] / frames, other = item.ms[both, 0] / frames;
                 total[0] += other; total[1] += left; total[2] += right;
                 if (left + right + other < mainMinMs) { if (item.calls[both, 0] + item.calls[both, 1] + item.calls[both, 2] > 0) { small++; smallMs += left + right + other; } continue; }

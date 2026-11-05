@@ -36,6 +36,19 @@ namespace TarkovVR.Patches.Core.VR
     [HarmonyPatch]
     internal class InitVRPatches
     {
+        // The UI-layer camera draws only unlit canvases, usually nothing at all. Unity's default camera is deferred + HDR: a G-buffer
+        // pass, a lighting pass and an HDR copy of the eye image, per eye, every frame (measured 1.3 ms GPU + 0.84 ms render thread
+        // in the hideout). Forward without HDR/MSAA draws straight into the eye image. false = Unity's default camera (applies to the
+        // next uiCam made).
+        public static bool lightUiCamera = true;
+        internal static void MakeUiCameraLight(Camera uiCam)
+        {
+            if (!lightUiCamera || uiCam == null) return;
+            uiCam.renderingPath = RenderingPath.Forward;
+            uiCam.allowHDR = false;
+            uiCam.allowMSAA = false;
+        }
+
         // just experimental stuff used for flipping camera when using forward rendering with MSAA
         public class FlipCameraRender : MonoBehaviour
         {
@@ -234,6 +247,7 @@ namespace TarkovVR.Patches.Core.VR
                 uiCam.depth = 1;
                 uiCam.cullingMask = 32;
                 uiCam.clearFlags = CameraClearFlags.Depth;
+                MakeUiCameraLight(uiCam);
                 mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
                 mainCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
                 mainCam.farClipPlane = 5000f;
