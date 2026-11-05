@@ -33,6 +33,9 @@ namespace TarkovVR.Source.Graphics
         public static int gridRows = 14;
         public static float cameraDepth = 100000f;      // after every other camera
         public static bool drawAfterLastEyeCamera = true;   // false = drawn by the window's own camera (costs a camera's work a frame)
+        public static bool flipAfterEyePass = true;     // drawn right after an eye pass the window comes out the other way up (headset: upside
+                                                        // down) - Unity still has the eye pass's render-into-texture flip set
+        private bool drawingAfterEyePass;
 
         // The game's (Unity 2022) XRMirrorViewBlitMode values: Default 0 = Unity's own mirror, None -6. Not the constants: they compile
         // in from the 2019 references this builds against, where None is 0 (= 2022's Default). (The render pass structs below are
@@ -118,7 +121,9 @@ namespace TarkovVR.Source.Graphics
                 Plugin.MyLog.LogInfo($"[DesktopMirror] drawn after '{camera.name}' (depth {camera.depth:0}), its {camera.stereoActiveEye} eye");
             }
             RenderTexture active = RenderTexture.active;
+            drawingAfterEyePass = true;
             cameraFailure = Guarded(fromCamera: true);
+            drawingAfterEyePass = false;
             RenderTexture.active = active;   // the camera's own target back for whatever Unity does after
         }
 
@@ -537,7 +542,7 @@ namespace TarkovVR.Source.Graphics
         private void Corner(float across, float up, float tanHalfAcross, float tanHalfUp, Matrix4x4 view, Matrix4x4 projection)
         {
             Vector2 uv = EyeImagePoint(smoothedRotation * viewTilt, across, up, tanHalfAcross, tanHalfUp, view, projection);
-            if (flipVertical)
+            if (flipVertical != (drawingAfterEyePass && flipAfterEyePass))
                 uv.y = 1f - uv.y;
             GL.TexCoord2(uv.x, uv.y);
             GL.Vertex3(across, up, 0f);
