@@ -7,13 +7,13 @@ using UnityEngine.XR;
 
 namespace TarkovVR.Source.Misc
 {
-    // Ctrl+F11, the alternate-eye experiment (measurement only): each press steps off -> both eyes (baseline) -> alternating eyes
-    // -> off. Alternating renders one eye a frame, left and right in turn (Camera.stereoTargetEye on every camera that drew both
-    // eyes), the CPU cost of left-only, the way the finished mode would. Nothing fixes up the eye left out yet: Unity's OpenXR plugin
-    // submits it however it does, which is what this finds out. Every reportSeconds an "[AltEye]" line: Unity's frame interval,
-    // render passes a frame, and what the native frame watcher (OpenXRFrameWatch) saw: views a frame, whether each eye's swapchain was
-    // taken this frame, whether each eye's pose was the same as the frame before, and how long the frame calls waited. The first
-    // frames of each step are described in full. It will judder while alternating: expected, the eye left out isn't reprojected.
+    // Ctrl+F11, alternate-eye rendering (test build): each press steps off -> both eyes (baseline) -> alternating eyes -> off.
+    // Alternating renders one eye a frame, left and right in turn (Camera.stereoTargetEye on every camera that drew both eyes):
+    // the CPU cost of left-only. The eye left out is fixed up by the native frame watcher (OpenXRFrameWatch): its last drawing goes
+    // back into the image Unity hands back for it (Unity takes a fresh image of both eyes every frame - measured), and it's
+    // submitted with the pose it was drawn with, moved by the rig's turn and move since, so the runtime reprojects it to the head.
+    // Every reportSeconds an "[AltEye]" line: Unity's frame interval, render passes a frame, what the watcher saw (views, swapchains
+    // taken, poses, how long the frame calls waited) and the fix-ups (eye drawings kept / given back, poses rewritten, misses).
     [DefaultExecutionOrder(32000)]   // our LateUpdate last: the eye is set right before the cameras render
     internal class AlternateEyeExperiment : MonoBehaviour
     {
@@ -39,14 +39,44 @@ namespace TarkovVR.Source.Misc
 
         private void LateUpdate()
         {
+            if (step == Step.Alternating)
+                SetEye();
+        }
+
+        private void OnEnable()
+        {
+            Application.onBeforeRender += BeforeRender;
+        }
+
+        private void OnDisable()
+        {
+            Application.onBeforeRender -= BeforeRender;
+        }
+
+        // Right before the cameras render, after OpenXRHeadPose has put this frame's head pose in the camera's local transform: the
+        // camera's parent is then exactly the tracking space (in the hideout too, where something else moves the camera in between)
+        private void BeforeRender()
+        {
             if (step != Step.Alternating)
                 return;
+            Transform rig = SetEye();
+            OpenXRFrameWatch.MarkOneEyeFrame(Time.frameCount % 2, Time.frameCount & 15, rig);
+        }
+
+        // This frame's eye on every camera that drew both; the headset camera's parent back (the tracking space)
+        private Transform SetEye()
+        {
             StereoTargetEyeMask eye = Time.frameCount % 2 == 0 ? StereoTargetEyeMask.Left : StereoTargetEyeMask.Right;
+            Transform rig = null;
             foreach (Camera camera in eyeCameras)
             {
-                if (camera != null)
-                    camera.stereoTargetEye = eye;
+                if (camera == null)
+                    continue;
+                camera.stereoTargetEye = eye;
+                if (rig == null && camera.name != "uiCam")
+                    rig = camera.transform.parent;
             }
+            return rig;
         }
 
         private IEnumerator Start()
@@ -83,6 +113,7 @@ namespace TarkovVR.Source.Misc
             else
             {
                 RestoreEyeCameras();
+                OpenXRFrameWatch.ForgetEyes();
                 step = Step.Off;
                 Plugin.MyLog.LogWarning("[AltEye] off: both eyes back");
                 return;
@@ -153,6 +184,11 @@ namespace TarkovVR.Source.Misc
                     + $"image waits {watch[(int)OpenXRFrameWatch.Stat.WaitImageMs] / frames:0.00} a frame/{watch[(int)OpenXRFrameWatch.Stat.WaitImageMax]:0.00}, "
                     + $"acquires {watch[(int)OpenXRFrameWatch.Stat.AcquireMs] / frames:0.00} a frame, "
                     + $"xrEndFrame {watch[(int)OpenXRFrameWatch.Stat.EndFrameMs] / frames:0.00}/{watch[(int)OpenXRFrameWatch.Stat.EndFrameMax]:0.00}");
+                if (step == Step.Alternating)
+                    line.Append($" | fix-ups: one-eye frames {watch[(int)OpenXRFrameWatch.Stat.AltFrames]:0}, drawings kept {watch[(int)OpenXRFrameWatch.Stat.AltKept]:0}, "
+                        + $"given back {watch[(int)OpenXRFrameWatch.Stat.AltRestored]:0}, poses rewritten {watch[(int)OpenXRFrameWatch.Stat.AltPosesFixed]:0}, "
+                        + $"misses: no image {watch[(int)OpenXRFrameWatch.Stat.AltNoImage]:0}, no drawing yet {watch[(int)OpenXRFrameWatch.Stat.AltNoCopyYet]:0}, "
+                        + $"copy failed {watch[(int)OpenXRFrameWatch.Stat.AltCopyFailed]:0}");
             }
             Plugin.MyLog.LogInfo(line.ToString());
             string detail = OpenXRFrameWatch.TakeDetail();

@@ -18,6 +18,9 @@ namespace TarkovVR.Source.XR
         [DllImport("SPTVRXrFrameWatch")] private static extern int XrWatch_Stats(double[] totals, int max);
         [DllImport("SPTVRXrFrameWatch")] private static extern int XrWatch_Detail(byte[] text, int max);
         [DllImport("SPTVRXrFrameWatch")] private static extern void XrWatch_DescribeNext(int frames);
+        [DllImport("SPTVRXrFrameWatch")] private static extern void XrAlt_SetRig(int slot, float px, float py, float pz, float qx, float qy, float qz, float qw, float scale);
+        [DllImport("SPTVRXrFrameWatch")] private static extern IntPtr XrAlt_GetRenderEventFunc();
+        [DllImport("SPTVRXrFrameWatch")] private static extern void XrAlt_Forget();
 
         // The totals the watcher keeps, in its order (XrFrameWatch.cpp, enum Stat)
         public enum Stat
@@ -27,6 +30,7 @@ namespace TarkovVR.Source.XR
             Acquires, Releases, SwapchainsTaken,
             WaitFrameMs, WaitFrameMax, BeginFrameMs, BeginFrameMax, WaitImageMs, WaitImageMax,
             EndFrameMs, EndFrameMax, AcquireMs, View0ArraySlice, View1ArraySlice, WaitFrames, BeginFrames,
+            AltFrames, AltKept, AltRestored, AltPosesFixed, AltNoImage, AltNoCopyYet, AltCopyFailed,
             Count
         }
 
@@ -73,6 +77,30 @@ namespace TarkovVR.Source.XR
         {
             if (Loaded)
                 XrWatch_DescribeNext(frames);
+        }
+
+        // Alternate eyes, a frame the game draws one eye (0 left, 1 right): the rig's world pose for it, then the render event that
+        // names the eye, issued before the frame's cameras render (so it reaches the render thread before Unity hands the eye images
+        // back). The watcher then gives the eye left out its last drawing and the pose it was drawn with.
+        public static void MarkOneEyeFrame(int eye, int slot, UnityEngine.Transform rig)
+        {
+            if (!Loaded)
+                return;
+            UnityEngine.Vector3 position = rig != null ? rig.position : UnityEngine.Vector3.zero;
+            UnityEngine.Quaternion rotation = rig != null ? rig.rotation : UnityEngine.Quaternion.identity;
+            float scale = rig != null ? rig.lossyScale.x : 1f;
+            XrAlt_SetRig(slot, position.x, position.y, position.z, rotation.x, rotation.y, rotation.z, rotation.w, scale);
+            if (renderEventFunc == IntPtr.Zero)
+                renderEventFunc = XrAlt_GetRenderEventFunc();
+            UnityEngine.GL.IssuePluginEvent(renderEventFunc, unchecked((int)0x5A000000) | (eye << 8) | (slot & 0xFF));
+        }
+        private static IntPtr renderEventFunc;
+
+        // Leaving alternate eyes: the copies kept are dropped, the next start is clean
+        public static void ForgetEyes()
+        {
+            if (Loaded)
+                XrAlt_Forget();
         }
 
         public static string TakeDetail()
