@@ -189,6 +189,10 @@ namespace TarkovVR.Source.Weapons
             string family = AnimationFamily(firearmController);
             if (slideBones.ContainsKey(family) || handleHolds.ContainsKey(family))
                 return true;
+            // A handle on the bolt carrier that only the gun hand's clips rack, its slot for an add-on handle empty (AK-50: headset, the draw
+            // still chambered). The hand takes the carrier's bone; a bolt-action's is the bolt, which the hand doesn't work.
+            if (gunHandHandleHolds.ContainsKey(family) && !weapon.BoltAction)
+                return true;
             foreach (Slot slot in weapon.AllSlots)
             {
                 if (slot.ID == EWeaponModType.mod_charge.ToString() && slot.ContainedItem != null)

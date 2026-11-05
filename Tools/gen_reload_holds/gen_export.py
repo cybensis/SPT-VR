@@ -145,8 +145,9 @@ for f in out['slides']:
 # The off hand on an AR-style T handle the gun's own clips never show it on: the Spear's racks its side handle (fingertips 7 cm and more
 # off the T, headset: "locks to a position but it's not correct"), the Mk47's only with the right. Their handle bone sits in the gun like
 # the M4's (0 deg apart) and the M4's fingertips land on either T as on its own (thumb 0.3-0.8 cm, index 0), so the M4's grip, moved
-# so the two handles' back ends line up. The travel stays the gun's own.
-T_HANDLE_FROM_M4=('spear','mk47')
+# so the two handles' back ends line up. The travel stays the gun's own. The MCX .300 BLK (mcx_4) too: its own left grip doesn't make it
+# out of gen_holds' checks (headset: no grab pose), its bone sits like the M4's (0 deg, 0.9 cm higher), M4 thumb 1.0 cm off its T, index 0.
+T_HANDLE_FROM_M4=('spear','mk47','mcx_4')
 def handleBack(family):
     folder=famFolder.get(family)
     gun=next((g for g in guns if g['folder']==folder),None)
