@@ -31,8 +31,12 @@ namespace TarkovVR.Source.Misc
         private static Camera headset;
         private static Light sun;
         private static readonly RenderTexture[] eyeMaps = new RenderTexture[2];
-        private static readonly CommandBuffer[] copyBuffers = new CommandBuffer[2];
-        private static int eyePass;                    // eye passes seen in the capture frame
+        private static RenderTexture latestMap;        // the sun's map, copied by the light's buffer each time it's drawn
+        private static CommandBuffer copyBuffer;       // on the sun for the whole capture frame
+        private static CommandBuffer keepBuffer;       // after each eye: latest -> that eye's map, latest cleared
+        private static int eyePass;                    // eye passes seen in the capture frame (pre-render)
+        private static int eyesDone;                   // eye passes finished (post-render)
+        private static readonly StringBuilder sequence = new StringBuilder();
         private static Matrix4x4 leftCulling;
 
         private void Awake() { instance = this; }
@@ -81,25 +85,30 @@ namespace TarkovVR.Source.Misc
                 + $"custom {sun.shadowCustomResolution}, screen-space shadows shader {ScreenSpaceShadowShader()}, eye separation {headset.stereoSeparation * 100f:0.0} cm");
             Camera.onPreCull += OnPreCull;
             Camera.onPreRender += OnPreRender;
+            Camera.onPostRender += OnPostRender;
             try
             {
                 foreach (bool variant in new[] { false, true })
                 {
                     oneView = variant;
                     Prepare();
-                    yield return null;                         // the next frame is the capture
+                    yield return null;                         // the next frame is the capture (its Update: before any camera)
                     captureFrame = Time.frameCount;
                     eyePass = 0;
+                    eyesDone = 0;
+                    sequence.Length = 0;
+                    sun.AddCommandBuffer(LightEvent.AfterShadowMap, copyBuffer);
                     yield return new WaitForEndOfFrame();
-                    int eyes = eyePass;
+                    int eyes = eyesDone;
                     Finish();
                     yield return null;
                     var left = AsyncGPUReadback.Request(eyeMaps[0]);
                     var right = AsyncGPUReadback.Request(eyeMaps[1]);
                     while (!left.done || !right.done) yield return null;
                     string label = variant ? "one view (both eyes culled through the left eye's matrix)" : "as drawn (each eye culled from its own view)";
+                    report.AppendLine($"[ShadowShare]   {label}: headset camera events {sequence}");
                     if (left.hasError || right.hasError || eyes < 2)
-                        report.AppendLine($"[ShadowShare]   {label}: no capture (eye passes {eyes}, readback errors {left.hasError}/{right.hasError})");
+                        report.AppendLine($"[ShadowShare]   {label}: no capture (eye passes finished {eyes}, readback errors {left.hasError}/{right.hasError})");
                     else
                         report.Append(Compare(label, left.GetData<float>(), right.GetData<float>()));
                 }
@@ -108,6 +117,7 @@ namespace TarkovVR.Source.Misc
             {
                 Camera.onPreCull -= OnPreCull;
                 Camera.onPreRender -= OnPreRender;
+                Camera.onPostRender -= OnPostRender;
                 Finish();
                 if (headset != null) headset.ResetCullingMatrix();
                 running = false;
@@ -124,55 +134,90 @@ namespace TarkovVR.Source.Misc
         }
 
         //------------------------------------------------------------------------------------------------------------
+        private static RenderTexture MakeMap(string name)
+        {
+            var map = new RenderTexture(captureSize, captureSize, 0, RenderTextureFormat.RFloat) { name = "SPT-VR ShadowShare " + name };
+            map.Create();
+            return map;
+        }
+
+        private static void Clear(RenderTexture map)
+        {
+            RenderTexture previous = RenderTexture.active;
+            RenderTexture.active = map;
+            GL.Clear(false, true, new Color(-1f, 0f, 0f, 0f));   // -1 = not written
+            RenderTexture.active = previous;
+        }
+
+        // One copy buffer on the sun for the whole frame (the first run swapped one buffer per eye in pre-render and neither eye's
+        // map got written: Unity takes a light's buffers before that). It copies into latestMap each time the map is drawn; after
+        // each eye (post-render, in order on the GPU) latestMap goes into that eye's map and is cleared, so an eye that drew no
+        // shadow map of its own shows as not written instead of as a copy of the other's.
         private static void Prepare()
         {
             for (int eye = 0; eye < 2; eye++)
             {
-                if (eyeMaps[eye] == null)
-                {
-                    eyeMaps[eye] = new RenderTexture(captureSize, captureSize, 0, RenderTextureFormat.RFloat) { name = "SPT-VR ShadowShare eye " + eye };
-                    eyeMaps[eye].Create();
-                }
-                RenderTexture previous = RenderTexture.active;
-                RenderTexture.active = eyeMaps[eye];
-                GL.Clear(false, true, new Color(-1f, 0f, 0f, 0f));   // -1 = not written
-                RenderTexture.active = previous;
-                if (copyBuffers[eye] == null)
-                {
-                    copyBuffers[eye] = new CommandBuffer { name = "SPT-VR ShadowShare copy eye " + eye };
-                    copyBuffers[eye].SetShadowSamplingMode(BuiltinRenderTextureType.CurrentActive, ShadowSamplingMode.RawDepth);
-                    copyBuffers[eye].Blit(BuiltinRenderTextureType.CurrentActive, eyeMaps[eye]);
-                }
+                if (eyeMaps[eye] == null) eyeMaps[eye] = MakeMap("eye " + eye);
+                Clear(eyeMaps[eye]);
             }
+            if (latestMap == null) latestMap = MakeMap("latest");
+            Clear(latestMap);
+            if (copyBuffer == null)
+            {
+                copyBuffer = new CommandBuffer { name = "SPT-VR ShadowShare copy" };
+                copyBuffer.SetShadowSamplingMode(BuiltinRenderTextureType.CurrentActive, ShadowSamplingMode.RawDepth);
+                copyBuffer.Blit(BuiltinRenderTextureType.CurrentActive, latestMap);
+            }
+            if (keepBuffer == null) keepBuffer = new CommandBuffer { name = "SPT-VR ShadowShare keep" };
         }
 
         private static void Finish()
         {
             captureFrame = -1;
-            if (sun != null)
-                for (int eye = 0; eye < 2; eye++)
-                    if (copyBuffers[eye] != null) sun.RemoveCommandBuffer(LightEvent.AfterShadowMap, copyBuffers[eye]);
+            if (sun != null && copyBuffer != null) sun.RemoveCommandBuffer(LightEvent.AfterShadowMap, copyBuffer);
             if (headset != null) headset.ResetCullingMatrix();
         }
+
+        private static string EyeName(Camera camera) => camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Left ? "L"
+            : camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? "R" : "mono";
 
         // Before each eye's cull: the left eye's culling matrix for both (one-view variant)
         private static void OnPreCull(Camera camera)
         {
-            if (camera != headset || Time.frameCount != captureFrame || !oneView)
+            if (camera != headset || Time.frameCount != captureFrame)
+                return;
+            sequence.Append("cull ").Append(EyeName(camera)).Append(", ");
+            if (!oneView)
                 return;
             if (eyePass == 0)
                 leftCulling = camera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left) * camera.GetStereoViewMatrix(Camera.StereoscopicEye.Left);
             camera.cullingMatrix = leftCulling;
         }
 
-        // Before each eye's rendering (its shadow map comes after): that eye's copy goes on the sun
         private static void OnPreRender(Camera camera)
         {
-            if (camera != headset || Time.frameCount != captureFrame || sun == null)
+            if (camera != headset || Time.frameCount != captureFrame)
                 return;
-            int eye = eyePass++;
-            if (eye > 0 && copyBuffers[eye - 1] != null) sun.RemoveCommandBuffer(LightEvent.AfterShadowMap, copyBuffers[eye - 1]);
-            if (eye < 2) sun.AddCommandBuffer(LightEvent.AfterShadowMap, copyBuffers[eye]);
+            eyePass++;
+            sequence.Append("render ").Append(EyeName(camera)).Append(", ");
+        }
+
+        // After each eye: its shadow map (the latest copy) kept
+        private static void OnPostRender(Camera camera)
+        {
+            if (camera != headset || Time.frameCount != captureFrame)
+                return;
+            int eye = eyesDone++;
+            sequence.Append("done ").Append(EyeName(camera)).Append(eye < 2 ? "" : " (ignored)").Append(", ");
+            if (eye >= 2 || keepBuffer == null)
+                return;
+            RenderTexture previous = RenderTexture.active;
+            keepBuffer.Clear();
+            keepBuffer.CopyTexture(latestMap, eyeMaps[eye]);
+            keepBuffer.SetRenderTarget(latestMap);
+            keepBuffer.ClearRenderTarget(false, true, new Color(-1f, 0f, 0f, 0f));
+            UnityEngine.Graphics.ExecuteCommandBuffer(keepBuffer);
+            RenderTexture.active = previous;
         }
 
         //------------------------------------------------------------------------------------------------------------
@@ -180,18 +225,26 @@ namespace TarkovVR.Source.Misc
         {
             int size = captureSize, half = size / 2;
             var sb = new StringBuilder();
-            long written = 0, notWritten = 0, different = 0;
+            long written = 0, notWritten = 0, different = 0, leftWritten = 0, rightWritten = 0;
             double maxDiff = 0;
             for (int i = 0; i < left.Length; i++)
             {
                 float a = left[i], b = right[i];
+                if (a >= 0f) leftWritten++;
+                if (b >= 0f) rightWritten++;
                 if (a < 0f || b < 0f) { notWritten++; continue; }
                 written++;
                 double d = Math.Abs(a - b);
                 if (d > sameDepth) different++;
                 if (d > maxDiff) maxDiff = d;
             }
-            sb.AppendLine($"[ShadowShare]   {label}: {(notWritten == left.Length ? "NOT WRITTEN (copy didn't run)" : different == 0 ? "IDENTICAL" : "different")} - "
+            sb.AppendLine($"[ShadowShare]   {label}: maps written: left {leftWritten * 100.0 / left.Length:0.#}%, right {rightWritten * 100.0 / left.Length:0.#}%");
+            if (leftWritten == 0 || rightWritten == 0)
+            {
+                sb.AppendLine($"[ShadowShare]   {label}: {(leftWritten == 0 && rightWritten == 0 ? "neither eye's map was copied" : "only one eye's map was copied")} - nothing to compare");
+                return sb.ToString();
+            }
+            sb.AppendLine($"[ShadowShare]   {label}: {(different == 0 ? "IDENTICAL" : "different")} - "
                 + $"{different * 100.0 / Math.Max(1, written):0.000}% of {written} texels differ, largest raw-depth difference {maxDiff:0.000000}"
                 + (notWritten > 0 ? $", {notWritten} texels not written" : ""));
             // Each quarter of the map (the cascades sit 2 x 2): how far the right eye's is shifted against the left's
@@ -218,7 +271,10 @@ namespace TarkovVR.Source.Misc
                         if (dx == 0 && dy == 0) atZero = mean;
                         if (mean < best) { best = mean; bestX = dx; bestY = dy; }
                     }
-                sb.AppendLine($"[ShadowShare]     {names[quarter],-12}: mean difference unshifted {atZero:0.0000000}, best match shifted ({bestX},{bestY}) texels of {size} at {best:0.0000000}");
+                if (best == double.MaxValue)
+                    sb.AppendLine($"[ShadowShare]     {names[quarter],-12}: not written in both");
+                else
+                    sb.AppendLine($"[ShadowShare]     {names[quarter],-12}: mean difference unshifted {atZero:0.0000000}, best match shifted ({bestX},{bestY}) texels of {size} at {best:0.0000000}");
             }
             return sb.ToString();
         }

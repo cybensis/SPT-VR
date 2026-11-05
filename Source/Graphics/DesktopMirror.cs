@@ -59,6 +59,13 @@ namespace TarkovVR.Source.Graphics
         private bool loggedEndOfFrameDraw;
         private Camera windowCamera;
 
+        // Diagnostic for the window flipping on its own (2026-11-05): the camera that rendered just before the window camera and what
+        // is bound when the window is drawn, logged each time that changes (the first 16 changes)
+        public static bool logFrameChanges = true;
+        private static string lastCameraBefore;
+        private string lastSignature;
+        private int signatureLogs;
+
         // Where each eye's lens mask is, over its image (0..1 both ways, rows up from the bottom of the view)
         private sealed class LensMask
         {
@@ -94,6 +101,8 @@ namespace TarkovVR.Source.Graphics
             windowCamera.allowHDR = false;
             windowCamera.allowMSAA = false;
             windowCamera.renderingPath = RenderingPath.Forward;
+            if (logFrameChanges)
+                Camera.onPostRender += NoteCamera;
             Plugin.MyLog.LogInfo($"[DesktopMirror] window camera made (enabled {windowCamera.enabled}, active {cameraObject.activeInHierarchy}, depth {windowCamera.depth:0}, on '{name}')");
         }
 
@@ -105,8 +114,30 @@ namespace TarkovVR.Source.Graphics
                 cameraEverRendered = true;
                 Plugin.MyLog.LogInfo($"[DesktopMirror] window camera renders (frame {Time.frameCount})");
             }
+            if (logFrameChanges && signatureLogs < 16)
+            {
+                RenderTexture active = RenderTexture.active;
+                RenderTexture target = windowCamera != null ? windowCamera.activeTexture : null;
+                string signature = $"after '{lastCameraBefore ?? "?"}', bound {(active != null ? Digitless(active.name) : "the window")}, "
+                    + $"window camera's target {(target != null ? Digitless(target.name) : "the window")}";
+                if (signature != lastSignature)
+                {
+                    lastSignature = signature;
+                    signatureLogs++;
+                    Plugin.MyLog.LogInfo($"[DesktopMirror] frame {Time.frameCount}: window drawn {signature}");
+                }
+            }
             cameraFailure = Guarded(fromCamera: true);
         }
+
+        private static void NoteCamera(Camera camera)
+        {
+            if (camera != null && camera.name != "VRDesktopMirrorCamera")
+                lastCameraBefore = camera.name + (camera.stereoEnabled ? " " + camera.stereoActiveEye : "");
+        }
+
+        // Swapchain / temporary texture numbers change every frame
+        private static string Digitless(string name) => System.Text.RegularExpressions.Regex.Replace(name ?? "", @"\d+", "#");
 
         // A frame the camera didn't draw: drawn now, at the very end (over the overlays), or Unity's mirror
         private IEnumerator Start()
