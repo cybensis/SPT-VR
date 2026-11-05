@@ -47,6 +47,7 @@ namespace TarkovVR.Patches.Core.VR
             uiCam.renderingPath = RenderingPath.Forward;
             uiCam.allowHDR = false;
             uiCam.allowMSAA = false;
+            uiCam.useOcclusionCulling = false;   // the UI is drawn over the world: baked occluders must not hide it (and the query costs)
         }
 
         // just experimental stuff used for flipping camera when using forward rendering with MSAA

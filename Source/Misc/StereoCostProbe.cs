@@ -36,13 +36,15 @@ namespace TarkovVR.Source.Misc
         public static float segmentSeconds = 6f;      // per mode per cycle
         public static float settleSeconds = 1.5f;     // discarded after every switch
         public static bool shadowStep = true;         // a third step each cycle: both eyes with every shadow off (QualitySettings.shadows)
+        public static bool occlusionStep = true;      // a fourth: both eyes with Unity's occlusion culling on (off in VR; eyes may flash during it)
 
         private static StereoCostProbe instance;
         private void Awake() { instance = this; mainThreadId = GetCurrentThreadId(); }
 
-        // NoShadows = both eyes, shadows off; Scripts = both eyes with every live script timed (one segment at the end)
-        private enum Mode { Both = 0, LeftOnly = 1, NoShadows = 2, Scripts = 3 }
-        private const int ModeCount = 4;
+        // NoShadows = both eyes, shadows off; Occlusion = both eyes, Unity's occlusion culling on; Scripts = both eyes with every live
+        // script timed (one segment at the end)
+        private enum Mode { Both = 0, LeftOnly = 1, NoShadows = 2, Occlusion = 3, Scripts = 4 }
+        private const int ModeCount = 5;
         private static bool running;
         private static Mode mode;
         private static bool sampling;                 // false during the settle window
@@ -50,9 +52,11 @@ namespace TarkovVR.Source.Misc
         //------------------------------------------------------------------------------------------------------------
         // Event ids (shared with the native helper: 1 = frame start, 99 = frame end, 250 = release)
         private const int EvFrameStart = 1, EvSettle = 2, EvSampleBoth = 3, EvSampleLeft = 4, EvRenderStart = 5, EvVrPreCull = 6, EvVrPreRender = 7,
-                          EvSampleNoShadows = 8, EvSampleScripts = 20, EvFrameEnd = 99, EvDiscard = 251, EvHarvest = 252;
-        private static int ModeTag(Mode m) => m == Mode.Both ? EvSampleBoth : m == Mode.LeftOnly ? EvSampleLeft : m == Mode.NoShadows ? EvSampleNoShadows : EvSampleScripts;
-        private static int TagMode(int tag) => tag == EvSampleBoth ? 0 : tag == EvSampleLeft ? 1 : tag == EvSampleNoShadows ? 2 : tag == EvSampleScripts ? 3 : -1;
+                          EvSampleNoShadows = 8, EvSampleScripts = 20, EvSampleOcclusion = 21, EvFrameEnd = 99, EvDiscard = 251, EvHarvest = 252;
+        private static int ModeTag(Mode m) => m == Mode.Both ? EvSampleBoth : m == Mode.LeftOnly ? EvSampleLeft : m == Mode.NoShadows ? EvSampleNoShadows
+                                             : m == Mode.Occlusion ? EvSampleOcclusion : EvSampleScripts;
+        private static int TagMode(int tag) => tag == EvSampleBoth ? 0 : tag == EvSampleLeft ? 1 : tag == EvSampleNoShadows ? 2 : tag == EvSampleOcclusion ? 3
+                                             : tag == EvSampleScripts ? 4 : -1;
         private const int EvBeforeGBuffer = 10, EvAfterGBuffer = 11, EvBeforeLighting = 12, EvAfterLighting = 13,
                           EvAfterEverything = 14, EvBeforeAlpha = 15, EvAfterAlpha = 16, EvBeforeFx = 17, EvAfterFx = 18,
                           EvAfterOpaque = 19;
@@ -262,13 +266,20 @@ namespace TarkovVR.Source.Misc
             for (int m = 0; m < ModeCount; m++) samples[m] = new Samples();
             StereoTargetEyeMask original = cam.stereoTargetEye;
             ShadowQuality originalShadows = QualitySettings.shadows;
+            bool originalOcclusion = cam.useOcclusionCulling;
             bool gpu = TryNative();
             eventPtr = gpu ? GpuProbe_GetRenderEventFunc() : Marshal.GetFunctionPointerForDelegate(managedEvent);
             Attach(cam);
             var plan = new List<Mode>();
-            for (int c = 0; c < cycles; c++) { plan.Add(Mode.Both); plan.Add(Mode.LeftOnly); if (shadowStep) plan.Add(Mode.NoShadows); }
+            for (int c = 0; c < cycles; c++)
+            {
+                plan.Add(Mode.Both); plan.Add(Mode.LeftOnly);
+                if (shadowStep) plan.Add(Mode.NoShadows);
+                if (occlusionStep) plan.Add(Mode.Occlusion);
+            }
             if (scriptSegment && mainBreakdown) plan.Add(Mode.Scripts);
-            Plugin.MyLog.LogWarning($"[StereoCost] start on '{cam.name}': {cycles} x (both eyes, left eye only{(shadowStep ? ", both eyes with shadows off" : "")}; {segmentSeconds}s each)"
+            Plugin.MyLog.LogWarning($"[StereoCost] start on '{cam.name}': {cycles} x (both eyes, left eye only{(shadowStep ? ", both eyes with shadows off" : "")}"
+                                    + $"{(occlusionStep ? ", both eyes with occlusion culling on" : "")}; {segmentSeconds}s each)"
                                     + $"{(plan.Contains(Mode.Scripts) ? " + one both-eyes segment with every script timed (a freeze of a few seconds going in and out)" : "")}, "
                                     + $"{settleSeconds}s settle after each switch, GPU timing {(gpu ? "ON" : "OFF")}, sun lights watched: {lightAttached.Count / lightEvents.Length}, "
                                     + $"main-thread items timed: {mainItems.Count}, player-loop steps timed: {loopSteps.Count}. {ShadowLightCount()}. "
@@ -282,6 +293,8 @@ namespace TarkovVR.Source.Misc
                     if (cam == null || !cam.isActiveAndEnabled) break;
                     cam.stereoTargetEye = mode == Mode.LeftOnly ? StereoTargetEyeMask.Left : StereoTargetEyeMask.Both;
                     QualitySettings.shadows = mode == Mode.NoShadows ? ShadowQuality.Disable : originalShadows;
+                    TarkovVR.Patches.Visuals.Rendering.vrOcclusionCulling = mode == Mode.Occlusion;   // the per-eye reset there keeps it
+                    cam.useOcclusionCulling = mode == Mode.Occlusion || originalOcclusion;
                     if (mode == Mode.Scripts) PatchAllScripts();   // the freeze lands in the settle window
                     sampling = false;
                     prevSampled = false;
@@ -306,6 +319,8 @@ namespace TarkovVR.Source.Misc
             {
                 if (cam != null) cam.stereoTargetEye = original;   // always hand both eyes back
                 QualitySettings.shadows = originalShadows;         // and the shadows
+                TarkovVR.Patches.Visuals.Rendering.vrOcclusionCulling = false;
+                if (cam != null) cam.useOcclusionCulling = originalOcclusion;
                 UnpatchAllScripts();
                 Detach(cam);
                 sampling = false;
@@ -644,17 +659,18 @@ namespace TarkovVR.Source.Misc
             var a = l.ToArray(); Array.Sort(a);
             return a.Length % 2 == 1 ? a[a.Length / 2] : 0.5f * (a[a.Length / 2 - 1] + a[a.Length / 2]);
         }
-        // Columns: both eyes, left only, both - left, both eyes shadows off, both - shadows off
+        // Columns: both eyes, left only, both - left, shadows off, both - shadows off, occlusion culling on, both - occlusion on
         private static void Row(StringBuilder sb, string label, Func<Samples, List<float>> pick)
         {
-            List<float> both = pick(samples[0]), left = pick(samples[1]), noShadows = pick(samples[2]);
-            float b = Median(both), l = Median(left), n = Median(noShadows);
-            sb.AppendLine($"[StereoCost]   {label,-46} {Fmt(b)} {Fmt(l)} {Delta(b, l)}  {Fmt(n)} {Delta(b, n)}   (n {both.Count}/{left.Count}/{noShadows.Count})");
+            List<float> both = pick(samples[0]), left = pick(samples[1]), noShadows = pick(samples[2]), occlusion = pick(samples[3]);
+            float b = Median(both), l = Median(left), n = Median(noShadows), o = Median(occlusion);
+            sb.AppendLine($"[StereoCost]   {label,-46} {Fmt(b)} {Fmt(l)} {Delta(b, l)}  {Fmt(n)} {Delta(b, n)}  {Fmt(o)} {Delta(b, o)}   "
+                + $"(n {both.Count}/{left.Count}/{noShadows.Count}/{occlusion.Count})");
         }
         private static void Value(StringBuilder sb, string label, Func<Samples, double> pick)
         {
-            double b = pick(samples[0]), l = pick(samples[1]), n = pick(samples[2]);
-            sb.AppendLine($"[StereoCost]   {label,-46} {Fmt((float)b)} {Fmt((float)l)} {Delta(b, l)}  {Fmt((float)n)} {Delta(b, n)}");
+            double b = pick(samples[0]), l = pick(samples[1]), n = pick(samples[2]), o = pick(samples[3]);
+            sb.AppendLine($"[StereoCost]   {label,-46} {Fmt((float)b)} {Fmt((float)l)} {Delta(b, l)}  {Fmt((float)n)} {Delta(b, n)}  {Fmt((float)o)} {Delta(b, o)}");
         }
         private static string Delta(double a, double b) => double.IsNaN(a) || double.IsNaN(b) ? "      -" : (a - b).ToString("+0.00;-0.00").PadLeft(7);
         private static string Fmt(float v) => float.IsNaN(v) ? "     -" : v.ToString("0.00").PadLeft(6);
@@ -699,9 +715,9 @@ namespace TarkovVR.Source.Misc
 
         private static void Report(bool gpu)
         {
-            var b = samples[0]; var l = samples[1]; var n = samples[2];
+            var b = samples[0]; var l = samples[1]; var n = samples[2]; var o = samples[3];
             var sb = new StringBuilder();
-            sb.AppendLine("[StereoCost] ===== result (medians, ms) =====     both   left both-left  no-shad both-noshad");
+            sb.AppendLine("[StereoCost] ===== result (medians, ms) =====     both   left both-left  no-shad both-noshad  occl-on both-occl");
             Row(sb, "frame interval (Unity)", s => s.frameInterval);
             if (!OpenXRBootstrap.Active)
             {
@@ -742,7 +758,7 @@ namespace TarkovVR.Source.Misc
             {
                 sb.AppendLine("[StereoCost]   " + sourceNames[src]);
                 for (int r = 0; r < rowNames.Length; r++)
-                    if (b.rows[src, r].Count + l.rows[src, r].Count + n.rows[src, r].Count > 0) Row(sb, rowNames[r], s => s.rows[src, r]);
+                    if (b.rows[src, r].Count + l.rows[src, r].Count + n.rows[src, r].Count + o.rows[src, r].Count > 0) Row(sb, rowNames[r], s => s.rows[src, r]);
             }
             // Which one holds the frame: the busiest of main thread, render thread and GPU, both eyes
             float mainBusy = Median(b.mainFrameBusy), renderBusy = Median(b.rows[SrcBusy, 0]), gpuFrame = Median(b.rows[SrcGpu, 0]), frame = Median(b.frameInterval);
@@ -752,8 +768,12 @@ namespace TarkovVR.Source.Misc
                 sb.AppendLine($"[StereoCost]   >>> shadows off, both eyes: frame {Fmt(Median(n.frameInterval))} ms, main thread busy {Fmt(Median(n.mainFrameBusy))}, "
                     + $"render thread busy {Fmt(Median(n.rows[SrcBusy, 0]))}, GPU {Fmt(Median(n.rows[SrcGpu, 0]))} = shadows cost the main thread "
                     + $"{Delta(mainBusy, Median(n.mainFrameBusy)).Trim()}, the render thread {Delta(renderBusy, Median(n.rows[SrcBusy, 0])).Trim()}, the GPU {Delta(gpuFrame, Median(n.rows[SrcGpu, 0])).Trim()} ms a frame");
-            sb.AppendLine($"[StereoCost]   frames both/left/no-shadows: {b.frames}/{l.frames}/{n.frames}; render-thread frames {b.rtFrames}/{l.rtFrames}/{n.rtFrames}; "
-                + $"with GPU times {b.gpuFrames}/{l.gpuFrames}/{n.gpuFrames}; with busy times {b.busyFrames}/{l.busyFrames}/{n.busyFrames} (TSC {tscPerMs / 1000:0.###} MHz)");
+            if (o.frames > 0)
+                sb.AppendLine($"[StereoCost]   >>> occlusion culling on, both eyes: frame {Fmt(Median(o.frameInterval))} ms, main thread busy {Fmt(Median(o.mainFrameBusy))}, "
+                    + $"render thread busy {Fmt(Median(o.rows[SrcBusy, 0]))}, GPU {Fmt(Median(o.rows[SrcGpu, 0]))} = leaving it off costs the main thread "
+                    + $"{Delta(mainBusy, Median(o.mainFrameBusy)).Trim()}, the render thread {Delta(renderBusy, Median(o.rows[SrcBusy, 0])).Trim()}, the GPU {Delta(gpuFrame, Median(o.rows[SrcGpu, 0])).Trim()} ms a frame");
+            sb.AppendLine($"[StereoCost]   frames both/left/no-shadows/occlusion: {b.frames}/{l.frames}/{n.frames}/{o.frames}; render-thread frames {b.rtFrames}/{l.rtFrames}/{n.rtFrames}/{o.rtFrames}; "
+                + $"with GPU times {b.gpuFrames}/{l.gpuFrames}/{n.gpuFrames}/{o.gpuFrames}; with busy times {b.busyFrames}/{l.busyFrames}/{n.busyFrames}/{o.busyFrames} (TSC {tscPerMs / 1000:0.###} MHz)");
             if (gpu)
             {
                 var st = new int[6];

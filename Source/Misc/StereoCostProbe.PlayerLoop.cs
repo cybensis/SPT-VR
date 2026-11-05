@@ -187,7 +187,7 @@ namespace TarkovVR.Source.Misc
         }
 
         //------------------------------------------------------------------------------------------------------------
-        private static readonly Mode[] loopModes = { Mode.Both, Mode.LeftOnly, Mode.NoShadows };
+        private static readonly Mode[] loopModes = { Mode.Both, Mode.LeftOnly, Mode.NoShadows, Mode.Occlusion };
 
         private static void ReportLoop(StringBuilder sb)
         {
@@ -195,7 +195,7 @@ namespace TarkovVR.Source.Misc
             if (loopSteps.Count > 0)
             {
                 sb.AppendLine($"[StereoCost] ===== MAIN THREAD step by step (Unity's player loop, {loopSteps.Count} steps): mean ms a frame, wall / BUSY =====");
-                sb.AppendLine("[StereoCost]   step                                                     both wall  busy |  left wall  busy | no shadows wall busy");
+                sb.AppendLine("[StereoCost]   step                                                     both wall  busy |  left wall  busy | no-shad wall  busy | occl-on wall busy");
                 var order = new List<int>();
                 for (int k = 0; k < loopSteps.Count; k++) order.Add(k);
                 order.Sort((a, b) => loopSteps[b].wall[0].CompareTo(loopSteps[a].wall[0]));
@@ -225,7 +225,7 @@ namespace TarkovVR.Source.Misc
             if (otherCameras.Count > 0)
             {
                 sb.AppendLine("[StereoCost] ===== MAIN THREAD, cameras other than the headset's (pre-cull -> post-render): mean ms a frame, wall / BUSY =====");
-                sb.AppendLine("[StereoCost]   camera                                                   both wall  busy |  left wall  busy | no shadows wall busy | passes a frame");
+                sb.AppendLine("[StereoCost]   camera                                                   both wall  busy |  left wall  busy | no-shad wall  busy | occl-on wall busy | passes a frame");
                 var cams = new List<OtherCamera>(otherCameras.Values);
                 cams.Sort((a, b) => b.wall[0].CompareTo(a.wall[0]));
                 double[] totalWall = new double[ModeCount], totalBusy = new double[ModeCount];
