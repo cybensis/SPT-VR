@@ -179,6 +179,11 @@ for f,source in ROCK_IN_FROM.items():
 out['boltBones']=extras['boltBones']
 out['handleBones']=extras.get('handleBones',{})
 out['rockIn'].update(extras.get('rockIn',{}))
+# gen_release.py: who presses each gun's release in its own mag_out clip. Not where a rock-in or thumb catch already says (the off thumb)
+release=json.load(open('release.json')) if os.path.exists('release.json') else {}
+out['releasePress']={f:dict(hand=p['hand'],finger=p['finger'],joints=p['joints']) for f,p in sorted(release.items())
+                     if f not in out['rockIn'] and f not in R['thumbCatches']}
+print('release presses:',{f:(p['hand'],p['finger']) for f,p in out['releasePress'].items()})
 out['sideHandles']={f:dict({k:v for k,v in h.items() if k!='clip'},travel=round(h['travel']*0.08/0.101,3),sliderLag=round(h['sliderLag']*0.08/0.101,3)) for f,h in extras['sideHandles'].items()}
 print('bolts the handle moves:',out['boltBones'],'side handles:',{f:(h['travel'],h['sliderLag']) for f,h in out['sideHandles'].items()})
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's

@@ -61,7 +61,11 @@ namespace TarkovVR.Source.Weapons
         private static float releasePressTarget;
         private static float releasePressShown;
 
+        // The gun hand's finger on the button, its own state apart from the button parts: a press read off the gun's clip (the
+        // thumb on a pistol) poses it even where no insert clip moves the button (Glock)
+        private static FirearmController releaseFingerFor;
         private static Transform[] releaseFingerJoints;
+        private static Quaternion[] releaseFingerPressed;   // the joints with the button all the way in
         private static Quaternion[] releaseFingerAnimated;  // the animator's pose under ours
         private static Quaternion[] releaseFingerWritten;   // ours, last frame
         private static bool releaseFingerWriting;
@@ -91,6 +95,8 @@ namespace TarkovVR.Source.Weapons
             latchThumbTarget = 0f;
             if (releasePartsFor != VRGlobals.firearmController)
                 ForgetReleaseParts();
+            if (releaseFingerFor != VRGlobals.firearmController)
+                ForgetReleaseFinger();
             if (!magazineReleaseButton || !TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return;
             if (!(firearmController.CurrentOperation is FirearmController.Idling))
@@ -98,11 +104,22 @@ namespace TarkovVR.Source.Weapons
 
             // B, or the gun's magazine pulled out by hand without Manual Reload (that grab is the button press)
             bool pressedByFinger = releaseHeld || (HoldingGunMagazine && onRail && railPullingOut && !VRSettings.GetManualReloadOn());
-            // A paddle catch is the off hand's thumb, not the gun hand's finger
+            // A paddle catch is the off hand's thumb, not the gun hand's finger; other off-hand presses their clip's finger
             RockIn rockIn = RockInOf(firearmController);
             bool thumbPresses = OffHandPressesCatch(firearmController);
+            ReleasePress clipPress = ReleasePressOf(firearmController);
             latchThumbPose = HoldingPalmedMagazine && activePalmHold?.thumb != null ? activePalmHold.thumb : rockIn?.thumb ?? ThumbCatchOf(firearmController);
+            latchFinger = 0;
+            if (latchThumbPose == null && clipPress != null && clipPress.offHand)
+            {
+                latchThumbPose = clipPress.joints;
+                latchFinger = clipPress.finger;
+            }
             latchThumbTarget = pressedByFinger && thumbPresses ? 1f : 0f;
+            // The magazine pushes it in on the way up, not the finger; a hand off the gun (slung, support-held) can't
+            bool fingerPresses = pressedByFinger && releaseFinger && !thumbPresses && !ChestHang.Detached;
+            if (fingerPresses && EnsureReleaseFinger(firearmController, clipOnly: true))
+                releaseFingerTarget = 1f;
             float target = pressedByFinger ? 1f : 0f;
             bool inserting = HoldingMagazine && onRail && !railPullingOut;
             if (target <= 0f && !inserting)
@@ -118,17 +135,58 @@ namespace TarkovVR.Source.Weapons
                 target = Mathf.Max(target, pushedBy);
             }
             releasePressTarget = target;
-            // The magazine pushes it in on the way up, not the finger; a hand off the gun (slung, support-held) can't
-            releaseFingerTarget = pressedByFinger && releaseFinger && !thumbPresses && !ChestHang.Detached ? 1f : 0f;
+            // No press read off the clip: the index, as the parts' own mag-out measure has it
+            if (fingerPresses && EnsureReleaseFinger(firearmController, clipOnly: false))
+                releaseFingerTarget = 1f;
+        }
+
+        // The gun hand's finger for this gun's button: the clip's press (gen_release.py), else the index as MeasurePressFinger read
+        // it with the button parts (clipOnly: not yet, the parts aren't measured)
+        private static bool EnsureReleaseFinger(FirearmController firearmController, bool clipOnly)
+        {
+            if (releaseFingerFor == firearmController && releaseFingerJoints != null)
+                return true;
+            Transform[] joints = null;
+            Quaternion[] pressed = null;
+            ReleasePress clipPress = ReleasePressOf(firearmController);
+            if (clipPress != null && !clipPress.offHand)
+            {
+                joints = GunHandFinger(clipPress.finger + 1);
+                pressed = new Quaternion[clipPress.joints.Length];
+                for (int joint = 0; joint < pressed.Length; joint++)
+                    pressed[joint] = Quaternion.Euler(clipPress.joints[joint]);
+            }
+            else if (!clipOnly && clipPress == null && releasePartsFor == firearmController && releaseMotion?.pressFingerRotations != null)
+            {
+                joints = GunHandIndexFinger(out _);
+                pressed = releaseMotion.pressFingerRotations;
+            }
+            if (joints == null || pressed == null || joints.Length != pressed.Length)
+                return false;
+            releaseFingerFor = firearmController;
+            releaseFingerJoints = joints;
+            releaseFingerPressed = pressed;
+            releaseFingerAnimated = new Quaternion[joints.Length];
+            releaseFingerWritten = new Quaternion[joints.Length];
+            return true;
+        }
+
+        private static void ForgetReleaseFinger()
+        {
+            PutReleaseFingerBack();
+            releaseFingerFor = null;
+            releaseFingerJoints = null;
+            releaseFingerShown = 0f;
         }
 
         // Called from HandsInteractionController.LateUpdate: the animator has posed the button this frame
         public static void ApplyMagazineReleaseButton()
         {
+            if (releaseFingerFor != null && releaseFingerFor == VRGlobals.firearmController)
+                ApplyReleaseFinger();
             if (releaseParts == null || releasePartsFor == null || releasePartsFor != VRGlobals.firearmController)
                 return;
             releasePressShown = Mathf.MoveTowards(releasePressShown, releasePressTarget, Time.deltaTime / Mathf.Max(releaseButtonTime, 0.001f));
-            ApplyReleaseFinger();
             if (releasePressShown <= 0f)
             {
                 if (releasePartsPressed)
@@ -183,7 +241,7 @@ namespace TarkovVR.Source.Weapons
                 PutReleaseFingerBack();
                 return;
             }
-            Quaternion[] pressedRotations = releaseMotion.pressFingerRotations;
+            Quaternion[] pressedRotations = releaseFingerPressed;
             for (int index = 0; index < releaseFingerJoints.Length; index++)
             {
                 Transform joint = releaseFingerJoints[index];
@@ -219,13 +277,10 @@ namespace TarkovVR.Source.Weapons
         {
             if (releasePartsPressed)
                 PutReleasePartsBack();
-            PutReleaseFingerBack();
             releasePartsFor = null;
             releaseMotion = null;
             releaseParts = null;
             releasePressShown = 0f;
-            releaseFingerJoints = null;
-            releaseFingerShown = 0f;
         }
 
         // This gun's button parts, measured once per gun type
@@ -257,15 +312,26 @@ namespace TarkovVR.Source.Weapons
             releaseParts = parts;
             releasePartRestPositions = new Vector3[parts.Length];
             releasePartRestRotations = new Quaternion[parts.Length];
-
-            Transform[] fingerJoints = motion.pressFingerRotations != null ? GunHandIndexFinger(out _) : null;
-            if (fingerJoints != null && fingerJoints.Length == motion.pressFingerRotations.Length)
-            {
-                releaseFingerJoints = fingerJoints;
-                releaseFingerAnimated = new Quaternion[fingerJoints.Length];
-                releaseFingerWritten = new Quaternion[fingerJoints.Length];
-            }
             return true;
+        }
+
+        // The gun hand's finger by EFT's digit number (1 thumb .. 5 pinky), knuckle to tip, under the right arm IK's wrist bone
+        private static Transform[] GunHandFinger(int digit)
+        {
+            Transform palm = VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null && VRGlobals.ikManager.rightArmIk.solver != null
+                && VRGlobals.ikManager.rightArmIk.solver.bone3 != null ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null;
+            if (palm == null)
+                return null;
+            for (int index = 0; index < palm.childCount; index++)
+            {
+                Transform knuckle = palm.GetChild(index);
+                if (knuckle.name.IndexOf("Digit" + digit, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                if (knuckle.childCount == 0 || knuckle.GetChild(0).childCount == 0)
+                    return null;
+                return new[] { knuckle, knuckle.GetChild(0), knuckle.GetChild(0).GetChild(0) };
+            }
+            return null;
         }
 
         // The gun hand's index finger, knuckle to tip (EFT: Base HumanRDigit21..23 under the right palm, the right arm

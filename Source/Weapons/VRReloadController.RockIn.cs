@@ -33,6 +33,7 @@ namespace TarkovVR.Source.Weapons
         private static float latchThumbTarget;
         private static float latchThumbShown;
         private static Vector3[] latchThumbPose;
+        private static int latchFinger;                     // which of the off hand's fingers that pose is (0 thumb): an MDR's is the index
 
         // The off thumb works these guns' catch without the magazine rocking (an MP5's paddle): the thumb's joints on it, by animation set
         public static bool offHandThumbCatches = true;      // false = the gun hand's finger and button, like an M4
@@ -41,11 +42,32 @@ namespace TarkovVR.Source.Weapons
         // The off hand works these guns' catch though their clips don't put the thumb on it (the AUG's release behind the magazine)
         private static readonly HashSet<string> offHandCatchGuns = new HashSet<string> { "aug" };
 
-        // The off thumb presses this gun's catch, on the off controller's button, not the gun hand's finger
+        // Who presses each gun's release in its own mag_out clip (Tools/gen_reload_holds/gen_release.py): the hand, the finger, and
+        // that finger's joints on it. A gun with no clear press isn't listed and keeps the M4's: the gun hand's index.
+        private sealed class ReleasePress
+        {
+            public bool offHand;
+            public int finger;          // 0 thumb .. 4 pinky
+            public Vector3[] joints;
+        }
+        private static readonly Dictionary<string, ReleasePress> releasePresses = new Dictionary<string, ReleasePress>();
+        public static bool releasePressFromClips = true;    // false = the hand-picked lists above only
+
+        private static ReleasePress ReleasePressOf(FirearmController firearmController)
+        {
+            if (!releasePressFromClips || firearmController == null)
+                return null;
+            LoadRecordedGrips();
+            releasePresses.TryGetValue(AnimationFamily(firearmController), out ReleasePress press);
+            return press;
+        }
+
+        // The off hand presses this gun's catch, on the off controller's button, not the gun hand's finger
         private static bool ThumbWorksCatch(FirearmController firearmController)
         {
             return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null
-                || (offHandThumbCatches && firearmController != null && offHandCatchGuns.Contains(AnimationFamily(firearmController)));
+                || (offHandThumbCatches && firearmController != null && offHandCatchGuns.Contains(AnimationFamily(firearmController)))
+                || (offHandThumbCatches && ReleasePressOf(firearmController)?.offHand == true);
         }
 
         // These guns' catch answers either hand's button: the gun hand's, as on an M4, or the off controller's with that hand on the
@@ -155,9 +177,11 @@ namespace TarkovVR.Source.Weapons
         {
             if (latchThumbShown <= 0f || latchThumbPose == null)
                 return;
-            int jointCount = Mathf.Min(latchThumbPose.Length, palmBones.Length - 1);
+            // palmBones is the palm then three joints a finger, thumb first
+            int firstJoint = 1 + latchFinger * 3;
+            int jointCount = Mathf.Min(latchThumbPose.Length, palmBones.Length - firstJoint);
             for (int joint = 0; joint < jointCount; joint++)
-                palmBones[joint + 1].localRotation = Quaternion.Slerp(palmBones[joint + 1].localRotation, Quaternion.Euler(latchThumbPose[joint]), latchThumbShown);
+                palmBones[firstJoint + joint].localRotation = Quaternion.Slerp(palmBones[firstJoint + joint].localRotation, Quaternion.Euler(latchThumbPose[joint]), latchThumbShown);
         }
     }
 }

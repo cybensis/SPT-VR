@@ -130,6 +130,14 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, List<SavedBoltBone>> boltBones;
             public Dictionary<string, SavedSideHandle> sideHandles;
             public Dictionary<string, string> handleBones;
+            public Dictionary<string, SavedReleasePress> releasePress;
+        }
+
+        public sealed class SavedReleasePress
+        {
+            public string hand;         // "gun" or "off"
+            public int finger;          // 0 thumb .. 4 pinky
+            public float[] joints;      // that finger's three joints pressing it, local eulers
         }
 
         // By animation set: the way the magazine leaves the well, in the well bone's frame, where the mesh can't say
@@ -455,6 +463,19 @@ namespace TarkovVR.Source.Weapons
                 {
                     foreach (KeyValuePair<string, List<SavedBoltBone>> entry in generated.boltBones)
                         boltBonesByFamily[entry.Key] = entry.Value;
+                }
+                if (generated.releasePress != null)
+                {
+                    foreach (KeyValuePair<string, SavedReleasePress> entry in generated.releasePress)
+                    {
+                        SavedReleasePress saved = entry.Value;
+                        if (saved.joints == null || saved.joints.Length < 9)
+                            continue;
+                        Vector3[] joints = new Vector3[3];
+                        for (int joint = 0; joint < 3; joint++)
+                            joints[joint] = new Vector3(saved.joints[joint * 3], saved.joints[joint * 3 + 1], saved.joints[joint * 3 + 2]);
+                        releasePresses[entry.Key] = new ReleasePress { offHand = saved.hand == "off", finger = saved.finger, joints = joints };
+                    }
                 }
                 if (generated.handleBones != null)
                 {
