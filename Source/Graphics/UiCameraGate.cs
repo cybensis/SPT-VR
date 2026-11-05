@@ -109,9 +109,12 @@ namespace TarkovVR.Source.Graphics
                         continue;
                     if (graphic.color.a * canvasRenderer.GetAlpha() * canvasRenderer.GetInheritedAlpha() < minAlpha)
                         continue;
+                    Rect area = graphic.rectTransform.rect;
+                    if (area.width <= 0f || area.height <= 0f)
+                        continue;   // nothing to draw
                     if (inFrontOfCamera || InView(graphic.rectTransform, head))
                     {
-                        LogReason(canvas, graphic);
+                        LogReason(canvas, graphic, head, renderMode);
                         return true;
                     }
                 }
@@ -148,12 +151,22 @@ namespace TarkovVR.Source.Graphics
             return GeometryUtility.TestPlanesAABB(eyePlanes[0], bounds) || GeometryUtility.TestPlanesAABB(eyePlanes[1], bounds);
         }
 
-        private void LogReason(Canvas canvas, Graphic graphic)
+        // What it saw, so a canvas that keeps the camera on all the time can be told apart from one really in view
+        private void LogReason(Canvas canvas, Graphic graphic, Vector3 head, RenderMode renderMode)
         {
             if (!logReasons || !loggedCanvases.Add(canvas.GetInstanceID()))
                 return;
             Transform parent = canvas.transform.parent;
-            Plugin.MyLog.LogInfo($"[UiCamGate] on for canvas '{(parent != null ? parent.name + "/" : "")}{canvas.name}' (first seen: '{graphic.name}')");
+            RectTransform rect = graphic.rectTransform;
+            Rect area = rect.rect;
+            Vector3 scale = rect.lossyScale;
+            CanvasRenderer canvasRenderer = graphic.canvasRenderer;
+            string text = graphic.GetType().GetProperty("text")?.GetValue(graphic) as string;
+            if (text != null && text.Length > 40)
+                text = text.Substring(0, 40) + "...";
+            Plugin.MyLog.LogInfo($"[UiCamGate] on for canvas '{(parent != null ? parent.name + "/" : "")}{canvas.name}' ({renderMode}): '{graphic.name}' "
+                + $"{graphic.GetType().Name}{(text != null ? $" text '{text}'" : "")}, {area.width * scale.x * 100f:0.#}x{area.height * scale.y * 100f:0.#} cm "
+                + $"{Vector3.Distance(head, rect.position):0.00} m from the eyes, alpha {graphic.color.a:0.##} x {canvasRenderer.GetAlpha():0.##} x {canvasRenderer.GetInheritedAlpha():0.##}");
         }
     }
 }
