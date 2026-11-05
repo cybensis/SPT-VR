@@ -306,7 +306,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             // The gun going away, then the one coming in: Tarkov's own skip of each
             if (fastSwitch && player.HandsController is FirearmController firearmController && !(firearmController.CurrentOperation is FirearmController.Idling))
-                firearmController.FastForwardCurrentState();
+                WeaponPatches.SkipDrawOrPutAway(firearmController);
             object hands = player.HandsController;
             bool landed = hands is EFT.Player.AbstractHandsController controller && controller.Item == switchingTo
                 && (!(hands is FirearmController landedFirearm) || landedFirearm.CurrentOperation is FirearmController.Idling);

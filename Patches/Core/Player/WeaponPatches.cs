@@ -316,6 +316,21 @@ namespace TarkovVR.Patches.Core.Player
 
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------       
+        // Tarkov's skip of a draw or a put-away (FastForwardCurrentState) finishes the op directly - the draw's FastForward plays
+        // IDLE and calls WeaponAppeared, the put-away's calls HideWeaponComplete - without the clip's WeapIn / WeapOut events,
+        // so the VR work on those events below never ran: the old gun stayed on its holder, and the drawn one kept the last
+        // gun's pistol/rifle flag and elbow goals, its GunInteractionController stayed off (a gun drawn before = not anchored to
+        // the hand: "the gun angled wrong") and switchingWeapon stayed set (FireHandler bails). Every VR skip goes through here,
+        // which does that work first, as the event would have.
+        internal static void SkipDrawOrPutAway(EFT.Player.FirearmController firearmController)
+        {
+            if (firearmController.IsInSpawnOperation())
+                FinishMovingWeaponToVrHands(firearmController);
+            else if (firearmController.IsInRemoveOperation())
+                ReturnWeaponToOriginalParentOnChange(firearmController);
+            firearmController.FastForwardCurrentState();
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IEventsConsumerOnWeapOut")]
         private static void ReturnWeaponToOriginalParentOnChange(EFT.Player.FirearmController __instance)

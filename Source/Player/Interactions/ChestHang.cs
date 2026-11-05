@@ -174,7 +174,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (hangOnArrivalUntil > 0f && !Detached && !grip && !supporting && BodyWeapons.IsActive)
             {
                 if (!(fc.CurrentOperation is EFT.Player.FirearmController.Idling))
-                    fc.FastForwardCurrentState();
+                    WeaponPatches.SkipDrawOrPutAway(fc);
                 else
                 {
                     BeginHang(fc, snap: true);
