@@ -58,7 +58,9 @@ HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghin
                   'zmz_pp-9':'weapon_bolt','zis_ppsh41':'weapon_bolt','iwi_uzi_pro':'weapon_bolt','vepr_hunter_vpo-101':'weapon_bolt'}
 HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier'}
 # (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's hand is too)
-HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12')
+# The MDR's handle part is a rod running back into the gun with the knob at its front: the back of it is nowhere near the knob
+# (headset: "the collision position is not correct for when you grab it", the grab pose itself right)
+HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12','dt_mdr')
 HANDLE_BONE_GUNS={}
 for folder,v in census.items():
     if not os.path.isdir(ROOT+folder): continue

@@ -276,12 +276,29 @@ def slideHold(tree,clips,prefix,names):
         for boneName in SLIDE_BONES:
             path=bone(P,'/'+boneName)
             if path is None: continue
+            # The part the clip moves: a slot bone can ride a rig bone that's the animated one (the Five-seveN's mod_reciever under
+            # weapon_reciever). The runtime moves the slide bone and measures the pull on its parent, which the locked-back pose
+            # moves too: the pose follows the pull, the pull follows the pose (headset: "the slide is flickering", as the MP5's handle)
+            slotPath=path
+            path=movedPart(g,tree[1],path)
             h=ridingHold(g,path,'L')
             if h is None: continue
             if best is None or (rank,h['drift'])<best[0]:
-                h['bone']=boneName; h['clip']=n; best=((rank,h['drift']),h)
+                h['bone']=path.split('/')[-1]; h['clip']=n; best=((rank,h['drift']),h)
+                # Where the slot bone sits on the part that moves: a fitted slide's mesh is in the slot's frame (gen_export's slideBack)
+                if path!=slotPath and tree[1].get(slotPath)==path:
+                    h['slotOffset']=[float(x) for x in tree[0][slotPath][0]]; h['slotRotation']=[float(x) for x in tree[0][slotPath][1]]
             break
     return best[1] if best else None
+
+def localTravel(g,path):
+    stop=float(g['clip'].m_MuscleClip.m_StopTime); rest=np.array(g['localAt'](path,0.0)[0],float)
+    return max(float(np.linalg.norm(np.array(g['localAt'](path,i/30)[0],float)-rest)) for i in range(int(stop*30)+1))
+
+def movedPart(g,parentOf,path):
+    while localTravel(g,path)<0.005 and parentOf.get(path) and localTravel(g,parentOf[path])>=0.02:
+        path=parentOf[path]
+    return path
 
 # Which way a magazine leaves its well, in the well bone's frame, from the clip: a pistol's goes down the raked grip, which the box of its
 # mesh can't say (the mesh is modelled upright around it). Only where the clip moves it in a straight line, unturned.

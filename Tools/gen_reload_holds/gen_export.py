@@ -61,12 +61,16 @@ for k,v in sorted(R['grips'].items()):
             dropped.append((k,half,h['palmOff'],h['frames'])); continue
         e[half]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],magazineLength=lengthFor(family,typ))
     if e: out['grips'][f'{family}|{typ}']=e
+# Handle travel: the clip's, scaled like the M4's (its clip shows 10.1 cm, tuned to 8 in the headset). Not where a gun came up short
+# at that (headset, MDR: "it doesn't pull far back enough"): those keep their clip's whole travel.
+FULL_HANDLE_TRAVEL=('mdr','mdr_308')
+def handleTravel(f,travel): return round(travel if f in FULL_HANDLE_TRAVEL else travel*0.08/0.101,3)
 for f,h in sorted(R['handles'].items()):
     if h['palmOff']>0.03:
         dropped.append((f,'handle',h['palmOff'])); continue
-    out['handles'][f]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=round(h['travel']*0.08/0.101,3))
+    out['handles'][f]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=handleTravel(f,h['travel']))
 for f,h in sorted(R['gunHandHandles'].items()):
-    out['gunHandHandles'][f]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=round(h['travel']*0.08/0.101,3))
+    out['gunHandHandles'][f]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=handleTravel(f,h['travel']))
 for f,h in sorted(R['rockIn'].items()):
     out['rockIn'][f]=dict(axis=h['axis'],angle=h['angle'],thumb=h['thumb'])
 for f,h in sorted(R['palms'].items()):
@@ -131,7 +135,7 @@ def slideBack(family,boneName):
     folder=famFolder.get(family)
     gun=next((g for g in guns if g['folder']==folder),None)
     slot=[s for s in items[gun['id']]['_props'].get('Slots',[]) if s['_name']=='mod_reciever'] if gun else []
-    box=None
+    box=None; fittedSlide=False
     if slot:
         # A fitted slide's mesh comes out in the bone's frame (the mesh's -90 and its ModPlacer's +90 cancel)
         for i in slot[0]['_props']['filters'][0]['Filter']:
@@ -140,6 +144,7 @@ def slideBack(family,boneName):
                 try: box=meshBox(loadWithMeshes(items[i]['_props']['Prefab']['path']),nameStart=items[i]['_name'])
                 except Exception: box=None
                 if box: break
+    fittedSlide=box is not None
     if box is None and gun:
         d=ROOT_WEAPONS+folder+'/'
         for c in sorted(os.listdir(d)):
@@ -147,7 +152,12 @@ def slideBack(family,boneName):
                 box=meshBox(loadWithMeshes('assets/content/weapons/'+folder+'/'+c),boneName)
                 if box: break
     if box is None: return None
-    return box[1]+box[2]   # x: the side of no use, y: its back, z: its top
+    back=box[1]+box[2]   # x: the side of no use, y: its back, z: its top
+    # The slide bone is the part the clip moves, with the slot on it (the Five-seveN's weapon_reciever): the fitted mesh is the slot's
+    slide=R['slides'].get(family,{})
+    if fittedSlide and slide.get('slotOffset'):
+        back=turn(np.array(slide['slotRotation'],float),back)+np.array(slide['slotOffset'],float)
+    return back
 ROOT_WEAPONS='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/weapons/'
 backs={f:slideBack(f,h['bone']) for f,h in R['slides'].items() if f in out['slides']}
 sourceBacks={k:slideBack(v['family'],R['slides'][v['family']]['bone']) for k,v in R['slideGrips'].items()}
