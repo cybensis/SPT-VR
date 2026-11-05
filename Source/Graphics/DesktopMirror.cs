@@ -66,21 +66,19 @@ namespace TarkovVR.Source.Graphics
         private readonly LensMask[] lensMasks = { new LensMask(), new LensMask() };
         private LensMask currentLensMask;
 
-        public static void Create()
-        {
-            GameObject mirror = new GameObject("VRDesktopMirror");
-            DontDestroyOnLoad(mirror);
-            mirror.AddComponent<DesktopMirror>();
-        }
-
+        // On the plugin's own object (headset: on an object of its own nothing of it ever ran - not the camera, not the end-of-frame
+        // draw); the camera on a child of it, so it lives as long as the plugin does
         private void Awake()
         {
-            Camera windowCamera = gameObject.AddComponent<Camera>();
+            GameObject cameraObject = new GameObject("VRDesktopMirrorCamera");
+            cameraObject.transform.SetParent(transform, worldPositionStays: false);
+            Camera windowCamera = cameraObject.AddComponent<Camera>();
             if (windowCamera == null)
             {
                 Plugin.MyLog.LogWarning("[DesktopMirror] couldn't add the window camera: the window is drawn at the end of the frame");
                 return;
             }
+            cameraObject.AddComponent<DesktopMirrorCamera>().mirror = this;
             windowCamera.cullingMask = 0;
             windowCamera.clearFlags = CameraClearFlags.Nothing;
             windowCamera.depth = cameraDepth;
@@ -93,11 +91,11 @@ namespace TarkovVR.Source.Graphics
             windowCamera.allowHDR = false;
             windowCamera.allowMSAA = false;
             windowCamera.renderingPath = RenderingPath.Forward;
-            Plugin.MyLog.LogInfo($"[DesktopMirror] window camera made (enabled {windowCamera.enabled}, depth {windowCamera.depth:0})");
+            Plugin.MyLog.LogInfo($"[DesktopMirror] window camera made (enabled {windowCamera.enabled}, active {cameraObject.activeInHierarchy}, depth {windowCamera.depth:0}, on '{name}')");
         }
 
-        // The camera's draw: before the overlays
-        private void OnPostRender()
+        // The camera's draw (DesktopMirrorCamera.OnPostRender): before the overlays
+        internal void CameraRendered()
         {
             if (!cameraEverRendered)
             {
@@ -110,13 +108,20 @@ namespace TarkovVR.Source.Graphics
         // A frame the camera didn't draw: drawn now, at the very end (over the overlays), or Unity's mirror
         private IEnumerator Start()
         {
+            Plugin.MyLog.LogInfo("[DesktopMirror] end-of-frame draw running");
             WaitForEndOfFrame endOfFrame = new WaitForEndOfFrame();
+            string loggedFailure = null;
             while (true)
             {
                 yield return endOfFrame;
                 if (drawnFrame == Time.frameCount)
                     continue;
                 string failure = Guarded(fromCamera: false);
+                if (failure != null && failure != loggedFailure && failure != "switched off")
+                {
+                    loggedFailure = failure;
+                    Plugin.MyLog.LogInfo($"[DesktopMirror] not drawn at the end of the frame either ({failure}): Unity's mirror");
+                }
                 if (failure != null || !stabilized)
                     continue;
                 if (!loggedEndOfFrameDraw)
@@ -514,6 +519,38 @@ namespace TarkovVR.Source.Graphics
             display.SetPreferredMirrorBlitMode(mode);
             mirrorModeSet = mode;
             mirrorModeSetOn = display;
+        }
+    }
+
+    // On the window camera: its render reaches the mirror, and what happens to it is logged (the first build's camera never rendered)
+    public class DesktopMirrorCamera : MonoBehaviour
+    {
+        internal DesktopMirror mirror;
+        private bool loggedUpdate;
+
+        private void Update()
+        {
+            if (!loggedUpdate)
+            {
+                loggedUpdate = true;
+                Plugin.MyLog.LogInfo($"[DesktopMirror] window camera object alive (frame {Time.frameCount})");
+            }
+        }
+
+        private void OnPostRender()
+        {
+            if (mirror != null)
+                mirror.CameraRendered();
+        }
+
+        private void OnDisable()
+        {
+            Plugin.MyLog.LogWarning($"[DesktopMirror] window camera object disabled (frame {Time.frameCount})");
+        }
+
+        private void OnDestroy()
+        {
+            Plugin.MyLog.LogWarning($"[DesktopMirror] window camera object destroyed (frame {Time.frameCount})");
         }
     }
 }
