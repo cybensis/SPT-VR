@@ -469,32 +469,32 @@ namespace TarkovVR.Source.Player.Interactions
         // rendered right hand sits on when gripping - measured against the RightHand rig transform.
         // Earlier attempts anchored on WeaponRoot, which sits at the receiver BEHIND the pistol grip
         // on most guns ("zone too far back", headset-confirmed).
+        // Anywhere on the hanging gun takes it back, as on the body guns (BodyWeapons.ReachScore): under 1 = in reach
         private static bool HandNearGun(EFT.Player.FirearmController fc)
         {
-            return RegrabDistance(fc) < regrabRadius;
+            return RegrabScore(fc) < 1f;
         }
 
-        internal static float RegrabDistance()
+        internal static float RegrabScore()
         {
-            return VRGlobals.firearmController != null ? RegrabDistance(VRGlobals.firearmController) : float.MaxValue;
+            return VRGlobals.firearmController != null ? RegrabScore(VRGlobals.firearmController) : float.MaxValue;
         }
 
-        private static float RegrabDistance(EFT.Player.FirearmController fc)
+        private static float RegrabScore(EFT.Player.FirearmController fc)
         {
-            var hand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.RightHand : null;
-            if (hand == null)
+            if (fc.WeaponRoot == null)
                 return float.MaxValue;
+            return BodyWeapons.ReachScore(fc.WeaponRoot, fc.WeaponRoot, RegrabPoint(fc), regrabRadius, alongBarrel: true);
+        }
+
+        // The grip, a little toward the muzzle (falls back to WeaponRoot)
+        private static Vector3 RegrabPoint(EFT.Player.FirearmController fc)
+        {
             var links = fc.HandsHierarchy;
-            Transform anchor = links != null && links.Transforms != null && links.Transforms.Length > 8
-                ? links.Transforms[8] : null;
+            Transform anchor = links != null && links.Transforms != null && links.Transforms.Length > 8 ? links.Transforms[8] : null;
             if (anchor == null)
-                anchor = fc.WeaponRoot;   // marker missing on this weapon - the old behavior beats no regrab
-            if (anchor == null)
-                return float.MaxValue;
-            Vector3 anchorPos = anchor.position;
-            if (fc.WeaponRoot != null)
-                anchorPos += -fc.WeaponRoot.up * regrabForwardOffset;   // WeaponRoot -up = toward the muzzle
-            return Vector3.Distance(hand.transform.position, anchorPos);
+                anchor = fc.WeaponRoot;
+            return anchor.position - fc.WeaponRoot.up * regrabForwardOffset;
         }
 
         // A gun in hand and not hanging is the gun's arm (Tarkov IKs it onto the grip). A gun drawn while the last one still hung

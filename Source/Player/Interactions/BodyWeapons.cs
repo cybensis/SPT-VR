@@ -27,8 +27,9 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool enabled = true;
         public static bool fastSwitch = true;           // false = Tarkov's put-away and draw animations play out
         public static float grabRadius = 0.13f;         // m RightHand rig to a body gun's grip, as ChestHang.regrabRadius
+        public static float gunGrabRadius = 0.06f;      // m any point of the hand (palm, fingertips) off a gun's barrel line: anywhere on it takes it
         public static float switchTimeout = 3f;         // s before a switch that never lands is given up
-        public static bool debugLog = false;
+        public static bool debugLog = true;             // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
 
         private static readonly EquipmentSlot[] bodySlots =
             { EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster, EquipmentSlot.Scabbard };
@@ -86,6 +87,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
             HandAtBodyGun = Active && NearestBodyGun(out _, out _, out _, out _);
+            if (gripPressed && debugLog && Active)
+                LogGripPress();
             if (gripPressed && HandAtBodyGun)
                 TryGrab();
         }
@@ -115,22 +118,110 @@ namespace TarkovVR.Source.Player.Interactions
                     return true;
                 }
             }
+            nearest = 1f;
             foreach (EquipmentSlot slot in bodySlots)
             {
                 GameObject model = ViewOf(slot)?.Model;
                 Item item = SlotItem(slot);
                 if (model == null || !model.activeInHierarchy || item == null || item == inHands)
                     continue;
-                float distance = Vector3.Distance(hand, GrabPoint(model));
-                if (distance < nearest)
+                float score = ModelReachScore(model);
+                if (score < nearest)
                 {
-                    nearest = distance;
+                    nearest = score;
                     takenItem = item;
                     takenModel = model;
                     takenSlot = slot;
                 }
             }
             return takenModel != null;
+        }
+
+        private static float ModelReachScore(GameObject model)
+        {
+            bool isGun = GripMarkerOf(model) != null;
+            return ReachScore(WeaponRootOf(model), model.transform, GrabPoint(model), grabRadius, isGun);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Reach: anywhere on the gun, not just its grip (headset: "make it so you can grab the gun anywhere")
+
+        // A capsule along the gun's barrel through the middle of its meshes, in its Weapon_root's frame (mesh-local corners, never
+        // Renderer.bounds: the world box grows as the gun turns), plus the grip reach as before. Under 1 = in reach, smaller = nearer.
+        private sealed class GunSpan
+        {
+            public Vector3 butt;      // Weapon_root local: +up is the butt
+            public Vector3 muzzle;
+            public float measuredAt;
+        }
+        private static readonly Dictionary<Transform, GunSpan> spans = new Dictionary<Transform, GunSpan>();
+        private static readonly List<Vector3> touchPoints = new List<Vector3>();
+        private static int touchPointsFrame = -1;
+
+        internal static float ReachScore(Transform weaponRoot, Transform meshRoot, Vector3 gripPoint, float gripRadius, bool alongBarrel)
+        {
+            if (VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.RightHand == null || weaponRoot == null)
+                return float.MaxValue;
+            float score = Vector3.Distance(VRGlobals.vrPlayer.RightHand.transform.position, gripPoint) / gripRadius;
+            GunSpan span = alongBarrel ? SpanOf(weaponRoot, meshRoot) : null;
+            if (span == null)
+                return score;
+            Vector3 butt = weaponRoot.TransformPoint(span.butt);
+            Vector3 muzzle = weaponRoot.TransformPoint(span.muzzle);
+            foreach (Vector3 point in HandTouchPoints())
+                score = Mathf.Min(score, DistanceToSegment(point, butt, muzzle) / gunGrabRadius);
+            return score;
+        }
+
+        private static List<Vector3> HandTouchPoints()
+        {
+            if (touchPointsFrame == Time.frameCount)
+                return touchPoints;
+            touchPointsFrame = Time.frameCount;
+            if (VRGlobals.handsInteractionController != null)
+                VRGlobals.handsInteractionController.GetHandTouchPoints(true, touchPoints);
+            else
+                touchPoints.Clear();
+            if (touchPoints.Count == 0)
+                touchPoints.Add(VRGlobals.vrPlayer.RightHand.transform.position);
+            return touchPoints;
+        }
+
+        private static GunSpan SpanOf(Transform weaponRoot, Transform meshRoot)
+        {
+            if (spans.TryGetValue(weaponRoot, out GunSpan span) && Time.time - span.measuredAt < 2f)
+                return span;
+            Vector3 low = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            Vector3 high = -low;
+            foreach (MeshFilter meshFilter in meshRoot.GetComponentsInChildren<MeshFilter>())
+            {
+                if (meshFilter.sharedMesh == null)
+                    continue;
+                Bounds bounds = meshFilter.sharedMesh.bounds;
+                for (int corner = 0; corner < 8; corner++)
+                {
+                    Vector3 sign = new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f);
+                    Vector3 inRoot = weaponRoot.InverseTransformPoint(meshFilter.transform.TransformPoint(bounds.center + Vector3.Scale(bounds.extents, sign)));
+                    low = Vector3.Min(low, inRoot);
+                    high = Vector3.Max(high, inRoot);
+                }
+            }
+            if (low.x > high.x)
+            {
+                spans.Remove(weaponRoot);
+                return null;
+            }
+            Vector3 middle = (low + high) * 0.5f;
+            span = new GunSpan { butt = new Vector3(middle.x, high.y, middle.z), muzzle = new Vector3(middle.x, low.y, middle.z), measuredAt = Time.time };
+            spans[weaponRoot] = span;
+            return span;
+        }
+
+        private static float DistanceToSegment(Vector3 point, Vector3 start, Vector3 end)
+        {
+            Vector3 along = end - start;
+            float t = along.sqrMagnitude > 1e-8f ? Mathf.Clamp01(Vector3.Dot(point - start, along) / along.sqrMagnitude) : 0f;
+            return Vector3.Distance(point, start + along * t);
         }
 
         private static void TryGrab()
@@ -141,7 +232,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!NearestBodyGun(out Item takenItem, out GameObject takenModel, out EquipmentSlot takenSlot, out float nearest))
                 return;
             // The gun in hand hanging nearer than this one: that's its regrab
-            if (ChestHang.Detached && ChestHang.RegrabDistance() < nearest)
+            if (ChestHang.Detached && ChestHang.RegrabScore() < nearest)
                 return;
 
             switchingTo = takenItem;
@@ -156,19 +247,49 @@ namespace TarkovVR.Source.Player.Interactions
             VRInputManager.ForceCommand(SelectCommand(takenSlot));
             ChestHang.Pulse(0.35f);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[BodyWeapons] took {takenItem.LocalizedShortName()} from {takenSlot} ({nearest * 100f:0.0} cm), in hands: {inHands?.LocalizedShortName() ?? "nothing"}");
+                Plugin.MyLog.LogInfo($"[BodyWeapons] took {takenItem.LocalizedShortName()} from {takenSlot} (reach {nearest:0.00}), in hands: {inHands?.LocalizedShortName() ?? "nothing"}");
         }
 
         // Only from hands Tarkov would let go of right now: empty, a knife, or the gun hanging at its spot and idle
         private static bool CanSwitchNow()
         {
-            if (VRGlobals.menuOpen || VRGlobals.usingItem || EatingInteractionController.ManualActive || WeaponPatches.grenadeEquipped
-                || ChestHang.SupportOnly || VRReloadController.HoldingMagazine || VRReloadController.HoldingChargingHandle)
-                return false;
+            return WhyNotSwitch() == null;
+        }
+
+        private static string WhyNotSwitch()
+        {
+            if (VRGlobals.menuOpen) return "menu open";
+            if (VRGlobals.usingItem) return "using an item";
+            if (EatingInteractionController.ManualActive) return "eating";
+            if (WeaponPatches.grenadeEquipped) return "grenade";
+            if (ChestHang.SupportOnly) return "the off hand holds the gun";
+            if (VRReloadController.HoldingMagazine) return "holding a magazine";
+            if (VRReloadController.HoldingChargingHandle) return "holding the charging handle";
             object hands = VRGlobals.player.HandsController;
             if (hands is FirearmController firearmController)
-                return ChestHang.Hanging && firearmController.CurrentOperation is FirearmController.Idling;
-            return hands is EFT.Player.EmptyHandsController || hands is EFT.Player.KnifeController;
+            {
+                if (!ChestHang.Hanging) return "the gun in hand isn't let go";
+                if (!(firearmController.CurrentOperation is FirearmController.Idling)) return $"the gun in hand is busy ({firearmController.CurrentOperation?.GetType().Name})";
+                return null;
+            }
+            return hands is EFT.Player.EmptyHandsController || hands is EFT.Player.KnifeController ? null : $"hands hold {hands?.GetType().Name ?? "nothing"}";
+        }
+
+        private static void LogGripPress()
+        {
+            Vector3 hand = VRGlobals.vrPlayer.RightHand.transform.position;
+            Item inHands = HandsItem();
+            var line = new System.Text.StringBuilder($"[BodyWeapons] grip press: shoulder zone {handInShoulderZone}, hip zone {handInHipZone}, can switch: {WhyNotSwitch() ?? "yes"}, in hands {inHands?.LocalizedShortName() ?? "nothing"}{(ChestHang.Detached ? $" (hanging, regrab reach {ChestHang.RegrabScore():0.00})" : "")}");
+            foreach (EquipmentSlot slot in bodySlots)
+            {
+                PlayerBody.SlotView view = ViewOf(slot);
+                GameObject model = view?.Model;
+                Item item = SlotItem(slot);
+                line.Append($" | {slot}: {(item != null ? item.LocalizedShortName() : "empty")}, view {(view != null ? "yes" : "NO")}, model {(model == null ? "NONE" : model.activeInHierarchy ? "active" : "INACTIVE")}");
+                if (model != null)
+                    line.Append($", grip {Vector3.Distance(hand, GrabPoint(model)) * 100f:0} cm, reach {ModelReachScore(model):0.00}");
+            }
+            Plugin.MyLog.LogInfo(line.ToString());
         }
 
         private static void UpdateSwitch()
@@ -226,6 +347,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
             currentModels.Clear();
+            Item inHandsItem = HandsItem();
             foreach (EquipmentSlot slot in bodySlots)
             {
                 PlayerBody.SlotView view = ViewOf(slot);
@@ -235,11 +357,16 @@ namespace TarkovVR.Source.Player.Interactions
                 currentModels.Add(model);
                 if (!tarkovPoses.ContainsKey(model))
                     tarkovPoses[model] = new Pose(model.transform.localPosition, model.transform.localRotation);
+                // The gun in hands keeps its body model for your own player (PlayerBody isn't given what's in your hands, so its
+                // slot view doesn't drop it): hidden, or it doubles the real one (headset: "two pistols on my hip")
+                bool inHands = inHandsItem != null && SlotItem(slot) == inHandsItem && !(Switching && model == standIn);
                 foreach (Renderer renderer in view.Renderers)
                 {
-                    if (renderer != null && !renderer.enabled)
-                        renderer.enabled = true;
+                    if (renderer != null && renderer.enabled == inHands)
+                        renderer.enabled = !inHands;
                 }
+                if (inHands)
+                    continue;
                 if (Switching && model == standIn)
                 {
                     Transform hand = VRGlobals.vrPlayer.RightHand.transform;
