@@ -352,6 +352,8 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 PlayerBody.SlotView view = ViewOf(slot);
                 GameObject model = view?.Model;
+                if (model != null)
+                    KeepSlotBoneOn(view, model);
                 if (model == null || !model.activeInHierarchy)
                     continue;
                 currentModels.Add(model);
@@ -394,9 +396,32 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
+        // The mod switches Tarkov's back-gun bones off (InitVRPatches SetupIK: weapon_holster, weapon_holster1, at rig setup and on
+        // every equip) and both primaries' models hang under them: hidden and never in reach (headset log: both primaries INACTIVE,
+        // the pistol on its own bone fine). The slot's own bone back on while this runs; the Player layer they're on isn't collided.
+        private static readonly List<GameObject> bonesTurnedOn = new List<GameObject>();
+
+        private static void KeepSlotBoneOn(PlayerBody.SlotView view, GameObject model)
+        {
+            if (!model.activeSelf || model.activeInHierarchy)
+                return;
+            Transform bone = model.transform.parent;
+            if (bone == null || bone.gameObject.activeSelf || (bone != view._bone && bone != view._alternativeHolsterBone))
+                return;
+            bone.gameObject.SetActive(true);
+            if (!bonesTurnedOn.Contains(bone.gameObject))
+                bonesTurnedOn.Add(bone.gameObject);
+        }
+
         // Back to Tarkov's: its pose on its bone, and hidden for your own player as Tarkov has it
         private static void PutAllBack()
         {
+            foreach (GameObject bone in bonesTurnedOn)
+            {
+                if (bone != null)
+                    bone.SetActive(false);
+            }
+            bonesTurnedOn.Clear();
             if (tarkovPoses.Count == 0)
                 return;
             foreach (KeyValuePair<GameObject, Pose> entry in tarkovPoses)
