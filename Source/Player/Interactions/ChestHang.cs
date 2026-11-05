@@ -1,4 +1,6 @@
 using Comfort.Common;
+using EFT;
+using EFT.InventoryLogic;
 using EFT.UI;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.VRManager;
@@ -36,6 +38,12 @@ namespace TarkovVR.Source.Player.Interactions
         public static float slingDelay = 0.1f;          // s the grip must stay fully released before letting go (debounce; 0.25 read as a delay)
         public static float regrabRadius = 0.13f;       // m RightHand rig transform to the regrab zone (0.10, the left hand's foregrip radius, read a little short)
         public static float regrabForwardOffset = 0.07f;// m the zone sits toward the MUZZLE from the R-hand marker (marker alone still read "a bit far back")
+        // The second primary's spot (BodyWeapons): over the dominant shoulder, hanging down the back. Where its Weapon_root sits,
+        // headset-local and yaw-only like the sling; x mirrors left-handed
+        public static Vector3 backOffset = new Vector3(0.17f, -0.17f, -0.17f);
+        public static float backAcross = 0.3f;          // the muzzle points across the back toward the off side (0 = straight down)
+        public static float backOut = -0.25f;           // and tips away behind the body
+        public static float backRollDeg = 0f;           // fine roll about the barrel
         public static bool hangHaptics = true;
         public static bool debugLog = false;            // 1/sec chain dump while detached + save/restore lines (for the prone-corrupts-regrab hunt)
         private static float nextDebugLog;
@@ -49,6 +57,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool HandInRegrabZone { get; private set; } // dominant palm within regrab reach of the detached gun (loot pointer yields to the regrab)
 
         private static bool gripSeen;                   // welded like vanilla until the first grip press on this controller
+        private static int ignoredPressFrame = -1;      // a grip press BodyWeapons took (a gun off the body), not a regrab
+        private static Item gripSeenFor;                // taken off the body with the grip closed: grip-bound from the moment it's in hands
         private static bool prevGrip;
         private static bool prevSupporting;             // for the foregrip-grab foley edge
         private static float releaseTimer;
@@ -106,6 +116,13 @@ namespace TarkovVR.Source.Player.Interactions
                 Reattach(restore: false);
                 return;
             }
+            // Taken off the body (BodyWeapons): the grip that took it holds it, so opening the hand lets it go to its spot
+            if (gripSeenFor != null && fc.Item == gripSeenFor)
+            {
+                gripSeen = true;
+                gripSeenFor = null;
+            }
+            bool pressed = grip && !prevGrip && Time.frameCount != ignoredPressFrame;
 
             // Update() skips frames (menu/sprint) - after a gap restart the release debounce so the
             // gun can't let go the instant a menu closes on an open hand.
@@ -156,7 +173,7 @@ namespace TarkovVR.Source.Player.Interactions
                     SupportOnly = false;
                     BeginHang(fc);
                 }
-                else if (grip && !prevGrip && near && !VRReloadController.HandleInGunHand)
+                else if (pressed && near && !VRReloadController.HandleInGunHand)
                 {
                     // dominant hand takes the grip back -> normal (two-handed) hold. Reattach clears
                     // SupportOnly itself - clearing it HERE first made wasDetached/fromSupport read
@@ -174,7 +191,7 @@ namespace TarkovVR.Source.Player.Interactions
                 HandInRegrabZone = near;
                 RegrabZonePulse(near);
                 // taking it back is deliberate: a fresh grip PRESS with the palm at the gun
-                if (grip && !prevGrip && near)
+                if (pressed && near)
                 {
                     Reattach(restore: true);
                     gripSeen = true;
@@ -449,20 +466,98 @@ namespace TarkovVR.Source.Player.Interactions
         // on most guns ("zone too far back", headset-confirmed).
         private static bool HandNearGun(EFT.Player.FirearmController fc)
         {
+            return RegrabDistance(fc) < regrabRadius;
+        }
+
+        internal static float RegrabDistance()
+        {
+            return VRGlobals.firearmController != null ? RegrabDistance(VRGlobals.firearmController) : float.MaxValue;
+        }
+
+        private static float RegrabDistance(EFT.Player.FirearmController fc)
+        {
             var hand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.RightHand : null;
             if (hand == null)
-                return false;
+                return float.MaxValue;
             var links = fc.HandsHierarchy;
             Transform anchor = links != null && links.Transforms != null && links.Transforms.Length > 8
                 ? links.Transforms[8] : null;
             if (anchor == null)
                 anchor = fc.WeaponRoot;   // marker missing on this weapon - the old behavior beats no regrab
             if (anchor == null)
-                return false;
+                return float.MaxValue;
             Vector3 anchorPos = anchor.position;
             if (fc.WeaponRoot != null)
                 anchorPos += -fc.WeaponRoot.up * regrabForwardOffset;   // WeaponRoot -up = toward the muzzle
-            return Vector3.Distance(hand.transform.position, anchorPos) < regrabRadius;
+            return Vector3.Distance(hand.transform.position, anchorPos);
+        }
+
+        // BodyWeapons took this frame's grip press for a gun off the body: not a regrab of the one hanging
+        internal static void IgnoreGripPress()
+        {
+            ignoredPressFrame = Time.frameCount;
+        }
+
+        internal static void TakenFromBody(Item item)
+        {
+            gripSeenFor = item;
+        }
+
+        // Where a gun lives on the body when it isn't in your hand, as its Weapon_root's pose: BodyWeapons draws the others there,
+        // and the gun in hand goes there when you let go. The first primary on the chest sling, the second over the dominant
+        // shoulder, the pistol on Tarkov's holster bone (Tarkov sets a body model's Weapon_root on its bone). False = no spot.
+        internal static bool SpotPose(EquipmentSlot slot, out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (!HeadPose(out _, out _))
+                return false;
+            bool leftHanded = VRSettings.GetLeftHandedMode();
+            Quaternion yawRot = HeadYaw(out Vector3 headPos);
+            switch (slot)
+            {
+                case EquipmentSlot.FirstPrimaryWeapon:
+                    Vector3 chest = chestOffset;
+                    if (leftHanded)
+                        chest.x = -chest.x;
+                    position = headPos + yawRot * chest;
+                    rotation = yawRot * CanonicalSlingRot(leftHanded);
+                    return true;
+                case EquipmentSlot.SecondPrimaryWeapon:
+                    Vector3 back = backOffset;
+                    if (leftHanded)
+                        back.x = -back.x;
+                    position = headPos + yawRot * back;
+                    rotation = yawRot * BackRot(leftHanded);
+                    return true;
+                case EquipmentSlot.Holster:
+                    Transform bone = BodyWeapons.HolsterBone();
+                    if (bone == null)
+                        return false;
+                    position = bone.position;
+                    rotation = bone.rotation;
+                    return true;
+            }
+            return false;
+        }
+
+        // Muzzle down the back and across toward the off side, the gun's face out behind you, the grip end up by the shoulder
+        private static Quaternion BackRot(bool leftHanded)
+        {
+            float side = leftHanded ? 1f : -1f;
+            Vector3 muzzle = new Vector3(side * backAcross, -1f, backOut).normalized;
+            Vector3 butt = -muzzle;                 // WeaponRoot +up
+            Vector3 face = Vector3.back - Vector3.Dot(Vector3.back, butt) * butt;
+            face = face.sqrMagnitude < 1e-4f ? Vector3.up : face.normalized;
+            return Quaternion.AngleAxis(backRollDeg, muzzle) * Quaternion.LookRotation(face, butt);
+        }
+
+        // The spot of the gun in hand: its slot's, or the chest sling's for anything else (or with BodyWeapons off)
+        private static bool HandsGunSpotPose(EFT.Player.FirearmController fc, out Vector3 position, out Quaternion rotation)
+        {
+            if (BodyWeapons.enabled && BodyWeapons.SlotOf(fc.Item, out EquipmentSlot slot) && SpotPose(slot, out position, out rotation))
+                return true;
+            return SpotPose(EquipmentSlot.FirstPrimaryWeapon, out position, out rotation);
         }
 
         // ---- per-frame pose drives (called from GunInteractionController.UpdateWeaponPosition) ----
@@ -493,16 +588,18 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
 
             float dt = Mathf.Clamp(Time.deltaTime, 1e-4f, 0.05f);
-            bool leftHanded = VRSettings.GetLeftHandedMode();
             Quaternion yawRot = HeadYaw(out Vector3 headPos);
-            Vector3 off = chestOffset;
-            if (leftHanded)
-                off.x = -off.x;
+            // Its own spot (the chest sling for the first primary, the shoulder for the second, the holster for the pistol), in the
+            // yaw-local frame the tuck-in runs in
+            if (!HandsGunSpotPose(fc, out Vector3 spotPos, out Quaternion spotRot))
+                return;
+            Vector3 off = Quaternion.Inverse(yawRot) * (spotPos - headPos);
+            Quaternion spotLocalRot = Quaternion.Inverse(yawRot) * spotRot;
 
             // tuck-in blend runs in the yaw-local frame (turning carries the gun 1:1 - world-space
             // blending was the "gun spins while I turn" bug), then the mount is rigid: no dangle.
             slingLocalPos = Vector3.SmoothDamp(slingLocalPos, off, ref posVel, attachTime);
-            slingLocalRot = Quaternion.Slerp(slingLocalRot, CanonicalSlingRot(leftHanded), Mathf.Min(1f, rotAttachRate * dt));
+            slingLocalRot = Quaternion.Slerp(slingLocalRot, spotLocalRot, Mathf.Min(1f, rotAttachRate * dt));
 
             StampWeaponRoot(headPos + yawRot * slingLocalPos, yawRot * slingLocalRot);
         }
@@ -625,7 +722,7 @@ namespace TarkovVR.Source.Player.Interactions
             return flat.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(flat.normalized) : Quaternion.identity;
         }
 
-        private static void Pulse(float amp)
+        internal static void Pulse(float amp)
         {
             SteamVR_Input_Sources gunHand = VRSettings.GetLeftHandedMode()
                 ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;

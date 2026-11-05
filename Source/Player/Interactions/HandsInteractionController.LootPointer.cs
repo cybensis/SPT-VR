@@ -270,7 +270,8 @@ namespace TarkovVR.Source.Player.Interactions
             return handFree
                 && !TarkovVR.Patches.Core.Player.WeaponPatches.grenadeEquipped
                 && !rightHandState.inBackHolster && !rightHandState.inSidearmHolster
-                && !ChestHang.HandInRegrabZone;
+                && !ChestHang.HandInRegrabZone
+                && !BodyWeapons.HandAtBodyGun && !BodyWeapons.Switching && !BodyWeapons.GrabbedThisPress;
         }
 
         // One hand's full pointer pass: eligibility -> cone -> candidates -> main -> dots/haptic ->

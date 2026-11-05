@@ -314,8 +314,12 @@ namespace TarkovVR.Source.Player.Interactions
             // radial gestures span many frames.
             if (VRGlobals.inGame && !VRGlobals.menuOpen && primaryHandGrip != null && VRGlobals.vrPlayer != null)
             {
+                // Guns on the body: a grip at one takes it (before the sling's regrab, which yields that press)
+                BodyWeapons.UpdateInput(primaryHandGrip.state, primaryHandGrip.stateDown);
+                // The holster zones only own the grip where they still swap weapons themselves
                 bool hangGripOwnedElsewhere =
-                    rightHandState.inBackHolster || rightHandState.inSidearmHolster
+                    (rightHandState.inBackHolster && !BodyWeapons.ReplacesBackZone)
+                    || (rightHandState.inSidearmHolster && !BodyWeapons.ReplacesHipZone)
                     || (VRGlobals.vrPlayer.radialMenu && VRGlobals.vrPlayer.radialMenu.active)
                     || (WeaponPatches.currentGunInteractController != null
                         && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1);
@@ -469,11 +473,12 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (rightHandState.inBackHolster)
             {
-                if (primaryHandGrip.stateUp)
+                // Guns on the body: the shoulder gun is taken off the back itself (BodyWeapons), no swap on letting go
+                if (primaryHandGrip.stateUp && !BodyWeapons.ReplacesBackZone)
                 {
                     selectWeaponHandler.TriggerSwapOtherPrimary();
                 }
-                if (primaryHandGrip.state && VRGlobals.vrPlayer.radialMenu)
+                if (primaryHandGrip.state && VRGlobals.vrPlayer.radialMenu && !BodyWeapons.GrabbedThisPress)
                 {
                     if (!VRGlobals.vrPlayer.radialMenu.active)
                     {
@@ -488,7 +493,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (rightHandState.inSidearmHolster)
             {
-                if (primaryHandGrip.stateDown)
+                // Guns on the body take the pistol off the holster itself; with no holster Tarkov draws no pistol there to take
+                if (primaryHandGrip.stateDown && !BodyWeapons.ReplacesHipZone)
                 {
                     selectWeaponHandler.TriggerSwapSidearm();
                 }
