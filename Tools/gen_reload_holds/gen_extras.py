@@ -82,6 +82,18 @@ for family,(folder,container,boneName) in sorted(HANDLE_BONE_GUNS.items()):
             moved=h['moved']
         if best is None or (rank,-moved)<best[0]:
             h['clip']=n; h['leftHandMoved']=round(moved,3); best=((rank,-moved),h)
+    # Nothing rides it: a fast yank (the Uzi's charge_0, ~4 frames back) leaves the palm pivoting about the fingertips, which
+    # ridingHold rejects though the hand does the pull (headset: "it pulls the handle on top with the left hand"). The left IK
+    # marker, where the game puts that palm, as gen_holds reads a reload_charge clip: at full pull, with the marker travelling back.
+    if best is None:
+        for n in sorted(names):
+            rank=rackClipRank(n[len(prefix)+1:])
+            if rank is None: continue
+            g=setup(tree,clips[n]); h=handleHold(g,J,charge)
+            if h is None: continue
+            moved=leftHandTravel(g,charge)
+            if moved>=0.03 and (best is None or (rank,-moved)<best[0]):
+                h['clip']=n; h['leftHandMoved']=round(moved,3); best=((rank,-moved),h)
     if best: extraHandles[family]=best[1]
     best=None
     for n in sorted(names):
