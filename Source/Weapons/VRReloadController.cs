@@ -76,7 +76,7 @@ namespace TarkovVR.Source.Weapons
         // No firing: the gun's magazine is out in the hand, the charging handle is being worked, or the round in the chamber
         // is still in the magazine (Tarkov's insert chambers one at once; it has to be racked first). On a truly empty
         // chamber the trigger goes through: Tarkov dry-fires (the click, the finger) without looking at the bolt catch.
-        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine || MagazinePartlyOut;
+        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine || MagazinePartlyOut || BoltBlocksFiring;
 
         private static bool ChamberLoaded => VRGlobals.firearmController != null && VRGlobals.firearmController.Item != null
             && VRGlobals.firearmController.Item.ChamberAmmoCount > 0;
@@ -86,7 +86,7 @@ namespace TarkovVR.Source.Weapons
         private static bool RoundStillInMagazine => ChamberLoaded && (BoltLockedBack || WaitingForRack(VRGlobals.firearmController.Item));
 
         // On that round the trigger clicks like an empty gun, it's never handed to Tarkov (it would fire)
-        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && RoundStillInMagazine;
+        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && RoundStillInMagazine && !BoltBlocksFiring;
 
         // Tarkov's own empty-gun trigger (Idling.SetTriggerPressed: SetAmmoInChamber, then SetFire) with the chamber shown
         // empty, as it looks with the bolt open: the animator plays its dry fire, the click and the finger. Local only:
@@ -323,10 +323,13 @@ namespace TarkovVR.Source.Weapons
             }
             if (boltReleaseFor != null)
                 UpdateBoltRelease();
+            // A bolt-action's bolt, by either hand's trigger (VRReloadController.Bolt)
+            TickBolt(triggerPressed, triggerReleased, gunHandTriggerPressed, gunHandTriggerReleased,
+                handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine);
             UpdateHandLatch();
             UpdateMagazineReleaseButton(releaseState);
 
-            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine;
+            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt;
             UpdateBoltSlap(handFree: !handBusy);
             if (!handBusy)
                 TryTakeOverGroundMagazine();
@@ -370,7 +373,9 @@ namespace TarkovVR.Source.Weapons
             if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine && !TrySlideMagazineOntoHand())
                 TryReleaseMagazine();
             // The gun hand on the handle leaves the off hand where it is: on the foregrip, holding the gun up
-            OwnsOffHand = HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine || reaching;
+            if (OffHandAtBolt)
+                OffHandAtChargingHandle = true;
+            OwnsOffHand = HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine || reaching;
 
             UpdateZoneViz();
         }
@@ -1399,7 +1404,7 @@ namespace TarkovVR.Source.Weapons
             // Bolt forward on an empty chamber: the round the insert chambers waits for the handle (a locked-back bolt
             // already holds it off). Guns without a handle we can work keep Tarkov's chambering.
             insertNeedsRack = weapon.ChamberAmmoCount == 0 && !firearmController.FirearmsAnimator.GetBoltCatch()
-                && chargingHandle && TryGetChargingHandle(firearmController, weapon);
+                && ((chargingHandle && TryGetChargingHandle(firearmController, weapon)) || (weapon.BoltAction && ManualBoltOn(firearmController)));
             if (heldSource == HeldMagazineSource.FromGround)
                 ExpectGroundMagazineGone();
             CommitHold();
@@ -1811,6 +1816,8 @@ namespace TarkovVR.Source.Weapons
             Vector3[] pose = null;
             if (HoldingChargingHandle && !HandleInGunHand)
                 pose = handleHandFingers ?? MAGAZINE_PULL_FINGERS;
+            else if (HoldingBolt && !BoltInGunHand)
+                pose = BoltFingerPose(gunHand: false);
             else if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
                 pose = magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
             if (pose != null)
@@ -1836,7 +1843,7 @@ namespace TarkovVR.Source.Weapons
         // The same for the gun hand on the charging handle, after that hand's own finger update
         public static void ApplyGunHandFingerPose()
         {
-            Vector3[] pose = HandleInGunHand ? handleHandFingers ?? GUN_HAND_HANDLE_FINGERS : null;
+            Vector3[] pose = HandleInGunHand ? handleHandFingers ?? GUN_HAND_HANDLE_FINGERS : BoltFingerPose(gunHand: true);
             if (pose != null)
                 gunHandFingerPoseShown = pose;
 

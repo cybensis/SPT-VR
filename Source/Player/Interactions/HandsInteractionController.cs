@@ -428,6 +428,8 @@ namespace TarkovVR.Source.Player.Interactions
             // Pulling the charging handle: a handle on the bolt brings the carrier back, then the chambered round rides the bolt
             VRReloadController.ApplyHandleCarrier();
             VRReloadController.ApplyChamberView();
+            // A bolt-action's bolt left open or being worked: its bones after the animator
+            VRReloadController.ApplyBolt();
             VRReloadController.ApplyMagazineReleaseButton();
             // A magazine picked up off the ground: its ground item stays hidden while our model of it is held
             VRReloadController.KeepGroundMagazineHidden();

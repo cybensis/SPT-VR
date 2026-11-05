@@ -201,7 +201,7 @@ namespace TarkovVR.Source.Player.Interactions
                     SupportOnly = false;
                     BeginHang(fc);
                 }
-                else if (pressed && near && !VRReloadController.HandleInGunHand)
+                else if (pressed && near && !VRReloadController.HandleInGunHand && !VRReloadController.BoltInGunHand)
                 {
                     // dominant hand takes the grip back -> normal (two-handed) hold. Reattach clears
                     // SupportOnly itself - clearing it HERE first made wasDetached/fromSupport read

@@ -212,6 +212,9 @@ out['releasePress']={f:dict(hand=p['hand'],finger=p['finger'],joints=p['joints']
 print('release presses:',{f:(p['hand'],p['finger']) for f,p in out['releasePress'].items()})
 out['sideHandles']={f:dict({k:v for k,v in h.items() if k!='clip'},travel=round(h['travel']*0.08/0.101,3),sliderLag=round(h['sliderLag']*0.08/0.101,3)) for f,h in extras['sideHandles'].items()}
 print('bolts the handle moves:',out['boltBones'],'side handles:',{f:(h['travel'],h['sliderLag']) for f,h in out['sideHandles'].items()})
+# gen_bolts.py: bolt-action rifles' bolts, by their bolt clip's family (the slide and turn bones, how far, the dominant hand's hold on the knob)
+out['bolts']=json.load(open('bolts.json'))['bolts'] if os.path.exists('bolts.json') else {}
+print('bolt-action bolts:',{f:(b['slider'],b['turner'],b['distance'],b['turnDegrees']) for f,b in out['bolts'].items()})
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]
 for holds in (out['handles'],out['gunHandHandles'],out['handleAlternates'],out['gunHandHandleAlternates'],out['rockIn'],out['palms'],out['slides'],out['wellAxes']):

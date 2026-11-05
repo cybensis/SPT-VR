@@ -1,0 +1,85 @@
+# Bolt-action rifles' bolts, from each gun's own after-shot bolt clip (<family>_fire_chambering_0, the Sako's rechamber_0): the bone
+# that slides the bolt back and how far (in its parent's frame), the bone that turns the handle up and about which axis how far (in
+# its own rest frame; the DVL-10's is one bone that does both), and the dominant hand's hold on the knob (ridingHold on the turning
+# bone, the palm in its frame). The runtime turns then slides those bones by the hand, from their own rest pose at the grab.
+# Writes bolts.json; gen_export.py merges it in. Run from this folder.
+import sys, os, re, json, zlib
+exec(open('gen_holds.py',encoding='utf-8').read().split("if __name__=='__main__':")[0])
+
+CHARGES='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/items/mods/charges/'
+# folder, bolt clip, the bolt part in mod_charge when the gun's own rig has none (its bones then carry the part's names)
+GUNS=[('mosin','mosin_fire_chambering_0',None),('mosin','mosin_inf_fire_chambering_0',None),('sv98','sv98_fire_chambering_0',None),
+      ('m700','m700_fire_chambering_0',None),('t5000','t5000_fire_chambering_0',None),('dvl-10','dvl_10_fire_chambering_0',None),
+      ('axmc','axmc_fire_chambering_0','charge_ax_accuracy_internation_axmc_86x70'),('sako','sako_rechamber_0','charge_trg_sako_trg_m10_bolt_86x70'),
+      ('vpo215','vpo215_fire_chambering_0',None)]
+NOT_BOLT=re.compile(r'Human|marker|Bend_Goal|Camera|IK|patron|shellport|LOD|aim_camera|weapon_hammer|mod_charge_hammer',re.I)
+
+def withCharge(tree,charge):
+    P,parentOf,_=tree; up,upParent,_=loadTree(CHARGES+charge+'_pb.bundle' if os.path.isfile(CHARGES+charge+'_pb.bundle') else CHARGES+charge+'.bundle')
+    mc=bone(P,'/mod_charge'); root=mc+'/'+charge
+    P=dict(P); parentOf=dict(parentOf); P[root]=(np.zeros(3),np.array([0,0,0,1.0]),np.ones(3)); parentOf[root]=mc
+    for p,v in up.items(): P[root+'/'+p]=v; parentOf[root+'/'+p]=root+('/'+upParent[p] if upParent[p] else '')
+    return P,parentOf,{zlib.crc32(p.encode())&0xffffffff:p for p in P}
+
+def axisAngle(q):
+    q=q if q[3]>=0 else -q; angle=2*math.degrees(math.acos(min(1.0,float(q[3])))); s=math.sqrt(max(1e-12,1-float(q[3])**2))
+    return [float(x)/s for x in q[:3]],angle
+
+bolts={}; folderClips={}
+for folder,clipName,charge in GUNS:
+    if folder not in folderClips:
+        clips={}
+        for o in UnityPy.load(ROOT+folder+'/client_assets.bundle').objects:
+            if o.type.name=='AnimationClip':
+                try: c=o.read(); clips[c.m_Name]=c
+                except Exception: pass
+        folderClips[folder]=clips
+    clip=folderClips[folder][clipName]; family=re.sub(r'_(fire_chambering|rechamber)_0$','',clipName)
+    hashes=[b.path for b in clip.m_ClipBindingConstant.genericBindings]; best=None
+    for c in sorted(os.listdir(ROOT+folder)):
+        if c.endswith('_container.bundle') and c.startswith('weapon_'):
+            tree=loadTree(ROOT+folder+'/'+c)
+            if charge: tree=withCharge(tree,charge)
+            n=sum(h in tree[2] for h in hashes)
+            if best is None or n>best[0]: best=(n,tree)
+    tree=best[1]; P,parentOf,H=tree; g=setup(tree,clip); stop=float(clip.m_MuscleClip.m_StopTime)
+    wp=bone(P,'Weapon_root_anim/weapon'); steps=int(stop*60)+1
+    moved={}
+    for h in set(hashes):
+        p=H.get(h)
+        if p is None or not p.startswith(wp+'/') or NOT_BOLT.search(p.split('/')[-1]): continue
+        p0,q0=[np.array(v,float) for v in g['localAt'](p,0.0)[:2]]; travel=(0,0); turn=(0,0)
+        for i in range(steps):
+            t=i/60; pt,qt=[np.array(v,float) for v in g['localAt'](p,t)[:2]]
+            d=float(np.linalg.norm(pt-p0)); r=ang(q0,qt)
+            if d>travel[0]: travel=(d,t)
+            if r>turn[0]: turn=(r,t)
+        if travel[0]>0.004 or turn[0]>4: moved[p]=dict(travel=travel,turn=turn)
+    sliders=[p for p in moved if moved[p]['travel'][0]>=0.05]
+    turners=[p for p in moved if moved[p]['turn'][0]>=30]
+    if not sliders or not turners:
+        print(family,'no bolt found',{p.split('/')[-1]:v for p,v in moved.items()}); continue
+    slider=max(sliders,key=lambda p:moved[p]['travel'][0]); turner=max(turners,key=lambda p:moved[p]['turn'][0])
+    tBack=moved[slider]['travel'][1]; tUp=moved[turner]['turn'][1]
+    p0=np.array(g['localAt'](slider,0.0)[0],float); pBack=np.array(g['localAt'](slider,tBack)[0],float)
+    # The turn at full lift, before the slide (the DVL-10's single bone: its turn as the slide starts)
+    tLift=tUp if tUp<=tBack else tBack
+    if turner==slider:
+        for i in range(steps):
+            t=i/60
+            if np.linalg.norm(np.array(g['localAt'](slider,t)[0],float)-p0)>0.005: tLift=t; break
+    q0=np.array(g['localAt'](turner,0.0)[1],float); qUp=np.array(g['localAt'](turner,tLift)[1],float)
+    axis,angle=axisAngle(qmul(conj(q0),qUp))
+    hold=ridingHold(g,turner,'R')
+    # Where the hand takes it, in the turning bone's frame: the hold's palm, else the palm with the bolt all the way back (the DVL-10's
+    # hold doesn't pass ridingHold's steadiness test)
+    if hold: knob=hold['position']
+    else:
+        c={}; tp,tr,_=g['worldAt'](turner,tBack,c); pp,_,_=g['worldAt'](bone(P,'/Base HumanRPalm'),tBack,c)
+        knob=[round(float(x),4) for x in g['rotate'](conj(tr),pp-tp)]
+    bolts[family]=dict(slider=slider.split('/')[-1],turner=turner.split('/')[-1],travel=[round(float(x),4) for x in pBack-p0],
+                       distance=round(float(np.linalg.norm(pBack-p0)),4),turnAxis=[round(x,4) for x in axis],turnDegrees=round(angle,1),knob=knob,
+                       hold=dict(position=hold['position'],rotation=hold['rotation'],fingers=hold['fingers']) if hold else None,
+                       times=dict(lift=round(tLift,3),back=round(tBack,3)))
+    print(f"{family}: slide {bolts[family]['slider']} {bolts[family]['distance']*100:.1f} cm at {tBack:.2f}s, turn {bolts[family]['turner']} {angle:.0f} deg about {[round(x,2) for x in axis]} at {tLift:.2f}s, hold {'yes' if hold else 'NO'}",flush=True)
+json.dump(dict(bolts=bolts),open('bolts.json','w'),indent=1)

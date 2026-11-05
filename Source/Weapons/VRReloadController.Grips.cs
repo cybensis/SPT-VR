@@ -133,6 +133,20 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, string> handleCarriers;
             public Dictionary<string, float[]> handleGrabPoints;
             public Dictionary<string, SavedReleasePress> releasePress;
+            public Dictionary<string, SavedBolt> bolts;
+        }
+
+        // A bolt-action's bolt (gen_bolts.py): the slide and turn bones, how far, the knob, the gun hand's hold on it
+        public sealed class SavedBolt
+        {
+            public string slider;
+            public string turner;
+            public float[] travel;
+            public float distance;
+            public float[] turnAxis;
+            public float turnDegrees;
+            public float[] knob;
+            public SavedHandleHold hold;
         }
 
         public sealed class SavedReleasePress
@@ -509,6 +523,25 @@ namespace TarkovVR.Source.Weapons
                     {
                         if (entry.Value != null && entry.Value.Length >= 3)
                             handleGrabPoints[entry.Key] = new Vector3(entry.Value[0], entry.Value[1], entry.Value[2]);
+                    }
+                }
+                if (generated.bolts != null)
+                {
+                    foreach (KeyValuePair<string, SavedBolt> entry in generated.bolts)
+                    {
+                        SavedBolt saved = entry.Value;
+                        if (saved.travel == null || saved.turnAxis == null || saved.knob == null || string.IsNullOrEmpty(saved.slider) || string.IsNullOrEmpty(saved.turner))
+                            continue;
+                        boltGuns[entry.Key] = new BoltData
+                        {
+                            slider = saved.slider,
+                            turner = saved.turner,
+                            travel = new Vector3(saved.travel[0], saved.travel[1], saved.travel[2]),
+                            turnAxis = new Vector3(saved.turnAxis[0], saved.turnAxis[1], saved.turnAxis[2]).normalized,
+                            turnDegrees = saved.turnDegrees,
+                            knob = new Vector3(saved.knob[0], saved.knob[1], saved.knob[2]),
+                            hold = saved.hold != null && saved.hold.position != null && saved.hold.rotation != null ? HandleHoldFrom(saved.hold) : null,
+                        };
                     }
                 }
                 if (generated.sideHandles != null)

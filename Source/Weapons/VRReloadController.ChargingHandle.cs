@@ -190,6 +190,9 @@ namespace TarkovVR.Source.Weapons
 
         private static bool CanBeRackedByHand(FirearmController firearmController, Weapon weapon)
         {
+            // A bolt-action's bolt (VRReloadController.Bolt): its draw on an empty chamber leaves the round for the hand too
+            if (weapon.BoltAction)
+                return boltAction && TryGetBolt(firearmController, out _);
             if (weapon.ReloadMode != Weapon.EReloadMode.ExternalMagazine && weapon.ReloadMode != Weapon.EReloadMode.ExternalMagazineWithInternalReloadSupport)
                 return false;
             LoadRecordedGrips();
