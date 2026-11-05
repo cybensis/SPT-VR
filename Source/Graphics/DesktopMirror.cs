@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -10,26 +9,32 @@ namespace TarkovVR.Source.Graphics
     // The desktop window, for recording: one eye's finished image (VR Graphics: "Desktop View Uses Right Eye"), cropped to the
     // window's shape and stabilised. Unity's own mirror copies the whole eye texture: nearly square, the headset's wide field of
     // view, the lenses' black corners, and every head movement. Instead a virtual camera at the eye follows the head's turning
-    // smoothed (with a cap on how far it can lag, so the crop stays inside the eye image), and every window point is looked up in
-    // the eye image through that eye's own view and projection. Rotation only: where the eye was is what the image shows.
-    // Drawn at the end of the frame, after every camera: no camera of its own, so other mods' per-camera work doesn't run for it.
+    // smoothed (with a cap on how far it can lag, and never so far that the window reaches the lens mask), and every window point
+    // is looked up in the eye image through that eye's own view and projection. Rotation only: where the eye was is what the
+    // image shows. Field of view and smoothing: VR Graphics sliders.
+    // Drawn by a camera of our own that renders nothing and comes last of the cameras: after the eyes, before the screen overlays
+    // (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end of the frame covered.
     public class DesktopMirror : MonoBehaviour
     {
         public static bool stabilized = true;           // false = Unity's own mirror of the eye texture
-        public static float fieldOfView = 80f;          // deg across the window
-        public static float smoothingTime = 0.15f;      // s the view takes to catch up with a head turn (0 = follows it exactly)
         public static float maxLagDegrees = 12f;        // how far it can trail the head (more = smoother, but the crop nears the eye image's edge)
         public static float resetDegrees = 60f;         // further off than this at once (a snap of the camera, a new scene): no catching up, it's there
-        public static float edgeMargin = 0.05f;         // share of the eye image kept clear at each edge: the lenses' black mask comes in there
-        public static int edgeChecks = 4;               // points checked along each side of the window to keep it inside the eye image
+        public static float edgeMargin = 0.03f;         // share of the eye image kept clear at each edge
+        public static bool useLensMask = true;          // keep the window off the eye's own lens mask (its occlusion mesh), corners included
+        public static int lensMaskMarginCells = 3;      // the mask grown by this many of its 128 cells (about 2% of the eye image)
+        public static int edgeChecks = 6;               // points checked along each side of the window to keep it inside the eye image
         public static bool flipVertical = true;         // the eye texture is stored top row first (headset: upside down without it)
         public static int gridColumns = 24;             // the window is drawn as a grid; each corner looked up exactly, straight in between
         public static int gridRows = 14;
+        public static float cameraDepth = 100000f;      // after every other camera
 
         // The game's (Unity 2022) XRMirrorViewBlitMode values: Default 0 = Unity's own mirror, None -6. Not the constants: they compile
-        // in from the 2019 references this builds against, where None is 0 (= 2022's Default).
+        // in from the 2019 references this builds against, where None is 0 (= 2022's Default). (The render pass structs below are
+        // fine: their layout comes from the game's assembly at run time; only fields both versions have are read.)
         private const int UnityMirror = 0;
         private const int NoMirror = -6;
+        private const int LensMaskSize = 128;
+
         private static readonly List<XRDisplaySubsystem> displays = new List<XRDisplaySubsystem>();
         private int mirrorModeSet = int.MinValue;
         private XRDisplaySubsystem mirrorModeSetOn;
@@ -41,26 +46,55 @@ namespace TarkovVR.Source.Graphics
         private bool loggedError;
         private bool loggedTooWide;
 
-        private IEnumerator Start()
+        // Where each eye's lens mask is, over its image (0..1 both ways, rows up from the bottom of the view)
+        private sealed class LensMask
         {
-            WaitForEndOfFrame endOfFrame = new WaitForEndOfFrame();
-            while (true)
+            public Mesh mesh;
+            public bool[] hidden;
+            public bool checkedMesh;
+        }
+        private readonly LensMask[] lensMasks = { new LensMask(), new LensMask() };
+        private LensMask currentLensMask;
+
+        public static void Create()
+        {
+            GameObject mirror = new GameObject("VRDesktopMirror");
+            DontDestroyOnLoad(mirror);
+            mirror.AddComponent<DesktopMirror>();
+        }
+
+        private void Awake()
+        {
+            Camera windowCamera = gameObject.AddComponent<Camera>();
+            windowCamera.cullingMask = 0;
+            windowCamera.clearFlags = CameraClearFlags.Nothing;
+            windowCamera.depth = cameraDepth;
+            windowCamera.stereoTargetEye = StereoTargetEyeMask.None;
+            windowCamera.targetDisplay = 0;
+            windowCamera.orthographic = true;
+            windowCamera.nearClipPlane = 0.01f;
+            windowCamera.farClipPlane = 1f;
+            windowCamera.useOcclusionCulling = false;
+            windowCamera.allowHDR = false;
+            windowCamera.allowMSAA = false;
+            windowCamera.renderingPath = RenderingPath.Forward;
+        }
+
+        private void OnPostRender()
+        {
+            try
             {
-                yield return endOfFrame;
-                try
+                DrawWindow();
+            }
+            catch (Exception exception)
+            {
+                if (!loggedError)
                 {
-                    DrawWindow();
+                    loggedError = true;
+                    Plugin.MyLog.LogError($"[DesktopMirror] drawing the window failed, Unity's mirror instead: {exception}");
                 }
-                catch (Exception exception)
-                {
-                    if (!loggedError)
-                    {
-                        loggedError = true;
-                        Plugin.MyLog.LogError($"[DesktopMirror] drawing the window failed, Unity's mirror instead: {exception}");
-                    }
-                    stabilized = false;
-                    SetMirrorMode(Display(), UnityMirror);
-                }
+                stabilized = false;
+                SetMirrorMode(Display(), UnityMirror);
             }
         }
 
@@ -83,13 +117,16 @@ namespace TarkovVR.Source.Graphics
             }
             SetMirrorMode(display, NoMirror);
 
+            int pass = eye == Camera.StereoscopicEye.Right ? 1 : 0;
+            currentLensMask = useLensMask ? LensMaskOf(display, pass, eyeCamera) : null;
             Matrix4x4 view = eyeCamera.GetStereoViewMatrix(eye);
             Matrix4x4 projection = eyeCamera.GetStereoProjectionMatrix(eye);
             Quaternion eyeRotation = RotationOfView(view);
-            float tanHalfAcross = Mathf.Tan(Mathf.Clamp(fieldOfView, 10f, 150f) * 0.5f * Mathf.Deg2Rad);
+            float fieldOfView = VRSettings.GetDesktopViewFieldOfView();
+            float tanHalfAcross = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
             float tanHalfUp = tanHalfAcross * Screen.height / Screen.width;
-            Smooth(eyeRotation, eyeCamera);
-            KeepInsideEyeImage(eyeRotation, view, projection, tanHalfAcross, tanHalfUp);
+            Smooth(eyeRotation, eyeCamera, VRSettings.GetDesktopViewSmoothing());
+            KeepInsideEyeImage(eyeRotation, view, projection, tanHalfAcross, tanHalfUp, fieldOfView);
 
             if (!loggedStart)
             {
@@ -132,7 +169,7 @@ namespace TarkovVR.Source.Graphics
             return forward.sqrMagnitude > 1e-8f && up.sqrMagnitude > 1e-8f ? Quaternion.LookRotation(forward, up) : Quaternion.identity;
         }
 
-        private void Smooth(Quaternion eyeRotation, Camera eyeCamera)
+        private void Smooth(Quaternion eyeRotation, Camera eyeCamera, float smoothingTime)
         {
             if (!haveSmoothedRotation || smoothedFor != eyeCamera || Quaternion.Angle(smoothedRotation, eyeRotation) > resetDegrees)
             {
@@ -150,10 +187,11 @@ namespace TarkovVR.Source.Graphics
         }
 
         // Each eye's image reaches less far toward the nose than outward, and the trailing view moved the crop toward it on a turn
-        // (headset: turning left with the left eye, the black mask came in on the right). The window's whole border has to land inside
-        // the eye image, less edgeMargin: where it wouldn't, the view trails less, just as far as fits (between the head's own turn
-        // and the smoothed one).
-        private void KeepInsideEyeImage(Quaternion eyeRotation, Matrix4x4 view, Matrix4x4 projection, float tanHalfAcross, float tanHalfUp)
+        // (headset: turning left with the left eye, the black mask came in on the right; then "a bit in the corner" with only the
+        // image's edges checked: the mask is rounded). The window's whole border has to land inside the eye image (less edgeMargin)
+        // and off the lens mask: where it wouldn't, the view trails less, just as far as fits (between the head's own turn and the
+        // smoothed one).
+        private void KeepInsideEyeImage(Quaternion eyeRotation, Matrix4x4 view, Matrix4x4 projection, float tanHalfAcross, float tanHalfUp, float fieldOfView)
         {
             if (BorderInsideEyeImage(smoothedRotation, view, projection, tanHalfAcross, tanHalfUp))
                 return;
@@ -190,13 +228,19 @@ namespace TarkovVR.Source.Graphics
             return true;
         }
 
-        private static bool InsideEyeImage(Vector2 point)
+        private bool InsideEyeImage(Vector2 point)
         {
-            return point.x >= edgeMargin && point.x <= 1f - edgeMargin && point.y >= edgeMargin && point.y <= 1f - edgeMargin;
+            if (point.x < edgeMargin || point.x > 1f - edgeMargin || point.y < edgeMargin || point.y > 1f - edgeMargin)
+                return false;
+            if (currentLensMask == null || currentLensMask.hidden == null)
+                return true;
+            int column = Mathf.Clamp((int)(point.x * LensMaskSize), 0, LensMaskSize - 1);
+            int row = Mathf.Clamp((int)(point.y * LensMaskSize), 0, LensMaskSize - 1);
+            return !currentLensMask.hidden[row * LensMaskSize + column];
         }
 
         // A window point (0..1 across and up): its direction from a camera turned this way, where that direction is in the eye image
-        // (0..1, the eye's own projection; the texture's row order aside)
+        // (0..1, the eye's own projection, up = up in the view; the texture's row order aside)
         private static Vector2 EyeImagePoint(Quaternion rotation, float across, float up, float tanHalfAcross, float tanHalfUp, Matrix4x4 view, Matrix4x4 projection)
         {
             Vector3 direction = rotation * new Vector3((across * 2f - 1f) * tanHalfAcross, (up * 2f - 1f) * tanHalfUp, 1f);
@@ -204,6 +248,120 @@ namespace TarkovVR.Source.Graphics
             Vector4 clip = projection * new Vector4(inView.x, inView.y, inView.z, 0f);
             return clip.w > 1e-5f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : new Vector2(-1f, -1f);
         }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The lens mask: the eye's occlusion mesh (the triangles Unity draws black into the eye image where the lens can't show it), from
+        // that eye's render pass, drawn once into a grid and grown by lensMaskMarginCells. Its vertices are 0..1 over the eye image, rows in
+        // the texture's order (top first: flipVertical). Anything else (none, unreadable, other units): the image's edges alone, logged once.
+
+        private LensMask LensMaskOf(XRDisplaySubsystem display, int pass, Camera eyeCamera)
+        {
+            LensMask lensMask = lensMasks[pass];
+            display.GetRenderPass(pass, out XRDisplaySubsystem.XRRenderPass renderPass);
+            if (renderPass.GetRenderParameterCount() < 1)
+                return lensMask;
+            renderPass.GetRenderParameter(eyeCamera, 0, out XRDisplaySubsystem.XRRenderParameter renderParameter);
+            Mesh mesh = renderParameter.occlusionMesh;
+            if (lensMask.checkedMesh && lensMask.mesh == mesh)
+                return lensMask;
+            lensMask.checkedMesh = true;
+            lensMask.mesh = mesh;
+            lensMask.hidden = null;
+            if (mesh == null)
+            {
+                Plugin.MyLog.LogInfo($"[DesktopMirror] eye {pass}: no lens mask from the headset, the image's edges only");
+                return lensMask;
+            }
+            Vector3[] vertices = mesh.vertices;
+            int[] triangles = mesh.triangles;
+            Vector2 low = new Vector2(float.MaxValue, float.MaxValue);
+            Vector2 high = new Vector2(float.MinValue, float.MinValue);
+            foreach (Vector3 vertex in vertices)
+            {
+                low = Vector2.Min(low, vertex);
+                high = Vector2.Max(high, vertex);
+            }
+            if (triangles.Length < 3 || low.x < -0.01f || low.y < -0.01f || high.x > 1.01f || high.y > 1.01f)
+            {
+                Plugin.MyLog.LogWarning($"[DesktopMirror] eye {pass}: lens mask not usable ({triangles.Length / 3} triangles, x {low.x:0.00}..{high.x:0.00}, y {low.y:0.00}..{high.y:0.00}), the image's edges only");
+                return lensMask;
+            }
+            bool[] hidden = new bool[LensMaskSize * LensMaskSize];
+            for (int index = 0; index + 2 < triangles.Length; index += 3)
+                FillTriangle(hidden, MaskPoint(vertices[triangles[index]]), MaskPoint(vertices[triangles[index + 1]]), MaskPoint(vertices[triangles[index + 2]]));
+            lensMask.hidden = Grow(hidden, Mathf.Max(0, lensMaskMarginCells));
+            int hiddenCells = 0;
+            foreach (bool cell in lensMask.hidden)
+            {
+                if (cell)
+                    hiddenCells++;
+            }
+            Plugin.MyLog.LogInfo($"[DesktopMirror] eye {pass}: lens mask {triangles.Length / 3} triangles, x {low.x:0.00}..{high.x:0.00}, y {low.y:0.00}..{high.y:0.00}, "
+                + $"{100f * hiddenCells / hidden.Length:0}% of the image kept off (with the margin)");
+            return lensMask;
+        }
+
+        // A mesh vertex in the view's own up (the mesh is in the texture's rows)
+        private static Vector2 MaskPoint(Vector3 vertex)
+        {
+            return new Vector2(vertex.x, flipVertical ? 1f - vertex.y : vertex.y);
+        }
+
+        private static void FillTriangle(bool[] hidden, Vector2 a, Vector2 b, Vector2 c)
+        {
+            int columnLow = Mathf.Clamp((int)(Mathf.Min(a.x, Mathf.Min(b.x, c.x)) * LensMaskSize), 0, LensMaskSize - 1);
+            int columnHigh = Mathf.Clamp((int)(Mathf.Max(a.x, Mathf.Max(b.x, c.x)) * LensMaskSize), 0, LensMaskSize - 1);
+            int rowLow = Mathf.Clamp((int)(Mathf.Min(a.y, Mathf.Min(b.y, c.y)) * LensMaskSize), 0, LensMaskSize - 1);
+            int rowHigh = Mathf.Clamp((int)(Mathf.Max(a.y, Mathf.Max(b.y, c.y)) * LensMaskSize), 0, LensMaskSize - 1);
+            for (int row = rowLow; row <= rowHigh; row++)
+            {
+                for (int column = columnLow; column <= columnHigh; column++)
+                {
+                    Vector2 cell = new Vector2((column + 0.5f) / LensMaskSize, (row + 0.5f) / LensMaskSize);
+                    if (InTriangle(cell, a, b, c))
+                        hidden[row * LensMaskSize + column] = true;
+                }
+            }
+        }
+
+        private static bool InTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
+        {
+            float side1 = Cross(b - a, point - a);
+            float side2 = Cross(c - b, point - b);
+            float side3 = Cross(a - c, point - c);
+            bool anyNegative = side1 < 0f || side2 < 0f || side3 < 0f;
+            bool anyPositive = side1 > 0f || side2 > 0f || side3 > 0f;
+            return !(anyNegative && anyPositive);
+        }
+
+        private static float Cross(Vector2 first, Vector2 second)
+        {
+            return first.x * second.y - first.y * second.x;
+        }
+
+        // Every cell within this many cells of a hidden one is hidden too (a square around it)
+        private static bool[] Grow(bool[] hidden, int cells)
+        {
+            if (cells <= 0)
+                return hidden;
+            bool[] grown = new bool[hidden.Length];
+            for (int row = 0; row < LensMaskSize; row++)
+            {
+                for (int column = 0; column < LensMaskSize; column++)
+                {
+                    if (!hidden[row * LensMaskSize + column])
+                        continue;
+                    for (int nearRow = Mathf.Max(0, row - cells); nearRow <= Mathf.Min(LensMaskSize - 1, row + cells); nearRow++)
+                    {
+                        for (int nearColumn = Mathf.Max(0, column - cells); nearColumn <= Mathf.Min(LensMaskSize - 1, column + cells); nearColumn++)
+                            grown[nearRow * LensMaskSize + nearColumn] = true;
+                    }
+                }
+            }
+            return grown;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         private void Draw(RenderTexture eyeTexture, Matrix4x4 view, Matrix4x4 projection, float tanHalfAcross, float tanHalfUp)
         {

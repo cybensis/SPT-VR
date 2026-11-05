@@ -86,6 +86,8 @@ namespace TarkovVR.Source.Settings
             public bool hideArms { get; set; }
             public bool hideLegs { get; set; }
             public bool desktopViewRightEye { get; set; }
+            public float desktopViewFieldOfView { get; set; }
+            public float desktopViewSmoothing { get; set; }
             public bool manualEating { get; set; }
             public bool disableMouseInput { get; set; }
             public bool disableCorpseContextMenu { get; set; }
@@ -143,6 +145,8 @@ namespace TarkovVR.Source.Settings
                 hideArms = false;
                 hideLegs = false;
                 desktopViewRightEye = false;
+                desktopViewFieldOfView = 80f;
+                desktopViewSmoothing = 0.15f;
                 manualEating = true;
                 disableMouseInput = true;
                 disableCorpseContextMenu = true;
@@ -219,6 +223,8 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle hideArmsToggle;
         private static SettingToggle hideLegsToggle;
         private static SettingToggle desktopViewRightEyeToggle;
+        private static SettingSelectSlider desktopViewFieldOfViewSlider;
+        private static SettingSelectSlider desktopViewSmoothingSlider;
         private static SettingToggle manualEatingToggle;
         private static SettingToggle disableMouseInput;
         private static SettingToggle disableCorpseContextMenuToggle;
@@ -750,6 +756,19 @@ namespace TarkovVR.Source.Settings
             desktopViewRightEyeToggle.Text.localizationKey = "Desktop View Uses Right Eye";
             desktopViewRightEyeToggle.Toggle.UpdateValue(settings.desktopViewRightEye);
 
+            // How wide the desktop window sees (degrees across), and how long its view takes to catch up with a head turn (0 = off)
+            desktopViewFieldOfViewSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
+            desktopViewFieldOfViewSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
+            desktopViewFieldOfViewSlider.Text.localizationKey = "Desktop View Field Of View:";
+            MakeSliderSmooth(desktopViewFieldOfViewSlider, 50f, 110f, () => settings.desktopViewFieldOfView,
+                (v) => settings.desktopViewFieldOfView = v, (v) => v.ToString("0"));
+
+            desktopViewSmoothingSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
+            desktopViewSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
+            desktopViewSmoothingSlider.Text.localizationKey = "Desktop View Smoothing (0 = off):";
+            MakeSliderSmooth(desktopViewSmoothingSlider, 0f, 0.5f, () => settings.desktopViewSmoothing,
+                (v) => settings.desktopViewSmoothing = v, (v) => Remap(v, 0f, 0.5f, 0f, 10f).ToString("0.0"));
+
             // Manual eating
             manualEatingToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
             manualEatingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
@@ -1202,6 +1221,18 @@ namespace TarkovVR.Source.Settings
         public static bool GetDesktopViewRightEye()
         {
             return settings != null && settings.desktopViewRightEye;
+        }
+
+        // Degrees across the desktop window (a settings file from before these sliders reads 0: the default then)
+        public static float GetDesktopViewFieldOfView()
+        {
+            return settings == null || settings.desktopViewFieldOfView < 1f ? 80f : Mathf.Clamp(settings.desktopViewFieldOfView, 30f, 150f);
+        }
+
+        // Seconds the desktop window's view takes to catch up with a head turn
+        public static float GetDesktopViewSmoothing()
+        {
+            return settings == null ? 0.15f : Mathf.Clamp(settings.desktopViewSmoothing, 0f, 1f);
         }
         private static void SetDesktopViewRightEye(bool rightEye)
         {

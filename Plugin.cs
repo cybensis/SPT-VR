@@ -58,7 +58,7 @@ namespace TarkovVR
             // Ctrl+F10 in a raid: both-eyes vs left-eye-only cost measurement (logs "[StereoCost]").
             gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>();
             // The desktop window: one eye, cropped to the window and stabilised (for recording)
-            gameObject.AddComponent<TarkovVR.Source.Graphics.DesktopMirror>();
+            TarkovVR.Source.Graphics.DesktopMirror.Create();
 
             if (OpenXRBootstrap.Active)
             {
