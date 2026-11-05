@@ -135,6 +135,11 @@ namespace TarkovVR.Source.Weapons
         private static readonly Dictionary<string, List<HandleHold>> gunHandHandleAlternates = new Dictionary<string, List<HandleHold>>();
         // A handle with no slot whose rig bone isn't named mod_charge (MP7: weapon_charghing_handle, sic), by animation set
         private static readonly Dictionary<string, string> handleBoneNames = new Dictionary<string, string>();
+        // Of those, a knob riding the bolt or carrier, which is what comes back (9A-91, G36), and a bolt that's the handle itself with
+        // no knob of its own, whose back end is inside the receiver: grabbed where its clip's hand is, in the bone's frame (PPSh, PP-91)
+        private static readonly Dictionary<string, string> handleCarrierNames = new Dictionary<string, string>();
+        private static readonly Dictionary<string, Vector3> handleGrabPoints = new Dictionary<string, Vector3>();
+        private static Vector3? foundHandleGrabLocal;
         private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
         private static float heldHandleTravel;              // m this gun's handle comes back
 
@@ -214,6 +219,7 @@ namespace TarkovVR.Source.Weapons
                 foundHandleBone = null;
                 foundHandleModel = null;
                 foundHandleCarrier = null;
+                foundHandleGrabLocal = null;
                 foreach (Slot slot in weapon.AllSlots)
                 {
                     if (slot.ID != EWeaponModType.mod_charge.ToString())
@@ -239,7 +245,10 @@ namespace TarkovVR.Source.Weapons
                     // hand), as a pistol's slide. Measured against the bone it would follow itself, the MP5's shake.
                     foundHandleBone = namedHandle;
                     foundHandleModel = namedHandle;
-                    foundHandleCarrier = namedHandle;
+                    Transform carrier = handleCarrierNames.TryGetValue(family, out string carrierName) ? FindRigBone(firearmController, carrierName) : null;
+                    foundHandleCarrier = carrier != null ? carrier : namedHandle;
+                    if (handleGrabPoints.TryGetValue(family, out Vector3 grabLocal))
+                        foundHandleGrabLocal = grabLocal;
                 }
                 else if (foundHandleBone == null)
                 {
@@ -289,6 +298,8 @@ namespace TarkovVR.Source.Weapons
         // Where the hand takes it: the back of the fitted handle, or the bone where a handle built into the carrier sits
         private static Vector3 ChargingHandleGrabPoint(Vector3 backWorld)
         {
+            if (foundHandleGrabLocal.HasValue)
+                return foundHandleBone.position + foundHandleBone.rotation * foundHandleGrabLocal.Value;
             return foundHandleModel != null ? HandleGrabPoint(foundHandleModel, backWorld) : foundHandleBone.position;
         }
 

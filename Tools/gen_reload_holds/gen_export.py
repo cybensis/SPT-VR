@@ -41,13 +41,26 @@ def lengthFor(family,typ):
                 if l>0: return round(float(l),3)
     return 0.0
 out=dict(grips={},handles={},gunHandHandles={},handleAlternates=R['handleAlternates'],gunHandHandleAlternates=R['gunHandHandleAlternates'],handleMovesWithBolt=sorted(set(R['handleMovesWithBolt'])),handleNotches=R['handleNotches'],thumbCatches=R['thumbCatches'],wellAxes={},slides={},rockIn={},palms={}); dropped=[]
+# Clips numbered by the magazine's size, not its type (the Uzi Pro: uzip_mag_in_20 / _30 for its 20, 25 and 32 round magazines, types
+# 0-2; the runtime only looks up to type 15): each to the type of the magazine nearest that size. A type left over borrows at runtime.
+magazinesByFolder={}
+for g in guns:
+    slot=[s for s in items[g['id']]['_props'].get('Slots',[]) if s['_name']=='mod_magazine']
+    for i in (slot[0]['_props']['filters'][0]['Filter'] if slot else []):
+        if i in items:
+            cartridges=items[i]['_props'].get('Cartridges') or [{}]
+            magazinesByFolder.setdefault(g['folder'],set()).add((items[i]['_props'].get('magAnimationIndex',0),cartridges[0].get('_max_count',0)))
+def gripType(family,typ):
+    magazines=magazinesByFolder.get(famFolder.get(family),set())
+    if typ<=15 or not magazines: return typ
+    return min(magazines,key=lambda m:abs(m[1]-typ))[0]
 for k,v in sorted(R['grips'].items()):
-    family,typ=k.split('|'); e={}
+    family,typ=k.split('|'); typ=gripType(family,int(typ)); e={}
     for half,h in v.items():
         if h['palmOff']>0.03 or h['frames']<4:
             dropped.append((k,half,h['palmOff'],h['frames'])); continue
-        e[half]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],magazineLength=lengthFor(family,int(typ)))
-    if e: out['grips'][k]=e
+        e[half]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],magazineLength=lengthFor(family,typ))
+    if e: out['grips'][f'{family}|{typ}']=e
 for f,h in sorted(R['handles'].items()):
     if h['palmOff']>0.03:
         dropped.append((f,'handle',h['palmOff'])); continue
@@ -179,6 +192,8 @@ for f,source in ROCK_IN_FROM.items():
 # gen_extras.py: bolts the handle moves itself, and side handles. A side handle's travel is scaled like the others, and its slider's lag with it.
 out['boltBones']=extras['boltBones']
 out['handleBones']=extras.get('handleBones',{})
+out['handleCarriers']=extras.get('handleCarriers',{})
+out['handleGrabPoints']=extras.get('handleGrabPoints',{})
 out['rockIn'].update(extras.get('rockIn',{}))
 # gen_release.py: who presses each gun's release in its own mag_out clip. Not where a rock-in or thumb catch already says (the off thumb)
 release=json.load(open('release.json')) if os.path.exists('release.json') else {}

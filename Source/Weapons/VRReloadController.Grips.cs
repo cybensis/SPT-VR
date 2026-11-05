@@ -130,6 +130,8 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, List<SavedBoltBone>> boltBones;
             public Dictionary<string, SavedSideHandle> sideHandles;
             public Dictionary<string, string> handleBones;
+            public Dictionary<string, string> handleCarriers;
+            public Dictionary<string, float[]> handleGrabPoints;
             public Dictionary<string, SavedReleasePress> releasePress;
         }
 
@@ -495,6 +497,19 @@ namespace TarkovVR.Source.Weapons
                 {
                     foreach (KeyValuePair<string, string> entry in generated.handleBones)
                         handleBoneNames[entry.Key] = entry.Value;
+                }
+                if (generated.handleCarriers != null)
+                {
+                    foreach (KeyValuePair<string, string> entry in generated.handleCarriers)
+                        handleCarrierNames[entry.Key] = entry.Value;
+                }
+                if (generated.handleGrabPoints != null)
+                {
+                    foreach (KeyValuePair<string, float[]> entry in generated.handleGrabPoints)
+                    {
+                        if (entry.Value != null && entry.Value.Length >= 3)
+                            handleGrabPoints[entry.Key] = new Vector3(entry.Value[0], entry.Value[1], entry.Value[2]);
+                    }
                 }
                 if (generated.sideHandles != null)
                 {

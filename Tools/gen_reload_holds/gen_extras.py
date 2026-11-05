@@ -45,23 +45,32 @@ def fullBackTime(g,path,wp):
 # container), the bone each one's own rack clips move back, every animation set in that folder (checked 2026-11-05: each bone moves
 # 6-13 cm straight back and carries the handle's meshes). MP7 7.2 cm, SA58 11.1, UMP 8.1, Vector 6.2 (its knob's fold not shown),
 # PKM 13.3, RFB 12.5 (its forward handle), Uzi 9.3, Mk-18 Mjolnir 13.2, RSASS 12.3, SR-2M (its magazine clips spelt reload_in/out,
-# clip_names). Left out: the RPD (no clip moves its handle bones) and the VSK-94 (no clips of its own).
+# clip_names), AA-12 14.5, MDR 13.0, M1A 12.0 (the op rod's handle). Second scan (the first one's printout was cut off): knobs riding
+# the bolt or carrier that moves (9A-91 10.2, ASh-12 16.9, G36 10.9: HANDLE_CARRIERS, the part the runtime moves), and bolts that are
+# the handle themselves, with no knob of their own (PP-91 8.8, PPSh 8.3, Uzi Pro 5.3, VPO-101 12.1: the back of the bolt is inside
+# the receiver, so the grab zone is where the clip's hand is, HANDLE_GRAB_AT_HOLD). Left out: the RPD (no clip moves its handle
+# bones), the M60 (no rack clip), the VSK-94 (no clips of its own), the AGS-30 and NSV (mounted).
 # gen_holds' own left/right hold search on that bone, merged into its handles by gen_export; handleBones tells the runtime the bone.
 HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghing_handle','hk_ump':'weapon_charge','tdi_kriss_vector':'weapon_charge',
                   'zid_pkm':'weapon_charge','kel_tec_rfb':'weapon_charge','iwi_uzi_9x19':'weapon_charge','sword_int_mk_18':'weapon_charge','r11_rsass':'weapon_charghing_000',
-                  'tochmash_sr2m':'weapon_charging_handle'}
+                  'tochmash_sr2m':'weapon_charging_handle','mps_aa_12':'weapon_charge','dt_mdr':'weapon_charge_000','springfield_m1a':'weapon_bolthandle',
+                  'kbp_9a91':'weapon_bolt_charge','ckib_ash_12':'weapon_charging_handle','hk_g36':'weapon_charge_handle',
+                  'zmz_pp-9':'weapon_bolt','zis_ppsh41':'weapon_bolt','iwi_uzi_pro':'weapon_bolt','vepr_hunter_vpo-101':'weapon_bolt'}
+HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier'}
+# (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's hand is too)
+HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12')
 HANDLE_BONE_GUNS={}
 for folder,v in census.items():
     if not os.path.isdir(ROOT+folder): continue
     containers=[c for c in sorted(os.listdir(ROOT+folder)) if c.endswith('_container.bundle') and c.startswith('weapon_')]
-    matching=[(c,b) for c in containers for k,b in HANDLE_BONE_RIGS.items() if k in c]
+    matching=[(c,b,k) for c in containers for k,b in HANDLE_BONE_RIGS.items() if k in c]
     for clip in v.get('clips',[]):
         m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,clip))
         if matching and m:
             family=m.group(1).lower()
-            HANDLE_BONE_GUNS[family]=(folder,)+next(((c,b) for c,b in matching if family in c),matching[0])
-extraHandles={}; extraGunHandHandles={}; handleBones={}; extraMovesWithBolt=[]; namedTrees={}
-for family,(folder,container,boneName) in sorted(HANDLE_BONE_GUNS.items()):
+            HANDLE_BONE_GUNS[family]=(folder,)+next(((c,b,k) for c,b,k in matching if family in c),matching[0])
+extraHandles={}; extraGunHandHandles={}; handleBones={}; handleCarriers={}; handleGrabPoints={}; extraMovesWithBolt=[]; namedTrees={}
+for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     _,clips=loadFolder(folder)
     tree=loadTree(ROOT+folder+'/'+container); P=tree[0]; J=fingerPaths(P)
     charge=bone(P,'/'+boneName); wp=bone(P,'Weapon_root_anim/weapon')
@@ -114,6 +123,9 @@ for family,(folder,container,boneName) in sorted(HANDLE_BONE_GUNS.items()):
         if np.linalg.norm(held['rotate'](conj(gunHeldRotation),heldAt-gunHeld)-restInGun)>=0.02: extraMovesWithBolt.append(family)
         break
     handleBones[family]=boneName
+    if rig in HANDLE_CARRIERS: handleCarriers[family]=HANDLE_CARRIERS[rig]
+    grabHold=extraHandles.get(family) or extraGunHandHandles.get(family)
+    if rig in HANDLE_GRAB_AT_HOLD and grabHold: handleGrabPoints[family]=grabHold['position']
     print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
           'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
 
@@ -179,4 +191,4 @@ for family in LOW_ROCK_GUNS:
         rockIns[family]=dict(axis=rocks['axis'],angle=rocks['angle'],thumb=rocks['thumb'])
         print(f'{family} rock-in:',{k:v for k,v in rocks.items() if k!='thumb'},flush=True)
 json.dump(dict(boltBones=boltBones,sideHandles=sideHandles,rockIn=rockIns,handles=extraHandles,gunHandHandles=extraGunHandHandles,
-               handleBones=handleBones,handleMovesWithBolt=extraMovesWithBolt),open('extras.json','w'))
+               handleBones=handleBones,handleCarriers=handleCarriers,handleGrabPoints=handleGrabPoints,handleMovesWithBolt=extraMovesWithBolt),open('extras.json','w'))
