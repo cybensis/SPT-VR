@@ -20,7 +20,7 @@ namespace TarkovVR.Source.Graphics
         public static float smoothingTime = 0.15f;      // s the view takes to catch up with a head turn (0 = follows it exactly)
         public static float maxLagDegrees = 12f;        // how far it can trail the head (more = smoother, but the crop nears the eye image's edge)
         public static float resetDegrees = 60f;         // further off than this at once (a snap of the camera, a new scene): no catching up, it's there
-        public static bool flipVertical = false;        // if the window shows the eye image upside down
+        public static bool flipVertical = true;         // the eye texture is stored top row first (headset: upside down without it)
         public static int gridColumns = 24;             // the window is drawn as a grid; each corner looked up exactly, straight in between
         public static int gridRows = 14;
 
