@@ -1,0 +1,159 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace TarkovVR.Source.Graphics
+{
+    // uiCam (the UI-layer camera drawn over the headset image) costs two camera passes a frame even with nothing of the UI layer in
+    // view: measured 0.87 ms of the main thread on Customs, most of it Unity's work for any camera. The wrist UI only fades in when the
+    // wrist is turned to the face, so most of a raid there's nothing for it to draw. This switches the camera off while no UI-layer
+    // graphic that can be seen (not faded out) is inside either eye's view, with a margin; on while a menu is open. Checked every few
+    // frames and kept on a moment after the last one (fade-outs finish). On the raid / hideout uiCam (InitVRPatches.SetMainCamParent).
+    public class UiCameraGate : MonoBehaviour
+    {
+        public static bool skipWhenNoUiInView = true;  // false = uiCam every frame
+        public static int checkEveryFrames = 3;
+        public static float keepOnSeconds = 0.3f;      // after the last UI seen in view
+        public static float marginMeters = 0.05f;      // grown around each graphic, plus...
+        public static float marginPerMeter = 0.2f;     // ...this share of its distance from the eyes (about 11 degrees): on before it's in view
+        public static float minAlpha = 0.004f;         // below this a graphic counts as faded out
+        public static bool logReasons = true;          // each canvas that turns the camera on, once
+
+        private const int UiLayer = 5;
+        private Camera uiCamera;
+        private Camera eyeCamera;
+        private float onUntil = float.MaxValue;        // on until the first check
+        private int framesToCheck;
+        private readonly Plane[][] eyePlanes = { new Plane[6], new Plane[6] };
+        private readonly Vector3[] corners = new Vector3[4];
+        private readonly HashSet<int> loggedCanvases = new HashSet<int>();
+
+        private void Awake()
+        {
+            uiCamera = GetComponent<Camera>();
+        }
+
+        private void OnDisable()
+        {
+            if (uiCamera != null) uiCamera.enabled = true;
+        }
+
+        // After the wrist's look check and the UI's own fades (Update), before the cameras render
+        private void LateUpdate()
+        {
+            if (uiCamera == null)
+                return;
+            if (!skipWhenNoUiInView || VRGlobals.menuOpen)
+            {
+                SetCameraOn(true);
+                onUntil = Time.unscaledTime + keepOnSeconds;
+                return;
+            }
+            if (--framesToCheck <= 0)
+            {
+                framesToCheck = Mathf.Max(1, checkEveryFrames);
+                if (AnyUiInView())
+                    onUntil = Time.unscaledTime + keepOnSeconds;
+                else if (onUntil == float.MaxValue)
+                    onUntil = 0f;
+            }
+            SetCameraOn(Time.unscaledTime < onUntil);
+        }
+
+        private void SetCameraOn(bool on)
+        {
+            if (uiCamera.enabled != on)
+                uiCamera.enabled = on;
+        }
+
+        // Any UI-layer graphic, not faded out, inside either eye's view (grown by the margin). Unsure = true.
+        private bool AnyUiInView()
+        {
+            if (eyeCamera == null && transform.parent != null)
+                eyeCamera = transform.parent.GetComponent<Camera>();
+            if (eyeCamera == null || !eyeCamera.isActiveAndEnabled || !eyeCamera.stereoEnabled)
+                return true;
+            GeometryUtility.CalculateFrustumPlanes(eyeCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left) * eyeCamera.GetStereoViewMatrix(Camera.StereoscopicEye.Left), eyePlanes[0]);
+            GeometryUtility.CalculateFrustumPlanes(eyeCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right) * eyeCamera.GetStereoViewMatrix(Camera.StereoscopicEye.Right), eyePlanes[1]);
+            Vector3 head = eyeCamera.transform.position;
+
+            // Every active, enabled graphic is registered with its canvas (Graphic.OnEnable): GraphicRegistry's private
+            // Dictionary<Canvas, IndexedSet<Graphic>>, walked through IDictionary / IList (IndexedSet is internal)
+            IDictionary registry = Registry();
+            if (registry == null)
+                return true;
+            IDictionaryEnumerator entries = registry.GetEnumerator();
+            while (entries.MoveNext())
+            {
+                Canvas canvas = entries.Key as Canvas;
+                if (canvas == null || canvas.gameObject.layer != UiLayer || !canvas.isActiveAndEnabled)
+                    continue;
+                Canvas root = canvas.rootCanvas;
+                RenderMode renderMode = root != null ? root.renderMode : canvas.renderMode;
+                if (renderMode == RenderMode.ScreenSpaceOverlay)
+                    continue;   // drawn onto the desktop window, not by a camera
+                bool inFrontOfCamera = renderMode == RenderMode.ScreenSpaceCamera;
+                if (inFrontOfCamera && root.worldCamera != uiCamera)
+                    continue;   // another camera's (or none = overlay)
+                if (!(entries.Value is IList<Graphic> graphics))
+                    return true;
+                for (int index = 0; index < graphics.Count; index++)
+                {
+                    Graphic graphic = graphics[index];
+                    if (graphic == null)
+                        continue;
+                    CanvasRenderer canvasRenderer = graphic.canvasRenderer;
+                    if (canvasRenderer == null || canvasRenderer.cull)
+                        continue;
+                    if (graphic.color.a * canvasRenderer.GetAlpha() * canvasRenderer.GetInheritedAlpha() < minAlpha)
+                        continue;
+                    if (inFrontOfCamera || InView(graphic.rectTransform, head))
+                    {
+                        LogReason(canvas, graphic);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static FieldInfo graphicsField;
+        private static bool loggedNoRegistry;
+        private static IDictionary Registry()
+        {
+            if (graphicsField == null)
+                graphicsField = typeof(GraphicRegistry).GetField("m_Graphics", BindingFlags.Instance | BindingFlags.NonPublic);
+            IDictionary registry = graphicsField?.GetValue(GraphicRegistry.instance) as IDictionary;
+            if (registry == null && !loggedNoRegistry)
+            {
+                loggedNoRegistry = true;
+                Plugin.MyLog.LogWarning("[UiCamGate] UI graphic registry not found: uiCam stays on every frame");
+            }
+            return registry;
+        }
+
+        private bool InView(RectTransform rect, Vector3 head)
+        {
+            rect.GetWorldCorners(corners);
+            Vector3 min = corners[0], max = corners[0];
+            for (int index = 1; index < 4; index++)
+            {
+                min = Vector3.Min(min, corners[index]);
+                max = Vector3.Max(max, corners[index]);
+            }
+            var bounds = new Bounds((min + max) * 0.5f, max - min);
+            bounds.Expand(2f * (marginMeters + marginPerMeter * Vector3.Distance(head, bounds.center)));
+            return GeometryUtility.TestPlanesAABB(eyePlanes[0], bounds) || GeometryUtility.TestPlanesAABB(eyePlanes[1], bounds);
+        }
+
+        private void LogReason(Canvas canvas, Graphic graphic)
+        {
+            if (!logReasons || !loggedCanvases.Add(canvas.GetInstanceID()))
+                return;
+            Transform parent = canvas.transform.parent;
+            Plugin.MyLog.LogInfo($"[UiCamGate] on for canvas '{(parent != null ? parent.name + "/" : "")}{canvas.name}' (first seen: '{graphic.name}')");
+        }
+    }
+}

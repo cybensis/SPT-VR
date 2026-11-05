@@ -249,6 +249,7 @@ namespace TarkovVR.Patches.Core.VR
                 uiCam.cullingMask = 32;
                 uiCam.clearFlags = CameraClearFlags.Depth;
                 MakeUiCameraLight(uiCam);
+                uiCamHolder.AddComponent<TarkovVR.Source.Graphics.UiCameraGate>();   // off while no UI is in view
                 mainCam.transform.parent = VRGlobals.vrOffsetter.transform;
                 mainCam.nearClipPlane = VRGlobals.NEAR_CLIP_PLANE;
                 mainCam.farClipPlane = 5000f;
