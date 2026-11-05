@@ -33,7 +33,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float slingRollDeg = 55f;          // fine roll about the barrel if the canonical pose sits face-on wrong
         public static float attachTime = 0.10f;         // s fly-in to the sling spot, then the mount is rigid
         public static float rotAttachRate = 10f;        // 1/s rotation tuck-in
-        public static float slingDelay = 0.25f;         // s the grip must stay fully released before letting go (debounce)
+        public static float slingDelay = 0.1f;          // s the grip must stay fully released before letting go (debounce; 0.25 read as a delay)
         public static float regrabRadius = 0.13f;       // m RightHand rig transform to the regrab zone (0.10, the left hand's foregrip radius, read a little short)
         public static float regrabForwardOffset = 0.07f;// m the zone sits toward the MUZZLE from the R-hand marker (marker alone still read "a bit far back")
         public static bool hangHaptics = true;

@@ -18,8 +18,8 @@ namespace TarkovVR.Source.Controls
         public enum ButtonState { Held, PressedThisFrame, ReleasedThisFrame }
 
         // The grip "button" comes from the analog squeeze value (on Index: how far your fingers wrap the handle)
-        public static float gripPressThreshold = 0.5f;
-        public static float gripReleaseThreshold = 0.25f;
+        public static float gripPressThreshold = 0.65f;     // kept above the release so the grip can't flicker on and off at one value
+        public static float gripReleaseThreshold = 0.5f;    // 0.25 waited for a nearly open hand (headset: "takes a second to let go")
 
         // Extra correction on top of the grip -> raw conversion, in the raw pose's own space
         public static Vector3 rawPosePositionOffset = Vector3.zero;
