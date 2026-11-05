@@ -12,7 +12,8 @@ using FirearmController = EFT.Player.FirearmController;
 namespace TarkovVR.Source.Player.Interactions
 {
     // Guns on the body, VR-game style: every weapon you're not holding hangs where you reach for it (the first primary on the
-    // chest sling, the second over the dominant shoulder, the pistol in its holster, the knife on its sheath), and the dominant
+    // chest sling, the second over the dominant shoulder, the pistol on the dominant hip, the knife on Tarkov's sheath; in the
+    // body's frame, ChestHang.BodyYaw, so a glance doesn't swing them away from the hand), and the dominant
     // hand takes one by gripping it there, with no draw animation. Letting go of the gun in hand sends it to its own spot
     // (ChestHang.SpotPose); it stays in hands game-side until another is taken, so letting go costs no inventory action.
     //
@@ -222,9 +223,9 @@ namespace TarkovVR.Source.Player.Interactions
                     Transform hand = VRGlobals.vrPlayer.RightHand.transform;
                     model.transform.SetPositionAndRotation(hand.position + hand.rotation * standInInHandPosition, hand.rotation * standInInHandRotation);
                 }
-                // The primaries go to our spots; the pistol and knife stay on Tarkov's own holster and sheath bones
-                else if ((slot == EquipmentSlot.FirstPrimaryWeapon || slot == EquipmentSlot.SecondPrimaryWeapon)
-                    && ChestHang.SpotPose(slot, out Vector3 position, out Quaternion rotation))
+                // The guns to our spots (Tarkov's thigh holster and back bones "aren't in good spots" and turn with the body);
+                // the knife stays on Tarkov's sheath
+                else if (slot != EquipmentSlot.Scabbard && ChestHang.SpotPose(slot, GripInWeaponRoot(model), out Vector3 position, out Quaternion rotation))
                 {
                     PlaceWeaponRoot(model, position, rotation);
                 }
@@ -282,6 +283,14 @@ namespace TarkovVR.Source.Player.Interactions
                 return grip.position - WeaponRootOf(model).up * ChestHang.regrabForwardOffset;
             Renderer renderer = model.GetComponentInChildren<Renderer>();
             return renderer != null ? renderer.bounds.center : model.transform.position;
+        }
+
+        // The R-hand marker in the model's Weapon_root frame (rotation only): which side of the bore the grip is
+        private static Vector3 GripInWeaponRoot(GameObject model)
+        {
+            Transform grip = GripMarkerOf(model);
+            Transform root = WeaponRootOf(model);
+            return grip != null ? Quaternion.Inverse(root.rotation) * (grip.position - root.position) : Vector3.forward;
         }
 
         private static Transform WeaponRootOf(GameObject model)

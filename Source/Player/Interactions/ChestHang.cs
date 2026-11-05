@@ -38,12 +38,15 @@ namespace TarkovVR.Source.Player.Interactions
         public static float slingDelay = 0.1f;          // s the grip must stay fully released before letting go (debounce; 0.25 read as a delay)
         public static float regrabRadius = 0.13f;       // m RightHand rig transform to the regrab zone (0.10, the left hand's foregrip radius, read a little short)
         public static float regrabForwardOffset = 0.07f;// m the zone sits toward the MUZZLE from the R-hand marker (marker alone still read "a bit far back")
-        // The second primary's spot (BodyWeapons): over the dominant shoulder, hanging down the back. Where its Weapon_root sits,
-        // headset-local and yaw-only like the sling; x mirrors left-handed
+        // The other spots (BodyWeapons, SpotPose): where the gun's Weapon_root sits, from the eyes looking level in the body's frame,
+        // and which way its muzzle and its grip point (x mirrors left-handed). The second primary over the dominant shoulder,
+        // hanging down the back, the grip out behind you; the pistol on the dominant hip, muzzle down, grip to the rear.
         public static Vector3 backOffset = new Vector3(0.17f, -0.17f, -0.17f);
-        public static float backAcross = 0.3f;          // the muzzle points across the back toward the off side (0 = straight down)
-        public static float backOut = -0.25f;           // and tips away behind the body
-        public static float backRollDeg = 0f;           // fine roll about the barrel
+        public static Vector3 backMuzzle = new Vector3(-0.3f, -1f, -0.2f);
+        public static Vector3 backGrip = new Vector3(0.3f, 0f, -1f);
+        public static Vector3 hipOffset = new Vector3(0.22f, -0.68f, 0.02f);
+        public static Vector3 hipMuzzle = new Vector3(0f, -1f, 0.15f);
+        public static Vector3 hipGrip = new Vector3(0.2f, 0f, -1f);
         public static bool hangHaptics = true;
         public static bool debugLog = false;            // 1/sec chain dump while detached + save/restore lines (for the prone-corrupts-regrab hunt)
         private static float nextDebugLog;
@@ -200,6 +203,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
+            GiveGunArmBack();
+
             if (grip)
             {
                 gripSeen = true;   // gun is now grip-bound: open the hand and it lets go
@@ -243,8 +248,8 @@ namespace TarkovVR.Source.Player.Interactions
             VRGlobals.vrPlayer.ForceUnlockHand();      // two-handing can't survive letting go
             SaveHolderOnce();
 
-            // fly-in starts from the release pose, captured in the yaw frame
-            Quaternion yawRot = HeadYaw(out Vector3 headPos);
+            // fly-in starts from the release pose, captured in the body's frame (where the spots are)
+            Quaternion yawRot = BodyYaw(out Vector3 headPos);
             slingLocalPos = Quaternion.Inverse(yawRot) * (wr.position - headPos);
             slingLocalRot = Quaternion.Inverse(yawRot) * wr.rotation;
             posVel = Vector3.zero;
@@ -492,6 +497,37 @@ namespace TarkovVR.Source.Player.Interactions
             return Vector3.Distance(hand.transform.position, anchorPos);
         }
 
+        // A gun in hand and not hanging is the gun's arm (Tarkov IKs it onto the grip). A gun drawn while the last one still hung
+        // got its arm freed by its own GunInteractionController.OnEnable (it saw Detached), and nothing gave it back, so its hand
+        // followed the controller instead of the grip until one sling cycle (headset: "only when I first take the gun out; after
+        // letting go and picking it back up it's correct"). Checked every frame, so no order of Tarkov's switch can leave it.
+        // The gun hand on the charging handle has its own target (VRReloadController's latch), not RightHand.
+        private static void GiveGunArmBack()
+        {
+            var arm = VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null;
+            var rightHand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.RightHand : null;
+            if (arm == null || rightHand == null)
+                return;
+            if (arm.enabled && arm.solver.target == rightHand.transform)
+            {
+                arm.solver.target = null;
+                arm.enabled = false;
+                if (debugLog)
+                    Plugin.MyLog.LogInfo("[ChestHang] gave the gun arm back to the gun in hand");
+            }
+            // And EFT's own right marker (KeepGunHandFree's), which it solves that arm onto: the gun's grip marker
+            var player = VRGlobals.player;
+            var fc = VRGlobals.firearmController;
+            if (player != null && player._markers.Length > 1 && player._markers[1] == rightHand.transform && fc != null && fc.HandsHierarchy != null)
+            {
+                Transform gunMarker = fc.HandsHierarchy.GetTransform(ECharacterWeaponBones.weapon_R_IK_marker);
+                if (gunMarker != null)
+                    player._markers[1] = gunMarker;
+                gunHandMarker = null;
+                freedHandMarker = null;
+            }
+        }
+
         // BodyWeapons took this frame's grip press for a gun off the body: not a regrab of the one hanging
         internal static void IgnoreGripPress()
         {
@@ -505,59 +541,120 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Where a gun lives on the body when it isn't in your hand, as its Weapon_root's pose: BodyWeapons draws the others there,
         // and the gun in hand goes there when you let go. The first primary on the chest sling, the second over the dominant
-        // shoulder, the pistol on Tarkov's holster bone (Tarkov sets a body model's Weapon_root on its bone). False = no spot.
-        internal static bool SpotPose(EquipmentSlot slot, out Vector3 position, out Quaternion rotation)
+        // shoulder, the pistol on the dominant hip (not Tarkov's thigh holster: "not in good spots"). In the body's frame (BodyYaw),
+        // not the head's ("they turn with me, which makes them harder to grab"). The back and hip guns are turned by where their
+        // muzzle and their grip point (gripLocal = the gun's R-hand marker in its Weapon_root frame), so any gun sits the same way.
+        internal static bool SpotPose(EquipmentSlot slot, Vector3 gripLocal, out Vector3 position, out Quaternion rotation)
         {
             position = Vector3.zero;
             rotation = Quaternion.identity;
             if (!HeadPose(out _, out _))
                 return false;
             bool leftHanded = VRSettings.GetLeftHandedMode();
-            Quaternion yawRot = HeadYaw(out Vector3 headPos);
+            Quaternion bodyRot = BodyYaw(out Vector3 neck);
+            Vector3 offset;
             switch (slot)
             {
                 case EquipmentSlot.FirstPrimaryWeapon:
-                    Vector3 chest = chestOffset;
-                    if (leftHanded)
-                        chest.x = -chest.x;
-                    position = headPos + yawRot * chest;
-                    rotation = yawRot * CanonicalSlingRot(leftHanded);
-                    return true;
+                    offset = Mirrored(chestOffset, leftHanded);
+                    rotation = bodyRot * CanonicalSlingRot(leftHanded);
+                    break;
                 case EquipmentSlot.SecondPrimaryWeapon:
-                    Vector3 back = backOffset;
-                    if (leftHanded)
-                        back.x = -back.x;
-                    position = headPos + yawRot * back;
-                    rotation = yawRot * BackRot(leftHanded);
-                    return true;
+                    offset = Mirrored(backOffset, leftHanded);
+                    rotation = bodyRot * PointGun(Mirrored(backMuzzle, leftHanded), Mirrored(backGrip, leftHanded), gripLocal);
+                    break;
                 case EquipmentSlot.Holster:
-                    Transform bone = BodyWeapons.HolsterBone();
-                    if (bone == null)
-                        return false;
-                    position = bone.position;
-                    rotation = bone.rotation;
-                    return true;
+                    offset = Mirrored(hipOffset, leftHanded);
+                    rotation = bodyRot * PointGun(Mirrored(hipMuzzle, leftHanded), Mirrored(hipGrip, leftHanded), gripLocal);
+                    break;
+                default:
+                    return false;
             }
-            return false;
+            // The offsets are from the eyes looking level; the anchor is the neck, so take that part off
+            position = neck + bodyRot * (offset - ShoulderStock.neckLocalOffset);
+            return true;
         }
 
-        // Muzzle down the back and across toward the off side, the gun's face out behind you, the grip end up by the shoulder
-        private static Quaternion BackRot(bool leftHanded)
+        private static Vector3 Mirrored(Vector3 vector, bool leftHanded)
         {
-            float side = leftHanded ? 1f : -1f;
-            Vector3 muzzle = new Vector3(side * backAcross, -1f, backOut).normalized;
-            Vector3 butt = -muzzle;                 // WeaponRoot +up
-            Vector3 face = Vector3.back - Vector3.Dot(Vector3.back, butt) * butt;
-            face = face.sqrMagnitude < 1e-4f ? Vector3.up : face.normalized;
-            return Quaternion.AngleAxis(backRollDeg, muzzle) * Quaternion.LookRotation(face, butt);
+            if (leftHanded)
+                vector.x = -vector.x;
+            return vector;
         }
 
-        // The spot of the gun in hand: its slot's, or the chest sling's for anything else (or with BodyWeapons off)
+        // A gun's Weapon_root rotation with its muzzle along `muzzle` and its grip (the R-hand marker, off the bore) toward `grip`.
+        // Weapon_root +up is the butt, -up the muzzle; the grip side comes from the gun itself, so no axis of it has to be known.
+        private static Quaternion PointGun(Vector3 muzzle, Vector3 grip, Vector3 gripLocal)
+        {
+            Vector3 gripSideLocal = Vector3.ProjectOnPlane(gripLocal, Vector3.up);
+            gripSideLocal = gripSideLocal.sqrMagnitude < 1e-6f ? Vector3.forward : gripSideLocal.normalized;
+            Vector3 butt = -muzzle.normalized;
+            Vector3 gripSide = Vector3.ProjectOnPlane(grip, butt);
+            gripSide = gripSide.sqrMagnitude < 1e-6f ? Vector3.ProjectOnPlane(Vector3.back, butt).normalized : gripSide.normalized;
+            return Quaternion.LookRotation(gripSide, butt) * Quaternion.Inverse(Quaternion.LookRotation(gripSideLocal, Vector3.up));
+        }
+
+        // The body's facing, for the guns hung on it: it follows the head's yaw only past bodyTurnDeadZone (a glance doesn't swing
+        // them away from the hand reaching for them), and comes round to the head once it has held a new facing for
+        // bodyRecenterAfter. Kept relative to the rig, so stick turns carry it 1:1. The anchor is the neck (ShoulderStock's): the
+        // HMD swings ~10 cm about it as the head turns.
+        public static float bodyTurnDeadZone = 40f;
+        public static float bodyRecenterAfter = 0.75f;  // s of a still head (under bodyStillSpeed) before the body comes round
+        public static float bodyRecenterRate = 60f;     // deg/s it comes round at
+        public static float bodyStillSpeed = 30f;       // deg/s of head yaw that still counts as holding a facing
+        private static float bodyYawInRig;
+        private static float lastHeadYawInRig;
+        private static float headStillFor;
+        private static bool bodyYawSet;
+        private static int bodyYawFrame = -1;
+        private static Quaternion bodyYaw = Quaternion.identity;
+        private static Vector3 bodyNeck;
+
+        internal static Quaternion BodyYaw(out Vector3 neck)
+        {
+            if (bodyYawFrame != Time.frameCount)
+            {
+                bodyYawFrame = Time.frameCount;
+                HeadPose(out Vector3 headPos, out Quaternion headRot);
+                float headYaw = HeadYaw(out _).eulerAngles.y;
+                float rigYaw = VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform.eulerAngles.y : 0f;
+                float headYawInRig = Mathf.DeltaAngle(rigYaw, headYaw);
+                float dt = Mathf.Clamp(Time.deltaTime, 1e-4f, 0.1f);
+                if (!bodyYawSet)
+                {
+                    bodyYawSet = true;
+                    bodyYawInRig = headYawInRig;
+                    lastHeadYawInRig = headYawInRig;
+                }
+                float fromBody = Mathf.DeltaAngle(bodyYawInRig, headYawInRig);
+                if (Mathf.Abs(fromBody) > bodyTurnDeadZone)
+                    bodyYawInRig += fromBody - Mathf.Sign(fromBody) * bodyTurnDeadZone;
+                headStillFor = Mathf.Abs(Mathf.DeltaAngle(lastHeadYawInRig, headYawInRig)) / dt < bodyStillSpeed ? headStillFor + dt : 0f;
+                if (headStillFor > bodyRecenterAfter)
+                    bodyYawInRig = Mathf.MoveTowardsAngle(bodyYawInRig, headYawInRig, bodyRecenterRate * dt);
+                lastHeadYawInRig = headYawInRig;
+                bodyYaw = Quaternion.Euler(0f, rigYaw + bodyYawInRig, 0f);
+                bodyNeck = headPos + headRot * ShoulderStock.neckLocalOffset;
+            }
+            neck = bodyNeck;
+            return bodyYaw;
+        }
+
+        // The gun in hand's own spot: its slot's, or the chest sling's for anything else (or with BodyWeapons off)
         private static bool HandsGunSpotPose(EFT.Player.FirearmController fc, out Vector3 position, out Quaternion rotation)
         {
-            if (BodyWeapons.enabled && BodyWeapons.SlotOf(fc.Item, out EquipmentSlot slot) && SpotPose(slot, out position, out rotation))
+            Vector3 gripLocal = GripInWeaponRoot(fc);
+            if (BodyWeapons.enabled && BodyWeapons.SlotOf(fc.Item, out EquipmentSlot slot) && SpotPose(slot, gripLocal, out position, out rotation))
                 return true;
-            return SpotPose(EquipmentSlot.FirstPrimaryWeapon, out position, out rotation);
+            return SpotPose(EquipmentSlot.FirstPrimaryWeapon, gripLocal, out position, out rotation);
+        }
+
+        // The gun's R-hand marker in its Weapon_root's frame (rotation only: the grip's side of the bore)
+        private static Vector3 GripInWeaponRoot(EFT.Player.FirearmController fc)
+        {
+            var links = fc.HandsHierarchy;
+            Transform grip = links != null && links.Transforms != null && links.Transforms.Length > 8 ? links.Transforms[8] : null;
+            return grip != null && fc.WeaponRoot != null ? Quaternion.Inverse(fc.WeaponRoot.rotation) * (grip.position - fc.WeaponRoot.position) : Vector3.forward;
         }
 
         // ---- per-frame pose drives (called from GunInteractionController.UpdateWeaponPosition) ----
@@ -588,9 +685,9 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
 
             float dt = Mathf.Clamp(Time.deltaTime, 1e-4f, 0.05f);
-            Quaternion yawRot = HeadYaw(out Vector3 headPos);
-            // Its own spot (the chest sling for the first primary, the shoulder for the second, the holster for the pistol), in the
-            // yaw-local frame the tuck-in runs in
+            Quaternion yawRot = BodyYaw(out Vector3 headPos);
+            // Its own spot (the chest sling for the first primary, the shoulder for the second, the hip for the pistol), in the
+            // body-local frame the tuck-in runs in (from the neck, so a head turn doesn't swing it)
             if (!HandsGunSpotPose(fc, out Vector3 spotPos, out Quaternion spotRot))
                 return;
             Vector3 off = Quaternion.Inverse(yawRot) * (spotPos - headPos);
