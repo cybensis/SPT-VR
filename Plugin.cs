@@ -65,8 +65,6 @@ namespace TarkovVR
                 gameObject.AddComponent<OpenXRProbe>();
                 gameObject.AddComponent<OpenXRFloorOrigin>();
                 gameObject.AddComponent<OpenXRInputDriver>();
-                // Ctrl+F11: the alternate-eye experiment (measurement only)
-                gameObject.AddComponent<TarkovVR.Source.Misc.AlternateEyeExperiment>();
             }
 
         }

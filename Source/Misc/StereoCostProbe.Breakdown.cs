@@ -312,76 +312,83 @@ namespace TarkovVR.Source.Misc
         // Parser side: per-frame scratch, folded into the mode's sums once the frame is accepted.
         private class ItemSums
         {
-            public readonly double[,,] item = new double[2, Buckets, MaxItems];   // [src, bucket, item]
+            public readonly double[,,] item = new double[Sources, Buckets, MaxItems];   // [src, bucket, item]
             public readonly int[,] ran = new int[Buckets, MaxItems];
-            public readonly double[,,] blockSpan = new double[2, Buckets, Blocks];
-            public readonly double[,,] blockItems = new double[2, Buckets, Blocks];
+            public readonly double[,,] blockSpan = new double[Sources, Buckets, Blocks];
+            public readonly double[,,] blockItems = new double[Sources, Buckets, Blocks];
         }
-        private static readonly double[,,] fItem = new double[2, Buckets, MaxItems];
-        private static readonly double[,,] fBlockItems = new double[2, Buckets, Blocks];
+        private static readonly double[,,] fItem = new double[Sources, Buckets, MaxItems];
+        private static readonly double[,,] fBlockItems = new double[Sources, Buckets, Blocks];
         private static readonly List<(int bucket, int k)> fTouched = new List<(int, int)>();
         private static readonly bool[,] fTouchedFlag = new bool[Buckets, MaxItems];
-        private static readonly double[] openC = new double[MaxItems], openG = new double[MaxItems];
+        private static readonly double[,] openAt = new double[Sources, MaxItems];
         private static readonly int[] openBucket = new int[MaxItems], openBlock = new int[MaxItems];
         private static readonly List<int> fOpen = new List<int>();
 
         private static void ItemFrameReset()
         {
-            foreach (var (b, k) in fTouched) { fItem[0, b, k] = 0; fItem[1, b, k] = 0; fTouchedFlag[b, k] = false; }
+            foreach (var (b, k) in fTouched) { for (int src = 0; src < Sources; src++) fItem[src, b, k] = 0; fTouchedFlag[b, k] = false; }
             fTouched.Clear();
             Array.Clear(fBlockItems, 0, fBlockItems.Length);
-            foreach (int k in fOpen) openC[k] = double.NaN;
+            foreach (int k in fOpen) openAt[SrcWall, k] = double.NaN;
             fOpen.Clear();
         }
 
-        private static void ItemMark(int id, double c, double g, int bucket, int block)
+        // values: this event's wall / GPU / busy time (NaN where not measured)
+        private static void ItemMark(int id, double[] values, int bucket, int block)
         {
             int k = (id - ItemBase) >> 1;
             if (k < 0 || k >= items.Count) return;
             if ((id & 1) == 0)
             {
-                if (double.IsNaN(openC[k])) fOpen.Add(k);
-                openC[k] = c; openG[k] = g; openBucket[k] = bucket; openBlock[k] = block;
+                if (double.IsNaN(openAt[SrcWall, k])) fOpen.Add(k);
+                for (int src = 0; src < Sources; src++) openAt[src, k] = values[src];
+                openBucket[k] = bucket; openBlock[k] = block;
                 return;
             }
-            if (double.IsNaN(openC[k])) return;
+            if (double.IsNaN(openAt[SrcWall, k])) return;
             int b = openBucket[k], blk = openBlock[k];
-            double dc = c - openC[k], dg = g - openG[k];
-            openC[k] = double.NaN;
             if (!fTouchedFlag[b, k]) { fTouchedFlag[b, k] = true; fTouched.Add((b, k)); }
             bool top = !items[k].inner;
-            fItem[0, b, k] += dc; if (top) fBlockItems[0, b, blk] += dc;
-            if (!double.IsNaN(dg)) { fItem[1, b, k] += dg; if (top) fBlockItems[1, b, blk] += dg; }
+            for (int src = 0; src < Sources; src++)
+            {
+                double d = values[src] - openAt[src, k];
+                if (double.IsNaN(d)) continue;
+                fItem[src, b, k] += d;
+                if (top) fBlockItems[src, b, blk] += d;
+            }
+            openAt[SrcWall, k] = double.NaN;
             if (items[k].block[b] < 0) items[k].block[b] = blk;
         }
 
         // Folds the accepted frame in: item sums + block spans (from the parser's per-eye event times).
-        private static void ItemFrameCommit(Samples s, bool hasGpu, int eyes, double renderStartC, double renderStartG, double endC, double endG)
+        private static void ItemFrameCommit(Samples s, bool hasGpu, bool hasBusy, int eyes)
         {
             var sums = s.itemSums;
             foreach (var (b, k) in fTouched)
             {
-                sums.item[0, b, k] += fItem[0, b, k];
-                if (hasGpu) sums.item[1, b, k] += fItem[1, b, k];
+                sums.item[SrcWall, b, k] += fItem[SrcWall, b, k];
+                if (hasGpu) sums.item[SrcGpu, b, k] += fItem[SrcGpu, b, k];
+                if (hasBusy) sums.item[SrcBusy, b, k] += fItem[SrcBusy, b, k];
                 sums.ran[b, k]++;
             }
-            for (int src = 0; src < (hasGpu ? 2 : 1); src++)
+            for (int src = 0; src < Sources; src++)
             {
-                var t = src == 0 ? tCpu : tGpu;
-                double rs = src == 0 ? renderStartC : renderStartG, fe = src == 0 ? endC : endG;
+                if ((src == SrcGpu && !hasGpu) || (src == SrcBusy && !hasBusy)) continue;
+                double rs = renderStartAt[src], fe = frameEndAt[src];
                 // once a frame: an eye-less span after the first eye counts as "after the eyes" in left-only frames
-                double[] fspan = { rs, t[0, EvEyeStart] - rs, eyes == 2 ? t[1, EvEyeStart] - t[0, EvAfterEverything] : 0, fe - t[eyes - 1, EvAfterEverything] };
+                double[] fspan = { rs, tAll[src, 0, EvEyeStart] - rs, eyes == 2 ? tAll[src, 1, EvEyeStart] - tAll[src, 0, EvAfterEverything] : 0, fe - tAll[src, eyes - 1, EvAfterEverything] };
                 if (eyes < 2) { fBlockItems[src, 0, 3] += fBlockItems[src, 0, 2]; fBlockItems[src, 0, 2] = 0; }
                 for (int blk = 0; blk < 4; blk++) AddBlock(sums, src, 0, blk, fspan[blk]);
                 for (int e = 0; e < eyes; e++)
                 {
                     double[] span =
                     {
-                        t[e, EvBeforeGBuffer] - t[e, EvEyeStart], t[e, EvAfterGBuffer] - t[e, EvBeforeGBuffer],
-                        t[e, EvBeforeLighting] - t[e, EvAfterGBuffer], t[e, EvAfterLighting] - t[e, EvBeforeLighting],
-                        t[e, EvAfterOpaque] - t[e, EvAfterLighting], t[e, EvBeforeAlpha] - t[e, EvAfterOpaque],
-                        t[e, EvAfterAlpha] - t[e, EvBeforeAlpha], t[e, EvBeforeFx] - t[e, EvAfterAlpha],
-                        t[e, EvAfterFx] - t[e, EvBeforeFx], t[e, EvAfterEverything] - t[e, EvAfterFx],
+                        tAll[src, e, EvBeforeGBuffer] - tAll[src, e, EvEyeStart], tAll[src, e, EvAfterGBuffer] - tAll[src, e, EvBeforeGBuffer],
+                        tAll[src, e, EvBeforeLighting] - tAll[src, e, EvAfterGBuffer], tAll[src, e, EvAfterLighting] - tAll[src, e, EvBeforeLighting],
+                        tAll[src, e, EvAfterOpaque] - tAll[src, e, EvAfterLighting], tAll[src, e, EvBeforeAlpha] - tAll[src, e, EvAfterOpaque],
+                        tAll[src, e, EvAfterAlpha] - tAll[src, e, EvBeforeAlpha], tAll[src, e, EvBeforeFx] - tAll[src, e, EvAfterAlpha],
+                        tAll[src, e, EvAfterFx] - tAll[src, e, EvBeforeFx], tAll[src, e, EvAfterEverything] - tAll[src, e, EvAfterFx],
                     };
                     for (int blk = 0; blk < Blocks; blk++) AddBlock(sums, src, e + 1, blk, span[blk]);
                 }
@@ -399,14 +406,16 @@ namespace TarkovVR.Source.Misc
         {
             if (!breakdown || items.Count == 0 || s.rtFrames == 0) return;
             var sums = s.itemSums;
-            double nC = s.rtFrames, nG = Math.Max(1, s.gpuFrames);
+            double nC = s.rtFrames, nG = Math.Max(1, s.gpuFrames), nB = Math.Max(1, s.busyFrames);
             sb.AppendLine($"[StereoCost] ===== breakdown, both eyes: mean ms per frame, {items.Count} items timed, {patchFailures} could not be patched =====");
-            sb.AppendLine("[StereoCost]   PER EYE                                                          GPU L  GPU R |  rt L   rt R | ran%");
+            sb.AppendLine("[StereoCost]   (rt = render thread wall clock; busy = its own CPU work in that span)");
+            sb.AppendLine("[StereoCost]   PER EYE                                                          GPU L  GPU R |  rt L   rt R | busy L busy R | ran%");
             for (int blk = 0; blk < Blocks; blk++)
             {
                 double bl = sums.blockSpan[1, 1, blk] / nG, br = sums.blockSpan[1, 2, blk] / nG;
                 double cl = sums.blockSpan[0, 1, blk] / nC, cr = sums.blockSpan[0, 2, blk] / nC;
-                sb.AppendLine($"[StereoCost]   {eyeBlockNames[blk],-64} {F(bl)} {F(br)} | {F(cl)} {F(cr)} |");
+                double ul = sums.blockSpan[2, 1, blk] / nB, ur = sums.blockSpan[2, 2, blk] / nB;
+                sb.AppendLine($"[StereoCost]   {eyeBlockNames[blk],-64} {F(bl)} {F(br)} | {F(cl)} {F(cr)} | {F(ul)} {F(ur)} |");
                 var list = new List<int>();
                 for (int k = 0; k < items.Count; k++)
                     if (items[k].block[1] == blk || (items[k].block[1] < 0 && items[k].block[2] == blk)) list.Add(k);
@@ -415,36 +424,38 @@ namespace TarkovVR.Source.Misc
                 foreach (int k in list)
                 {
                     double gl = sums.item[1, 1, k] / nG, gr = sums.item[1, 2, k] / nG, rl = sums.item[0, 1, k] / nC, rr = sums.item[0, 2, k] / nC;
+                    double ul2 = sums.item[2, 1, k] / nB, ur2 = sums.item[2, 2, k] / nB;
                     if (Math.Max(gl, gr) < breakdownMinMs && Math.Max(rl, rr) < breakdownMinMs) { small++; smallG += gl + gr; smallC += rl + rr; continue; }
                     string ran = (100.0 * Math.Max(sums.ran[1, k], sums.ran[2, k]) / s.rtFrames).ToString("0");
-                    sb.AppendLine($"[StereoCost]     {Trim(items[k].name, 62),-62} {F(gl)} {F(gr)} | {F(rl)} {F(rr)} | {ran,4}");
+                    sb.AppendLine($"[StereoCost]     {Trim(items[k].name, 62),-62} {F(gl)} {F(gr)} | {F(rl)} {F(rr)} | {F(ul2)} {F(ur2)} | {ran,4}");
                 }
                 if (small > 0) sb.AppendLine($"[StereoCost]     {small} more under {breakdownMinMs} ms (both eyes together: GPU {smallG:0.000}, rt {smallC:0.000})");
                 double restL = bl - sums.blockItems[1, 1, blk] / nG, restR = br - sums.blockItems[1, 2, blk] / nG;
                 double restCL = cl - sums.blockItems[0, 1, blk] / nC, restCR = cr - sums.blockItems[0, 2, blk] / nC;
+                double restUL = ul - sums.blockItems[2, 1, blk] / nB, restUR = ur - sums.blockItems[2, 2, blk] / nB;
                 if (list.Count > 0 || Math.Abs(restL) >= 0.005)
-                    sb.AppendLine($"[StereoCost]     {"(rest: Unity's own work + unbracketed)",-62} {F(restL)} {F(restR)} | {F(restCL)} {F(restCR)} |");
+                    sb.AppendLine($"[StereoCost]     {"(rest: Unity's own work + unbracketed)",-62} {F(restL)} {F(restR)} | {F(restCL)} {F(restCR)} | {F(restUL)} {F(restUR)} |");
             }
-            sb.AppendLine("[StereoCost]   ONCE A FRAME                                                       GPU        |   rt          | ran%");
+            sb.AppendLine("[StereoCost]   ONCE A FRAME                                                       GPU        |   rt          |  busy         | ran%");
             for (int blk = 0; blk < 4; blk++)
             {
-                double bg = sums.blockSpan[1, 0, blk] / nG, bc = sums.blockSpan[0, 0, blk] / nC;
-                sb.AppendLine($"[StereoCost]   {frameBlockNames[blk],-64} {F(bg)}        | {F(bc)}        |");
+                double bg = sums.blockSpan[1, 0, blk] / nG, bc = sums.blockSpan[0, 0, blk] / nC, bu = sums.blockSpan[2, 0, blk] / nB;
+                sb.AppendLine($"[StereoCost]   {frameBlockNames[blk],-64} {F(bg)}        | {F(bc)}        | {F(bu)}        |");
                 var list = new List<int>();
                 for (int k = 0; k < items.Count; k++) if (items[k].block[0] == blk) list.Add(k);
                 list.Sort((a, b) => sums.item[1, 0, b].CompareTo(sums.item[1, 0, a]));
                 int small = 0; double smallG = 0, smallC = 0;
                 foreach (int k in list)
                 {
-                    double g = sums.item[1, 0, k] / nG, c = sums.item[0, 0, k] / nC;
+                    double g = sums.item[1, 0, k] / nG, c = sums.item[0, 0, k] / nC, u = sums.item[2, 0, k] / nB;
                     if (g < breakdownMinMs && c < breakdownMinMs) { small++; smallG += g; smallC += c; continue; }
                     string ran = (100.0 * sums.ran[0, k] / s.rtFrames).ToString("0");
-                    sb.AppendLine($"[StereoCost]     {Trim(items[k].name, 62),-62} {F(g)}        | {F(c)}        | {ran,4}");
+                    sb.AppendLine($"[StereoCost]     {Trim(items[k].name, 62),-62} {F(g)}        | {F(c)}        | {F(u)}        | {ran,4}");
                 }
                 if (small > 0) sb.AppendLine($"[StereoCost]     {small} more under {breakdownMinMs} ms (together: GPU {smallG:0.000}, rt {smallC:0.000})");
-                double rest = bg - sums.blockItems[1, 0, blk] / nG, restC = bc - sums.blockItems[0, 0, blk] / nC;
+                double rest = bg - sums.blockItems[1, 0, blk] / nG, restC = bc - sums.blockItems[0, 0, blk] / nC, restU = bu - sums.blockItems[2, 0, blk] / nB;
                 if (list.Count > 0 || Math.Abs(rest) >= 0.005)
-                    sb.AppendLine($"[StereoCost]     {"(rest)",-62} {F(rest)}        | {F(restC)}        |");
+                    sb.AppendLine($"[StereoCost]     {"(rest)",-62} {F(rest)}        | {F(restC)}        | {F(restU)}        |");
             }
         }
         private static string F(double v) => double.IsNaN(v) ? "     -" : v.ToString("0.000").PadLeft(6);
