@@ -562,10 +562,22 @@ namespace TarkovVR.Source.Player.Interactions
                 case EquipmentSlot.SecondPrimaryWeapon:
                     offset = Mirrored(backOffset, leftHanded);
                     rotation = bodyRot * PointGun(Mirrored(backMuzzle, leftHanded), Mirrored(backGrip, leftHanded), gripLocal);
+                    // Its grip in the over-the-shoulder zone (the proven spot the old swap used; it rides the head)
+                    if (VRGlobals.backHolster != null)
+                    {
+                        position = VRGlobals.backHolster.position - rotation * gripLocal;
+                        return true;
+                    }
                     break;
                 case EquipmentSlot.Holster:
                     offset = Mirrored(hipOffset, leftHanded);
                     rotation = bodyRot * PointGun(Mirrored(hipMuzzle, leftHanded), Mirrored(hipGrip, leftHanded), gripLocal);
+                    // Its grip in the hip zone (on the body's holster bone's parent)
+                    if (VRGlobals.sidearmHolster != null)
+                    {
+                        position = VRGlobals.sidearmHolster.position - rotation * gripLocal;
+                        return true;
+                    }
                     break;
                 default:
                     return false;

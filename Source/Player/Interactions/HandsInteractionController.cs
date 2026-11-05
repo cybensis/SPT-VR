@@ -315,7 +315,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (VRGlobals.inGame && !VRGlobals.menuOpen && primaryHandGrip != null && VRGlobals.vrPlayer != null)
             {
                 // Guns on the body: a grip at one takes it (before the sling's regrab, which yields that press)
-                BodyWeapons.UpdateInput(primaryHandGrip.state, primaryHandGrip.stateDown);
+                BodyWeapons.UpdateInput(primaryHandGrip.state, primaryHandGrip.stateDown, rightHandState.inBackHolster, rightHandState.inSidearmHolster);
                 // The holster zones only own the grip where they still swap weapons themselves
                 bool hangGripOwnedElsewhere =
                     (rightHandState.inBackHolster && !BodyWeapons.ReplacesBackZone)
@@ -478,17 +478,7 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     selectWeaponHandler.TriggerSwapOtherPrimary();
                 }
-                if (primaryHandGrip.state && VRGlobals.vrPlayer.radialMenu && !BodyWeapons.GrabbedThisPress)
-                {
-                    if (!VRGlobals.vrPlayer.radialMenu.active)
-                    {
-                        VRGlobals.vrPlayer.radialMenu.SetActive(true);
-                        if (cachedLeftHandedMode)
-                            VRGlobals.blockLeftJoystick = true;
-                        else
-                            VRGlobals.blockRightJoystick = true;
-                    }
-                }
+                // (No radial menu over the shoulder any more: the grip there takes the shoulder gun)
             }
 
             if (rightHandState.inSidearmHolster)

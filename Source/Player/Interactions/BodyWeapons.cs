@@ -63,9 +63,15 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Grabbing
 
-        // From HandsInteractionController.Update, before ChestHang.UpdateInput (a grab here takes the press from its regrab)
-        public static void UpdateInput(bool grip, bool gripPressed)
+        // From HandsInteractionController.Update, before ChestHang.UpdateInput (a grab here takes the press from its regrab). The
+        // shoulder and hip zones (InitVRPatches' backHolster / sidearmHolster colliders, one frame stale) take their own gun.
+        private static bool handInShoulderZone;
+        private static bool handInHipZone;
+
+        public static void UpdateInput(bool grip, bool gripPressed, bool inShoulderZone, bool inHipZone)
         {
+            handInShoulderZone = inShoulderZone;
+            handInHipZone = inHipZone;
             if (!hooked)
             {
                 hooked = true;
@@ -84,7 +90,9 @@ namespace TarkovVR.Source.Player.Interactions
                 TryGrab();
         }
 
-        // The gun on the body nearest the dominant hand within grabRadius, not the one in hands
+        // The gun the dominant hand takes: the shoulder or hip zone's own while the hand is in that zone (the proven collision spots
+        // the old swaps used; the guns sit there, ChestHang.SpotPose), else the one on the body nearest the hand within grabRadius.
+        // Never the one in hands (the hanging one is ChestHang's regrab).
         private static bool NearestBodyGun(out Item takenItem, out GameObject takenModel, out EquipmentSlot takenSlot, out float nearest)
         {
             Vector3 hand = VRGlobals.vrPlayer.RightHand.transform.position;
@@ -93,6 +101,20 @@ namespace TarkovVR.Source.Player.Interactions
             takenItem = null;
             takenModel = null;
             takenSlot = EquipmentSlot.FirstPrimaryWeapon;
+            if (handInShoulderZone || handInHipZone)
+            {
+                EquipmentSlot zoneSlot = handInShoulderZone ? EquipmentSlot.SecondPrimaryWeapon : EquipmentSlot.Holster;
+                GameObject zoneModel = ViewOf(zoneSlot)?.Model;
+                Item zoneItem = SlotItem(zoneSlot);
+                if (zoneModel != null && zoneModel.activeInHierarchy && zoneItem != null && zoneItem != inHands)
+                {
+                    takenItem = zoneItem;
+                    takenModel = zoneModel;
+                    takenSlot = zoneSlot;
+                    nearest = 0f;
+                    return true;
+                }
+            }
             foreach (EquipmentSlot slot in bodySlots)
             {
                 GameObject model = ViewOf(slot)?.Model;
