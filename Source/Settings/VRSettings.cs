@@ -86,6 +86,7 @@ namespace TarkovVR.Source.Settings
             public bool hideArms { get; set; }
             public bool hideLegs { get; set; }
             public bool desktopViewRightEye { get; set; }
+            public bool desktopViewPlainMirror { get; set; }
             public float desktopViewFieldOfView { get; set; }
             public float desktopViewSmoothing { get; set; }
             public float desktopViewVerticalFieldOfView { get; set; }
@@ -147,6 +148,7 @@ namespace TarkovVR.Source.Settings
                 hideArms = false;
                 hideLegs = false;
                 desktopViewRightEye = false;
+                desktopViewPlainMirror = false;
                 desktopViewFieldOfView = 80f;
                 desktopViewSmoothing = 0.15f;
                 desktopViewVerticalFieldOfView = 0f;
@@ -227,6 +229,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle hideArmsToggle;
         private static SettingToggle hideLegsToggle;
         private static SettingToggle desktopViewRightEyeToggle;
+        private static SettingToggle desktopViewPlainMirrorToggle;
         private static SettingSelectSlider desktopViewFieldOfViewSlider;
         private static SettingSelectSlider desktopViewSmoothingSlider;
         private static SettingSelectSlider desktopViewVerticalFieldOfViewSlider;
@@ -755,6 +758,13 @@ namespace TarkovVR.Source.Settings
             hideLegsToggle.Text.localizationKey = "Hide Legs";
             hideLegsToggle.Toggle.UpdateValue(settings.hideLegs);
 
+            // The desktop window: Unity's plain mirror of the eye image instead of the stabilised view (no window camera = less CPU)
+            desktopViewPlainMirrorToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            desktopViewPlainMirrorToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            desktopViewPlainMirrorToggle.Toggle._onValueChanged = SetDesktopViewPlainMirror;
+            desktopViewPlainMirrorToggle.Text.localizationKey = "Plain Desktop Mirror (Saves CPU)";
+            desktopViewPlainMirrorToggle.Toggle.UpdateValue(settings.desktopViewPlainMirror);
+
             // The desktop window (DesktopMirror): which eye it shows, off = the left
             desktopViewRightEyeToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
             desktopViewRightEyeToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
@@ -1241,6 +1251,10 @@ namespace TarkovVR.Source.Settings
         {
             return settings != null && settings.desktopViewRightEye;
         }
+        public static bool GetDesktopViewPlainMirror()
+        {
+            return settings != null && settings.desktopViewPlainMirror;
+        }
 
         // Degrees across the desktop window (a settings file from before these sliders reads 0: the default then)
         public static float GetDesktopViewFieldOfView()
@@ -1268,6 +1282,10 @@ namespace TarkovVR.Source.Settings
         private static void SetDesktopViewRightEye(bool rightEye)
         {
             settings.desktopViewRightEye = rightEye;
+        }
+        private static void SetDesktopViewPlainMirror(bool plain)
+        {
+            settings.desktopViewPlainMirror = plain;
         }
         private static void SetHideArms(bool turnOff)
         {

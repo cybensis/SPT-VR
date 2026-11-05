@@ -20,7 +20,9 @@ namespace TarkovVR.Source.Graphics
     // instead, the way it was first built.
     public class DesktopMirror : MonoBehaviour
     {
-        public static bool stabilized = true;           // false = Unity's own mirror of the eye texture
+        public static bool stabilized = true;           // false = Unity's own mirror of the eye texture (also set when drawing fails)
+        // The VR Graphics setting "Plain Desktop Mirror": Unity's own mirror, and the window camera off (its ~0.45 ms of the main thread)
+        private static bool Wanted => stabilized && !VRSettings.GetDesktopViewPlainMirror();
         public static float maxLagDegrees = 12f;        // how far it can trail the head (more = smoother, but the crop nears the eye image's edge)
         public static float resetDegrees = 60f;         // further off than this at once (a snap of the camera, a new scene): no catching up, it's there
         public static float edgeMargin = 0.03f;         // share of the eye image kept clear at each edge
@@ -55,6 +57,7 @@ namespace TarkovVR.Source.Graphics
         private string cameraFailure;                   // why the camera's draw didn't happen this frame
         private bool loggedCameraFailure;
         private bool loggedEndOfFrameDraw;
+        private Camera windowCamera;
 
         // Where each eye's lens mask is, over its image (0..1 both ways, rows up from the bottom of the view)
         private sealed class LensMask
@@ -72,7 +75,7 @@ namespace TarkovVR.Source.Graphics
         {
             GameObject cameraObject = new GameObject("VRDesktopMirrorCamera");
             cameraObject.transform.SetParent(transform, worldPositionStays: false);
-            Camera windowCamera = cameraObject.AddComponent<Camera>();
+            windowCamera = cameraObject.AddComponent<Camera>();
             if (windowCamera == null)
             {
                 Plugin.MyLog.LogWarning("[DesktopMirror] couldn't add the window camera: the window is drawn at the end of the frame");
@@ -114,6 +117,9 @@ namespace TarkovVR.Source.Graphics
             while (true)
             {
                 yield return endOfFrame;
+                bool wanted = Wanted;
+                if (windowCamera != null && windowCamera.enabled != wanted)
+                    windowCamera.enabled = wanted;   // no window camera with Unity's mirror
                 if (drawnFrame == Time.frameCount)
                     continue;
                 string failure = Guarded(fromCamera: false);
@@ -122,7 +128,7 @@ namespace TarkovVR.Source.Graphics
                     loggedFailure = failure;
                     Plugin.MyLog.LogInfo($"[DesktopMirror] not drawn at the end of the frame either ({failure}): Unity's mirror");
                 }
-                if (failure != null || !stabilized)
+                if (failure != null || !wanted)
                     continue;
                 if (!loggedEndOfFrameDraw)
                 {
@@ -162,7 +168,7 @@ namespace TarkovVR.Source.Graphics
             Camera eyeCamera = null;
             Camera.StereoscopicEye eye = Camera.StereoscopicEye.Left;
             string failure = display == null ? "no running XR display"
-                : !stabilized ? "switched off"
+                : !Wanted ? "switched off"
                 : Screen.width <= 0 || Screen.height <= 0 ? "no window"
                 : TryGetEye(display, out eyeTexture, out eyeCamera, out eye);
             if (failure == null && !EnsureMaterial())
