@@ -138,11 +138,7 @@ public class GunInteractionController : MonoBehaviour
             // onto the slung gun ("hand auto-reattaches while slinged and can't take it off").
             if (TarkovVR.Source.Player.Interactions.ChestHang.Detached)
             {
-                if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null)
-                {
-                    VRGlobals.ikManager.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
-                    VRGlobals.ikManager.rightArmIk.enabled = true;
-                }
+                TarkovVR.Source.Player.Interactions.ChestHang.KeepGunHandFree();
             }
             else
             {

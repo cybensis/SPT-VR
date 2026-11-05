@@ -840,9 +840,11 @@ namespace TarkovVR.Patches.Core.Player
 
             bool shouldStayZeroed = disableAnim || (currentTime < zeroOutEndTime);
 
-            if (shouldStayZeroed && __instance._markers.Length > 1 && __instance._markers[1]?.transform?.parent?.parent != null)
+            // The gun's marker even while slung: then _markers[1] is the freed hand's IK target, whose grandparent is the VR rig
+            Transform gunRightMarker = TarkovVR.Source.Player.Interactions.ChestHang.GunRightMarker(__instance);
+            if (shouldStayZeroed && gunRightMarker?.parent?.parent != null)
             {
-                var ik = __instance._markers[1].transform.parent.parent;
+                var ik = gunRightMarker.parent.parent;
                 ik.localPosition = Vector3.zero;
                 ik.localEulerAngles = Vector3.zero;
             }

@@ -139,7 +139,10 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             if (Detached)
+            {
+                KeepGunHandFree();
                 DebugChainDump();
+            }
 
             if (SupportOnly)
             {
@@ -267,16 +270,58 @@ namespace TarkovVR.Source.Player.Interactions
         // the save (the prone-sling corruption).
         private static void DetachCommon()
         {
-            var ik = VRGlobals.ikManager;
-            if (ik.rightArmIk != null && VRGlobals.vrPlayer.RightHand != null)
-            {
-                ik.rightArmIk.solver.target = VRGlobals.vrPlayer.RightHand.transform;
-                ik.rightArmIk.enabled = true;
-            }
+            KeepGunHandFree();
             gripSeen = false;
             // The hand is AT the gun the instant it lets go - start the zone flag "in" so the
             // in-reach blip only fires after leaving and coming back.
             regrabZoneIn = true;
+        }
+
+        // EFT solves the gun-hand arm onto _markers[1] (the gun's weapon_R_IK_marker) itself every LateUpdate (Player.IkProcess/IkApply),
+        // whatever our IK does: the freed hand only followed the controller when our IK happened to solve after it, and Unity doesn't
+        // order the two (headset: now and then the hand stuck back on the slung gun until a regrab). So while detached _markers[1] is our
+        // IK's own target, as on empty hands and the free left hand; every frame, since EFT gathers a fresh marker on a weapon change.
+        private static Transform gunHandMarker;     // the gun's own, given back when the hand takes the gun again
+        private static Transform freedHandMarker;   // what _markers[1] was set to
+
+        internal static void KeepGunHandFree()
+        {
+            var arm = VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null;
+            var rightHand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.RightHand : null;
+            var player = VRGlobals.player;
+            if (arm == null || rightHand == null || player == null)
+                return;
+            // The gun hand on the charging handle (VRReloadController's latch) keeps its own target
+            if (arm.solver.target == null)
+                arm.solver.target = rightHand.transform;
+            if (!arm.enabled)
+                arm.enabled = true;
+            Transform aim = arm.solver.target;
+            if (player._markers.Length < 2 || player._markers[1] == aim)
+                return;
+            if (player._markers[1] != freedHandMarker)
+                gunHandMarker = player._markers[1];
+            player._markers[1] = aim;
+            freedHandMarker = aim;
+        }
+
+        private static void GiveGunHandMarkerBack()
+        {
+            var player = VRGlobals.player;
+            // Not when something else set it since: a new gun gathered its own, empty hands point it at the hand
+            if (player != null && player._markers.Length > 1 && freedHandMarker != null && player._markers[1] == freedHandMarker
+                && gunHandMarker != null && !player.HandsIsEmpty)
+                player._markers[1] = gunHandMarker;
+            gunHandMarker = null;
+            freedHandMarker = null;
+        }
+
+        // The gun's own right marker, also while detached (IKPatches zeroes the bone above it through a sprint)
+        internal static Transform GunRightMarker(EFT.Player player)
+        {
+            if (player._markers.Length < 2)
+                return null;
+            return freedHandMarker != null && gunHandMarker != null && player._markers[1] == freedHandMarker ? gunHandMarker : player._markers[1];
         }
 
         // A light blip when the dominant hand comes into regrab reach of the detached gun (mirrors the
@@ -297,6 +342,7 @@ namespace TarkovVR.Source.Player.Interactions
             Hanging = false;
             SupportOnly = false;
             HandInRegrabZone = false;
+            GiveGunHandMarkerBack();
             if (!restore)
             {
                 holderSaved = false;
