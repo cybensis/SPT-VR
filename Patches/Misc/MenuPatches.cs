@@ -45,7 +45,7 @@ using UnityEngine.UIElements;
 using UnityEngine.XR;
 using UnityStandardAssets.ImageEffects;
 using Valve.VR;
-using TarkovVR.Source.Controls;
+using TarkovVR.Source.Controls;
 using TarkovVR.Source.XR;
 using static EFT.BaseLocalGame<EFT.HideoutPlayerOwner>;
 using static EFT.UI.BattleUiVoipPanel;
@@ -796,9 +796,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(ItemView), "Update")]
         private static bool FixDragAndDropButton(ItemView __instance)
         {
-            bool triggerPressed = (VRSettings.GetLeftHandedMode() ?
-                VRInput.LeftTrigger.axis :
-                VRInput.RightTrigger.axis) >= 0.7f;
+            bool triggerPressed = VRUIInteracter.DragTriggerHeld();
 
             if (__instance._lastKnownMouseEvent != null && !triggerPressed)
             {

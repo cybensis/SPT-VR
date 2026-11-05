@@ -21,7 +21,25 @@ namespace TarkovVR.Source.UI
     {
 
         private float rayDistance = 100f;
-        private static float DRAG_TRIGGER_THRESHOLD = 0.5f;
+
+        // The trigger holding an item drag: one state for this pointer and the item views (FixDragAndDropButton). They used to read
+        // 0.5 and 0.7, so a light press in between began the drag here and ended it there, every frame (headset: flickers between
+        // grabbing and not). The gap between press and release keeps a trigger resting at one value from flickering it too.
+        public static float dragTriggerPress = 0.5f;
+        public static float dragTriggerRelease = 0.3f;
+        private static bool dragTriggerHeld;
+        private static int dragTriggerFrame = -1;
+
+        public static bool DragTriggerHeld()
+        {
+            if (dragTriggerFrame != Time.frameCount)
+            {
+                dragTriggerFrame = Time.frameCount;
+                float axis = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis : VRInput.RightTrigger.axis;
+                dragTriggerHeld = dragTriggerHeld ? axis > dragTriggerRelease : axis >= dragTriggerPress;
+            }
+            return dragTriggerHeld;
+        }
 
         // Drag an item off the inventory panel and release to drop it on the ground. RAID ONLY
         // (gated on RaidVRPlayerManager in DropDraggedItemToGround) — there is no world to drop into
@@ -247,7 +265,7 @@ namespace TarkovVR.Source.UI
         {
             // Use pressedObject to ensure that the object the user is trying to drag is the one they have selected,
             // not an object they selected then moved off from.
-            if ((VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis :  VRInput.RightTrigger.axis) > DRAG_TRIGGER_THRESHOLD)
+            if (DragTriggerHeld())
             {
                 VRBoolean cancelButton = (VRSettings.GetLeftHandedMode()) ? VRInput.ButtonY : VRInput.ButtonB;
 
@@ -314,9 +332,7 @@ namespace TarkovVR.Source.UI
         // cancels; releasing the trigger drops the item if it's been dragged far enough from origin.
         private void HandleOffPanelDrag()
         {
-            bool triggerHeld = (VRSettings.GetLeftHandedMode()
-                ? VRInput.LeftTrigger.axis
-                : VRInput.RightTrigger.axis) > DRAG_TRIGGER_THRESHOLD;
+            bool triggerHeld = DragTriggerHeld();
             VRBoolean cancelButton = VRSettings.GetLeftHandedMode()
                 ? VRInput.ButtonY
                 : VRInput.ButtonB;
