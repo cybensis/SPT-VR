@@ -200,6 +200,8 @@ namespace TarkovVR.Source.Misc
         {
             if (running)
             {
+                // The render thread calibrates the TSC rate from its first frames (0 until then): read it until it's there
+                if (tscPerMs <= 0 && nativeOk) tscPerMs = GpuProbe_TscPerMs();
                 long now = Stopwatch.GetTimestamp();
                 ulong cycles = MainCycles();
                 // The span since the last frame's end mark (present, xrWaitFrame, input, physics before Update) and the whole frame
