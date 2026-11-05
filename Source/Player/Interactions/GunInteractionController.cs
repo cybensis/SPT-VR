@@ -534,16 +534,11 @@ public class GunInteractionController : MonoBehaviour
 
         // Detached from the dominant hand (chest sling, or held by the support hand alone): skip the
         // marker anchor + collision and let ChestHang stamp the holder with an absolute world pose.
-        if (TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
-        {
-            TarkovVR.Source.Player.Interactions.ChestHang.DriveHangPose();
+        // (false = that gun was switched away from: this is the next one, placed below as usual)
+        if (TarkovVR.Source.Player.Interactions.ChestHang.Hanging && TarkovVR.Source.Player.Interactions.ChestHang.DriveHangPose())
             return;
-        }
-        if (TarkovVR.Source.Player.Interactions.ChestHang.SupportOnly)
-        {
-            TarkovVR.Source.Player.Interactions.ChestHang.DriveSupportPose();
+        if (TarkovVR.Source.Player.Interactions.ChestHang.SupportOnly && TarkovVR.Source.Player.Interactions.ChestHang.DriveSupportPose())
             return;
-        }
 
         // _markers[1] is weapon_R_IK_marker, a bone on the gun that reloads and malfunctions animate - while one plays,
         // VRGunController keeps the gun where it was in your hand instead of following that marker

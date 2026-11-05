@@ -69,6 +69,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static object lastHandsController;
         private static object lastPlayer;
         private static float hangOnArrivalUntil = -1f;  // the gun Tarkov hands you (raid start, walking into the range) goes to its spot
+        private static EFT.Player.FirearmController detachedGun;   // the gun slung / support-held: only its holder is ever stamped
         // Holder local pose from BEFORE the first detach; the anchor only re-stamps rotation at equip,
         // so it MUST be restored when the gun returns to the hand - and preserved across a
         // SupportOnly -> sling transition (holderSaved guards the save).
@@ -290,6 +291,7 @@ namespace TarkovVR.Source.Player.Interactions
                 slingLocalRot = Quaternion.Inverse(yawRot) * spotRot;
             }
 
+            detachedGun = fc;
             DetachCommon();
             Hanging = true;
             if (hangHaptics && !snap)
@@ -317,6 +319,7 @@ namespace TarkovVR.Source.Player.Interactions
             supportGripLever = Quaternion.Inverse(supportRelRot) * supportRelPos;
             supportSmoothedRot = wr.rotation;
 
+            detachedGun = fc;
             DetachCommon();
             SupportOnly = true;
             if (hangHaptics)
@@ -399,6 +402,7 @@ namespace TarkovVR.Source.Player.Interactions
             bool wasDetached = Detached;
             Hanging = false;
             SupportOnly = false;
+            detachedGun = null;
             HandInRegrabZone = false;
             GiveGunHandMarkerBack();
             if (!restore)
@@ -727,18 +731,43 @@ namespace TarkovVR.Source.Player.Interactions
                  * Quaternion.AngleAxis(slingRollDeg, m) * Quaternion.LookRotation(f, u);
         }
 
-        public static void DriveHangPose()
+        // A switch away from the detached gun (a gun taken off the body while it hangs) hands Tarkov's hands,
+        // VRGlobals.firearmController and VRGlobals.weaponHolder to the next gun a few frames before UpdateInput sees the new
+        // controller; a stamp in between moved THAT gun's holder, and it was held at a wrong angle from then on (headset:
+        // "switching between weapons ... the gun being angled wrong"). Not the detached gun any more = the detach ends here.
+        private static bool DetachedGunGone()
         {
+            var player = VRGlobals.player;
+            return detachedGun == null || player == null || !ReferenceEquals(player.HandsController, detachedGun)
+                || !ReferenceEquals(VRGlobals.firearmController, detachedGun);
+        }
+
+        // Still in hands but off our holder: Tarkov has it back for its put-away, nothing of ours to place
+        private static bool DetachedGunOnHolder()
+        {
+            return detachedGun.WeaponRoot != null && VRGlobals.weaponHolder != null && detachedGun.WeaponRoot.parent == VRGlobals.weaponHolder.transform;
+        }
+
+        // false = the detached gun is gone: place the gun in hands the usual way
+        public static bool DriveHangPose()
+        {
+            if (DetachedGunGone())
+            {
+                Reattach(restore: false);
+                return false;
+            }
+            if (!DetachedGunOnHolder())
+                return true;
             var fc = VRGlobals.firearmController;
             if (fc == null || fc.WeaponRoot == null || VRGlobals.weaponHolder == null || !HeadPose(out _, out _))
-                return;
+                return true;
 
             float dt = Mathf.Clamp(Time.deltaTime, 1e-4f, 0.05f);
             Quaternion yawRot = BodyYaw(out Vector3 headPos);
             // Its own spot (the chest sling for the first primary, the shoulder for the second, the hip for the pistol), in the
             // body-local frame the tuck-in runs in (from the neck, so a head turn doesn't swing it)
             if (!HandsGunSpotPose(fc, out Vector3 spotPos, out Quaternion spotRot))
-                return;
+                return true;
             Vector3 off = Quaternion.Inverse(yawRot) * (spotPos - headPos);
             Quaternion spotLocalRot = Quaternion.Inverse(yawRot) * spotRot;
 
@@ -748,14 +777,22 @@ namespace TarkovVR.Source.Player.Interactions
             slingLocalRot = Quaternion.Slerp(slingLocalRot, spotLocalRot, Mathf.Min(1f, rotAttachRate * dt));
 
             StampWeaponRoot(headPos + yawRot * slingLocalPos, yawRot * slingLocalRot);
+            return true;
         }
 
-        public static void DriveSupportPose()
+        public static bool DriveSupportPose()
         {
+            if (DetachedGunGone())
+            {
+                Reattach(restore: false);
+                return false;
+            }
+            if (!DetachedGunOnHolder())
+                return true;
             var fc = VRGlobals.firearmController;
             var lhObj = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand : null;
             if (fc == null || fc.WeaponRoot == null || VRGlobals.weaponHolder == null || lhObj == null)
-                return;
+                return true;
             Transform lh = lhObj.transform;
             Quaternion ctrl = SupportControllerRot(lh);
             Quaternion target = ctrl * supportRelRot;
@@ -776,6 +813,7 @@ namespace TarkovVR.Source.Player.Interactions
                 supportSmoothedRot = target;
             }
             StampWeaponRoot(lh.position + supportSmoothedRot * supportGripLever, supportSmoothedRot);
+            return true;
         }
 
         // The support hand's LIVE controller rotation in world space: the raw pose action's local
@@ -806,8 +844,7 @@ namespace TarkovVR.Source.Player.Interactions
         // support-only hold "jittery", where the gun hand's hold is local to that same parent). HandsPositioner calls this after it moves.
         internal static void RestampDetached()
         {
-            if (!Detached || stampedFrame != Time.frameCount || VRGlobals.firearmController == null
-                || VRGlobals.firearmController.WeaponRoot == null || VRGlobals.weaponHolder == null)
+            if (!Detached || stampedFrame != Time.frameCount || DetachedGunGone() || !DetachedGunOnHolder())
                 return;
             PlaceWeaponRoot(stampedPosition, stampedRotation);
         }
