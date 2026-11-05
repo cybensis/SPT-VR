@@ -40,16 +40,80 @@ def fullBackTime(g,path,wp):
     top=max(r[1] for r in rows); plateau=[r[0] for r in rows if r[1]>=top-0.002]
     return plateau[len(plateau)//2],top
 
+# Guns with no slot for a handle whose rig bone isn't mod_charge, the only name gen_holds looks for: by rig (a substring of its
+# container), the bone each one's own rack clips move back, every animation set in that folder (checked 2026-11-05: each bone moves
+# 6-13 cm straight back and carries the handle's meshes). MP7 7.2 cm, SA58 11.1, UMP 8.1, Vector 6.2 (its knob's fold not shown),
+# PKM 13.3, RFB 12.5 (its forward handle), Uzi 9.3, Mk-18 Mjolnir 13.2, RSASS 12.3. Left out: the RPD (no clip moves its handle bones),
+# the SR-2M (no magazine clips by its name: its set is its template id at runtime) and the VSK-94 (no clips of its own).
+# gen_holds' own left/right hold search on that bone, merged into its handles by gen_export; handleBones tells the runtime the bone.
+HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghing_handle','hk_ump':'weapon_charge','tdi_kriss_vector':'weapon_charge',
+                  'zid_pkm':'weapon_charge','kel_tec_rfb':'weapon_charge','iwi_uzi_9x19':'weapon_charge','sword_int_mk_18':'weapon_charge','r11_rsass':'weapon_charghing_000'}
+HANDLE_BONE_GUNS={}
+for folder,v in census.items():
+    if not os.path.isdir(ROOT+folder): continue
+    containers=[c for c in sorted(os.listdir(ROOT+folder)) if c.endswith('_container.bundle') and c.startswith('weapon_')]
+    matching=[(c,b) for c in containers for k,b in HANDLE_BONE_RIGS.items() if k in c]
+    for clip in v.get('clips',[]):
+        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',clip)
+        if matching and m:
+            family=m.group(1).lower()
+            HANDLE_BONE_GUNS[family]=(folder,)+next(((c,b) for c,b in matching if family in c),matching[0])
+extraHandles={}; extraGunHandHandles={}; handleBones={}; extraMovesWithBolt=[]; namedTrees={}
+for family,(folder,container,boneName) in sorted(HANDLE_BONE_GUNS.items()):
+    _,clips=loadFolder(folder)
+    tree=loadTree(ROOT+folder+'/'+container); P=tree[0]; J=fingerPaths(P)
+    charge=bone(P,'/'+boneName); wp=bone(P,'Weapon_root_anim/weapon')
+    namedTrees[family]=(tree,clips,charge)
+    prefix=next(n for n in clips if n.lower().startswith(family+'_mag_in')).split('_mag_in')[0]
+    names=[n for n in clips if n.startswith(prefix+'_')]
+    best=None
+    for n in sorted(names):
+        rank=rackClipRank(n[len(prefix)+1:])
+        if rank is None: continue
+        g=setup(tree,clips[n])
+        if rank==0:
+            h=handleHold(g,J,charge)
+            if h is None: continue
+            moved=leftHandTravel(g,charge)
+            if moved<0.03: continue
+        else:
+            h=ridingHold(g,charge,'L')
+            if h is None: continue
+            moved=h['moved']
+        if best is None or (rank,-moved)<best[0]:
+            h['clip']=n; h['leftHandMoved']=round(moved,3); best=((rank,-moved),h)
+    if best: extraHandles[family]=best[1]
+    best=None
+    for n in sorted(names):
+        rank=rackClipRank(n[len(prefix)+1:])
+        if rank is None: continue
+        h=ridingHold(setup(tree,clips[n]),charge,'R')
+        if h and (best is None or (rank,h['drift'])<best[0]):
+            h['clip']=n; best=((rank,h['drift']),h)
+    if best: extraGunHandHandles[family]=best[1]
+    # The locked-back pose moves the handle too (gen_holds' handleMovesWithBolt test)
+    g=setup(tree,clips[next(n for n in names if '_mag_in' in n)]); c={}
+    restAt,_,_=g['worldAt'](charge,0.0,c); gunAt,gunRotation,_=g['worldAt'](wp,0.0,c); restInGun=g['rotate'](conj(gunRotation),restAt-gunAt)
+    for n in sorted(x for x in names if re.search(r'(catch_on|on_catch)$',x)):
+        held=setup(tree,clips[n]); c2={}
+        heldAt,_,_=held['worldAt'](charge,0.0,c2); gunHeld,gunHeldRotation,_=held['worldAt'](wp,0.0,c2)
+        if np.linalg.norm(held['rotate'](conj(gunHeldRotation),heldAt-gunHeld)-restInGun)>=0.02: extraMovesWithBolt.append(family)
+        break
+    handleBones[family]=boneName
+    print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
+          'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
+
 NOT_BOLT=re.compile(r'Human|marker|Bend_Goal|Camera|IK|patron|shellport',re.I)
 boltBones={}
-for family in sorted(set(R['handles'])|set(R['gunHandHandles'])):
+for family in sorted(set(R['handles'])|set(R['gunHandHandles'])|set(extraHandles)|set(extraGunHandHandles)):
     folder=famFolder.get(family)
-    if family in R['handleMovesWithBolt'] or folder is None: continue
+    if family in R['handleMovesWithBolt'] or family in extraMovesWithBolt or folder is None: continue
     if any(n.lower().startswith(family+'_') and re.search(r'(catch_on|on_catch)$',n) for n in census[folder]['clips']): continue
-    hold=R['handles'].get(family) or R['gunHandHandles'].get(family)
-    tree,clips=loadFolder(folder)
+    hold=R['handles'].get(family) or R['gunHandHandles'].get(family) or extraHandles.get(family) or extraGunHandHandles.get(family)
+    if family in namedTrees: tree,clips,_=namedTrees[family]
+    else: tree,clips=loadFolder(folder)
     if tree is None or hold['clip'] not in clips: continue
-    P,parentOf=tree[0],tree[1]; ch=bone(P,'/mod_charge'); wp=bone(P,'Weapon_root_anim/weapon')
+    P,parentOf=tree[0],tree[1]; ch=namedTrees[family][2] if family in namedTrees else bone(P,'/mod_charge'); wp=bone(P,'Weapon_root_anim/weapon')
     g=setup(tree,clips[hold['clip']]); t,top=fullBackTime(g,ch,wp)
     def inGun(path,time):
         c={}; p,_,_=g['worldAt'](path,time,c); wpp,wr,_=g['worldAt'](wp,time,c); return g['rotate'](conj(wr),p-wpp)
@@ -92,55 +156,6 @@ for family,spec in SIDE_HANDLE_GUNS.items():
         position=[round(float(x),4) for x in g['rotate'](conj(br),pp-bp)],rotation=toUnityEuler(qmul(conj(br),pr)),
         fingers=eulerList([np.array(g['localAt'](j,t)[1],float) for j in fingerPaths(P,spec['side'])]),clip=spec['clip'])
     print(f'{family} side handle:',{k:v for k,v in sideHandles[family].items() if k!='fingers'},flush=True)
-# Guns with no slot for a handle whose rig bone isn't mod_charge, the only name gen_holds looks for (MP7: "weapon_charghing_handle",
-# sic; its rack clip takes it back 7.2 cm with the carrier). gen_holds' own left/right hold search on that bone, merged into its
-# handles by gen_export; handleBones tells the runtime which bone to take.
-HANDLE_BONE_GUNS={'mp7a1':'weapon_charghing_handle','mp7a2':'weapon_charghing_handle'}
-extraHandles={}; extraGunHandHandles={}; handleBones={}; extraMovesWithBolt=[]
-for family,boneName in HANDLE_BONE_GUNS.items():
-    folder=famFolder[family]; d=ROOT+folder+'/'
-    _,clips=loadFolder(folder)
-    containers=[c for c in sorted(os.listdir(d)) if c.endswith('_container.bundle') and c.startswith('weapon_')]
-    tree=loadTree(d+next((c for c in containers if family in c),containers[0])); P=tree[0]; J=fingerPaths(P)
-    charge=bone(P,'/'+boneName); wp=bone(P,'Weapon_root_anim/weapon')
-    prefix=next(n for n in clips if n.lower().startswith(family+'_mag_in')).split('_mag_in')[0]
-    names=[n for n in clips if n.startswith(prefix+'_')]
-    best=None
-    for n in sorted(names):
-        rank=rackClipRank(n[len(prefix)+1:])
-        if rank is None: continue
-        g=setup(tree,clips[n])
-        if rank==0:
-            h=handleHold(g,J,charge)
-            if h is None: continue
-            moved=leftHandTravel(g,charge)
-            if moved<0.03: continue
-        else:
-            h=ridingHold(g,charge,'L')
-            if h is None: continue
-            moved=h['moved']
-        if best is None or (rank,-moved)<best[0]:
-            h['clip']=n; h['leftHandMoved']=round(moved,3); best=((rank,-moved),h)
-    if best: extraHandles[family]=best[1]
-    best=None
-    for n in sorted(names):
-        rank=rackClipRank(n[len(prefix)+1:])
-        if rank is None: continue
-        h=ridingHold(setup(tree,clips[n]),charge,'R')
-        if h and (best is None or (rank,h['drift'])<best[0]):
-            h['clip']=n; best=((rank,h['drift']),h)
-    if best: extraGunHandHandles[family]=best[1]
-    # The locked-back pose moves the handle too (gen_holds' handleMovesWithBolt test)
-    g=setup(tree,clips[next(n for n in names if '_mag_in' in n)]); c={}
-    restAt,_,_=g['worldAt'](charge,0.0,c); gunAt,gunRotation,_=g['worldAt'](wp,0.0,c); restInGun=g['rotate'](conj(gunRotation),restAt-gunAt)
-    for n in sorted(x for x in names if re.search(r'(catch_on|on_catch)$',x)):
-        held=setup(tree,clips[n]); c2={}
-        heldAt,_,_=held['worldAt'](charge,0.0,c2); gunHeld,gunHeldRotation,_=held['worldAt'](wp,0.0,c2)
-        if np.linalg.norm(held['rotate'](conj(gunHeldRotation),heldAt-gunHeld)-restInGun)>=0.02: extraMovesWithBolt.append(family)
-        break
-    handleBones[family]=boneName
-    print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
-          'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
 LOW_ROCK_GUNS=('ak50',)
 rockIns={}
 for family in LOW_ROCK_GUNS:
