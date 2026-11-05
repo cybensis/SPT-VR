@@ -100,6 +100,12 @@ namespace TarkovVR.Source.XR
             hapticFrequency.enabled = true;
             features.Add(hapticFrequency);
 
+            // Watches the frame submission for the alternate-eye experiment (Ctrl+F11); only looks
+            OpenXRFrameWatch frameWatch = ScriptableObject.CreateInstance<OpenXRFrameWatch>();
+            nameField?.SetValue(frameWatch, "SPT-VR Frame Watch");
+            frameWatch.enabled = true;
+            features.Add(frameWatch);
+
             FieldInfo featuresField = typeof(OpenXRSettings).GetField("features", BindingFlags.NonPublic | BindingFlags.Instance);
             if (featuresField == null)
             {
