@@ -34,8 +34,9 @@ namespace TarkovVR.Source.Graphics
         public static float cameraDepth = 100000f;      // after every other camera
         public static bool drawAfterLastEyeCamera = true;   // false = drawn by the window's own camera (costs a camera's work a frame)
         // Drawn right after an eye pass the window can come out the other way up: Unity keeps that pass's projection flip. Headset: after
-        // the raid's uiCam upside down, after the main menu's uiCam not. -1 = by the camera (flipped when it drew into a texture of its
-        // own rather than straight into the eye image - inferred, logged once per camera), 0 = never, 1 = always.
+        // the raid's uiCam upside down, after the main menu's uiCam (which drew into a texture of its own, 'TempBuffer') not. -1 = by the
+        // camera (flipped back when it drew straight into the eye image - inferred from those two, logged once per camera), 0 = never,
+        // 1 = always.
         public static int flipAfterEyePass = -1;
         private bool drawingAfterEyePass;
         private bool flipThisDraw;
@@ -132,7 +133,7 @@ namespace TarkovVR.Source.Graphics
             RenderTexture.active = active;   // the camera's own target back for whatever Unity does after
         }
 
-        // Whether the eye pass just drawn leaves the window flipped: the camera drew into a texture of its own (not this eye's image)
+        // Whether the eye pass just drawn leaves the window flipped: the camera drew straight into this eye's image (not a texture of its own)
         private bool FlipAfter(Camera camera, RenderTexture active)
         {
             RenderTexture eyeImage = null;
@@ -141,7 +142,7 @@ namespace TarkovVR.Source.Graphics
                 eyeImage = display.GetRenderTextureForRenderPass(camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Left ? 0 : 1);
             RenderTexture cameraTexture = camera.activeTexture;
             bool ownTexture = cameraTexture != null && cameraTexture != eyeImage;
-            bool flip = flipAfterEyePass == 1 || (flipAfterEyePass < 0 && ownTexture);
+            bool flip = flipAfterEyePass == 1 || (flipAfterEyePass < 0 && !ownTexture);
             if (loggedFlipCameras.Add(camera.GetInstanceID()))
                 Plugin.MyLog.LogInfo($"[DesktopMirror] after '{camera.name}': its texture {Describe(cameraTexture)}, active {Describe(active)}, eye image {Describe(eyeImage)} "
                     + $"-> {(flip ? "flipped back" : "as is")} (flipAfterEyePass {flipAfterEyePass})");
