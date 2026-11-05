@@ -20,6 +20,8 @@ namespace TarkovVR.Source.Graphics
         public static float smoothingTime = 0.15f;      // s the view takes to catch up with a head turn (0 = follows it exactly)
         public static float maxLagDegrees = 12f;        // how far it can trail the head (more = smoother, but the crop nears the eye image's edge)
         public static float resetDegrees = 60f;         // further off than this at once (a snap of the camera, a new scene): no catching up, it's there
+        public static float edgeMargin = 0.05f;         // share of the eye image kept clear at each edge: the lenses' black mask comes in there
+        public static int edgeChecks = 4;               // points checked along each side of the window to keep it inside the eye image
         public static bool flipVertical = true;         // the eye texture is stored top row first (headset: upside down without it)
         public static int gridColumns = 24;             // the window is drawn as a grid; each corner looked up exactly, straight in between
         public static int gridRows = 14;
@@ -37,6 +39,7 @@ namespace TarkovVR.Source.Graphics
         private Camera smoothedFor;
         private bool loggedStart;
         private bool loggedError;
+        private bool loggedTooWide;
 
         private IEnumerator Start()
         {
@@ -83,7 +86,10 @@ namespace TarkovVR.Source.Graphics
             Matrix4x4 view = eyeCamera.GetStereoViewMatrix(eye);
             Matrix4x4 projection = eyeCamera.GetStereoProjectionMatrix(eye);
             Quaternion eyeRotation = RotationOfView(view);
+            float tanHalfAcross = Mathf.Tan(Mathf.Clamp(fieldOfView, 10f, 150f) * 0.5f * Mathf.Deg2Rad);
+            float tanHalfUp = tanHalfAcross * Screen.height / Screen.width;
             Smooth(eyeRotation, eyeCamera);
+            KeepInsideEyeImage(eyeRotation, view, projection, tanHalfAcross, tanHalfUp);
 
             if (!loggedStart)
             {
@@ -91,7 +97,7 @@ namespace TarkovVR.Source.Graphics
                 Plugin.MyLog.LogInfo($"[DesktopMirror] stabilised window from the {eye} eye ({eyeTexture.width}x{eyeTexture.height} {eyeTexture.format}) of '{eyeCamera.name}', "
                     + $"window {Screen.width}x{Screen.height}, {fieldOfView:0} deg across, render passes {display.GetRenderPassCount()}");
             }
-            Draw(eyeTexture, view, projection);
+            Draw(eyeTexture, view, projection, tanHalfAcross, tanHalfUp);
         }
 
         // MultiPass: one render pass per eye, each its own texture (pass 0 left, 1 right). Single-pass would be one texture array,
@@ -143,11 +149,64 @@ namespace TarkovVR.Source.Graphics
                 smoothedRotation = Quaternion.RotateTowards(eyeRotation, smoothedRotation, maxLagDegrees);
         }
 
-        private void Draw(RenderTexture eyeTexture, Matrix4x4 view, Matrix4x4 projection)
+        // Each eye's image reaches less far toward the nose than outward, and the trailing view moved the crop toward it on a turn
+        // (headset: turning left with the left eye, the black mask came in on the right). The window's whole border has to land inside
+        // the eye image, less edgeMargin: where it wouldn't, the view trails less, just as far as fits (between the head's own turn
+        // and the smoothed one).
+        private void KeepInsideEyeImage(Quaternion eyeRotation, Matrix4x4 view, Matrix4x4 projection, float tanHalfAcross, float tanHalfUp)
         {
-            float aspect = (float)Screen.width / Screen.height;
-            float tanHalfAcross = Mathf.Tan(Mathf.Clamp(fieldOfView, 10f, 150f) * 0.5f * Mathf.Deg2Rad);
-            float tanHalfUp = tanHalfAcross / aspect;
+            if (BorderInsideEyeImage(smoothedRotation, view, projection, tanHalfAcross, tanHalfUp))
+                return;
+            float fits = 0f;
+            float doesNot = 1f;
+            for (int step = 0; step < 8; step++)
+            {
+                float middle = (fits + doesNot) * 0.5f;
+                if (BorderInsideEyeImage(Quaternion.Slerp(eyeRotation, smoothedRotation, middle), view, projection, tanHalfAcross, tanHalfUp))
+                    fits = middle;
+                else
+                    doesNot = middle;
+            }
+            smoothedRotation = Quaternion.Slerp(eyeRotation, smoothedRotation, fits);
+            if (fits <= 0f && !loggedTooWide && !BorderInsideEyeImage(eyeRotation, view, projection, tanHalfAcross, tanHalfUp))
+            {
+                loggedTooWide = true;
+                Plugin.MyLog.LogWarning($"[DesktopMirror] {fieldOfView:0} deg across is wider than this eye's image: its edges show even looking straight ahead");
+            }
+        }
+
+        private bool BorderInsideEyeImage(Quaternion rotation, Matrix4x4 view, Matrix4x4 projection, float tanHalfAcross, float tanHalfUp)
+        {
+            int checks = Mathf.Max(1, edgeChecks);
+            for (int index = 0; index <= checks; index++)
+            {
+                float along = (float)index / checks;
+                if (!InsideEyeImage(EyeImagePoint(rotation, along, 0f, tanHalfAcross, tanHalfUp, view, projection))
+                    || !InsideEyeImage(EyeImagePoint(rotation, along, 1f, tanHalfAcross, tanHalfUp, view, projection))
+                    || !InsideEyeImage(EyeImagePoint(rotation, 0f, along, tanHalfAcross, tanHalfUp, view, projection))
+                    || !InsideEyeImage(EyeImagePoint(rotation, 1f, along, tanHalfAcross, tanHalfUp, view, projection)))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool InsideEyeImage(Vector2 point)
+        {
+            return point.x >= edgeMargin && point.x <= 1f - edgeMargin && point.y >= edgeMargin && point.y <= 1f - edgeMargin;
+        }
+
+        // A window point (0..1 across and up): its direction from a camera turned this way, where that direction is in the eye image
+        // (0..1, the eye's own projection; the texture's row order aside)
+        private static Vector2 EyeImagePoint(Quaternion rotation, float across, float up, float tanHalfAcross, float tanHalfUp, Matrix4x4 view, Matrix4x4 projection)
+        {
+            Vector3 direction = rotation * new Vector3((across * 2f - 1f) * tanHalfAcross, (up * 2f - 1f) * tanHalfUp, 1f);
+            Vector3 inView = view.MultiplyVector(direction);
+            Vector4 clip = projection * new Vector4(inView.x, inView.y, inView.z, 0f);
+            return clip.w > 1e-5f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : new Vector2(-1f, -1f);
+        }
+
+        private void Draw(RenderTexture eyeTexture, Matrix4x4 view, Matrix4x4 projection, float tanHalfAcross, float tanHalfUp)
+        {
             int columns = Mathf.Max(1, gridColumns);
             int rows = Mathf.Max(1, gridRows);
 
@@ -176,13 +235,10 @@ namespace TarkovVR.Source.Graphics
             GL.PopMatrix();
         }
 
-        // A window point (0..1 across and up): its direction from the smoothed camera, where that direction is in the eye image
+        // A grid corner, from the smoothed camera
         private void Corner(float across, float up, float tanHalfAcross, float tanHalfUp, Matrix4x4 view, Matrix4x4 projection)
         {
-            Vector3 direction = smoothedRotation * new Vector3((across * 2f - 1f) * tanHalfAcross, (up * 2f - 1f) * tanHalfUp, 1f);
-            Vector3 inView = view.MultiplyVector(direction);
-            Vector4 clip = projection * new Vector4(inView.x, inView.y, inView.z, 0f);
-            Vector2 uv = clip.w > 1e-5f ? new Vector2(clip.x / clip.w * 0.5f + 0.5f, clip.y / clip.w * 0.5f + 0.5f) : new Vector2(-1f, -1f);
+            Vector2 uv = EyeImagePoint(smoothedRotation, across, up, tanHalfAcross, tanHalfUp, view, projection);
             if (flipVertical)
                 uv.y = 1f - uv.y;
             GL.TexCoord2(uv.x, uv.y);
