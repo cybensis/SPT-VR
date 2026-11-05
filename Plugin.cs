@@ -14,7 +14,8 @@ using Valve.VR;
 using static TarkovVR.Patches.Visuals.VisualPatches;
 using UnityEngine.XR;
 using System.Text;
-using TarkovVR.Source.Settings;
+using TarkovVR.Source.Settings;
+
 using TarkovVR.Source.XR;
 using TarkovVR.Source.Controls;
 
@@ -56,6 +57,8 @@ namespace TarkovVR
 
             // Ctrl+F10 in a raid: both-eyes vs left-eye-only cost measurement (logs "[StereoCost]").
             gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>();
+            // The desktop window: one eye, cropped to the window and stabilised (for recording)
+            gameObject.AddComponent<TarkovVR.Source.Graphics.DesktopMirror>();
 
             if (OpenXRBootstrap.Active)
             {

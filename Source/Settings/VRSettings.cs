@@ -85,6 +85,7 @@ namespace TarkovVR.Source.Settings
             public bool walkEffector { get; set; }
             public bool hideArms { get; set; }
             public bool hideLegs { get; set; }
+            public bool desktopViewRightEye { get; set; }
             public bool manualEating { get; set; }
             public bool disableMouseInput { get; set; }
             public bool disableCorpseContextMenu { get; set; }
@@ -141,6 +142,7 @@ namespace TarkovVR.Source.Settings
                 walkEffector = false;
                 hideArms = false;
                 hideLegs = false;
+                desktopViewRightEye = false;
                 manualEating = true;
                 disableMouseInput = true;
                 disableCorpseContextMenu = true;
@@ -216,6 +218,7 @@ namespace TarkovVR.Source.Settings
         // Other settings
         private static SettingToggle hideArmsToggle;
         private static SettingToggle hideLegsToggle;
+        private static SettingToggle desktopViewRightEyeToggle;
         private static SettingToggle manualEatingToggle;
         private static SettingToggle disableMouseInput;
         private static SettingToggle disableCorpseContextMenuToggle;
@@ -740,6 +743,13 @@ namespace TarkovVR.Source.Settings
             hideLegsToggle.Text.localizationKey = "Hide Legs";
             hideLegsToggle.Toggle.UpdateValue(settings.hideLegs);
 
+            // The desktop window (DesktopMirror): which eye it shows, off = the left
+            desktopViewRightEyeToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            desktopViewRightEyeToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            desktopViewRightEyeToggle.Toggle._onValueChanged = SetDesktopViewRightEye;
+            desktopViewRightEyeToggle.Text.localizationKey = "Desktop View Uses Right Eye";
+            desktopViewRightEyeToggle.Toggle.UpdateValue(settings.desktopViewRightEye);
+
             // Manual eating
             manualEatingToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
             manualEatingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
@@ -1187,6 +1197,15 @@ namespace TarkovVR.Source.Settings
         public static bool GetHideArms()
         {
             return settings.hideArms;
+        }
+
+        public static bool GetDesktopViewRightEye()
+        {
+            return settings != null && settings.desktopViewRightEye;
+        }
+        private static void SetDesktopViewRightEye(bool rightEye)
+        {
+            settings.desktopViewRightEye = rightEye;
         }
         private static void SetHideArms(bool turnOff)
         {
