@@ -11,7 +11,8 @@ namespace TarkovVR.Source.Graphics
     // view, the lenses' black corners, and every head movement. Instead a virtual camera at the eye follows the head's turning
     // smoothed (with a cap on how far it can lag, and never so far that the window reaches the lens mask), and every window point
     // is looked up in the eye image through that eye's own view and projection. Rotation only: where the eye was is what the
-    // image shows. Field of view and smoothing: VR Graphics sliders.
+    // image shows. Field of view (across, and up if set apart from the window's shape: that squashes the picture), smoothing and
+    // a downward tilt of the view: VR Graphics sliders.
     // Drawn by a camera of our own that renders nothing and comes last of the cameras: after the eyes, before the screen overlays
     // (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end of the frame covered.
     public class DesktopMirror : MonoBehaviour
@@ -39,7 +40,8 @@ namespace TarkovVR.Source.Graphics
         private int mirrorModeSet = int.MinValue;
         private XRDisplaySubsystem mirrorModeSetOn;
         private Material material;
-        private Quaternion smoothedRotation = Quaternion.identity;
+        private Quaternion smoothedRotation = Quaternion.identity;   // the head's turn, smoothed
+        private Quaternion viewTilt = Quaternion.identity;           // the window's view off that (the tilt slider)
         private bool haveSmoothedRotation;
         private Camera smoothedFor;
         private bool loggedStart;
@@ -124,7 +126,10 @@ namespace TarkovVR.Source.Graphics
             Quaternion eyeRotation = RotationOfView(view);
             float fieldOfView = VRSettings.GetDesktopViewFieldOfView();
             float tanHalfAcross = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
-            float tanHalfUp = tanHalfAcross * Screen.height / Screen.width;
+            float verticalFieldOfView = VRSettings.GetDesktopViewVerticalFieldOfView();
+            float tanHalfUp = verticalFieldOfView > 0f ? Mathf.Tan(verticalFieldOfView * 0.5f * Mathf.Deg2Rad) : tanHalfAcross * Screen.height / Screen.width;
+            // Positive pitch about the camera's own x turns it down
+            viewTilt = Quaternion.Euler(VRSettings.GetDesktopViewTiltDown(), 0f, 0f);
             Smooth(eyeRotation, eyeCamera, VRSettings.GetDesktopViewSmoothing());
             KeepInsideEyeImage(eyeRotation, view, projection, tanHalfAcross, tanHalfUp, fieldOfView);
 
@@ -193,23 +198,24 @@ namespace TarkovVR.Source.Graphics
         // smoothed one).
         private void KeepInsideEyeImage(Quaternion eyeRotation, Matrix4x4 view, Matrix4x4 projection, float tanHalfAcross, float tanHalfUp, float fieldOfView)
         {
-            if (BorderInsideEyeImage(smoothedRotation, view, projection, tanHalfAcross, tanHalfUp))
+            if (BorderInsideEyeImage(smoothedRotation * viewTilt, view, projection, tanHalfAcross, tanHalfUp))
                 return;
             float fits = 0f;
             float doesNot = 1f;
             for (int step = 0; step < 8; step++)
             {
                 float middle = (fits + doesNot) * 0.5f;
-                if (BorderInsideEyeImage(Quaternion.Slerp(eyeRotation, smoothedRotation, middle), view, projection, tanHalfAcross, tanHalfUp))
+                if (BorderInsideEyeImage(Quaternion.Slerp(eyeRotation, smoothedRotation, middle) * viewTilt, view, projection, tanHalfAcross, tanHalfUp))
                     fits = middle;
                 else
                     doesNot = middle;
             }
             smoothedRotation = Quaternion.Slerp(eyeRotation, smoothedRotation, fits);
-            if (fits <= 0f && !loggedTooWide && !BorderInsideEyeImage(eyeRotation, view, projection, tanHalfAcross, tanHalfUp))
+            if (fits <= 0f && !loggedTooWide && !BorderInsideEyeImage(eyeRotation * viewTilt, view, projection, tanHalfAcross, tanHalfUp))
             {
                 loggedTooWide = true;
-                Plugin.MyLog.LogWarning($"[DesktopMirror] {fieldOfView:0} deg across is wider than this eye's image: its edges show even looking straight ahead");
+                Plugin.MyLog.LogWarning($"[DesktopMirror] {fieldOfView:0} deg across ({2f * Mathf.Atan(tanHalfUp) * Mathf.Rad2Deg:0} up, tilted {VRSettings.GetDesktopViewTiltDown():0} down) "
+                    + "reaches past this eye's image: its edges show even with the head still");
             }
         }
 
@@ -396,7 +402,7 @@ namespace TarkovVR.Source.Graphics
         // A grid corner, from the smoothed camera
         private void Corner(float across, float up, float tanHalfAcross, float tanHalfUp, Matrix4x4 view, Matrix4x4 projection)
         {
-            Vector2 uv = EyeImagePoint(smoothedRotation, across, up, tanHalfAcross, tanHalfUp, view, projection);
+            Vector2 uv = EyeImagePoint(smoothedRotation * viewTilt, across, up, tanHalfAcross, tanHalfUp, view, projection);
             if (flipVertical)
                 uv.y = 1f - uv.y;
             GL.TexCoord2(uv.x, uv.y);

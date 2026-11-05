@@ -88,6 +88,8 @@ namespace TarkovVR.Source.Settings
             public bool desktopViewRightEye { get; set; }
             public float desktopViewFieldOfView { get; set; }
             public float desktopViewSmoothing { get; set; }
+            public float desktopViewVerticalFieldOfView { get; set; }
+            public float desktopViewTiltDown { get; set; }
             public bool manualEating { get; set; }
             public bool disableMouseInput { get; set; }
             public bool disableCorpseContextMenu { get; set; }
@@ -147,6 +149,8 @@ namespace TarkovVR.Source.Settings
                 desktopViewRightEye = false;
                 desktopViewFieldOfView = 80f;
                 desktopViewSmoothing = 0.15f;
+                desktopViewVerticalFieldOfView = 0f;
+                desktopViewTiltDown = 0f;
                 manualEating = true;
                 disableMouseInput = true;
                 disableCorpseContextMenu = true;
@@ -225,6 +229,8 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle desktopViewRightEyeToggle;
         private static SettingSelectSlider desktopViewFieldOfViewSlider;
         private static SettingSelectSlider desktopViewSmoothingSlider;
+        private static SettingSelectSlider desktopViewVerticalFieldOfViewSlider;
+        private static SettingSelectSlider desktopViewTiltDownSlider;
         private static SettingToggle manualEatingToggle;
         private static SettingToggle disableMouseInput;
         private static SettingToggle disableCorpseContextMenuToggle;
@@ -769,6 +775,19 @@ namespace TarkovVR.Source.Settings
             MakeSliderSmooth(desktopViewSmoothingSlider, 0f, 0.5f, () => settings.desktopViewSmoothing,
                 (v) => settings.desktopViewSmoothing = v, (v) => Remap(v, 0f, 0.5f, 0f, 10f).ToString("0.0"));
 
+            // Up-down on its own (0 = from the window's shape; anything else squashes the picture to fit), and the view aimed lower
+            desktopViewVerticalFieldOfViewSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
+            desktopViewVerticalFieldOfViewSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
+            desktopViewVerticalFieldOfViewSlider.Text.localizationKey = "Desktop View Vertical Field Of View (0 = auto):";
+            MakeSliderSmooth(desktopViewVerticalFieldOfViewSlider, 0f, 100f, () => settings.desktopViewVerticalFieldOfView,
+                (v) => settings.desktopViewVerticalFieldOfView = v, (v) => v < 1f ? "Auto" : v.ToString("0"));
+
+            desktopViewTiltDownSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
+            desktopViewTiltDownSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
+            desktopViewTiltDownSlider.Text.localizationKey = "Desktop View Tilt Down:";
+            MakeSliderSmooth(desktopViewTiltDownSlider, -20f, 30f, () => settings.desktopViewTiltDown,
+                (v) => settings.desktopViewTiltDown = v, (v) => v.ToString("0"));
+
             // Manual eating
             manualEatingToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
             manualEatingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
@@ -1227,6 +1246,18 @@ namespace TarkovVR.Source.Settings
         public static float GetDesktopViewFieldOfView()
         {
             return settings == null || settings.desktopViewFieldOfView < 1f ? 80f : Mathf.Clamp(settings.desktopViewFieldOfView, 30f, 150f);
+        }
+
+        // Degrees up-down in the desktop window, 0 = from the window's shape
+        public static float GetDesktopViewVerticalFieldOfView()
+        {
+            return settings == null || settings.desktopViewVerticalFieldOfView < 1f ? 0f : Mathf.Clamp(settings.desktopViewVerticalFieldOfView, 1f, 150f);
+        }
+
+        // Degrees the desktop window's view is aimed below where the head looks
+        public static float GetDesktopViewTiltDown()
+        {
+            return settings == null ? 0f : Mathf.Clamp(settings.desktopViewTiltDown, -45f, 45f);
         }
 
         // Seconds the desktop window's view takes to catch up with a head turn
