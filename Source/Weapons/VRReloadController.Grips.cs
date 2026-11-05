@@ -129,6 +129,7 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedPalmHold> palms;
             public Dictionary<string, List<SavedBoltBone>> boltBones;
             public Dictionary<string, SavedSideHandle> sideHandles;
+            public Dictionary<string, string> handleBones;
         }
 
         // By animation set: the way the magazine leaves the well, in the well bone's frame, where the mesh can't say
@@ -454,6 +455,11 @@ namespace TarkovVR.Source.Weapons
                 {
                     foreach (KeyValuePair<string, List<SavedBoltBone>> entry in generated.boltBones)
                         boltBonesByFamily[entry.Key] = entry.Value;
+                }
+                if (generated.handleBones != null)
+                {
+                    foreach (KeyValuePair<string, string> entry in generated.handleBones)
+                        handleBoneNames[entry.Key] = entry.Value;
                 }
                 if (generated.sideHandles != null)
                 {

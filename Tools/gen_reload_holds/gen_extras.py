@@ -7,6 +7,7 @@
 #    The grip is the palm in the base's frame at full pull.
 #  - rockIn: guns whose magazine tilts out less than gen_holds' 15 deg but still tilts (AK-50: 9.9 deg about the AKs' axis, then away
 #    down; headset: its straight track ran toward the stock)
+#  - handles / gunHandHandles / handleBones: guns whose handle bone has another name than mod_charge (MP7)
 import sys, json, re, os, zlib
 exec(open('gen_holds.py',encoding='utf-8').read().split("if __name__=='__main__':")[0])
 gen=json.load(open('gen_all.json')); R=gen['result']; census=json.load(open('clip_census.json'))
@@ -91,6 +92,55 @@ for family,spec in SIDE_HANDLE_GUNS.items():
         position=[round(float(x),4) for x in g['rotate'](conj(br),pp-bp)],rotation=toUnityEuler(qmul(conj(br),pr)),
         fingers=eulerList([np.array(g['localAt'](j,t)[1],float) for j in fingerPaths(P,spec['side'])]),clip=spec['clip'])
     print(f'{family} side handle:',{k:v for k,v in sideHandles[family].items() if k!='fingers'},flush=True)
+# Guns with no slot for a handle whose rig bone isn't mod_charge, the only name gen_holds looks for (MP7: "weapon_charghing_handle",
+# sic; its rack clip takes it back 7.2 cm with the carrier). gen_holds' own left/right hold search on that bone, merged into its
+# handles by gen_export; handleBones tells the runtime which bone to take.
+HANDLE_BONE_GUNS={'mp7a1':'weapon_charghing_handle','mp7a2':'weapon_charghing_handle'}
+extraHandles={}; extraGunHandHandles={}; handleBones={}; extraMovesWithBolt=[]
+for family,boneName in HANDLE_BONE_GUNS.items():
+    folder=famFolder[family]; d=ROOT+folder+'/'
+    _,clips=loadFolder(folder)
+    containers=[c for c in sorted(os.listdir(d)) if c.endswith('_container.bundle') and c.startswith('weapon_')]
+    tree=loadTree(d+next((c for c in containers if family in c),containers[0])); P=tree[0]; J=fingerPaths(P)
+    charge=bone(P,'/'+boneName); wp=bone(P,'Weapon_root_anim/weapon')
+    prefix=next(n for n in clips if n.lower().startswith(family+'_mag_in')).split('_mag_in')[0]
+    names=[n for n in clips if n.startswith(prefix+'_')]
+    best=None
+    for n in sorted(names):
+        rank=rackClipRank(n[len(prefix)+1:])
+        if rank is None: continue
+        g=setup(tree,clips[n])
+        if rank==0:
+            h=handleHold(g,J,charge)
+            if h is None: continue
+            moved=leftHandTravel(g,charge)
+            if moved<0.03: continue
+        else:
+            h=ridingHold(g,charge,'L')
+            if h is None: continue
+            moved=h['moved']
+        if best is None or (rank,-moved)<best[0]:
+            h['clip']=n; h['leftHandMoved']=round(moved,3); best=((rank,-moved),h)
+    if best: extraHandles[family]=best[1]
+    best=None
+    for n in sorted(names):
+        rank=rackClipRank(n[len(prefix)+1:])
+        if rank is None: continue
+        h=ridingHold(setup(tree,clips[n]),charge,'R')
+        if h and (best is None or (rank,h['drift'])<best[0]):
+            h['clip']=n; best=((rank,h['drift']),h)
+    if best: extraGunHandHandles[family]=best[1]
+    # The locked-back pose moves the handle too (gen_holds' handleMovesWithBolt test)
+    g=setup(tree,clips[next(n for n in names if '_mag_in' in n)]); c={}
+    restAt,_,_=g['worldAt'](charge,0.0,c); gunAt,gunRotation,_=g['worldAt'](wp,0.0,c); restInGun=g['rotate'](conj(gunRotation),restAt-gunAt)
+    for n in sorted(x for x in names if re.search(r'(catch_on|on_catch)$',x)):
+        held=setup(tree,clips[n]); c2={}
+        heldAt,_,_=held['worldAt'](charge,0.0,c2); gunHeld,gunHeldRotation,_=held['worldAt'](wp,0.0,c2)
+        if np.linalg.norm(held['rotate'](conj(gunHeldRotation),heldAt-gunHeld)-restInGun)>=0.02: extraMovesWithBolt.append(family)
+        break
+    handleBones[family]=boneName
+    print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
+          'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
 LOW_ROCK_GUNS=('ak50',)
 rockIns={}
 for family in LOW_ROCK_GUNS:
@@ -99,4 +149,5 @@ for family in LOW_ROCK_GUNS:
     if rocks:
         rockIns[family]=dict(axis=rocks['axis'],angle=rocks['angle'],thumb=rocks['thumb'])
         print(f'{family} rock-in:',{k:v for k,v in rocks.items() if k!='thumb'},flush=True)
-json.dump(dict(boltBones=boltBones,sideHandles=sideHandles,rockIn=rockIns),open('extras.json','w'))
+json.dump(dict(boltBones=boltBones,sideHandles=sideHandles,rockIn=rockIns,handles=extraHandles,gunHandHandles=extraGunHandHandles,
+               handleBones=handleBones,handleMovesWithBolt=extraMovesWithBolt),open('extras.json','w'))

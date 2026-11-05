@@ -4,6 +4,10 @@ import numpy as np, UnityPy
 ITEMS='F:/SPT4.1/SPT_Runtime/SPT_Data/database/templates/items.json'
 BUNDLES='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/'
 gen=json.load(open('gen_all.json')); R=gen['result']
+# gen_extras.py: bolts the handle moves, side handles, low rocks, handles on bones not named mod_charge (merged into gen_holds' own here)
+extras=json.load(open('extras.json')) if os.path.exists('extras.json') else dict(boltBones={},sideHandles={})
+R['handles'].update(extras.get('handles',{})); R['gunHandHandles'].update(extras.get('gunHandHandles',{}))
+R['handleMovesWithBolt']=list(R['handleMovesWithBolt'])+extras.get('handleMovesWithBolt',[])
 items=json.load(open(ITEMS,encoding='utf-8')); guns=json.load(open('guns.json')); census=json.load(open('clip_census.json'))
 famFolder={}
 for folder,v in census.items():
@@ -172,8 +176,8 @@ ROCK_IN_FROM={'mk47':'akm'}
 for f,source in ROCK_IN_FROM.items():
     if source in out['rockIn']: out['rockIn'][f]=out['rockIn'][source]
 # gen_extras.py: bolts the handle moves itself, and side handles. A side handle's travel is scaled like the others, and its slider's lag with it.
-extras=json.load(open('extras.json')) if os.path.exists('extras.json') else dict(boltBones={},sideHandles={})
 out['boltBones']=extras['boltBones']
+out['handleBones']=extras.get('handleBones',{})
 out['rockIn'].update(extras.get('rockIn',{}))
 out['sideHandles']={f:dict({k:v for k,v in h.items() if k!='clip'},travel=round(h['travel']*0.08/0.101,3),sliderLag=round(h['sliderLag']*0.08/0.101,3)) for f,h in extras['sideHandles'].items()}
 print('bolts the handle moves:',out['boltBones'],'side handles:',{f:(h['travel'],h['sliderLag']) for f,h in out['sideHandles'].items()})

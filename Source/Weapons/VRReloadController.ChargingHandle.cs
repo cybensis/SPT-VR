@@ -133,6 +133,8 @@ namespace TarkovVR.Source.Weapons
         // Another way to hold the same handle (an AK's from over the top or from below): whichever the hand is turned closest to as it takes it
         private static readonly Dictionary<string, List<HandleHold>> handleAlternates = new Dictionary<string, List<HandleHold>>();
         private static readonly Dictionary<string, List<HandleHold>> gunHandHandleAlternates = new Dictionary<string, List<HandleHold>>();
+        // A handle with no slot whose rig bone isn't named mod_charge (MP7: weapon_charghing_handle, sic), by animation set
+        private static readonly Dictionary<string, string> handleBoneNames = new Dictionary<string, string>();
         private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
         private static float heldHandleTravel;              // m this gun's handle comes back
 
@@ -187,7 +189,7 @@ namespace TarkovVR.Source.Weapons
                 return false;
             LoadRecordedGrips();
             string family = AnimationFamily(firearmController);
-            if (slideBones.ContainsKey(family) || handleHolds.ContainsKey(family))
+            if (slideBones.ContainsKey(family) || handleHolds.ContainsKey(family) || handleBoneNames.ContainsKey(family))
                 return true;
             // A handle on the bolt carrier that only the gun hand's clips rack, its slot for an add-on handle empty (AK-50: headset, the draw
             // still chambered). The hand takes the carrier's bone; a bolt-action's is the bolt, which the hand doesn't work.
@@ -229,7 +231,17 @@ namespace TarkovVR.Source.Weapons
                     foundHandleBone = FindRigBone(firearmController, EWeaponModType.mod_charge.ToString());
                 LoadRecordedGrips();
                 string family = AnimationFamily(firearmController);
-                if (foundHandleBone == null)
+                Transform namedHandle = foundHandleBone == null && handleBoneNames.TryGetValue(family, out string handleBoneName)
+                    ? FindRigBone(firearmController, handleBoneName) : null;
+                if (namedHandle != null)
+                {
+                    // That bone is the handle itself, moving: worked like a carrier (our frame on the gun body, the bone follows the
+                    // hand), as a pistol's slide. Measured against the bone it would follow itself, the MP5's shake.
+                    foundHandleBone = namedHandle;
+                    foundHandleModel = namedHandle;
+                    foundHandleCarrier = namedHandle;
+                }
+                else if (foundHandleBone == null)
                 {
                     // A pistol: the slide is the handle and its own carrier, its meshes say where the back of it is
                     if (slideBones.TryGetValue(family, out string slideBone))
