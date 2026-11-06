@@ -152,11 +152,12 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             own.boxCount = slot.sourceBoxCount;
             own.frame = slot.frame;
             own.present = true;
-            if (!mergeEyes)
-                return;
             EyeResult other = lastResult[1 - eye];
             if (!other.present || other.generation != slot.generation || other.data.Length != data.Length
                 || Math.Abs(slot.frame - other.frame) > maxOtherEyeAgeFrames)
+                return;
+            CompareEyes(eye, own, other);
+            if (!mergeEyes)
                 return;
             uint[] otherData = other.data;
             int boxes = Math.Min(slot.sourceBoxCount, other.boxCount);
@@ -184,6 +185,50 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
                 data[word] = merged;
             }
             resultsMerged++;
+        }
+
+        // Diagnostic (headset round 2: 780 merges, 0 boxes seen by one eye only - two real eye views always differ somewhere):
+        // every 2 s, the two eyes' latest raw results compared box by box, and the reason codes seen in each, first 10 lines
+        public static bool logEyeComparison = true;
+        private static float nextComparison;
+        private static int comparisonLogs;
+        private static readonly int[] reasonCounts = new int[256];
+
+        private static void CompareEyes(int eye, EyeResult own, EyeResult other)
+        {
+            if (!logEyeComparison || comparisonLogs >= 10 || Time.unscaledTime < nextComparison)
+                return;
+            nextComparison = Time.unscaledTime + 2f;
+            comparisonLogs++;
+            EyeResult left = eye == 0 ? own : other;
+            EyeResult right = eye == 0 ? other : own;
+            int boxes = Math.Min(left.boxCount, right.boxCount);
+            int leftOnly = 0, rightOnly = 0, both = 0, neither = 0, differentCode = 0;
+            Array.Clear(reasonCounts, 0, reasonCounts.Length);
+            for (int box = 0; box < boxes; box++)
+            {
+                int word = 4 + box / 4;
+                int shift = (box & 3) * 8;
+                int leftReason = (int)((left.data[word] >> shift) & 0xFFu);
+                int rightReason = (int)((right.data[word] >> shift) & 0xFFu);
+                bool leftSees = VisibleReason.IsVisible(leftReason);
+                bool rightSees = VisibleReason.IsVisible(rightReason);
+                if (leftSees && rightSees) both++;
+                else if (leftSees) leftOnly++;
+                else if (rightSees) rightOnly++;
+                else neither++;
+                if (leftReason != rightReason) differentCode++;
+                reasonCounts[rightReason]++;
+            }
+            var codes = new System.Text.StringBuilder();
+            for (int code = 0; code < 256; code++)
+            {
+                if (reasonCounts[code] > 0)
+                    codes.Append(code).Append(':').Append(reasonCounts[code]).Append(' ');
+            }
+            Plugin.MyLog.LogInfo($"[FuckThisCulling VR] eyes compared (left test frame {left.frame}, right {right.frame}, {boxes} boxes): "
+                + $"seen by both {both}, left only {leftOnly}, right only {rightOnly}, neither {neither}, different codes {differentCode}; "
+                + $"right eye's codes {codes}");
         }
 
         private static Matrix4x4 ReferenceProjection(Camera camera) => camera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
