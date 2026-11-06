@@ -143,10 +143,8 @@ namespace TarkovVR.Patches.Upscalers
                 _loggedViewport = true;
                 int ew = (int)(XRSettings.eyeTextureWidth * VRGlobals.upscalingMultiplier);
                 int eh = (int)(XRSettings.eyeTextureHeight * VRGlobals.upscalingMultiplier);
-                var log = Mathf.Abs(vw - ew) > 2 || Mathf.Abs(vh - eh) > 2
-                    ? (Action<string>)(s => Plugin.MyLog.LogWarning(s)) : s => Plugin.MyLog.LogInfo(s);
-                log($"[VRJitter] game-jitter viewport: pixelWidth={vw}x{vh} vs eyeTex*scale={ew}x{eh}" +
-                    (Mathf.Abs(vw - ew) > 2 ? " — MISMATCH, jitter magnitude wrong!" : ""));
+                if (Mathf.Abs(vw - ew) > 2 || Mathf.Abs(vh - eh) > 2)
+                    Plugin.MyLog.LogWarning($"[VRJitter] game-jitter viewport {vw}x{vh} vs eye texture x scale {ew}x{eh}: jitter magnitude wrong");
             }
             LastScaledWidth = vw;
             LastScaledHeight = vh;

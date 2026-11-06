@@ -106,7 +106,7 @@ namespace TarkovVR.Source.Settings
             public int opticRenderResolution { get; set; }
             public float lodBias { get; set; }
             public float cullDistance { get; set; }
-            // Start with OpenXR instead of SteamVR (no menu setting yet)
+            // Start with OpenXR (default) or the OpenVR / SteamVR plugin (false; no menu setting yet)
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
@@ -164,7 +164,7 @@ namespace TarkovVR.Source.Settings
                 disableFrusCulling = false;
                 lodBias = 1.0f;
                 cullDistance = 1.0f;
-                useOpenXR = false;
+                useOpenXR = true;
                 useVRKeyboard = false;
                 heldItemWeight = false;
                 virtualStock = true;

@@ -140,7 +140,7 @@ namespace TarkovVR.Source.Player.Interactions
             palmAnchorsResolved = true;
             ResolvePalmLeaves(VRGlobals.ikManager?.rightArmIk, out palmWristDom, out palmLeavesDom);
             ResolvePalmLeaves(VRGlobals.ikManager?.leftArmIk, out palmWristOff, out palmLeavesOff);
-            Plugin.MyLog.LogInfo("[ManualEat] palm anchors: dom="
+            LogStep("[ManualEat] palm anchors: dom="
                 + (palmLeavesDom != null ? palmLeavesDom.Length : 0) + " leaves, off="
                 + (palmLeavesOff != null ? palmLeavesOff.Length : 0) + " leaves.");
         }

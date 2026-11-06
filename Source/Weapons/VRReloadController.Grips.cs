@@ -18,7 +18,7 @@ namespace TarkovVR.Source.Weapons
     // from the same animation set, moved along the magazine so the hand stays the same distance from its bottom.
     public static partial class VRReloadController
     {
-        public static bool saveReloadGrips = true;       // temporary: reloads with Manual Reload off record any hold that's missing
+        public static bool saveReloadGrips = false;      // temporary: reloads with Manual Reload off record any hold that's missing
         public static bool rerecordReloadGrips = false;  // true = replace recordings, except the built in one below
 
         private const string BUILT_IN_GRIP = "m4a1|0";   // tested in the headset, a recording never replaces it
@@ -235,7 +235,7 @@ namespace TarkovVR.Source.Weapons
                 insert = ResolveHold(family, magazineType, false, prop, lengthAxis, length, out string insertSource),
             };
             grip.pull = WithInsertThumb(grip.pull, grip.insert);
-            Plugin.MyLog.LogInfo($"[VRReload] {firearmController.Item.LocalizedShortName()} with {magazine.LocalizedShortName()}: animations '{family}', "
+            LogAction($"[VRReload] {firearmController.Item.LocalizedShortName()} with {magazine.LocalizedShortName()}: animations '{family}', "
                 + $"magazine type {magazineType}, length {length * 100f:0.#} cm, pull hold {pullSource}, insert hold {insertSource}");
             return grip.pull != null || grip.insert != null ? grip : null;
         }

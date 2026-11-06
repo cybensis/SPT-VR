@@ -22,6 +22,7 @@ namespace TarkovVR.Source.Graphics
     {
         public static bool stabilized = true;           // false = Unity's own mirror of the eye texture (also set when drawing fails)
         // The VR Graphics setting "Plain Desktop Mirror": Unity's own mirror, and the window camera off (its ~0.45 ms of the main thread)
+        internal static void LogDetail(string message) { if (logDetails) Plugin.MyLog.LogInfo(message); }
         private static bool Wanted => stabilized && !VRSettings.GetDesktopViewPlainMirror();
         public static float maxLagDegrees = 12f;        // how far it can trail the head (more = smoother, but the crop nears the eye image's edge)
         public static float resetDegrees = 60f;         // further off than this at once (a snap of the camera, a new scene): no catching up, it's there
@@ -33,6 +34,7 @@ namespace TarkovVR.Source.Graphics
         public static int gridColumns = 24;             // the window is drawn as a grid; each corner looked up exactly, straight in between
         public static int gridRows = 14;
         public static float cameraDepth = 100000f;      // after every other camera
+        public static bool logDetails = false;         // setup and drawing-path lines ("[DesktopMirror]"); warnings always
 
         // The game's (Unity 2022) XRMirrorViewBlitMode values: Default 0 = Unity's own mirror, None -6. Not the constants: they compile
         // in from the 2019 references this builds against, where None is 0 (= 2022's Default). (The render pass structs below are
@@ -116,7 +118,7 @@ namespace TarkovVR.Source.Graphics
             windowCamera.allowMSAA = false;
             windowCamera.renderingPath = RenderingPath.Forward;
             windowCamera.enabled = Wanted && !drawAfterEyes;
-            Plugin.MyLog.LogInfo($"[DesktopMirror] window camera made (enabled {windowCamera.enabled}, active {cameraObject.activeInHierarchy}, depth {windowCamera.depth:0}, on '{name}')");
+            LogDetail($"[DesktopMirror] window camera made (enabled {windowCamera.enabled}, active {cameraObject.activeInHierarchy}, depth {windowCamera.depth:0}, on '{name}')");
         }
 
         private void OnEnable() { Camera.onPostRender += OnAnyCameraPostRender; }
@@ -128,7 +130,7 @@ namespace TarkovVR.Source.Graphics
             if (!cameraEverRendered)
             {
                 cameraEverRendered = true;
-                Plugin.MyLog.LogInfo($"[DesktopMirror] window camera renders (frame {Time.frameCount})");
+                LogDetail($"[DesktopMirror] window camera renders (frame {Time.frameCount})");
             }
             cameraFailure = Guarded(fromCamera: true);
         }
@@ -173,7 +175,7 @@ namespace TarkovVR.Source.Graphics
             sourceTopRowFirst = source == null && flipVertical;
             drawingAfterEye = true;
             if (loggedPaths.Add(((long)camera.GetInstanceID() << 8) | (long)path))
-                Plugin.MyLog.LogInfo($"[DesktopMirror] drawn {where}: '{camera.name}' (depth {camera.depth:0}), {camera.stereoActiveEye} eye, "
+                LogDetail($"[DesktopMirror] drawn {where}: '{camera.name}' (depth {camera.depth:0}), {camera.stereoActiveEye} eye, "
                     + $"{(source != null ? $"'{source.name}' {source.width}x{source.height}" : "eye image")}, rows {(sourceTopRowFirst != afterEyesExtraFlip ? "turned over" : "as stored")}");
             try
             {
@@ -233,7 +235,7 @@ namespace TarkovVR.Source.Graphics
         // A frame the camera didn't draw: drawn now, at the very end (over the overlays), or Unity's mirror
         private IEnumerator Start()
         {
-            Plugin.MyLog.LogInfo("[DesktopMirror] end-of-frame draw running");
+            LogDetail("[DesktopMirror] end-of-frame draw running");
             WaitForEndOfFrame endOfFrame = new WaitForEndOfFrame();
             string loggedFailure = null;
             while (true)
@@ -249,7 +251,7 @@ namespace TarkovVR.Source.Graphics
                 if (failure != null && failure != loggedFailure && failure != "switched off")
                 {
                     loggedFailure = failure;
-                    Plugin.MyLog.LogInfo($"[DesktopMirror] not drawn at the end of the frame either ({failure}): Unity's mirror");
+                    LogDetail($"[DesktopMirror] not drawn at the end of the frame either ({failure}): Unity's mirror");
                 }
                 if (failure != null || !wanted)
                     continue;
@@ -483,7 +485,7 @@ namespace TarkovVR.Source.Graphics
             lensMask.hidden = null;
             if (mesh == null)
             {
-                Plugin.MyLog.LogInfo($"[DesktopMirror] eye {pass}: no lens mask from the headset, the image's edges only");
+                LogDetail($"[DesktopMirror] eye {pass}: no lens mask from the headset, the image's edges only");
                 return lensMask;
             }
             Vector3[] vertices = mesh.vertices;
@@ -510,7 +512,7 @@ namespace TarkovVR.Source.Graphics
                 if (cell)
                     hiddenCells++;
             }
-            Plugin.MyLog.LogInfo($"[DesktopMirror] eye {pass}: lens mask {triangles.Length / 3} triangles, x {low.x:0.00}..{high.x:0.00}, y {low.y:0.00}..{high.y:0.00}, "
+            LogDetail($"[DesktopMirror] eye {pass}: lens mask {triangles.Length / 3} triangles, x {low.x:0.00}..{high.x:0.00}, y {low.y:0.00}..{high.y:0.00}, "
                 + $"{100f * hiddenCells / hidden.Length:0}% of the image kept off (with the margin)");
             return lensMask;
         }
@@ -668,7 +670,7 @@ namespace TarkovVR.Source.Graphics
             if (!loggedUpdate)
             {
                 loggedUpdate = true;
-                Plugin.MyLog.LogInfo($"[DesktopMirror] window camera object alive (frame {Time.frameCount})");
+                DesktopMirror.LogDetail($"[DesktopMirror] window camera object alive (frame {Time.frameCount})");
             }
         }
 

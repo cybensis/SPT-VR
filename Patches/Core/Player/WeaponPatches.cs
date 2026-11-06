@@ -1639,9 +1639,10 @@ namespace TarkovVR.Patches.Core.Player
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(AnimationEventSystem.AnimationEventsEmitter), "EmitEvents")]
+        public static bool logItemAnimationEvents = false;   // every arms-animator state change and event while using an item ("[EatLog]")
         public static void LogEvents(AnimationEventSystem.AnimationEventsEmitter __instance)
         {
-            if (!VRGlobals.usingItem) return;
+            if (!logItemAnimationEvents || !VRGlobals.usingItem) return;
 
             var animator = VRGlobals.player.ArmsAnimatorCommon;
             if (animator == null) return;

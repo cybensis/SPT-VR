@@ -147,6 +147,8 @@ namespace TarkovVR.Source.Player.Interactions
         // hand flew off in the wrong direction. The OpenGrip prop-ride can't misalign: the
         // bone it follows is the same one you SEE moving on the item.)
         public static bool logOpenMovers = false;
+        public static bool logSteps = false;              // each eat's step-by-step progress ("[ManualEat] Opening / Took / Ate ..."); warnings always
+        internal static void LogStep(string message) { if (logSteps) Plugin.MyLog.LogInfo(message); }
         // OpenGrip snap: at the grab, JUMP the hand onto the lid/cover bone instead of
         // keeping the offset from where you pressed trigger. The INDEX FINGERTIP is what
         // lands on the bone — resolved from the hand skeleton at the grab (deepest bone

@@ -41,7 +41,6 @@ namespace TarkovVR.Source.XR
         private static readonly ulong[] handPaths = new ulong[2];
         private static readonly float[] handFrequencies = new float[2];
         private static float lastFrequency;
-        private static bool firstVibrationLogged;
 
         // Hz the next vibration on this hand goes out at; 0 = the runtime's own
         public static void SetFrequency(int hand, float frequency)
@@ -126,11 +125,6 @@ namespace TarkovVR.Source.XR
             float frequency = path != XR_NULL_PATH && path == handPaths[OpenXRInput.LEFT_HAND] ? handFrequencies[OpenXRInput.LEFT_HAND]
                 : path != XR_NULL_PATH && path == handPaths[OpenXRInput.RIGHT_HAND] ? handFrequencies[OpenXRInput.RIGHT_HAND]
                 : lastFrequency;
-            if (!firstVibrationLogged)
-            {
-                firstVibrationLogged = true;
-                Plugin.MyLog.LogInfo($"[OpenXR-Haptics] first vibration: path {path}, Unity's frequency {((XrHapticVibration*)hapticFeedback)->frequency}, ours {frequency}");
-            }
             if (frequency <= 0f)
                 return runtimeApplyHapticFeedback(session, hapticActionInfo, hapticFeedback);
 

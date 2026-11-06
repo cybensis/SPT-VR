@@ -437,7 +437,6 @@ namespace TarkovVR.Source.Player.Interactions
         // gear (rig/backpack) pickup foley = the cloth, with the weapon's own pickup clip quiet under
         // it. Used for the foregrip grab (VRPlayerManager, isSupporting engage) and the grip retake
         // while supported. Public so VRPlayerManager can fire it.
-        private static bool loggedGripClips;
         public static void PlayGripSound()
         {
             var fc = VRGlobals.firearmController;
@@ -460,11 +459,6 @@ namespace TarkovVR.Source.Player.Interactions
             var item = fc.Item;
             AudioClip gun = item != null ? gui.GetItemClip(item.ItemSound, EInventorySoundType.pickup) : null;
 
-            if (!loggedGripClips)
-            {
-                loggedGripClips = true;
-                Plugin.MyLog.LogInfo($"[ChestHang] grip sound clips: cloth={(cloth != null ? clothSrc : "NONE")} gun={(gun != null ? item.ItemSound : "NONE")}");
-            }
             if (cloth != null)
                 ba.TryPlayAtPoint(out _, pos, cloth, BetterAudio.AudioSourceGroupType.Character, 25, gripClothVolume);
             if (gun != null)

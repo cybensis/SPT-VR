@@ -30,7 +30,7 @@ namespace TarkovVR.Patches.Core.Player
     //  * [FINGERS]  the gun's left-hand finger pose while holding the new magazine (index-matched to your hand)
     internal static class WeaponRecon
     {
-        public static bool enabled = true;              // temporary: on while we capture guns
+        public static bool enabled = false;             // temporary: on while we capture guns
         public static float stableMaxDistance = 0.35f;  // m: magazine farther than this from the marker = not in the hand
         public static float stablePositionTolerance = 0.01f;    // m frame-to-frame that still counts as held still
         public static float stableAngleTolerance = 6f;          // deg, same

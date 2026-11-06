@@ -19,7 +19,7 @@ namespace TarkovVR.Source.Graphics
         public static float marginMeters = 0.05f;      // grown around each graphic, plus...
         public static float marginPerMeter = 0.2f;     // ...this share of its distance from the eyes (about 11 degrees): on before it's in view
         public static float minAlpha = 0.004f;         // below this a graphic counts as faded out
-        public static bool logReasons = true;          // each canvas that turns the camera on, once
+        public static bool logReasons = false;         // each canvas that turns the camera on, once
         public static float logHolderAfterSeconds = 10f; // on this long without a break: the graphic holding it logged (a new one at most every 15 s, first 60)
         public static float minAngularSize = 0.002f;    // radians across (~0.1 degree, ~2 pixels of the eye image): smaller can't be seen (a raid's preloader clock, 33 cm, 1.2 km away)
 

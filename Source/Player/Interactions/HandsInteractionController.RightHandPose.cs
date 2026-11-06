@@ -234,7 +234,6 @@ namespace TarkovVR.Source.Player.Interactions
                 rightFingerJoints = fingers.ToArray();
                 rightFingerIsThumb = thumbs.ToArray();
             }
-            Plugin.MyLog.LogInfo($"[RightHandPose] right fingers under '{palm.name}': {fingers.Count} [{string.Join(", ", names)}]");
         }
 
         private void CaptureRightRestPose()

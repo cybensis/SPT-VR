@@ -206,8 +206,8 @@ namespace TarkovVR.Source.Player.Interactions
                 if (kept.Count > 0) fingerAnchors = kept.ToArray();
             }
 
-            Plugin.MyLog.LogInfo(dump.ToString());
-            Plugin.MyLog.LogInfo(fingerAnchors == null
+            LogStep(dump.ToString());
+            LogStep(fingerAnchors == null
                 ? "[ManualEat] pull-snap: no usable finger bones — the palm lands on the OpenGrip bone."
                 : best != null
                     ? $"[ManualEat] pull-snap finger anchor: '{best.name}' ({(best.position - wristPos).magnitude * 100f:F0}cm from wrist)."
@@ -304,7 +304,7 @@ namespace TarkovVR.Source.Player.Interactions
             handLatched = true;
 
             PulseHand(latchedHandIsDominant);
-            Plugin.MyLog.LogInfo("[ManualEat] Hand locked onto the bag mouth — push in to reach.");
+            LogStep("[ManualEat] Hand locked onto the bag mouth — push in to reach.");
         }
 
         private static void EndReach()

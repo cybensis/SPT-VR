@@ -13,6 +13,15 @@ namespace TarkovVR.Patches.Upscalers
     [HarmonyPatch]
     internal class UpscalerQualityPatches
     {
+        // The mode is applied several times as the settings load: log a scale only when it changes
+        private static string lastScaleLog;
+        private static void LogScaleOnce(string line)
+        {
+            if (line == lastScaleLog) return;
+            lastScaleLog = line;
+            Plugin.MyLog.LogInfo(line);
+        }
+
         // Adjusts VR eye resolution scale when DLSS/FSR is enabled
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -57,7 +66,7 @@ namespace TarkovVR.Patches.Upscalers
 
                 ApplyUpscalerScale(scale, ssaaimpl_, true);
 
-                Plugin.MyLog.LogWarning($"[VR DLSS] Set eye texture scale to {scale} for mode {dlssMode}");
+                LogScaleOnce($"[VR DLSS] Set eye texture scale to {scale} for mode {dlssMode}");
             }
             else if (fsr2On || fsr3On)
             {
@@ -90,7 +99,7 @@ namespace TarkovVR.Patches.Upscalers
                 }
 
                 ApplyUpscalerScale(scale, ssaaimpl_, false);
-                Plugin.MyLog.LogWarning(label);
+                LogScaleOnce(label);
             }
             else
             {

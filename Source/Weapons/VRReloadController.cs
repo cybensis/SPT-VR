@@ -63,6 +63,7 @@ namespace TarkovVR.Source.Weapons
         public static float soundHapticsIdleStop = 0.5f;    // s after a sound ends that the tap comes off: the gun hands its source back to the pool 1 s after
         public static bool debugZones = false;             // spheres: grab zone (blue), chest pouch (yellow), mag well seat radius (green)
         public static bool debugLog = false;
+        private static void LogAction(string message) { if (debugLog) Plugin.MyLog.LogInfo(message); }
         public static bool pickUpGroundMagazines = true;    // a loose magazine that fits, picked up in the off hand, is held for the reload
 
         private enum HeldMagazineSource { None, FromGun, FromPouch, FromGround }
@@ -586,7 +587,7 @@ namespace TarkovVR.Source.Weapons
             }
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
+                LogAction($"[VRReload] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
             if (!VRSettings.GetManualReloadOn())
                 PlayGunSound(firearmController, "Button");
             Pulse(0.35f, 0.05f);
@@ -606,7 +607,7 @@ namespace TarkovVR.Source.Weapons
                 return;
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
+                LogAction($"[VRReload] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
             PlayGunSound(firearmController, "MagPullOut");
             Pulse(0.35f, 0.05f);
         }
@@ -640,7 +641,7 @@ namespace TarkovVR.Source.Weapons
                 lastRefusedGroundItem = lootItem;
                 lastRefusedForFirearm = firearmController;
                 if (debugLog)
-                    Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} picked up, not for this gun: {fits.Error}");
+                    LogAction($"[VRReload] {magazine.LocalizedShortName()} picked up, not for this gun: {fits.Error}");
                 return;
             }
             if (!HoldNewMagazine(firearmController, weapon, magazineSlot, magazine, HeldMagazineSource.FromGround, startFrom: lootItem.transform))
@@ -651,7 +652,7 @@ namespace TarkovVR.Source.Weapons
             groundMagazineLetGoTime = Time.time;
             HideGroundMagazine(lootItem);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] picked {magazine.LocalizedShortName()} ({magazine.Count} rounds) up off the ground");
+                LogAction($"[VRReload] picked {magazine.LocalizedShortName()} ({magazine.Count} rounds) up off the ground");
             Pulse(0.25f, 0.04f);
         }
 
@@ -1048,7 +1049,7 @@ namespace TarkovVR.Source.Weapons
             PlayGunSound(heldForFirearm, "MagOut");
             Pulse(0.5f, 0.04f);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] {heldMagazine.LocalizedShortName()} out of the well: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
+                LogAction($"[VRReload] {heldMagazine.LocalizedShortName()} out of the well: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
         }
 
         // A magazine being put in backed out of the track or was pulled off it sideways
@@ -1112,7 +1113,7 @@ namespace TarkovVR.Source.Weapons
             if (debugLog)
             {
                 Vector3 middleInWell = seatedLocalRotation * Vector3.Scale(towardMiddle, seatedScale);
-                Plugin.MyLog.LogInfo($"[VRReload] track {(axisInProp == lengthAxis ? "along the magazine's length" : "toward its middle")}, "
+                LogAction($"[VRReload] track {(axisInProp == lengthAxis ? "along the magazine's length" : "toward its middle")}, "
                     + $"{Vector3.Angle(axisInWell, middleInWell):0.#} deg off the well-to-middle direction");
             }
             return axisInWell.sqrMagnitude > 1e-8f ? axisInWell.normalized : Vector3.down;
@@ -1335,7 +1336,7 @@ namespace TarkovVR.Source.Weapons
                     ExpectGroundMagazineGone();
                     VRGlobals.player.InventoryController.TryRunNetworkTransaction(groundToRig);
                     if (debugLog)
-                        Plugin.MyLog.LogInfo($"[VRReload] {heldMagazine.LocalizedShortName()} off the ground put in the rig");
+                        LogAction($"[VRReload] {heldMagazine.LocalizedShortName()} off the ground put in the rig");
                     PlayGunSound(heldForFirearm, "MagSbrosnik");
                     Pulse(0.4f, 0.05f);
                     DestroyProp();
@@ -1414,7 +1415,7 @@ namespace TarkovVR.Source.Weapons
             TryForceExpectedOperation();
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] seated {magazine.LocalizedShortName()}");
+                LogAction($"[VRReload] seated {magazine.LocalizedShortName()}");
             PlayGunSound(firearmController, "MagIn");
             Pulse(0.8f, 0.07f);
             return true;
@@ -1453,7 +1454,7 @@ namespace TarkovVR.Source.Weapons
             TryForceExpectedOperation();
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} put in the rig");
+                LogAction($"[VRReload] {magazine.LocalizedShortName()} put in the rig");
             PlayGunSound(firearmController, "MagSbrosnik");
             Pulse(0.4f, 0.05f);
         }
@@ -1481,7 +1482,7 @@ namespace TarkovVR.Source.Weapons
             TryForceExpectedOperation();
 
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} dropped");
+                LogAction($"[VRReload] {magazine.LocalizedShortName()} dropped");
         }
 
         // B (Y left-handed): the magazine falls out of the well (into the rig in the hideout; a pistol's with a hand under
@@ -1602,7 +1603,7 @@ namespace TarkovVR.Source.Weapons
                     if (insertNeedsRack && firearmController.Item.ChamberAmmoCount > 0)
                     {
                         weaponsWaitingForRack.Add(firearmController.Item);
-                        Plugin.MyLog.LogInfo($"[VRReload] {firearmController.Item.LocalizedShortName()}: magazine in on an empty chamber, the round waits for the handle");
+                        LogAction($"[VRReload] {firearmController.Item.LocalizedShortName()}: magazine in on an empty chamber, the round waits for the handle");
                     }
                     insertNeedsRack = false;
                 }
@@ -1657,7 +1658,7 @@ namespace TarkovVR.Source.Weapons
             if (firearmController.CurrentOperation is FirearmController.Idling idling)
                 idling.OnIdleStartEvent();
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] finished {expectedOperation} after {Time.frameCount - expectedOperationStartFrame} frames");
+                LogAction($"[VRReload] finished {expectedOperation} after {Time.frameCount - expectedOperationStartFrame} frames");
             expectedOperation = ExpectedOperation.None;
         }
 
@@ -1789,7 +1790,7 @@ namespace TarkovVR.Source.Weapons
             // After the drop: it hides the item for a moment too, and it's already where the hand let go
             ShowGroundMagazine(groundMagazine);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] {heldMagazine.LocalizedShortName()} back to the ground{(thrown ? "" : " (where it lay)")}");
+                LogAction($"[VRReload] {heldMagazine.LocalizedShortName()} back to the ground{(thrown ? "" : " (where it lay)")}");
         }
 
         private static void ClearHold()

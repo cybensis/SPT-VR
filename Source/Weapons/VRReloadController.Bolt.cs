@@ -29,7 +29,7 @@ namespace TarkovVR.Source.Weapons
         public static float boltClosedTurn = 0.03f;         // share of the turn left that counts as turned down
         public static float boltLetGoDistance = 0.12f;      // m the controller gets from where the knob can be before the hand lets go
         public static float boltTurnSign = 1f;              // -1 if the handle turns the wrong way (the clip's turn read the other way round)
-        public static bool boltDebugLog = true;             // the bolt's grabs, strokes and what came out of the chamber (on for its first headset rounds)
+        public static bool boltDebugLog = false;            // the bolt's grabs, strokes and what came out of the chamber (on for its first headset rounds)
 
         public static bool HoldingBolt { get; private set; }
         public static bool BoltInGunHand => HoldingBolt && boltInGunHand;
@@ -269,7 +269,7 @@ namespace TarkovVR.Source.Weapons
                 loggedBoltSounds = true;
                 BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
                 if (soundPlayer != null)
-                    Plugin.MyLog.LogInfo($"[VRReload] {firearmController.Item.LocalizedShortName()} sounds: {string.Join(", ", soundPlayer.AdditionalSounds.ConvertAll(sound => sound.EventName))}");
+                    LogAction($"[VRReload] {firearmController.Item.LocalizedShortName()} sounds: {string.Join(", ", soundPlayer.AdditionalSounds.ConvertAll(sound => sound.EventName))}");
             }
             return true;
         }

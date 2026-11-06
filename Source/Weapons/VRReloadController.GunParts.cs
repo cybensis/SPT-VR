@@ -417,7 +417,7 @@ namespace TarkovVR.Source.Weapons
             List<Transform> parts = ReleaseCandidates(weaponRoot, well);
             if (parts.Count == 0)
             {
-                Plugin.MyLog.LogInfo($"[VRReload] {gunName}: no mag release part on this gun");
+                LogAction($"[VRReload] {gunName}: no mag release part on this gun");
                 return null;
             }
 
@@ -456,7 +456,7 @@ namespace TarkovVR.Source.Weapons
             {
                 UnityEngine.Object.Destroy(sampler);
             }
-            Plugin.MyLog.LogInfo($"[VRReload] {gunName}: the mag release doesn't move in its insert animation");
+            LogAction($"[VRReload] {gunName}: the mag release doesn't move in its insert animation");
             return null;
         }
 
@@ -583,7 +583,7 @@ namespace TarkovVR.Source.Weapons
             string partList = "";
             for (int index = 0; index < motion.partNames.Length; index++)
                 partList += $" {motion.partNames[index]} {motion.pressedPositionOffsets[index].ToString("F4")} {motion.pressedRotationOffsets[index].eulerAngles.ToString("F1")}";
-            Plugin.MyLog.LogInfo($"[VRReload] {gunName} mag release from '{clip.name}':{partList}; goes in from {pressStart * 100f:0.0} cm to {pressFull * 100f:0.0} cm above seated"
+            LogAction($"[VRReload] {gunName} mag release from '{clip.name}':{partList}; goes in from {pressStart * 100f:0.0} cm to {pressFull * 100f:0.0} cm above seated"
                 + (timedFromAnimation ? "" : " (default, the animation presses it after seating)"));
             return motion;
         }
@@ -600,7 +600,7 @@ namespace TarkovVR.Source.Weapons
                 Transform[] fingerJoints = GunHandIndexFinger(out Transform armTop);
                 if (fingerJoints == null)
                 {
-                    Plugin.MyLog.LogInfo($"[VRReload] {gunName}: no gun hand index finger to press the mag release with");
+                    LogAction($"[VRReload] {gunName}: no gun hand index finger to press the mag release with");
                     return null;
                 }
                 Transform[] sampledJoints = new Transform[fingerJoints.Length];
@@ -646,13 +646,13 @@ namespace TarkovVR.Source.Weapons
                         string jointList = "";
                         for (int index = 0; index < sampledJoints.Length; index++)
                             jointList += $" {sampledJoints[index].name} {fingerJoints[index].localEulerAngles.ToString("F1")} -> {peakJoints[index].eulerAngles.ToString("F1")}";
-                        Plugin.MyLog.LogInfo($"[VRReload] {gunName} mag release finger from '{clip.name}':{jointList}");
+                        LogAction($"[VRReload] {gunName} mag release finger from '{clip.name}':{jointList}");
                         return peakJoints;
                     }
                     if (++measured >= maxInsertClipsMeasured)
                         break;
                 }
-                Plugin.MyLog.LogInfo($"[VRReload] {gunName}: no mag-out animation presses the mag release");
+                LogAction($"[VRReload] {gunName}: no mag-out animation presses the mag release");
             }
             catch (Exception exception)
             {
@@ -750,7 +750,7 @@ namespace TarkovVR.Source.Weapons
                 {
                     float speed = (ControllerVelocity.GetSteamVRVelocity(OffHandSource()) - ControllerVelocity.GetSteamVRVelocity(GunHandSource())).magnitude;
                     if (debugLog)
-                        Plugin.MyLog.LogInfo($"[VRReload] hand at the bolt catch at {speed:0.00} m/s (slap from {boltSlapSpeed:0.00})");
+                        LogAction($"[VRReload] hand at the bolt catch at {speed:0.00} m/s (slap from {boltSlapSpeed:0.00})");
                     if (speed >= boltSlapSpeed)
                         ReleaseBolt(firearmController);
                 }
@@ -811,7 +811,7 @@ namespace TarkovVR.Source.Weapons
             if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
                 return;
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] bolt release, chamber: {weapon.ChamberAmmoCount}");
+                LogAction($"[VRReload] bolt release, chamber: {weapon.ChamberAmmoCount}");
             firearmsAnimator.SetBoltCatch(false);
             BoltStripsRound(weapon);
             // SetBoltCatch snaps the pose shut; it runs forward instead (UpdateBoltRelease)

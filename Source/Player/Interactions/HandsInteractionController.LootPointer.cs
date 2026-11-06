@@ -1129,7 +1129,6 @@ namespace TarkovVR.Source.Player.Interactions
                 for (int i = 0; i < fingers.Count; i++)
                     leftFingerSpread[i] = thumbs[i] ? 0f : (k++ - center);
             }
-            Plugin.MyLog.LogInfo($"[LootPointer] left fingers under '{palm.name}': {fingers.Count} [{string.Join(", ", names)}]");
         }
 
         // The point on a (possibly oriented) BoxCollider surface nearest a world point. Unlike

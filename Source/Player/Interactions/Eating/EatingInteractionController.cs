@@ -85,7 +85,7 @@ namespace TarkovVR.Source.Player.Interactions
                 spawnAnimSpeed = animationSpeed <= 0f ? 1f : animationSpeed;
                 ReadDrinkState(instance.Item); // resource left + full-item use-time (drinks/partials)
 
-                Plugin.MyLog.LogInfo($"[ManualEat] Armed manual sequence for {d.templateId} "
+                LogStep($"[ManualEat] Armed manual sequence for {d.templateId} "
                     + $"(openGrip={(string.IsNullOrEmpty(d.openGripName) ? "none" : d.openGripName)}, "
                     + $"handPath={(d.openHandPath != null ? d.openHandPath.Length / 8 + " keys" : "none")}, "
                     + $"reachPath={(d.reachHandPath != null ? d.reachHandPath.Length / 8 + " keys" : "none")}, "
@@ -122,7 +122,7 @@ namespace TarkovVR.Source.Player.Interactions
             catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] ReadDrinkState: {ex.Message}"); }
             if (drinkUseTime <= 0f) drinkUseTime = 5f; // template missing/odd — sane fallback
             if (def.kind == FoodKind.Drink)
-                Plugin.MyLog.LogInfo(drinkFdc != null
+                LogStep(drinkFdc != null
                     ? $"[ManualEat] Drink: {drinkFdc.HpPercent:F0}/{drinkFdc.MaxResource:F0} left ({drinkRemainingFrac:P0}), {drinkUseTime * drinkRemainingFrac:F1}s at the mouth to finish."
                     : "[ManualEat] Drink has NO FoodDrinkComponent — the bar can't tick down; the finish falls back to the use-time clock.");
         }
@@ -157,7 +157,7 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     leftHandBone = VRGlobals.vrPlayer.LeftHand.transform;
                     rightHandBone = VRGlobals.vrPlayer.RightHand.transform;
-                    Plugin.MyLog.LogInfo("[ManualEat] DIAG: props parented to IK TARGETS (RightHand/LeftHand).");
+                    LogStep("[ManualEat] DIAG: props parented to IK TARGETS (RightHand/LeftHand).");
                 }
                 leftHandBoneRef = leftHandBone; // for the handheld wrapper's left-hand holder (built on open)
 
@@ -176,7 +176,7 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     segR = baseT.GetComponentsInChildren<Renderer>(true);
                     Array.Sort(segR, (a, b) => string.CompareOrdinal(a.name, b.name));
-                    Plugin.MyLog.LogInfo($"[ManualEat] segmented bites: {segR.Length} renderers under '{baseT.name}'.");
+                    LogStep($"[ManualEat] segmented bites: {segR.Length} renderers under '{baseT.name}'.");
                 }
 
                 // Hide-on-open target: the torn cover/lid mesh (a sibling of the held bones, so
@@ -186,7 +186,7 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     Transform t = FindDeep(root, def.hideOnOpenName);
                     hideOnOpenR = t != null ? t.GetComponentsInChildren<Renderer>(true) : null;
-                    Plugin.MyLog.LogInfo(hideOnOpenR != null
+                    LogStep(hideOnOpenR != null
                         ? $"[ManualEat] hideOnOpen '{def.hideOnOpenName}': {hideOnOpenR.Length} renderer(s) will hide after the open."
                         : $"[ManualEat] hideOnOpen '{def.hideOnOpenName}' not found — nothing will hide.");
                 }
@@ -201,7 +201,7 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     openGripT = FindDeep(baseT, def.openGripName);
                     if (openGripT != null)
-                        Plugin.MyLog.LogInfo($"[ManualEat] openGrip bone '{def.openGripName}' resolved under the held item.");
+                        LogStep($"[ManualEat] openGrip bone '{def.openGripName}' resolved under the held item.");
                     else
                     {
                         openGripT = FindDeep(root, def.openGripName);
@@ -213,7 +213,7 @@ namespace TarkovVR.Source.Player.Interactions
 
                 if (driveHandsToTargets) SubscribePinAfterIk();
 
-                Plugin.MyLog.LogInfo($"[ManualEat] Props reparented to hands (kind={def.kind}).");
+                LogStep($"[ManualEat] Props reparented to hands (kind={def.kind}).");
             }
             catch (Exception ex)
             {
@@ -299,7 +299,7 @@ namespace TarkovVR.Source.Player.Interactions
             prevBothTriggers = both;
             if (bothEdge)
             {
-                Plugin.MyLog.LogInfo("[ManualEat] Both-trigger cancel — putting the food away.");
+                LogStep("[ManualEat] Both-trigger cancel — putting the food away.");
                 ReattachCap(); // no-op unless a drink cap is off
                 RequestFinish(cancel: true);
                 return;
@@ -353,7 +353,7 @@ namespace TarkovVR.Source.Player.Interactions
             TarkovVR.Source.Misc.AudioHaptics.Stop(); // pump + tap off (the controller object is pooled)
             RestoreProps();
             ReleaseArms();
-            Plugin.MyLog.LogInfo("[ManualEat] End() — cleaned up.");
+            LogStep("[ManualEat] End() — cleaned up.");
             Reset();
         }
 
@@ -403,7 +403,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (result.Succeeded)
                 {
                     ic.RunNetworkTransaction(result.Value);
-                    Plugin.MyLog.LogInfo("[ManualEat] Consumed (discarded) food item.");
+                    LogStep("[ManualEat] Consumed (discarded) food item.");
                 }
                 else Plugin.MyLog.LogWarning("[ManualEat] DiscardFood: discard not allowed.");
             }
@@ -441,7 +441,7 @@ namespace TarkovVR.Source.Player.Interactions
                 fraction = cancel ? Mathf.Min(drinkAppliedFrac, drinkRemainingFrac) : drinkRemainingFrac;
 
             effectFired = true;
-            Plugin.MyLog.LogInfo($"[ManualEat] Finish (cancel={cancel}, fraction={fraction:F2}): method_5 + SetActiveParam(false) -> play END.");
+            LogStep($"[ManualEat] Finish (cancel={cancel}, fraction={fraction:F2}): method_5 + SetActiveParam(false) -> play END.");
             try
             {
                 var fa = controller.FirearmsAnimator;
@@ -469,7 +469,7 @@ namespace TarkovVR.Source.Player.Interactions
                     bool emptied = drinkFdc != null
                         ? drinkFdc.HpPercent <= 0.0001f
                         : fraction >= drinkRemainingFrac - 0.0001f; // no resource component = one-shot
-                    Plugin.MyLog.LogInfo(drinkFdc != null
+                    LogStep(drinkFdc != null
                         ? $"[ManualEat] Consumed {fraction:P0} ({drinkFdc.HpPercent:F1}/{drinkFdc.MaxResource:F0} left{(emptied ? " — empty" : "")})."
                         : $"[ManualEat] Consumed {fraction:P0} (no resource component{(emptied ? " — treated as empty" : "")}).");
                     pendingOp.GoNextBodyPart();   // keep — leaves the controller in the state the cancel needs
@@ -546,7 +546,7 @@ namespace TarkovVR.Source.Player.Interactions
                 fdc.HpPercent = Mathf.Max(0f, fdc.HpPercent - fdc.MaxResource * fraction);
                 item.RaiseRefreshEvent();
                 if (!quiet)
-                    Plugin.MyLog.LogInfo($"[ManualEat] Nutrition for {fraction:P0} of the item ({fdc.HpPercent:F1}/{fdc.MaxResource:F0} left).");
+                    LogStep($"[ManualEat] Nutrition for {fraction:P0} of the item ({fdc.HpPercent:F1}/{fdc.MaxResource:F0} left).");
                 return fdc.HpPercent <= 0.0001f;
             }
             catch (Exception ex)

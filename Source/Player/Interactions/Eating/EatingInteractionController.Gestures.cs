@@ -199,7 +199,7 @@ namespace TarkovVR.Source.Player.Interactions
                     playingOpen = true;
                     controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
                     Pulse();
-                    Plugin.MyLog.LogInfo($"[ManualEat] Opening {s.label}...");
+                    LogStep($"[ManualEat] Opening {s.label}...");
                 }
             }
             else
@@ -234,14 +234,14 @@ namespace TarkovVR.Source.Player.Interactions
                 catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] open-anim Play({openPlayState}) failed: {ex.Message}"); }
                 controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
                 PulseHand(s.openHand == Hand.Dominant);
-                Plugin.MyLog.LogInfo($"[ManualEat] Playing open animation ({openPlayState}) to {openPlayMaxTime:F2}...");
+                LogStep($"[ManualEat] Playing open animation ({openPlayState}) to {openPlayMaxTime:F2}...");
                 return;
             }
             s.onOpened?.Invoke();
             HideOnOpenRenderers(); // drop the torn cover/lid (noodles) so it doesn't float
             phase = Phase.Ready;
             PulseHand(s.openHand == Hand.Dominant);
-            Plugin.MyLog.LogInfo($"[ManualEat] Opened {s.label} — ready (take={s.hasTakeStep}).");
+            LogStep($"[ManualEat] Opened {s.label} — ready (take={s.hasTakeStep}).");
         }
 
         // Hide the configured torn-cover renderers once the open is done (FoodDef.hideOnOpenName).
@@ -251,7 +251,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (hideOnOpenR == null || hiddenOnOpen) return;
             for (int i = 0; i < hideOnOpenR.Length; i++) SetRenderer(hideOnOpenR[i], false);
             hiddenOnOpen = true;
-            Plugin.MyLog.LogInfo($"[ManualEat] Hid the torn cover ({def.hideOnOpenName}).");
+            LogStep($"[ManualEat] Hid the torn cover ({def.hideOnOpenName}).");
         }
 
         // Wait out the one-shot open animation (the rip), then freeze + go Ready. Stops at
@@ -272,7 +272,7 @@ namespace TarkovVR.Source.Player.Interactions
             s.onOpened?.Invoke();
             HideOnOpenRenderers(); // the rip just played — now drop the torn cover so it doesn't float
             phase = Phase.Ready;
-            Plugin.MyLog.LogInfo($"[ManualEat] Open animation done — ready (take={s.hasTakeStep}).");
+            LogStep($"[ManualEat] Open animation done — ready (take={s.hasTakeStep}).");
         }
 
         // Physical open. Squeezing the trigger at the open zone latches the opening hand
@@ -340,7 +340,7 @@ namespace TarkovVR.Source.Player.Interactions
                 LatchHandToItem(s.openHand, acting, anchor);
                 ScrubOpen(s);
                 PulseHand(dominant);
-                Plugin.MyLog.LogInfo($"[ManualEat] Open grab ({s.label}, {g}) at {pullProgress:P0}.");
+                LogStep($"[ManualEat] Open grab ({s.label}, {g}) at {pullProgress:P0}.");
                 return;
             }
 
@@ -357,7 +357,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (axis <= pullReleaseAxis)
             {
                 EndPull();
-                Plugin.MyLog.LogInfo($"[ManualEat] Open released at {pullProgress:P0}.");
+                LogStep($"[ManualEat] Open released at {pullProgress:P0}.");
                 return;
             }
 
@@ -430,7 +430,7 @@ namespace TarkovVR.Source.Player.Interactions
                 playingOpen = true;
                 controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
                 PulseHand(s.openHand == Hand.Dominant);
-                Plugin.MyLog.LogInfo($"[ManualEat] Open done ({s.label}) — settling to the ready pose...");
+                LogStep($"[ManualEat] Open done ({s.label}) — settling to the ready pose...");
                 return;
             }
             FinishOpen(s); // -> Ready, or play the one-shot open animation (rip) first
@@ -506,11 +506,11 @@ namespace TarkovVR.Source.Player.Interactions
             if (!triggered) return;
 
             if (logGesturePose && s.logsGesturePose)
-                Plugin.MyLog.LogInfo($"[ManualEat] take #{biteCount + 1} pulse from {CurStateStr()}");
+                LogStep($"[ManualEat] take #{biteCount + 1} pulse from {CurStateStr()}");
             s.onTake?.Invoke();
             PlaySound(def.scoopSound);
             phase = Phase.Holding;
-            Plugin.MyLog.LogInfo($"[ManualEat] Took {s.label} (round {biteCount + 1}/{def.bites}).");
+            LogStep($"[ManualEat] Took {s.label} (round {biteCount + 1}/{def.bites}).");
         }
 
         // Reach-into-bag take (iskra/MRE — the user's spec mapped onto the pull-latch
@@ -558,9 +558,9 @@ namespace TarkovVR.Source.Player.Interactions
                 if (grabbed)
                 {
                     phase = Phase.Holding;
-                    Plugin.MyLog.LogInfo($"[ManualEat] Pulled the cracker out (round {biteCount + 1}/{def.bites}).");
+                    LogStep($"[ManualEat] Pulled the cracker out (round {biteCount + 1}/{def.bites}).");
                 }
-                else Plugin.MyLog.LogInfo("[ManualEat] Left the bag empty-handed — hand released.");
+                else LogStep("[ManualEat] Left the bag empty-handed — hand released.");
                 return;
             }
 
@@ -578,11 +578,11 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 reachGrabbed = true;
                 if (logGesturePose && s.logsGesturePose)
-                    Plugin.MyLog.LogInfo($"[ManualEat] grab #{biteCount + 1} from {CurStateStr()}");
+                    LogStep($"[ManualEat] grab #{biteCount + 1} from {CurStateStr()}");
                 s.onTake?.Invoke(); // cracker -> the reaching hand's holder, shown
                 PlaySound(def.scoopSound);
                 PulseHand(s.takeHand == Hand.Dominant);
-                Plugin.MyLog.LogInfo($"[ManualEat] Grabbed the cracker at {reachProgress:P0} deep — pull it out.");
+                LogStep($"[ManualEat] Grabbed the cracker at {reachProgress:P0} deep — pull it out.");
             }
         }
 
@@ -594,12 +594,12 @@ namespace TarkovVR.Source.Player.Interactions
             if (!EatZoneReached(s.eatHand)) return;
 
             if (logGesturePose && s.logsGesturePose)
-                Plugin.MyLog.LogInfo($"[ManualEat] eat #{biteCount + 1} pulse from {CurStateStr()}");
+                LogStep($"[ManualEat] eat #{biteCount + 1} pulse from {CurStateStr()}");
             s.onEatHide?.Invoke();
             biteCount++;
             Pulse();
             PlaySound(def.eatSound);
-            Plugin.MyLog.LogInfo($"[ManualEat] Ate {biteCount}/{def.bites}.");
+            LogStep($"[ManualEat] Ate {biteCount}/{def.bites}.");
 
             // Resource foods tick their bar down PER BITE: the def's bites divide what was
             // left at spawn (oat flakes 40/40 at bites:4 = 10 a shake; the HUD bar updates
@@ -650,7 +650,7 @@ namespace TarkovVR.Source.Player.Interactions
                     nextDrinkSound = 0f; // first gulp plays immediately
                     nextGulpFallback = Time.time + GulpFallbackGrace; // animation event gets first shot
                     Pulse();
-                    Plugin.MyLog.LogInfo("[ManualEat] Drinking...");
+                    LogStep("[ManualEat] Drinking...");
                 }
                 drinkHeldTime += Time.deltaTime;
                 DriveDrinkLoop();
@@ -681,7 +681,7 @@ namespace TarkovVR.Source.Player.Interactions
                     : drinkHeldTime >= drinkUseTime * drinkRemainingFrac;
                 if (done)
                 {
-                    Plugin.MyLog.LogInfo($"[ManualEat] Drank it all ({drinkHeldTime:F1}s).");
+                    LogStep($"[ManualEat] Drank it all ({drinkHeldTime:F1}s).");
                     RequestFinish(cancel: false);
                 }
                 return true;
@@ -691,7 +691,7 @@ namespace TarkovVR.Source.Player.Interactions
                 drinkingHeld = false;
                 playUntil = 0f;   // freeze the gulp mid-loop
                 StopDrinkSound(); // cut the glug — re-raising restarts it from the top
-                Plugin.MyLog.LogInfo($"[ManualEat] Lowered it at {drinkHeldTime:F1}/{drinkUseTime * drinkRemainingFrac:F1}s.");
+                LogStep($"[ManualEat] Lowered it at {drinkHeldTime:F1}/{drinkUseTime * drinkRemainingFrac:F1}s.");
             }
             return false;
         }
@@ -717,7 +717,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 ReattachCap();
                 Pulse();
-                Plugin.MyLog.LogInfo($"[ManualEat] Recapped after {drinkHeldTime:F1}s.");
+                LogStep($"[ManualEat] Recapped after {drinkHeldTime:F1}s.");
                 RequestFinish(cancel: false); // fraction comes from the held time; 0 drunk = just put it away
             }
         }

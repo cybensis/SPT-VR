@@ -180,7 +180,7 @@ namespace TarkovVR.Source.Weapons
                 // The clip's own event, if one still comes, has nothing left to do
                 spawnOperation._ammoFromMagToChamber = null;
                 weaponsWaitingForRack.Add(weapon);
-                Plugin.MyLog.LogInfo($"[VRReload] {weapon.LocalizedShortName()}: drawn on an empty chamber, the round waits for the handle");
+                LogAction($"[VRReload] {weapon.LocalizedShortName()}: drawn on an empty chamber, the round waits for the handle");
             }
             catch (System.Exception exception)
             {
@@ -434,7 +434,7 @@ namespace TarkovVR.Source.Weapons
                 FirearmsAnimator firearmsAnimator = firearmController.FirearmsAnimator;
                 Transform[] patrons = firearmController.Firearms._patronInWeaponTransforms;
                 Transform patron = patrons != null && patrons.Length > 0 ? patrons[0] : null;
-                Plugin.MyLog.LogInfo($"[VRReload] grabbed the charging handle '{handleView.name}', bolt locked back: {BoltLockedBack}, chamber: {weapon.ChamberAmmoCount}, " +
+                LogAction($"[VRReload] grabbed the charging handle '{handleView.name}', bolt locked back: {BoltLockedBack}, chamber: {weapon.ChamberAmmoCount}, " +
                     $"catch layer: {firearmsAnimator.BOLT_CATCH_LAYER_INDEX}, idle position: {firearmsAnimator.HasParameter(AnimationControllerParametersTable.FLOAT_IDLEPOSITION)}, " +
                     $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}, gun hand: {gunHand}, hold from a clip: {handleHold != null}, carrier: {(handleCarrier != null ? handleCarrier.name : "none")}");
             }
@@ -458,7 +458,7 @@ namespace TarkovVR.Source.Weapons
                 }
             }
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[VRReload] charging handle: {(closest == main ? "main" : "other")} grip, {smallestTurn:0} deg from the hand");
+                LogAction($"[VRReload] charging handle: {(closest == main ? "main" : "other")} grip, {smallestTurn:0} deg from the hand");
             return closest;
         }
 
@@ -558,7 +558,7 @@ namespace TarkovVR.Source.Weapons
             if (!firearmController.FirearmsAnimator.GetBoltCatch() && BoltStaysBack(weapon))
             {
                 if (debugLog)
-                    Plugin.MyLog.LogInfo("[VRReload] empty magazine: the bolt locks back");
+                    LogAction("[VRReload] empty magazine: the bolt locks back");
                 firearmController.FirearmsAnimator.SetBoltCatch(true);
                 return;
             }
@@ -568,7 +568,7 @@ namespace TarkovVR.Source.Weapons
             if (!(firearmController.CurrentOperation is FirearmController.Idling))
                 return;
             if (debugLog)
-                Plugin.MyLog.LogInfo("[VRReload] rechamber: the chambered round comes out");
+                LogAction("[VRReload] rechamber: the chambered round comes out");
             ExpectOperation(ExpectedOperation.Rechamber, firearmController);
             VRGlobals.player.InventoryController.RechamberWeapon(weapon);
             TryForceExpectedOperation();
@@ -723,7 +723,7 @@ namespace TarkovVR.Source.Weapons
                 boltPart = boltParts[furthestIndex];
                 boltPartRestInChamber = boltPartsRestInChamber[furthestIndex];
                 if (debugLog)
-                    Plugin.MyLog.LogInfo($"[VRReload] the round rides '{boltPart.name}' (parent '{(boltPart.parent != null ? boltPart.parent.name : "-")}')");
+                    LogAction($"[VRReload] the round rides '{boltPart.name}' (parent '{(boltPart.parent != null ? boltPart.parent.name : "-")}')");
             }
             return chamberBone.InverseTransformPoint(boltPart.position) - boltPartRestInChamber;
         }
@@ -766,7 +766,7 @@ namespace TarkovVR.Source.Weapons
             if (firearmController.FirearmsAnimator.GetBoltCatch())
             {
                 if (debugLog)
-                    Plugin.MyLog.LogInfo($"[VRReload] bolt released, chamber: {weapon.ChamberAmmoCount}");
+                    LogAction($"[VRReload] bolt released, chamber: {weapon.ChamberAmmoCount}");
                 firearmController.FirearmsAnimator.SetBoltCatch(BoltStaysBack(weapon));
             }
         }
@@ -778,7 +778,7 @@ namespace TarkovVR.Source.Weapons
             if (!WaitingForRack(weapon) || weapon.GetCurrentMagazine() == null)
                 return;
             if (debugLog)
-                Plugin.MyLog.LogInfo("[VRReload] racked: the round goes into the chamber");
+                LogAction("[VRReload] racked: the round goes into the chamber");
             weaponsWaitingForRack.Remove(weapon);
         }
 

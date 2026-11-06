@@ -90,7 +90,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool RefusePalming(string reason)
         {
-            Plugin.MyLog.LogInfo($"[VRReload] no palming: {reason}");
+            LogAction($"[VRReload] no palming: {reason}");
             return false;
         }
 
@@ -175,7 +175,7 @@ namespace TarkovVR.Source.Weapons
             magazineHandFingers = palmHold.fingers;
             if (snapHandToGrip)
                 SnapHandToGrip(oldPosition, oldRotation.eulerAngles);
-            Plugin.MyLog.LogInfo($"[VRReload] palming {palmedMagazine.LocalizedShortName()}, pulling {heldMagazine.LocalizedShortName()}");
+            LogAction($"[VRReload] palming {palmedMagazine.LocalizedShortName()}, pulling {heldMagazine.LocalizedShortName()}");
             return true;
         }
 
@@ -238,7 +238,7 @@ namespace TarkovVR.Source.Weapons
 
             PlayGunSound(firearmController, "MagOut");
             Pulse(0.5f, 0.04f);
-            Plugin.MyLog.LogInfo($"[VRReload] {oldMagazine.LocalizedShortName()} out and in the hand, {newMagazine.LocalizedShortName()} next");
+            LogAction($"[VRReload] {oldMagazine.LocalizedShortName()} out and in the hand, {newMagazine.LocalizedShortName()} next");
         }
 
         // A new magazine as the held one, off the track, its way into this gun worked out (HoldNewMagazine's second half)

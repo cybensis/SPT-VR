@@ -1389,7 +1389,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             try { VRGlobals.player?.GetComponent<GamePlayerOwner>()?.InteractionsChangedHandler(); } catch { }
             NotifyWeightChanged();
-            Plugin.MyLog.LogInfo("[ManualEat] Held loose-loot item hidden for the use/eat — outcome deferred.");
+            EatingInteractionController.LogStep("[ManualEat] Held loose-loot item hidden for the use/eat — outcome deferred.");
         }
 
         /// <summary>
@@ -1427,7 +1427,7 @@ namespace TarkovVR.Source.Player.Interactions
             // drop our hidden reference; the still-inactive GO is torn down by the discard's event.
             if (item == null || item.Item == null || item._item == null || IsFoodEmptied(item.Item))
             {
-                Plugin.MyLog.LogInfo("[ManualEat] Deferred use: item consumed — removal left to the eat's discard.");
+                EatingInteractionController.LogStep("[ManualEat] Deferred use: item consumed — removal left to the eat's discard.");
                 NotifyWeightChanged();
                 return;
             }
@@ -1438,7 +1438,7 @@ namespace TarkovVR.Source.Player.Interactions
             heldItem = item;
             cachedOriginalParent = pendingUseLootParent;
             cachedHand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand?.transform : null;
-            Plugin.MyLog.LogInfo("[ManualEat] Deferred use: not consumed — returning the item (stow or drop).");
+            EatingInteractionController.LogStep("[ManualEat] Deferred use: not consumed — returning the item (stow or drop).");
             ReleaseHeldForUse();
         }
 

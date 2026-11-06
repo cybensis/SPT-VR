@@ -417,7 +417,7 @@ namespace TarkovVR.Source.Player.Interactions
                 foodHolder = NewHolder("EatWrapperHolder", leftHandBoneRef, def.foodPos, def.foodRot);
                 coverT.SetParent(foodHolder.transform, false);
                 coverDetached = true;
-                Plugin.MyLog.LogInfo("[ManualEat] Wrapper (cover) detached to the left hand.");
+                LogStep("[ManualEat] Wrapper (cover) detached to the left hand.");
             }
             catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] DetachWrapper error: {ex}"); }
         }
@@ -435,7 +435,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (capHolder == null) capHolder = NewHolder("EatCapHolder", capHandBoneRef, def.capPos, def.capRot);
                 capT.SetParent(capHolder.transform, false);
                 capDetached = true;
-                Plugin.MyLog.LogInfo("[ManualEat] Cap popped to the free hand.");
+                LogStep("[ManualEat] Cap popped to the free hand.");
             }
             catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] DetachCap error: {ex}"); }
         }
@@ -451,7 +451,7 @@ namespace TarkovVR.Source.Player.Interactions
                 capT.localPosition = capLocalPos;
                 capT.localRotation = capLocalRot;
                 capDetached = false;
-                Plugin.MyLog.LogInfo("[ManualEat] Cap back on.");
+                LogStep("[ManualEat] Cap back on.");
             }
             catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] ReattachCap error: {ex}"); }
         }

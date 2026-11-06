@@ -29,7 +29,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float grabRadius = 0.13f;         // m RightHand rig to a body gun's grip, as ChestHang.regrabRadius
         public static float gunGrabRadius = 0.06f;      // m any point of the hand (palm, fingertips) off a gun's barrel line: anywhere on it takes it
         public static float switchTimeout = 3f;         // s before a switch that never lands is given up
-        public static bool debugLog = true;             // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
+        public static bool debugLog = false;            // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
 
         private static readonly EquipmentSlot[] bodySlots =
             { EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster, EquipmentSlot.Scabbard };
