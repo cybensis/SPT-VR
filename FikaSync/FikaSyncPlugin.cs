@@ -4,7 +4,7 @@ using HarmonyLib;
 
 namespace SptVrFikaSync
 {
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "1.0.0")]
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.0.0")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module. When present we relocate a
     // dragged corpse's loot waypoint here (the VR mod can't — it doesn't run on a headless). Soft so this
