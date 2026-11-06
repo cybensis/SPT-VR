@@ -27,7 +27,8 @@ namespace TarkovVR.Source.Weapons
         public static float boltFullBack = 0.92f;           // share of the slide that counts as all the way back
         public static float boltTurnedUp = 0.97f;           // share of the turn before it slides
         public static float boltClosedTurn = 0.03f;         // share of the turn left that counts as turned down
-        public static float boltTurnSign = 1f;            // -1 if the handle turns the wrong way (the clip's turn read the other way round)
+        public static bool boltShowsChamberedRound = true;  // a live round in the chamber comes back on the bolt face as it opens (you can see one's in)
+        public static float boltTurnSign = 1f;          // -1 if the handle turns the wrong way (the clip's turn read the other way round)
         public static bool boltDebugLog = false;            // the bolt's grabs, strokes and what came out of the chamber (on for its first headset rounds)
 
         public static bool HoldingBolt { get; private set; }
@@ -95,6 +96,16 @@ namespace TarkovVR.Source.Weapons
         private static Vector3[] boltHandFingers;
         private static bool loggedBoltSounds;
         private static GameObject boltZoneViz;
+
+        // The chamber while the bolt is open (from leaving closed until closed again), like the charging handle's: Tarkov's round
+        // model sits on the patron_in_weapon bone; we show it and move it back with the slider
+        private static FirearmController boltChamberFor;
+        private static Transform boltChamberBone;
+        private static bool boltChamberBoneWasActive;
+        private static Transform boltChamberRound;
+        private static Vector3 boltChamberRoundRest;
+        private static bool boltChamberEmpty;               // shown empty: the round went out at full travel (the next one stays in the
+                                                            // magazine until the bolt closes), or it never left it (WaitingForRack)
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -253,6 +264,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (boltBonesFor == firearmController && boltBonesData == bolt && boltSlider != null && boltTurner != null && boltFrame != null)
                 return true;
+            EndBoltChamberView();
             boltBonesFor = firearmController;
             boltBonesData = bolt;
             boltSlider = FindRigBone(firearmController, bolt.slider);
@@ -379,6 +391,8 @@ namespace TarkovVR.Source.Weapons
             }
             if (!state.Closed)
                 drivingBolt = true;
+            if (wasClosed && !state.Closed)
+                BeginBoltChamberView(boltForFirearm, state);
             PlaceBoltKnob(state, bolt);
             ApplyBoltBones(state, bolt);
 
@@ -429,8 +443,9 @@ namespace TarkovVR.Source.Weapons
                 return;
             if (boltDebugLog)
                 Plugin.MyLog.LogInfo("[VRReload] bolt back: the chambered round comes out (rechamber)");
-            // Tarkov's rechamber throws it out and shows the next one
+            // Tarkov's rechamber throws it out and shows the next one, which is still in the magazine until the bolt closes
             state.roundShown = true;
+            boltChamberEmpty = true;
             ExpectOperation(ExpectedOperation.Rechamber, firearmController);
             VRGlobals.player.InventoryController.RechamberWeapon(weapon);
             TryForceExpectedOperation();
@@ -440,6 +455,7 @@ namespace TarkovVR.Source.Weapons
         private static void BoltClosed(FirearmController firearmController, BoltState state)
         {
             Weapon weapon = firearmController.Item;
+            EndBoltChamberView();
             PlayFirstGunSound(firearmController, BoltSoundHand, "BoltIn", "BoltDown", "HandleIn", "SlideIn");
             PulseBoltHand(0.6f, 0.05f);
             if (state.backThisStroke)
@@ -490,6 +506,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (boltStates.TryGetValue(weapon, out BoltState state) && (!state.Closed || state.spentCase))
             {
+                EndBoltChamberView();
                 state.turn = 0f;
                 state.slide = 0f;
                 state.spentCase = false;
@@ -509,7 +526,69 @@ namespace TarkovVR.Source.Weapons
                 return;
             if (!(firearmController.CurrentOperation is FirearmController.Idling) && expectedOperation != ExpectedOperation.Rechamber)
                 return;
-            ApplyBoltBones(BoltStateOf(firearmController.Item), boltBonesData);
+            BoltState state = BoltStateOf(firearmController.Item);
+            ApplyBoltBones(state, boltBonesData);
+            ApplyBoltChamberView(firearmController, state, boltBonesData);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The chambered round on the bolt face
+
+        // The bolt leaves closed: a live round in the chamber shows and rides back with it. After a shot the fired case's model is at
+        // the shell port already (nothing in the chamber to show); a round Tarkov counts in but that's still in the magazine stays hidden.
+        private static void BeginBoltChamberView(FirearmController firearmController, BoltState state)
+        {
+            EndBoltChamberView();
+            Weapon weapon = firearmController.Item;
+            if (!boltShowsChamberedRound || state.spentCase || weapon.ChamberAmmoCount == 0)
+                return;
+            Transform[] chamberBones = firearmController.Firearms._patronInWeaponTransforms;
+            Transform chamberBone = chamberBones != null && chamberBones.Length > 0 ? chamberBones[0] : null;
+            if (chamberBone == null)
+                return;
+            boltChamberFor = firearmController;
+            boltChamberBone = chamberBone;
+            boltChamberBoneWasActive = chamberBone.gameObject.activeSelf;
+            boltChamberEmpty = WaitingForRack(weapon);
+            boltChamberRound = chamberBone.childCount > 0 ? chamberBone.GetChild(0) : null;
+            if (boltChamberRound != null)
+                boltChamberRoundRest = boltChamberRound.localPosition;
+            if (boltDebugLog)
+                Plugin.MyLog.LogInfo($"[VRReload] bolt opening: chamber '{chamberBone.name}' (was {(boltChamberBoneWasActive ? "shown" : "hidden")}), round model {(boltChamberRound != null ? boltChamberRound.name : "none")}, "
+                    + $"{(boltChamberEmpty ? "still in the magazine: shown empty" : "rides the bolt")}, chamber on the slider {chamberBone.IsChildOf(boltSlider)}");
+        }
+
+        // After the animator: the round moves back as far as the slider has. A chamber bone that is itself on the slider rides it already.
+        // Once the full stroke threw the round out (its model goes back to Tarkov's pool) the chamber stays empty until the bolt closes.
+        private static void ApplyBoltChamberView(FirearmController firearmController, BoltState state, BoltData bolt)
+        {
+            if (boltChamberBone == null || boltChamberFor != firearmController)
+                return;
+            if (boltChamberEmpty)
+            {
+                boltChamberBone.gameObject.SetActive(false);
+                return;
+            }
+            boltChamberBone.gameObject.SetActive(true);
+            if (boltChamberRound == null || boltChamberRound.parent != boltChamberBone)
+                return;
+            Vector3 back = boltChamberBone.IsChildOf(boltSlider) ? Vector3.zero
+                : boltChamberBone.InverseTransformVector(boltFrame.TransformVector(bolt.travel * state.slide));
+            boltChamberRound.localPosition = boltChamberRoundRest + back;
+        }
+
+        private static void EndBoltChamberView()
+        {
+            if (boltChamberBone != null)
+            {
+                boltChamberBone.gameObject.SetActive(boltChamberBoneWasActive);
+                if (boltChamberRound != null && boltChamberRound.parent == boltChamberBone)
+                    boltChamberRound.localPosition = boltChamberRoundRest;
+            }
+            boltChamberFor = null;
+            boltChamberBone = null;
+            boltChamberRound = null;
+            boltChamberEmpty = false;
         }
 
         private static void ApplyBoltBones(BoltState state, BoltData bolt)
