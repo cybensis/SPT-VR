@@ -57,10 +57,8 @@ namespace TarkovVR
             ApplyPatches("TarkovVR.Patches");
             InitializeConditionalPatches();
 
-            // Ctrl+F10 in a raid: both-eyes vs left-eye-only cost measurement (logs "[StereoCost]").
-            gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>();
-            // Ctrl+F8 in a raid: do the two eyes draw the same sun shadow map? (logs "[ShadowShare]")
-            gameObject.AddComponent<TarkovVR.Source.Misc.ShadowShareProbe>();
+            // Dev measurement tools, not added in releases: StereoCostProbe (Ctrl+F10, also needs OpenXRBootstrap.registerFrameWatch
+            // for its OpenXR rows) and ShadowShareProbe (Ctrl+F8) - gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>() etc.
             // The desktop window: one eye, cropped to the window and stabilised (for recording)
             gameObject.AddComponent<TarkovVR.Source.Graphics.DesktopMirror>();
 
@@ -75,17 +73,38 @@ namespace TarkovVR
 
         private bool InitializeVR()
         {
-            // OpenXR still creates SteamVR's action objects (VRInput falls back to them), but never starts OpenVR
+            // Both paths create SteamVR's action objects (OpenXR's VRInput falls back to them); once
+            SteamVR_Actions.PreInitialize();
             if (VRSettings.GetUseOpenXR())
             {
-                SteamVR_Actions.PreInitialize();
-                return OpenXRBootstrap.Initialize();
+                if (TryStartOpenXR())
+                    return true;
+                Logger.LogWarning("[VR] OpenXR didn't start (see the lines above): starting SteamVR's OpenVR instead. "
+                    + "Its files: UnityOpenXR.dll + openxr_loader.dll in EscapeFromTarkov_Data\\Plugins\\x86_64, Unity.XR.OpenXR.dll in "
+                    + "EscapeFromTarkov_Data\\Managed. \"useOpenXR\": false in ModSettings.json starts OpenVR directly.");
             }
+            return StartOpenVR();
+        }
 
+        // OpenXR never starts OpenVR. Without Unity.XR.OpenXR.dll the call itself throws (OpenXRBootstrap.Initialize can't be
+        // compiled), so it is caught here rather than inside it.
+        private static bool TryStartOpenXR()
+        {
             try
             {
+                return OpenXRBootstrap.Initialize();
+            }
+            catch (Exception ex)
+            {
+                MyLog.LogError($"[OpenXR] Couldn't load Unity's OpenXR plugin: {ex.GetType().Name}: {ex.Message}");
+                return false;
+            }
+        }
 
-                SteamVR_Actions.PreInitialize();
+        private bool StartOpenVR()
+        {
+            try
+            {
                 SteamVR_Settings.instance.pauseGameWhenDashboardVisible = false;
 
                 var generalSettings = ScriptableObject.CreateInstance<XRGeneralSettings>();

@@ -15,22 +15,16 @@ namespace TarkovVR.Source.XR
     // Unity still renders MultiPass, so all the per-eye code keeps working. SteamVR is never started in this mode.
     public static class OpenXRBootstrap
     {
+        // No static field may name an OpenXR type: Active is read every frame (VRInput), and without Unity.XR.OpenXR.dll the class
+        // initializer would throw on every read - OpenVR mode included
         public static bool Active { get; private set; }
+        public static bool registerFrameWatch = false;   // dev: the native frame-call watcher for the cost probe
 
-        // Without at least one controller profile, OpenXR reports no controllers at all
-        private static readonly Type[] controllerProfiles =
-        {
-            typeof(ValveIndexControllerProfile),
-            typeof(OculusTouchControllerProfile),
-            typeof(MetaQuestTouchProControllerProfile),
-            typeof(HTCViveControllerProfile),
-            typeof(MicrosoftMotionControllerProfile),
-            typeof(HPReverbG2ControllerProfile),
-            typeof(KHRSimpleControllerProfile),
-        };
-
+        // false = Plugin falls back to OpenVR. Called through Plugin.TryStartOpenXR, which also catches the call itself failing
+        // (Unity.XR.OpenXR.dll missing: this method can't be compiled).
         public static bool Initialize()
         {
+            XRManagerSettings managerSettings = null;
             try
             {
                 // The game ships no OpenXR settings asset, so this creates a default one at runtime
@@ -42,7 +36,7 @@ namespace TarkovVR.Source.XR
                     return false;
 
                 XRGeneralSettings generalSettings = ScriptableObject.CreateInstance<XRGeneralSettings>();
-                XRManagerSettings managerSettings = ScriptableObject.CreateInstance<XRManagerSettings>();
+                managerSettings = ScriptableObject.CreateInstance<XRManagerSettings>();
                 OpenXRLoader openXRLoader = ScriptableObject.CreateInstance<OpenXRLoader>();
                 generalSettings.Manager = managerSettings;
                 managerSettings.loaders.Clear();
@@ -72,13 +66,41 @@ namespace TarkovVR.Source.XR
             catch (Exception ex)
             {
                 Plugin.MyLog.LogError("[OpenXR] Initialization failed: " + ex);
+                StopHalfStarted(managerSettings);
                 return false;
+            }
+        }
+
+        // A loader that started before the failure is stopped, so OpenVR can start in its place
+        private static void StopHalfStarted(XRManagerSettings managerSettings)
+        {
+            if (managerSettings == null || managerSettings.activeLoader == null)
+                return;
+            try
+            {
+                managerSettings.StopSubsystems();
+                managerSettings.DeinitializeLoader();
+            }
+            catch (Exception ex)
+            {
+                Plugin.MyLog.LogWarning("[OpenXR] Stopping the half-started loader failed: " + ex.Message);
             }
         }
 
         // Features are normally set up by the Unity editor, so their fields are internal - set them through reflection
         private static bool AddFeatures(OpenXRSettings openXRSettings)
         {
+            // Without at least one controller profile, OpenXR reports no controllers at all
+            Type[] controllerProfiles =
+            {
+                typeof(ValveIndexControllerProfile),
+                typeof(OculusTouchControllerProfile),
+                typeof(MetaQuestTouchProControllerProfile),
+                typeof(HTCViveControllerProfile),
+                typeof(MicrosoftMotionControllerProfile),
+                typeof(HPReverbG2ControllerProfile),
+                typeof(KHRSimpleControllerProfile),
+            };
             List<OpenXRFeature> features = new List<OpenXRFeature>();
             foreach (Type profileType in controllerProfiles)
             {
@@ -100,11 +122,15 @@ namespace TarkovVR.Source.XR
             hapticFrequency.enabled = true;
             features.Add(hapticFrequency);
 
-            // Watches the frame submission for the alternate-eye experiment (Ctrl+F11); only looks
-            OpenXRFrameWatch frameWatch = ScriptableObject.CreateInstance<OpenXRFrameWatch>();
-            nameField?.SetValue(frameWatch, "SPT-VR Frame Watch");
-            frameWatch.enabled = true;
-            features.Add(frameWatch);
+            // The frame-call watcher (native, hooks xrWaitFrame and friends) only fed the cost probe's OpenXR rows, which is no
+            // longer added: not registered in release builds
+            if (registerFrameWatch)
+            {
+                OpenXRFrameWatch frameWatch = ScriptableObject.CreateInstance<OpenXRFrameWatch>();
+                nameField?.SetValue(frameWatch, "SPT-VR Frame Watch");
+                frameWatch.enabled = true;
+                features.Add(frameWatch);
+            }
 
             FieldInfo featuresField = typeof(OpenXRSettings).GetField("features", BindingFlags.NonPublic | BindingFlags.Instance);
             if (featuresField == null)
