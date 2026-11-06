@@ -116,7 +116,7 @@ namespace TarkovVR.Patches.Visuals
         // exactly backwards. So: into the eye image, flipped only when another headset camera draws after it this frame; into a
         // texture of its own, flipped as before. false = FlippedV = true always (the old behavior).
         public static bool flipByDestination = true;
-        public static bool logFlipDestinations = true;     // each change of what was decided, the first 12
+        public static bool logFlipDestinations = false;    // each change of what was decided, the first 12
         private static string lastFlipDestination;
         private static int flipDestinationLogs;
         private static readonly List<XRDisplaySubsystem> xrDisplays = new List<XRDisplaySubsystem>();

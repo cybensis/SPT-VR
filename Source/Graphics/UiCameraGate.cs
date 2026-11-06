@@ -20,6 +20,7 @@ namespace TarkovVR.Source.Graphics
         public static float marginPerMeter = 0.2f;     // ...this share of its distance from the eyes (about 11 degrees): on before it's in view
         public static float minAlpha = 0.004f;         // below this a graphic counts as faded out
         public static bool logReasons = true;          // each canvas that turns the camera on, once
+        public static float logHolderAfterSeconds = 10f; // on this long without a break: the graphic holding it logged (each new one, first 20)
 
         private const int UiLayer = 5;
         private Camera uiCamera;
@@ -29,6 +30,12 @@ namespace TarkovVR.Source.Graphics
         private readonly Plane[][] eyePlanes = { new Plane[6], new Plane[6] };
         private readonly Vector3[] corners = new Vector3[4];
         private readonly HashSet<int> loggedCanvases = new HashSet<int>();
+        private Canvas holderCanvas;                   // what the last check found in view
+        private Graphic holderGraphic;
+        private RenderMode holderRenderMode;
+        private float onSince = -1f;
+        private Graphic loggedHolder;
+        private int holderLogs;
 
         private void Awake()
         {
@@ -59,7 +66,27 @@ namespace TarkovVR.Source.Graphics
                 else if (onUntil == float.MaxValue)
                     onUntil = 0f;
             }
-            SetCameraOn(Time.unscaledTime < onUntil);
+            bool on = Time.unscaledTime < onUntil;
+            SetCameraOn(on);
+            LogLongHolder(on);
+        }
+
+        // A camera that never switches off saves nothing: which graphic keeps it on (the per-canvas log names only the first)
+        private void LogLongHolder(bool on)
+        {
+            if (!on)
+            {
+                onSince = -1f;
+                return;
+            }
+            if (onSince < 0f)
+                onSince = Time.unscaledTime;
+            if (!logReasons || holderLogs >= 20 || holderGraphic == null || holderGraphic == loggedHolder || holderCanvas == null
+                || Time.unscaledTime - onSince < logHolderAfterSeconds || eyeCamera == null)
+                return;
+            loggedHolder = holderGraphic;
+            holderLogs++;
+            Describe($"kept on {Time.unscaledTime - onSince:0} s so far by canvas", holderCanvas, holderGraphic, eyeCamera.transform.position, holderRenderMode);
         }
 
         private void SetCameraOn(bool on)
@@ -110,10 +137,13 @@ namespace TarkovVR.Source.Graphics
                     if (graphic.color.a * canvasRenderer.GetAlpha() * canvasRenderer.GetInheritedAlpha() < minAlpha)
                         continue;
                     Rect area = graphic.rectTransform.rect;
-                    if (area.width <= 0f || area.height <= 0f)
+                    if (area.width <= 0f || area.height <= 0f || DrawsNothing(graphic))
                         continue;   // nothing to draw
                     if (inFrontOfCamera || InView(graphic.rectTransform, head))
                     {
+                        holderCanvas = canvas;
+                        holderGraphic = graphic;
+                        holderRenderMode = renderMode;
                         LogReason(canvas, graphic, head, renderMode);
                         return true;
                     }
@@ -151,11 +181,27 @@ namespace TarkovVR.Source.Graphics
             return GeometryUtility.TestPlanesAABB(eyePlanes[0], bounds) || GeometryUtility.TestPlanesAABB(eyePlanes[1], bounds);
         }
 
+        // An empty text is an enabled graphic with a rect that draws nothing (a raid's preloader 'Day' label, 2 m in front, empty).
+        // TMP: its character count, not .text (SetText(char[]) can leave .text stale while characters draw); not laid out yet = draws.
+        private static bool DrawsNothing(Graphic graphic)
+        {
+            if (graphic is TMPro.TMP_Text textMeshPro)
+                return textMeshPro.textInfo != null && textMeshPro.textInfo.characterCount == 0;
+            if (graphic is Text text)
+                return string.IsNullOrWhiteSpace(text.text);
+            return false;
+        }
+
         // What it saw, so a canvas that keeps the camera on all the time can be told apart from one really in view
         private void LogReason(Canvas canvas, Graphic graphic, Vector3 head, RenderMode renderMode)
         {
             if (!logReasons || !loggedCanvases.Add(canvas.GetInstanceID()))
                 return;
+            Describe("on for canvas", canvas, graphic, head, renderMode);
+        }
+
+        private static void Describe(string what, Canvas canvas, Graphic graphic, Vector3 head, RenderMode renderMode)
+        {
             Transform parent = canvas.transform.parent;
             RectTransform rect = graphic.rectTransform;
             Rect area = rect.rect;
@@ -164,7 +210,7 @@ namespace TarkovVR.Source.Graphics
             string text = graphic.GetType().GetProperty("text")?.GetValue(graphic) as string;
             if (text != null && text.Length > 40)
                 text = text.Substring(0, 40) + "...";
-            Plugin.MyLog.LogInfo($"[UiCamGate] on for canvas '{(parent != null ? parent.name + "/" : "")}{canvas.name}' ({renderMode}): '{graphic.name}' "
+            Plugin.MyLog.LogInfo($"[UiCamGate] {what} '{(parent != null ? parent.name + "/" : "")}{canvas.name}' ({renderMode}): '{graphic.name}' "
                 + $"{graphic.GetType().Name}{(text != null ? $" text '{text}'" : "")}, {area.width * scale.x * 100f:0.#}x{area.height * scale.y * 100f:0.#} cm "
                 + $"{Vector3.Distance(head, rect.position):0.00} m from the eyes, alpha {graphic.color.a:0.##} x {canvasRenderer.GetAlpha():0.##} x {canvasRenderer.GetInheritedAlpha():0.##}");
         }
