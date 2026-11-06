@@ -20,7 +20,8 @@ namespace TarkovVR.Source.Graphics
         public static float marginPerMeter = 0.2f;     // ...this share of its distance from the eyes (about 11 degrees): on before it's in view
         public static float minAlpha = 0.004f;         // below this a graphic counts as faded out
         public static bool logReasons = true;          // each canvas that turns the camera on, once
-        public static float logHolderAfterSeconds = 10f; // on this long without a break: the graphic holding it logged (each new one, first 20)
+        public static float logHolderAfterSeconds = 10f; // on this long without a break: the graphic holding it logged (a new one at most every 15 s, first 60)
+        public static float minAngularSize = 0.002f;    // radians across (~0.1 degree, ~2 pixels of the eye image): smaller can't be seen (a raid's preloader clock, 33 cm, 1.2 km away)
 
         private const int UiLayer = 5;
         private Camera uiCamera;
@@ -36,6 +37,7 @@ namespace TarkovVR.Source.Graphics
         private float onSince = -1f;
         private Graphic loggedHolder;
         private int holderLogs;
+        private float nextHolderLog;
 
         private void Awake()
         {
@@ -81,11 +83,12 @@ namespace TarkovVR.Source.Graphics
             }
             if (onSince < 0f)
                 onSince = Time.unscaledTime;
-            if (!logReasons || holderLogs >= 20 || holderGraphic == null || holderGraphic == loggedHolder || holderCanvas == null
-                || Time.unscaledTime - onSince < logHolderAfterSeconds || eyeCamera == null)
+            if (!logReasons || holderLogs >= 60 || holderGraphic == null || holderGraphic == loggedHolder || holderCanvas == null
+                || Time.unscaledTime - onSince < logHolderAfterSeconds || Time.unscaledTime < nextHolderLog || eyeCamera == null)
                 return;
             loggedHolder = holderGraphic;
             holderLogs++;
+            nextHolderLog = Time.unscaledTime + 15f;
             Describe($"kept on {Time.unscaledTime - onSince:0} s so far by canvas", holderCanvas, holderGraphic, eyeCamera.transform.position, holderRenderMode);
         }
 
@@ -177,7 +180,10 @@ namespace TarkovVR.Source.Graphics
                 max = Vector3.Max(max, corners[index]);
             }
             var bounds = new Bounds((min + max) * 0.5f, max - min);
-            bounds.Expand(2f * (marginMeters + marginPerMeter * Vector3.Distance(head, bounds.center)));
+            float distance = Vector3.Distance(head, bounds.center);
+            if (bounds.size.magnitude < minAngularSize * distance)
+                return false;   // too small to see from here
+            bounds.Expand(2f * (marginMeters + marginPerMeter * distance));
             return GeometryUtility.TestPlanesAABB(eyePlanes[0], bounds) || GeometryUtility.TestPlanesAABB(eyePlanes[1], bounds);
         }
 
