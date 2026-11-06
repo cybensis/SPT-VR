@@ -61,7 +61,7 @@ namespace TarkovVR.Source.Graphics
 
         // Diagnostic for the window flipping on its own (2026-11-05): the camera that rendered just before the window camera and what
         // is bound when the window is drawn, logged each time that changes (the first 16 changes)
-        public static bool logFrameChanges = true;
+        public static bool logFrameChanges = false;
         private static string lastCameraBefore;
         private string lastSignature;
         private int signatureLogs;
