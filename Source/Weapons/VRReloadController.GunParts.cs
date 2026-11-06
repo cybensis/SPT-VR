@@ -315,10 +315,13 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // The gun hand's finger by EFT's digit number (1 thumb .. 5 pinky), knuckle to tip, under the right arm IK's wrist bone
+        // The gun hand's finger by EFT's digit number (1 thumb .. 5 pinky), knuckle to tip, under the right arm IK's wrist bone.
+        // None with the gun in the left hand: the right hand is off the gun then (its button press isn't drawn)
         private static Transform[] GunHandFinger(int digit)
         {
-            Transform palm = VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null && VRGlobals.ikManager.rightArmIk.solver != null
+            if (Handedness.GunInLeftHand)
+                return null;
+            Transform palm =VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null && VRGlobals.ikManager.rightArmIk.solver != null
                 && VRGlobals.ikManager.rightArmIk.solver.bone3 != null ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null;
             if (palm == null)
                 return null;
@@ -339,6 +342,8 @@ namespace TarkovVR.Source.Weapons
         private static Transform[] GunHandIndexFinger(out Transform armTop)
         {
             armTop = null;
+            if (Handedness.GunInLeftHand)
+                return null;
             Transform palm = VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null && VRGlobals.ikManager.rightArmIk.solver != null
                 && VRGlobals.ikManager.rightArmIk.solver.bone3 != null ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null;
             if (palm == null)
@@ -700,7 +705,8 @@ namespace TarkovVR.Source.Weapons
             // Still in the gun (the insert may be finishing this frame)
             bool magazineIn = weapon != null && (weapon.GetCurrentMagazine() != null || expectedOperation == ExpectedOperation.Insert);
             bool valid = enabled && VRGlobals.inGame && !VRGlobals.menuOpen && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.LeftHand != null
-                && firearmController == VRGlobals.firearmController && seatedHoldWell != null && magazineIn && !ChestHang.Detached;
+                && firearmController == VRGlobals.firearmController && seatedHoldWell != null && magazineIn && !ChestHang.Detached
+                && handLatched;     // the latch drops when the gun goes from one hand to the other (UpdateHandLatch)
             if (!valid || gripReleased)
             {
                 EndSeatedHold();

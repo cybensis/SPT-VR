@@ -255,6 +255,9 @@ namespace TarkovVR.Source.Weapons
             // The gun hand: only while the off hand holds the gun up; the off hand: only while the gun hand has the grip
             if (boltInGunHand ? !ChestHang.SupportOnly : ChestHang.Detached)
                 return false;
+            // The gun went from one hand to the other: that arm isn't this hand's any more
+            if (latchedOnRightArm != OnRightArm(boltInGunHand))
+                return false;
             return boltForFirearm.CurrentOperation is FirearmController.Idling || expectedOperation == ExpectedOperation.Rechamber;
         }
 
@@ -335,11 +338,12 @@ namespace TarkovVR.Source.Weapons
             boltForFirearm = firearmController;
             boltInGunHand = gunHand;
             HoldingBolt = true;
-            Transform handRig = (gunHand ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand).transform;
+            Transform handRig = HandRig(gunHand);
             controllerToKnob = Quaternion.Inverse(boltFrame.rotation) * (KnobWorld(state, bolt) - handRig.position);
             LatchHand(boltKnob, gunHand);
             boltHandFingers = null;
-            if (gunHand && bolt.hold != null)
+            // The clip's hand on the knob is the right hand's: the gun hand, or the off hand with the gun in the left hand
+            if (OnRightArm(gunHand) && bolt.hold != null)
             {
                 // The clip's palm on the knob, in the turner's frame: our knob transform is on the turner's pose
                 boltHandFingers = bolt.hold.fingers;
@@ -626,12 +630,13 @@ namespace TarkovVR.Source.Weapons
                 Pulse(amplitude, duration);
         }
 
-        // The finger pose on the knob: the clip's for the gun hand, the magazine pull's pinch for the off hand
+        // The finger pose on the knob: the clip's for the right hand (the gun hand's, or the off hand's with the gun in the left
+        // hand), the magazine pull's pinch for the left
         private static Vector3[] BoltFingerPose(bool gunHand)
         {
             if (!HoldingBolt || boltInGunHand != gunHand)
                 return null;
-            return gunHand ? boltHandFingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
+            return OnRightArm(gunHand) ? boltHandFingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
         }
     }
 }

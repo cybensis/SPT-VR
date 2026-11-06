@@ -186,6 +186,40 @@ namespace TarkovVR.Source.Player.Body
             }
         }
 
+        // A finger pose as joint locals in the reload code's order (0 the palm, left alone, then three joints a finger, thumb first:
+        // DigitFJ at (F - 1) * 3 + J) -> the other hand's, for its mirror image. With the gun in the left hand the right hand holds the
+        // magazine, whose finger poses were all recorded on the left (VRReloadController).
+        private static Quaternion[] poseFrom, poseTo;
+
+        public static bool TryMirrorPose(Quaternion[] fromPose, bool rightToLeft, Quaternion[] toPose)
+        {
+            if (VRGlobals.player == null || fromPose == null || toPose == null || !EnsureBones())
+                return false;
+            int count = HandMirror.rightToLeft.Length;
+            if (poseFrom == null || poseFrom.Length != count)
+            {
+                poseFrom = new Quaternion[count];
+                poseTo = new Quaternion[count];
+            }
+            for (int index = 0; index < count; index++)
+            {
+                int poseIndex = PoseIndex(HandMirror.rightToLeft[index].digit);
+                if (poseIndex >= fromPose.Length || poseIndex >= toPose.Length)
+                    return false;
+                poseFrom[index] = fromPose[poseIndex];
+            }
+            MirrorLocals(poseFrom, rightToLeft, poseTo);
+            for (int index = 0; index < count; index++)
+                toPose[PoseIndex(HandMirror.rightToLeft[index].digit)] = poseTo[index];
+            return true;
+        }
+
+        // "Digit23" -> 2nd finger, 3rd joint -> 6
+        private static int PoseIndex(string digit)
+        {
+            return (digit[5] - '1') * 3 + (digit[6] - '0');
+        }
+
         // Reflection through the plane with this normal (through the origin)
         private static Matrix4x4 Reflection(Vector3 normal)
         {

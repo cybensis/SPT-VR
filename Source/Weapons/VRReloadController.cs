@@ -113,8 +113,9 @@ namespace TarkovVR.Source.Weapons
         private static Transform magazineWell;
         private static Vector3 propWellPointLocal;          // the point on the prop that sits at the mag well when seated
         private static bool magazineLeftWell;
-        private static Vector3 freeHoldPosition;            // where a magazine off the track sits in the hand (LeftHand-local)
+        private static Vector3 freeHoldPosition;            // where a magazine off the track sits in the hand (HandBone-local)
         private static Quaternion freeHoldRotation;
+        private static bool heldOnRightArm;                 // the arm holding it (OnRightArm): the hold ends if that changes
 
         // The track, in the mag well bone's frame: the seated pose, and the axis the magazine slides out along
         private static Vector3 seatedLocalPosition;
@@ -139,6 +140,8 @@ namespace TarkovVR.Source.Weapons
         private static bool handLatchReleasing;
         private static bool handLatchSnapping;
         private static bool latchedHandIsGunHand;           // the gun hand on the charging handle; everything else latches the off hand
+        private static bool latchedOnRightArm;              // the arm drawing the latched hand (OnRightArm), as it was at the grab
+        private static Transform latchedHandRig;            // that hand's controller transform in its arm's frame (HandRig), as it was at the grab
         private static Vector3 handSnapLocalPosition;       // the animation's grip, in the magazine's frame
         private static Quaternion handSnapLocalRotation;
 
@@ -158,6 +161,11 @@ namespace TarkovVR.Source.Weapons
 
         private static float fingerWeight;
         private static Vector3[] fingerPoseShown;
+        private static bool fingerPoseShownIsRight;         // recorded on the right hand (the bolt's / handle's gun-hand data), else on the left
+        private static Transform offRightPalm;              // the off hand on the right arm (OffHandOnRightArm): its bones in pose order
+        private static Transform[] offRightFingerBones;
+        private static readonly Quaternion[] leftPoseScratch = new Quaternion[16];
+        private static readonly Quaternion[] rightPoseScratch = new Quaternion[16];
         private static float gunHandFingerWeight;
         private static Vector3[] gunHandFingerPoseShown;
         private static Transform gunHandPalm;
@@ -588,6 +596,7 @@ namespace TarkovVR.Source.Weapons
             heldMagazine = magazine;
             heldForFirearm = firearmController;
             heldProp = prop;
+            heldOnRightArm = OffHandOnRightArm;
             magazineWell = magazineView.Bone;
             magazineLeftWell = false;
             magazineCatchPassed = false;
@@ -783,6 +792,8 @@ namespace TarkovVR.Source.Weapons
                 freeHoldPosition = useLastGrab ? lastGrabPosition : newMagazineHoldPosition;
                 freeHoldRotation = useLastGrab ? lastGrabRotation : Quaternion.Euler(newMagazineHoldRotation);
             }
+            ToOffHandPalm(prop, magazineView.Bone, ref freeHoldPosition, ref freeHoldRotation);
+            heldOnRightArm = OffHandOnRightArm;
             // UpdateFreeHold eases it the rest of the way into the grip
             if (startFrom != null)
                 propTransform.SetPositionAndRotation(startFrom.position, startFrom.rotation);
@@ -838,6 +849,9 @@ namespace TarkovVR.Source.Weapons
                 return false;
             // Off the ground: still lying there as the same magazine (FIKA: nobody else took it)
             if (heldSource == HeldMagazineSource.FromGround && (groundMagazine == null || groundMagazine.Item != heldMagazine))
+                return false;
+            // The gun went from one hand to the other: the arm holding it isn't the off hand's any more (it goes back where it came from)
+            if (heldOnRightArm != OffHandOnRightArm)
                 return false;
             return heldProp != null && magazineWell != null && heldMagazine != null;
         }
@@ -1057,17 +1071,22 @@ namespace TarkovVR.Source.Weapons
             Transform propTransform = heldProp.transform;
             Transform handBone = HandBone();
             propTransform.SetParent(handBone, worldPositionStays: true);
-            GetPoseIn(handBone, propTransform, out lastGrabPosition, out lastGrabRotation);
+            GetPoseIn(handBone, propTransform, out Vector3 grabPosition, out Quaternion grabRotation);
+            // Kept as the left palm's, like every other hold: the next magazine may be in the other hand
+            lastGrabPosition = grabPosition;
+            lastGrabRotation = grabRotation;
+            ToLeftPalm(heldProp, magazineWell, ref lastGrabPosition, ref lastGrabRotation);
             hasLastGrabPose = true;
             if (heldReloadGrip?.pull != null)
             {
                 freeHoldPosition = heldReloadGrip.pull.position;
                 freeHoldRotation = Quaternion.Euler(heldReloadGrip.pull.rotation);
+                ToOffHandPalm(heldProp, magazineWell, ref freeHoldPosition, ref freeHoldRotation);
             }
             else
             {
-                freeHoldPosition = lastGrabPosition;
-                freeHoldRotation = lastGrabRotation;
+                freeHoldPosition = grabPosition;
+                freeHoldRotation = grabRotation;
             }
             ReleaseHandLatch();
             PlayGunSound(heldForFirearm, "MagOut");
@@ -1091,12 +1110,58 @@ namespace TarkovVR.Source.Weapons
         // attached to LeftHand the magazine ran a frame ahead of the hand (headset: "slightly lags in my hand").
         private static Transform HandBone()
         {
-            LimbIK leftArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null;
-            if (leftArmIk != null && leftArmIk.solver != null && leftArmIk.solver.bone3 != null && leftArmIk.solver.bone3.transform != null)
-                return leftArmIk.solver.bone3.transform;
-            if (InitVRPatches.leftPalm != null)
+            Transform palm = ArmPalm(OffHandOnRightArm);
+            if (palm != null)
+                return palm;
+            if (!OffHandOnRightArm && InitVRPatches.leftPalm != null)
                 return InitVRPatches.leftPalm;
-            return VRGlobals.vrPlayer.LeftHand.transform;
+            return HandRig(gunHand: false);
+        }
+
+        // A magazine's pose in the LEFT palm's frame (every hold the clips have, the defaults, the last grab: Tarkov's reloads only
+        // ever hold it in the left hand) -> in the off hand's palm frame, HandBone. The same, or with the gun in the left hand, its
+        // mirror image on the right palm.
+        private static void ToOffHandPalm(GameObject prop, Transform well, ref Vector3 position, ref Quaternion rotation)
+        {
+            if (OffHandOnRightArm && PropCentrePlane(prop, well, out Vector3 normal, out Vector3 point))
+                MirrorHold(normal, point, leftToRight: true, ref position, ref rotation);
+        }
+
+        // The other way: a pose measured on the off hand, kept as the left palm's
+        private static void ToLeftPalm(GameObject prop, Transform well, ref Vector3 position, ref Quaternion rotation)
+        {
+            if (OffHandOnRightArm && PropCentrePlane(prop, well, out Vector3 normal, out Vector3 point))
+                MirrorHold(normal, point, leftToRight: false, ref position, ref rotation);
+        }
+
+        // The gun's centre plane in a magazine prop's own frame (its normal, and a point on it in metres along the prop's axes). Seated,
+        // a magazine is its own mirror image across it, and its well point (where the well bone sits) is on it.
+        private static bool PropCentrePlane(GameObject prop, Transform well, out Vector3 normal, out Vector3 point)
+        {
+            normal = Vector3.right;
+            point = Vector3.zero;
+            if (prop == null || well == null || !TarkovVR.Patches.Core.Player.RealLeftHandedPatches.GunPlane(out _, out Vector3 gunRight))
+                return false;
+            ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
+            Quaternion seatedRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
+            normal = (Quaternion.Inverse(seatedRotation) * well.InverseTransformDirection(gunRight)).normalized;
+            point = Vector3.Scale(SeatedWellPointLocal(prop), prop.transform.lossyScale);
+            return true;
+        }
+
+        // A thing's pose in one palm's frame -> in the other palm's, for the mirror image of that hold: the palm reflected through the
+        // thing's own centre plane (which maps the thing onto itself), turned into the other palm's bone frame (HandMirror.TryMirrorPalm).
+        // Worked with the palm at the origin, unturned.
+        private static void MirrorHold(Vector3 normalInThing, Vector3 pointInThing, bool leftToRight, ref Vector3 position, ref Quaternion rotation)
+        {
+            Vector3 normal = (rotation * normalInThing).normalized;
+            Vector3 planePoint = position + rotation * pointInThing;
+            if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(Quaternion.identity, normal, rightToLeft: !leftToRight, out Quaternion palmRotation))
+                return;
+            Vector3 palmPosition = 2f * Vector3.Dot(planePoint, normal) * normal;
+            Quaternion toPalm = Quaternion.Inverse(palmRotation);
+            position = toPalm * (position - palmPosition);
+            rotation = toPalm * rotation;
         }
 
         // A pose in a transform's frame without its scale (the grip data is in metres in the hand's frame)
@@ -1228,15 +1293,23 @@ namespace TarkovVR.Source.Weapons
         // The rendered hand on what it holds (a magazine on the track, the charging handle): it rides that, from where
         // the controller grabbed it
 
-        private static Transform LatchedHandRig => (latchedHandIsGunHand ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand).transform;
+        private static Transform LatchedHandRig => latchedHandRig != null ? latchedHandRig : HandRig(latchedHandIsGunHand);
 
-        private static LimbIK LatchedArmIk => VRGlobals.ikManager == null ? null : latchedHandIsGunHand ? VRGlobals.ikManager.rightArmIk : VRGlobals.ikManager.leftArmIk;
+        private static LimbIK LatchedArmIk => ArmIk(latchedOnRightArm);
+
+        // The latch on that arm, for RealLeftHandedPatches (the gun in the left hand): it leaves that arm's target alone
+        internal static Transform ArmLatch(bool rightArm)
+        {
+            return handLatched && handLatch != null && latchedOnRightArm == rightArm ? handLatch : null;
+        }
 
         private static void LatchHand(Transform holder, bool gunHand = false)
         {
             if (handLatch == null)
                 handLatch = new GameObject("VRReloadHandLatch").transform;
             latchedHandIsGunHand = gunHand;
+            latchedOnRightArm = OnRightArm(gunHand);
+            latchedHandRig = HandRig(gunHand);
             Transform handRig = LatchedHandRig;
             handLatch.SetParent(holder, worldPositionStays: false);
             handLatch.SetPositionAndRotation(handRig.position, handRig.rotation);
@@ -1251,7 +1324,9 @@ namespace TarkovVR.Source.Weapons
         private static void SnapHandToGrip(Vector3 gripPosition, Vector3 gripRotation)
         {
             Transform propTransform = heldProp.transform;
-            Quaternion handRotation = propTransform.rotation * Quaternion.Inverse(Quaternion.Euler(gripRotation));
+            Quaternion gripTurn = Quaternion.Euler(gripRotation);
+            ToOffHandPalm(heldProp, magazineWell, ref gripPosition, ref gripTurn);
+            Quaternion handRotation = propTransform.rotation * Quaternion.Inverse(gripTurn);
             SnapHandTo(propTransform, propTransform.position - handRotation * gripPosition, handRotation);
         }
 
@@ -1304,6 +1379,19 @@ namespace TarkovVR.Source.Weapons
             if (VRGlobals.vrPlayer == null || handLatch == null)
             {
                 ReleaseHandLatchNow();
+                return;
+            }
+            // The gun went from one hand to the other under it: that arm is someone else's now (the sling frees the right one, the
+            // equip path re-stamps it), so it comes off the latch at once with no target of ours left on it
+            if (latchedOnRightArm != OnRightArm(latchedHandIsGunHand))
+            {
+                handLatch.SetParent(null, worldPositionStays: true);
+                LimbIK armIk = LatchedArmIk;
+                if (armIk != null && armIk.solver.target == handLatch)
+                    armIk.solver.target = null;
+                handLatched = false;
+                handLatchReleasing = false;
+                handLatchSnapping = false;
                 return;
             }
             if (handLatchReleasing)
@@ -1832,41 +1920,64 @@ namespace TarkovVR.Source.Weapons
             OwnsOffHand = false;
         }
 
-        // Called from HandsInteractionController.LateUpdate right after the off-hand finger update, so it's the last write
-        // to those bones this frame. Eases in on a grab and back out to whatever the hand was doing on release.
+        // Called from HandsInteractionController.LateUpdate right after the LEFT hand's finger update, so it's the last write
+        // to those bones this frame. Eases in on a grab and back out to whatever the hand was doing on release. The off hand on the
+        // right arm (the gun in the left hand) is posed in ApplyGunHandFingerPose instead, after the right hand's own finger update.
         public static void ApplyHeldFingerPose()
         {
             try
             {
-                ApplyOffHandFingerPose();
+                if (!OffHandOnRightArm)
+                    ApplyOffHandFingerPose();
             }
             finally
             {
                 // A round in this hand goes where the fingers now are
-                if (!RoundInGunHand)
+                if (HoldingRound && !roundOnRightArm)
                     PlaceHeldRound();
             }
         }
 
+        // What the off hand's fingers hold, and whether the pose was recorded on the right hand (a gun-hand clip's, for the right arm)
+        private static Vector3[] OffHandPose(out bool rightHandPose)
+        {
+            bool rightArm = OffHandOnRightArm;
+            rightHandPose = rightArm;
+            // A gun whose charging handle clip hasn't been read yet: the magazine pull's thumb-and-index pinch is the closest grip
+            // (the right hand: its fingers hooked over a T)
+            if (HoldingChargingHandle && !HandleInGunHand)
+                return handleHandFingers ?? (rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS);
+            if (HoldingBolt && !BoltInGunHand)
+                return BoltFingerPose(gunHand: false);
+            // The magazine and the round: only ever held in the left hand in the clips
+            rightHandPose = false;
+            if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
+                return magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
+            if (HoldingRound && !RoundInGunHand)
+                return MAGAZINE_PULL_FINGERS;
+            return null;
+        }
+
         private static void ApplyOffHandFingerPose()
         {
-            // A gun whose charging handle clip hasn't been read yet: the magazine pull's thumb-and-index pinch is the closest grip
             latchThumbShown = Mathf.MoveTowards(latchThumbShown, latchThumbTarget, Time.deltaTime / Mathf.Max(releaseButtonTime, 0.001f));
-            Vector3[] pose = null;
-            if (HoldingChargingHandle && !HandleInGunHand)
-                pose = handleHandFingers ?? MAGAZINE_PULL_FINGERS;
-            else if (HoldingBolt && !BoltInGunHand)
-                pose = BoltFingerPose(gunHand: false);
-            else if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
-                pose = magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
-            else if (HoldingRound && !RoundInGunHand)
-                pose = MAGAZINE_PULL_FINGERS;
+            Vector3[] pose = OffHandPose(out bool rightHandPose);
             if (pose != null)
+            {
                 fingerPoseShown = pose;
+                fingerPoseShownIsRight = rightHandPose;
+            }
 
             float target = pose != null && magazineFingers ? 1f : 0f;
             fingerWeight = Mathf.Lerp(fingerWeight, target, 1f - Mathf.Exp(-fingerBlendRate * Time.deltaTime));
             if (fingerWeight < 0.01f || fingerPoseShown == null)
+                return;
+            if (OffHandOnRightArm)
+            {
+                ApplyOffHandPoseOnRight();
+                return;
+            }
+            if (fingerPoseShownIsRight)
                 return;
 
             Transform leftPalm = InitVRPatches.leftPalm;
@@ -1881,18 +1992,62 @@ namespace TarkovVR.Source.Weapons
             ApplyLatchThumb(leftPalmBones);
         }
 
-        // The same for the gun hand on the charging handle, after that hand's own finger update
+        // The same for the RIGHT hand, after that hand's own finger update: the gun hand on the charging handle / bolt, or the off hand
+        // when it's on the right arm (the gun in the left hand)
         public static void ApplyGunHandFingerPose()
         {
             try
             {
-                ApplyGunHandFingers();
+                if (OffHandOnRightArm)
+                    ApplyOffHandFingerPose();
+                else
+                    ApplyGunHandFingers();
             }
             finally
             {
                 // A round in this hand goes where the fingers now are
-                if (RoundInGunHand)
+                if (HoldingRound && roundOnRightArm)
                     PlaceHeldRound();
+            }
+        }
+
+        // The off hand's pose on the right hand's bones: a right-hand pose as it is, a left-hand one (the magazine's, the round's)
+        // mirrored, with the off thumb on the magazine catch in it
+        private static void ApplyOffHandPoseOnRight()
+        {
+            Transform palm = ArmPalm(rightArm: true);
+            if (palm == null)
+                return;
+            if (offRightFingerBones == null || offRightPalm != palm)
+            {
+                offRightPalm = palm;
+                offRightFingerBones = FingerBonesInPoseOrder(palm);
+            }
+            int boneCount = Mathf.Min(offRightFingerBones.Length, fingerPoseShown.Length);
+            if (fingerPoseShownIsRight)
+            {
+                for (int i = 1; i < boneCount; i++)
+                {
+                    if (offRightFingerBones[i] != null)
+                        offRightFingerBones[i].localRotation = Quaternion.Slerp(offRightFingerBones[i].localRotation, Quaternion.Euler(fingerPoseShown[i]), fingerWeight);
+                }
+                return;
+            }
+            for (int i = 0; i < leftPoseScratch.Length; i++)
+                leftPoseScratch[i] = i < fingerPoseShown.Length ? Quaternion.Euler(fingerPoseShown[i]) : Quaternion.identity;
+            if (latchThumbShown > 0f && latchThumbPose != null)
+            {
+                int firstJoint = 1 + latchFinger * 3;
+                for (int joint = 0; joint < latchThumbPose.Length && firstJoint + joint < leftPoseScratch.Length; joint++)
+                    leftPoseScratch[firstJoint + joint] = Quaternion.Slerp(leftPoseScratch[firstJoint + joint], Quaternion.Euler(latchThumbPose[joint]), latchThumbShown);
+            }
+            if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPose(leftPoseScratch, rightToLeft: false, rightPoseScratch))
+                return;
+            boneCount = Mathf.Min(offRightFingerBones.Length, rightPoseScratch.Length);
+            for (int i = 1; i < boneCount; i++)
+            {
+                if (offRightFingerBones[i] != null)
+                    offRightFingerBones[i].localRotation = Quaternion.Slerp(offRightFingerBones[i].localRotation, rightPoseScratch[i], fingerWeight);
             }
         }
 
@@ -1948,11 +2103,45 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Hand and zones
 
+        // Which arm draws a hand. With the gun in the left hand (Handedness.GunInLeftHand) the off hand is the right controller, drawn
+        // by the right arm: it works the gun with the right hand's clip data (the bolt, the charging handle) or the left hand's mirrored
+        // (the magazine and the round: the clips only ever hold those in the left). The input stays the off hand's (Handedness).
+        private static bool OnRightArm(bool gunHand) => gunHand != Handedness.GunInLeftHand;
+        private static bool OffHandOnRightArm => Handedness.GunInLeftHand;
+
+        private static LimbIK ArmIk(bool rightArm)
+        {
+            if (VRGlobals.ikManager == null)
+                return null;
+            return rightArm ? VRGlobals.ikManager.rightArmIk : VRGlobals.ikManager.leftArmIk;
+        }
+
+        // An arm's wrist bone: the hand you see
+        private static Transform ArmPalm(bool rightArm)
+        {
+            LimbIK armIk = ArmIk(rightArm);
+            return armIk != null && armIk.solver != null && armIk.solver.bone3 != null ? armIk.solver.bone3.transform : null;
+        }
+
+        // The rig transform following a hand's controller, in its arm's hand frame: where a latch starts and eases back to. The off hand
+        // on the right arm: VRPlayerManager.RightControllerHand (the rig's LeftHand follows the right controller then, in the left
+        // hand's frame, and the right arm aims at that one when it's free)
+        private static Transform HandRig(bool gunHand)
+        {
+            if (!gunHand && OffHandOnRightArm)
+            {
+                Transform rightControllerHand = VRGlobals.vrPlayer.RightControllerHand;
+                if (rightControllerHand != null)
+                    return rightControllerHand;
+            }
+            return (gunHand ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand).transform;
+        }
+
         // The rendered hand's knuckle line (the loot pointer's palm). The LeftHand rig transform sits at the wrist.
         private static Vector3 OffHandPalm()
         {
             if (VRGlobals.handsInteractionController != null)
-                return VRGlobals.handsInteractionController.PalmOrigin(dominant: false);
+                return VRGlobals.handsInteractionController.PalmOrigin(dominant: OffHandOnRightArm);
             Transform leftHand = VRGlobals.vrPlayer.LeftHand.transform;
             return leftHand.position + leftHand.forward * GunInteractionController.interactProbeForward;
         }

@@ -326,7 +326,8 @@ namespace TarkovVR.Source.Weapons
         {
             if (VRGlobals.handsInteractionController == null)
                 return DistanceToSegment(gunHand ? VRGlobals.vrPlayer.RightHand.transform.position : OffHandPalm(), start, end) <= radius;
-            VRGlobals.handsInteractionController.GetHandTouchPoints(gunHand, handTouchPoints);
+            // The hand you see: the arm drawing it (OnRightArm), not the controller
+            VRGlobals.handsInteractionController.GetHandTouchPoints(OnRightArm(gunHand), handTouchPoints);
             foreach (Vector3 point in handTouchPoints)
             {
                 if (DistanceToSegment(point, start, end) <= radius)
@@ -410,9 +411,12 @@ namespace TarkovVR.Source.Weapons
             string family = AnimationFamily(firearmController);
             handleHolds.TryGetValue(family, out HandleHold offHandHold);
             gunHandHandleHolds.TryGetValue(family, out HandleHold gunHandHold);
-            HandleHold handleHold = sideHandle ? heldSideHandle.hold : gunHand ? gunHandHold : offHandHold;
+            // By the arm, not the controller: with the gun in the left hand the off hand is the right hand, and racks with the right
+            // hand's clip (the side handle's hold is the left hand's: the right one takes it where it grabs)
+            bool rightArm = OnRightArm(gunHand);
+            HandleHold handleHold = sideHandle ? (rightArm ? null : heldSideHandle.hold) : rightArm ? gunHandHold : offHandHold;
             // The same handle goes back as far whichever hand has it, and a gun's clips may only ever rack with one
-            HandleHold otherHandHold = sideHandle ? null : gunHand ? offHandHold : gunHandHold;
+            HandleHold otherHandHold = sideHandle ? null : rightArm ? offHandHold : gunHandHold;
             if (handleHold != null && handleHold.travel > 0f)
                 heldHandleTravel = handleHold.travel;
             else if (otherHandHold != null && otherHandHold.travel > 0f)
@@ -421,7 +425,7 @@ namespace TarkovVR.Source.Weapons
                 heldHandleTravel = Mathf.Min(heldHandleTravel, handleLockedBackTravel);
             if (handleHold != null)
             {
-                HandleHold grip = sideHandle ? handleHold : HoldHandIsTurnedTo(handleHold, gunHand ? gunHandHandleAlternates : handleAlternates, family);
+                HandleHold grip = sideHandle ? handleHold : HoldHandIsTurnedTo(handleHold, rightArm ? gunHandHandleAlternates : handleAlternates, family);
                 handleHandFingers = grip.fingers;
                 SnapHandTo(handleView, handleBone.position + handleBone.rotation * grip.position, handleBone.rotation * Quaternion.Euler(grip.rotation));
             }
@@ -508,6 +512,9 @@ namespace TarkovVR.Source.Weapons
             // The off hand let go too, or the grip was taken back some other way
             if (handleInGunHand && !ChestHang.SupportOnly)
                 return false;
+            // The gun went from one hand to the other: that arm isn't this hand's any more
+            if (latchedOnRightArm != OnRightArm(handleInGunHand))
+                return false;
             // Our own rechamber runs for a frame while the handle is back
             if (!(handleForFirearm.CurrentOperation is FirearmController.Idling) && expectedOperation != ExpectedOperation.Rechamber)
                 return false;
@@ -521,7 +528,8 @@ namespace TarkovVR.Source.Weapons
             Vector3 handDelta = LatchedHandRig.position - handleBone.TransformPoint(handAtHandleGrabInSlot);
             float handAlongTrack = Vector3.Dot(handDelta, axis);
 
-            float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !handleInGunHand ? underGunPullGain : 1f;
+            // Only the left hand reaches under the gun to a handle on the bolt (the right one is on that side)
+            float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !latchedOnRightArm ? underGunPullGain : 1f;
             handlePull = Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel);
             handleView.position = handleBone.TransformPoint(handleRestLocalPosition) + axis * handlePull;
             UpdateHandleNotch();

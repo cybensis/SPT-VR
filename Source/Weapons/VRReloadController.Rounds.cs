@@ -33,6 +33,7 @@ namespace TarkovVR.Source.Weapons
         public static bool RoundInGunHand => HoldingRound && roundInGunHand;
 
         private static bool roundInGunHand;
+        private static bool roundOnRightArm;                // the arm drawing that hand (OnRightArm), as it was at the grab
         private static bool previousGunHandGripState;
         private static Ammo heldRoundSource;               // the stack the round comes from (it stays there until it's loaded)
         private static GameObject heldRoundProp;
@@ -96,6 +97,7 @@ namespace TarkovVR.Source.Weapons
             heldRoundProp = prop;
             heldRoundFor = firearmController;
             roundInGunHand = gunHand;
+            roundOnRightArm = OnRightArm(gunHand);
             roundLoading = false;
             MeasureRound(prop);
             HoldingRound = true;
@@ -107,11 +109,12 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
+        // The hand you see: by the arm drawing it (OnRightArm), not the controller
         private static Vector3 HandPalm(bool gunHand)
         {
             if (!gunHand)
                 return OffHandPalm();
-            return VRGlobals.handsInteractionController != null ? VRGlobals.handsInteractionController.PalmOrigin(true) : VRGlobals.vrPlayer.RightHand.transform.position;
+            return VRGlobals.handsInteractionController != null ? VRGlobals.handsInteractionController.PalmOrigin(OnRightArm(gunHand)) : VRGlobals.vrPlayer.RightHand.transform.position;
         }
 
         private static void PulseRoundHand(bool gunHand, float amplitude, float duration, float delay = 0f)
@@ -192,6 +195,9 @@ namespace TarkovVR.Source.Weapons
             if (!enabled || !singleRoundLoading || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
                 return false;
             if (heldRoundProp == null || heldRoundSource == null || VRGlobals.firearmController == null || VRGlobals.firearmController != heldRoundFor)
+                return false;
+            // The gun went from one hand to the other: the arm holding it isn't this hand's any more
+            if (roundOnRightArm != OnRightArm(roundInGunHand))
                 return false;
             // The stack went somewhere else meanwhile (moved in the inventory, FIKA)
             return heldRoundSource.StackObjectsCount > 0 && heldRoundSource.Parent is GridItemAddress;
@@ -302,7 +308,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (!HoldingRound || heldRoundProp == null || VRGlobals.handsInteractionController == null)
                 return;
-            if (!VRGlobals.handsInteractionController.TryGetPinch(roundInGunHand, out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase))
+            if (!VRGlobals.handsInteractionController.TryGetPinch(roundOnRightArm, out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase))
                 return;
             Vector3 pinch = (thumbTip + indexTip) * 0.5f;
             Vector3 along = indexTip - indexBase;

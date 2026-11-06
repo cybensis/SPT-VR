@@ -61,6 +61,7 @@ namespace TarkovVR.Source.Weapons
         private static HeldMagazineSource palmedSource;
         private static PalmHold activePalmHold;
         private static bool palmedIsOld;                    // false = the new one, waiting while the hand pulls the gun's out
+        private static bool palmedOnRightArm;               // the arm holding it (OnRightArm): it's let go if that changes
         private static bool palmedLetGo;                    // the grip opened before the old one's move to the rig had landed
         private static Vector3 palmedPosition;              // where it sits in the hand
         private static Quaternion palmedRotation;
@@ -152,6 +153,8 @@ namespace TarkovVR.Source.Weapons
                 return RefusePalming("the gun's magazine is too big to palm");
 
             PoseForThisMagazine(palmHold.newMagazine, heldProp, propWellPointLocal, out palmedPosition, out palmedRotation);
+            ToOffHandPalm(heldProp, magazineView.Bone, ref palmedPosition, ref palmedRotation);
+            palmedOnRightArm = OffHandOnRightArm;
             palmedProp = heldProp;
             palmedMagazine = heldMagazine;
             palmedSource = heldSource;
@@ -210,6 +213,7 @@ namespace TarkovVR.Source.Weapons
 
             oldProp.transform.SetParent(HandBone(), worldPositionStays: true);
             PoseForThisMagazine(activePalmHold.oldMagazine, oldProp, propWellPointLocal, out Vector3 oldPosition, out Quaternion oldRotation);
+            ToOffHandPalm(oldProp, magazineWell, ref oldPosition, ref oldRotation);
 
             // The gun's model of it stays hidden until Tarkov removes it (as CommitHold, but this prop stays in the hand)
             pendingHiddenView = hiddenGunMagazineView;
@@ -257,6 +261,7 @@ namespace TarkovVR.Source.Weapons
             heldMagazine = magazine;
             heldForFirearm = firearmController;
             heldProp = prop;
+            heldOnRightArm = OffHandOnRightArm;
             magazineWell = magazineView != null ? magazineView.Bone : null;
             magazineLeftWell = true;
             onRail = false;
@@ -286,6 +291,7 @@ namespace TarkovVR.Source.Weapons
             {
                 freeHoldPosition = heldReloadGrip.insert.position;
                 freeHoldRotation = Quaternion.Euler(heldReloadGrip.insert.rotation);
+                ToOffHandPalm(prop, magazineWell, ref freeHoldPosition, ref freeHoldRotation);
                 magazineHandFingers = heldReloadGrip.insert.fingers ?? MAGAZINE_INSERT_FINGERS;
             }
             else
@@ -315,7 +321,7 @@ namespace TarkovVR.Source.Weapons
             }
 
             if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.firearmController == null
-                || VRGlobals.firearmController != palmedFor)
+                || VRGlobals.firearmController != palmedFor || palmedOnRightArm != OffHandOnRightArm)
             {
                 DropPalmedModel();
                 return;
