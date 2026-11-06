@@ -439,6 +439,8 @@ namespace TarkovVR.Source.Player.Interactions
             UpdateRightHandFingers();
             // That hand on the charging handle: the rack clip's finger pose on top
             VRReloadController.ApplyGunHandFingerPose();
+            // Left-handed stage 2 test (off by default): the gun hand's grip mirrored onto the free off hand
+            TarkovVR.Source.Player.Body.HandMirror.ApplyTest();
 
             // AFTER both finger updates: buffer the rendered joint locals for the FIKA finger sync
             // (VRArmSync sends them on its own cadence).
