@@ -189,8 +189,12 @@ namespace TarkovVR.Source.Graphics
 
         // An empty text is an enabled graphic with a rect that draws nothing (a raid's preloader 'Day' label, 2 m in front, empty).
         // TMP: its character count, not .text (SetText(char[]) can leave .text stale while characters draw); not laid out yet = draws.
+        // A Mask's own graphic with showMaskGraphic off only marks the stencil (its children are checked on their own): the wrist's
+        // 'Notifier', 58 x 15 cm at alpha 1, kept the camera on for minutes.
         private static bool DrawsNothing(Graphic graphic)
         {
+            if (graphic.TryGetComponent(out Mask mask) && mask.enabled && !mask.showMaskGraphic)
+                return true;
             if (graphic is TMPro.TMP_Text textMeshPro)
                 return textMeshPro.textInfo != null && textMeshPro.textInfo.characterCount == 0;
             if (graphic is Text text)
@@ -218,7 +222,10 @@ namespace TarkovVR.Source.Graphics
                 text = text.Substring(0, 40) + "...";
             Plugin.MyLog.LogInfo($"[UiCamGate] {what} '{(parent != null ? parent.name + "/" : "")}{canvas.name}' ({renderMode}): '{graphic.name}' "
                 + $"{graphic.GetType().Name}{(text != null ? $" text '{text}'" : "")}, {area.width * scale.x * 100f:0.#}x{area.height * scale.y * 100f:0.#} cm "
-                + $"{Vector3.Distance(head, rect.position):0.00} m from the eyes, alpha {graphic.color.a:0.##} x {canvasRenderer.GetAlpha():0.##} x {canvasRenderer.GetInheritedAlpha():0.##}");
+                + $"{Vector3.Distance(head, rect.position):0.00} m from the eyes, alpha {graphic.color.a:0.##} x {canvasRenderer.GetAlpha():0.##} x {canvasRenderer.GetInheritedAlpha():0.##}"
+                + (graphic is Image image ? $", sprite {(image.sprite != null ? $"'{image.sprite.name}'" : "none")} {image.type}{(image.type == Image.Type.Filled ? $" fill {image.fillAmount:0.##}" : "")}" : "")
+                + (graphic.TryGetComponent(out Mask mask) ? $", mask (shows its graphic: {mask.showMaskGraphic})" : "")
+                + $", material '{(graphic.materialForRendering != null ? graphic.materialForRendering.name : "none")}', depth {graphic.depth}");
         }
     }
 }
