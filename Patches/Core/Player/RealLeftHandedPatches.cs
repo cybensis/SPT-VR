@@ -156,15 +156,18 @@ namespace TarkovVR.Patches.Core.Player
             else
             {
                 // Off the gun: its own target, also for its own update later this frame. The hand on a magazine, a handle or a bolt
-                // (VRReloadController's latch, the off hand's on this arm then) keeps the latch as its target.
+                // (VRReloadController's latch, the off hand's on this arm then) keeps the latch as its target; on the scope's zoom dial,
+                // the dial grip (VROpticController.RightHandDialTarget).
                 if (!freeRightOn)
                 {
                     freeRightOn = true;
                     rightTargetOriginal = right.target;
                 }
                 freeRightTarget = freeTarget;
-                Transform latch = Source.Weapons.VRReloadController.ArmLatch(rightArm: true);
-                right.target = latch != null ? latch : freeTarget;
+                Transform held = Source.Weapons.VRReloadController.ArmLatch(rightArm: true);
+                if (held == null && VRGlobals.vrOpticController != null)
+                    held = VRGlobals.vrOpticController.RightHandDialTarget;
+                right.target = held != null ? held : freeTarget;
                 __instance._limbs[1].enabled = true;
             }
         }

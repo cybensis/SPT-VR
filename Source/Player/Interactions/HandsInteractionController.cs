@@ -57,8 +57,6 @@ namespace TarkovVR.Source.Player.Interactions
         private bool hasEnteredRigCollider = false;
         private bool hasEnteredLootCollider = false;
 
-        private bool cachedLeftHandedMode;
-        private float leftHandedModeCheckTimer;
         private float lastPhysicsCheckTime;
         private const float PHYSICS_CHECK_INTERVAL = 0.05f;
         private const float MaxHoldDistance = 0.35f;
@@ -91,8 +89,6 @@ namespace TarkovVR.Source.Player.Interactions
         // Called in Awake
         private void InitializeInteractions()
         {
-            cachedLeftHandedMode = VRSettings.GetLeftHandedMode();
-            leftHandedModeCheckTimer = 0f;
             lastPhysicsCheckTime = 0f;
             UpdateInputReferences();
         }
@@ -341,16 +337,9 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            if (Time.time > leftHandedModeCheckTimer)
-            {
-                cachedLeftHandedMode = VRSettings.GetLeftHandedMode();
-                leftHandedModeCheckTimer = Time.time + 0.1f;
-                UpdateInputReferences();
-            }
+            UpdateInputReferences();
 
-            float secondaryHandTriggerAxis = cachedLeftHandedMode ?
-                VRInput.RightTrigger.GetAxis(SteamVR_Input_Sources.Any) :
-                VRInput.LeftTrigger.GetAxis(SteamVR_Input_Sources.Any);
+            float secondaryHandTriggerAxis = Handedness.OffHandTrigger.GetAxis(SteamVR_Input_Sources.Any);
 
             // Handle laser pointer (only update when state changes)
             /*
@@ -502,7 +491,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void ProcessLeftHandInputs()
         {
-            float secondaryHandTriggerAmount = cachedLeftHandedMode ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
+            float secondaryHandTriggerAmount = Handedness.OffHandTrigger.axis;
 
             if (leftHandState.inBackpack)
             {
@@ -588,22 +577,16 @@ namespace TarkovVR.Source.Player.Interactions
 
             UpdateRightCorpseTap();
         }
+        // The hand holding the gun and the other one, as Handedness has them: the left-handed setting, or the gun in the left hand
+        // (the rig's hands, which leftHandState / rightHandState are read from, follow the controllers the same way). Every frame:
+        // the gun changes hands mid-play. By the setting alone, with the gun in the left hand the off hand's grip was the LEFT one,
+        // always held there: the scope zone never cleared and blocked the right hand's foregrip grab (headset).
         private void UpdateInputReferences()
         {
-            if (cachedLeftHandedMode)
-            {
-                primaryHandGrip = VRInput.LeftGrip;
-                secondaryHandGrip = VRInput.RightGrip;
-                primaryInputSource = SteamVR_Input_Sources.LeftHand;
-                secondaryInputSource = SteamVR_Input_Sources.RightHand;
-            }
-            else
-            {
-                primaryHandGrip = VRInput.RightGrip;
-                secondaryHandGrip = VRInput.LeftGrip;
-                primaryInputSource = SteamVR_Input_Sources.RightHand;
-                secondaryInputSource = SteamVR_Input_Sources.LeftHand;
-            }
+            primaryHandGrip = Handedness.GunHandGrip;
+            secondaryHandGrip = Handedness.OffHandGrip;
+            primaryInputSource = Handedness.GunHandSource;
+            secondaryInputSource = Handedness.OffHandSource;
         }
         private void UpdateCollisionStates()
         {

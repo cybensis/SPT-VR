@@ -123,7 +123,9 @@ namespace TarkovVR.Source.Weapons
 
             if (scopeXform != null && VRGlobals.vrPlayer?.LeftHand != null)
             {
-                Quaternion localHandRot = VRInput.LeftHandPose.GetLocalRotation(zoomSource);
+                // The off hand's own pose action: LeftHandPose asked for the right controller reads identity (the gun in the left
+                // hand / left-handed mode: the zoom then only followed the scope turning with the gun)
+                Quaternion localHandRot = Handedness.OffHandPose.GetLocalRotation(zoomSource);
                 Quaternion worldHandRot = VRGlobals.vrPlayer.LeftHand.transform.rotation;
                 trackingToWorldSpaceMatrix = worldHandRot * Quaternion.Inverse(localHandRot);
 
@@ -171,7 +173,7 @@ namespace TarkovVR.Source.Weapons
             if (scopeXform == null) return;
 
             var zoomSource = Handedness.OffHandSource;
-            Quaternion localHandRot = VRInput.LeftHandPose.GetLocalRotation(zoomSource);
+            Quaternion localHandRot = Handedness.OffHandPose.GetLocalRotation(zoomSource);
             Quaternion currentWorldHandRot = trackingToWorldSpaceMatrix * localHandRot;
 
             Vector3 handUpInScopeSpace = (Quaternion.Inverse(scopeXform.rotation) * currentWorldHandRot) * Vector3.up;
@@ -333,11 +335,37 @@ namespace TarkovVR.Source.Weapons
             var scopeXform = VRGlobals.handsInteractionController.scopeTransform;
 
             leftHand.rotation = scopeXform.rotation;
-            leftHand.Rotate(rotation, 160, -40);
+            leftHand.Rotate(Handedness.GunInLeftHand ? rotation * rightHandDialTwistSign : rotation, 160, -40);
             leftHand.position = scopeXform.position
                 + (scopeXform.right * -0.17f)
                 + (scopeXform.up * -0.02f)
                 + (scopeXform.forward * -0.05f);
+            PlaceRightHandOnDial(scopeXform, leftHand.position, leftHand.rotation);
+        }
+
+        // The gun in the left hand: the RIGHT hand grips the dial, its arm aimed at the left hand's dial pose mirrored across the gun's
+        // centre plane (RealLeftHandedPatches takes it as that arm's target while it's set; the rig's LeftHand, which the left arm
+        // follows, is the right controller's then). The mirror turns the hand the other way about axes in that plane: if the right
+        // hand on the dial turns against the wrist, flip rightHandDialTwistSign.
+        public static float rightHandDialTwistSign = 1f;
+        private Transform rightHandDial;
+        private int rightHandDialFrame = -10;
+
+        public Transform RightHandDialTarget => rightHandDial != null && Time.frameCount - rightHandDialFrame <= 1 ? rightHandDial : null;
+
+        private void PlaceRightHandOnDial(Transform scope, Vector3 leftPosition, Quaternion leftRotation)
+        {
+            if (!Handedness.GunInLeftHand || !TarkovVR.Patches.Core.Player.RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
+                return;
+            if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(leftRotation, planeNormal, rightToLeft: false, out Quaternion rightRotation))
+                return;
+            if (rightHandDial == null)
+                rightHandDial = new GameObject("VRRightHandDial").transform;
+            // On the scope, so it rides the gun if that moves later this frame
+            if (rightHandDial.parent != scope)
+                rightHandDial.SetParent(scope, worldPositionStays: false);
+            rightHandDial.SetPositionAndRotation(TarkovVR.Patches.Core.Player.RealLeftHandedPatches.ReflectPoint(leftPosition, planePoint, planeNormal), rightRotation);
+            rightHandDialFrame = Time.frameCount;
         }
 
         public bool SetScopeSensitivity()
