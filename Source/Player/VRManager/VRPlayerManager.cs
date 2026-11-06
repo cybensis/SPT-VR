@@ -484,26 +484,38 @@ namespace TarkovVR.Source.Player.VRManager
             VRInput.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
             VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
             VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+            // The mirrored mode flips the arms + gun (scale -1) and uses offsets tuned for that; the real one (Handedness.RealLeftHanded,
+            // test) flips nothing and mirrors the right-handed offsets onto the left controller instead (PlaceRightHandForGun / PlaceOffHand)
+            bool mirror = Handedness.MirrorLeftHanded;
+            Vector3 flip = mirror ? new Vector3(-1, 1, 1) : Vector3.one;
             if (VRGlobals.emptyHands)
-                VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
+                VRGlobals.emptyHands.localScale = flip;
             if (VRGlobals.ikManager && VRGlobals.ikManager.leftArmIk)
-                VRGlobals.ikManager.leftArmIk.transform.parent.localScale = new Vector3(-1, 1, 1);
-            mainHandRotOffset = leftHandedPrimaryHandRotOffset;
-            secondaryHandRotOffset = leftHandedOtherHandRotOffset;
+                VRGlobals.ikManager.leftArmIk.transform.parent.localScale = flip;
+            GunInteractionController heldGun = UnityEngine.Object.FindObjectOfType<GunInteractionController>();
+            if (heldGun != null && heldGun.transform.parent != null)
+                heldGun.transform.parent.localScale = flip;
+            mainHandRotOffset = mirror ? leftHandedPrimaryHandRotOffset : rightHandedPrimaryHandRotOffset;
+            secondaryHandRotOffset = mirror ? leftHandedOtherHandRotOffset : rightHandedOtherHandRotOffset;
 
-            mainHandPosOffset = leftHandedPrimaryHandPosOffset;
-            secondaryHandPosOffset = leftHandedOtherHandPosOffset;
+            mainHandPosOffset = mirror ? leftHandedPrimaryHandPosOffset : rightHandedPrimaryHandPosOffset;
+            secondaryHandPosOffset = mirror ? leftHandedOtherHandPosOffset : rightHandedOtherHandPosOffset;
 
             radialMenu.transform.localPosition = new Vector3(0.0172f, -0.1143f, -0.03f);
             radialMenu.transform.localEulerAngles = new Vector3(270, 127, 80);
 
             if (WeaponPatches.currentScope)
-                WeaponPatches.currentScope.parent.localScale = new Vector3(-1, 1, 1);
+                WeaponPatches.currentScope.parent.localScale = flip;
 
             if (VRGlobals.player)
             {
-                VRGlobals.player._elbowBends[0] = VRGlobals.rightArmBendGoal;
-                VRGlobals.player._elbowBends[1] = VRGlobals.leftArmBendGoal;
+                VRGlobals.player._elbowBends[0] = mirror ? VRGlobals.rightArmBendGoal : VRGlobals.leftArmBendGoal;
+                VRGlobals.player._elbowBends[1] = mirror ? VRGlobals.leftArmBendGoal : VRGlobals.rightArmBendGoal;
+            }
+            if (VRGlobals.leftArmBendGoal != null && VRGlobals.rightArmBendGoal != null)
+            {
+                VRGlobals.leftArmBendGoal.localPosition = mirror ? new Vector3(1, -2f, -0.8f) : new Vector3(-1, -2f, -0.8f);
+                VRGlobals.rightArmBendGoal.localPosition = mirror ? new Vector3(-2.5f, -2f, -0.8f) : new Vector3(2.5f, -2f, -0.8f);
             }
 
             if (UIPatches.quickSlotUi)
@@ -674,16 +686,43 @@ namespace TarkovVR.Source.Player.VRManager
 
         private void PlaceRightHandForGun(VRPose fromAction)
         {
-            RightHand.transform.localRotation = fromAction.localRotation;
-            RightHand.transform.Rotate(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
-            RightHand.transform.localPosition = (fromAction.localPosition + mainHandPosOffset) - fromAction.localRotation * Vector3.forward * controllerLength;
+            Quaternion offset = Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
+            // Real left-handed (test): the left controller holds the gun the way the right one does, mirrored. The controllers are mirror
+            // images across their own x, so the right-handed offset reflected through that plane; the gun itself isn't mirrored.
+            bool real = Handedness.RealLeftHanded;
+            RightHand.transform.localRotation = fromAction.localRotation * (real ? MirrorX(offset) : offset);
+            RightHand.transform.localPosition = (fromAction.localPosition + (real ? MirrorX(mainHandPosOffset) : mainHandPosOffset)) - fromAction.localRotation * Vector3.forward * controllerLength;
         }
+
+        // Real left-handed (test): where the RIGHT controller puts a right hand the right-handed way (the gun hand's offsets), in world
+        // space - the free support hand's target (RealLeftHandedPatches)
+        public bool RightControllerHandPose(out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (RightHand == null || RightHand.transform.parent == null)
+                return false;
+            Vector3 controllerPosition = VRInput.RightHandPose.GetLocalPosition(SteamVR_Input_Sources.RightHand);
+            Quaternion controllerRotation = VRInput.RightHandPose.GetLocalRotation(SteamVR_Input_Sources.RightHand);
+            Quaternion local = controllerRotation * Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + rightHandedPrimaryHandRotOffset.x,
+                rightHandedPrimaryHandRotOffset.y, rightHandedPrimaryHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
+            Vector3 localPosition = controllerPosition + rightHandedPrimaryHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
+            Transform rig = RightHand.transform.parent;
+            position = rig.TransformPoint(localPosition);
+            rotation = rig.rotation * local;
+            return true;
+        }
+
+        // A rotation / point reflected through the plane x = 0 (the controllers' own left-right mirror)
+        private static Quaternion MirrorX(Quaternion rotation) => new Quaternion(rotation.x, -rotation.y, -rotation.z, rotation.w);
+        private static Vector3 MirrorX(Vector3 point) => new Vector3(-point.x, point.y, point.z);
 
         private Vector3 OffHandPosition(VRPose fromAction)
         {
             if (AlignsFreeHands)
                 return fromAction.localPosition + fromAction.localRotation * freeLeftHandWrist;
-            return (fromAction.localPosition + secondaryHandPosOffset) - fromAction.localRotation * Vector3.forward * controllerLength;
+            Vector3 offset = Handedness.RealLeftHanded ? MirrorX(secondaryHandPosOffset) : secondaryHandPosOffset;
+            return (fromAction.localPosition + offset) - fromAction.localRotation * Vector3.forward * controllerLength;
         }
 
         public void PlaceOffHand(VRPose fromAction)
@@ -693,7 +732,10 @@ namespace TarkovVR.Source.Player.VRManager
             if (AlignsFreeHands)
                 LeftHand.transform.localRotation *= Quaternion.Euler(freeLeftHandRotation);
             else
-                LeftHand.transform.Rotate(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x, secondaryHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
+            {
+                Quaternion offset = Quaternion.Euler(VRSettings.GetSecondaryHandVertOffset() + secondaryHandRotOffset.x, secondaryHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + secondaryHandRotOffset.z);
+                LeftHand.transform.localRotation *= Handedness.RealLeftHanded ? MirrorX(offset) : offset;
+            }
         }
 
         // Runs at render time, so the bones hold this frame's final pose. Hold still to read it: the IK aimed at last frame's controller pose.

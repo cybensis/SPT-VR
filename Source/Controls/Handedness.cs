@@ -15,6 +15,26 @@ namespace TarkovVR.Source.Controls
     {
         public static bool LeftHanded => VRSettings.GetLeftHandedMode();
 
+        // Real left-handed mode, stage 2b test (live, left-handed mode on): the gun in the LEFT hand unmirrored - no mirror flips, the
+        // right-handed grip offsets mirrored onto the left controller, EFT's arms swapped onto mirrored targets and the fingers swapped
+        // (RealLeftHandedPatches, HandMirror). Off = today's mirrored left-handed mode. Setting it re-applies the left-handed setup.
+        private static bool realLeftHandedTest;
+        public static bool RealLeftHandedTest
+        {
+            get => realLeftHandedTest;
+            set
+            {
+                if (realLeftHandedTest == value)
+                    return;
+                realLeftHandedTest = value;
+                if (LeftHanded && VRGlobals.vrPlayer != null)
+                    VRGlobals.vrPlayer.LeftHandedMode();
+            }
+        }
+        public static bool RealLeftHanded => LeftHanded && realLeftHandedTest;
+        // Today's left-handed mode: the arms + gun mirrored (scale -1), everything right-handed underneath
+        public static bool MirrorLeftHanded => LeftHanded && !realLeftHandedTest;
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The controllers
 

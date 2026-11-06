@@ -11,6 +11,7 @@ using RootMotion.FinalIK;
 using Valve.VR;
 using EFT.InputSystem;
 using AnimationSystem;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Patches.Core.Player
 {
@@ -212,7 +213,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (__instance.Player == null || !__instance.Player.IsYourPlayer ||
                 VRGlobals.vrPlayer == null || VRGlobals.ikManager == null ||
-                VRSettings.GetLeftHandedMode())
+                Handedness.MirrorLeftHanded)
                 return true;
 
             // Base shoulder dimensions
@@ -410,7 +411,7 @@ namespace TarkovVR.Patches.Core.Player
 
             TarkovVR.Source.Player.VR.ArmLength.Apply();
 
-            bool on = naturalElbow && !VRSettings.GetLeftHandedMode();
+            bool on = naturalElbow && !Handedness.MirrorLeftHanded;
             // Elbow reference frame: the yaw OverrideShoulders placed the shoulders with this frame
             // (head-follow aware); body yaw when it didn't run (e.g. mounted/vanilla path).
             float yaw = shoulderYawFrame == Time.frameCount ? lastShoulderYaw : __instance.Transform.eulerAngles.y;
@@ -591,7 +592,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer || VRGlobals.ikManager == null)
                 return;
-            if (!naturalWrist || VRSettings.GetLeftHandedMode())
+            if (!naturalWrist || Handedness.MirrorLeftHanded)
                 return;
 
             ApplyWristTwist(VRGlobals.ikManager.leftArmIk, wristTwistTrimL, ref wristTauL, wristBindInitL, wristOff1L, wristOff2L, wristOff3L);

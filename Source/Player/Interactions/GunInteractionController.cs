@@ -126,7 +126,7 @@ public class GunInteractionController : MonoBehaviour
             rightHandsPositioner.gameObject.active = true; 
         }
         
-        if (VRSettings.GetLeftHandedMode()) { 
+        if (Handedness.MirrorLeftHanded) { 
             this.transform.parent.localScale = new Vector3(-1, 1, 1);
             
         }

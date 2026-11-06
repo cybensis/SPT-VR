@@ -81,6 +81,76 @@ namespace TarkovVR.Source.Player.Body
             }
         }
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Real left-handed mode (Handedness.RealLeftHanded, test)
+
+        private static readonly Matrix4x4 FlipX = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
+        private static Matrix4x4 palmRightToLeft, palmLeftToRight;
+        private static Quaternion[] swapLeft, swapRight;
+
+        // A palm's world rotation -> the OTHER palm's for its mirror image through a world plane (e.g. the gun's centre plane). The
+        // frame reflected through the plane, then turned into the other palm's bone frame by the rest poses:
+        //     mirrored = Reflection(plane) * palm * FlipX * (FlipX * fromRest^-1 * Reflection(mesh centre plane) * toRest)
+        // At rest, mirrored through the body's own centre plane, that is exactly the other palm's rest (same rule as the fingers).
+        public static bool TryMirrorPalm(Quaternion palmRotation, Vector3 planeNormal, bool rightToLeft, out Quaternion mirrored)
+        {
+            mirrored = palmRotation;
+            if (VRGlobals.player == null || !EnsureBones())
+                return false;
+            Matrix4x4 result = Reflection(planeNormal) * Matrix4x4.Rotate(palmRotation) * FlipX * (rightToLeft ? palmRightToLeft : palmLeftToRight);
+            mirrored = Quaternion.LookRotation(result.GetColumn(2), result.GetColumn(1));
+            return true;
+        }
+
+        // End of HandsInteractionController.LateUpdate, with RealLeftHandedPatches' arm swap: the gun's grip pose (animated on the right
+        // bones) onto the left hand now on the grip, the support pose onto the right
+        public static void ApplyRealLeftHanded()
+        {
+            if (TarkovVR.Source.Controls.Handedness.RealLeftHanded && VRGlobals.player != null && VRGlobals.firearmController != null
+                && !TarkovVR.Source.Player.Interactions.ChestHang.Detached)
+                SwapFingers();
+        }
+
+        // Both hands' fingers at once, each the mirror image of the other's (both read before either is written): the gun hand's grip
+        // shows on the hand now holding the gun, the support hand's pose on the other
+        public static void SwapFingers()
+        {
+            if (VRGlobals.player == null || !EnsureBones())
+                return;
+            int count = rightToLeft.Length;
+            if (swapLeft == null || swapLeft.Length != count)
+            {
+                swapLeft = new Quaternion[count];
+                swapRight = new Quaternion[count];
+            }
+            Quaternion rightPalmInverse = Quaternion.Inverse(rightPalm.rotation), leftPalmInverse = Quaternion.Inverse(leftPalm.rotation);
+            Quaternion rightPalmRestInverse = Quaternion.Inverse(rightPalmRest), leftPalmRestInverse = Quaternion.Inverse(leftPalmRest);
+            for (int index = 0; index < count; index++)
+            {
+                BonePair pair = rightToLeft[index];
+                Quaternion rightTurn = rightPalmRest * (rightPalmInverse * pair.from.rotation) * Quaternion.Inverse(pair.fromRest);
+                Quaternion leftTurn = leftPalmRest * (leftPalmInverse * pair.to.rotation) * Quaternion.Inverse(pair.toRest);
+                swapLeft[index] = leftPalmRestInverse * Reflect(rightTurn, centrePlaneNormal) * pair.toRest;
+                swapRight[index] = rightPalmRestInverse * Reflect(leftTurn, centrePlaneNormal) * pair.fromRest;
+            }
+            for (int index = 0; index < count; index++)
+            {
+                rightToLeft[index].to.rotation = leftPalm.rotation * swapLeft[index];
+                rightToLeft[index].from.rotation = rightPalm.rotation * swapRight[index];
+            }
+        }
+
+        // Reflection through the plane with this normal (through the origin)
+        private static Matrix4x4 Reflection(Vector3 normal)
+        {
+            normal.Normalize();
+            Matrix4x4 reflection = Matrix4x4.identity;
+            reflection.m00 = 1f - 2f * normal.x * normal.x; reflection.m01 = -2f * normal.x * normal.y; reflection.m02 = -2f * normal.x * normal.z;
+            reflection.m10 = -2f * normal.y * normal.x; reflection.m11 = 1f - 2f * normal.y * normal.y; reflection.m12 = -2f * normal.y * normal.z;
+            reflection.m20 = -2f * normal.z * normal.x; reflection.m21 = -2f * normal.z * normal.y; reflection.m22 = 1f - 2f * normal.z * normal.z;
+            return reflection;
+        }
+
         // A rotation seen in a mirror (reflection through the plane with this normal): same angle, axis reflected, turning the other way
         private static Quaternion Reflect(Quaternion rotation, Vector3 normal)
         {
@@ -143,6 +213,9 @@ namespace TarkovVR.Source.Player.Body
                 leftPalmRest = RestRotation(bindPoses[leftPalmIndex]);
                 rightToLeft = pairs.ToArray();
                 ReadCentrePlane(bindPoses[rightPalmIndex].inverse.GetColumn(3), bindPoses[leftPalmIndex].inverse.GetColumn(3));
+                Matrix4x4 rightRest = Matrix4x4.Rotate(rightPalmRest), leftRest = Matrix4x4.Rotate(leftPalmRest), meshMirror = Reflection(centrePlaneNormal);
+                palmRightToLeft = FlipX * rightRest.inverse * meshMirror * leftRest;
+                palmLeftToRight = FlipX * leftRest.inverse * meshMirror * rightRest;
                 Plugin.MyLog.LogInfo($"[HandMirror] hands on '{mesh.name}': {pairs.Count} finger joint pairs, centre plane normal {centrePlaneNormal} (mesh space)");
                 return true;
             }

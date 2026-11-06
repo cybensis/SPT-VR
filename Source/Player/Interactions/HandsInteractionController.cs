@@ -441,6 +441,8 @@ namespace TarkovVR.Source.Player.Interactions
             VRReloadController.ApplyGunHandFingerPose();
             // Left-handed stage 2 test (off by default): the gun hand's grip mirrored onto the free off hand
             TarkovVR.Source.Player.Body.HandMirror.ApplyTest();
+            // Real left-handed test (off by default): the gun in the left hand - both hands' fingers swapped onto their mirror images
+            TarkovVR.Source.Player.Body.HandMirror.ApplyRealLeftHanded();
 
             // AFTER both finger updates: buffer the rendered joint locals for the FIKA finger sync
             // (VRArmSync sends them on its own cadence).

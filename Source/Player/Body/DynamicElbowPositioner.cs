@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TarkovVR.Source.Settings;
 using UnityEngine;
+using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Body
 {
@@ -15,8 +16,9 @@ namespace TarkovVR.Source.Player.Body
         public Transform leftBendGoal;
         public Transform rightBendGoal;
 
-        private Vector3 leftBendGoalBasePos = VRSettings.GetLeftHandedMode() ? new Vector3(1, -2f, -0.8f) : new Vector3(-1, -2f, -0.8f);
-        private Vector3 rightBendGoalBasePos = VRSettings.GetLeftHandedMode() ? new Vector3(-2.5f, -2f, -0.8f) : new Vector3(2.5f, -2f, -0.8f);
+        // The mirrored left-handed mode swaps the sides (its arms are scaled -1); a real one, like right-handed, does not
+        private Vector3 leftBendGoalBasePos => Handedness.MirrorLeftHanded ? new Vector3(1, -2f, -0.8f) : new Vector3(-1, -2f, -0.8f);
+        private Vector3 rightBendGoalBasePos => Handedness.MirrorLeftHanded ? new Vector3(-2.5f, -2f, -0.8f) : new Vector3(2.5f, -2f, -0.8f);
 
         public float elbowOffsetMultiplier = 0.12f;
         public float smoothSpeed = 8f;
@@ -88,7 +90,7 @@ namespace TarkovVR.Source.Player.Body
         Vector3 CalculateElbowPosition(float wristTwist, Vector3 basePos, bool isLeftHand, bool oneSidedClamp)
         {
             float elbowOffset = wristTwist * elbowOffsetMultiplier;
-            bool isLeftHandedMode = VRSettings.GetLeftHandedMode();
+            bool isLeftHandedMode = Handedness.MirrorLeftHanded;
 
             // Apply the base inversion for right hand
             if (!isLeftHand)

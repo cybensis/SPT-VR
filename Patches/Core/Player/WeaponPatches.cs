@@ -118,7 +118,7 @@ namespace TarkovVR.Patches.Core.Player
                 return;
             VRGlobals.firearmController = null;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
-            if (VRSettings.GetLeftHandedMode())
+            if (Handedness.MirrorLeftHanded)
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             VRGlobals.player = __instance._player;
 
@@ -192,7 +192,7 @@ namespace TarkovVR.Patches.Core.Player
             rangeFinder = instance;
             instance._rangeFinderController._boneToCastRay.parent.Find("linza").gameObject.SetActive(false);
             VRGlobals.emptyHands = instance.ControllerGameObject.transform;
-            if (VRSettings.GetLeftHandedMode())
+            if (Handedness.MirrorLeftHanded)
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             if (__instance.WeaponRoot.parent.name != "weaponHolder")
             {
@@ -456,7 +456,7 @@ namespace TarkovVR.Patches.Core.Player
             
             VRGlobals.player = __instance._player;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
-            if (VRSettings.GetLeftHandedMode())
+            if (Handedness.MirrorLeftHanded)
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             knifeTransform = VRGlobals.emptyHands;
             VRGlobals.usingItem = false;
@@ -848,7 +848,7 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.firearmController = __instance;
             VRGlobals.player = __instance._player;
             VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
-            if (VRSettings.GetLeftHandedMode())
+            if (Handedness.MirrorLeftHanded)
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             VRGlobals.usingItem = false;
 
@@ -1286,7 +1286,7 @@ namespace TarkovVR.Patches.Core.Player
                 VRGlobals.vrOpticController.scopeCamera = __instance.opticCamera;
                 currentScope = __instance.cameraPivot;
 
-                if (VRSettings.GetLeftHandedMode())
+                if (Handedness.MirrorLeftHanded)
                     currentScope.parent.localScale = new Vector3(-1, 1, 1);
 
                 string scopeName = opticSight.name;
@@ -1719,7 +1719,7 @@ namespace TarkovVR.Patches.Core.Player
                 {
                     VRGlobals.emptyHands = __instance._controllerObject.transform;
 
-                    if (VRSettings.GetLeftHandedMode())
+                    if (Handedness.MirrorLeftHanded)
                         VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
                 }
                 
