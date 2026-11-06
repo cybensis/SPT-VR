@@ -424,9 +424,7 @@ namespace TarkovVR.ModSupport.FIKA
         {
             EQuitState quitState = __instance.QuitState;
             // Check VR button press (B for right-handed, Y for left-handed)
-            bool vrExtractPressed = VRSettings.GetLeftHandedMode()
-                ? VRInput.ButtonY.stateDown
-                : VRInput.ButtonB.stateDown;
+            bool vrExtractPressed = Handedness.GunHandUpperButton.stateDown;
 
             if (!vrExtractPressed || quitState == EQuitState.None || __instance._requestQuitGame)
                 return false;

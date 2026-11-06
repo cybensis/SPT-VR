@@ -381,13 +381,11 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void Pulse(float duration, float freq, float amp)
         {
-            SteamVR_Input_Sources gunHand = VRSettings.GetLeftHandedMode()
-                ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
+            SteamVR_Input_Sources gunHand = Handedness.GunHandSource;
             VRInput.Haptic.Execute(0f, duration, freq, amp, gunHand);
             if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting)
             {
-                SteamVR_Input_Sources offHand = VRSettings.GetLeftHandedMode()
-                    ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
+                SteamVR_Input_Sources offHand = Handedness.OffHandSource;
                 VRInput.Haptic.Execute(0f, duration, freq, amp * 0.7f, offHand);
             }
         }

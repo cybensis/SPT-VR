@@ -41,7 +41,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (player == null || firearmController == null || !ReferenceEquals(player.HandsController, firearmController)
                 || WeaponPatches.grenadeEquipped || ChestHang.Detached)
                 return false;
-            VRSingle trigger = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger : VRInput.RightTrigger;
+            VRSingle trigger = Handedness.GunHandTrigger;
             if (!trigger.TryGetTouch(out bool touched))
                 return false;
             return !touched && trigger.axis < 0.05f;

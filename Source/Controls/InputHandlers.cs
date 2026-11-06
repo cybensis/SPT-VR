@@ -324,9 +324,7 @@ namespace TarkovVR.Source.Controls
                 // a press drops the magazine, held it lets the off hand pull it out), never Tarkov's reload
                 bool manualReload = VRReloadController.ManualReloadActive();
 
-                bool reloadButton = VRSettings.GetLeftHandedMode()
-                    ? VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any)
-                    : VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
+                bool reloadButton = Handedness.GunHandUpperButton.GetStateDown(SteamVR_Input_Sources.Any);
 
                 if (reloadButton)
                 {
@@ -396,9 +394,7 @@ namespace TarkovVR.Source.Controls
                 if (VRGlobals.firearmController == null && !WeaponPatches.rangeFinder)
                     return;
 
-                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode()
-                    ? VRInput.LeftTrigger.axis
-                    : VRInput.RightTrigger.axis;
+                float primaryHandTriggerAmount = Handedness.GunHandTrigger.axis;
 
                 if (WeaponPatches.rangeFinder)
                 {
@@ -571,7 +567,7 @@ namespace TarkovVR.Source.Controls
                 if (WeaponPatches.grenadeEquipped || VRGlobals.switchingWeapon)
                     return;
 
-                float primaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis : VRInput.RightTrigger.axis;
+                float primaryHandTriggerAmount = Handedness.GunHandTrigger.axis;
                 bool detached = TarkovVR.Source.Player.Interactions.ChestHang.Detached;
 
                 // No trigger finger on the grip (slung, or support-hand-only hold) = no firing; if the
@@ -666,7 +662,7 @@ namespace TarkovVR.Source.Controls
                 if (!VRGlobals.firearmController)
                     return;
 
-                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
+                float secondaryHandTriggerAmount = Handedness.OffHandTrigger.axis;
                 bool isAiming = VRGlobals.firearmController.IsAiming;
                 var physical = VRGlobals.player.Physical;
 
@@ -708,9 +704,9 @@ namespace TarkovVR.Source.Controls
             {
                 if (!VRGlobals.player)
                     return;
-                VRBoolean UBGLButtonAction = VRSettings.GetLeftHandedMode() ? VRInput.ButtonA : VRInput.ButtonX;
-                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
-                bool cancelGrenadeButtonClick = (VRSettings.GetLeftHandedMode() ? VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any));
+                VRBoolean UBGLButtonAction = Handedness.OffHandLowerButton;
+                float secondaryHandTriggerAmount = Handedness.OffHandTrigger.axis;
+                bool cancelGrenadeButtonClick = (Handedness.GunHandUpperButton.GetStateDown(SteamVR_Input_Sources.Any));
                 bool UBGLButtonDown = UBGLButtonAction.state;
 
                 if ((swapPrimaryWeapon) || swapWeapon || (WeaponPatches.grenadeEquipped && cancelGrenadeButtonClick))
@@ -872,9 +868,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                bool changeFireModeButtonClick = VRSettings.GetLeftHandedMode()
-                    ? VRInput.ButtonX.GetStateDown(SteamVR_Input_Sources.Any)
-                    : VRInput.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
+                bool changeFireModeButtonClick = Handedness.GunHandLowerButton.GetStateDown(SteamVR_Input_Sources.Any);
 
                 if (changeFireMode)
                 {
@@ -952,8 +946,8 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                bool interactButtonUp = VRSettings.GetLeftHandedMode() ? VRInput.ButtonX.GetStateDown(SteamVR_Input_Sources.Any) : VRInput.ButtonA.GetStateDown(SteamVR_Input_Sources.Any);
-                bool interactButtonDown = VRSettings.GetLeftHandedMode() ? VRInput.ButtonX.GetStateUp(SteamVR_Input_Sources.Any) : VRInput.ButtonA.GetStateUp(SteamVR_Input_Sources.Any);
+                bool interactButtonUp = Handedness.GunHandLowerButton.GetStateDown(SteamVR_Input_Sources.Any);
+                bool interactButtonDown = Handedness.GunHandLowerButton.GetStateUp(SteamVR_Input_Sources.Any);
 
                 // Off-hand trigger executes a reach-selected weapon part (offHandInteract), mirroring
                 // the A-button's edge mapping. Gated on a part being selected - the off trigger
@@ -964,7 +958,7 @@ namespace TarkovVR.Source.Controls
                     && WeaponPatches.currentGunInteractController != null
                     && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1)
                 {
-                    float t = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
+                    float t = Handedness.OffHandTrigger.axis;
                     bool down = t > 0.5f;
                     offTriggerPress = down && !offTriggerWasDown;
                     offTriggerRelease = !down && offTriggerWasDown;
@@ -986,8 +980,8 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
-                bool inventoryButtonUp = VRSettings.GetLeftHandedMode() ? VRInput.ButtonA.GetStateUp(SteamVR_Input_Sources.Any) : VRInput.ButtonX.GetStateUp(SteamVR_Input_Sources.Any);
-                float secondaryHandTriggerAmount = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
+                bool inventoryButtonUp = Handedness.OffHandLowerButton.GetStateUp(SteamVR_Input_Sources.Any);
+                float secondaryHandTriggerAmount = Handedness.OffHandTrigger.axis;
 
                 if (inventoryButtonUp && secondaryHandTriggerAmount < 0.1f)
                     command = ECommand.ToggleInventory;
@@ -1020,13 +1014,9 @@ namespace TarkovVR.Source.Controls
                     }
                 }
 
-                float primaryTrigger = VRSettings.GetLeftHandedMode()
-                    ? VRInput.LeftTrigger.axis
-                    : VRInput.RightTrigger.axis;
+                float primaryTrigger = Handedness.GunHandTrigger.axis;
 
-                float secondaryTrigger = VRSettings.GetLeftHandedMode()
-                    ? VRInput.RightTrigger.axis
-                    : VRInput.LeftTrigger.axis;
+                float secondaryTrigger = Handedness.OffHandTrigger.axis;
 
                 if (primaryTrigger < 0.5f && grenadePinResetting)
                 {
@@ -1117,9 +1107,7 @@ namespace TarkovVR.Source.Controls
 
             private void HandleTripwireToggle(GrenadeHandsController grenadeController)
             {
-                VRBoolean plantButton = VRSettings.GetLeftHandedMode()
-                    ? VRInput.ButtonX
-                    : VRInput.ButtonA;
+                VRBoolean plantButton = Handedness.GunHandLowerButton;
 
                 if (plantButton.state)
                 {
@@ -1141,9 +1129,7 @@ namespace TarkovVR.Source.Controls
 
             private void HandleTripwirePlacement(GrenadeHandsController grenadeController)
             {
-                float primaryTrigger = VRSettings.GetLeftHandedMode()
-                    ? VRInput.LeftTrigger.axis
-                    : VRInput.RightTrigger.axis;
+                float primaryTrigger = Handedness.GunHandTrigger.axis;
 
                 if (!tripwireFireHeld && primaryTrigger > 0.5f)
                 {
@@ -1166,7 +1152,7 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                VRBoolean tacticalButtonAction = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB : VRInput.ButtonY;
+                VRBoolean tacticalButtonAction = Handedness.OffHandUpperButton;
 
                 // Only with the hand on the foregrip: the same grip also holds magazines and loot
                 bool tacticalButtonDown = tacticalButtonAction.state && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
@@ -1211,9 +1197,9 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
-                bool escapeButtonUp = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any) : VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any);
-                bool backButtonUp = VRSettings.GetLeftHandedMode() ? VRInput.ButtonY.GetStateDown(SteamVR_Input_Sources.Any) : VRInput.ButtonB.GetStateDown(SteamVR_Input_Sources.Any);
-                VRBoolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.RightGrip : VRInput.LeftGrip;
+                bool escapeButtonUp = Handedness.OffHandUpperButton.GetStateDown(SteamVR_Input_Sources.Any);
+                bool backButtonUp = Handedness.GunHandUpperButton.GetStateDown(SteamVR_Input_Sources.Any);
+                VRBoolean secondaryGripState = Handedness.OffHandGrip;
 
                 if (secondaryGripState.state && !VRGlobals.menuOpen)
                     return;

@@ -256,8 +256,8 @@ namespace TarkovVR.Source.Player.VRManager
 
         private static void Pulse()
         {
-            SteamVR_Input_Sources gunHand = VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
-            SteamVR_Input_Sources offHand = VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
+            SteamVR_Input_Sources gunHand = Handedness.GunHandSource;
+            SteamVR_Input_Sources offHand = Handedness.OffHandSource;
             VRInput.Haptic.Execute(0f, 0.06f, 110f, 0.5f, gunHand);
             VRInput.Haptic.Execute(0f, 0.06f, 110f, 0.35f, offHand);
         }

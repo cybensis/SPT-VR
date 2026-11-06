@@ -119,7 +119,7 @@ namespace TarkovVR.Source.Weapons
             if (!gunHand)
                 Pulse(amplitude, duration, delay);
             else if (haptics)
-                VRInput.Haptic.Execute(delay, duration, 120f, amplitude, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand);
+                VRInput.Haptic.Execute(delay, duration, 120f, amplitude, Handedness.GunHandSource);
         }
 
         // A loose stack (in a container's grid: not the rounds in another magazine) the gun takes, the type already in it first

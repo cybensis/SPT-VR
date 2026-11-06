@@ -750,13 +750,13 @@ namespace TarkovVR.Source.Player.VRManager
             // Last frame's free pose overwrote RightHand; the code below reads it as the gun's frame (two-hand aim, weight filter)
             if (rightHandPlacedFree)
                 PlaceRightHandForGun(fromAction);
-            VRBoolean primaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.LeftGrip : VRInput.RightGrip;
+            VRBoolean primaryGripState = Handedness.GunHandGrip;
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockLeftJoystick : VRGlobals.blockRightJoystick;
             // If the joystick is being blocked but the right grip isn't down, keep the joystick blocked until they stop pushing it beyond a certain threshold so the player
             // doesn't immediately move forward after selecting something from the radial menu
             if (blockJoystick && !primaryGripState.state)
             {
-                Vector2 joystickInput = (VRSettings.GetLeftHandedMode()) ? VRInput.LeftJoystick.axis : VRInput.RightJoystick.axis;
+                Vector2 joystickInput = Handedness.GunHandJoystick.axis;
                 if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
                 {
                     if (VRSettings.GetLeftHandedMode())
@@ -989,7 +989,7 @@ namespace TarkovVR.Source.Player.VRManager
         private void UpdateLeftHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
         {
             leftHandYRotation = fromAction.localRotation.eulerAngles.y;
-            VRBoolean secondaryGripState = (VRSettings.GetLeftHandedMode()) ? VRInput.RightGrip : VRInput.LeftGrip;
+            VRBoolean secondaryGripState = Handedness.OffHandGrip;
 
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockRightJoystick : VRGlobals.blockLeftJoystick;
 
@@ -1008,7 +1008,7 @@ namespace TarkovVR.Source.Player.VRManager
             // doesn't immediately move forward after selecting something from the radial menu
             if (blockJoystick && !secondaryGripState.state)
             {
-                Vector2 joystickInput = (VRSettings.GetLeftHandedMode()) ? VRInput.RightJoystick.axis : VRInput.LeftJoystick.axis;
+                Vector2 joystickInput = Handedness.OffHandJoystick.axis;
                 if (Mathf.Abs(joystickInput.x) < 0.2f && Mathf.Abs(joystickInput.y) < 0.2)
                 {
                     if (VRSettings.GetLeftHandedMode())
@@ -1077,7 +1077,7 @@ namespace TarkovVR.Source.Player.VRManager
                     if (!hapticTriggered)
                     {
                         hapticTriggered = true;
-                        VRInput.Haptic.Execute(0, 0.25f, 1, 0.4f, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);                       
+                        VRInput.Haptic.Execute(0, 0.25f, 1, 0.4f, Handedness.OffHandSource);                       
                     }
                 }
                 else if (!isSupporting)

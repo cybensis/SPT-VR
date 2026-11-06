@@ -258,10 +258,10 @@ namespace TarkovVR.Source.Weapons
         public static void Tick()
         {
             // Resync the grip edge after skipped frames so a held grip doesn't read as a fresh press
-            VRBoolean offHandGrip = VRSettings.GetLeftHandedMode() ? VRInput.RightGrip : VRInput.LeftGrip;
+            VRBoolean offHandGrip = Handedness.OffHandGrip;
             bool gripState = offHandGrip.state;
             // The gun hand's grip: a single round in that hand (VRReloadController.Rounds)
-            VRBoolean gunHandGrip = VRSettings.GetLeftHandedMode() ? VRInput.LeftGrip : VRInput.RightGrip;
+            VRBoolean gunHandGrip = Handedness.GunHandGrip;
             bool gunHandGripState = gunHandGrip.state;
             if (Time.frameCount - lastTickFrame > 1)
             {
@@ -277,7 +277,7 @@ namespace TarkovVR.Source.Weapons
             previousGunHandGripState = gunHandGripState;
 
             // The off-hand trigger works the charging handle (the same 0.5 / 0.35 hysteresis as the other trigger reads)
-            float offHandTrigger = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
+            float offHandTrigger = Handedness.OffHandTrigger.axis;
             bool triggerResumed = Time.frameCount - lastTriggerTickFrame > 1;
             if (triggerResumed)
                 previousTriggerState = offHandTrigger > 0.5f;
@@ -288,7 +288,7 @@ namespace TarkovVR.Source.Weapons
             previousTriggerState = triggerState;
 
             // The gun hand's trigger works the handle too, once that hand is off the grip (it can't fire then)
-            float gunHandTrigger = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis : VRInput.RightTrigger.axis;
+            float gunHandTrigger = Handedness.GunHandTrigger.axis;
             if (triggerResumed)
                 previousGunHandTriggerState = gunHandTrigger > 0.5f;
             bool gunHandTriggerState = previousGunHandTriggerState ? gunHandTrigger > 0.35f : gunHandTrigger > 0.5f;
@@ -444,13 +444,13 @@ namespace TarkovVR.Source.Weapons
             return GunHandReleaseButton.state;
         }
 
-        private static VRBoolean GunHandReleaseButton => VRSettings.GetLeftHandedMode() ? VRInput.ButtonY : VRInput.ButtonB;
+        private static VRBoolean GunHandReleaseButton => Handedness.GunHandUpperButton;
 
         // A paddle catch is the off thumb's, on the off controller's button: only with that hand on the magazine (off it, the
         // same button is the flashlight or Tarkov's Escape)
         private static bool OffHandReleaseHeld()
         {
-            VRBoolean thumbButton = VRSettings.GetLeftHandedMode() ? VRInput.ButtonB : VRInput.ButtonY;
+            VRBoolean thumbButton = Handedness.OffHandUpperButton;
             return thumbButton.state && ((HoldingGunMagazine && onRail) || HoldingSeatedMagazine);
         }
 
@@ -2004,7 +2004,7 @@ namespace TarkovVR.Source.Weapons
 
         private static SteamVR_Input_Sources OffHandSource()
         {
-            return VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
+            return Handedness.OffHandSource;
         }
 
         private static void Pulse(float amplitude, float duration, float delay = 0f)
@@ -2028,7 +2028,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (!haptics)
                 return;
-            SteamVR_Input_Sources gunHand = VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
+            SteamVR_Input_Sources gunHand = Handedness.GunHandSource;
             VRInput.Haptic.Execute(0f, duration, 120f, amplitude, gunHand);
         }
 

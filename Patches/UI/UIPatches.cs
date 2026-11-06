@@ -1125,7 +1125,7 @@ namespace TarkovVR.Patches.UI
         private static bool FixAcceptItem(GridView __instance, DragItemContext itemContext, ItemContext targetItemContext, ref Task __result)
         {
             // Modify the flag argument based on your logic
-            bool flag = VRSettings.GetLeftHandedMode() ? VRInput.LeftGrip.state : VRInput.RightGrip.state;
+            bool flag = Handedness.GunHandGrip.state;
 
             // Call the original method with the modified flag
             __result = AcceptItemModified(__instance, itemContext, targetItemContext, flag);
@@ -1280,7 +1280,7 @@ namespace TarkovVR.Patches.UI
             {
                 return false;
             }
-            bool partialTransferOnly = VRSettings.GetLeftHandedMode() ? VRInput.LeftGrip.state : VRInput.RightGrip.state;
+            bool partialTransferOnly = Handedness.GunHandGrip.state;
             if (item.CheckAction(gClass).Failed)
             {
                 return false;

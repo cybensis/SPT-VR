@@ -816,8 +816,7 @@ namespace TarkovVR.Source.Player.Interactions
         // is rotation-frozen while supporting (UpdateLeftHand only writes position then).
         private static Quaternion SupportControllerRot(Transform lh)
         {
-            var pose = VRSettings.GetLeftHandedMode()
-                ? VRInput.RightHandPose : VRInput.LeftHandPose;
+            var pose = Handedness.OffHandPose;
             return (lh.parent != null ? lh.parent.rotation : Quaternion.identity) * pose.localRotation;
         }
 
@@ -901,8 +900,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         internal static void Pulse(float amp)
         {
-            SteamVR_Input_Sources gunHand = VRSettings.GetLeftHandedMode()
-                ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
+            SteamVR_Input_Sources gunHand = Handedness.GunHandSource;
             VRInput.Haptic.Execute(0f, 0.07f, 95f, amp, gunHand);
         }
     }

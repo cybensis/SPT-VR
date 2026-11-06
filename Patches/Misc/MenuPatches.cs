@@ -476,9 +476,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(SimpleContextMenu), "Update")]
         private static void CloseContextMenu(SimpleContextMenu __instance)
         {
-            VRBoolean actionButton = VRSettings.GetLeftHandedMode()
-                ? VRInput.ButtonX
-                : VRInput.ButtonA;
+            VRBoolean actionButton = Handedness.GunHandLowerButton;
 
             if (vrUiInteracter != null && vrUiInteracter.hitObject != null &&
                 vrUiInteracter.hitObject.transform.IsChildOf(__instance.transform))

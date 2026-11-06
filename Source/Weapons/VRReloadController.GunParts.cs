@@ -796,7 +796,7 @@ namespace TarkovVR.Source.Weapons
 
         private static SteamVR_Input_Sources GunHandSource()
         {
-            return VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
+            return Handedness.GunHandSource;
         }
 
         // A locked-back bolt runs forward, unless an empty magazine on an empty chamber holds it (its follower keeps the

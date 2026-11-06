@@ -73,8 +73,8 @@ namespace TarkovVR.Source.Weapons
         // Haptic plays on whichever hand is performing the zoom action
         private SteamVR_Input_Sources HapticHand =>
             joystickZooming
-                ? (VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand)
-                : (VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
+                ? (Handedness.GunHandSource)
+                : (Handedness.OffHandSource);
 
         public void Awake()
         {
@@ -118,7 +118,7 @@ namespace TarkovVR.Source.Weapons
 
             joystickZooming = false;
 
-            var zoomSource = VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
+            var zoomSource = Handedness.OffHandSource;
             Transform scopeXform = VRGlobals.handsInteractionController?.scopeTransform;
 
             if (scopeXform != null && VRGlobals.vrPlayer?.LeftHand != null)
@@ -170,7 +170,7 @@ namespace TarkovVR.Source.Weapons
             Transform scopeXform = VRGlobals.handsInteractionController?.scopeTransform;
             if (scopeXform == null) return;
 
-            var zoomSource = VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
+            var zoomSource = Handedness.OffHandSource;
             Quaternion localHandRot = VRInput.LeftHandPose.GetLocalRotation(zoomSource);
             Quaternion currentWorldHandRot = trackingToWorldSpaceMatrix * localHandRot;
 
@@ -215,9 +215,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (!scopeCamera) return;
 
-            float input = VRSettings.GetLeftHandedMode()
-                ? VRInput.LeftJoystick.axis.y
-                : VRInput.RightJoystick.axis.y;
+            float input = Handedness.GunHandJoystick.axis.y;
 
             if (VRGlobals.scopes.Any(s => s != null && s.parent != null
                                            && s.parent.name.Contains("scope_all_eotech_hhs_1")))

@@ -35,7 +35,7 @@ namespace TarkovVR.Source.UI
             if (dragTriggerFrame != Time.frameCount)
             {
                 dragTriggerFrame = Time.frameCount;
-                float axis = VRSettings.GetLeftHandedMode() ? VRInput.LeftTrigger.axis : VRInput.RightTrigger.axis;
+                float axis = Handedness.GunHandTrigger.axis;
                 dragTriggerHeld = dragTriggerHeld ? axis > dragTriggerRelease : axis >= dragTriggerPress;
             }
             return dragTriggerHeld;
@@ -90,7 +90,7 @@ namespace TarkovVR.Source.UI
         //}
         public void Update()
         {
-            float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? VRInput.LeftJoystick.axis.x : VRInput.RightJoystick.axis.x;
+            float primaryHandJoystickAxis = Handedness.GunHandJoystick.axis.x;
 
             if (dragObject != null && Mathf.Abs(primaryHandJoystickAxis) > 0.7)
             {
@@ -177,9 +177,7 @@ namespace TarkovVR.Source.UI
 
         private void handleButtonClick(Vector2 hitPoint)
         {
-            VRBoolean actionButton = VRSettings.GetLeftHandedMode()
-                ? VRInput.ButtonX
-                : VRInput.ButtonA;
+            VRBoolean actionButton = Handedness.GunHandLowerButton;
 
             bool isPointerClick = !hitObject.GetComponent<EmptyItemView>();
 
@@ -243,7 +241,7 @@ namespace TarkovVR.Source.UI
         }
         private void handleUIScrollwheel()
         {
-            float primaryHandJoystickAxis = VRSettings.GetLeftHandedMode() ? VRInput.LeftJoystick.axis.y : VRInput.RightJoystick.axis.y;
+            float primaryHandJoystickAxis = Handedness.GunHandJoystick.axis.y;
             if (Mathf.Abs(primaryHandJoystickAxis) > 0.4 && hitObject.GetComponentInParent<ScrollRectNoDrag>() != null)
             {
                 eventData.scrollDelta = new Vector2(0, primaryHandJoystickAxis / 1.5f);
@@ -267,7 +265,7 @@ namespace TarkovVR.Source.UI
             // not an object they selected then moved off from.
             if (DragTriggerHeld())
             {
-                VRBoolean cancelButton = (VRSettings.GetLeftHandedMode()) ? VRInput.ButtonY : VRInput.ButtonB;
+                VRBoolean cancelButton = Handedness.GunHandUpperButton;
 
                 if (dragObject == null)
                 {
@@ -333,9 +331,7 @@ namespace TarkovVR.Source.UI
         private void HandleOffPanelDrag()
         {
             bool triggerHeld = DragTriggerHeld();
-            VRBoolean cancelButton = VRSettings.GetLeftHandedMode()
-                ? VRInput.ButtonY
-                : VRInput.ButtonB;
+            VRBoolean cancelButton = Handedness.GunHandUpperButton;
 
             if (cancelButton.stateUp)
             {

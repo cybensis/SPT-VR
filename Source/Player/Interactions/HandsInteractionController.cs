@@ -1537,7 +1537,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void HandleScopeInteraction()
         {
-            VRBoolean secondaryHandGrip = (VRSettings.GetLeftHandedMode()) ? VRInput.RightGrip : VRInput.LeftGrip;
+            VRBoolean secondaryHandGrip = Handedness.OffHandGrip;
 
             if (VRGlobals.menuOpen)
                 return;
@@ -1547,7 +1547,7 @@ namespace TarkovVR.Source.Player.Interactions
                 isInRange = true;
                 if (!hasEnteredScope)
                 {
-                    VRInput.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, (VRSettings.GetLeftHandedMode()) ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
+                    VRInput.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, Handedness.OffHandSource);
                     hasEnteredScope = true;
                 }
             }
