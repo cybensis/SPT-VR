@@ -144,6 +144,14 @@ namespace TarkovVR.Patches.Visuals
             Plugin.MyLog.LogInfo($"[SSAAFlip] frame {Time.frameCount}: '{(camera != null ? camera.name : "?")}' (depth {(camera != null ? camera.depth : 0f):0}) final image into {kind} - flipped {__instance.FlippedV}");
         }
 
+        // The desktop window drawn right where the game camera's picture is finished, when nothing draws over it (DesktopMirror)
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SSAAImpl), "OnRenderImage")]
+        private static void DesktopWindowAfterFinalImage(SSAAImpl __instance, RenderTexture destination)
+        {
+            TarkovVR.Source.Graphics.DesktopMirror.AfterFinalImage(__instance._currentCamera, destination);
+        }
+
         // An enabled headset camera that draws into the eye images after this one (higher depth, no texture of its own): uiCam
         private static Camera LaterEyeCamera(Camera current)
         {

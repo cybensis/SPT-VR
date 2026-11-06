@@ -14,10 +14,10 @@ namespace TarkovVR.Source.Graphics
     // is looked up in the eye image through that eye's own view and projection. Rotation only: where the eye was is what the
     // image shows. Field of view (across, and up if set apart from the window's shape: that squashes the picture), smoothing and
     // a downward tilt of the view: VR Graphics sliders.
-    // Drawn by a camera of our own that renders nothing and comes last of the cameras: after the eyes, before the screen overlays
-    // (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end of the frame covered. A frame that camera didn't
-    // draw (headset: it never drew, the window stayed Unity's mirror: why is logged once) is drawn at the very end of the frame
-    // instead, the way it was first built.
+    // Drawn after the eyes, before the screen overlays (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end
+    // of the frame covered: where the chosen eye's picture is finished (drawAfterEyes, see there), or by a camera of our own that
+    // renders nothing and comes last of the cameras (drawAfterEyes = false; costs a camera's work a frame). A frame neither drew is
+    // drawn at the very end of the frame instead, the way it was first built.
     public class DesktopMirror : MonoBehaviour
     {
         public static bool stabilized = true;           // false = Unity's own mirror of the eye texture (also set when drawing fails)
@@ -59,12 +59,25 @@ namespace TarkovVR.Source.Graphics
         private bool loggedEndOfFrameDraw;
         private Camera windowCamera;
 
-        // Diagnostic for the window flipping on its own (2026-11-05): the camera that rendered just before the window camera and what
-        // is bound when the window is drawn, logged each time that changes (the first 16 changes)
-        public static bool logFrameChanges = false;
-        private static string lastCameraBefore;
-        private string lastSignature;
-        private int signatureLogs;
+        // Drawn without a camera of its own (the window camera costs ~0.5 ms of the main thread a frame: Unity's work for any camera),
+        // right where the chosen eye's picture is finished. false = the window camera, the old way.
+        //   The last camera drawing into the headset has the game's final step (SSAAImpl; uiCam skipped): right after that step
+        //     (Rendering's SSAAImpl.OnRenderImage postfix -> AfterFinalImage), from the eye image, finished there.
+        //   Another camera (uiCam): at its post-render, from ITS OWN working texture. Its copy back into the eye image comes after
+        //     post-render: the eye image there is still the game's picture stored the other way up, without the UI (why the first
+        //     try, 33c659c, came out upside down); the working texture holds the whole picture, stored like any render texture.
+        public static bool drawAfterEyes = true;
+        public static bool afterEyesExtraFlip = false;  // turns the window over on those paths (A/B, if one comes out upside down)
+        internal static DesktopMirror instance;
+        private RenderTexture sourceOverride;           // the picture drawn from, when it isn't the eye image
+        private bool sourceTopRowFirst = true;          // the eye image is stored top row first; a render texture of Unity's the other way
+        private bool drawingAfterEye;
+        private Camera[] cameraList = new Camera[16];
+        private Camera lastEyeCamera;                   // the last camera drawing into the headset this frame
+        private int lastEyeCameraFrame = -1;
+        private Camera finalStepCamera;                 // the last camera looked at for the game's final step, and what it has
+        private SSAAImpl finalStep;
+        private readonly HashSet<long> loggedPaths = new HashSet<long>();
 
         // Where each eye's lens mask is, over its image (0..1 both ways, rows up from the bottom of the view)
         private sealed class LensMask
@@ -80,6 +93,7 @@ namespace TarkovVR.Source.Graphics
         // draw); the camera on a child of it, so it lives as long as the plugin does
         private void Awake()
         {
+            instance = this;
             GameObject cameraObject = new GameObject("VRDesktopMirrorCamera");
             cameraObject.transform.SetParent(transform, worldPositionStays: false);
             windowCamera = cameraObject.AddComponent<Camera>();
@@ -101,10 +115,12 @@ namespace TarkovVR.Source.Graphics
             windowCamera.allowHDR = false;
             windowCamera.allowMSAA = false;
             windowCamera.renderingPath = RenderingPath.Forward;
-            if (logFrameChanges)
-                Camera.onPostRender += NoteCamera;
+            windowCamera.enabled = Wanted && !drawAfterEyes;
             Plugin.MyLog.LogInfo($"[DesktopMirror] window camera made (enabled {windowCamera.enabled}, active {cameraObject.activeInHierarchy}, depth {windowCamera.depth:0}, on '{name}')");
         }
+
+        private void OnEnable() { Camera.onPostRender += OnAnyCameraPostRender; }
+        private void OnDisable() { Camera.onPostRender -= OnAnyCameraPostRender; }
 
         // The camera's draw (DesktopMirrorCamera.OnPostRender): before the overlays
         internal void CameraRendered()
@@ -114,30 +130,105 @@ namespace TarkovVR.Source.Graphics
                 cameraEverRendered = true;
                 Plugin.MyLog.LogInfo($"[DesktopMirror] window camera renders (frame {Time.frameCount})");
             }
-            if (logFrameChanges && signatureLogs < 16)
-            {
-                RenderTexture active = RenderTexture.active;
-                RenderTexture target = windowCamera != null ? windowCamera.activeTexture : null;
-                string signature = $"after '{lastCameraBefore ?? "?"}', bound {(active != null ? Digitless(active.name) : "the window")}, "
-                    + $"window camera's target {(target != null ? Digitless(target.name) : "the window")}";
-                if (signature != lastSignature)
-                {
-                    lastSignature = signature;
-                    signatureLogs++;
-                    Plugin.MyLog.LogInfo($"[DesktopMirror] frame {Time.frameCount}: window drawn {signature}");
-                }
-            }
             cameraFailure = Guarded(fromCamera: true);
         }
 
-        private static void NoteCamera(Camera camera)
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Drawn after the eyes (drawAfterEyes)
+
+        // The chosen eye's post-render of the last camera drawing into the headset - unless that camera has the game's final step,
+        // which comes after post-render (AfterFinalImage draws then)
+        private void OnAnyCameraPostRender(Camera camera)
         {
-            if (camera != null && camera.name != "VRDesktopMirrorCamera")
-                lastCameraBefore = camera.name + (camera.stereoEnabled ? " " + camera.stereoActiveEye : "");
+            if (!drawAfterEyes || camera == null || camera == windowCamera || drawnFrame == Time.frameCount || !Wanted)
+                return;
+            if (camera != LastEyeCamera() || camera.stereoActiveEye != ChosenEye() || HasFinalStep(camera))
+                return;
+            RenderTexture working = camera.activeTexture;
+            RenderTexture eyeImage = EyeImage(camera.stereoActiveEye);
+            bool ownTexture = working != null && working != eyeImage;
+            DrawAfterEye(camera, ownTexture ? working : null, ownTexture ? "at its post-render, from its own working texture" : "at its post-render, from the eye image", ownTexture ? 1 : 2);
         }
 
-        // Swapchain / temporary texture numbers change every frame
-        private static string Digitless(string name) => System.Text.RegularExpressions.Regex.Replace(name ?? "", @"\d+", "#");
+        // Right after the game's final step drew the picture (Rendering: SSAAImpl.OnRenderImage postfix)
+        internal static void AfterFinalImage(Camera camera, RenderTexture destination)
+        {
+            DesktopMirror mirror = instance;
+            if (mirror == null || !drawAfterEyes || camera == null || mirror.drawnFrame == Time.frameCount || !Wanted)
+                return;
+            if (camera != mirror.LastEyeCamera() || camera.stereoActiveEye != ChosenEye())
+                return;
+            // Into the eye image (null = the camera's own target, which is it): finished there. Into a texture of its own: that one
+            // holds it (Unity copies it on afterwards), stored like any render texture.
+            bool intoEyeImage = destination == null || destination == mirror.EyeImage(camera.stereoActiveEye)
+                || (destination.name != null && destination.name.StartsWith("XR Texture"));
+            mirror.DrawAfterEye(camera, intoEyeImage ? null : destination,
+                intoEyeImage ? "after its final step, from the eye image" : "after its final step, from its own texture", intoEyeImage ? 3 : 4);
+        }
+
+        private void DrawAfterEye(Camera camera, RenderTexture source, string where, int path)
+        {
+            RenderTexture active = RenderTexture.active;
+            sourceOverride = source;
+            sourceTopRowFirst = source == null && flipVertical;
+            drawingAfterEye = true;
+            if (loggedPaths.Add(((long)camera.GetInstanceID() << 8) | (long)path))
+                Plugin.MyLog.LogInfo($"[DesktopMirror] drawn {where}: '{camera.name}' (depth {camera.depth:0}), {camera.stereoActiveEye} eye, "
+                    + $"{(source != null ? $"'{source.name}' {source.width}x{source.height}" : "eye image")}, rows {(sourceTopRowFirst != afterEyesExtraFlip ? "turned over" : "as stored")}");
+            try
+            {
+                cameraFailure = Guarded(fromCamera: true);
+            }
+            finally
+            {
+                drawingAfterEye = false;
+                sourceOverride = null;
+                RenderTexture.active = active;   // the camera's own target back for whatever Unity does after
+            }
+        }
+
+        private static Camera.MonoOrStereoscopicEye ChosenEye() =>
+            VRSettings.GetDesktopViewRightEye() ? Camera.MonoOrStereoscopicEye.Right : Camera.MonoOrStereoscopicEye.Left;
+
+        private RenderTexture EyeImage(Camera.MonoOrStereoscopicEye eye)
+        {
+            XRDisplaySubsystem display = Display();
+            return display != null && display.GetRenderPassCount() >= 2
+                ? display.GetRenderTextureForRenderPass(eye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0) : null;
+        }
+
+        private bool HasFinalStep(Camera camera)
+        {
+            if (camera != finalStepCamera)
+            {
+                finalStepCamera = camera;
+                finalStep = camera.GetComponent<SSAAImpl>();
+            }
+            return finalStep != null && finalStep.isActiveAndEnabled;
+        }
+
+        // The highest-depth enabled camera drawing into the headset (stereo, no texture of its own), found once a frame
+        private Camera LastEyeCamera()
+        {
+            if (lastEyeCameraFrame == Time.frameCount)
+                return lastEyeCamera;
+            lastEyeCameraFrame = Time.frameCount;
+            lastEyeCamera = null;
+            if (Camera.allCamerasCount > cameraList.Length)
+                cameraList = new Camera[Camera.allCamerasCount + 8];
+            int count = Camera.GetAllCameras(cameraList);
+            for (int index = 0; index < count; index++)
+            {
+                Camera candidate = cameraList[index];
+                cameraList[index] = null;
+                if (candidate == null || candidate == windowCamera || !candidate.stereoEnabled || candidate.targetTexture != null
+                    || candidate.stereoTargetEye == StereoTargetEyeMask.None)
+                    continue;
+                if (lastEyeCamera == null || candidate.depth > lastEyeCamera.depth)
+                    lastEyeCamera = candidate;
+            }
+            return lastEyeCamera;
+        }
 
         // A frame the camera didn't draw: drawn now, at the very end (over the overlays), or Unity's mirror
         private IEnumerator Start()
@@ -149,8 +240,9 @@ namespace TarkovVR.Source.Graphics
             {
                 yield return endOfFrame;
                 bool wanted = Wanted;
-                if (windowCamera != null && windowCamera.enabled != wanted)
-                    windowCamera.enabled = wanted;   // no window camera with Unity's mirror
+                bool cameraWanted = wanted && !drawAfterEyes;
+                if (windowCamera != null && windowCamera.enabled != cameraWanted)
+                    windowCamera.enabled = cameraWanted;   // no window camera with Unity's mirror or when drawn after the eyes (both live)
                 if (drawnFrame == Time.frameCount)
                     continue;
                 string failure = Guarded(fromCamera: false);
@@ -164,7 +256,10 @@ namespace TarkovVR.Source.Graphics
                 if (!loggedEndOfFrameDraw)
                 {
                     loggedEndOfFrameDraw = true;
-                    Plugin.MyLog.LogWarning($"[DesktopMirror] the window camera didn't draw ({(cameraEverRendered ? cameraFailure ?? "no reason" : "it never rendered")}): "
+                    string why = drawAfterEyes
+                        ? (loggedPaths.Count > 0 ? cameraFailure ?? "no reason" : $"no draw after the last headset camera's eye ('{(LastEyeCamera() != null ? LastEyeCamera().name : "none")}')")
+                        : cameraEverRendered ? cameraFailure ?? "no reason" : "the window camera never rendered";
+                    Plugin.MyLog.LogWarning($"[DesktopMirror] not drawn {(drawAfterEyes ? "after the eyes" : "by the window camera")} ({why}): "
                         + "drawn at the end of the frame instead, over the F7 / F12 menus");
                 }
             }
@@ -202,6 +297,8 @@ namespace TarkovVR.Source.Graphics
                 : !Wanted ? "switched off"
                 : Screen.width <= 0 || Screen.height <= 0 ? "no window"
                 : TryGetEye(display, out eyeTexture, out eyeCamera, out eye);
+            if (failure == null && sourceOverride != null)
+                eyeTexture = sourceOverride;   // after an eye pass: the picture where it's finished (DrawAfterEye)
             if (failure == null && !EnsureMaterial())
             {
                 stabilized = false;
@@ -212,7 +309,7 @@ namespace TarkovVR.Source.Graphics
                 if (fromCamera && !loggedCameraFailure)
                 {
                     loggedCameraFailure = true;
-                    Plugin.MyLog.LogWarning($"[DesktopMirror] the window camera can't draw: {failure}");
+                    Plugin.MyLog.LogWarning($"[DesktopMirror] {(drawingAfterEye ? "can't draw after the eyes" : "the window camera can't draw")}: {failure}");
                 }
                 if (!fromCamera)
                 {
@@ -486,6 +583,7 @@ namespace TarkovVR.Source.Graphics
             int rows = Mathf.Max(1, gridRows);
 
             RenderTexture.active = null;
+            GL.Viewport(new Rect(0f, 0f, Screen.width, Screen.height));   // drawn after an eye pass, the eye's viewport is still set
             GL.PushMatrix();
             GL.LoadOrtho();
             GL.Clear(true, true, Color.black);
@@ -514,7 +612,7 @@ namespace TarkovVR.Source.Graphics
         private void Corner(float across, float up, float tanHalfAcross, float tanHalfUp, Matrix4x4 view, Matrix4x4 projection)
         {
             Vector2 uv = EyeImagePoint(smoothedRotation * viewTilt, across, up, tanHalfAcross, tanHalfUp, view, projection);
-            if (flipVertical)
+            if (drawingAfterEye ? sourceTopRowFirst != afterEyesExtraFlip : flipVertical)
                 uv.y = 1f - uv.y;
             GL.TexCoord2(uv.x, uv.y);
             GL.Vertex3(across, up, 0f);
