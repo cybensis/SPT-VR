@@ -7,26 +7,61 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
 {
     // FuckThisCulling (rootdarkarchon) in VR, written against its 0.4.1 (Plugin applies this to that version only).
     // The mod tests what is hidden once a frame, from the camera's depth in the pass it records the test in. In MultiPass that was
-    // the left eye's pass only, so anything only the right eye could see was hidden. Here the eyes take turns (left on even frames,
-    // right on odd), each tested with its own view and projection. The mod hides only after several occluded results in a row
-    // (OccludedConfirmationQueries; at least minimumOccludedChecks here), so an object one eye sees - "visible" every second test -
-    // stays drawn. Hides and restores happen only before the first eye, so both eyes draw the same objects.
+    // the left eye's pass only, so anything only the right eye could see was hidden. Here the eyes take turns, each tested in its
+    // own pass, and every result that comes back is MERGED with the other eye's latest one: a box either eye saw counts as seen.
+    // (Turns alone were not enough - headset: right-eye-only objects still culled. When results arrive close together the mod
+    // consumes only the newest and drops the rest, so one eye's results could be dropped again and again.) Hides and restores
+    // happen only before the first eye, so both eyes draw the same objects.
     [HarmonyPatch]
     internal static class StereoCullingPatches
     {
         public static bool enabled = true;               // false = the mod as it is (left eye only)
+        public static bool mergeEyes = true;             // false = turns only (the first build: right-eye-only objects still culled)
+        public static int maxOtherEyeAgeFrames = 12;     // the other eye's result older than this is not merged (an old "seen" only keeps more drawn)
         public static int minimumOccludedChecks = 2;     // with the eyes taking turns, 1 would hide what only the other eye sees
         public static float behindConeMargin = 1.05f;    // "hide objects behind you": kept off both eyes' views, this much wider
 
         private static Camera testingCamera;             // the gameplay camera whose eye is recording the test
+        private static readonly int[] lastTestFrame = { -1, -1 };
+        private static int turnFrame = -1;
+        private static int turnEye;
+        private static int[] eyeOfSlot = new int[32];    // by the slot's ring index: the eye its current test came from...
+        private static int[] tokenOfSlot = new int[32];  // ...for that test (token)
         private static readonly int[] testsByEye = new int[2];
+        private static long resultsMerged;
+        private static long boxesMerged;
         private static bool loggedFirstTest;
         private static bool loggedSummary;
         private static float summaryAt = -1f;
 
+        // One eye's latest result as it came back, before any merge
+        private sealed class EyeResult
+        {
+            public uint[] data;
+            public int generation;
+            public int boxCount;
+            public int frame;
+            public bool present;
+        }
+        private static readonly EyeResult[] lastResult = { new EyeResult(), new EyeResult() };
+
         private static bool Stereo(Camera camera) => enabled && camera != null && camera.stereoEnabled;
-        private static int TurnEye => Time.frameCount & 1;
         private static int EyeIndex(Camera camera) => camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
+
+        // The eye whose last test is older (frame parity alone gave the right eye 295 tests to the left's 504 in 20 s: a turn with no
+        // free slot is lost, so the turn stays with that eye). Fixed for the frame.
+        private static int TurnEye
+        {
+            get
+            {
+                if (turnFrame != Time.frameCount)
+                {
+                    turnFrame = Time.frameCount;
+                    turnEye = lastTestFrame[1] < lastTestFrame[0] ? 1 : 0;
+                }
+                return turnEye;
+            }
+        }
 
         // Hides / restores run in the gameplay camera's pre-cull, which comes once an eye: only before the left eye
         [HarmonyPrefix]
@@ -76,12 +111,79 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             slot.sourceView = eyeView;
             slot.sourceQueryVP = __instance.CensusQueryMatrix(slot, eyeView);
             slot.sourceRasterVP = GL.GetGPUProjectionMatrix(eyeProjection, false) * eyeView;
-            testsByEye[(int)eye]++;
+            int eyeIndex = (int)eye;
+            testsByEye[eyeIndex]++;
+            lastTestFrame[eyeIndex] = Time.frameCount;
+            if (slot.index >= eyeOfSlot.Length)
+            {
+                Array.Resize(ref eyeOfSlot, slot.index + 16);
+                Array.Resize(ref tokenOfSlot, slot.index + 16);
+            }
+            if (slot.index >= 0)
+            {
+                eyeOfSlot[slot.index] = eyeIndex;
+                tokenOfSlot[slot.index] = slot.token;
+            }
             if (!loggedSummary && summaryAt > 0f && Time.unscaledTime > summaryAt)
             {
                 loggedSummary = true;
-                Plugin.MyLog.LogInfo($"[FuckThisCulling VR] tests in the first 20 s: left eye {testsByEye[0]}, right eye {testsByEye[1]}");
+                Plugin.MyLog.LogInfo($"[FuckThisCulling VR] first 20 s: tests left eye {testsByEye[0]}, right eye {testsByEye[1]}; "
+                    + $"{resultsMerged} results merged with the other eye's, {boxesMerged} boxes seen only by the other eye kept visible");
             }
+        }
+
+        // A result came back (QueryPipeline.Read: copied into slot.data, ready): kept as this eye's latest, then every box the other
+        // eye's latest result saw is marked seen here too. Packet: 4 header words, then one byte per box (0 or a "visible" reason
+        // code = seen, VisibleReason.IsVisible).
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(QueryPipeline), "Read")]
+        private static void MergeOtherEye(QuerySlot slot)
+        {
+            if (!enabled || slot == null || !slot.ready || slot.data == null || slot.index < 0 || slot.index >= eyeOfSlot.Length
+                || tokenOfSlot[slot.index] != slot.token)
+                return;   // not a test from an eye
+            int eye = eyeOfSlot[slot.index];
+            uint[] data = slot.data;
+            EyeResult own = lastResult[eye];
+            if (own.data == null || own.data.Length != data.Length)
+                own.data = new uint[data.Length];
+            Array.Copy(data, own.data, data.Length);
+            own.generation = slot.generation;
+            own.boxCount = slot.sourceBoxCount;
+            own.frame = slot.frame;
+            own.present = true;
+            if (!mergeEyes)
+                return;
+            EyeResult other = lastResult[1 - eye];
+            if (!other.present || other.generation != slot.generation || other.data.Length != data.Length
+                || Math.Abs(slot.frame - other.frame) > maxOtherEyeAgeFrames)
+                return;
+            uint[] otherData = other.data;
+            int boxes = Math.Min(slot.sourceBoxCount, other.boxCount);
+            int endWord = Math.Min(data.Length, 4 + (boxes + 3) / 4);
+            for (int word = 4; word < endWord; word++)
+            {
+                uint mine = data[word];
+                uint theirs = otherData[word];
+                if (mine == theirs)
+                    continue;
+                uint merged = mine;
+                for (int lane = 0; lane < 4; lane++)
+                {
+                    if ((word - 4) * 4 + lane >= boxes)
+                        break;
+                    int shift = lane * 8;
+                    int myReason = (int)((mine >> shift) & 0xFFu);
+                    int theirReason = (int)((theirs >> shift) & 0xFFu);
+                    if (!VisibleReason.IsVisible(myReason) && VisibleReason.IsVisible(theirReason))
+                    {
+                        merged = (merged & ~(0xFFu << shift)) | ((uint)theirReason << shift);
+                        boxesMerged++;
+                    }
+                }
+                data[word] = merged;
+            }
+            resultsMerged++;
         }
 
         private static Matrix4x4 ReferenceProjection(Camera camera) => camera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
