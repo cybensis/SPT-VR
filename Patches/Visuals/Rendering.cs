@@ -109,16 +109,18 @@ namespace TarkovVR.Patches.Visuals
         }
 
         // The game camera's last step (SSAAImpl.OnRenderImage) draws its image with a full-screen quad straight in clip space,
-        // the Y-flipped one while FlippedV: right into an ordinary render texture, upside down into the headset's eye image (or
-        // null = the camera's own target, which is the eye image). Which it gets depends on whether another camera draws into the
-        // eye image after it - with uiCam rendering it ends in a texture of its own; with uiCam skipped (UiCameraGate) straight
-        // in the eye image, and the fixed FlippedV = true turned the HEADSET image upside down (2026-11-05). So per call, from
-        // the destination. false = FlippedV = true always (the old behavior).
+        // the Y-flipped one while FlippedV, and SSAA.Awake above sets FlippedV = true. Measured 2026-11-05: its destination is the
+        // eye image EVERY frame, and what decides the way up is uiCam: a headset camera drawing into the eye image after this one
+        // turns the image over once more (its own texture round trip). With uiCam drawing every frame the fixed flip was right; with
+        // uiCam skipped (UiCameraGate) it turned the HEADSET image upside down, and flipping by destination alone (never, then) was
+        // exactly backwards. So: into the eye image, flipped only when another headset camera draws after it this frame; into a
+        // texture of its own, flipped as before. false = FlippedV = true always (the old behavior).
         public static bool flipByDestination = true;
-        public static bool logFlipDestinations = true;     // each new destination, the first 12
+        public static bool logFlipDestinations = true;     // each change of what was decided, the first 12
         private static string lastFlipDestination;
         private static int flipDestinationLogs;
         private static readonly List<XRDisplaySubsystem> xrDisplays = new List<XRDisplaySubsystem>();
+        private static Camera[] cameraList = new Camera[16];
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "OnRenderImage")]
@@ -126,18 +128,39 @@ namespace TarkovVR.Patches.Visuals
         {
             if (!flipByDestination)
                 return;
+            Camera camera = __instance._currentCamera;
             bool intoEyeImage = destination == null || IsEyeImage(destination);
-            __instance.FlippedV = !intoEyeImage;
+            Camera drawnOverBy = intoEyeImage && camera != null ? LaterEyeCamera(camera) : null;
+            __instance.FlippedV = !intoEyeImage || drawnOverBy != null;
             if (!logFlipDestinations || flipDestinationLogs >= 12)
                 return;
-            string kind = destination == null ? "null (the camera's own target)"
-                : $"'{System.Text.RegularExpressions.Regex.Replace(destination.name ?? "", @"\d+", "#")}'{(intoEyeImage ? " (eye image)" : "")}";
+            string kind = (destination == null ? "null (the camera's own target)"
+                : $"'{System.Text.RegularExpressions.Regex.Replace(destination.name ?? "", @"\d+", "#")}'{(intoEyeImage ? " (eye image)" : "")}")
+                + (intoEyeImage ? (drawnOverBy != null ? $", drawn over by '{drawnOverBy.name}' (depth {drawnOverBy.depth:0})" : ", nothing drawn after it") : "");
             if (kind == lastFlipDestination)
                 return;
             lastFlipDestination = kind;
             flipDestinationLogs++;
-            Camera camera = __instance._currentCamera;
-            Plugin.MyLog.LogInfo($"[SSAAFlip] frame {Time.frameCount}: '{(camera != null ? camera.name : "?")}' final image into {kind} - flipped {__instance.FlippedV}");
+            Plugin.MyLog.LogInfo($"[SSAAFlip] frame {Time.frameCount}: '{(camera != null ? camera.name : "?")}' (depth {(camera != null ? camera.depth : 0f):0}) final image into {kind} - flipped {__instance.FlippedV}");
+        }
+
+        // An enabled headset camera that draws into the eye images after this one (higher depth, no texture of its own): uiCam
+        private static Camera LaterEyeCamera(Camera current)
+        {
+            int count = Camera.allCamerasCount;
+            if (cameraList.Length < count)
+                cameraList = new Camera[count * 2];
+            count = Camera.GetAllCameras(cameraList);
+            Camera found = null;
+            for (int index = 0; index < count; index++)
+            {
+                Camera camera = cameraList[index];
+                if (found == null && camera != null && camera != current && camera.depth > current.depth && camera.targetTexture == null
+                    && camera.stereoTargetEye != StereoTargetEyeMask.None && camera.stereoEnabled)
+                    found = camera;
+                cameraList[index] = null;
+            }
+            return found;
         }
 
         private static bool IsEyeImage(RenderTexture texture)
