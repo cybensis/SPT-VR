@@ -32,7 +32,6 @@ namespace TarkovVR.Source.Weapons
         public static float handleZoneBack = 0.05f;        // m the grab zone reaches on past that toward the stock (a capsule)
         public static float handleTravel = 0.08f;          // m the handle comes back (headset: 0.07 a touch short)
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
-        public static float handleLateralEscape = 0.10f;   // m the controller moves sideways off the track before the hand lets go
         public static float handleLockedBackTravel = 0.02f; // m a handle on the bolt has left to give, with the bolt already locked back
         public static float underGunPullGain = 1.6f;        // the off hand on a handle on the bolt: how much further it comes than the controller does.
                                                             // That hand reaches under the gun and runs into the other controller over a full pull;
@@ -521,7 +520,6 @@ namespace TarkovVR.Source.Weapons
             Vector3 axis = handleBone.TransformDirection(handleAxisInSlot).normalized;
             Vector3 handDelta = LatchedHandRig.position - handleBone.TransformPoint(handAtHandleGrabInSlot);
             float handAlongTrack = Vector3.Dot(handDelta, axis);
-            float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
 
             float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !handleInGunHand ? underGunPullGain : 1f;
             handlePull = Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel);
@@ -542,8 +540,9 @@ namespace TarkovVR.Source.Weapons
                 SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : boltOpen);
             }
 
-            // Once it has been all the way back, letting go slams the bolt forward whatever the handle does after
-            if (triggerReleased || handOffTrack > handleLateralEscape)
+            // Only letting go of the trigger lets go (his call: no distance release). Once it has been all the way back, that slams
+            // the bolt forward whatever the handle does after
+            if (triggerReleased)
                 LetGoOfChargingHandle(snapForward: handleFullyBack);
         }
 

@@ -23,12 +23,11 @@ namespace TarkovVR.Source.Weapons
     public static partial class VRReloadController
     {
         public static bool boltAction = true;               // false = Tarkov cycles a bolt-action's bolt itself after every shot
-        public static float boltGrabRadius = 0.07f;         // m any point of the hand to the knob
+        public static float boltGrabRadius = 0.07f;         // m any point of the hand to the knob (the knob's middle, from its mesh: gen_bolts.py)
         public static float boltFullBack = 0.92f;           // share of the slide that counts as all the way back
         public static float boltTurnedUp = 0.97f;           // share of the turn before it slides
         public static float boltClosedTurn = 0.03f;         // share of the turn left that counts as turned down
-        public static float boltLetGoDistance = 0.12f;      // m the controller gets from where the knob can be before the hand lets go
-        public static float boltTurnSign = 1f;              // -1 if the handle turns the wrong way (the clip's turn read the other way round)
+        public static float boltTurnSign = 1f;            // -1 if the handle turns the wrong way (the clip's turn read the other way round)
         public static bool boltDebugLog = false;            // the bolt's grabs, strokes and what came out of the chamber (on for its first headset rounds)
 
         public static bool HoldingBolt { get; private set; }
@@ -95,6 +94,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 controllerToKnob;            // at the grab, in the gun body's rotation (m)
         private static Vector3[] boltHandFingers;
         private static bool loggedBoltSounds;
+        private static GameObject boltZoneViz;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -179,6 +179,7 @@ namespace TarkovVR.Source.Weapons
         private static void TickBolt(bool offTriggerPressed, bool offTriggerReleased, bool gunTriggerPressed, bool gunTriggerReleased, bool handBusy)
         {
             OffHandAtBolt = false;
+            SetZoneViz(ref boltZoneViz, false, Vector3.zero, 0f, Color.clear);
             if (HoldingBolt)
             {
                 if (!BoltHoldIsStillValid())
@@ -212,10 +213,13 @@ namespace TarkovVR.Source.Weapons
             Vector3 knob = KnobWorld(state, bolt);
             // The off hand while the gun hand has the grip (not holding the foregrip: that's two-handing)
             bool offHandAt = !ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting && HandTouchesCapsule(false, knob, knob, boltGrabRadius);
+            bool gunHandAt = ChestHang.SupportOnly && HandTouchesCapsule(true, knob, knob, boltGrabRadius);
             OffHandAtBolt = offHandAt;
+            // debugZones: the grab zone, green while a hand that may take it is in it
+            SetZoneViz(ref boltZoneViz, debugZones, knob, boltGrabRadius, offHandAt || gunHandAt ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0f, 1f, 0.3f));
             if (offTriggerPressed && offHandAt)
                 GrabBolt(firearmController, bolt, state, gunHand: false);
-            else if (gunTriggerPressed && ChestHang.SupportOnly && HandTouchesCapsule(true, knob, knob, boltGrabRadius))
+            else if (gunTriggerPressed && gunHandAt)
                 GrabBolt(firearmController, bolt, state, gunHand: true);
         }
 
@@ -393,9 +397,8 @@ namespace TarkovVR.Source.Weapons
             if (!wasClosed && state.Closed)
                 BoltClosed(boltForFirearm, state);
 
-            // The trigger let go, or the controller far from anywhere the knob can be (the hand left it): it stays where it is
-            bool pulledOff = (wantedWorld - KnobWorld(state, bolt)).magnitude > boltLetGoDistance;
-            if (triggerReleased || pulledOff)
+            // Only letting go of the trigger lets go (his call: no distance release); the bolt stays where it is
+            if (triggerReleased)
                 LetGoOfBolt();
         }
 

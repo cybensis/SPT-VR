@@ -21,6 +21,50 @@ def withCharge(tree,charge):
     for p,v in up.items(): P[root+'/'+p]=v; parentOf[root+'/'+p]=root+('/'+upParent[p] if upParent[p] else '')
     return P,parentOf,{zlib.crc32(p.encode())&0xffffffff:p for p in P}
 
+# The knob: the turning bone's meshes (MeshFilters on it and under it, read from the gun's client_assets.bundle, where the
+# Windows.json manifest says the meshes of the gun AND of its charge parts live), in its frame; the vertices furthest from the turn
+# axis (through its origin) are the end of the handle - their centroid within KNOB_SHELL of the furthest is the knob's middle.
+KNOB_SHELL=0.012
+def meshKnob(folder,container,charge,turnerLeaf,axis):
+    from UnityPy.helpers.MeshHelper import MeshHandler
+    bundle=(CHARGES+charge+'_pb.bundle' if os.path.isfile(CHARGES+charge+'_pb.bundle') else CHARGES+charge+'.bundle') if charge else ROOT+folder+'/'+container
+    env=UnityPy.load(bundle,ROOT+folder+'/client_assets.bundle')
+    def toParent(t,p):
+        s=t.m_LocalScale; r=t.m_LocalRotation; a=t.m_LocalPosition
+        return g_rot(np.array([r.x,r.y,r.z,r.w]),p*np.array([s.x,s.y,s.z]))+np.array([a.x,a.y,a.z])
+    # The rig can hold the bone more than once (the DVL-10: 4, one with collider-only children): the copy with the most vertices (LOD0)
+    best=[]
+    for o in env.objects:
+        if o.type.name!='Transform': continue
+        t=o.read()
+        if t.m_GameObject.read().m_Name!=turnerLeaf: continue
+        points=[]
+        def walk(tr,chain):
+            for c in tr.m_GameObject.read().m_Components:
+                ptr=c.component if hasattr(c,'component') else c
+                try: comp=ptr.read()
+                except Exception: continue
+                if type(comp).__name__!='MeshFilter': continue
+                try:
+                    h=MeshHandler(comp.m_Mesh.read()); h.process()
+                except Exception: continue
+                for p in np.array(h.m_Vertices,float).reshape(-1,3):
+                    for link in chain: p=toParent(link,p)
+                    points.append(p)
+            for ch in tr.m_Children:
+                c=ch.read(); walk(c,[c]+chain)
+        walk(t,[])
+        if len(points)>len(best): best=points
+    if not best: return None
+    points=np.array(best); a=np.array(axis,float); a/=np.linalg.norm(a)
+    radial=np.linalg.norm(points-np.outer(points@a,a),axis=1)
+    tip=points[radial>=radial.max()-KNOB_SHELL].mean(axis=0)
+    print(f'  knob from {len(points)} mesh vertices: {np.round(tip,4)} ({radial.max()*100:.1f} cm out from the turn axis)')
+    return [round(float(x),4) for x in tip]
+
+def g_rot(q,v):
+    u=q[:3]; return v+2*np.cross(u,np.cross(u,v)+q[3]*v)
+
 def axisAngle(q):
     q=q if q[3]>=0 else -q; angle=2*math.degrees(math.acos(min(1.0,float(q[3])))); s=math.sqrt(max(1e-12,1-float(q[3])**2))
     return [float(x)/s for x in q[:3]],angle
@@ -41,8 +85,8 @@ for folder,clipName,charge in GUNS:
             tree=loadTree(ROOT+folder+'/'+c)
             if charge: tree=withCharge(tree,charge)
             n=sum(h in tree[2] for h in hashes)
-            if best is None or n>best[0]: best=(n,tree)
-    tree=best[1]; P,parentOf,H=tree; g=setup(tree,clip); stop=float(clip.m_MuscleClip.m_StopTime)
+            if best is None or n>best[0]: best=(n,tree,c)
+    tree=best[1]; container=best[2]; P,parentOf,H=tree; g=setup(tree,clip); stop=float(clip.m_MuscleClip.m_StopTime)
     wp=bone(P,'Weapon_root_anim/weapon'); steps=int(stop*60)+1
     moved={}
     for h in set(hashes):
@@ -71,9 +115,27 @@ for folder,clipName,charge in GUNS:
     q0=np.array(g['localAt'](turner,0.0)[1],float); qUp=np.array(g['localAt'](turner,tLift)[1],float)
     axis,angle=axisAngle(qmul(conj(q0),qUp))
     hold=ridingHold(g,turner,'R')
-    # Where the hand takes it, in the turning bone's frame: the hold's palm, else the palm with the bolt all the way back (the DVL-10's
-    # hold doesn't pass ridingHold's steadiness test)
-    if hold: knob=hold['position']
+    # Where the hand takes it, in the turning bone's frame: the handle's knob from its mesh (the grab zone's centre; the hold's palm
+    # is the hand ROOT, ~10 cm off the knob on the M700). Without a mesh: the hold's palm, else the palm with the bolt all the way
+    # back (the DVL-10's hold doesn't pass ridingHold's steadiness test).
+    # Which mesh: the clip's closed right fingers (the 15 finger joints' centroid at the hold, in the turner's frame) wrap the knob,
+    # so of the folder's guns (the Mosin folder has the sniper's bent handle and the infantry's straight one; the clip's bones match
+    # both) the one whose knob is nearest them. They agree within 1.5-3.4 cm on every rifle.
+    grasp=None; J=fingerPaths(P,'R')
+    if J:
+        c={}; tHold=hold['t'] if hold else tBack; tp,tr,_=g['worldAt'](turner,tHold,c)
+        grasp=np.mean([g['rotate'](conj(tr),g['worldAt'](j,tHold,c)[0]-tp) for j in J[1:]],axis=0)
+    inCharge=charge if charge and ('/'+charge+'/') in turner else None
+    candidates=[container] if inCharge else [c for c in sorted(os.listdir(ROOT+folder)) if c.endswith('_container.bundle') and c.startswith('weapon_')]
+    knob=None; knobOff=None
+    for candidate in candidates:
+        k=meshKnob(folder,candidate,inCharge,turner.split('/')[-1],axis)
+        if k is None: continue
+        off=float(np.linalg.norm(grasp-np.array(k))) if grasp is not None else 0.0
+        if knob is None or off<knobOff: knob,knobOff=k,off
+    if knob and grasp is not None: print(f'  knob {knob}: {knobOff*100:.1f} cm from where the clip\'s fingers close')
+    if knob: pass
+    elif hold: knob=hold['position']
     else:
         c={}; tp,tr,_=g['worldAt'](turner,tBack,c); pp,_,_=g['worldAt'](bone(P,'/Base HumanRPalm'),tBack,c)
         knob=[round(float(x),4) for x in g['rotate'](conj(tr),pp-tp)]
