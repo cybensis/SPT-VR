@@ -44,6 +44,15 @@ namespace TarkovVR.Source.Player.VRManager
         public static Vector3 headOffset = new Vector3(0.04f, 0.175f, 0.07f);
         public Transform gunTransform;
         public static Transform leftHandGunIK;
+        // Where the support hand grabs the gun: the gun's left-hand marker, or with the gun in the left hand its mirror on the gun's
+        // right side, where the right hand supports (the same plane RealLeftHandedPatches mirrors the foregrip pose across)
+        public static Vector3 SupportGripPoint()
+        {
+            Vector3 point = leftHandGunIK.position;
+            if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
+                point = RealLeftHandedPatches.ReflectPoint(point, planePoint, planeNormal);
+            return point;
+        }
         public bool leftHandOnScope = false;
 
         public float leftHandYRotation = 0f;
@@ -558,6 +567,7 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
                 VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
+                VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, PlaceRightControllerHand);
             }
             else
             {
@@ -734,42 +744,45 @@ namespace TarkovVR.Source.Player.VRManager
             return Quaternion.LookRotation(hold.GetColumn(2), hold.GetColumn(1));
         }
 
-        // A hand's own natural pose at its OWN controller, the right-handed way, in world space - the target of an arm that isn't on the
-        // gun while the gun is in the left hand (RealLeftHandedPatches; the rig's hands follow the swapped controllers then).
-        // Index: the free-hand wrist poses; else the gun hand's offsets for the right, the off hand's for the left.
-        public bool ControllerHandPose(bool rightController, out Vector3 position, out Quaternion rotation)
+        // The right hand's own natural pose at the right controller, the right-handed way - the target of the right arm while it's off the
+        // gun in the left hand (RealLeftHandedPatches; the rig's hands follow the swapped controllers then). A rig child placed from the
+        // right controller's pose callback, the same sample and the same moment as the rig hands, and solved by the arm's own IK update too,
+        // like every other free hand: a world point handed to EFT's arm pass alone jittered (headset, round 2; the free left hand did the
+        // same in round 1 while its own update was off). Index: the free-hand wrist pose; else the gun hand's offsets.
+        private Transform rightControllerHand;
+
+        public Transform RightControllerHand
         {
-            position = Vector3.zero;
-            rotation = Quaternion.identity;
-            if (RightHand == null || RightHand.transform.parent == null)
-                return false;
-            VRPose pose = rightController ? VRInput.RightHandPose : VRInput.LeftHandPose;
-            SteamVR_Input_Sources source = rightController ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
-            Vector3 controllerPosition = pose.GetLocalPosition(source);
-            Quaternion controllerRotation = pose.GetLocalRotation(source);
-            Vector3 localPosition;
-            Quaternion local;
+            get
+            {
+                if (RightHand == null || RightHand.transform.parent == null)
+                    return null;
+                if (rightControllerHand == null || rightControllerHand.parent != RightHand.transform.parent)
+                {
+                    if (rightControllerHand == null)
+                        rightControllerHand = new GameObject("RightControllerHand").transform;
+                    rightControllerHand.SetParent(RightHand.transform.parent, worldPositionStays: false);
+                    PlaceRightControllerHand(VRInput.RightHandPose, SteamVR_Input_Sources.RightHand);
+                }
+                return rightControllerHand;
+            }
+        }
+
+        private void PlaceRightControllerHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
+        {
+            if (rightControllerHand == null)
+                return;
+            Vector3 controllerPosition = fromAction.localPosition;
+            Quaternion controllerRotation = fromAction.localRotation;
             if (alignFreeHands && VRGlobals.vrControllerType == "index")
             {
-                localPosition = controllerPosition + controllerRotation * (rightController ? freeRightHandWrist : freeLeftHandWrist);
-                local = controllerRotation * Quaternion.Euler(rightController ? freeRightHandRotation : freeLeftHandRotation);
+                rightControllerHand.localPosition = controllerPosition + controllerRotation * freeRightHandWrist;
+                rightControllerHand.localRotation = controllerRotation * Quaternion.Euler(freeRightHandRotation);
+                return;
             }
-            else if (rightController)
-            {
-                local = controllerRotation * Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + rightHandedPrimaryHandRotOffset.x,
-                    rightHandedPrimaryHandRotOffset.y, rightHandedPrimaryHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
-                localPosition = controllerPosition + rightHandedPrimaryHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
-            }
-            else
-            {
-                local = controllerRotation * Quaternion.Euler(VRSettings.GetSecondaryHandVertOffset() + rightHandedOtherHandRotOffset.x,
-                    rightHandedOtherHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + rightHandedOtherHandRotOffset.z);
-                localPosition = controllerPosition + rightHandedOtherHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
-            }
-            Transform rig = RightHand.transform.parent;
-            position = rig.TransformPoint(localPosition);
-            rotation = rig.rotation * local;
-            return true;
+            rightControllerHand.localPosition = controllerPosition + rightHandedPrimaryHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
+            rightControllerHand.localRotation = controllerRotation * Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + rightHandedPrimaryHandRotOffset.x,
+                rightHandedPrimaryHandRotOffset.y, rightHandedPrimaryHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
         }
 
         // A rotation / point reflected through the plane x = 0 (the controllers' own left-right mirror)
@@ -1169,7 +1182,8 @@ namespace TarkovVR.Source.Player.VRManager
             }
             if (leftHandGunIK)
             {
-                bool withinDistance = Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.1f;
+                Vector3 supportGripPoint = SupportGripPoint();
+                bool withinDistance = Vector3.Distance(LeftHand.transform.position, supportGripPoint) < 0.1f;
 
                 if (withinDistance)
                 {
@@ -1185,7 +1199,7 @@ namespace TarkovVR.Source.Player.VRManager
                 // If the player is already in support position with snap enabled and they aren't holding grip, check for the position similar to above 
                 // but give the distance between hand and IK position some tolerance so the hand doesn't rapidly swap between support pos and non-support pos
                 // when in close vicinity.
-                bool withinDistanceAfterSnap = withinDistance && isSupporting && Vector3.Distance(LeftHand.transform.position, leftHandGunIK.position) < 0.175f;
+                bool withinDistanceAfterSnap = withinDistance && isSupporting && Vector3.Distance(LeftHand.transform.position, supportGripPoint) < 0.175f;
                 if (withinDistance || handLock || withinDistanceAfterSnap)
                 {
                     if (!isSupporting && (!VRSettings.GetSnapToGun() || handLock))

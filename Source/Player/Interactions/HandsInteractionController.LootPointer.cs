@@ -597,7 +597,7 @@ namespace TarkovVR.Source.Player.Interactions
             Transform lh = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.LeftHand != null
                 ? VRGlobals.vrPlayer.LeftHand.transform : null;
             if (lh == null) return false;
-            return Vector3.Distance(lh.position, grip.position) < foregripBlockDistance;
+            return Vector3.Distance(lh.position, VRPlayerManager.SupportGripPoint()) < foregripBlockDistance;
         }
 
         // A hand's thumb and index fingertips and the index's base knuckle (the index runs base -> tip), for a small item held in a

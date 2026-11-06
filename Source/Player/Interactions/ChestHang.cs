@@ -315,13 +315,14 @@ namespace TarkovVR.Source.Player.Interactions
                 slingLocalRot = Quaternion.Inverse(yawRot) * spotRot;
             }
 
+            // Out of the left hand too: on the sling the gun is nobody's. Before DetachCommon frees the right arm, so that starts
+            // from the arms as they were and not the left-hand hold's own right-arm target (RealLeftHandedPatches.ReleaseArms)
+            Handedness.SetGunInLeftHand(false);
             detachedGun = fc;
             DetachCommon();
             Hanging = true;
             if (hangHaptics && !snap)
                 Pulse(0.6f);
-            // Out of the left hand too: on the sling the gun is nobody's
-            Handedness.SetGunInLeftHand(false);
         }
 
         // The left hand's palm, knuckles or fingertips at the slung gun's grip (the right hand's regrab point and reach)

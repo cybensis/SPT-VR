@@ -31,6 +31,9 @@ namespace TarkovVR.Source.Controls
             if (GunInLeftHand == inLeftHand)
                 return;
             GunInLeftHand = inLeftHand;
+            // The arms back as they were before anything frees or takes them next (the sling)
+            if (!inLeftHand)
+                TarkovVR.Patches.Core.Player.RealLeftHandedPatches.ReleaseArms();
             // Which controller drives the rig's gun hand
             if (VRGlobals.vrPlayer != null)
                 VRGlobals.vrPlayer.RightHandedMode();
