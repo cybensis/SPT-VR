@@ -55,11 +55,16 @@ namespace TarkovVR
                 Logger.LogError($"[VR files] preparing the VR files failed: {ex}");
             }
 
+            // Unity read the old manifests at engine start: starting VR against them could pair two copies of a plugin
+            if (VRRuntimeFiles.RestartNeeded)
+            {
+                Logger.LogError("VR not started: its plugin manifests in the game's data folder were just added or updated. Restart the game once.");
+                return;
+            }
+
             if (!InitializeVR())
             {
-                Logger.LogError(VRRuntimeFiles.RestartNeeded
-                    ? "VR didn't start because its plugin manifests were only just added to the game's data folder: restart the game once."
-                    : "VR initialization failed. Skipping the rest of the plugin setup.");
+                Logger.LogError("VR initialization failed. Skipping the rest of the plugin setup.");
                 return;
             }
 
@@ -91,11 +96,9 @@ namespace TarkovVR
             {
                 if (TryStartOpenXR())
                     return true;
-                Logger.LogWarning("[VR] OpenXR didn't start (see the lines above): starting SteamVR's OpenVR instead. "
-                    + (VRRuntimeFiles.RestartNeeded ? "Its manifest was only just added to the game's data folder: OpenXR works from the next start. "
-                        : "Its files ship in BepInEx\\plugins\\sptvr\\VR (Managed\\Unity.XR.OpenXR.dll + Unity.InputSystem.dll, Native\\UnityOpenXR.dll + "
-                        + "openxr_loader.dll, Data\\UnitySubsystems\\UnityOpenXR). ")
-                    + "\"useOpenXR\": false in ModSettings.json starts OpenVR directly.");
+                Logger.LogWarning("[VR] OpenXR didn't start (see the lines above): starting SteamVR's OpenVR instead. Its files ship in "
+                    + "BepInEx\\plugins\\sptvr\\VR (Managed\\Unity.XR.OpenXR.dll + Unity.InputSystem.dll, Native\\UnityOpenXR.dll + openxr_loader.dll, "
+                    + "Data\\UnitySubsystems\\UnityOpenXR). \"useOpenXR\": false in ModSettings.json starts OpenVR directly.");
             }
             return StartOpenVR();
         }
@@ -135,6 +138,13 @@ namespace TarkovVR
 
                 XRGeneralSettings.AttemptInitializeXRSDKOnLoad();
                 XRGeneralSettings.AttemptStartXRSDKOnBeforeSplashScreen();
+
+                // SteamVR below connects without the XR plugin, so without this a missing display read as a successful start
+                if (managerSettings.activeLoader == null)
+                {
+                    Plugin.MyLog.LogError("[OpenVR] The OpenVR XR plugin didn't start (see the [Subsystems] lines above): no headset display.");
+                    return false;
+                }
 
                 XRSettings.useOcclusionMesh = true;
 
