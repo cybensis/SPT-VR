@@ -600,21 +600,27 @@ namespace TarkovVR.Source.Player.Interactions
             return Vector3.Distance(lh.position, grip.position) < foregripBlockDistance;
         }
 
-        // The off hand's thumb and index fingertips and the index's base knuckle (the index runs base -> tip), for a small item held
-        // in a pinch (VRReloadController's single rounds). Fingertips as in GetHandTouchPoints; the index is EFT's Digit2.
-        internal bool TryGetOffHandPinch(out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase)
+        // A hand's thumb and index fingertips and the index's base knuckle (the index runs base -> tip), for a small item held in a
+        // pinch (VRReloadController's single rounds). Fingertips as in GetHandTouchPoints; the index is EFT's Digit2.
+        internal bool TryGetPinch(bool dominant, out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase)
         {
             thumbTip = indexTip = indexBase = Vector3.zero;
-            if (!fingersResolved) ResolveLeftFingers();
-            if (leftFingerJoints == null || leftFingerIsThumb == null)
+            if (dominant)
+            {
+                if (!rightFingersResolved) ResolveRightFingers();
+            }
+            else if (!fingersResolved) ResolveLeftFingers();
+            Transform[][] fingerJoints = dominant ? rightFingerJoints : leftFingerJoints;
+            bool[] isThumb = dominant ? rightFingerIsThumb : leftFingerIsThumb;
+            if (fingerJoints == null || isThumb == null)
                 return false;
             Transform[] thumb = null, index = null, firstFinger = null;
-            for (int finger = 0; finger < leftFingerJoints.Length; finger++)
+            for (int finger = 0; finger < fingerJoints.Length && finger < isThumb.Length; finger++)
             {
-                Transform[] joints = leftFingerJoints[finger];
+                Transform[] joints = fingerJoints[finger];
                 if (joints == null || joints.Length == 0 || joints[0] == null || joints[joints.Length - 1] == null)
                     continue;
-                if (leftFingerIsThumb[finger])
+                if (isThumb[finger])
                     thumb = thumb ?? joints;
                 else if (joints[0].name.IndexOf("Digit2", System.StringComparison.OrdinalIgnoreCase) >= 0)
                     index = index ?? joints;

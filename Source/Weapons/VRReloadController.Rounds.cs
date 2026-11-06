@@ -2,16 +2,21 @@ using System.Collections.Generic;
 using Diz.LanguageExtensions;
 using EFT;
 using EFT.InventoryLogic;
+using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
+using TarkovVR.Source.Settings;
 using UnityEngine;
+using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
     // Single rounds through an open bolt (Manual Reload): the bolt-actions Tarkov loads through the action (Mosins; an M700, AXMC or
-    // TRG's magazine topped up while it's in). With the bolt all the way back, the off hand's grip at the chest pouch takes ONE round
-    // of a loose stack that fits (the type already in the gun first), held in a thumb-and-index pinch; into the open action it goes in.
-    // On those guns with the bolt open, the pouch grip is a round, not a magazine.
+    // TRG's magazine topped up while it's in). With the bolt all the way back, a grip at the chest pouch takes ONE round of a loose
+    // stack that fits (the type already in the gun first), held in a thumb-and-index pinch; into the open action it goes in.
+    // The hand that's free does it, the same that works the bolt: the off hand while the gun hand has the grip, the gun hand while the
+    // off hand holds the gun up (ChestHang.SupportOnly; his ask: "the same hand you pull the bolt on"). On those guns with the bolt
+    // open, the off hand's pouch grip is a round, not a magazine.
     //  - The inventory move is Tarkov's own ApplySingleItemToAddress (merge / transfer / split / move of one round), built simulated and
     //    run as a network transaction (FIKA syncs it like any move). NOT Tarkov's ReloadInternalMagWithOpenBoltOperation: its Prepare
     //    throws out a chambered round and it plays the reload animation.
@@ -25,8 +30,11 @@ namespace TarkovVR.Source.Weapons
         public static float roundOutPastPinch = 0.25f;      // share of the round's length its middle sits past the pinch (the fingers hold its base)
 
         public static bool HoldingRound { get; private set; }
+        public static bool RoundInGunHand => HoldingRound && roundInGunHand;
 
-        private static Ammo heldRoundSource;                // the stack the round comes from (it stays there until it's loaded)
+        private static bool roundInGunHand;
+        private static bool previousGunHandGripState;
+        private static Ammo heldRoundSource;               // the stack the round comes from (it stays there until it's loaded)
         private static GameObject heldRoundProp;
         private static FirearmController heldRoundFor;
         private static Vector3 roundAxisInProp;             // its length, in the prop's frame
@@ -63,18 +71,22 @@ namespace TarkovVR.Source.Weapons
             return magazine.Count < magazine.MaxCount || (weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0);
         }
 
-        // The grip at the chest: true when it was a round's grip (taken, or nothing that fits: a double buzz), so the magazine grab skips it
-        private static bool TryGrabRound()
+        // A grip at the chest: true when it was a round's grip (taken, or nothing that fits: a double buzz), so nothing else takes that
+        // press. gunHand: the gun hand's grip, only while the off hand holds the gun up and the hand isn't at the gun's grip (that's
+        // ChestHang's regrab); the off hand's only while the gun hand has the grip and the off hand isn't on the foregrip.
+        private static bool TryGrabRound(bool gunHand)
         {
             if (!CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine))
                 return false;
-            if (VRGlobals.vrPlayer.isSupporting || ChestHang.Detached || !InChestPouchZone(OffHandPalm()))
+            if (gunHand ? !ChestHang.SupportOnly || ChestHang.HandInRegrabZone : VRGlobals.vrPlayer.isSupporting || ChestHang.Detached)
+                return false;
+            if (!InChestPouchZone(HandPalm(gunHand)))
                 return false;
             Ammo source = FindRoundToLoad(weapon, magazine);
             if (source == null)
             {
-                Pulse(0.2f, 0.03f);
-                Pulse(0.2f, 0.03f, 0.08f);
+                PulseRoundHand(gunHand, 0.2f, 0.03f);
+                PulseRoundHand(gunHand, 0.2f, 0.03f, 0.08f);
                 return true;
             }
             GameObject prop = CreateProp(source);
@@ -83,14 +95,31 @@ namespace TarkovVR.Source.Weapons
             heldRoundSource = source;
             heldRoundProp = prop;
             heldRoundFor = firearmController;
+            roundInGunHand = gunHand;
             roundLoading = false;
             MeasureRound(prop);
             HoldingRound = true;
             PlaceHeldRound();
-            Pulse(0.25f, 0.03f);
+            PulseRoundHand(gunHand, 0.25f, 0.03f);
             if (debugLog)
-                LogAction($"[VRReload] took a round of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack), gun {magazine.Count}/{magazine.MaxCount} + chamber {weapon.ChamberAmmoCount}");
+                LogAction($"[VRReload] took a round of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack) in the {(gunHand ? "gun" : "off")} hand, "
+                    + $"gun {magazine.Count}/{magazine.MaxCount} + chamber {weapon.ChamberAmmoCount}");
             return true;
+        }
+
+        private static Vector3 HandPalm(bool gunHand)
+        {
+            if (!gunHand)
+                return OffHandPalm();
+            return VRGlobals.handsInteractionController != null ? VRGlobals.handsInteractionController.PalmOrigin(true) : VRGlobals.vrPlayer.RightHand.transform.position;
+        }
+
+        private static void PulseRoundHand(bool gunHand, float amplitude, float duration, float delay = 0f)
+        {
+            if (!gunHand)
+                Pulse(amplitude, duration, delay);
+            else if (haptics)
+                VRInput.Haptic.Execute(delay, duration, 120f, amplitude, VRSettings.GetLeftHandedMode() ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand);
         }
 
         // A loose stack (in a container's grid: not the rounds in another magazine) the gun takes, the type already in it first
@@ -137,7 +166,8 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // From Tick
 
-        private static void UpdateHeldRound(bool gripReleased)
+        // gripReleased / gunHandGripReleased: the two hands' grips let go this frame; the one holding the round counts
+        private static void UpdateHeldRound(bool gripReleased, bool gunHandGripReleased)
         {
             if (roundLoading)
                 return;
@@ -146,10 +176,10 @@ namespace TarkovVR.Source.Weapons
                 PutRoundBack();
                 return;
             }
-            if (gripReleased)
+            if (roundInGunHand ? gunHandGripReleased : gripReleased)
             {
                 PutRoundBack();
-                Pulse(0.15f, 0.02f);
+                PulseRoundHand(roundInGunHand, 0.15f, 0.02f);
                 return;
             }
             if (CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine) && firearmController == heldRoundFor
@@ -173,15 +203,16 @@ namespace TarkovVR.Source.Weapons
             {
                 if (debugLog)
                     LogAction($"[VRReload] the round won't go in: {operation.Error}");
+                bool gunHand = roundInGunHand;
                 PutRoundBack();
-                Pulse(0.2f, 0.03f);
-                Pulse(0.2f, 0.03f, 0.08f);
+                PulseRoundHand(gunHand, 0.2f, 0.03f);
+                PulseRoundHand(gunHand, 0.2f, 0.03f, 0.08f);
                 return;
             }
             roundLoading = true;
             DestroyRoundProp();
-            PlayFirstGunSound(firearmController, SoundHand.OffHand, "AmmoIn", "PatronIn", "Patron", "MagIn");
-            Pulse(0.4f, 0.04f);
+            PlayFirstGunSound(firearmController, roundInGunHand ? SoundHand.GunHand : SoundHand.OffHand, "AmmoIn", "PatronIn", "Patron", "MagIn");
+            PulseRoundHand(roundInGunHand, 0.4f, 0.04f);
             VRGlobals.player.InventoryController.TryRunNetworkTransaction(operation, result =>
             {
                 if (result.Succeed)
@@ -265,12 +296,13 @@ namespace TarkovVR.Source.Weapons
             return heldRoundProp != null ? heldRoundProp.transform.TransformPoint(roundCenterInProp) : Vector3.zero;
         }
 
-        // After the fingers are posed (the end of ApplyHeldFingerPose): its base between the thumb and index tips, pointing along the index
+        // After the holding hand's fingers are posed (the end of ApplyHeldFingerPose / ApplyGunHandFingerPose): its base between the
+        // thumb and index tips, pointing along the index
         private static void PlaceHeldRound()
         {
             if (!HoldingRound || heldRoundProp == null || VRGlobals.handsInteractionController == null)
                 return;
-            if (!VRGlobals.handsInteractionController.TryGetOffHandPinch(out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase))
+            if (!VRGlobals.handsInteractionController.TryGetPinch(roundInGunHand, out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase))
                 return;
             Vector3 pinch = (thumbTip + indexTip) * 0.5f;
             Vector3 along = indexTip - indexBase;

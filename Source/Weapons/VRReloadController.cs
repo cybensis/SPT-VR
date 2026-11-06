@@ -260,12 +260,21 @@ namespace TarkovVR.Source.Weapons
             // Resync the grip edge after skipped frames so a held grip doesn't read as a fresh press
             VRBoolean offHandGrip = VRSettings.GetLeftHandedMode() ? VRInput.RightGrip : VRInput.LeftGrip;
             bool gripState = offHandGrip.state;
+            // The gun hand's grip: a single round in that hand (VRReloadController.Rounds)
+            VRBoolean gunHandGrip = VRSettings.GetLeftHandedMode() ? VRInput.LeftGrip : VRInput.RightGrip;
+            bool gunHandGripState = gunHandGrip.state;
             if (Time.frameCount - lastTickFrame > 1)
+            {
                 previousGripState = gripState;
+                previousGunHandGripState = gunHandGripState;
+            }
             lastTickFrame = Time.frameCount;
             bool gripPressed = gripState && !previousGripState;
             bool gripReleased = !gripState && previousGripState;
             previousGripState = gripState;
+            bool gunHandGripPressed = gunHandGripState && !previousGunHandGripState;
+            bool gunHandGripReleased = !gunHandGripState && previousGunHandGripState;
+            previousGunHandGripState = gunHandGripState;
 
             // The off-hand trigger works the charging handle (the same 0.5 / 0.35 hysteresis as the other trigger reads)
             float offHandTrigger = VRSettings.GetLeftHandedMode() ? VRInput.RightTrigger.axis : VRInput.LeftTrigger.axis;
@@ -330,17 +339,20 @@ namespace TarkovVR.Source.Weapons
                 handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingRound);
             // A single round in the fingers, for an open bolt-action (VRReloadController.Rounds)
             if (HoldingRound)
-                UpdateHeldRound(gripReleased);
+                UpdateHeldRound(gripReleased, gunHandGripReleased);
             UpdateHandLatch();
             UpdateMagazineReleaseButton(releaseState);
 
             bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound;
-            // On a gun that loads through its open bolt, the pouch grip is a round, not a magazine
-            if (!handBusy && gripPressed && TryGrabRound())
+            // On a gun that loads through its open bolt, the pouch grip is a round, not a magazine: the off hand's, or the gun hand's
+            // while the off hand holds the gun up
+            if (!handBusy && gripPressed && TryGrabRound(gunHand: false))
             {
                 gripPressed = false;
                 handBusy = true;
             }
+            else if (!handBusy && gunHandGripPressed && TryGrabRound(gunHand: true))
+                handBusy = true;
             UpdateBoltSlap(handFree: !handBusy);
             if (!handBusy)
                 TryTakeOverGroundMagazine();
@@ -387,7 +399,7 @@ namespace TarkovVR.Source.Weapons
             if (OffHandAtBolt)
                 OffHandAtChargingHandle = true;
             OwnsOffHand = HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine
-                || HoldingRound || reaching;
+                || (HoldingRound && !RoundInGunHand) || reaching;
 
             UpdateZoneViz();
             UpdateRoundViz();
@@ -1830,8 +1842,9 @@ namespace TarkovVR.Source.Weapons
             }
             finally
             {
-                // The round goes where the fingers now are
-                PlaceHeldRound();
+                // A round in this hand goes where the fingers now are
+                if (!RoundInGunHand)
+                    PlaceHeldRound();
             }
         }
 
@@ -1846,7 +1859,7 @@ namespace TarkovVR.Source.Weapons
                 pose = BoltFingerPose(gunHand: false);
             else if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
                 pose = magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
-            else if (HoldingRound)
+            else if (HoldingRound && !RoundInGunHand)
                 pose = MAGAZINE_PULL_FINGERS;
             if (pose != null)
                 fingerPoseShown = pose;
@@ -1871,7 +1884,24 @@ namespace TarkovVR.Source.Weapons
         // The same for the gun hand on the charging handle, after that hand's own finger update
         public static void ApplyGunHandFingerPose()
         {
+            try
+            {
+                ApplyGunHandFingers();
+            }
+            finally
+            {
+                // A round in this hand goes where the fingers now are
+                if (RoundInGunHand)
+                    PlaceHeldRound();
+            }
+        }
+
+        private static void ApplyGunHandFingers()
+        {
             Vector3[] pose = HandleInGunHand ? handleHandFingers ?? GUN_HAND_HANDLE_FINGERS : BoltFingerPose(gunHand: true);
+            // A single round: the gun's own clip's hand on the bolt knob (a small thing between the fingers), else the hand on a T
+            if (pose == null && RoundInGunHand)
+                pose = boltBonesData?.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS;
             if (pose != null)
                 gunHandFingerPoseShown = pose;
 
