@@ -29,6 +29,8 @@ namespace TarkovVR
     // waypoints, but the VR mod must still load without it. The dependency only guarantees ORBIT loads
     // first so it's in the Chainloader registry when we detect it below.
     [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft: FuckThisCulling (GPU occlusion culling) gets stereo support patches (ModSupport/FuckThisCulling) when installed
+    [BepInDependency("com.rootdarkarchon.fuckthisculling", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
@@ -410,7 +412,27 @@ namespace TarkovVR
                 MyLog.LogWarning("WeaponCustomizer dll not found, support patches will not be applied.");
             }
 
-            // Repeat for other mods (AmandsGraphics, FIKA) as needed
+            // FuckThisCulling: the eyes take turns in its visibility test (StereoCullingPatches). Patched against its private
+            // internals, so only the version it was written for.
+            if (BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue("com.rootdarkarchon.fuckthisculling", out var cullingInfo))
+            {
+                Version cullingVersion = cullingInfo.Metadata.Version;
+                if (cullingVersion == new Version(0, 4, 1))
+                {
+                    try
+                    {
+                        ApplyPatches("TarkovVR.ModSupport.FuckThisCullingSupport");
+                        InstalledMods.FuckThisCullingInstalled = true;
+                        MyLog.LogInfo($"FuckThisCulling {cullingVersion} found: stereo support applied (the eyes take turns in its visibility test).");
+                    }
+                    catch (Exception e)
+                    {
+                        MyLog.LogError($"FuckThisCulling {cullingVersion}: stereo support failed to apply, objects only the right eye sees may be hidden: {e}");
+                    }
+                }
+                else
+                    MyLog.LogWarning($"FuckThisCulling {cullingVersion}: SPT-VR's stereo support was written for 0.4.1 and is NOT applied - objects only the right eye sees may be hidden.");
+            }
         }
 
         // Bind the body-drag steal-arbitration hooks into the FikaSync companion module. Isolated into

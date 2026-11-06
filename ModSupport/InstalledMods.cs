@@ -14,6 +14,7 @@ namespace TarkovVR.ModSupport
         public static bool DynamicMapsInstalled { get; set; }
         public static bool WeaponCustomizerInstalled { get; set; }
         public static bool ORBITInstalled { get; set; }
+        public static bool FuckThisCullingInstalled { get; set; }
 
         static InstalledMods()
         {

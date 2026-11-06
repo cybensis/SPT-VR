@@ -83,6 +83,10 @@
       <HintPath>libs\ModSupport\Orbit.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="FuckThisCulling">
+      <HintPath>libs\ModSupport\FuckThisCulling.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="ItemComponent.Types">
       <HintPath>libs\Managed\ItemComponent.Types.dll</HintPath>
     </Reference>
