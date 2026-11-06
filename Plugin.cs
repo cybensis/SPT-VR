@@ -45,9 +45,21 @@ namespace TarkovVR
             Logger.LogInfo($"Plugin SPT-VR is loading!");
             MyLog = Logger;
 
+            // The VR libraries and data files from BepInEx/plugins/sptvr/VR, before anything starts VR
+            try
+            {
+                VRRuntimeFiles.Prepare();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"[VR files] preparing the VR files failed: {ex}");
+            }
+
             if (!InitializeVR())
-            {             
-                Logger.LogError("VR initialization failed. Skipping the rest of the plugin setup.");
+            {
+                Logger.LogError(VRRuntimeFiles.RestartNeeded
+                    ? "VR didn't start because its plugin manifests were only just added to the game's data folder: restart the game once."
+                    : "VR initialization failed. Skipping the rest of the plugin setup.");
                 return;
             }
 
@@ -80,8 +92,10 @@ namespace TarkovVR
                 if (TryStartOpenXR())
                     return true;
                 Logger.LogWarning("[VR] OpenXR didn't start (see the lines above): starting SteamVR's OpenVR instead. "
-                    + "Its files: UnityOpenXR.dll + openxr_loader.dll in EscapeFromTarkov_Data\\Plugins\\x86_64, Unity.XR.OpenXR.dll in "
-                    + "EscapeFromTarkov_Data\\Managed. \"useOpenXR\": false in ModSettings.json starts OpenVR directly.");
+                    + (VRRuntimeFiles.RestartNeeded ? "Its manifest was only just added to the game's data folder: OpenXR works from the next start. "
+                        : "Its files ship in BepInEx\\plugins\\sptvr\\VR (Managed\\Unity.XR.OpenXR.dll + Unity.InputSystem.dll, Native\\UnityOpenXR.dll + "
+                        + "openxr_loader.dll, Data\\UnitySubsystems\\UnityOpenXR). ")
+                    + "\"useOpenXR\": false in ModSettings.json starts OpenVR directly.");
             }
             return StartOpenVR();
         }
