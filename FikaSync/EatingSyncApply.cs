@@ -191,7 +191,7 @@ namespace SptVrFikaSync
         // empty-hands sync; the held food piece is placed separately so the hand reaches it.
         private static void DriveArms(ObservedPlayer p, EatState s, Transform chest)
         {
-            LimbIK[] limbs = p._observedLimbs;
+            LimbIK[] limbs = p._limbs;
             if (limbs == null || limbs.Length < 2)
                 return;
             float t = smoothRate > 0f ? 1f - Mathf.Exp(-smoothRate * Time.deltaTime) : 1f;

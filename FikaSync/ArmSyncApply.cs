@@ -163,7 +163,7 @@ namespace SptVrFikaSync
         // Empty / knife / grenade: both arms to the synced controller poses.
         private static void DriveRemoteHands(ObservedPlayer p, RemoteArms raw)
         {
-            LimbIK[] limbs = p._observedLimbs;
+            LimbIK[] limbs = p._limbs;
             if (limbs == null || limbs.Length < 2)
                 return;
             Transform chest = p.PlayerBones?.Ribcage?.Original;
@@ -204,8 +204,8 @@ namespace SptVrFikaSync
                     fwdOffset = fwd.normalized * weaponForwardOffset;
             }
 
-            LimbIK[] limbs = p._observedLimbs;
-            Transform[] markers = p._observedMarkers;
+            LimbIK[] limbs = p._limbs;
+            Transform[] markers = p._markers;
 
             // Place the gun: faithful pose + forward nudge, then extend along the held shoulder->gun line
             // so the held arm straightens whichever way it's aimed (no-op if the limbs aren't ready).
