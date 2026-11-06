@@ -15,49 +15,55 @@ namespace TarkovVR.Source.Controls
     {
         public static bool LeftHanded => VRSettings.GetLeftHandedMode();
 
-        // Real left-handed mode, stage 2b test (live, left-handed mode on): the gun in the LEFT hand unmirrored - no mirror flips, the
-        // right-handed grip offsets mirrored onto the left controller, EFT's arms swapped onto mirrored targets and the fingers swapped
-        // (RealLeftHandedPatches, HandMirror). Off = today's mirrored left-handed mode. Setting it re-applies the left-handed setup.
-        private static bool realLeftHandedTest;
-        public static bool RealLeftHandedTest
+        // Today's left-handed mode: the arms + gun mirrored (scale -1), everything right-handed underneath. Untouched by the below.
+        public static bool MirrorLeftHanded => LeftHanded;
+
+        // The gun in the LEFT hand, right-handed mode (no mirroring anywhere - his call 2026-11-06, after the test built on the mirrored
+        // mode stacked mirror on mirror): the left hand took it off the sling (ChestHang). The rig's gun hand follows the left controller
+        // with the right-handed hold mirrored once (VRPlayerManager.MirroredGunHold), EFT's arms go onto the gun mirrored
+        // (RealLeftHandedPatches), the fingers swap (HandMirror). Back to the sling = back to normal.
+        public static bool GunInLeftHand { get; private set; }
+
+        public static void SetGunInLeftHand(bool inLeftHand)
         {
-            get => realLeftHandedTest;
-            set
-            {
-                if (realLeftHandedTest == value)
-                    return;
-                realLeftHandedTest = value;
-                if (LeftHanded && VRGlobals.vrPlayer != null)
-                    VRGlobals.vrPlayer.LeftHandedMode();
-            }
+            if (LeftHanded)
+                inLeftHand = false;
+            if (GunInLeftHand == inLeftHand)
+                return;
+            GunInLeftHand = inLeftHand;
+            // Which controller drives the rig's gun hand
+            if (VRGlobals.vrPlayer != null)
+                VRGlobals.vrPlayer.RightHandedMode();
+            Plugin.MyLog.LogInfo($"[Handedness] gun in the {(inLeftHand ? "LEFT" : "right")} hand");
         }
-        public static bool RealLeftHanded => LeftHanded && realLeftHandedTest;
-        // Today's left-handed mode: the arms + gun mirrored (scale -1), everything right-handed underneath
-        public static bool MirrorLeftHanded => LeftHanded && !realLeftHandedTest;
+
+        // Which controller holds the gun: the left in left-handed mode, or while the gun is in the left hand
+        public static bool GunHandIsLeft => LeftHanded || GunInLeftHand;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // The controllers
+        // The controllers. Grip, trigger, face buttons, pose and haptics follow the gun; the sticks stay where the layout puts them
+        // (movement / turning don't swap sides when the gun does).
 
-        public static SteamVR_Input_Sources GunHandSource => LeftHanded ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
-        public static SteamVR_Input_Sources OffHandSource => LeftHanded ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
+        public static SteamVR_Input_Sources GunHandSource => GunHandIsLeft ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand;
+        public static SteamVR_Input_Sources OffHandSource => GunHandIsLeft ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
 
-        public static VRBoolean GunHandGrip => LeftHanded ? VRInput.LeftGrip : VRInput.RightGrip;
-        public static VRBoolean OffHandGrip => LeftHanded ? VRInput.RightGrip : VRInput.LeftGrip;
+        public static VRBoolean GunHandGrip => GunHandIsLeft ? VRInput.LeftGrip : VRInput.RightGrip;
+        public static VRBoolean OffHandGrip => GunHandIsLeft ? VRInput.RightGrip : VRInput.LeftGrip;
 
-        public static VRSingle GunHandTrigger => LeftHanded ? VRInput.LeftTrigger : VRInput.RightTrigger;
-        public static VRSingle OffHandTrigger => LeftHanded ? VRInput.RightTrigger : VRInput.LeftTrigger;
+        public static VRSingle GunHandTrigger => GunHandIsLeft ? VRInput.LeftTrigger : VRInput.RightTrigger;
+        public static VRSingle OffHandTrigger => GunHandIsLeft ? VRInput.RightTrigger : VRInput.LeftTrigger;
 
         public static VRVector2 GunHandJoystick => LeftHanded ? VRInput.LeftJoystick : VRInput.RightJoystick;
         public static VRVector2 OffHandJoystick => LeftHanded ? VRInput.RightJoystick : VRInput.LeftJoystick;
 
         // Face buttons: lower = A / X, upper = B / Y (A and B are on the right controller, X and Y on the left)
-        public static VRBoolean GunHandLowerButton => LeftHanded ? VRInput.ButtonX : VRInput.ButtonA;
-        public static VRBoolean GunHandUpperButton => LeftHanded ? VRInput.ButtonY : VRInput.ButtonB;
-        public static VRBoolean OffHandLowerButton => LeftHanded ? VRInput.ButtonA : VRInput.ButtonX;
-        public static VRBoolean OffHandUpperButton => LeftHanded ? VRInput.ButtonB : VRInput.ButtonY;
+        public static VRBoolean GunHandLowerButton => GunHandIsLeft ? VRInput.ButtonX : VRInput.ButtonA;
+        public static VRBoolean GunHandUpperButton => GunHandIsLeft ? VRInput.ButtonY : VRInput.ButtonB;
+        public static VRBoolean OffHandLowerButton => GunHandIsLeft ? VRInput.ButtonA : VRInput.ButtonX;
+        public static VRBoolean OffHandUpperButton => GunHandIsLeft ? VRInput.ButtonB : VRInput.ButtonY;
 
-        public static VRPose GunHandPose => LeftHanded ? VRInput.LeftHandPose : VRInput.RightHandPose;
-        public static VRPose OffHandPose => LeftHanded ? VRInput.RightHandPose : VRInput.LeftHandPose;
+        public static VRPose GunHandPose => GunHandIsLeft ? VRInput.LeftHandPose : VRInput.RightHandPose;
+        public static VRPose OffHandPose => GunHandIsLeft ? VRInput.RightHandPose : VRInput.LeftHandPose;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The rig

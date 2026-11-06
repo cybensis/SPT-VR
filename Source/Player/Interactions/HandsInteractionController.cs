@@ -323,7 +323,8 @@ namespace TarkovVR.Source.Player.Interactions
                     || (VRGlobals.vrPlayer.radialMenu && VRGlobals.vrPlayer.radialMenu.active)
                     || (WeaponPatches.currentGunInteractController != null
                         && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1);
-                ChestHang.UpdateInput(primaryHandGrip.state, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
+                // The grip of the hand holding the gun (the left one while the gun is in the left hand: Handedness.GunInLeftHand)
+                ChestHang.UpdateInput(Handedness.GunHandGrip.state, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
             }
 
             // Magazines by hand: also before the bail (it cancels a held magazine itself on menus)

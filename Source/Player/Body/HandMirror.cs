@@ -82,7 +82,7 @@ namespace TarkovVR.Source.Player.Body
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Real left-handed mode (Handedness.RealLeftHanded, test)
+        // The gun in the left hand (Handedness.GunInLeftHand, right-handed mode)
 
         private static readonly Matrix4x4 FlipX = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
         private static Matrix4x4 palmRightToLeft, palmLeftToRight;
@@ -106,8 +106,7 @@ namespace TarkovVR.Source.Player.Body
         // bones) onto the left hand now on the grip, the support pose onto the right
         public static void ApplyRealLeftHanded()
         {
-            if (TarkovVR.Source.Controls.Handedness.RealLeftHanded && VRGlobals.player != null && VRGlobals.firearmController != null
-                && !TarkovVR.Source.Player.Interactions.ChestHang.Detached)
+            if (TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active && VRGlobals.player != null)
                 SwapFingers();
         }
 

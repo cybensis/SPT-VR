@@ -95,8 +95,13 @@ namespace TarkovVR.Source.Player.Interactions
                 gripSeen = false;
                 releaseTimer = 0f;
                 Reattach(restore: false);
+                Handedness.SetGunInLeftHand(false);
                 return;
             }
+            // The LEFT controller's grip, for taking the slung gun into the left hand (right-handed mode: that controller doesn't change)
+            bool leftGrip = VRInput.LeftGrip.state;
+            bool leftGripPressed = leftGrip && !prevLeftGrip;
+            prevLeftGrip = leftGrip;
 
             var player = VRGlobals.player;
             if (!ReferenceEquals(player, lastPlayer))
@@ -122,12 +127,15 @@ namespace TarkovVR.Source.Player.Interactions
                 releaseTimer = 0f;
                 prevGrip = grip;
                 Reattach(restore: false);
+                // A new gun (or none) starts in the right hand
+                Handedness.SetGunInLeftHand(false);
             }
 
             if (!holdingFirearm)
             {
                 releaseTimer = 0f;
                 Reattach(restore: false);
+                Handedness.SetGunInLeftHand(false);
                 return;
             }
             // Taken off the body (BodyWeapons): the grip that took it holds it, so opening the hand lets it go to its spot
@@ -224,6 +232,18 @@ namespace TarkovVR.Source.Player.Interactions
                     Reattach(restore: true);
                     gripSeen = true;
                 }
+                // ...or with the LEFT hand at its grip: then it's held left-handed (Handedness.GunInLeftHand: not mirrored, the hold, arms
+                // and fingers mirrored onto the left). Right-handed mode only; the left hand free (nothing in it, not on a reload part).
+                else if (!Handedness.LeftHanded && leftGripPressed && LeftHandAtGrip(fc) && !VRReloadController.OwnsOffHand
+                    && (VRGlobals.handsInteractionController == null || VRGlobals.handsInteractionController.heldItem == null))
+                {
+                    Handedness.SetGunInLeftHand(true);
+                    Reattach(restore: true);
+                    gripSeen = true;
+                    // From here the gun hand's grip is the left one, held now: no fresh press next frame
+                    prevGrip = true;
+                    return;
+                }
                 prevGrip = grip;
                 return;
             }
@@ -241,8 +261,10 @@ namespace TarkovVR.Source.Player.Interactions
                 if (releaseTimer >= slingDelay)
                 {
                     releaseTimer = 0f;
-                    if (supporting)
-                        BeginSupportHold(fc);   // left hand still on it - hand the gun to the support hand
+                    // left hand still on it - hand the gun to the support hand (not from the left hand: that hold assumes the support
+                    // hand is the left; the gun goes to the sling)
+                    if (supporting && !Handedness.GunInLeftHand)
+                        BeginSupportHold(fc);
                     else
                         BeginHang(fc);
                 }
@@ -296,7 +318,26 @@ namespace TarkovVR.Source.Player.Interactions
             Hanging = true;
             if (hangHaptics && !snap)
                 Pulse(0.6f);
+            // Out of the left hand too: on the sling the gun is nobody's
+            Handedness.SetGunInLeftHand(false);
         }
+
+        // The left hand's palm, knuckles or fingertips at the slung gun's grip (the right hand's regrab point and reach)
+        private static bool LeftHandAtGrip(EFT.Player.FirearmController fc)
+        {
+            if (fc.WeaponRoot == null || VRGlobals.handsInteractionController == null)
+                return false;
+            Vector3 grip = RegrabPoint(fc);
+            VRGlobals.handsInteractionController.GetHandTouchPoints(false, leftTouchPoints);
+            foreach (Vector3 point in leftTouchPoints)
+            {
+                if ((point - grip).sqrMagnitude <= regrabRadius * regrabRadius)
+                    return true;
+            }
+            return false;
+        }
+        private static readonly System.Collections.Generic.List<Vector3> leftTouchPoints = new System.Collections.Generic.List<Vector3>();
+        private static bool prevLeftGrip;
 
         private static void BeginSupportHold(EFT.Player.FirearmController fc)
         {
