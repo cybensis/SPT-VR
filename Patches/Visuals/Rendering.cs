@@ -108,6 +108,57 @@ namespace TarkovVR.Patches.Visuals
             __instance.FlippedV = true;
         }
 
+        // The game camera's last step (SSAAImpl.OnRenderImage) draws its image with a full-screen quad straight in clip space,
+        // the Y-flipped one while FlippedV: right into an ordinary render texture, upside down into the headset's eye image (or
+        // null = the camera's own target, which is the eye image). Which it gets depends on whether another camera draws into the
+        // eye image after it - with uiCam rendering it ends in a texture of its own; with uiCam skipped (UiCameraGate) straight
+        // in the eye image, and the fixed FlippedV = true turned the HEADSET image upside down (2026-11-05). So per call, from
+        // the destination. false = FlippedV = true always (the old behavior).
+        public static bool flipByDestination = true;
+        public static bool logFlipDestinations = true;     // each new destination, the first 12
+        private static string lastFlipDestination;
+        private static int flipDestinationLogs;
+        private static readonly List<XRDisplaySubsystem> xrDisplays = new List<XRDisplaySubsystem>();
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SSAAImpl), "OnRenderImage")]
+        private static void FlipForDestination(SSAAImpl __instance, RenderTexture destination)
+        {
+            if (!flipByDestination)
+                return;
+            bool intoEyeImage = destination == null || IsEyeImage(destination);
+            __instance.FlippedV = !intoEyeImage;
+            if (!logFlipDestinations || flipDestinationLogs >= 12)
+                return;
+            string kind = destination == null ? "null (the camera's own target)"
+                : $"'{System.Text.RegularExpressions.Regex.Replace(destination.name ?? "", @"\d+", "#")}'{(intoEyeImage ? " (eye image)" : "")}";
+            if (kind == lastFlipDestination)
+                return;
+            lastFlipDestination = kind;
+            flipDestinationLogs++;
+            Camera camera = __instance._currentCamera;
+            Plugin.MyLog.LogInfo($"[SSAAFlip] frame {Time.frameCount}: '{(camera != null ? camera.name : "?")}' final image into {kind} - flipped {__instance.FlippedV}");
+        }
+
+        private static bool IsEyeImage(RenderTexture texture)
+        {
+#pragma warning disable CS0618 // GetInstances: the 2019 references' name; still in the game's 2022
+            SubsystemManager.GetInstances(xrDisplays);
+#pragma warning restore CS0618
+            foreach (XRDisplaySubsystem display in xrDisplays)
+            {
+                if (!display.running)
+                    continue;
+                int passes = display.GetRenderPassCount();
+                for (int pass = 0; pass < passes; pass++)
+                {
+                    if (display.GetRenderTextureForRenderPass(pass) == texture)
+                        return true;
+                }
+            }
+            return texture.name != null && texture.name.StartsWith("XR Texture");
+        }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         private static int scaledWidth;
         private static int scaledHeight;

@@ -13,7 +13,7 @@ namespace TarkovVR.Source.Graphics
     // frames and kept on a moment after the last one (fade-outs finish). On the raid / hideout uiCam (InitVRPatches.SetMainCamParent).
     public class UiCameraGate : MonoBehaviour
     {
-        public static bool skipWhenNoUiInView = false; // false = uiCam every frame. OFF: with uiCam skipped the HEADSET image came out upside down (2026-11-05)
+        public static bool skipWhenNoUiInView = true;  // false = uiCam every frame. (Skipping it once flipped the headset image: fixed at the game camera, Rendering.FlipForDestination)
         public static int checkEveryFrames = 3;
         public static float keepOnSeconds = 0.3f;      // after the last UI seen in view
         public static float marginMeters = 0.05f;      // grown around each graphic, plus...
