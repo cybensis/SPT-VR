@@ -23,6 +23,7 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
 
         private static Camera testingCamera;             // the gameplay camera whose eye is recording the test
         private static readonly int[] lastTestFrame = { -1, -1 };
+        private static readonly int[] lastDrawnFrame = { -1, -1 };   // an eye's last pre-render (one not drawn never gets the turn)
         private static int turnFrame = -1;
         private static int turnEye;
         private static int[] eyeOfSlot = new int[32];    // by the slot's ring index: the eye its current test came from...
@@ -49,15 +50,21 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         private static int EyeIndex(Camera camera) => camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
 
         // The eye whose last test is older (frame parity alone gave the right eye 295 tests to the left's 504 in 20 s: a turn with no
-        // free slot is lost, so the turn stays with that eye). Fixed for the frame.
+        // free slot is lost, so the turn stays with that eye), among the eyes being drawn (the cost probe's left-eye-only step never
+        // drew the right one: it kept the turn, nothing was tested, every hide aged out). Fixed for the frame.
         private static int TurnEye
         {
             get
             {
-                if (turnFrame != Time.frameCount)
+                int frame = Time.frameCount;
+                if (turnFrame != frame)
                 {
-                    turnFrame = Time.frameCount;
-                    turnEye = lastTestFrame[1] < lastTestFrame[0] ? 1 : 0;
+                    turnFrame = frame;
+                    bool leftDrawn = lastDrawnFrame[0] >= frame - 2;
+                    bool rightDrawn = lastDrawnFrame[1] >= frame - 2;
+                    turnEye = leftDrawn && !rightDrawn ? 0
+                        : rightDrawn && !leftDrawn ? 1
+                        : lastTestFrame[1] < lastTestFrame[0] ? 1 : 0;
                 }
                 return turnEye;
             }
@@ -79,7 +86,9 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         {
             if (c == null || c != __instance._camera || !Stereo(c))
                 return true;
-            if (EyeIndex(c) != TurnEye)
+            int eye = EyeIndex(c);
+            lastDrawnFrame[eye] = Time.frameCount;
+            if (eye != TurnEye)
                 return false;
             testingCamera = c;
             return true;
@@ -197,7 +206,7 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
 
         // Diagnostic (headset round 2: 780 merges, 0 boxes seen by one eye only - two real eye views always differ somewhere):
         // every 2 s, the two eyes' latest raw results compared box by box (by state), and each eye's state counts, first 10 lines
-        public static bool logEyeComparison = true;
+        public static bool logEyeComparison = false;    // confirmed working 2026-11-05 (right-only boxes 18-795 a test); on = 10 comparison lines
         private static float nextComparison;
         private static int comparisonLogs;
         private static readonly int[][] stateCounts = { new int[4], new int[4] };
