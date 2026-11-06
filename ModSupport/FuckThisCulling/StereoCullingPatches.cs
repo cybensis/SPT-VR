@@ -1,6 +1,4 @@
 using System;
-using BepInEx.Configuration;
-using FuckThisCulling;
 using FuckThisCulling.Engine;
 using HarmonyLib;
 using UnityEngine;
@@ -88,14 +86,6 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
 
         private static Matrix4x4 ReferenceProjection(Camera camera) => camera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
 
-        // PluginSettings' entries are internal properties, which the publicized DLL leaves internal (its fields are opened)
-        private static readonly Func<PluginSettings, ConfigEntry<int>> MaxAge = Getter<ConfigEntry<int>>("MaxAge");
-        private static readonly Func<PluginSettings, ConfigEntry<float>> MotionDistance = Getter<ConfigEntry<float>>("MotionDistance");
-        private static readonly Func<PluginSettings, ConfigEntry<float>> MotionAngle = Getter<ConfigEntry<float>>("MotionAngle");
-
-        private static Func<PluginSettings, T> Getter<T>(string property) =>
-            AccessTools.MethodDelegate<Func<PluginSettings, T>>(AccessTools.PropertyGetter(typeof(PluginSettings), property));
-
         // RestoreTriggers.Stale (0.4.1) with the current projection read the same way the slots now store it. The original reads the
         // camera's plain projection, which would not match a slot from the other eye.
         [HarmonyPrefix]
@@ -118,9 +108,9 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             __instance._stats.RecordSourceDelta(moved, turned, largestChange);
             __result = sample.Generation != generation ? "generation"
                 : current.pixelWidth != width || current.pixelHeight != height || current.cullingMask != mask || current.orthographic ? "camera layout"
-                : Time.frameCount - sample.Frame > MaxAge(__instance._settings).Value ? "age"
-                : moved > MotionDistance(__instance._settings).Value ? "translation/cut"
-                : turned > MotionAngle(__instance._settings).Value ? "rotation/cut"
+                : Time.frameCount - sample.Frame > __instance._settings.MaxAge.Value ? "age"
+                : moved > __instance._settings.MotionDistance.Value ? "translation/cut"
+                : turned > __instance._settings.MotionAngle.Value ? "rotation/cut"
                 : largestChange > 0.0001f ? "projection"
                 : Math.Abs(now.m02 - then.m02) > 8f / width || Math.Abs(now.m12 - then.m12) > 8f / height ? "projection jitter"
                 : "";
