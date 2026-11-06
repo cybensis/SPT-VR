@@ -694,19 +694,38 @@ namespace TarkovVR.Source.Player.VRManager
             RightHand.transform.localPosition = (fromAction.localPosition + (real ? MirrorX(mainHandPosOffset) : mainHandPosOffset)) - fromAction.localRotation * Vector3.forward * controllerLength;
         }
 
-        // Real left-handed (test): where the RIGHT controller puts a right hand the right-handed way (the gun hand's offsets), in world
-        // space - the free support hand's target (RealLeftHandedPatches)
-        public bool RightControllerHandPose(out Vector3 position, out Quaternion rotation)
+        // Real left-handed (test): a hand's own natural pose at its OWN controller, the right-handed way, in world space - the target of
+        // an arm that isn't on the gun (RealLeftHandedPatches; the rig's hands follow the swapped controllers in left-handed mode).
+        // Index: the free-hand wrist poses; else the gun hand's offsets for the right, the off hand's for the left.
+        public bool ControllerHandPose(bool rightController, out Vector3 position, out Quaternion rotation)
         {
             position = Vector3.zero;
             rotation = Quaternion.identity;
             if (RightHand == null || RightHand.transform.parent == null)
                 return false;
-            Vector3 controllerPosition = VRInput.RightHandPose.GetLocalPosition(SteamVR_Input_Sources.RightHand);
-            Quaternion controllerRotation = VRInput.RightHandPose.GetLocalRotation(SteamVR_Input_Sources.RightHand);
-            Quaternion local = controllerRotation * Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + rightHandedPrimaryHandRotOffset.x,
-                rightHandedPrimaryHandRotOffset.y, rightHandedPrimaryHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
-            Vector3 localPosition = controllerPosition + rightHandedPrimaryHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
+            VRPose pose = rightController ? VRInput.RightHandPose : VRInput.LeftHandPose;
+            SteamVR_Input_Sources source = rightController ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand;
+            Vector3 controllerPosition = pose.GetLocalPosition(source);
+            Quaternion controllerRotation = pose.GetLocalRotation(source);
+            Vector3 localPosition;
+            Quaternion local;
+            if (alignFreeHands && VRGlobals.vrControllerType == "index")
+            {
+                localPosition = controllerPosition + controllerRotation * (rightController ? freeRightHandWrist : freeLeftHandWrist);
+                local = controllerRotation * Quaternion.Euler(rightController ? freeRightHandRotation : freeLeftHandRotation);
+            }
+            else if (rightController)
+            {
+                local = controllerRotation * Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + rightHandedPrimaryHandRotOffset.x,
+                    rightHandedPrimaryHandRotOffset.y, rightHandedPrimaryHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
+                localPosition = controllerPosition + rightHandedPrimaryHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
+            }
+            else
+            {
+                local = controllerRotation * Quaternion.Euler(VRSettings.GetSecondaryHandVertOffset() + rightHandedOtherHandRotOffset.x,
+                    rightHandedOtherHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + rightHandedOtherHandRotOffset.z);
+                localPosition = controllerPosition + rightHandedOtherHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
+            }
             Transform rig = RightHand.transform.parent;
             position = rig.TransformPoint(localPosition);
             rotation = rig.rotation * local;
