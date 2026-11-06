@@ -133,11 +133,16 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         }
 
         // A result came back (QueryPipeline.Read: copied into slot.data, ready): kept as this eye's latest, then every box the other
-        // eye's latest result saw is marked seen here too. Packet: 4 header words, then one byte per box (0 or a "visible" reason
-        // code = seen, VisibleReason.IsVisible).
+        // eye's latest result saw is marked seen here too. Packet (0.4.1): 4 header words, one byte per box (the compact words),
+        // then at compactWords the previous test's token, then the GPU's changed-word bits. A box's byte: low 2 bits = its state
+        // (LaneClassifier: 1 = occluded -> hide; 3 = still occluded while hidden; 0 / 2 = seen), upper bits = behind-hide flags.
+        // (Round 2 read the whole byte as a VisibleReason code - wrong, so it never merged anything.)
+        private const uint StateMask = 0x3u;
+        private static bool Seen(uint state) => state == 0u || state == 2u;
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(QueryPipeline), "Read")]
-        private static void MergeOtherEye(QuerySlot slot)
+        private static void MergeOtherEye(QueryPipeline __instance, QuerySlot slot)
         {
             if (!enabled || slot == null || !slot.ready || slot.data == null || slot.index < 0 || slot.index >= eyeOfSlot.Length
                 || tokenOfSlot[slot.index] != slot.token)
@@ -160,8 +165,9 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             if (!mergeEyes)
                 return;
             uint[] otherData = other.data;
+            int compactWords = __instance._compactWords;
             int boxes = Math.Min(slot.sourceBoxCount, other.boxCount);
-            int endWord = Math.Min(data.Length, 4 + (boxes + 3) / 4);
+            int endWord = Math.Min(Math.Min(data.Length, compactWords), 4 + (boxes + 3) / 4);
             for (int word = 4; word < endWord; word++)
             {
                 uint mine = data[word];
@@ -174,25 +180,27 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
                     if ((word - 4) * 4 + lane >= boxes)
                         break;
                     int shift = lane * 8;
-                    int myReason = (int)((mine >> shift) & 0xFFu);
-                    int theirReason = (int)((theirs >> shift) & 0xFFu);
-                    if (!VisibleReason.IsVisible(myReason) && VisibleReason.IsVisible(theirReason))
+                    if (!Seen((mine >> shift) & StateMask) && Seen((theirs >> shift) & StateMask))
                     {
-                        merged = (merged & ~(0xFFu << shift)) | ((uint)theirReason << shift);
+                        merged = (merged & ~(0xFFu << shift)) | (theirs & (0xFFu << shift));
                         boxesMerged++;
                     }
                 }
                 data[word] = merged;
             }
+            // The GPU's changed-word bits compare this test with the one before it (the other eye's, unmerged), and the decoder reads
+            // only those words while the token chain holds: break the chain so it decodes the whole merged result
+            if (compactWords > 0 && compactWords < data.Length)
+                data[compactWords] = uint.MaxValue;
             resultsMerged++;
         }
 
         // Diagnostic (headset round 2: 780 merges, 0 boxes seen by one eye only - two real eye views always differ somewhere):
-        // every 2 s, the two eyes' latest raw results compared box by box, and the reason codes seen in each, first 10 lines
+        // every 2 s, the two eyes' latest raw results compared box by box (by state), and each eye's state counts, first 10 lines
         public static bool logEyeComparison = true;
         private static float nextComparison;
         private static int comparisonLogs;
-        private static readonly int[] reasonCounts = new int[256];
+        private static readonly int[][] stateCounts = { new int[4], new int[4] };
 
         private static void CompareEyes(int eye, EyeResult own, EyeResult other)
         {
@@ -203,32 +211,28 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
             EyeResult left = eye == 0 ? own : other;
             EyeResult right = eye == 0 ? other : own;
             int boxes = Math.Min(left.boxCount, right.boxCount);
-            int leftOnly = 0, rightOnly = 0, both = 0, neither = 0, differentCode = 0;
-            Array.Clear(reasonCounts, 0, reasonCounts.Length);
+            int leftOnly = 0, rightOnly = 0, both = 0, neither = 0, differentBytes = 0;
+            Array.Clear(stateCounts[0], 0, 4);
+            Array.Clear(stateCounts[1], 0, 4);
             for (int box = 0; box < boxes; box++)
             {
                 int word = 4 + box / 4;
                 int shift = (box & 3) * 8;
-                int leftReason = (int)((left.data[word] >> shift) & 0xFFu);
-                int rightReason = (int)((right.data[word] >> shift) & 0xFFu);
-                bool leftSees = VisibleReason.IsVisible(leftReason);
-                bool rightSees = VisibleReason.IsVisible(rightReason);
+                uint leftByte = (left.data[word] >> shift) & 0xFFu;
+                uint rightByte = (right.data[word] >> shift) & 0xFFu;
+                bool leftSees = Seen(leftByte & StateMask);
+                bool rightSees = Seen(rightByte & StateMask);
                 if (leftSees && rightSees) both++;
                 else if (leftSees) leftOnly++;
                 else if (rightSees) rightOnly++;
                 else neither++;
-                if (leftReason != rightReason) differentCode++;
-                reasonCounts[rightReason]++;
-            }
-            var codes = new System.Text.StringBuilder();
-            for (int code = 0; code < 256; code++)
-            {
-                if (reasonCounts[code] > 0)
-                    codes.Append(code).Append(':').Append(reasonCounts[code]).Append(' ');
+                if (leftByte != rightByte) differentBytes++;
+                stateCounts[0][leftByte & StateMask]++;
+                stateCounts[1][rightByte & StateMask]++;
             }
             Plugin.MyLog.LogInfo($"[FuckThisCulling VR] eyes compared (left test frame {left.frame}, right {right.frame}, {boxes} boxes): "
-                + $"seen by both {both}, left only {leftOnly}, right only {rightOnly}, neither {neither}, different codes {differentCode}; "
-                + $"right eye's codes {codes}");
+                + $"seen by both {both}, left only {leftOnly}, right only {rightOnly}, neither {neither}, different bytes {differentBytes}; "
+                + $"states 0/1/2/3 left {string.Join("/", stateCounts[0])}, right {string.Join("/", stateCounts[1])}");
         }
 
         private static Matrix4x4 ReferenceProjection(Camera camera) => camera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
@@ -279,9 +283,18 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         private static void ConeOffBothEyes(ref Matrix4x4 projection)
         {
             Camera camera = testingCamera;
-            if (Stereo(camera))
-                projection = BothEyesProjection(camera, projection);
+            if (!Stereo(camera))
+                return;
+            Matrix4x4 given = projection;
+            projection = BothEyesProjection(camera, projection);
+            if (!loggedCone)
+            {
+                loggedCone = true;
+                Plugin.MyLog.LogInfo($"[FuckThisCulling VR] behind-you cone kept off both eyes: half-angle tangents across {1f / projection.m00:0.000} "
+                    + $"up {1f / projection.m11:0.000} (the eye's own {1f / given.m00:0.000} / {1f / given.m11:0.000})");
+            }
         }
+        private static bool loggedCone;
 
         private static Matrix4x4 BothEyesProjection(Camera camera, Matrix4x4 fallback)
         {
