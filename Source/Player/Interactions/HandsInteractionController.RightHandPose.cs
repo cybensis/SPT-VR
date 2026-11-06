@@ -64,7 +64,9 @@ namespace TarkovVR.Source.Player.Interactions
             bool emptyHands = VRGlobals.player != null && VRGlobals.player.HandsIsEmpty;
             bool free = rightOpenHand && VRGlobals.inGame && !VRGlobals.menuOpen
                         && !VRGlobals.usingItem && !EatingInteractionController.ManualActive
-                        && (ChestHang.Detached || emptyHands);
+                        && (ChestHang.Detached || emptyHands
+                            // the gun in the LEFT hand and this one off the foregrip (HandMirror puts the mirrored foregrip pose on it there)
+                            || (TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active && !VRGlobals.vrPlayer.isSupporting));
 
             float k = 1f - Mathf.Exp(-handOpenLerp * Time.deltaTime);
             rightHandWeightBlend = Mathf.Lerp(rightHandWeightBlend, free ? Mathf.Clamp01(handPoseWeight) : 0f, k);

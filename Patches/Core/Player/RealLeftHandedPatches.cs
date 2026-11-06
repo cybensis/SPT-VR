@@ -17,12 +17,17 @@ namespace TarkovVR.Patches.Core.Player
     //  - right arm: the left hand's foregrip pose mirrored while supporting, else its own controller the right-handed way
     // The gun's centre plane is its Weapon_root's x = 0 (measured on the AK-74 / M4A1 / M700 models: bore along -y, sights +z, the two
     // hand markers at x = +3 / -4 cm). The mod's own arm targets (solver.target wins over IKPosition) are taken off for the solve and put
-    // back after IkApply. The fingers swap at the end of HandsInteractionController.LateUpdate (HandMirror.SwapFingers).
+    // back after IkApply. The fingers: HandMirror.CaptureGunHandGrip / ApplyRealLeftHanded (HandsInteractionController.LateUpdate).
     [HarmonyPatch]
     internal static class RealLeftHandedPatches
     {
         private static bool swapped;
         private static Transform leftTargetBefore, rightTargetBefore;
+        // The limbs' own update, switched off while the gun is in the left hand, put back as it was when that ends (headset: left
+        // switched off, the left hand jittered / lagged after handing the gun back until a foregrip grab re-enabled it)
+        private static bool limbUpdatesOff;
+        private static bool leftEnabledBefore, rightEnabledBefore;
+        private static Transform swayFrameFor, swayFrame;
 
         internal static bool Active => Handedness.GunInLeftHand && VRGlobals.vrPlayer != null && VRGlobals.firearmController != null
             && VRGlobals.firearmController.WeaponRoot != null && !ChestHang.Detached;
@@ -32,8 +37,18 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.Player), nameof(EFT.Player.IkProcess))]
         private static void SwapArms(EFT.Player __instance)
         {
-            if (!Active || !__instance.IsYourPlayer || __instance._limbs == null || __instance._limbs.Length < 2)
+            if (!__instance.IsYourPlayer || __instance._limbs == null || __instance._limbs.Length < 2)
                 return;
+            if (!Active)
+            {
+                if (limbUpdatesOff)
+                {
+                    limbUpdatesOff = false;
+                    __instance._limbs[0].enabled = leftEnabledBefore;
+                    __instance._limbs[1].enabled = rightEnabledBefore;
+                }
+                return;
+            }
             IKSolverLimb left = __instance._limbs[0].solver;
             IKSolverLimb right = __instance._limbs[1].solver;
 
@@ -43,9 +58,18 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 supportPosition = left.target != null ? left.target.position : left.IKPosition;
             Quaternion supportRotation = left.target != null ? left.target.rotation : left.IKRotation;
 
+            // The plane rides EFT's sway / inertia: that moves Weapon_root_anim (PlayerBones.ShiftWeaponRoot / Kinematics) under
+            // Weapon_root, gun mesh and markers with it, so a plane on Weapon_root mirrored the hand the OPPOSITE way to the gun's sway
+            // (headset: "the gun moves slightly out of hand while moving / turning"; the right hand on the foregrip jittered). On the
+            // models Weapon_root_anim sits on Weapon_root at rest (zero offset, zero turn), so its x is the same centre plane.
             Transform weaponRoot = VRGlobals.firearmController.WeaponRoot;
-            Vector3 planeNormal = weaponRoot.right;
-            Vector3 planePoint = weaponRoot.position;
+            if (swayFrameFor != weaponRoot)
+            {
+                swayFrameFor = weaponRoot;
+                swayFrame = weaponRoot.Find("Weapon_root_anim") ?? weaponRoot;
+            }
+            Vector3 planeNormal = swayFrame.right;
+            Vector3 planePoint = swayFrame.position;
             if (!HandMirror.TryMirrorPalm(gripRotation, planeNormal, rightToLeft: true, out Quaternion leftRotation))
                 return;
             Vector3 leftPosition = ReflectPoint(gripPosition, planePoint, planeNormal);
@@ -69,6 +93,12 @@ namespace TarkovVR.Patches.Core.Player
             left.target = null;
             right.target = null;
             // EFT solves both by hand (IkApply); the components' own update would solve them again onto the mod's targets
+            if (!limbUpdatesOff)
+            {
+                limbUpdatesOff = true;
+                leftEnabledBefore = __instance._limbs[0].enabled;
+                rightEnabledBefore = __instance._limbs[1].enabled;
+            }
             __instance._limbs[0].enabled = false;
             __instance._limbs[1].enabled = false;
             left.IKPositionWeight = left.IKRotationWeight = 1f;

@@ -435,6 +435,8 @@ namespace TarkovVR.Source.Player.Interactions
             // A magazine picked up off the ground: its ground item stays hidden while our model of it is held
             VRReloadController.KeepGroundMagazineHidden();
 
+            // The gun in the left hand: the gun grip as EFT animated it on the right hand, before that hand's own update (HandMirror)
+            TarkovVR.Source.Player.Body.HandMirror.CaptureGunHandGrip();
             // Same open-hand treatment for the RIGHT hand while it's off the gun (ChestHang
             // sling / support-only) - the animator still curls it in the grip pose otherwise.
             UpdateRightHandFingers();

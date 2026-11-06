@@ -86,7 +86,6 @@ namespace TarkovVR.Source.Player.Body
 
         private static readonly Matrix4x4 FlipX = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
         private static Matrix4x4 palmRightToLeft, palmLeftToRight;
-        private static Quaternion[] swapLeft, swapRight;
 
         // A palm's world rotation -> the OTHER palm's for its mirror image through a world plane (e.g. the gun's centre plane). The
         // frame reflected through the plane, then turned into the other palm's bone frame by the rest poses:
@@ -102,40 +101,88 @@ namespace TarkovVR.Source.Player.Body
             return true;
         }
 
-        // End of HandsInteractionController.LateUpdate, with RealLeftHandedPatches' arm swap: the gun's grip pose (animated on the right
-        // bones) onto the left hand now on the grip, the support pose onto the right
-        public static void ApplyRealLeftHanded()
+        // The fingers while the gun is in the left hand. EFT still animates the RIGHT hand gripping the gun and the LEFT as its support
+        // hand, so: the left = the right's animated grip, mirrored; the right = the left's animated foregrip pose, mirrored, only while
+        // on the foregrip (off it, its own open pose: HandsInteractionController.UpdateRightHandFingers). Each is read as EFT animated
+        // it: a joint still holding what was on it at the end of last frame wasn't re-animated, and keeps its last animated value -
+        // otherwise our own (or the open pose's) output fed back in (headset: "the right hand off the gun copies the left hand pose").
+        private static Quaternion[] rightAnimated, leftAnimated, rightFinal, leftFinal, mirroredOut;
+
+        // Before the right hand's own finger update (it may put the open pose on): the gun grip, after the trigger discipline
+        public static void CaptureGunHandGrip()
         {
-            if (TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active && VRGlobals.player != null)
-                SwapFingers();
+            if (!TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active || VRGlobals.player == null || !EnsureBones())
+            {
+                rightAnimated = leftAnimated = rightFinal = leftFinal = null;
+                return;
+            }
+            Capture(right: true, ref rightAnimated, rightFinal);
         }
 
-        // Both hands' fingers at once, each the mirror image of the other's (both read before either is written): the gun hand's grip
-        // shows on the hand now holding the gun, the support hand's pose on the other
-        public static void SwapFingers()
+        // End of HandsInteractionController.LateUpdate, with RealLeftHandedPatches' arm swap
+        public static void ApplyRealLeftHanded()
         {
-            if (VRGlobals.player == null || !EnsureBones())
+            if (!TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active || VRGlobals.player == null || rightAnimated == null || !EnsureBones())
                 return;
             int count = rightToLeft.Length;
-            if (swapLeft == null || swapLeft.Length != count)
+            if (mirroredOut == null || mirroredOut.Length != count)
+                mirroredOut = new Quaternion[count];
+            bool supporting = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
+            if (supporting)
+                Capture(right: false, ref leftAnimated, leftFinal);
+
+            MirrorLocals(rightAnimated, rightToLeft: true, mirroredOut);
+            for (int index = 0; index < count; index++)
+                rightToLeft[index].to.localRotation = mirroredOut[index];
+            if (supporting && leftAnimated != null)
             {
-                swapLeft = new Quaternion[count];
-                swapRight = new Quaternion[count];
+                MirrorLocals(leftAnimated, rightToLeft: false, mirroredOut);
+                for (int index = 0; index < count; index++)
+                    rightToLeft[index].from.localRotation = mirroredOut[index];
             }
-            Quaternion rightPalmInverse = Quaternion.Inverse(rightPalm.rotation), leftPalmInverse = Quaternion.Inverse(leftPalm.rotation);
-            Quaternion rightPalmRestInverse = Quaternion.Inverse(rightPalmRest), leftPalmRestInverse = Quaternion.Inverse(leftPalmRest);
+            Record(right: true, ref rightFinal);
+            Record(right: false, ref leftFinal);
+        }
+
+        private static void Capture(bool right, ref Quaternion[] animated, Quaternion[] final)
+        {
+            int count = rightToLeft.Length;
+            bool fresh = animated == null || animated.Length != count;
+            if (fresh)
+                animated = new Quaternion[count];
             for (int index = 0; index < count; index++)
             {
-                BonePair pair = rightToLeft[index];
-                Quaternion rightTurn = rightPalmRest * (rightPalmInverse * pair.from.rotation) * Quaternion.Inverse(pair.fromRest);
-                Quaternion leftTurn = leftPalmRest * (leftPalmInverse * pair.to.rotation) * Quaternion.Inverse(pair.toRest);
-                swapLeft[index] = leftPalmRestInverse * Reflect(rightTurn, centrePlaneNormal) * pair.toRest;
-                swapRight[index] = rightPalmRestInverse * Reflect(leftTurn, centrePlaneNormal) * pair.fromRest;
+                Quaternion current = right ? rightToLeft[index].from.localRotation : rightToLeft[index].to.localRotation;
+                if (!fresh && final != null && final.Length == count && Quaternion.Angle(current, final[index]) < 0.05f)
+                    continue;
+                animated[index] = current;
             }
+        }
+
+        private static void Record(bool right, ref Quaternion[] final)
+        {
+            int count = rightToLeft.Length;
+            if (final == null || final.Length != count)
+                final = new Quaternion[count];
             for (int index = 0; index < count; index++)
+                final[index] = right ? rightToLeft[index].from.localRotation : rightToLeft[index].to.localRotation;
+        }
+
+        // One hand's finger joint locals -> the other hand's for its mirror image (the pairs run finger by finger, joint 1 in the palm)
+        private static void MirrorLocals(Quaternion[] fromLocals, bool rightToLeft, Quaternion[] toLocals)
+        {
+            Quaternion fromPalmRest = rightToLeft ? rightPalmRest : leftPalmRest;
+            Quaternion toPalmRestInverse = Quaternion.Inverse(rightToLeft ? leftPalmRest : rightPalmRest);
+            Quaternion fromInPalm = Quaternion.identity, toInPalm = Quaternion.identity;
+            for (int index = 0; index < HandMirror.rightToLeft.Length; index++)
             {
-                rightToLeft[index].to.rotation = leftPalm.rotation * swapLeft[index];
-                rightToLeft[index].from.rotation = rightPalm.rotation * swapRight[index];
+                BonePair pair = HandMirror.rightToLeft[index];
+                bool firstJoint = pair.digit[pair.digit.Length - 1] == '1';
+                Quaternion toParentInPalm = firstJoint ? Quaternion.identity : toInPalm;
+                fromInPalm = (firstJoint ? Quaternion.identity : fromInPalm) * fromLocals[index];
+                Quaternion turn = fromPalmRest * fromInPalm * Quaternion.Inverse(rightToLeft ? pair.fromRest : pair.toRest);
+                toInPalm = toPalmRestInverse * Reflect(turn, centrePlaneNormal) * (rightToLeft ? pair.toRest : pair.fromRest);
+                toLocals[index] = Quaternion.Inverse(toParentInPalm) * toInPalm;
             }
         }
 

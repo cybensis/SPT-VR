@@ -706,13 +706,29 @@ namespace TarkovVR.Source.Player.VRManager
             RightHand.transform.localPosition = (fromAction.localPosition + (real ? MirrorX(mainHandPosOffset) : mainHandPosOffset)) - fromAction.localRotation * Vector3.forward * controllerLength;
         }
 
+        // The gun's rotation in the rig hand's frame (the rig hand (smoothed) -> RightHandPositioner -> weaponHolder -> Weapon_root), read
+        // ONCE when the gun goes into the left hand, with the holder in its restored pose (ChestHang, after Reattach). Read live it fed
+        // back: the weapon collision nudges the holder every frame, the nudge changed the hold, the hold moved the gun into a new nudge
+        // (headset: "spazzes out everywhere for a while, then randomly stabilizes").
+        private static Quaternion gunInHandCached = Quaternion.identity;
+        private static EFT.Player.FirearmController gunInHandFor;
+
+        public static void CacheGunInHand()
+        {
+            gunInHandFor = null;
+            gunInHandCached = Quaternion.identity;
+            Transform weaponRoot = VRGlobals.firearmController != null ? VRGlobals.firearmController.WeaponRoot : null;
+            if (weaponRoot == null || VRGlobals.weaponHolder == null || weaponRoot.parent != VRGlobals.weaponHolder.transform)
+                return;
+            gunInHandCached = VRGlobals.weaponHolder.transform.localRotation * weaponRoot.localRotation;
+            gunInHandFor = VRGlobals.firearmController;
+        }
+
         private static Quaternion MirroredGunHold(Quaternion offset)
         {
-            // The gun's rotation in the rig hand's frame: the rig hand (smoothed) -> RightHandPositioner -> weaponHolder -> Weapon_root
-            Quaternion gunInHand = Quaternion.identity;
-            Transform weaponRoot = VRGlobals.firearmController != null ? VRGlobals.firearmController.WeaponRoot : null;
-            if (weaponRoot != null && VRGlobals.weaponHolder != null && weaponRoot.parent == VRGlobals.weaponHolder.transform)
-                gunInHand = VRGlobals.weaponHolder.transform.localRotation * weaponRoot.localRotation;
+            if (gunInHandFor != VRGlobals.firearmController)
+                CacheGunInHand();
+            Quaternion gunInHand = gunInHandCached;
             Matrix4x4 flip = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));
             Matrix4x4 hold = flip * Matrix4x4.Rotate(offset * gunInHand) * flip * Matrix4x4.Rotate(Quaternion.Inverse(gunInHand));
             return Quaternion.LookRotation(hold.GetColumn(2), hold.GetColumn(1));

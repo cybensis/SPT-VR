@@ -239,6 +239,8 @@ namespace TarkovVR.Source.Player.Interactions
                 {
                     Handedness.SetGunInLeftHand(true);
                     Reattach(restore: true);
+                    // The holder is back in its clean pose: the left-handed hold is built from it once (not from the live, nudged one)
+                    VRPlayerManager.CacheGunInHand();
                     gripSeen = true;
                     // From here the gun hand's grip is the left one, held now: no fresh press next frame
                     prevGrip = true;
