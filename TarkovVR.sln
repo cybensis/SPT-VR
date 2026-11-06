@@ -7,6 +7,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TarkovVR", "TarkovVR.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FikaSync", "FikaSync\FikaSync.csproj", "{485BDA4E-005A-422D-92CF-E98137DB87BC}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Preloader", "Preloader", "{1FACFC32-1603-8FD4-6DCC-05FB003BD2C2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SptVrPreloader", "Preloader\SptVrPreloader.csproj", "{49BB1244-2547-4400-9483-166D94DCCE9F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,9 +45,24 @@ Global
 		{485BDA4E-005A-422D-92CF-E98137DB87BC}.Release|x64.Build.0 = Release|Any CPU
 		{485BDA4E-005A-422D-92CF-E98137DB87BC}.Release|x86.ActiveCfg = Release|Any CPU
 		{485BDA4E-005A-422D-92CF-E98137DB87BC}.Release|x86.Build.0 = Release|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Debug|x64.Build.0 = Debug|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Debug|x86.Build.0 = Debug|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Release|x64.ActiveCfg = Release|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Release|x64.Build.0 = Release|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Release|x86.ActiveCfg = Release|Any CPU
+		{49BB1244-2547-4400-9483-166D94DCCE9F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{49BB1244-2547-4400-9483-166D94DCCE9F} = {1FACFC32-1603-8FD4-6DCC-05FB003BD2C2}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5DE1FA83-CA8B-4C59-ACD2-6610ACB17249}

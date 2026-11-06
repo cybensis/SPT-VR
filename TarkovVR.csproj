@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <Compile Remove="FikaSync\**\*.cs" />
+    <Compile Remove="Preloader\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
