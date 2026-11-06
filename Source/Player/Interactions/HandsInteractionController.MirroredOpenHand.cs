@@ -1,0 +1,71 @@
+using System.Collections.Generic;
+using TarkovVR.Source.Player.Body;
+using UnityEngine;
+
+namespace TarkovVR.Source.Player.Interactions
+{
+    // The free left hand's open pose = the right hand's baked open pose (rightRestPoseEuler), mirrored (HandMirror: each joint's turn
+    // from its bind pose reflected through the body's centre plane). His pick 2026-11-06 after the left-handed stage 2 test ("same pose
+    // on both hands"). Replaces the left bake (restPoseEuler) and its fixed idle flex / spread deltas, which were tuned for that bake;
+    // the loot-dot "ready" curl stays on top, and Index finger tracking curls from it. Recomputed every frame (15 joints, cheap), so a
+    // live edit of the right bake shows on both hands. false = the left bake as before.
+    internal partial class HandsInteractionController
+    {
+        public static bool mirrorOpenHand = true;
+
+        private static readonly Dictionary<string, Quaternion> mirrorRightLocals = new Dictionary<string, Quaternion>();
+        private static readonly Dictionary<string, Quaternion> mirrorLeftLocals = new Dictionary<string, Quaternion>();
+        private Vector3[] mirroredLeftRest;
+
+        // In ReplayRestPose's order (the left's fingers as found, three joints each)
+        private bool TryGetMirroredLeftRest(out Vector3[] pose)
+        {
+            pose = null;
+            if (!mirrorOpenHand || rightRestPoseEuler == null || rightRestPoseEuler.Length == 0 || leftFingerJoints == null)
+                return false;
+            if (!rightFingersResolved)
+                ResolveRightFingers();
+            if (rightFingerJoints == null)
+                return false;
+
+            mirrorRightLocals.Clear();
+            int index = 0;
+            foreach (Transform[] joints in rightFingerJoints)
+            {
+                for (int joint = 0; joint < joints.Length && joint < 3; joint++, index++)
+                {
+                    if (joints[joint] != null && index < rightRestPoseEuler.Length)
+                        mirrorRightLocals[DigitOf(joints[joint].name)] = Quaternion.Euler(rightRestPoseEuler[index]);
+                }
+            }
+            if (!HandMirror.TryMirrorRightToLeft(mirrorRightLocals, mirrorLeftLocals))
+                return false;
+
+            int count = 0;
+            foreach (Transform[] joints in leftFingerJoints)
+                count += Mathf.Min(joints.Length, 3);
+            if (mirroredLeftRest == null || mirroredLeftRest.Length != count)
+                mirroredLeftRest = new Vector3[count];
+            index = 0;
+            foreach (Transform[] joints in leftFingerJoints)
+            {
+                for (int joint = 0; joint < joints.Length && joint < 3; joint++, index++)
+                {
+                    if (joints[joint] != null && mirrorLeftLocals.TryGetValue(DigitOf(joints[joint].name), out Quaternion local))
+                        mirroredLeftRest[index] = local.eulerAngles;
+                    else
+                        mirroredLeftRest[index] = restPoseEuler != null && index < restPoseEuler.Length ? restPoseEuler[index] : Vector3.zero;
+                }
+            }
+            pose = mirroredLeftRest;
+            return true;
+        }
+
+        // "Base HumanLDigit21" -> "Digit21" (the same on both hands)
+        private static string DigitOf(string boneName)
+        {
+            int at = boneName.IndexOf("Digit", System.StringComparison.Ordinal);
+            return at >= 0 ? boneName.Substring(at) : boneName;
+        }
+    }
+}

@@ -22,8 +22,33 @@ namespace TarkovVR.Source.Player.Body
 
         private sealed class BonePair
         {
+            public string digit;                  // "Digit11" .. "Digit53"
             public Transform from, to;
             public Quaternion fromRest, toRest;   // in the mesh's bind space
+        }
+
+        // A right-hand finger pose given as joint locals (by digit, "Digit11".."Digit53"; each finger's first joint is relative to the
+        // palm) -> the left hand's joint locals for its mirror image. No bones are touched. False until the hands mesh is found.
+        public static bool TryMirrorRightToLeft(Dictionary<string, Quaternion> rightLocals, Dictionary<string, Quaternion> leftLocals)
+        {
+            leftLocals.Clear();
+            if (VRGlobals.player == null || !EnsureBones())
+                return false;
+            Quaternion leftPalmRestInverse = Quaternion.Inverse(leftPalmRest);
+            Quaternion rightInPalm = Quaternion.identity, leftInPalm = Quaternion.identity;
+            foreach (BonePair pair in rightToLeft)
+            {
+                if (!rightLocals.TryGetValue(pair.digit, out Quaternion local))
+                    return false;
+                // Each finger restarts at its first joint (the pairs run Digit11, 12, 13, 21, ...)
+                bool firstJoint = pair.digit[pair.digit.Length - 1] == '1';
+                Quaternion leftParentInPalm = firstJoint ? Quaternion.identity : leftInPalm;
+                rightInPalm = (firstJoint ? Quaternion.identity : rightInPalm) * local;
+                Quaternion turn = rightPalmRest * rightInPalm * Quaternion.Inverse(pair.fromRest);
+                leftInPalm = leftPalmRestInverse * Reflect(turn, centrePlaneNormal) * pair.toRest;
+                leftLocals[pair.digit] = Quaternion.Inverse(leftParentInPalm) * leftInPalm;
+            }
+            return true;
         }
 
         private static SkinnedMeshRenderer handsMesh;
@@ -99,6 +124,7 @@ namespace TarkovVR.Source.Player.Body
                             continue;
                         pairs.Add(new BonePair
                         {
+                            digit = digit,
                             from = mesh.bones[rightIndex],
                             to = mesh.bones[leftIndex],
                             fromRest = RestRotation(bindPoses[rightIndex]),

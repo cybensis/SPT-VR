@@ -927,6 +927,9 @@ namespace TarkovVR.Source.Player.Interactions
             if (restPoseEuler != null && restPoseEuler.Length > 0)
             {
                 EditRestPoseLive();
+                // The right hand's open pose mirrored (MirroredOpenHand), else the left bake with its own deltas
+                bool mirrored = TryGetMirroredLeftRest(out Vector3[] mirroredPose);
+                Vector3[] basePose = mirrored ? mirroredPose : restPoseEuler;
                 if (handWeightBlend >= 0.01f)
                 {
                     // Index controllers curl the real off-hand fingers from the baked pose (with the
@@ -936,8 +939,8 @@ namespace TarkovVR.Source.Player.Interactions
                     // - the baked rest pose shows instead, like before finger tracking.
                     bool holdingInThisHand = heldItem != null && !heldInDominantHand;
                     if (holdingInThisHand
-                        || !(SkeletalActive(false) && ApplySkeletalCurls(false, leftFingerJoints, leftFingerIsThumb, restPoseEuler, leftCurlSign, handWeightBlend, leftDeltas: true)))
-                        ReplayRestPose();
+                        || !(SkeletalActive(false) && ApplySkeletalCurls(false, leftFingerJoints, leftFingerIsThumb, basePose, leftCurlSign, handWeightBlend, leftDeltas: !mirrored)))
+                        ReplayRestPose(basePose, staticDeltas: !mirrored);
                 }
                 return;
             }
@@ -1040,6 +1043,11 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Per-finger flex delta (finger index f; 0 = thumb), eased between the idle and
         // "dot in view" arrays by flexProgress. Out-of-range fingers get 0.
+        private float IdleFlex(int f)
+        {
+            return fingerFlexDeg != null && f < fingerFlexDeg.Length ? fingerFlexDeg[f] : 0f;
+        }
+
         private float PerFingerFlex(int f)
         {
             float idle = (fingerFlexDeg != null && f < fingerFlexDeg.Length) ? fingerFlexDeg[f] : 0f;
@@ -1052,22 +1060,24 @@ namespace TarkovVR.Source.Player.Interactions
         // by handWeightBlend. The baked pose is the natural rested BASE; idle/readyFlexDeg and
         // fingerSpreadDeg are small adjustments relative to it (0 = baked pose exactly). Same
         // iteration order as CaptureRestPose for index parity.
-        private void ReplayRestPose()
+        // basePose: the left bake, or the right's open pose mirrored. staticDeltas: the idle flex + spread tuned for the left bake
+        // (off on the mirrored pose: it IS the look); the loot-dot "ready" curl (its move from idle) shows either way.
+        private void ReplayRestPose(Vector3[] basePose, bool staticDeltas)
         {
             int idx = 0;
             for (int f = 0; f < leftFingerJoints.Length; f++)
             {
                 Transform[] joints = leftFingerJoints[f];
-                float fingerSpread = (leftFingerSpread != null && f < leftFingerSpread.Length)
+                float fingerSpread = staticDeltas && leftFingerSpread != null && f < leftFingerSpread.Length
                     ? leftFingerSpread[f] * fingerSpreadDeg : 0f;
-                float flexBase = PerFingerFlex(f);
+                float flexBase = staticDeltas ? PerFingerFlex(f) : PerFingerFlex(f) - IdleFlex(f);
                 for (int j = 0; j < joints.Length && j < 3; j++, idx++)
                 {
-                    if (joints[j] == null || idx >= restPoseEuler.Length) continue;
+                    if (joints[j] == null || idx >= basePose.Length) continue;
                     Quaternion animated = RecoverAnimated(joints[j]);
                     float flex = flexBase * Mathf.Pow(midJointScale, j) * flexSign;
                     float sp = (j == 0) ? fingerSpread : 0f;
-                    Quaternion target = Quaternion.Euler(restPoseEuler[idx])
+                    Quaternion target = Quaternion.Euler(basePose[idx])
                         * Quaternion.AngleAxis(flex, Vector3.forward)
                         * Quaternion.AngleAxis(sp, spreadAxis);
                     Quaternion outRot = Quaternion.Slerp(animated, target, handWeightBlend);
