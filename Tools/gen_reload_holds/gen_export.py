@@ -77,8 +77,11 @@ for f,h in sorted(R['palms'].items()):
     out['palms'][f]=dict(newMagazine=h['newMagazine'],oldMagazine=h['oldMagazine'],fingers=h['fingers'],thumb=h.get('thumb'))
 # Pistols only for now: other guns with no handle keep Tarkov's chambering
 pistolFolders={g['folder'] for g in guns if items[g['id']]['_props'].get('weapClass')=='pistol'}
+# The track out of the well from the gun's own mag_out clip: pistols (the raked grip), and rifles whose magazine's longest side runs
+# along the gun, where the runtime's mesh-length axis points at the stock (headset: SV-98's 10-round box)
+CLIP_WELL_AXIS_RIFLES={'sv98'}
 for f,axis in sorted(R['wellAxes'].items()):
-    if famFolder.get(f) in pistolFolders: out['wellAxes'][f]=axis
+    if famFolder.get(f) in pistolFolders or f in CLIP_WELL_AXIS_RIFLES: out['wellAxes'][f]=axis
 for f,h in sorted(R['slides'].items()):
     if famFolder.get(f) in pistolFolders:
         out['slides'][f]=dict(bone=h['bone'],position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=h['travel'])

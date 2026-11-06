@@ -48,7 +48,8 @@ namespace TarkovVR.Source.Weapons
         public static bool snapHandToGrip = true;           // grabbing the gun's magazine moves the hand onto it where the animation holds it
         public static float handSnapTime = 0.06f;           // s that move takes
         public static float gripEaseRate = 10f;             // 1/s a free magazine settles into the animation's grip
-        public static Vector3 chestPouchOffset = new Vector3(0f, -0.42f, 0.05f);    // headset-local, yaw-only: the chest pouch zone center (headset round 1: 0.12 forward was too far out)
+        public static Vector3 chestPouchOffset = new Vector3(0f, -0.40f, 0.03f);    // from the eyes looking level, body frame (neck anchored): the chest pouch zone
+                                                                                     // center (headset: 0.12 forward too far out; 2026-11-06 "too far forward and low" = up/back 2 cm)
         public static float chestPouchRadius = 0.16f;       // m palm to the chest pouch center
         public static Vector3 newMagazineHoldPosition = new Vector3(-0.10f, 0.02f, 0.11f);    // off hand local, used until a magazine is pulled off a gun (average of his headset grabs)
         public static Vector3 newMagazineHoldRotation = new Vector3(320f, 250f, 265f);        // off hand local euler, same
@@ -1935,11 +1936,13 @@ namespace TarkovVR.Source.Weapons
             pouchCenter = Vector3.zero;
             if (!ChestHang.HeadPose(out _, out _))
                 return false;
-            Quaternion headYaw = ChestHang.HeadYaw(out Vector3 headPosition);
             Vector3 offset = chestPouchOffset;
             if (VRSettings.GetLeftHandedMode())
                 offset.x = -offset.x;
-            pouchCenter = headPosition + headYaw * offset;
+            // In the body's frame from the neck, like the guns on the body: on the headset, looking down at the pouch swung it forward
+            // and down with the head (the HMD pivots ~10 cm about the neck). The offset is from the eyes looking level.
+            Quaternion bodyRot = ChestHang.BodyYaw(out Vector3 neck);
+            pouchCenter = neck + bodyRot * (offset - Player.VRManager.ShoulderStock.neckLocalOffset);
             return true;
         }
 
