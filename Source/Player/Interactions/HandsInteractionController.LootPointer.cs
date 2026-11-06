@@ -600,6 +600,36 @@ namespace TarkovVR.Source.Player.Interactions
             return Vector3.Distance(lh.position, grip.position) < foregripBlockDistance;
         }
 
+        // The off hand's thumb and index fingertips and the index's base knuckle (the index runs base -> tip), for a small item held
+        // in a pinch (VRReloadController's single rounds). Fingertips as in GetHandTouchPoints; the index is EFT's Digit2.
+        internal bool TryGetOffHandPinch(out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase)
+        {
+            thumbTip = indexTip = indexBase = Vector3.zero;
+            if (!fingersResolved) ResolveLeftFingers();
+            if (leftFingerJoints == null || leftFingerIsThumb == null)
+                return false;
+            Transform[] thumb = null, index = null, firstFinger = null;
+            for (int finger = 0; finger < leftFingerJoints.Length; finger++)
+            {
+                Transform[] joints = leftFingerJoints[finger];
+                if (joints == null || joints.Length == 0 || joints[0] == null || joints[joints.Length - 1] == null)
+                    continue;
+                if (leftFingerIsThumb[finger])
+                    thumb = thumb ?? joints;
+                else if (joints[0].name.IndexOf("Digit2", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    index = index ?? joints;
+                else
+                    firstFinger = firstFinger ?? joints;
+            }
+            index = index ?? firstFinger;
+            if (thumb == null || index == null)
+                return false;
+            thumbTip = thumb[thumb.Length - 1].TransformPoint(-0.025f, 0f, 0f);
+            indexTip = index[index.Length - 1].TransformPoint(-0.025f, 0f, 0f);
+            indexBase = index[0].position;
+            return true;
+        }
+
         // A hand's palm, knuckles and fingertips, for a zone the hand counts as in as soon as any of it is. The rig has no
         // bone at the fingertip: about 2.5cm past the last joint, along the finger.
         internal void GetHandTouchPoints(bool dominant, List<Vector3> points)

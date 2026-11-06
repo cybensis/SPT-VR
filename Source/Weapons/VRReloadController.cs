@@ -327,11 +327,20 @@ namespace TarkovVR.Source.Weapons
                 UpdateBoltRelease();
             // A bolt-action's bolt, by either hand's trigger (VRReloadController.Bolt)
             TickBolt(triggerPressed, triggerReleased, gunHandTriggerPressed, gunHandTriggerReleased,
-                handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine);
+                handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingRound);
+            // A single round in the fingers, for an open bolt-action (VRReloadController.Rounds)
+            if (HoldingRound)
+                UpdateHeldRound(gripReleased);
             UpdateHandLatch();
             UpdateMagazineReleaseButton(releaseState);
 
-            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt;
+            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound;
+            // On a gun that loads through its open bolt, the pouch grip is a round, not a magazine
+            if (!handBusy && gripPressed && TryGrabRound())
+            {
+                gripPressed = false;
+                handBusy = true;
+            }
             UpdateBoltSlap(handFree: !handBusy);
             if (!handBusy)
                 TryTakeOverGroundMagazine();
@@ -377,9 +386,11 @@ namespace TarkovVR.Source.Weapons
             // The gun hand on the handle leaves the off hand where it is: on the foregrip, holding the gun up
             if (OffHandAtBolt)
                 OffHandAtChargingHandle = true;
-            OwnsOffHand = HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine || reaching;
+            OwnsOffHand = HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine
+                || HoldingRound || reaching;
 
             UpdateZoneViz();
+            UpdateRoundViz();
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1668,12 +1679,12 @@ namespace TarkovVR.Source.Weapons
 
         // Tarkov's own magazine model, borrowed from its pool. Colliders off (the weapon collision proxy copies nearby
         // colliders) and drawn on the gun's layer; both are put back before it returns to the pool.
-        private static GameObject CreateProp(Magazine magazine)
+        private static GameObject CreateProp(Item item)
         {
             ObjectsFactory objectsFactory = Singleton<ObjectsFactory>.Instance;
             if (objectsFactory == null)
                 return null;
-            GameObject prop = objectsFactory.CreateItem(magazine, isAnimated: false);
+            GameObject prop = objectsFactory.CreateItem(item, isAnimated: false);
             if (prop == null)
                 return null;
 
@@ -1813,6 +1824,19 @@ namespace TarkovVR.Source.Weapons
         // to those bones this frame. Eases in on a grab and back out to whatever the hand was doing on release.
         public static void ApplyHeldFingerPose()
         {
+            try
+            {
+                ApplyOffHandFingerPose();
+            }
+            finally
+            {
+                // The round goes where the fingers now are
+                PlaceHeldRound();
+            }
+        }
+
+        private static void ApplyOffHandFingerPose()
+        {
             // A gun whose charging handle clip hasn't been read yet: the magazine pull's thumb-and-index pinch is the closest grip
             latchThumbShown = Mathf.MoveTowards(latchThumbShown, latchThumbTarget, Time.deltaTime / Mathf.Max(releaseButtonTime, 0.001f));
             Vector3[] pose = null;
@@ -1822,6 +1846,8 @@ namespace TarkovVR.Source.Weapons
                 pose = BoltFingerPose(gunHand: false);
             else if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
                 pose = magazineHandFingers ?? MAGAZINE_INSERT_FINGERS;
+            else if (HoldingRound)
+                pose = MAGAZINE_PULL_FINGERS;
             if (pose != null)
                 fingerPoseShown = pose;
 
