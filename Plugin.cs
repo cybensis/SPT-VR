@@ -78,6 +78,8 @@ namespace TarkovVR
             // for its OpenXR rows) and ShadowShareProbe (Ctrl+F8) - gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>() etc.
             // The desktop window: one eye, cropped to the window and stabilised (for recording)
             gameObject.AddComponent<TarkovVR.Source.Graphics.DesktopMirror>();
+            // VR Graphics "Disable Hideout Shadows"
+            gameObject.AddComponent<TarkovVR.Source.Graphics.HideoutShadows>();
 
             if (OpenXRBootstrap.Active)
             {

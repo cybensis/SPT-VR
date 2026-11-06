@@ -93,6 +93,9 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.transform.root.name != "PlayerSuperior(Clone)" && __instance.transform.root.name != "Main_PlayerSuperior(Clone)")
                 return;
 
+            if (player is HideoutPlayer)
+                TarkovVR.Source.Graphics.HideoutShadows.hideoutPlayer = player;
+
             if (player is not HideoutPlayer)
             {
                 if (!VRGlobals.vrPlayer)

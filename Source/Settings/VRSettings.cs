@@ -87,6 +87,7 @@ namespace TarkovVR.Source.Settings
             public bool hideLegs { get; set; }
             public bool desktopViewRightEye { get; set; }
             public bool desktopViewPlainMirror { get; set; }
+            public bool hideoutShadowsOff { get; set; }
             public float desktopViewFieldOfView { get; set; }
             public float desktopViewSmoothing { get; set; }
             public float desktopViewVerticalFieldOfView { get; set; }
@@ -149,6 +150,7 @@ namespace TarkovVR.Source.Settings
                 hideLegs = false;
                 desktopViewRightEye = false;
                 desktopViewPlainMirror = false;
+                hideoutShadowsOff = false;
                 desktopViewFieldOfView = 80f;
                 desktopViewSmoothing = 0.15f;
                 desktopViewVerticalFieldOfView = 0f;
@@ -230,6 +232,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle hideLegsToggle;
         private static SettingToggle desktopViewRightEyeToggle;
         private static SettingToggle desktopViewPlainMirrorToggle;
+        private static SettingToggle hideoutShadowsOffToggle;
         private static SettingSelectSlider desktopViewFieldOfViewSlider;
         private static SettingSelectSlider desktopViewSmoothingSlider;
         private static SettingSelectSlider desktopViewVerticalFieldOfViewSlider;
@@ -709,6 +712,13 @@ namespace TarkovVR.Source.Settings
             else
                 shadowOptsToggle.DropDown.SetLabelText("Distant Shadows (FPS hit)");
             shadowOptsToggle.DropDown._onValueChanged._onChange = ChangeShadowOpts;
+
+            // No realtime shadows in the hideout (HideoutShadows): its ~100 shadowed lights are most of its frame time
+            hideoutShadowsOffToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            hideoutShadowsOffToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            hideoutShadowsOffToggle.Toggle._onValueChanged = SetHideoutShadowsOff;
+            hideoutShadowsOffToggle.Text.localizationKey = "Disable Hideout Shadows (Saves FPS)";
+            hideoutShadowsOffToggle.Toggle.UpdateValue(settings.hideoutShadowsOff);
 
             lodBiasSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
             lodBiasSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
@@ -1254,6 +1264,14 @@ namespace TarkovVR.Source.Settings
         public static bool GetDesktopViewPlainMirror()
         {
             return settings != null && settings.desktopViewPlainMirror;
+        }
+        public static bool GetHideoutShadowsOff()
+        {
+            return settings != null && settings.hideoutShadowsOff;
+        }
+        private static void SetHideoutShadowsOff(bool off)
+        {
+            settings.hideoutShadowsOff = off;
         }
 
         // Degrees across the desktop window (a settings file from before these sliders reads 0: the default then)
