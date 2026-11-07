@@ -68,6 +68,17 @@ HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101'
 # 15 cm from the knob; the fingertips on it): the grab zone on the knob itself, the centre of the bone's mesh vertices within 1 cm of
 # its furthest point to that side, in the bone's frame. (axis, sign): the AVT/SVT knob is the carrier's +x, (4.5,-4.6,-1.5) cm.
 HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1)}
+# The gun hand's hold from Tarkov's own right-hand rack where ridingHold turns it down: the AVT/SVT's charge_0/1 and rechamber rack with
+# the RIGHT hand (index 2-3 cm off the knob all the way back; charge_2 is the left-hand one), 10 cm in 4 frames with the palm pivoting
+# ~2 cm about the fingers - over the 1.5 cm limit, so it fell to jam_hardslide (8.1 cm, a stuck slide). Headset 2026-11-07, a picture of
+# the SVT's rack: that pose. Read at full pull (fullBackTime: the middle of the frames within 2 mm of all the way back).
+GUN_HAND_HOLD_CLIP={'toz_avt_40':'avt40_charge_1','toz_svt_40':'avt40_charge_1'}
+def holdAtFullBack(g,charge,wp,side):
+    P=g['prefabLocal']; palm=bone(P,f'/Base Human{side}Palm'); t,top=fullBackTime(g,charge,wp); c={}
+    cp,cr,_=g['worldAt'](charge,t,c); pp,pr,_=g['worldAt'](palm,t,c)
+    qs=[np.array(g['localAt'](j,t)[1],float) for j in fingerPaths(P,side)]
+    return dict(position=[round(float(x),4) for x in g['rotate'](conj(cr),pp-cp)],rotation=toUnityEuler(qmul(conj(cr),pr)),fingers=eulerList(qs),
+                travel=round(float(top),3),t=t,palmOff=0.0)
 def meshKnobPoint(folder,container,boneLeaf,axis,sign,shell=0.01):
     from UnityPy.helpers.MeshHelper import MeshHandler
     env=UnityPy.load(ROOT+folder+'/'+container,ROOT+folder+'/client_assets.bundle')
@@ -155,6 +166,8 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
         if h and (best is None or (rank,h['drift'])<best[0]):
             h['clip']=n; best=((rank,h['drift']),h)
     if best: extraGunHandHandles[family]=best[1]
+    if rig in GUN_HAND_HOLD_CLIP:
+        h=holdAtFullBack(setup(tree,clips[GUN_HAND_HOLD_CLIP[rig]]),charge,wp,'R'); h['clip']=GUN_HAND_HOLD_CLIP[rig]; extraGunHandHandles[family]=h
     # The locked-back pose moves the handle too (gen_holds' handleMovesWithBolt test)
     g=setup(tree,clips[next(n for n in names if '_mag_in' in n)]); c={}
     restAt,_,_=g['worldAt'](charge,0.0,c); gunAt,gunRotation,_=g['worldAt'](wp,0.0,c); restInGun=g['rotate'](conj(gunRotation),restAt-gunAt)
