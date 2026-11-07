@@ -28,6 +28,9 @@ namespace TarkovVR.Source.Weapons
         public static float jamPortRadius = 0.05f;              // m any point of the hand to the ejection port for its trigger to take a stuck case out
         public static bool malfunctionPoseOffWhileHeld = true;  // Tarkov's malfunction pose off while the hand works the handle or bolt,
                                                                 // as its own repair does (it would hold the bolt where the jam left it)
+        // TEST: your next shot fails with this type (UnityExplorer), then it goes back to None. Only where Tarkov itself could roll it
+        // (ForcedMalfunction), so a gun never gets one it has no animations for.
+        public static Weapon.EMalfunctionState testMalfunctionNextShot = Weapon.EMalfunctionState.None;
 
         private static bool malfunctionRacked;                  // this grab has been all the way back on a malfunctioned gun
         private static int hardSlideTugsDone;
@@ -179,6 +182,43 @@ namespace TarkovVR.Source.Weapons
             PlayFirstGunSound(firearmController, hand, "ShellRemove", "ShellPull", "ShellGrab");
             Pulse(hand, 0.45f, 0.04f);
             RepairByHand(firearmController);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The test switch (MalfunctionTestPatches: FirearmController.GetMalfunctionState, Tarkov's roll for every shot, semi and auto)
+
+        // The type testMalfunctionNextShot asks for, if Tarkov's own roll could give it on this shot (FirearmController
+        // .GetSpecificMalfunctionVariants' conditions); used once, whatever the answer
+        public static bool ForcedMalfunction(Weapon weapon, bool hasAmmoInMagazine, bool hasBoltCatch, bool magazineInserted, out Weapon.EMalfunctionState malfunction)
+        {
+            malfunction = testMalfunctionNextShot;
+            if (malfunction == Weapon.EMalfunctionState.None || weapon == null)
+                return false;
+            testMalfunctionNextShot = Weapon.EMalfunctionState.None;
+            string refused = null;
+            if (!weapon.AllowMalfunction)
+                refused = "this gun has no malfunctions";
+            else if (malfunction == Weapon.EMalfunctionState.Misfire && !weapon.AllowMisfire)
+                refused = "this gun doesn't misfire";
+            else if (malfunction == Weapon.EMalfunctionState.Jam && !weapon.AllowJam)
+                refused = "this gun doesn't fail to eject";
+            else if (malfunction == Weapon.EMalfunctionState.Jam && !(hasAmmoInMagazine || !hasBoltCatch || !magazineInserted))
+                refused = "a failure to eject needs a round left in the magazine (the bolt locks back on the last one)";
+            else if (malfunction == Weapon.EMalfunctionState.Feed && !weapon.AllowFeed)
+                refused = "this gun doesn't fail to feed";
+            else if (malfunction == Weapon.EMalfunctionState.Feed && !(hasAmmoInMagazine && magazineInserted))
+                refused = "a failure to feed needs a magazine in with a round left";
+            else if ((malfunction == Weapon.EMalfunctionState.SoftSlide || malfunction == Weapon.EMalfunctionState.HardSlide) && !weapon.AllowSlide)
+                refused = "this gun doesn't get slide malfunctions";
+            else if ((malfunction == Weapon.EMalfunctionState.SoftSlide || malfunction == Weapon.EMalfunctionState.HardSlide) && !hasAmmoInMagazine)
+                refused = "a slide malfunction needs a round left in the magazine";
+            if (refused != null)
+            {
+                Plugin.MyLog.LogWarning($"[VRReload] test malfunction {malfunction} not forced on {weapon.LocalizedShortName()}: {refused}");
+                return false;
+            }
+            Plugin.MyLog.LogInfo($"[VRReload] test malfunction: {malfunction} forced on this shot of {weapon.LocalizedShortName()}");
+            return true;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
