@@ -63,6 +63,11 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 jamCaseAxisInProp, jamCaseCenterInProp;
         private static Vector3 controllerAtJamGrabInGun;
         private static Quaternion controllerRotationAtJamGrabInGun;
+        private static Vector3 jamGripPointInPalm;              // where the round hold's fingers close on a round, in the palm bone's frame
+        private static Vector3 jamCaseGrabInCase;               // where on the case they closed, in its own frame: the wrist's pivot while stuck
+        private static float jamHandSnapStartTime;
+        private static Vector3 jamCaseInHandPosition;           // out: the case as it came out, in the palm bone's frame
+        private static Quaternion jamCaseInHandRotation;
 
         // The malfunction is the hands' to clear: Manual Reload, and a handle, slide or bolt they work
         internal static bool MalfunctionClearsByHand(FirearmController firearmController)
@@ -259,16 +264,17 @@ namespace TarkovVR.Source.Weapons
             jamCasePivotInCase = CaseEndInGun(firearmController, stuckCase.transform, caseLength);
             HoldingJamCase = true;
 
-            // The hand locked on it, the case where the round hold has a round in the fingers (the latch = the arm's IK target = the palm
-            // bone's pose, as the magazine's SnapHandToGrip takes it); eased there from the controller, then riding the case
+            // The hand locked on it ("It should keep its current hand position but while holding the bullet, the fingers lock to the bullet
+            // and that point becomes the pivot for the wrist"): turned as the controller is, placed so the point its fingers close on (the
+            // round hold's round centre, HoldInPalm) sits on the case where the hand reached it. The latch = the arm's IK target = the
+            // palm bone's pose, as the magazine's SnapHandToGrip takes it; it rides the case (PullStuckCase).
             LatchHand(stuckCase.transform, gunHand);
-            if (HoldInPalm(jamCaseOnRightArm, stuckCase.transform, jamCaseAxisInProp, jamCaseCenterInProp, out Vector3 holdPosition, out Quaternion holdRotation))
-            {
-                Quaternion handRotation = stuckCase.transform.rotation * Quaternion.Inverse(holdRotation);
-                SnapHandTo(stuckCase.transform, stuckCase.transform.position - handRotation * holdPosition, handRotation);
-            }
             Transform weaponRoot = firearmController.WeaponRoot;
             Transform controller = LatchedHandRig;
+            jamGripPointInPalm = HoldInPalm(jamCaseOnRightArm, stuckCase.transform, jamCaseAxisInProp, jamCaseCenterInProp, out Vector3 holdPosition, out Quaternion holdRotation)
+                ? holdPosition + holdRotation * Vector3.Scale(jamCaseCenterInProp, stuckCase.transform.lossyScale) : Vector3.zero;
+            jamCaseGrabInCase = CasePointNearest(stuckCase.transform, caseLength, controller.position + controller.rotation * jamGripPointInPalm);
+            jamHandSnapStartTime = Time.time;
             controllerAtJamGrabInGun = weaponRoot.InverseTransformPoint(controller.position);
             controllerRotationAtJamGrabInGun = Quaternion.Inverse(weaponRoot.rotation) * controller.rotation;
             if (debugLog)
@@ -286,6 +292,15 @@ namespace TarkovVR.Source.Weapons
             Vector3 chamber = chamberBones != null && chamberBones.Length > 0 && chamberBones[0] != null ? chamberBones[0].position : firearmController.WeaponRoot.position;
             Vector3 end = (center + axis - chamber).sqrMagnitude < (center - axis - chamber).sqrMagnitude ? center + axis : center - axis;
             return caseTransform.InverseTransformPoint(end);
+        }
+
+        // The point on the case's length nearest a world point (kept off its very ends), in its own frame
+        private static Vector3 CasePointNearest(Transform caseTransform, float caseLength, Vector3 point)
+        {
+            Vector3 center = caseTransform.TransformPoint(jamCaseCenterInProp);
+            Vector3 axis = caseTransform.TransformDirection(jamCaseAxisInProp).normalized;
+            float along = Mathf.Clamp(Vector3.Dot(point - center, axis), -0.4f * caseLength, 0.4f * caseLength);
+            return caseTransform.InverseTransformPoint(center + axis * along);
         }
 
         // Stuck: back at its rest in the port, then tipped about its inner end by the wiggle and given toward the pull (both in the gun's frame)
@@ -330,6 +345,16 @@ namespace TarkovVR.Source.Weapons
             Vector3 give = pull.sqrMagnitude > 1e-8f ? pull.normalized * (jamCaseGive * fraction) : Vector3.zero;
             PoseStuckCase(weaponRoot, wiggle, give);
 
+            // The hand: the controller's turn, its fingers' point on the case (the wrist pivots there), eased onto it over handSnapTime
+            if (handLatched && handLatch != null)
+            {
+                Quaternion handRotation = controller.rotation;
+                Vector3 handPosition = jamCase.transform.TransformPoint(jamCaseGrabInCase) - handRotation * jamGripPointInPalm;
+                float snap = handSnapTime > 0f ? Mathf.Clamp01((Time.time - jamHandSnapStartTime) / handSnapTime) : 1f;
+                snap = snap * snap * (3f - 2f * snap);
+                handLatch.SetPositionAndRotation(Vector3.Lerp(controller.position, handPosition, snap), handRotation);
+            }
+
             if (jamCaseStrain > 0f && pull.magnitude > 0.005f && haptics)
             {
                 SteamVR_Input_Sources source = jamCaseInGunHand ? Handedness.GunHandSource : Handedness.OffHandSource;
@@ -349,8 +374,19 @@ namespace TarkovVR.Source.Weapons
             }
             if (debugLog)
                 LogAction("[VRReload] the stuck case pulled out");
-            // Into the fingers, off the gun (which rides the controllers' rig, moving after the arms are posed); the hand eases back
-            // to the controller with it
+            // Into the fingers as it came out (relative to the hand, whatever way the hand was turned), off the gun (which rides the
+            // controllers' rig, moving after the arms are posed); the hand eases back to the controller with it
+            if (handLatched && handLatch != null)
+            {
+                Quaternion toHand = Quaternion.Inverse(handLatch.rotation);
+                jamCaseInHandPosition = toHand * (jamCase.transform.position - handLatch.position);
+                jamCaseInHandRotation = toHand * jamCase.transform.rotation;
+            }
+            else
+            {
+                jamCaseInHandPosition = jamGripPointInPalm;
+                jamCaseInHandRotation = Quaternion.identity;
+            }
             ReleaseHandLatch();
             jamCase.transform.SetParent(null, worldPositionStays: true);
         }
@@ -439,9 +475,9 @@ namespace TarkovVR.Source.Weapons
             Transform palm = ArmPalm(jamCaseOnRightArm);
             if (palm == null && !jamCaseOnRightArm)
                 palm = TarkovVR.Patches.Core.VR.InitVRPatches.leftPalm;
-            if (palm == null || !HoldInPalm(jamCaseOnRightArm, jamCase.transform, jamCaseAxisInProp, jamCaseCenterInProp, out Vector3 holdPosition, out Quaternion holdRotation))
+            if (palm == null)
                 return;
-            jamCase.transform.SetPositionAndRotation(palm.position + palm.rotation * holdPosition, palm.rotation * holdRotation);
+            jamCase.transform.SetPositionAndRotation(palm.position + palm.rotation * jamCaseInHandPosition, palm.rotation * jamCaseInHandRotation);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
