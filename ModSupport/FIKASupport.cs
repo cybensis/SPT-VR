@@ -128,7 +128,33 @@ namespace TarkovVR.ModSupport.FIKA
             // until the item settles, then sends the final Done position).
             if (item.RigidBody == null)
                 return;
+            // Nothing to send to (the hideout: no FIKA session, see StopSyncerWithoutWorld)
+            if (!HasLootSyncWorld(FikaBackendUtils.IsServer))
+                return;
             ItemPositionSyncer.Create(item.gameObject, FikaBackendUtils.IsServer, observed);
+        }
+
+        // FIKA's host / client world that takes the loot position packets; none outside a FIKA session (the hideout)
+        private static bool HasLootSyncWorld(bool isServer)
+        {
+            return isServer ? Singleton<FikaServer>.Instance?.FikaHostWorld != null : Singleton<FikaClient>.Instance?.FikaClientWorld != null;
+        }
+
+        // An ItemPositionSyncer with no world to send to (the hideout has no FIKA session): its FixedUpdate dereferences the missing
+        // host / client world every physics tick while the item moves, and never reaches its own Destroy (headset log, one hideout
+        // session: 438 NullReferenceExceptions in ItemPositionSyncer.FixedUpdate, a round thrown out of the bolt and picked up). FIKA
+        // gives one to the item a throw puts in the world, and ResyncDroppedItem to one let go from the hand. Removed here instead.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ItemPositionSyncer), "FixedUpdate")]
+        private static bool StopSyncerWithoutWorld(ItemPositionSyncer __instance)
+        {
+            bool hasWorld = __instance._isServer
+                ? __instance._server != null && __instance._server.FikaHostWorld != null
+                : __instance._client != null && __instance._client.FikaClientWorld != null;
+            if (hasWorld)
+                return true;
+            UnityEngine.Object.Destroy(__instance);
+            return false;
         }
 
         // ===== Receiver-side: don't let a LOCAL rigidbody fight a remote player's hold =====

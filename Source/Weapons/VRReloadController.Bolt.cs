@@ -528,13 +528,33 @@ namespace TarkovVR.Source.Weapons
         public static void ApplyBolt()
         {
             FirearmController firearmController = VRGlobals.firearmController;
-            if (!drivingBolt || firearmController == null || firearmController != boltBonesFor || boltBonesData == null || firearmController.Item == null)
+            if (firearmController == null || firearmController != boltBonesFor || boltBonesData == null || firearmController.Item == null)
                 return;
             if (!(firearmController.CurrentOperation is FirearmController.Idling) && expectedOperation != ExpectedOperation.Rechamber)
                 return;
+            if (!drivingBolt)
+            {
+                KeepBoltShut(firearmController);
+                return;
+            }
             BoltState state = BoltStateOf(firearmController.Item);
             ApplyBoltBones(state, boltBonesData);
             ApplyBoltChamberView(firearmController, state, boltBonesData);
+        }
+
+        // Closed and ours, the gun idle: held shut against the animator, so the bolt shows where it is. Handed back to the animator once
+        // closed, a bolt-action stayed drawn open by it (headset, once, a hideout session that threw a live round out: "the bolt was stuck
+        // open and when I tried grabbing it, it would grab at the closed position ... I wouldn't be able to grab bullets" - our state was
+        // closed). Suspected: the rechamber skip sends only the arms layer back to idle, and a layer left in Tarkov's rechamber clip held
+        // the bolt open. Tarkov's own operations (its reload, check chamber, a malfunction) aren't idle: their bolt animations play.
+        public static bool keepBoltShut = true;
+
+        private static void KeepBoltShut(FirearmController firearmController)
+        {
+            if (!keepBoltShut || HoldingBolt || !boltClosedPoseRead || boltSlider == null || boltTurner == null || !ManualBoltOn(firearmController))
+                return;
+            boltSlider.localPosition = sliderClosedLocalPosition;
+            boltTurner.localRotation = turnerClosedLocalRotation;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
