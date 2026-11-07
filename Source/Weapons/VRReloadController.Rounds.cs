@@ -159,20 +159,42 @@ namespace TarkovVR.Source.Weapons
         {
             if (!singleRoundLoading || controller == null || controller._player == null || !controller._player.IsYourPlayer || !roundLoading || heldRoundFor != controller)
                 return false;
-            if (operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo) || move.To1 == null)
-                return false;
             Weapon weapon = controller.Item;
             if (weapon == null || !weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload)
+                return false;
+            // A merge asks with a sub-operation of its own (AddSuboperation / RemoveSuboperation): the operation it belongs to says where
+            if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && IsRoundIntoGun(weapon, subOperation.BaseInventoryOperation))
+                return true;
+            return IsRoundIntoGun(weapon, operation);
+        }
+
+        // One round from outside the gun into its chamber or its magazine. The destination is To1 for a move / split, To2 for a transfer
+        // or merge onto the stack on top of the magazine (a transfer's To1 is its own source: headset log, every same-type round after the
+        // first was refused - "Can't perform operation TransferOperation ... TargetItem ... StackSlot cartridges"). Not Tarkov's reload.
+        private static bool IsRoundIntoGun(Weapon weapon, IInventoryOperation operation)
+        {
+            if (operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo))
                 return false;
             // From outside the gun, not a round moving inside it (Tarkov's own discharge / chambering)
             if (move.From1 != null && move.From1.IsChildOf(weapon))
                 return false;
-            object into = move.To1.Container;
+            return IntoGun(weapon, move.To1) || (operation is ITwoItemOperation twoItems && IntoGun(weapon, twoItems.To2));
+        }
+
+        private static bool IntoGun(Weapon weapon, ItemAddress address)
+        {
+            if (address == null)
+                return false;
+            object into = address.Container;
             Magazine magazine = weapon.GetCurrentMagazine();
-            bool intoGun = magazine != null && ReferenceEquals(into, magazine.Cartridges);
+            if (magazine != null && ReferenceEquals(into, magazine.Cartridges))
+                return true;
             foreach (Slot chamber in weapon.Chambers)
-                intoGun |= ReferenceEquals(into, chamber);
-            return intoGun;
+            {
+                if (ReferenceEquals(into, chamber))
+                    return true;
+            }
+            return false;
         }
 
         // One round from the stack: into an empty chamber, else onto the top of the magazine (merged with a stack of the same type, or a

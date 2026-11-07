@@ -41,22 +41,43 @@ namespace SptVrFikaSync
         }
 
         // One round from outside an open-bolt-loaded gun (SupportsInternalReload + MustBoltBeOpennedForInternalReload) into its chamber or
-        // its magazine's cartridges, not as Tarkov's own reload
+        // its magazine's cartridges, not as Tarkov's own reload. A merge asks with a sub-operation of its own: the operation it belongs to
+        // says where.
         internal static bool IsSingleRoundIntoGun(Weapon weapon, IInventoryOperation operation)
         {
-            if (weapon == null || operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo) || move.To1 == null)
+            if (weapon == null || !weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload)
                 return false;
-            if (!weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload)
+            if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && IsRoundIntoGun(weapon, subOperation.BaseInventoryOperation))
+                return true;
+            return IsRoundIntoGun(weapon, operation);
+        }
+
+        // The destination is To1 for a move / split, To2 for a transfer or merge onto the stack on top of the magazine (a transfer's To1
+        // is its own source)
+        private static bool IsRoundIntoGun(Weapon weapon, IInventoryOperation operation)
+        {
+            if (operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo))
                 return false;
             // From outside the gun, not a round moving inside it (Tarkov's own discharge / chambering)
             if (move.From1 != null && move.From1.IsChildOf(weapon))
                 return false;
-            object into = move.To1.Container;
+            return IntoGun(weapon, move.To1) || (operation is ITwoItemOperation twoItems && IntoGun(weapon, twoItems.To2));
+        }
+
+        private static bool IntoGun(Weapon weapon, ItemAddress address)
+        {
+            if (address == null)
+                return false;
+            object into = address.Container;
             Magazine magazine = weapon.GetCurrentMagazine();
-            bool intoGun = magazine != null && ReferenceEquals(into, magazine.Cartridges);
+            if (magazine != null && ReferenceEquals(into, magazine.Cartridges))
+                return true;
             foreach (Slot chamber in weapon.Chambers)
-                intoGun |= ReferenceEquals(into, chamber);
-            return intoGun;
+            {
+                if (ReferenceEquals(into, chamber))
+                    return true;
+            }
+            return false;
         }
     }
 }
