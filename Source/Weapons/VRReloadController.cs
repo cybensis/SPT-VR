@@ -164,6 +164,8 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion latchControllerAtGrabInHolder = Quaternion.identity;  // the controller's turn at the grab, in the holder's frame
         private static Vector3 latchPivotInHolder;          // the point the hand holds, in the holder's frame: the wiggle turns the hand about it
         private static Transform latchHolder;               // what those are relative to (LatchHand's holder, or where the latch was moved on to)
+        private static Vector3 latchPivotInLatch;           // the same point in the hand's own frame, kept each frame: what a rebase starts from
+        public static float latchWigglePivotMaxDistance = 0.25f;   // m a pivot further than this from the hand isn't one (no wiggle)
 
         // What each borrowed magazine model had changed, to put back before it returns to the pool (palming holds two)
         private sealed class PropChanges
@@ -1432,6 +1434,7 @@ namespace TarkovVR.Source.Weapons
             latchBaseLocalRotation = handLatch.localRotation;
             latchControllerAtGrabInHolder = Quaternion.Inverse(holder.rotation) * handRig.rotation;
             latchPivotInHolder = Vector3.zero;      // the holder's own point; the grabs that know better set it after
+            latchPivotInLatch = handLatch.InverseTransformPoint(holder.position);
             latchHolder = holder;
             handLatched = true;
             handLatchReleasing = false;
@@ -1443,17 +1446,21 @@ namespace TarkovVR.Source.Weapons
         private static void SetLatchPivot(Vector3 worldPoint)
         {
             if (handLatched && handLatch != null && handLatch.parent != null)
+            {
                 latchPivotInHolder = handLatch.parent.InverseTransformPoint(worldPoint);
+                latchPivotInLatch = handLatch.InverseTransformPoint(worldPoint);
+            }
         }
 
         // The latch moved on to another part, keeping its world pose (BeginSeatedHold puts it on the magazine well as the magazine seats):
         // its base, the controller's reference turn and the pivot are re-expressed there from where it is now. Written against the old
-        // part's frame, the base turned the hand ("as soon as the mag goes in, wrist twists 90 degrees", from the wiggle's round on).
+        // part's frame, the base turned the hand ("as soon as the mag goes in, wrist twists 90 degrees", from the wiggle's round on). The
+        // pivot comes from the hand, never the old part: that's the magazine prop, already back in Tarkov's pool somewhere else (taken from
+        // it, the pivot landed far off and the wiggle flung the hand: "My hand goes flying off now when the mag is seated").
         private static void RebaseLatch()
         {
-            Transform oldHolder = latchHolder;
             Transform holder = handLatch.parent;
-            Vector3 pivotWorld = oldHolder != null ? oldHolder.TransformPoint(latchPivotInHolder) : handLatch.position;
+            Vector3 pivotWorld = handLatch.TransformPoint(latchPivotInLatch);
             latchHolder = holder;
             handLatchSnapping = false;
             if (holder == null)
@@ -1481,6 +1488,11 @@ namespace TarkovVR.Source.Weapons
             turnInHolder = Quaternion.RotateTowards(Quaternion.identity, turnInHolder, handWiggleDegrees);
             Quaternion wiggle = holder.rotation * turnInHolder * Quaternion.Inverse(holder.rotation);
             Vector3 pivot = holder.TransformPoint(latchPivotInHolder);
+            // The pivot in the hand's own frame, from the unwiggled pose: what a rebase starts from if the latch is moved on
+            latchPivotInLatch = handLatch.InverseTransformPoint(pivot);
+            // A pivot far off the hand is a stale one: no wiggle rather than swinging the hand about it
+            if ((pivot - handLatch.position).sqrMagnitude > latchWigglePivotMaxDistance * latchWigglePivotMaxDistance)
+                return;
             handLatch.SetPositionAndRotation(pivot + wiggle * (handLatch.position - pivot), wiggle * handLatch.rotation);
         }
 
