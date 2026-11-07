@@ -179,9 +179,9 @@ namespace TarkovVR.Source.Player.VRManager
         private static float MeasureStock(EFT.Player.FirearmController fc)
         {
             Transform wr = fc.WeaponRoot;
-            var links = fc.HandsHierarchy;
-            Transform grip = links != null && links.Transforms != null && links.Transforms.Length > 8 && links.Transforms[8] != null
-                ? links.Transforms[8] : wr;
+            Transform grip = TarkovVR.Patches.Core.Player.WeaponPatches.RightGripMarker(fc);
+            if (grip == null)
+                grip = wr;
             Vector3 back = wr.up;   // toward the shooter
             Vector3 gripPos = grip.position;
             float best = 0f;

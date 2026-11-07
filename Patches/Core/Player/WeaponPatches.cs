@@ -819,6 +819,39 @@ namespace TarkovVR.Patches.Core.Player
             { "weapon_toz_tt_gold_762x25tt_container", new Vector3(-0.058f, -0.416f, -0.187f) },
         };
 
+        // The same for the RIGHT-grip marker (weapon_R_hand_marker, HandsHierarchy.Transforms[8]): the Sako's sits 58 cm out to the side
+        // in every one of its clips, like its left one, so its gun spot on the back / hip, the reach to take it back and the stock length
+        // all measured from there (headset: let go of it from the back, "it puts itself in front of me"). A sound marker sits on the right
+        // palm in the gun's idle pose (SV-98, M700: to the mm), so this is the Sako's palm there (sako_idle_armed, Weapon_root frame).
+        private static readonly Dictionary<string, Vector3> RightHandMarkerOverrides = new()
+        {
+            { "weapon_sako_trg_m10_86x70_container", new Vector3(0.047f, -0.150f, -0.103f) },
+        };
+        private const string RIGHT_MARKER_OVERRIDE = "VR_RightHandMarker_Override";
+
+        // A gun's right-grip marker: its own, or for a gun above a stand-in child of its Weapon_root at the right spot. weaponPrefab is the
+        // gun in hands' (_weaponPrefab) or a model on the body's; null = its own marker.
+        internal static Transform RightGripMarker(WeaponPrefab weaponPrefab, TransformLinks links, Transform weaponRoot)
+        {
+            if (weaponPrefab != null && weaponRoot != null && RightHandMarkerOverrides.TryGetValue(weaponPrefab.name.Replace("(Clone)", ""), out Vector3 localPosition))
+            {
+                Transform stand = weaponRoot.Find(RIGHT_MARKER_OVERRIDE);
+                if (stand == null)
+                {
+                    stand = new GameObject(RIGHT_MARKER_OVERRIDE).transform;
+                    stand.SetParent(weaponRoot, false);
+                }
+                stand.localPosition = localPosition;
+                return stand;
+            }
+            return links != null && links.Transforms != null && links.Transforms.Length > 8 ? links.Transforms[8] : null;
+        }
+
+        internal static Transform RightGripMarker(EFT.Player.FirearmController controller)
+        {
+            return controller != null ? RightGripMarker(controller._weaponPrefab, controller.HandsHierarchy, controller.WeaponRoot) : null;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
         private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)

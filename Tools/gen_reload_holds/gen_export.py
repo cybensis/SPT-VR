@@ -82,6 +82,13 @@ pistolFolders={g['folder'] for g in guns if items[g['id']]['_props'].get('weapCl
 CLIP_WELL_AXIS_RIFLES={'sv98'}
 for f,axis in sorted(R['wellAxes'].items()):
     if famFolder.get(f) in pistolFolders or f in CLIP_WELL_AXIS_RIFLES: out['wellAxes'][f]=axis
+# Rifles whose mag_out clip has no clean straight run (wellAxis None) though the magazine leaves down the well bone's own -z, as every
+# straight-out rifle's clip has it (SV-98, T-5000, SR-25, SCAR, M4: within 4 deg): the Sako TRG's box goes 1 cm straight down -z then
+# turns away with the hand, and the runtime's mesh-length axis ran along the gun (headset: "pulls forward toward the front of the
+# gun"); the M1A's rocks 27 deg forward as it leaves, along -z (headset: "comes up through the top of the gun")
+WELL_DOWN_RIFLES={'sako','m1a'}
+for f in sorted(WELL_DOWN_RIFLES):
+    out['wellAxes'].setdefault(f,[0.0,0.0,-1.0])
 for f,h in sorted(R['slides'].items()):
     if famFolder.get(f) in pistolFolders:
         out['slides'][f]=dict(bone=h['bone'],position=h['position'],rotation=h['rotation'],fingers=h['fingers'],travel=h['travel'])

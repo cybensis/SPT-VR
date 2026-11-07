@@ -695,8 +695,7 @@ namespace TarkovVR.Source.Player.Interactions
         // The grip, a little toward the muzzle (falls back to WeaponRoot)
         private static Vector3 RegrabPoint(EFT.Player.FirearmController fc)
         {
-            var links = fc.HandsHierarchy;
-            Transform anchor = links != null && links.Transforms != null && links.Transforms.Length > 8 ? links.Transforms[8] : null;
+            Transform anchor = WeaponPatches.RightGripMarker(fc);
             if (anchor == null)
                 anchor = fc.WeaponRoot;
             return anchor.position - fc.WeaponRoot.up * regrabForwardOffset;
@@ -896,8 +895,7 @@ namespace TarkovVR.Source.Player.Interactions
         // The gun's R-hand marker in its Weapon_root's frame (rotation only: the grip's side of the bore)
         private static Vector3 GripInWeaponRoot(EFT.Player.FirearmController fc)
         {
-            var links = fc.HandsHierarchy;
-            Transform grip = links != null && links.Transforms != null && links.Transforms.Length > 8 ? links.Transforms[8] : null;
+            Transform grip = WeaponPatches.RightGripMarker(fc);
             return grip != null && fc.WeaponRoot != null ? Quaternion.Inverse(fc.WeaponRoot.rotation) * (grip.position - fc.WeaponRoot.position) : Vector3.forward;
         }
 

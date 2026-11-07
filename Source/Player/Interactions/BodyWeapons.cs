@@ -559,7 +559,10 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (!gripMarkers.TryGetValue(model, out Transform grip))
             {
-                grip = LinksOf(model)?.GetTransform(ECharacterWeaponBones.weapon_R_hand_marker);
+                // Its own marker, or the stand-in for a gun whose marker is off the grip (WeaponPatches.RightGripMarker: the Sako)
+                TransformLinks links = LinksOf(model);
+                grip = WeaponPatches.RightGripMarker(model.GetComponent<WeaponPrefab>(), null, WeaponRootOf(model))
+                    ?? links?.GetTransform(ECharacterWeaponBones.weapon_R_hand_marker);
                 gripMarkers[model] = grip;
             }
             return grip;
