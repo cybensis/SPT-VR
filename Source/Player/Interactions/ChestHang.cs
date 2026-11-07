@@ -827,17 +827,19 @@ namespace TarkovVR.Source.Player.Interactions
         private static float headStillFor;
         private static bool bodyYawSet;
         private static int bodyYawFrame = -1;
-        private static Quaternion bodyYaw = Quaternion.identity;
-        private static Vector3 bodyNeck;
 
+        // The body's turn in the rig advances once a frame; the neck and the rig's own yaw are read at every call. BodyWeapons places
+        // the guns on the body at onBeforeRender, after the rig's LateUpdate pins (FirstPersonCameraState.ManualLateUpdate, the body
+        // follow) have moved it for the frame: a neck cached by the frame's first caller (Update) left them a step behind while
+        // walking (headset: the guns on the body "sorta lag/jitter while moving around", the hanging one, under the rig, steady).
         internal static Quaternion BodyYaw(out Vector3 neck)
         {
+            HeadPose(out Vector3 headPos, out Quaternion headRot);
+            float rigYaw = VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform.eulerAngles.y : 0f;
             if (bodyYawFrame != Time.frameCount)
             {
                 bodyYawFrame = Time.frameCount;
-                HeadPose(out Vector3 headPos, out Quaternion headRot);
                 float headYaw = HeadYaw(out _).eulerAngles.y;
-                float rigYaw = VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform.eulerAngles.y : 0f;
                 float headYawInRig = Mathf.DeltaAngle(rigYaw, headYaw);
                 float dt = Mathf.Clamp(Time.deltaTime, 1e-4f, 0.1f);
                 if (!bodyYawSet)
@@ -853,11 +855,9 @@ namespace TarkovVR.Source.Player.Interactions
                 if (headStillFor > bodyRecenterAfter)
                     bodyYawInRig = Mathf.MoveTowardsAngle(bodyYawInRig, headYawInRig, bodyRecenterRate * dt);
                 lastHeadYawInRig = headYawInRig;
-                bodyYaw = Quaternion.Euler(0f, rigYaw + bodyYawInRig, 0f);
-                bodyNeck = headPos + headRot * ShoulderStock.neckLocalOffset;
             }
-            neck = bodyNeck;
-            return bodyYaw;
+            neck = headPos + headRot * ShoulderStock.neckLocalOffset;
+            return Quaternion.Euler(0f, rigYaw + bodyYawInRig, 0f);
         }
 
         // The gun in hand's own spot: its slot's, or the chest sling's for anything else (or with BodyWeapons off)
