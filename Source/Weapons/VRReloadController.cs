@@ -412,19 +412,19 @@ namespace TarkovVR.Source.Weapons
                 bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon);
                 bool inSideHandleZone = !supporting && !inHandleZone && InSideHandleZone(firearmController, weapon);
                 bool inPouchZone = !supporting && InChestPouchZone(palm);
-                // A failure to eject: the case stuck in the ejection port (VRReloadController.Malfunctions)
-                bool atJamPort = InJamPortZone(firearmController, weapon);
-                OffHandAtChargingHandle = inHandleZone || inSideHandleZone;
+                // A failure to eject: the case stuck in the ejection port, taken with the trigger like the handle (VRReloadController.Malfunctions)
+                bool atJamPort = InJamPortZone(firearmController, weapon, gunHand: false);
+                OffHandAtChargingHandle = inHandleZone || inSideHandleZone || atJamPort;
                 // A hand on the support grip is only taken over by an actual grab, never by passing through a zone
                 // (a pistol's support hand cups right over its magazine). Not the handle's zone: that's the trigger's, the
                 // foregrip's the grip's, and on an AK the two are 12 cm apart, so this would keep the foregrip from being taken.
-                // The jam port's is: it's right by the grip, where the hand swap would take the press.
-                reaching = !supporting && (inGrabZone || inPouchZone || atJamPort);
+                reaching = !supporting && (inGrabZone || inPouchZone);
                 // A press ChestHang's hand swap left to the magazine (the hand nearer it than the grip): taken with the swap's reach,
                 // the palm maybe just outside this one (a short magazine in the grip, the MP7's 20-round)
                 bool pressLeftToMagazine = ChestHang.GripPressLeftToMagazineFrame == Time.frameCount && GunMagazineGrabbable(weapon) && !MagazinePartlyOut;
-                if (gripPressed && atJamPort)
-                    ClearJamAtPort(firearmController);
+                // Before the handle: on an AK the handle rides the carrier right at the port (a rack would clear it too)
+                if (triggerPressed && atJamPort)
+                    ClearJamAtPort(firearmController, gunHand: false);
                 else if (gripPressed && (inGrabZone || pressLeftToMagazine))
                     GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
                 // Manual Reload, two-handing with the support hand at the magazine (a pistol): the mag release takes it
@@ -435,10 +435,16 @@ namespace TarkovVR.Source.Weapons
                 else if (gripPressed && inPouchZone)
                     GrabFromPouch(firearmController, weapon, magazineSlot);
             }
-            // The gun hand off the grip, the off hand holding the gun up (ChestHang's support hold): that hand can take the handle
-            if (!handBusy && gunHandTriggerPressed && ChestHang.SupportOnly && CanWorkGun(out FirearmController heldFirearm, out Weapon heldWeapon, out _)
-                && InChargingHandleZone(heldFirearm, heldWeapon, gunHand: true))
-                GrabChargingHandle(heldFirearm, heldWeapon, gunHand: true);
+            // The gun hand off the grip, the off hand holding the gun up (ChestHang's support hold): that hand can take the handle, or a
+            // case stuck in the port (its trigger: its grip there would take the gun's grip back)
+            if (!handBusy && ChestHang.SupportOnly && CanWorkGun(out FirearmController heldFirearm, out Weapon heldWeapon, out _))
+            {
+                bool gunHandAtJamPort = InJamPortZone(heldFirearm, heldWeapon, gunHand: true);
+                if (gunHandTriggerPressed && gunHandAtJamPort)
+                    ClearJamAtPort(heldFirearm, gunHand: true);
+                else if (gunHandTriggerPressed && InChargingHandleZone(heldFirearm, heldWeapon, gunHand: true))
+                    GrabChargingHandle(heldFirearm, heldWeapon, gunHand: true);
+            }
             // Manual Reload, like the real button: B lets the magazine fall out of the well, unless the off hand has it
             // (on the track, still on it from seating it, or cupping it from the support grip just above)
             // A new magazine in the hand, at the gun's: the trigger takes that one too (palming)

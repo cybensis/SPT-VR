@@ -1,5 +1,6 @@
 using EFT;
 using EFT.InventoryLogic;
+using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
@@ -9,7 +10,7 @@ namespace TarkovVR.Source.Weapons
     // Clearing a malfunction by hand (Manual Reload), the way Tarkov's own clearing clips do it (each gun's misfire / jam_shell /
     // jam_feed / jam_hard / jam_soft, read for the M4, AK, MP5, Glock and SV-98):
     //  - misfire, soft slide, failure to feed: the handle or slide all the way back and let go (a bolt-action: the bolt cycled)
-    //  - failure to eject: the case stuck in the ejection port, taken out with a grip there (a full rack clears it too)
+    //  - failure to eject: the case stuck in the ejection port, taken out with either hand's trigger there (a full rack clears it too)
     //  - hard slide: the handle (or bolt) doesn't move for the first hardSlideStuckTugs tugs, each a hard clunk through the gun; it
     //    breaks free on the next, then a full rack clears it
     // What clears it is Tarkov's one repair for all five (RepairMalfunction: the gun's state, the dud or stuck round thrown out, the
@@ -24,7 +25,7 @@ namespace TarkovVR.Source.Weapons
         public static float hardSlideTugDistance = 0.025f;      // m the hand pulls on the stuck handle or bolt for a tug
         public static float hardSlideTugReset = 0.01f;          // m it has to come back toward rest before the next one counts
         public static float hardSlideGive = 0.004f;             // m a stuck handle still gives
-        public static float jamPortRadius = 0.05f;              // m any point of the off hand to the ejection port to take a stuck case out
+        public static float jamPortRadius = 0.05f;              // m any point of the hand to the ejection port for its trigger to take a stuck case out
         public static bool malfunctionPoseOffWhileHeld = true;  // Tarkov's malfunction pose off while the hand works the handle or bolt,
                                                                 // as its own repair does (it would hold the bolt where the jam left it)
 
@@ -156,27 +157,27 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // The off hand at the port of a gun with a case stuck in it (not two-handing: that hand is on the foregrip)
-        private static bool InJamPortZone(FirearmController firearmController, Weapon weapon)
+        // A hand at the port of a gun with a case stuck in it, the trigger taking it like the charging handle: the off hand while the gun
+        // hand has the grip (not two-handing: it's on the foregrip), the gun hand once it has let go with the off hand holding the gun up.
+        // Tarkov's own clips do both (the M4's and AK's gun hand, the Glock's support hand).
+        private static bool InJamPortZone(FirearmController firearmController, Weapon weapon, bool gunHand)
         {
-            bool show = debugZones && weapon.MalfState.State == Weapon.EMalfunctionState.Jam;
-            bool atPort = false;
-            Vector3 port = Vector3.zero;
-            if (weapon.MalfState.State == Weapon.EMalfunctionState.Jam && !VRGlobals.vrPlayer.isSupporting && MalfunctionClearsByHand(firearmController)
-                && TryGetJamPort(firearmController, out port))
-                atPort = HandTouchesCapsule(false, port, port, jamPortRadius);
-            else
-                show = false;
-            SetZoneViz(ref jamPortZoneViz, show, port, jamPortRadius, atPort ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.9f, 0f, 0.3f));
+            bool handMayTakeIt = gunHand ? ChestHang.SupportOnly : !VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached;
+            if (!handMayTakeIt || weapon.MalfState.State != Weapon.EMalfunctionState.Jam || !MalfunctionClearsByHand(firearmController)
+                || !TryGetJamPort(firearmController, out Vector3 port))
+                return false;
+            bool atPort = HandTouchesCapsule(gunHand, port, port, jamPortRadius);
+            SetZoneViz(ref jamPortZoneViz, debugZones, port, jamPortRadius, atPort ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.9f, 0f, 0.3f));
             return atPort;
         }
 
-        private static void ClearJamAtPort(FirearmController firearmController)
+        private static void ClearJamAtPort(FirearmController firearmController, bool gunHand)
         {
             if (debugLog)
-                LogAction("[VRReload] the stuck case taken out at the ejection port");
-            PlayFirstGunSound(firearmController, SoundHand.OffHand, "ShellRemove", "ShellPull", "ShellGrab");
-            Pulse(SoundHand.OffHand, 0.45f, 0.04f);
+                LogAction($"[VRReload] the stuck case taken out at the ejection port ({(gunHand ? "gun" : "off")} hand)");
+            SoundHand hand = gunHand ? SoundHand.GunHand : SoundHand.OffHand;
+            PlayFirstGunSound(firearmController, hand, "ShellRemove", "ShellPull", "ShellGrab");
+            Pulse(hand, 0.45f, 0.04f);
             RepairByHand(firearmController);
         }
 
