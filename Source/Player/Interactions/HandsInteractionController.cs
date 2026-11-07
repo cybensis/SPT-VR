@@ -321,6 +321,8 @@ namespace TarkovVR.Source.Player.Interactions
                         && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1);
                 // The grip of the hand holding the gun (the left one while the gun is in the left hand: Handedness.GunInLeftHand)
                 ChestHang.UpdateInput(Handedness.GunHandGrip.state, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
+                // A gun's body spot placed by hand (the trigger held on it)
+                GunSpots.Tick();
             }
 
             // Magazines by hand: also before the bail (it cancels a held magazine itself on menus)

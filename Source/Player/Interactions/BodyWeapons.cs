@@ -111,7 +111,8 @@ namespace TarkovVR.Source.Player.Interactions
                 EquipmentSlot zoneSlot = handInShoulderZone ? EquipmentSlot.SecondPrimaryWeapon : EquipmentSlot.Holster;
                 GameObject zoneModel = ViewOf(zoneSlot)?.Model;
                 Item zoneItem = SlotItem(zoneSlot);
-                if (zoneModel != null && zoneModel.activeInHierarchy && zoneItem != null && zoneItem != inHands)
+                // A spot placed by hand: that gun isn't in the zone any more (the reach below finds it where it is)
+                if (!GunSpots.MovedOffZone(zoneSlot) && zoneModel != null && zoneModel.activeInHierarchy && zoneItem != null && zoneItem != inHands)
                 {
                     takenItem = zoneItem;
                     takenModel = zoneModel;
@@ -217,6 +218,44 @@ namespace TarkovVR.Source.Player.Interactions
             span = new GunSpan { butt = new Vector3(middle.x, high.y, middle.z), muzzle = new Vector3(middle.x, low.y, middle.z), measuredAt = Time.time };
             spans[weaponRoot] = span;
             return span;
+        }
+
+        // ReachScore's measure for any hand's points (GunSpots: either hand places a gun's spot). Under 1 = in reach.
+        internal static float HandReach(Transform weaponRoot, Transform meshRoot, Vector3 gripPoint, List<Vector3> handPoints)
+        {
+            if (weaponRoot == null)
+                return float.MaxValue;
+            GunSpan span = SpanOf(weaponRoot, meshRoot);
+            Vector3 butt = span != null ? weaponRoot.TransformPoint(span.butt) : Vector3.zero;
+            Vector3 muzzle = span != null ? weaponRoot.TransformPoint(span.muzzle) : Vector3.zero;
+            float score = float.MaxValue;
+            foreach (Vector3 point in handPoints)
+            {
+                score = Mathf.Min(score, Vector3.Distance(point, gripPoint) / grabRadius);
+                if (span != null)
+                    score = Mathf.Min(score, DistanceToSegment(point, butt, muzzle) / gunGrabRadius);
+            }
+            return score;
+        }
+
+        // A gun drawn at its spot on the body (GunSpots): shown, not the one in hands, not riding the hand in a switch, not the knife
+        internal static bool DrawnBodyGun(EquipmentSlot slot, out GameObject model, out Transform weaponRoot, out Vector3 gripLocal, out Vector3 grabPoint)
+        {
+            model = null;
+            weaponRoot = null;
+            gripLocal = Vector3.forward;
+            grabPoint = Vector3.zero;
+            if (!Active || slot == EquipmentSlot.Scabbard)
+                return false;
+            GameObject found = ViewOf(slot)?.Model;
+            Item item = SlotItem(slot);
+            if (found == null || !found.activeInHierarchy || item == null || item == HandsItem() || (Switching && found == standIn) || GripMarkerOf(found) == null)
+                return false;
+            model = found;
+            weaponRoot = WeaponRootOf(found);
+            gripLocal = GripInWeaponRoot(found);
+            grabPoint = GrabPoint(found);
+            return true;
         }
 
         private static float DistanceToSegment(Vector3 point, Vector3 start, Vector3 end)

@@ -111,6 +111,11 @@ namespace TarkovVR.Source.Settings
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
+            // The guns' body spots placed by hand (GunSpots), per slot: the grip point x, y, z and the Weapon_root rotation x, y, z, w in
+            // the body's frame. null = the default spot. Plain floats: Newtonsoft can't write a Vector3 (its normalized loops).
+            public float[] gunSpotChest { get; set; }
+            public float[] gunSpotBack { get; set; }
+            public float[] gunSpotHip { get; set; }
             public float armLength { get; set; }    // m, shoulder joint to wrist; 0 = never measured
             // B no longer runs Tarkov's reload on guns with detachable magazines: a press drops the magazine, held = the off hand can pull it out
             public bool manualReload { get; set; }
@@ -198,6 +203,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle weaponWeightToggle;
         private static SettingToggle virtualStockToggle;
         private static SettingToggle chestSlingToggle;
+        private static SettingToggle resetGunSpotsToggle;
         private static SettingToggle manualReloadToggle;
         private static SettingToggle weaponInertiaToggle;
         private static SettingToggle walkEffectorToggle;
@@ -534,6 +540,14 @@ namespace TarkovVR.Source.Settings
             chestSlingToggle.Toggle._onValueChanged = SetChestSlingOn;
             chestSlingToggle.Text.localizationKey = "Turn On Chest Sling";
             chestSlingToggle.Toggle.UpdateValue(settings.chestSling);
+
+            // The gun spots placed by hand (GunSpots: hold the trigger on a gun at its spot, move it, let go) all back to where they
+            // start. A one-shot: it turns itself back off.
+            resetGunSpotsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            resetGunSpotsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            resetGunSpotsToggle.Toggle._onValueChanged = ResetGunSpots;
+            resetGunSpotsToggle.Text.localizationKey = "Reset Placed Gun Spots";
+            resetGunSpotsToggle.Toggle.UpdateValue(false);
 
             // Manual reload (VRReloadController): on guns with detachable magazines B stops running Tarkov's
             // reload; a press drops the magazine, hold it so the off hand can pull it out.
@@ -1067,6 +1081,51 @@ namespace TarkovVR.Source.Settings
         public static bool GetChestSlingOn()
         {
             return settings.chestSling;
+        }
+
+        // A gun spot placed by hand (GunSpots; index 0 the chest sling, 1 the shoulder, 2 the hip): its grip point and Weapon_root
+        // rotation in the body's frame. Saved straight away (placed in a raid, not in this menu).
+        public static bool GetGunSpot(int index, out Vector3 grip, out Quaternion rotation)
+        {
+            float[] data = index == 0 ? settings.gunSpotChest : index == 1 ? settings.gunSpotBack : index == 2 ? settings.gunSpotHip : null;
+            if (data == null || data.Length != 7)
+            {
+                grip = Vector3.zero;
+                rotation = Quaternion.identity;
+                return false;
+            }
+            grip = new Vector3(data[0], data[1], data[2]);
+            rotation = new Quaternion(data[3], data[4], data[5], data[6]);
+            return true;
+        }
+
+        public static void SetGunSpot(int index, Vector3 grip, Quaternion rotation)
+        {
+            rotation = Quaternion.Normalize(rotation);
+            float[] data = { grip.x, grip.y, grip.z, rotation.x, rotation.y, rotation.z, rotation.w };
+            if (index == 0)
+                settings.gunSpotChest = data;
+            else if (index == 1)
+                settings.gunSpotBack = data;
+            else if (index == 2)
+                settings.gunSpotHip = data;
+            else
+                return;
+            SaveSettings();
+        }
+
+        private static void ResetGunSpots(bool turnOn)
+        {
+            if (!turnOn)
+                return;
+            settings.gunSpotChest = null;
+            settings.gunSpotBack = null;
+            settings.gunSpotHip = null;
+            SaveSettings();
+            Plugin.MyLog.LogInfo("[GunSpots] placed gun spots reset to the defaults");
+            // Back off without calling this again: a button, not a setting
+            if (resetGunSpotsToggle != null)
+                resetGunSpotsToggle.Toggle.UpdateValue(false, sendCallback: false);
         }
 
         private static void SetManualReloadOn(bool turnOn)

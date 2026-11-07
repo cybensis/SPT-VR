@@ -72,6 +72,10 @@ namespace TarkovVR.Source.Weapons
 
         // Off hand state, read by VRPlayerManager / the loot pointer / the weapon interact
         public static bool OwnsOffHand { get; private set; }            // holding a magazine, or reaching for one
+        // Holding a part of the gun, without the zones it's only reaching into (GunSpots: the chest pouch zone overlaps the chest sling)
+        public static bool OffHandHolds => HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand)
+            || HoldingSeatedMagazine || HoldingPalmedMagazine || (HoldingRound && !RoundInGunHand);
+        public static bool GunHandHolds => HandleInGunHand || BoltInGunHand || RoundInGunHand;
         public static bool HoldingMagazine => heldSource != HeldMagazineSource.None;
         public static bool HoldingGunMagazine => heldSource == HeldMagazineSource.FromGun;   // still in the gun as far as Tarkov knows: no firing
 

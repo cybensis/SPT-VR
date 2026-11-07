@@ -756,6 +756,9 @@ namespace TarkovVR.Source.Player.Interactions
             rotation = Quaternion.identity;
             if (!HeadPose(out _, out _))
                 return false;
+            // A spot placed by hand, or the one being placed (GunSpots)
+            if (GunSpots.TryGetSpot(slot, gripLocal, out position, out rotation))
+                return true;
             bool leftHanded = VRSettings.GetLeftHandedMode();
             Quaternion bodyRot = BodyYaw(out Vector3 neck);
             Vector3 offset;
@@ -867,6 +870,29 @@ namespace TarkovVR.Source.Player.Interactions
             return SpotPose(EquipmentSlot.FirstPrimaryWeapon, gripLocal, out position, out rotation);
         }
 
+        // The slot whose spot the gun in hand hangs at (HandsGunSpotPose's choice)
+        internal static EquipmentSlot HandsGunSlot(EFT.Player.FirearmController fc)
+        {
+            return BodyWeapons.enabled && BodyWeapons.SlotOf(fc.Item, out EquipmentSlot slot) ? slot : EquipmentSlot.FirstPrimaryWeapon;
+        }
+
+        // The gun in hands hanging at its spot (GunSpots places it like the ones on the body): its slot, grip in its Weapon_root frame,
+        // and where the hand takes it
+        internal static bool HangingGun(out EFT.Player.FirearmController fc, out EquipmentSlot slot, out Vector3 gripLocal, out Vector3 grabPoint)
+        {
+            fc = null;
+            slot = EquipmentSlot.FirstPrimaryWeapon;
+            gripLocal = Vector3.forward;
+            grabPoint = Vector3.zero;
+            if (!Hanging || DetachedGunGone() || detachedGun.WeaponRoot == null || !DetachedGunOnHolder())
+                return false;
+            fc = detachedGun;
+            slot = HandsGunSlot(fc);
+            gripLocal = GripInWeaponRoot(fc);
+            grabPoint = RegrabPoint(fc);
+            return true;
+        }
+
         // The gun's R-hand marker in its Weapon_root's frame (rotation only: the grip's side of the bore)
         private static Vector3 GripInWeaponRoot(EFT.Player.FirearmController fc)
         {
@@ -938,8 +964,18 @@ namespace TarkovVR.Source.Player.Interactions
 
             // tuck-in blend runs in the yaw-local frame (turning carries the gun 1:1 - world-space
             // blending was the "gun spins while I turn" bug), then the mount is rigid: no dangle.
-            slingLocalPos = Vector3.SmoothDamp(slingLocalPos, off, ref posVel, attachTime);
-            slingLocalRot = Quaternion.Slerp(slingLocalRot, spotLocalRot, Mathf.Min(1f, rotAttachRate * dt));
+            // Being placed by hand (GunSpots): it's in the hand, no tuck-in
+            if (GunSpots.IsPlacing(HandsGunSlot(fc)))
+            {
+                slingLocalPos = off;
+                slingLocalRot = spotLocalRot;
+                posVel = Vector3.zero;
+            }
+            else
+            {
+                slingLocalPos = Vector3.SmoothDamp(slingLocalPos, off, ref posVel, attachTime);
+                slingLocalRot = Quaternion.Slerp(slingLocalRot, spotLocalRot, Mathf.Min(1f, rotAttachRate * dt));
+            }
 
             StampWeaponRoot(headPos + yawRot * slingLocalPos, yawRot * slingLocalRot);
             return true;
