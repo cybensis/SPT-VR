@@ -50,9 +50,12 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool hangHaptics = true;
         public static bool debugLog = false;            // 1/sec chain dump while detached + save/restore lines (for the prone-corrupts-regrab hunt)
         private static float nextDebugLog;
-        public static bool gripSound = true;            // every grab (foregrip / grip retake / off the sling): cloth + a hint of gun
-        public static float gripClothVolume = 0.85f;    // the gear (rig/backpack) pickup foley = the cloth layer
-        public static float gripGunVolume = 0.18f;      // the weapon's own pickup clip, quiet, underneath
+        public static bool gripSound = true;            // every grab (foregrip / grip retake / off the sling / a gun off the body)
+        public static bool gripSoundHandOn = true;      // the gun's own hand-on-the-grip sound; false = the old cloth + a hint of gun ("doesn't sound good and gets annoying")
+        public static float gripClothVolume = 0.85f;    // old mix: the gear (rig/backpack) pickup foley = the cloth layer
+        public static float gripGunVolume = 0.18f;      // old mix: the weapon's own pickup clip, quiet, underneath
+        private static EFT.Player.FirearmController handOnSoundFor;
+        private static BaseSoundPlayer handOnSoundPlayer;
         // The gun from one hand straight into the other (right-handed mode): the off hand at the gun hand's grip + a grip press takes it
         // (not a pistol: its support hand cups the gun hand right there), and a pistol held two-handed goes over to the support hand
         // when the gun hand lets go (instead of the support-only hold the long guns get)
@@ -617,15 +620,20 @@ namespace TarkovVR.Source.Player.Interactions
                 PlayGripSound();
         }
 
-        // "Cloth grab with a hint of gun" (headset spec) for hands-going-onto-the-held-gun: the generic
-        // gear (rig/backpack) pickup foley = the cloth, with the weapon's own pickup clip quiet under
-        // it. Used for the foregrip grab (VRPlayerManager, isSupporting engage) and the grip retake
-        // while supported. Public so VRPlayerManager can fire it.
+        // Hands going onto the held gun: the gun's own hand-on-grip sound (gripSoundHandOn), else the old
+        // "cloth grab with a hint of gun" = the generic gear (rig/backpack) pickup foley with the weapon's
+        // own pickup clip quiet under it. Fired for the foregrip grab (the isSupporting edge), the grip
+        // retake, the hand swap and a gun drawn off the body (BodyWeapons).
         public static void PlayGripSound()
         {
             var fc = VRGlobals.firearmController;
             if (!gripSound || fc == null || fc.WeaponRoot == null)
                 return;
+            if (gripSoundHandOn)
+            {
+                PlayHandOnSound(fc);
+                return;
+            }
             var gui = Singleton<GUISounds>.Instance;
             var ba = MonoBehaviourSingleton<BetterAudio>.Instance;
             if (gui == null || ba == null)
@@ -647,6 +655,29 @@ namespace TarkovVR.Source.Player.Interactions
                 ba.TryPlayAtPoint(out _, pos, cloth, BetterAudio.AudioSourceGroupType.Character, 25, gripClothVolume);
             if (gun != null)
                 ba.TryPlayAtPoint(out _, pos, gun, BetterAudio.AudioSourceGroupType.Character, 25, cloth != null ? gripGunVolume : gripClothVolume);
+        }
+
+        // The sound Tarkov's reload plays as the support hand goes back onto the gun, from the gun's own sound player (WeaponRecon,
+        // M4A1: HandOn = hand_grip4, HandOff = hand_grip3). A gun without either stays silent. Not through VRReloadController's
+        // PlayFelt: no audio haptics (the grab already pulses) and nothing sent over FIKA, as before.
+        private static void PlayHandOnSound(EFT.Player.FirearmController fc)
+        {
+            if (handOnSoundFor != fc)
+            {
+                handOnSoundFor = fc;
+                handOnSoundPlayer = fc._controllerObject != null ? fc._controllerObject.GetComponentInChildren<BaseSoundPlayer>(true) : null;
+            }
+            if (handOnSoundPlayer == null || handOnSoundPlayer.AdditionalSounds == null)
+                return;
+            foreach (string soundName in new[] { "HandOn", "HandOff" })
+            {
+                string eventName = "Snd" + soundName;
+                if (handOnSoundPlayer.AdditionalSounds.Exists(sound => sound != null && (sound.EventName == soundName || sound.EventName == eventName)))
+                {
+                    handOnSoundPlayer.SoundEventHandler(soundName);
+                    return;
+                }
+            }
         }
 
         private static void SaveHolderOnce()
