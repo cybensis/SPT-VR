@@ -383,14 +383,24 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool TryGrabFromGunHand(EFT.Player.FirearmController fc, bool supporting, bool offGripPressed)
         {
             var hands = VRGlobals.handsInteractionController;
-            bool atGrip = handSwap && !Handedness.LeftHanded && !supporting && !VRGlobals.vrPlayer.isWeapPistol
+            float swapScore = handSwap && !Handedness.LeftHanded && !supporting && !VRGlobals.vrPlayer.isWeapPistol
                 && !VRReloadController.OwnsOffHand && hands != null && hands.heldItem == null && hands.scopeTransform == null
-                && !OffHandAtForegrip() && OffHandAtGrip(fc);
+                && !OffHandAtForegrip() ? OffHandGripScore(fc) : float.MaxValue;
+            bool atGrip = swapScore < 1f;
+            // Nearest wins: a magazine that loads through the grip (MP7, MP9, Uzi, Vector, PP-91) sits inside this reach, and a short
+            // one is all grip (headset, MP7 20-round: "if I try and grab this smaller mag, it just causes me to move the gun to my
+            // other hand"). The hand nearer the magazine than the grip, each over its own reach, leaves the press to the magazine
+            // (VRReloadController.Tick, later this frame, takes it with that reach).
+            bool magazineNearer = atGrip && VRReloadController.OffHandMagazineScore(offTouchPoints) < swapScore;
+            if (magazineNearer)
+                atGrip = false;
             OffHandAtGunGrip = atGrip;
-            // A light blip on the off hand coming into reach of the grip (as the regrab zone's)
+            // A light blip on the off hand coming into reach of the grip (as the regrab zone's): only where a press would swap
             if (atGrip && !swapZoneIn && hangHaptics)
                 VRInput.Haptic.Execute(0f, 0.07f, 95f, 0.25f, Handedness.OffHandSource);
             swapZoneIn = atGrip;
+            if (magazineNearer && offGripPressed)
+                GripPressLeftToMagazineFrame = Time.frameCount;
             if (!atGrip || !offGripPressed)
                 return false;
             SwapHands();
@@ -403,23 +413,26 @@ namespace TarkovVR.Source.Player.Interactions
             return pistolSwapOnRelease && !Handedness.LeftHanded && VRGlobals.vrPlayer.isWeapPistol;
         }
 
-        // The off hand's palm, knuckles or fingertips at the gun hand's grip: the regrab point (the R-hand marker), mirrored across the
-        // gun's centre plane while the gun is in the left hand (where that hand holds it)
-        private static bool OffHandAtGrip(EFT.Player.FirearmController fc)
+        // The frame a grip press in the swap's reach went to the seated magazine instead (nearer it: TryGrabFromGunHand)
+        internal static int GripPressLeftToMagazineFrame { get; private set; } = -1;
+
+        // The off hand's palm, knuckles or fingertips to the gun hand's grip, over handSwapRadius (under 1 = in reach): the regrab
+        // point (the R-hand marker), mirrored across the gun's centre plane while the gun is in the left hand (where that hand holds
+        // it). Leaves those points in offTouchPoints.
+        private static float OffHandGripScore(EFT.Player.FirearmController fc)
         {
+            offTouchPoints.Clear();
             if (fc.WeaponRoot == null || VRGlobals.handsInteractionController == null)
-                return false;
+                return float.MaxValue;
             Vector3 grip = RegrabPoint(fc);
             if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
                 grip = RealLeftHandedPatches.ReflectPoint(grip, planePoint, planeNormal);
             // The off hand is drawn by the right arm while the gun is in the left hand
             VRGlobals.handsInteractionController.GetHandTouchPoints(Handedness.GunInLeftHand, offTouchPoints);
+            float nearest = float.MaxValue;
             foreach (Vector3 point in offTouchPoints)
-            {
-                if ((point - grip).sqrMagnitude <= handSwapRadius * handSwapRadius)
-                    return true;
-            }
-            return false;
+                nearest = Mathf.Min(nearest, (point - grip).magnitude / handSwapRadius);
+            return nearest;
         }
         private static readonly System.Collections.Generic.List<Vector3> offTouchPoints = new System.Collections.Generic.List<Vector3>();
 

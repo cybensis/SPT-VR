@@ -393,7 +393,10 @@ namespace TarkovVR.Source.Weapons
                 // (a pistol's support hand cups right over its magazine). Not the handle's zone: that's the trigger's, the
                 // foregrip's the grip's, and on an AK the two are 12 cm apart, so this would keep the foregrip from being taken.
                 reaching = !supporting && (inGrabZone || inPouchZone);
-                if (gripPressed && inGrabZone)
+                // A press ChestHang's hand swap left to the magazine (the hand nearer it than the grip): taken with the swap's reach,
+                // the palm maybe just outside this one (a short magazine in the grip, the MP7's 20-round)
+                bool pressLeftToMagazine = ChestHang.GripPressLeftToMagazineFrame == Time.frameCount && GunMagazineGrabbable(weapon) && !MagazinePartlyOut;
+                if (gripPressed && (inGrabZone || pressLeftToMagazine))
                     GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
                 // Manual Reload, two-handing with the support hand at the magazine (a pistol): the mag release takes it
                 else if (releasePressed && supporting && inGrabZone && !MagazineSlidesOntoHand)
@@ -505,6 +508,19 @@ namespace TarkovVR.Source.Weapons
 
         private static bool InGunMagazineGrabZone(FirearmController firearmController, Weapon weapon, Slot magazineSlot, Vector3 palm)
         {
+            if (!GunMagazineGrabbable(weapon))
+                return false;
+            // Partly out: the magazine and below it, the hand can take it there (headset: with the palm having to be right at the
+            // magazine it couldn't be grabbed)
+            if (MagazinePartlyOut)
+                return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
+            return TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
+                && DistanceToSegment(palm, magazineCenter, magazineBottom) <= magazineGrabRadius;
+        }
+
+        // Everything but where the hand is
+        private static bool GunMagazineGrabbable(Weapon weapon)
+        {
             if (weapon.GetCurrentMagazine() == null)
                 return false;
             // Manual Reload: any gun, the mag catch holds it in the well until B is down (UpdateRail). Otherwise
@@ -513,14 +529,24 @@ namespace TarkovVR.Source.Weapons
             if (!VRSettings.GetManualReloadOn() && (VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting))
                 return false;
             // A pistol's has to come partly out first (the release held)
-            if (MagazineSlidesOntoHand && !MagazinePartlyOut)
-                return false;
-            // Partly out: the magazine and below it, the hand can take it there (headset: with the palm having to be right at the
-            // magazine it couldn't be grabbed)
-            if (MagazinePartlyOut)
-                return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
-            return TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
-                && DistanceToSegment(palm, magazineCenter, magazineBottom) <= magazineGrabRadius;
+            return !MagazineSlidesOntoHand || MagazinePartlyOut;
+        }
+
+        // For ChestHang's hand swap (nearest wins, see TryGrabFromGunHand): the off hand's touch points (the swap's own: palm,
+        // knuckles, fingertips) to the seated magazine's grab capsule, over magazineGrabRadius. float.MaxValue where a grip press
+        // couldn't take it now (Tick's own conditions). A pistol's partly-out magazine isn't in it: the swap leaves pistols alone.
+        internal static float OffHandMagazineScore(List<Vector3> touchPoints)
+        {
+            if (HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound)
+                return float.MaxValue;
+            if (touchPoints == null || touchPoints.Count == 0 || !CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
+                || !GunMagazineGrabbable(weapon) || MagazinePartlyOut
+                || !TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
+                return float.MaxValue;
+            float nearest = float.MaxValue;
+            foreach (Vector3 point in touchPoints)
+                nearest = Mathf.Min(nearest, DistanceToSegment(point, magazineCenter, magazineBottom) / magazineGrabRadius);
+            return nearest;
         }
 
         private static float DistanceToSegment(Vector3 point, Vector3 segmentStart, Vector3 segmentEnd)
