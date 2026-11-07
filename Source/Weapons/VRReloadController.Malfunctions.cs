@@ -175,13 +175,36 @@ namespace TarkovVR.Source.Weapons
             return Mathf.Min(wanted, hardSlideGive);
         }
 
-        // Let go from a full pull on a malfunctioned gun: the bolt slams home and the malfunction is cleared
+        // Let go from a full pull on a malfunctioned gun: the malfunction is cleared and the bolt goes home on the next round (Tarkov's repair
+        // chambers it) - or, the magazine empty, the follower catches it back, as any rack on an empty magazine does (BoltComesBack's rule,
+        // which the malfunction's full pull skipped): no round, no slam
         private static void RackClearsMalfunction(FirearmController firearmController)
         {
-            PlayFirstGunSound(firearmController, SoundHand.GunBody, "BoltIn", "SlideIn");
+            Weapon weapon = firearmController.Item;
+            bool repaired = RepairByHand(firearmController);
+            bool caughtBack = repaired && BoltStaysBack(weapon) && !firearmController.FirearmsAnimator.GetBoltCatch();
+            if (caughtBack)
+            {
+                firearmController.FirearmsAnimator.SetBoltCatch(true);
+                if (debugLog)
+                    LogAction("[VRReload] malfunction cleared on an empty magazine: the bolt locks back");
+            }
+            else
+                PlayFirstGunSound(firearmController, SoundHand.GunBody, "BoltIn", "SlideIn");
             PlayGunSound(firearmController, "HandleIn", SoundHand.GunBody);
-            Pulse(SoundHand.GunBody, 0.8f, 0.06f);
-            RepairByHand(firearmController);
+            Pulse(SoundHand.GunBody, caughtBack ? 0.4f : 0.8f, 0.06f);
+        }
+
+        // The stuck case taken out by hand: that clears it, but nothing cycled the bolt. Tarkov's repair chambered the next round anyway; it
+        // stays in the magazine as far as the hands go until a full rack (WaitingForRack: the trigger only clicks), like a magazine put in on
+        // a closed, empty chamber ("you should still have to pull the charging handle to chamber another round")
+        private static void NextRoundWaitsForRack(FirearmController firearmController)
+        {
+            Weapon weapon = firearmController.Item;
+            if (weapon == null || weapon.ChamberAmmoCount == 0)
+                return;
+            weaponsWaitingForRack.Add(weapon);
+            LogAction($"[VRReload] {weapon.LocalizedShortName()}: stuck case out by hand, the next round waits for the handle");
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -219,7 +242,8 @@ namespace TarkovVR.Source.Weapons
             SoundHand hand = gunHand ? SoundHand.GunHand : SoundHand.OffHand;
             PlayFirstGunSound(firearmController, hand, "ShellRemove", "ShellPull", "ShellGrab");
             Pulse(hand, 0.45f, 0.04f);
-            RepairByHand(firearmController);
+            if (RepairByHand(firearmController))
+                NextRoundWaitsForRack(firearmController);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -430,6 +454,7 @@ namespace TarkovVR.Source.Weapons
                 jamCaseWontClear = true;
                 return;
             }
+            NextRoundWaitsForRack(jamCaseFor);
             if (debugLog)
                 LogAction("[VRReload] the stuck case pulled out");
             // Into the fingers as it came out (relative to the hand, whatever way the hand was turned), off the gun (which rides the
