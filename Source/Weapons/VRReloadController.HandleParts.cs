@@ -82,10 +82,10 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // Not on a jammed gun, like the main handle: clearing one is still the interaction menu's
+        // On a jammed gun only when the hands clear it, like the main handle
         private static bool InSideHandleZone(FirearmController firearmController, Weapon weapon)
         {
-            if (!chargingHandle || weapon.MalfState.State != Weapon.EMalfunctionState.None || !TryGetSideKnobPoint(firearmController, out Vector3 point))
+            if (!chargingHandle || !HandsMayWorkAction(firearmController, weapon) || !TryGetSideKnobPoint(firearmController, out Vector3 point))
                 return false;
             return OffHandTouchesCapsule(point, point, handleGrabRadius);
         }

@@ -313,9 +313,12 @@ public class GunInteractionController : MonoBehaviour
         }
     }
     
-    // Manual Reload on a gun with a magazine: the hands do what this menu did. A jam still needs it, there's no clearing one by hand yet.
+    // Manual Reload on a gun with a magazine: the hands do what this menu did. A malfunction too, on a gun whose handle, slide or bolt
+    // the hands clear it with (VRReloadController.Malfunctions); any other jam still needs the menu's Fix Malfunction.
     private static bool ManualReloadReplacesMenu()
     {
+        if (VRReloadController.MalfunctionClearsByHand(VRGlobals.firearmController))
+            return true;
         return VRReloadController.ManualReloadActive()
             && VRGlobals.firearmController.Weapon.MalfState.State == EFT.InventoryLogic.Weapon.EMalfunctionState.None;
     }

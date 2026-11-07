@@ -305,10 +305,11 @@ namespace TarkovVR.Source.Weapons
             return foundHandleModel != null ? HandleGrabPoint(foundHandleModel, backWorld) : foundHandleBone.position;
         }
 
-        // Not on a jammed gun: clearing one is still the interaction menu's, which this zone would keep from coming up
+        // On a jammed gun only when the hands clear it (VRReloadController.Malfunctions); else that's the interaction menu's, which this
+        // zone would keep from coming up
         private static bool InChargingHandleZone(FirearmController firearmController, Weapon weapon, bool gunHand = false)
         {
-            if (!chargingHandle || weapon.MalfState.State != Weapon.EMalfunctionState.None || !TryGetChargingHandle(firearmController, weapon))
+            if (!chargingHandle || !HandsMayWorkAction(firearmController, weapon) || !TryGetChargingHandle(firearmController, weapon))
                 return false;
             Vector3 backWorld = firearmController.WeaponRoot.up;
             Vector3 grabPoint = ChargingHandleGrabPoint(backWorld);
@@ -429,6 +430,7 @@ namespace TarkovVR.Source.Weapons
                 handleHandFingers = grip.fingers;
                 SnapHandTo(handleView, handleBone.position + handleBone.rotation * grip.position, handleBone.rotation * Quaternion.Euler(grip.rotation));
             }
+            BeginMalfunctionGrab(firearmController);
             StartMovedBolts(firearmController, backWorld);
             BeginChamberView(firearmController, weapon);
 
@@ -530,7 +532,8 @@ namespace TarkovVR.Source.Weapons
 
             // Only the left hand reaches under the gun to a handle on the bolt (the right one is on that side)
             float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !latchedOnRightArm ? underGunPullGain : 1f;
-            handlePull = Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel);
+            // A hard slide holds it until it breaks free (VRReloadController.Malfunctions)
+            handlePull = StuckPull(handleForFirearm, Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel), HandleSoundHand);
             handleView.position = handleBone.TransformPoint(handleRestLocalPosition) + axis * handlePull;
             UpdateHandleNotch();
 
@@ -560,6 +563,12 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             PlayFirstGunSound(firearmController, HandleSoundHand, "HandleOut", "SlideOut", "BoltOut");
             PulseHandleHand(0.5f, 0.04f);
+            // A malfunction: cleared as the bolt goes home, by Tarkov's repair, which throws the round out itself
+            if (MalfunctionRackedBack(firearmController))
+            {
+                chamberShownEmpty = true;
+                return;
+            }
             // An empty magazine's follower pushes the catch up under the bolt. (With a round to throw out Tarkov's
             // rechamber below sets it.)
             if (!firearmController.FirearmsAnimator.GetBoltCatch() && BoltStaysBack(weapon))
@@ -603,19 +612,27 @@ namespace TarkovVR.Source.Weapons
             handleView = null;
 
             if (firearmController == null)
+            {
+                EndMalfunctionGrab(null);
                 return;
+            }
             if (firearmController != VRGlobals.firearmController)
             {
                 RestoreBoltPose(firearmController);
+                EndMalfunctionGrab(firearmController);
                 return;
             }
-            if (staysInNotch)
+            // Racked back on a malfunction: the bolt goes home and that clears it (a notch doesn't hold it)
+            if (snapForward && malfunctionRacked && MalfunctionClearsByHand(firearmController))
+                RackClearsMalfunction(firearmController);
+            else if (staysInNotch)
                 firearmController.FirearmsAnimator.SetBoltCatch(true);
             else if (snapForward)
                 BoltSlamsForward(firearmController);
             else
                 PlayFirstGunSound(firearmController, HandleSoundHand, "HandleIn", "SlideIn");
             RestoreBoltPose(firearmController);
+            EndMalfunctionGrab(firearmController);
         }
 
         // 0 = closed, 1 = Tarkov's locked-back pose

@@ -222,6 +222,89 @@ namespace SptVrFikaSync
             }
         }
 
+        // A VR player clearing a malfunction by hand: their game runs Tarkov's notice / examine / repair back to back, each skipped to
+        // its end (SPT-VR's VRReloadController.RepairByHand), and FIKA sends them as CheckChamber / ExamineWeapon packets. Those arrive
+        // here together: skipped only at the next LateUpdate, the repair's Check Chamber would land on the examine still running and be
+        // refused, and this copy would keep the malfunction. So these two are finished the moment the packet starts them.
+        // Before them: this copy may still be playing the "it jammed" beat (StartMalfunction, which ends on its animation's event), the
+        // packets arriving sooner than its animation ends here; the VR player's own was over, they couldn't have touched the gun otherwise
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(FirearmController), nameof(FirearmController.ExamineWeapon))]
+        private static void EndJamBeatBeforeExamine(FirearmController __instance)
+        {
+            EndJamBeat(__instance);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(FirearmController), nameof(FirearmController.CheckChamber))]
+        private static void EndJamBeatBeforeCheck(FirearmController __instance)
+        {
+            EndJamBeat(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(FirearmController), nameof(FirearmController.ExamineWeapon))]
+        private static void SkipMalfunctionExamine(FirearmController __instance)
+        {
+            SkipMalfunctionOperation(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(FirearmController), nameof(FirearmController.CheckChamber))]
+        private static void SkipMalfunctionRepair(FirearmController __instance)
+        {
+            SkipMalfunctionOperation(__instance);
+        }
+
+        private static void EndJamBeat(FirearmController firearmController)
+        {
+            try
+            {
+                if (!ClearsMalfunctionsByHand(firearmController, out _) || !(firearmController.CurrentOperation is FirearmController.StartMalfunction))
+                    return;
+                // BSG's own skip: the malfunction pose on, then idle
+                firearmController.FastForwardCurrentState();
+                if (debug)
+                    FikaSyncPlugin.Log.LogInfo("[FikaSync] reload: the jam beat skipped to its end on a VR player's copy");
+            }
+            catch (Exception exception)
+            {
+                LogOnce(exception);
+            }
+        }
+
+        // A VR player's copy, with Manual Reload on
+        private static bool ClearsMalfunctionsByHand(FirearmController firearmController, out Remote remote)
+        {
+            remote = null;
+            return FikaVrSync.enableReloadSync && skipTarkovReloadAnimations && firearmController is ObservedFirearmController
+                && firearmController._player is ObservedPlayer observed && remotes.TryGetValue(observed.NetId, out remote)
+                && remote.hasPacket && (remote.packet.Flags & VRReloadPacket.ManualReload) != 0;
+        }
+
+        private static void SkipMalfunctionOperation(FirearmController firearmController)
+        {
+            try
+            {
+                if (!ClearsMalfunctionsByHand(firearmController, out Remote remote))
+                    return;
+                FirearmController.FirearmOperation operation = firearmController.CurrentOperation;
+                bool repair = operation is FirearmController.RepairMalfunction;
+                if (!repair && !(operation is FirearmController.ExamineMalfunctionTypeOperation))
+                    return;
+                firearmController.FastForwardCurrentState();
+                PlayIdle(firearmController);
+                IAnimator animator = firearmController.FirearmsAnimator?.Animator;
+                if (animator != null)
+                    AnimationControllerParametersTable.ResetTriggerLook(animator);
+                FinishSkipped(firearmController, remote, repair ? "malfunction repair" : "malfunction examine");
+            }
+            catch (Exception exception)
+            {
+                LogOnce(exception);
+            }
+        }
+
         private static void PlayIdle(FirearmController firearmController)
         {
             FirearmsAnimator firearmsAnimator = firearmController.FirearmsAnimator;

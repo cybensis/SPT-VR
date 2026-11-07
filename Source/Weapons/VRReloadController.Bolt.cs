@@ -239,7 +239,8 @@ namespace TarkovVR.Source.Weapons
             bolt = null;
             if (!ManualBoltOn(firearmController) || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null)
                 return false;
-            if (firearmController.IsInLauncherMode() || firearmController.Item.MalfState.State != Weapon.EMalfunctionState.None)
+            // A malfunction only when the hands clear it (VRReloadController.Malfunctions): cycling the bolt does
+            if (firearmController.IsInLauncherMode() || !HandsMayWorkAction(firearmController, firearmController.Item))
                 return false;
             if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
                 return false;
@@ -338,6 +339,10 @@ namespace TarkovVR.Source.Weapons
             boltForFirearm = firearmController;
             boltInGunHand = gunHand;
             HoldingBolt = true;
+            BeginMalfunctionGrab(firearmController);
+            // A hard-slide bolt let go of already open has broken free
+            if (state.slide > 0f)
+                hardSlideFree = true;
             Transform handRig = HandRig(gunHand);
             controllerToKnob = Quaternion.Inverse(boltFrame.rotation) * (KnobWorld(state, bolt) - handRig.position);
             LatchHand(boltKnob, gunHand);
@@ -382,7 +387,8 @@ namespace TarkovVR.Source.Weapons
             if ((state.slide > 0f || state.turn >= boltTurnedUp) && along > 0f)
             {
                 state.turn = 1f;
-                state.slide = Mathf.Clamp01(along);
+                // A hard slide holds it until it breaks free (VRReloadController.Malfunctions), in metres along the travel
+                state.slide = distance > 0f ? StuckPull(boltForFirearm, Mathf.Clamp01(along) * distance, BoltSoundHand) / distance : Mathf.Clamp01(along);
             }
             else
             {
@@ -426,6 +432,13 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             PlayFirstGunSound(firearmController, BoltSoundHand, "BoltOut", "BoltBack", "HandleOut", "SlideOut");
             PulseBoltHand(0.5f, 0.04f);
+            // A malfunction: cleared as the bolt closes, by Tarkov's repair, which throws the round out itself
+            if (MalfunctionRackedBack(firearmController))
+            {
+                boltChamberEmpty = true;
+                state.spentCase = false;
+                return;
+            }
             if (state.spentCase)
             {
                 // The case the shot left: Tarkov's own flying shell, from where the shot put it (the shell port)
@@ -463,6 +476,18 @@ namespace TarkovVR.Source.Weapons
             EndBoltChamberView();
             PlayFirstGunSound(firearmController, BoltSoundHand, "BoltIn", "BoltDown", "HandleIn", "SlideIn");
             PulseBoltHand(0.6f, 0.05f);
+            // Cycled all the way on a malfunction: closing it clears it (Tarkov's repair chambers and shows the next round). The bolt's
+            // own stroke, not this grab's: it may have been let go open and taken again.
+            if (state.backThisStroke && MalfunctionClearsByHand(firearmController))
+            {
+                RepairByHand(firearmController);
+                malfunctionRacked = false;
+                state.backThisStroke = false;
+                state.roundShown = false;
+                if (boltDebugLog)
+                    Plugin.MyLog.LogInfo($"[VRReload] bolt closed on a malfunction: {firearmController.Item.MalfState.State} now, chamber {weapon.ChamberAmmoCount}");
+                return;
+            }
             if (state.backThisStroke)
             {
                 BoltStripsRound(weapon);
@@ -505,6 +530,7 @@ namespace TarkovVR.Source.Weapons
                 state.turn = 0f;
                 PutBoltBonesBack();
             }
+            EndMalfunctionGrab(firearmController);
         }
 
         // Tarkov's own reload took over the bolt (and closes it)

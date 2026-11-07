@@ -403,6 +403,7 @@ namespace TarkovVR.Source.Weapons
 
             bool reaching = false;
             OffHandAtChargingHandle = false;
+            SetZoneViz(ref jamPortZoneViz, false, Vector3.zero, 0f, Color.clear);   // InJamPortZone shows it again where it applies
             if (!handBusy && CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
             {
                 Vector3 palm = OffHandPalm();
@@ -411,15 +412,20 @@ namespace TarkovVR.Source.Weapons
                 bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon);
                 bool inSideHandleZone = !supporting && !inHandleZone && InSideHandleZone(firearmController, weapon);
                 bool inPouchZone = !supporting && InChestPouchZone(palm);
+                // A failure to eject: the case stuck in the ejection port (VRReloadController.Malfunctions)
+                bool atJamPort = InJamPortZone(firearmController, weapon);
                 OffHandAtChargingHandle = inHandleZone || inSideHandleZone;
                 // A hand on the support grip is only taken over by an actual grab, never by passing through a zone
                 // (a pistol's support hand cups right over its magazine). Not the handle's zone: that's the trigger's, the
                 // foregrip's the grip's, and on an AK the two are 12 cm apart, so this would keep the foregrip from being taken.
-                reaching = !supporting && (inGrabZone || inPouchZone);
+                // The jam port's is: it's right by the grip, where the hand swap would take the press.
+                reaching = !supporting && (inGrabZone || inPouchZone || atJamPort);
                 // A press ChestHang's hand swap left to the magazine (the hand nearer it than the grip): taken with the swap's reach,
                 // the palm maybe just outside this one (a short magazine in the grip, the MP7's 20-round)
                 bool pressLeftToMagazine = ChestHang.GripPressLeftToMagazineFrame == Time.frameCount && GunMagazineGrabbable(weapon) && !MagazinePartlyOut;
-                if (gripPressed && (inGrabZone || pressLeftToMagazine))
+                if (gripPressed && atJamPort)
+                    ClearJamAtPort(firearmController);
+                else if (gripPressed && (inGrabZone || pressLeftToMagazine))
                     GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
                 // Manual Reload, two-handing with the support hand at the magazine (a pistol): the mag release takes it
                 else if (releasePressed && supporting && inGrabZone && !MagazineSlidesOntoHand)
