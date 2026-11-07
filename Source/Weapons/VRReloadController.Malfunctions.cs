@@ -604,6 +604,66 @@ namespace TarkovVR.Source.Weapons
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // From Tick
+
+        // A bolt-action's slide jam starts with a clip of the gun hand going to the bolt and bumping it, the bolt not moving (mosin_to_jam_slide
+        // 2.0 s, sv98_idle_to_jam_slide 1.8 s: its R-hand marker travels 10-30 cm) - here the hand does that itself ("the hardSlide jam for a
+        // bolt action causes an animation to play where the hands bump on the bolt a bit"). Skipped the frame after it starts, BSG's own skip
+        // (StartMalfunction.FastForward = its end: the malfunction pose on, idle). The other guns' and types' start clips play as they are.
+        public static bool skipBoltActionSlideJamClip = true;
+
+        private static void SkipBoltActionSlideJamClip()
+        {
+            FirearmController firearmController = VRGlobals.firearmController;
+            if (!skipBoltActionSlideJamClip || firearmController == null || !(firearmController.CurrentOperation is FirearmController.StartMalfunction))
+                return;
+            Weapon weapon = firearmController.Item;
+            Weapon.EMalfunctionState malfunction = weapon.MalfState.State;
+            if (!weapon.BoltAction || (malfunction != Weapon.EMalfunctionState.SoftSlide && malfunction != Weapon.EMalfunctionState.HardSlide)
+                || !MalfunctionClearsByHand(firearmController))
+                return;
+            try
+            {
+                firearmController.FastForwardCurrentState();
+                FirearmsAnimator firearmsAnimator = firearmController.FirearmsAnimator;
+                firearmsAnimator?.Animator?.Play(firearmsAnimator.FullIdleStateName, 1, 0.1f);
+                if (debugLog)
+                    LogAction($"[VRReload] {malfunction} on a bolt-action: its start clip skipped (the hand works the bolt)");
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogWarning($"[VRReload] skipping the {malfunction} start clip failed: {exception.Message}");
+            }
+        }
+
+        // Tarkov's notice and examine put the player on the gun's "knows about it" lists twice: at once, and again through inventory
+        // operations (ExamineMalfunctionOperation / ExamineMalfTypeOperation.ExecuteInternal: AddPlayerWho...) that land after our same-frame
+        // repair has cleared them (MalfunctionState.Repair). Left there, the next malfunction counts as already known: no jingle
+        // (PlayerOwnerInventoryController.ExamineMalfunction only plays MalfunctionExamined for an unknown one) and no glow ("the malfunction
+        // audio cue only seems to play on the first malfunction"). Nobody knows about a malfunction that isn't there: cleared, as Repair does.
+        private static void ForgetClearedMalfunction()
+        {
+            FirearmController firearmController = VRGlobals.firearmController;
+            Weapon weapon = firearmController != null ? firearmController.Item : null;
+            if (weapon == null || weapon.MalfState.State != Weapon.EMalfunctionState.None)
+                return;
+            if (!AnyIn(weapon.MalfState.PlayersWhoKnowAboutMalfunction) && !AnyIn(weapon.MalfState.PlayersWhoKnowMalfType))
+                return;
+            weapon.MalfState.ClearPlayersWhoKnow();
+            if (debugLog)
+                LogAction($"[VRReload] {weapon.LocalizedShortName()}: who-knows lists of a cleared malfunction emptied");
+        }
+
+        private static bool AnyIn(System.Collections.Generic.IEnumerable<string> items)
+        {
+            if (items == null)
+                return false;
+            foreach (string _ in items)
+                return true;
+            return false;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The test switch (MalfunctionTestPatches: FirearmController.GetMalfunctionState, Tarkov's roll for every shot, semi and auto)
 
         // The type testMalfunctionNextShot asks for, if Tarkov's own roll could give it on this shot (FirearmController

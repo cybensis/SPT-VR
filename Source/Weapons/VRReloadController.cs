@@ -355,6 +355,9 @@ namespace TarkovVR.Source.Weapons
 
             if (expectedOperation != ExpectedOperation.None)
                 TryForceExpectedOperation();
+            // Malfunctions (VRReloadController.Malfunctions): a bolt-action slide jam's start clip skipped, a cleared one's stale who-knows lists emptied
+            SkipBoltActionSlideJamClip();
+            ForgetClearedMalfunction();
             CheckGroundMagazineMove();
 
             if (HoldingSeatedMagazine)
