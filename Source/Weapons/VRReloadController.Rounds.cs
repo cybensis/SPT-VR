@@ -3,6 +3,7 @@ using Diz.LanguageExtensions;
 using EFT;
 using EFT.InventoryLogic;
 using EFT.InventoryLogic.Operations;
+using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
@@ -33,7 +34,25 @@ namespace TarkovVR.Source.Weapons
         public static bool singleRoundLoading = true;
         public static float roundLoadRadius = 0.06f;        // m from the round's middle to the chamber that loads it
         public static float roundOutPastPinch = 0.25f;      // share of the round's length its middle sits past the pinch (the fingers hold its base)
-        public static bool flipHeldRound = false;           // the round the other way round in the fingers, should a round model break PointRoundAlongBore's rule
+        public static bool flipHeldRound = false;           // the round the other way round in the fingers, should a round model break PointRoundAlongBore's rule (pinch only)
+
+        // The hold from Tarkov's own single-round load (mosin_reload_loop, t 0.5: the right hand carrying the round to the action, fingers
+        // closed on it): the round (its patron_in_weapon bone) in the right palm's frame, and the fingers. The left hand holds its mirror
+        // image. false = the old thumb-and-index pinch: the magazine pull's, its fingertips a magazine's width apart, so the round floated
+        // between them (headset: "doesnt look like its holding the bullet").
+        public static bool bakedRoundHold = true;
+        public static Vector3 roundHoldPosition = new Vector3(-0.1188f, -0.0273f, -0.0473f);
+        public static Quaternion roundHoldBoneRotation = new Quaternion(0.57807f, 0.67472f, 0.36482f, -0.27837f);
+
+        private static readonly Vector3[] ROUND_HOLD_FINGERS =
+        {
+            Vector3.zero,
+            new Vector3(295.71f, 307.6f, 25.05f), new Vector3(345.88f, 4.51f, 19.87f), new Vector3(0.36f, 357.99f, 22.93f),    // thumb
+            new Vector3(355.1f, 1.35f, 15.81f), new Vector3(357.44f, 2.39f, 81.46f), new Vector3(357.77f, 1.18f, 45.82f),      // index
+            new Vector3(1.03f, 359.78f, 31.33f), new Vector3(359.58f, 6.44f, 90.79f), new Vector3(2.61f, 358.7f, 70.52f),      // middle
+            new Vector3(8.59f, 9.79f, 31.66f), new Vector3(357.29f, 0.67f, 92.33f), new Vector3(358.31f, 3.6f, 61.32f),        // ring
+            new Vector3(14.53f, 16.8f, 36.97f), new Vector3(355.63f, 8.69f, 89.05f), new Vector3(1.12f, 0.02f, 73.76f),        // pinky
+        };
 
         public static bool HoldingRound { get; private set; }
         public static bool RoundInGunHand => HoldingRound && roundInGunHand;
@@ -373,12 +392,20 @@ namespace TarkovVR.Source.Weapons
             return heldRoundProp != null ? heldRoundProp.transform.TransformPoint(roundCenterInProp) : Vector3.zero;
         }
 
-        // After the holding hand's fingers are posed (the end of ApplyHeldFingerPose / ApplyGunHandFingerPose): its base between the
-        // thumb and index tips, pointing along the index
+        // After the holding hand's fingers are posed (the end of ApplyHeldFingerPose / ApplyGunHandFingerPose): the clip's hold on that
+        // palm, else its base between the thumb and index tips, pointing along the index
         private static void PlaceHeldRound()
         {
             if (!HoldingRound || heldRoundProp == null || VRGlobals.handsInteractionController == null)
                 return;
+            Transform palm = ArmPalm(roundOnRightArm);
+            if (palm == null && !roundOnRightArm)
+                palm = InitVRPatches.leftPalm;
+            if (bakedRoundHold && palm != null && RoundHoldInPalm(roundOnRightArm, out Vector3 holdPosition, out Quaternion holdRotation))
+            {
+                SetPoseIn(palm, heldRoundProp.transform, holdPosition, holdRotation);
+                return;
+            }
             if (!VRGlobals.handsInteractionController.TryGetPinch(roundOnRightArm, out Vector3 thumbTip, out Vector3 indexTip, out Vector3 indexBase))
                 return;
             Vector3 pinch = (thumbTip + indexTip) * 0.5f;
@@ -390,6 +417,52 @@ namespace TarkovVR.Source.Weapons
             prop.rotation = Quaternion.FromToRotation(prop.rotation * roundAxisInProp, along) * prop.rotation;
             Vector3 center = pinch + along * (roundLength * roundOutPastPinch);
             prop.position += center - prop.TransformPoint(roundCenterInProp);
+        }
+
+        // The round's pose in an arm's palm frame. The prop is the round's model, which Tarkov seats at the chamber bone's pose turned
+        // 90 deg about x (Firearms.ParentShellToTransform), so the clip's bone pose becomes the model's that way. The left palm's is the
+        // mirror image through a plane along the round's length: a round is its own mirror image across any of them (which one only
+        // spins it about its length). False until HandMirror has the hands mesh.
+        private static bool RoundHoldInPalm(bool rightArm, out Vector3 position, out Quaternion rotation)
+        {
+            position = roundHoldPosition;
+            rotation = roundHoldBoneRotation.normalized * Quaternion.Euler(90f, 0f, 0f);
+            if (rightArm)
+                return true;
+            Vector3 axis = roundAxisInProp.sqrMagnitude > 1e-6f ? roundAxisInProp.normalized : Vector3.forward;
+            Vector3 normal = Vector3.Cross(axis, Mathf.Abs(axis.x) < 0.9f ? Vector3.right : Vector3.up).normalized;
+            Vector3 point = Vector3.Scale(roundCenterInProp, heldRoundProp.transform.lossyScale);
+            return MirrorHold(normal, point, leftToRight: false, ref position, ref rotation);
+        }
+
+        // The fingers holding a round, on an arm (pose order, palm first): the clip's on the right, mirrored on the left. The pinch:
+        // the magazine pull's on the left, mirrored on the right (falling back to the bolt clip's closed hand there).
+        private static Vector3[] RoundFingers(bool rightArm)
+        {
+            if (!bakedRoundHold)
+                return rightArm ? MirroredPose(MAGAZINE_PULL_FINGERS, rightToLeft: false, mirroredRoundPinch) ?? boltBonesData?.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
+            return rightArm ? ROUND_HOLD_FINGERS : MirroredPose(ROUND_HOLD_FINGERS, rightToLeft: true, mirroredRoundHold) ?? MAGAZINE_PULL_FINGERS;
+        }
+
+        // One hand's finger pose (pose-order eulers) as the other hand's. Worked out each call (HandMirror's rest poses come from the
+        // body's hands mesh, which a change of clothes can swap); null until that mesh is found.
+        private static readonly Vector3[] mirroredRoundPinch = new Vector3[16];
+        private static readonly Vector3[] mirroredRoundHold = new Vector3[16];
+        private static readonly Quaternion[] mirrorFromScratch = new Quaternion[16];
+        private static readonly Quaternion[] mirrorToScratch = new Quaternion[16];
+
+        private static Vector3[] MirroredPose(Vector3[] pose, bool rightToLeft, Vector3[] into)
+        {
+            for (int index = 0; index < 16; index++)
+            {
+                mirrorFromScratch[index] = index < pose.Length ? Quaternion.Euler(pose[index]) : Quaternion.identity;
+                mirrorToScratch[index] = Quaternion.identity;
+            }
+            if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPose(mirrorFromScratch, rightToLeft, mirrorToScratch))
+                return null;
+            for (int index = 0; index < 16; index++)
+                into[index] = mirrorToScratch[index].eulerAngles;
+            return into;
         }
 
         // Where it goes in: the chamber (Tarkov's patron_in_weapon bone), the open action right behind it
