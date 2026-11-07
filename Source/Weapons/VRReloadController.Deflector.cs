@@ -12,17 +12,53 @@ namespace TarkovVR.Source.Weapons
     // the hinge, about 60 deg - then lift it off; here it swings on that hinge only (his "hinge only and yes close before firing"):
     //  - during one of those two malfunctions it has to be open: closed, the stuck case can't be reached and a rack doesn't clear it
     //  - open, the gun doesn't fire (BlocksFiring), whatever else is going on
-    //  - either hand's trigger at its free end takes it, the hand that may take the stuck case (the off hand while the gun hand has the
-    //    grip, the gun hand with the off hand holding the gun up); only during one of those malfunctions, or while it's open (to shut it).
-    //    The hand rides its free end, it turns with the hand about the hinge, and stays where it's let go.
+    //  - either hand's trigger where Tarkov's hand takes it (the clip's index tip at the grab, or its free end) takes it, the hand that may
+    //    take the stuck case (the off hand while the gun hand has the grip, the gun hand with the off hand holding the gun up); only during
+    //    one of those malfunctions, or while it's open (to shut it). It stays where it's let go.
+    //  - Opened Tarkov's way ("Make it actually use the grab pose/animation for when they open it in base tarkov. Stop before it fully takes
+    //    off the latch ... it should be more of a push/pull motion with a bit of twist"): mdr_jam_shell t 2.93 -> 3.20, the hand on it, then
+    //    pushing it out and forward ~7 cm with ~35 deg of roll as it flips 0 -> 62 deg; the lift-off starts at 3.23. Baked (DEFLECTOR_OPEN_PATH):
+    //    the hinge angle and the right palm's pose in the gun's frame each frame. The controller's push along that path and its roll about the
+    //    path's own roll axis, since the grab, give how far along it is; the hinge and the right hand (the clip's, the gun hand's) follow the
+    //    clip there, the fingers as the clip has them. The left hand rides where it took it, with the clip's fingers mirrored.
     // Both MDR rigs (5.56 and 7.62) have the same weapon_deflector bone.
     public static partial class VRReloadController
     {
         public static bool deflectorByHand = true;
-        public static float deflectorOpenDegrees = 60f;         // the hinge's travel (the clips' flip, before they lift it off)
+        public static float deflectorOpenDegrees = 61.7f;       // the hinge's travel (the clip's flip, up to before the lift-off)
         public static float deflectorOpenEnough = 0.8f;         // share of that it must be open for the stuck case and the rack
-        public static float deflectorGrabRadius = 0.05f;        // m any point of the hand to its free end
-        public static Vector3 deflectorHingeAxis = new Vector3(0f, 0f, -1f);  // in the bone's closed frame (the clips'); flip it if it opens into the gun
+        public static float deflectorGrabRadius = 0.05f;        // m any point of the hand to where it's taken
+        public static Vector3 deflectorHingeAxis = new Vector3(0f, 0f, -1f);  // in the bone's closed frame (the clip's); flip it if it opens into the gun
+        public static float deflectorPushTravel = 0.069f;       // m of push along the clip's path for all the way open (the clip's own hand: 6.9 cm)
+        public static float deflectorPushShare = 0.7f;          // how much of the opening the push gives; the roll gives the rest
+
+        // mdr_jam_shell t 2.933 -> 3.200 (30 fps): hinge degrees, then the right palm's position (m) and rotation in the gun's (weapon node's) frame
+        private static readonly float[] DEFLECTOR_OPEN_PATH =
+        {
+            0.0f, 0.0461f, -0.0764f, -0.1530f, -0.62261f, -0.63796f, 0.39778f, -0.21712f,
+            2.6f, 0.0452f, -0.0761f, -0.1525f, -0.61847f, -0.63876f, 0.40892f, -0.20559f,
+            9.6f, 0.0491f, -0.0787f, -0.1519f, -0.62218f, -0.62811f, 0.43285f, -0.17613f,
+            19.5f, 0.0584f, -0.0862f, -0.1512f, -0.62753f, -0.60839f, 0.46600f, -0.13754f,
+            30.8f, 0.0694f, -0.0961f, -0.1505f, -0.63158f, -0.58245f, 0.50336f, -0.09214f,
+            42.2f, 0.0787f, -0.1062f, -0.1498f, -0.63296f, -0.55203f, 0.54095f, -0.04472f,
+            52.0f, 0.0851f, -0.1220f, -0.1492f, -0.63130f, -0.52024f, 0.57516f, 0.00038f,
+            59.0f, 0.0877f, -0.1329f, -0.1487f, -0.62762f, -0.49066f, 0.60321f, 0.03852f,
+            61.7f, 0.0870f, -0.1327f, -0.1506f, -0.62584f, -0.48208f, 0.61107f, 0.05016f,
+        };
+        private const int DEFLECTOR_PATH_STRIDE = 8;
+        // The right hand's fingers mid-flip (t 3.07), pose order
+        private static readonly Vector3[] DEFLECTOR_FINGERS =
+        {
+            new Vector3(75.4f, 204.6f, 194.1f),   // palm
+            new Vector3(290.3f, 216.0f, 118.8f), new Vector3(4.5f, 356.3f, 11.2f), new Vector3(5.8f, 358.4f, 355.4f),     // thumb
+            new Vector3(358.3f, 0.1f, 12.4f), new Vector3(0.0f, 0.0f, 59.3f), new Vector3(0.0f, 0.0f, 53.7f),           // index
+            new Vector3(4.4f, 358.6f, 20.2f), new Vector3(0.0f, 360.0f, 48.9f), new Vector3(0.0f, 0.0f, 49.7f),         // middle
+            new Vector3(9.4f, 0.8f, 19.2f), new Vector3(0.1f, 0.4f, 27.2f), new Vector3(1.1f, 358.7f, 24.1f),           // ring
+            new Vector3(24.3f, 8.3f, 20.5f), new Vector3(0.2f, 1.5f, 20.0f), new Vector3(1.0f, 0.1f, 27.1f),            // pinky
+        };
+        private static readonly Vector3[] mirroredDeflectorFingers = new Vector3[16];
+        // Where the clip's index tip touches it at the grab, in the gun's frame
+        private static readonly Vector3 DEFLECTOR_TOUCH_IN_GUN = new Vector3(0.0159f, -0.1442f, 0.0048f);
 
         private const string DEFLECTOR_BONE = "weapon_deflector";
         private static readonly Dictionary<Weapon, float> deflectorAngles = new Dictionary<Weapon, float>();    // per gun, degrees open: it stays across a swap
@@ -39,8 +75,9 @@ namespace TarkovVR.Source.Weapons
         private static bool deflectorInGunHand;
         private static bool deflectorOnRightArm;
         private static FirearmController deflectorHeldFor;
-        private static float deflectorAngleAtGrab;
-        private static float handAngleAtDeflectorGrab;
+        private static float deflectorProgressAtGrab;           // 0 shut .. 1 open along the clip's path, as it was taken
+        private static Vector3 controllerAtDeflectorGrabInGun;
+        private static Quaternion controllerRotationAtDeflectorGrabInGun;
 
         // Open far enough to count: the current gun has a deflector and it's (more than barely) open
         private static bool DeflectorOpen(FirearmController firearmController)
@@ -166,21 +203,50 @@ namespace TarkovVR.Source.Weapons
                 || ((malfunction == Weapon.EMalfunctionState.Jam || malfunction == Weapon.EMalfunctionState.Feed) && MalfunctionClearsByHand(firearmController));
             if (!handMayTakeIt || !worthTaking)
                 return false;
+            // Where Tarkov's hand takes it (shut), or its free end (wherever it is now)
+            Vector3 touch = DeflectorGunFrame(out Vector3 gunPosition, out Quaternion gunRotation) ? gunPosition + gunRotation * DEFLECTOR_TOUCH_IN_GUN : deflectorGrab.position;
             Vector3 freeEnd = deflectorGrab.position;
-            bool atIt = HandTouchesCapsule(gunHand, freeEnd, freeEnd, deflectorGrabRadius);
-            SetZoneViz(ref deflectorZoneViz, debugZones, freeEnd, deflectorGrabRadius, atIt ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.6f, 1f, 0.3f));
+            bool atIt = HandTouchesCapsule(gunHand, touch, touch, deflectorGrabRadius) || HandTouchesCapsule(gunHand, freeEnd, freeEnd, deflectorGrabRadius);
+            SetZoneViz(ref deflectorZoneViz, debugZones, touch, deflectorGrabRadius, atIt ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.6f, 1f, 0.3f));
             return atIt;
         }
 
-        // The hand's angle about the hinge, from the closed free end, in the bone's parent's frame (the gun's body)
-        private static float HandAngleAboutHinge(Vector3 handWorld)
+        // The gun's frame the clip's path is in: the weapon node (the deflector's parent), unscaled
+        private static bool DeflectorGunFrame(out Vector3 position, out Quaternion rotation)
         {
-            Transform frame = deflectorBone.parent;
-            Vector3 pivot = deflectorBone.localPosition;
-            Vector3 axis = deflectorClosedLocalRotation * deflectorHingeAxis.normalized;
-            Vector3 closedEnd = Vector3.ProjectOnPlane(deflectorClosedLocalRotation * deflectorFreeEndLocal, axis);
-            Vector3 hand = Vector3.ProjectOnPlane(frame.InverseTransformPoint(handWorld) - pivot, axis);
-            return closedEnd.sqrMagnitude < 1e-10f || hand.sqrMagnitude < 1e-10f ? 0f : Vector3.SignedAngle(closedEnd, hand, axis);
+            Transform gun = deflectorBone != null ? deflectorBone.parent : null;
+            position = gun != null ? gun.position : Vector3.zero;
+            rotation = gun != null ? gun.rotation : Quaternion.identity;
+            return gun != null;
+        }
+
+        private static int DeflectorPathFrames => DEFLECTOR_OPEN_PATH.Length / DEFLECTOR_PATH_STRIDE;
+
+        // Along the clip's path (0 shut .. 1 open): the hinge angle and the right palm's pose in the gun's frame, between its frames
+        private static void DeflectorPathAt(float progress, out float angle, out Vector3 palmPosition, out Quaternion palmRotation)
+        {
+            float frame = Mathf.Clamp01(progress) * (DeflectorPathFrames - 1);
+            int first = Mathf.Min((int)frame, DeflectorPathFrames - 2);
+            float blend = frame - first;
+            int a = first * DEFLECTOR_PATH_STRIDE, b = a + DEFLECTOR_PATH_STRIDE;
+            float[] path = DEFLECTOR_OPEN_PATH;
+            angle = Mathf.Lerp(path[a], path[b], blend);
+            palmPosition = Vector3.Lerp(new Vector3(path[a + 1], path[a + 2], path[a + 3]), new Vector3(path[b + 1], path[b + 2], path[b + 3]), blend);
+            palmRotation = Quaternion.Slerp(new Quaternion(path[a + 4], path[a + 5], path[a + 6], path[a + 7]),
+                new Quaternion(path[b + 4], path[b + 5], path[b + 6], path[b + 7]), blend);
+        }
+
+        // The other way: how far along the path an angle is (it only rises along it)
+        private static float DeflectorProgressOf(float angle)
+        {
+            float[] path = DEFLECTOR_OPEN_PATH;
+            for (int frame = 1; frame < DeflectorPathFrames; frame++)
+            {
+                float from = path[(frame - 1) * DEFLECTOR_PATH_STRIDE], to = path[frame * DEFLECTOR_PATH_STRIDE];
+                if (angle <= to)
+                    return (frame - 1 + (to > from ? Mathf.Clamp01((angle - from) / (to - from)) : 0f)) / (DeflectorPathFrames - 1);
+            }
+            return 1f;
         }
 
         private static void GrabDeflector(FirearmController firearmController, bool gunHand)
@@ -189,15 +255,74 @@ namespace TarkovVR.Source.Weapons
             deflectorInGunHand = gunHand;
             deflectorOnRightArm = OnRightArm(gunHand);
             deflectorHeldFor = firearmController;
-            deflectorAngles.TryGetValue(firearmController.Item, out deflectorAngleAtGrab);
-            LatchHand(deflectorGrab, gunHand);
-            handAngleAtDeflectorGrab = HandAngleAboutHinge(LatchedHandRig.position);
+            deflectorAngles.TryGetValue(firearmController.Item, out float angle);
+            deflectorProgressAtGrab = DeflectorProgressOf(angle);
+            Transform controller = HandRig(gunHand);
+            DeflectorGunFrame(out Vector3 gunPosition, out Quaternion gunRotation);
+            Quaternion toGun = Quaternion.Inverse(gunRotation);
+            controllerAtDeflectorGrabInGun = toGun * (controller.position - gunPosition);
+            controllerRotationAtDeflectorGrabInGun = toGun * controller.rotation;
+            // The right hand on the clip's pose (eased there, then following the clip), on the gun's body; the left rides where it took it
+            if (deflectorOnRightArm)
+            {
+                LatchHand(deflectorBone.parent, gunHand);
+                PlaceDeflectorHand(deflectorProgressAtGrab);
+            }
+            else
+            {
+                LatchHand(deflectorGrab, gunHand);
+                SetLatchPivot(deflectorGrab.position);
+            }
             if (debugLog)
-                LogAction($"[VRReload] took the deflector ({(gunHand ? "gun" : "off")} hand), open {deflectorAngleAtGrab:0} deg");
+                LogAction($"[VRReload] took the deflector ({(gunHand ? "gun" : "off")} hand), open {angle:0} deg ({deflectorProgressAtGrab:0.00} along the clip)");
             Pulse(gunHand ? SoundHand.GunHand : SoundHand.OffHand, 0.3f, 0.03f);
         }
 
-        // From Tick: it turns with the hand from where it was taken, between shut and fully open, a click at either end
+        // The clip's fingers on it: the right hand's as they are, mirrored on the left
+        private static Vector3[] DeflectorFingers(bool rightArm)
+        {
+            return rightArm ? DEFLECTOR_FINGERS : MirroredPose(DEFLECTOR_FINGERS, rightToLeft: true, mirroredDeflectorFingers) ?? MAGAZINE_PULL_FINGERS;
+        }
+
+        // The right hand where the clip has it at that point of the opening (the latch eases there: SnapHandTo)
+        private static void PlaceDeflectorHand(float progress)
+        {
+            DeflectorPathAt(progress, out _, out Vector3 palmPosition, out Quaternion palmRotation);
+            DeflectorGunFrame(out Vector3 gunPosition, out Quaternion gunRotation);
+            SnapHandTo(deflectorBone.parent, gunPosition + gunRotation * palmPosition, gunRotation * palmRotation);
+            SetLatchPivot(deflectorGrab.position);
+        }
+
+        // How far along the clip's path the controller has gone since the grab: its push along the path's own travel, and its roll about the
+        // path's own roll axis (both in the gun's frame, so turning the gun doesn't count), deflectorPushShare : the rest
+        private static float DeflectorProgressFromHand()
+        {
+            DeflectorPathAt(0f, out _, out Vector3 startPosition, out Quaternion startRotation);
+            DeflectorPathAt(1f, out _, out Vector3 endPosition, out Quaternion endRotation);
+            Transform controller = LatchedHandRig;
+            DeflectorGunFrame(out Vector3 gunPosition, out Quaternion gunRotation);
+            Quaternion toGun = Quaternion.Inverse(gunRotation);
+            Vector3 moved = toGun * (controller.position - gunPosition) - controllerAtDeflectorGrabInGun;
+            Vector3 pathTravel = endPosition - startPosition;
+            float push = pathTravel.sqrMagnitude > 1e-8f && deflectorPushTravel > 0f ? Vector3.Dot(moved, pathTravel.normalized) / deflectorPushTravel : 0f;
+
+            // The roll: the path's own turn, start to end, as an angle about an axis; the controller's turn since the grab, about that axis
+            (endRotation * Quaternion.Inverse(startRotation)).ToAngleAxis(out float pathTurn, out Vector3 rollAxis);
+            if (pathTurn > 180f)
+            {
+                pathTurn = 360f - pathTurn;
+                rollAxis = -rollAxis;
+            }
+            Quaternion turned = toGun * controller.rotation * Quaternion.Inverse(controllerRotationAtDeflectorGrabInGun);
+            Vector3 turnedVector = new Vector3(turned.x, turned.y, turned.z);
+            float roll = 2f * Mathf.Atan2(Vector3.Dot(turnedVector, rollAxis), turned.w) * Mathf.Rad2Deg;
+            if (roll > 180f) roll -= 360f;
+            else if (roll < -180f) roll += 360f;
+            float twist = pathTurn > 1f ? roll / pathTurn : 0f;
+            return Mathf.Clamp01(deflectorProgressAtGrab + deflectorPushShare * push + (1f - deflectorPushShare) * twist);
+        }
+
+        // From Tick: the opening follows the hand along the clip, between shut and fully open, a click at either end
         private static void UpdateDeflector(bool offTriggerReleased, bool gunTriggerReleased)
         {
             if (!HoldingDeflector)
@@ -212,9 +337,12 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
             deflectorAngles.TryGetValue(firearmController.Item, out float before);
-            float turned = Mathf.DeltaAngle(handAngleAtDeflectorGrab, HandAngleAboutHinge(LatchedHandRig.position));
-            float angle = Mathf.Clamp(deflectorAngleAtGrab + turned, 0f, deflectorOpenDegrees);
+            float progress = DeflectorProgressFromHand();
+            DeflectorPathAt(progress, out float angle, out _, out _);
+            angle = Mathf.Min(angle, deflectorOpenDegrees);
             SetDeflectorAngle(firearmController, angle);
+            if (deflectorOnRightArm)
+                PlaceDeflectorHand(progress);
             SoundHand hand = deflectorInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
             if (before < deflectorOpenDegrees - 0.5f && angle >= deflectorOpenDegrees - 0.5f)
                 Pulse(hand, 0.35f, 0.03f);

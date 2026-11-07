@@ -163,6 +163,7 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion latchBaseLocalRotation = Quaternion.identity;
         private static Quaternion latchControllerAtGrabInHolder = Quaternion.identity;  // the controller's turn at the grab, in the holder's frame
         private static Vector3 latchPivotInHolder;          // the point the hand holds, in the holder's frame: the wiggle turns the hand about it
+        private static Transform latchHolder;               // what those are relative to (LatchHand's holder, or where the latch was moved on to)
 
         // What each borrowed magazine model had changed, to put back before it returns to the pool (palming holds two)
         private sealed class PropChanges
@@ -1431,6 +1432,7 @@ namespace TarkovVR.Source.Weapons
             latchBaseLocalRotation = handLatch.localRotation;
             latchControllerAtGrabInHolder = Quaternion.Inverse(holder.rotation) * handRig.rotation;
             latchPivotInHolder = Vector3.zero;      // the holder's own point; the grabs that know better set it after
+            latchHolder = holder;
             handLatched = true;
             handLatchReleasing = false;
             handLatchSnapping = false;
@@ -1444,12 +1446,33 @@ namespace TarkovVR.Source.Weapons
                 latchPivotInHolder = handLatch.parent.InverseTransformPoint(worldPoint);
         }
 
+        // The latch moved on to another part, keeping its world pose (BeginSeatedHold puts it on the magazine well as the magazine seats):
+        // its base, the controller's reference turn and the pivot are re-expressed there from where it is now. Written against the old
+        // part's frame, the base turned the hand ("as soon as the mag goes in, wrist twists 90 degrees", from the wiggle's round on).
+        private static void RebaseLatch()
+        {
+            Transform oldHolder = latchHolder;
+            Transform holder = handLatch.parent;
+            Vector3 pivotWorld = oldHolder != null ? oldHolder.TransformPoint(latchPivotInHolder) : handLatch.position;
+            latchHolder = holder;
+            handLatchSnapping = false;
+            if (holder == null)
+                return;
+            latchBaseLocalPosition = handLatch.localPosition;
+            latchBaseLocalRotation = handLatch.localRotation;
+            Transform controller = LatchedHandRig;
+            if (controller != null)
+                latchControllerAtGrabInHolder = Quaternion.Inverse(holder.rotation) * controller.rotation;
+            latchPivotInHolder = holder.InverseTransformPoint(pivotWorld);
+        }
+
         // The controller's turn since the grab, in the holder's frame (so the gun turning doesn't count), capped at handWiggleDegrees, turns
         // the latched hand about the point it holds
         private static void ApplyLatchWiggle()
         {
             Transform holder = handLatch.parent;
-            if (handWiggleDegrees <= 0f || holder == null)
+            // The right hand on the MDR's deflector follows Tarkov's clip, whose roll is part of the opening itself
+            if (handWiggleDegrees <= 0f || holder == null || (HoldingDeflector && deflectorOnRightArm))
                 return;
             Transform controller = LatchedHandRig;
             if (controller == null)
@@ -1566,6 +1589,14 @@ namespace TarkovVR.Source.Weapons
             // The stuck case of a failure to eject places the latch itself, fully free (PullStuckCase)
             else if (!(HoldingJamCase && !jamCaseOut))
             {
+                // Moved on to another part (or off any) since: carry on from where it is, never the old part's numbers
+                if (handLatch.parent != latchHolder)
+                    RebaseLatch();
+                if (handLatch.parent == null)
+                {
+                    AssertHandLatch();
+                    return;
+                }
                 if (handLatchSnapping)
                 {
                     float ease = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(handSnapTime / 3f, 0.001f));
@@ -2118,9 +2149,9 @@ namespace TarkovVR.Source.Weapons
             // A round, or the stuck case of a failure to eject (its thumb then put on it, ThumbOntoCase): already the arm's own pose (RoundFingers)
             if ((HoldingRound && !RoundInGunHand) || (HoldingJamCase && !jamCaseInGunHand))
                 return RoundFingers(rightArm);
-            // The MDR's deflector: the handle's pinch (no clip holds it that way)
+            // The MDR's deflector: the clip's fingers on it
             if (HoldingDeflector && !deflectorInGunHand)
-                return rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
+                return DeflectorFingers(rightArm);
             // The magazine: only ever held in the left hand in the clips
             rightHandPose = false;
             if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
@@ -2250,7 +2281,7 @@ namespace TarkovVR.Source.Weapons
             if (pose == null && (RoundInGunHand || JamCaseInGunHand))
                 pose = RoundFingers(rightArm);
             else if (pose == null && DeflectorInGunHand)
-                pose = rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
+                pose = DeflectorFingers(rightArm);
             if (pose != null)
                 gunHandFingerPoseShown = pose;
 
