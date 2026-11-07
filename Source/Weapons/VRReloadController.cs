@@ -1922,12 +1922,15 @@ namespace TarkovVR.Source.Weapons
 
         // Called from HandsInteractionController.LateUpdate right after the LEFT hand's finger update, so it's the last write
         // to those bones this frame. Eases in on a grab and back out to whatever the hand was doing on release. The off hand on the
-        // right arm (the gun in the left hand) is posed in ApplyGunHandFingerPose instead, after the right hand's own finger update.
+        // right arm (the gun in the left hand) is posed in ApplyGunHandFingerPose instead, after the right hand's own finger update;
+        // the left arm then carries the gun hand, on the handle / bolt / a round while the right hand holds the gun alone.
         public static void ApplyHeldFingerPose()
         {
             try
             {
-                if (!OffHandOnRightArm)
+                if (OffHandOnRightArm)
+                    ApplyGunHandFingers(rightArm: false);
+                else
                     ApplyOffHandFingerPose();
             }
             finally
@@ -1992,6 +1995,19 @@ namespace TarkovVR.Source.Weapons
             ApplyLatchThumb(leftPalmBones);
         }
 
+        // A left-hand pose on the left hand's bones the way the off hand's is put on above (its palm's children in order)
+        private static void ApplyLeftHandPose(Vector3[] pose, float weight)
+        {
+            Transform leftPalm = InitVRPatches.leftPalm;
+            if (leftPalm == null)
+                return;
+            if (leftPalmBones == null || leftPalmBones.Length == 0 || leftPalmBones[0] != leftPalm)
+                leftPalmBones = leftPalm.GetComponentsInChildren<Transform>(true);
+            int boneCount = Mathf.Min(leftPalmBones.Length, pose.Length);
+            for (int i = 1; i < boneCount; i++)
+                leftPalmBones[i].localRotation = Quaternion.Slerp(leftPalmBones[i].localRotation, Quaternion.Euler(pose[i]), weight);
+        }
+
         // The same for the RIGHT hand, after that hand's own finger update: the gun hand on the charging handle / bolt, or the off hand
         // when it's on the right arm (the gun in the left hand)
         public static void ApplyGunHandFingerPose()
@@ -2001,7 +2017,7 @@ namespace TarkovVR.Source.Weapons
                 if (OffHandOnRightArm)
                     ApplyOffHandFingerPose();
                 else
-                    ApplyGunHandFingers();
+                    ApplyGunHandFingers(rightArm: true);
             }
             finally
             {
@@ -2051,12 +2067,15 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        private static void ApplyGunHandFingers()
+        // The gun hand on the charging handle / bolt / a round, on its arm: the right normally; the left with the gun in the left hand
+        // (the hand's own data then, as the off hand's on that arm: GrabChargingHandle read the left-hand clip grip, BoltFingerPose
+        // gives the pinch, a round the pinch as the off hand holds one)
+        private static void ApplyGunHandFingers(bool rightArm)
         {
-            Vector3[] pose = HandleInGunHand ? handleHandFingers ?? GUN_HAND_HANDLE_FINGERS : BoltFingerPose(gunHand: true);
+            Vector3[] pose = HandleInGunHand ? handleHandFingers ?? (rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS) : BoltFingerPose(gunHand: true);
             // A single round: the gun's own clip's hand on the bolt knob (a small thing between the fingers), else the hand on a T
             if (pose == null && RoundInGunHand)
-                pose = boltBonesData?.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS;
+                pose = rightArm ? boltBonesData?.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
             if (pose != null)
                 gunHandFingerPoseShown = pose;
 
@@ -2064,6 +2083,11 @@ namespace TarkovVR.Source.Weapons
             gunHandFingerWeight = Mathf.Lerp(gunHandFingerWeight, target, 1f - Mathf.Exp(-fingerBlendRate * Time.deltaTime));
             if (gunHandFingerWeight < 0.01f || gunHandFingerPoseShown == null)
                 return;
+            if (!rightArm)
+            {
+                ApplyLeftHandPose(gunHandFingerPoseShown, gunHandFingerWeight);
+                return;
+            }
 
             LimbIK rightArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null;
             Transform palm = rightArmIk != null && rightArmIk.solver != null && rightArmIk.solver.bone3 != null ? rightArmIk.solver.bone3.transform : null;
