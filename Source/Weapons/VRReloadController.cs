@@ -183,6 +183,7 @@ namespace TarkovVR.Source.Weapons
         private static bool previousTriggerState;
         private static bool previousGunHandTriggerState;
         private static int lastTickFrame = -10;
+        private static bool lastTickGunInLeftHand;
         private static int lastTriggerTickFrame = -10;
 
         private static ExpectedOperation expectedOperation;
@@ -271,7 +272,12 @@ namespace TarkovVR.Source.Weapons
             // The gun hand's grip: a single round in that hand (VRReloadController.Rounds)
             VRBoolean gunHandGrip = Handedness.GunHandGrip;
             bool gunHandGripState = gunHandGrip.state;
-            if (Time.frameCount - lastTickFrame > 1)
+            // The gun changed hands since the last tick (ChestHang's hand swap): the off / gun hand reads here are the other
+            // controllers now, so their last states are the wrong hand's - the hand left on the grip read as a fresh press (and
+            // grabbed the magazine right there). Resynced like after skipped frames.
+            bool handsSwapped = Handedness.GunInLeftHand != lastTickGunInLeftHand;
+            lastTickGunInLeftHand = Handedness.GunInLeftHand;
+            if (Time.frameCount - lastTickFrame > 1 || handsSwapped)
             {
                 previousGripState = gripState;
                 previousGunHandGripState = gunHandGripState;
@@ -286,7 +292,7 @@ namespace TarkovVR.Source.Weapons
 
             // The off-hand trigger works the charging handle (the same 0.5 / 0.35 hysteresis as the other trigger reads)
             float offHandTrigger = Handedness.OffHandTrigger.axis;
-            bool triggerResumed = Time.frameCount - lastTriggerTickFrame > 1;
+            bool triggerResumed = Time.frameCount - lastTriggerTickFrame > 1 || handsSwapped;
             if (triggerResumed)
                 previousTriggerState = offHandTrigger > 0.5f;
             lastTriggerTickFrame = Time.frameCount;
@@ -306,6 +312,8 @@ namespace TarkovVR.Source.Weapons
 
             // A click on the gun hand when the mag release goes down
             bool releaseState = MagazineReleaseHeld();
+            if (handsSwapped)
+                previousReleaseState = releaseState;
             bool releasePressed = releaseState && !previousReleaseState;
             bool releaseLetGo = !releaseState && previousReleaseState;
             if (releasePressed)

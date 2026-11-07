@@ -53,11 +53,21 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool gripSound = true;            // every grab (foregrip / grip retake / off the sling): cloth + a hint of gun
         public static float gripClothVolume = 0.85f;    // the gear (rig/backpack) pickup foley = the cloth layer
         public static float gripGunVolume = 0.18f;      // the weapon's own pickup clip, quiet, underneath
+        // The gun from one hand straight into the other (right-handed mode): the off hand at the gun hand's grip + a grip press takes it
+        // (not a pistol: its support hand cups the gun hand right there), and a pistol held two-handed goes over to the support hand
+        // when the gun hand lets go (instead of the support-only hold the long guns get)
+        public static bool handSwap = true;
+        public static bool pistolSwapOnRelease = true;
+        public static float handSwapRadius = 0.13f;     // m off-hand palm / knuckles / fingertips to the gun hand's grip (regrabRadius's reach)
 
         public static bool Hanging { get; private set; }
         public static bool SupportOnly { get; private set; }   // gun held by the support hand alone
         public static bool Detached => Hanging || SupportOnly; // fire gate
         public static bool HandInRegrabZone { get; private set; } // dominant palm within regrab reach of the detached gun (loot pointer yields to the regrab)
+        public static bool OffHandAtGunGrip { get; private set; } // the off hand where a grip press takes the gun into it (the off-hand loot pointer and body grab yield)
+        private static bool prevOffGrip;
+        private static bool prevOffGripWasLeft = true;  // which controller that was: the off hand changes sides with the gun
+        private static bool swapZoneIn;
 
         private static bool gripSeen;                   // welded like vanilla until the first grip press on this controller
         private static int ignoredPressFrame = -1;      // a grip press BodyWeapons took (a gun off the body), not a regrab
@@ -90,6 +100,14 @@ namespace TarkovVR.Source.Player.Interactions
         // holster/radial gestures are already reflected in the ownership flag).
         public static void UpdateInput(bool grip, bool gripOwnedElsewhere, bool supporting)
         {
+            // The off hand's grip press, from the same controller as last frame only (a hand swap changes which one that is)
+            bool offGrip = Handedness.OffHandGrip.state;
+            bool offIsLeft = !Handedness.GunHandIsLeft;
+            bool offGripPressed = offGrip && !prevOffGrip && offIsLeft == prevOffGripWasLeft;
+            prevOffGrip = offGrip;
+            prevOffGripWasLeft = offIsLeft;
+            OffHandAtGunGrip = false;
+
             if (!enabled || !(VRGlobals.vrPlayer is RaidVRPlayerManager || VRGlobals.vrPlayer is HideoutVRPlayerManager))
             {
                 gripSeen = false;
@@ -164,6 +182,10 @@ namespace TarkovVR.Source.Player.Interactions
             if (supporting && !prevSupporting && !Detached)
                 PlayGripSound();
             prevSupporting = supporting;
+
+            // The off hand taking the gun by its grip, out of the gun hand (also with the sling off: the gun stays in a hand)
+            if (!Detached && TryGrabFromGunHand(fc, supporting, offGripPressed))
+                return;
 
             // "Chest Sling" off in the VR menu: the gun stays in the hand whatever the grip does. Switched
             // off while slung / support-held -> back into the hand (same gun: the switch check ran above).
@@ -266,6 +288,12 @@ namespace TarkovVR.Source.Player.Interactions
                 if (releaseTimer >= slingDelay)
                 {
                     releaseTimer = 0f;
+                    // A pistol two-handed: the support hand becomes its gun hand (its support grip cups the gun hand, nothing to hold up)
+                    if (supporting && PistolSwapsOnRelease())
+                    {
+                        SwapHands();
+                        return;
+                    }
                     // the support hand still on it - hand the gun to that hand. With the gun in the left hand that's the right hand:
                     // GunInLeftHand stays on (the rig's LeftHand, the support pose and isSupporting all follow the right controller
                     // then, so the hold below is the same), RealLeftHandedPatches.SupportHeld draws the arms
@@ -345,6 +373,98 @@ namespace TarkovVR.Source.Player.Interactions
         }
         private static readonly System.Collections.Generic.List<Vector3> leftTouchPoints = new System.Collections.Generic.List<Vector3>();
         private static bool prevLeftGrip;
+
+        // ---- the gun from one hand into the other ----
+
+        // The off hand at the gun hand's grip with a grip press: the gun goes into the off hand. Not a pistol (its support grip is right
+        // there: PistolSwapsOnRelease), not from the foregrip or near it (short guns: the foregrip's grab wins), not while the off hand
+        // is on a reload part or in its zone (VRReloadController.OwnsOffHand, a frame old: the magazine zone wins), holds loot or the
+        // scope dial. True = swapped.
+        private static bool TryGrabFromGunHand(EFT.Player.FirearmController fc, bool supporting, bool offGripPressed)
+        {
+            var hands = VRGlobals.handsInteractionController;
+            bool atGrip = handSwap && !Handedness.LeftHanded && !supporting && !VRGlobals.vrPlayer.isWeapPistol
+                && !VRReloadController.OwnsOffHand && hands != null && hands.heldItem == null && hands.scopeTransform == null
+                && !OffHandAtForegrip() && OffHandAtGrip(fc);
+            OffHandAtGunGrip = atGrip;
+            // A light blip on the off hand coming into reach of the grip (as the regrab zone's)
+            if (atGrip && !swapZoneIn && hangHaptics)
+                VRInput.Haptic.Execute(0f, 0.07f, 95f, 0.25f, Handedness.OffHandSource);
+            swapZoneIn = atGrip;
+            if (!atGrip || !offGripPressed)
+                return false;
+            SwapHands();
+            return true;
+        }
+
+        // A pistol held two-handed, the gun hand letting go: the support hand takes it as its gun hand
+        private static bool PistolSwapsOnRelease()
+        {
+            return pistolSwapOnRelease && !Handedness.LeftHanded && VRGlobals.vrPlayer.isWeapPistol;
+        }
+
+        // The off hand's palm, knuckles or fingertips at the gun hand's grip: the regrab point (the R-hand marker), mirrored across the
+        // gun's centre plane while the gun is in the left hand (where that hand holds it)
+        private static bool OffHandAtGrip(EFT.Player.FirearmController fc)
+        {
+            if (fc.WeaponRoot == null || VRGlobals.handsInteractionController == null)
+                return false;
+            Vector3 grip = RegrabPoint(fc);
+            if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
+                grip = RealLeftHandedPatches.ReflectPoint(grip, planePoint, planeNormal);
+            // The off hand is drawn by the right arm while the gun is in the left hand
+            VRGlobals.handsInteractionController.GetHandTouchPoints(Handedness.GunInLeftHand, offTouchPoints);
+            foreach (Vector3 point in offTouchPoints)
+            {
+                if ((point - grip).sqrMagnitude <= handSwapRadius * handSwapRadius)
+                    return true;
+            }
+            return false;
+        }
+        private static readonly System.Collections.Generic.List<Vector3> offTouchPoints = new System.Collections.Generic.List<Vector3>();
+
+        // UpdateLeftHand's foregrip grab range (the rig's LeftHand follows the off controller either way)
+        private static bool OffHandAtForegrip()
+        {
+            var offHand = VRGlobals.vrPlayer.LeftHand;
+            return offHand != null && VRPlayerManager.leftHandGunIK != null
+                && Vector3.Distance(offHand.transform.position, VRPlayerManager.SupportGripPoint()) < 0.1f;
+        }
+
+        // The gun goes into the other hand, held as it would be taken off the sling by that hand
+        private static void SwapHands()
+        {
+            // The holder in its clean pose (the left hand's hold is read off it once: VRPlayerManager.CacheGunInHand; a collision nudge
+            // left on it fed back, the round-1 "spazzes out") and the collision's rig-motion tracking re-primed (the gun jumps hands)
+            WeaponCollision.Reset();
+            bool toLeft = !Handedness.GunInLeftHand;
+            // A pistol's support hand is its gun hand from here
+            VRGlobals.vrPlayer.ForceUnlockHand();
+            Handedness.SetGunInLeftHand(toLeft);
+            if (toLeft)
+            {
+                VRPlayerManager.CacheGunInHand();
+            }
+            else if (VRGlobals.ikManager != null && VRGlobals.ikManager.leftArmIk != null && VRGlobals.vrPlayer.LeftHand != null)
+            {
+                // The left hand off the gun: a free hand on its own controller, as on any equip (GunInteractionController.OnEnable)
+                VRGlobals.ikManager.leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+                VRGlobals.ikManager.leftArmIk.enabled = true;
+            }
+            // Bound to the new gun hand's grip when it's closed (it is for a grab; a pistol's support hand on the toggle setting holds
+            // with it open), else held like a freshly equipped gun until its first press
+            gripSeen = Handedness.GunHandGrip.state;
+            prevGrip = gripSeen;
+            releaseTimer = 0f;
+            prevOffGrip = Handedness.OffHandGrip.state;
+            prevOffGripWasLeft = !Handedness.GunHandIsLeft;
+            // The old gun hand is at the grip: no blip until it leaves and comes back
+            swapZoneIn = true;
+            OffHandAtGunGrip = false;
+            if (hangHaptics)
+                Pulse(0.45f);
+            PlayGripSound();
+        }
 
         private static void BeginSupportHold(EFT.Player.FirearmController fc)
         {
