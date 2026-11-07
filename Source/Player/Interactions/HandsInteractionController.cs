@@ -407,6 +407,9 @@ namespace TarkovVR.Source.Player.Interactions
                 FIKASupport.SyncHeldLootItem(heldItem);
             }
 
+            // The right hand holding the gun alone with the gun in the left hand: the left's foregrip grip as EFT animated it, before
+            // the left hand opens below (HandMirror mirrors it onto the right)
+            TarkovVR.Source.Player.Body.HandMirror.CaptureSupportGrip();
             // Relax the free off-hand open (more when a loot dot is in view). Self-gates;
             // runs after EFT's hand animation. Must come last so it offsets the final pose.
             UpdateLeftHandFingers();

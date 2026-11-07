@@ -2125,7 +2125,8 @@ namespace TarkovVR.Source.Weapons
 
         // The rig transform following a hand's controller, in its arm's hand frame: where a latch starts and eases back to. The off hand
         // on the right arm: VRPlayerManager.RightControllerHand (the rig's LeftHand follows the right controller then, in the left
-        // hand's frame, and the right arm aims at that one when it's free)
+        // hand's frame, and the right arm aims at that one when it's free). The gun hand on the left arm (only off the gun while the
+        // right hand holds it alone): LeftControllerHand, for the same reason (the rig's RightHand holds the mirrored gun hold then)
         private static Transform HandRig(bool gunHand)
         {
             if (!gunHand && OffHandOnRightArm)
@@ -2133,6 +2134,12 @@ namespace TarkovVR.Source.Weapons
                 Transform rightControllerHand = VRGlobals.vrPlayer.RightControllerHand;
                 if (rightControllerHand != null)
                     return rightControllerHand;
+            }
+            if (gunHand && Handedness.GunInLeftHand)
+            {
+                Transform leftControllerHand = VRGlobals.vrPlayer.LeftControllerHand;
+                if (leftControllerHand != null)
+                    return leftControllerHand;
             }
             return (gunHand ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand).transform;
         }

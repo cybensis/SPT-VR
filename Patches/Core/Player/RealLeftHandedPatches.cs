@@ -16,6 +16,7 @@ namespace TarkovVR.Patches.Core.Player
     //  - left arm: the right hand's grip pose mirrored across the gun's centre plane (HandMirror.TryMirrorPalm)
     //  - right arm on the foregrip: the left hand's foregrip pose mirrored
     //  - right arm off the gun: VRPlayerManager.RightControllerHand, a rig child placed in the right controller's pose callback
+    //  - the right hand holding the gun alone (SupportHeld): right arm on the foregrip as above, left arm free on LeftControllerHand
     // The hands on the gun are solved by EFT's arm pass alone, like the gun hand and the support hand always are. The free right hand is
     // also solved by its own IK update onto that rig child, like every other free hand (the slung gun's, the free left hand): handed to
     // EFT's pass alone as a world point it jittered (headset round 2; the free left hand did the same in round 1 while its update was off).
@@ -36,9 +37,17 @@ namespace TarkovVR.Patches.Core.Player
         private static bool limbUpdatesOff;
         private static bool leftEnabledBefore, rightEnabledBefore;
         private static Transform swayFrameFor, swayFrame;
+        // The free left hand's own target while the right hand holds the gun alone (SupportHeld), like the free right hand's
+        private static bool freeLeftOn;
+        private static Transform freeLeftTarget, leftTargetOriginal;
 
         internal static bool Active => Handedness.GunInLeftHand && VRGlobals.vrPlayer != null && VRGlobals.firearmController != null
             && VRGlobals.firearmController.WeaponRoot != null && !ChestHang.Detached;
+
+        // The gun in the left hand, let go by the left with the right on the foregrip: the right hand holds it alone (ChestHang.SupportOnly,
+        // the gun riding the right controller). The right arm stays on the foregrip, the left is free on VRPlayerManager.LeftControllerHand.
+        internal static bool SupportHeld => Handedness.GunInLeftHand && ChestHang.SupportOnly && VRGlobals.vrPlayer != null
+            && VRGlobals.firearmController != null && VRGlobals.firearmController.WeaponRoot != null;
 
         // Both arms back as they were. Handedness.SetGunInLeftHand(false) calls it straight away, so whatever frees or takes the arms
         // next (the sling's KeepGunHandFree) starts from the arms as they were; SwapArms also calls it the first frame it isn't Active.
@@ -48,9 +57,11 @@ namespace TarkovVR.Patches.Core.Player
             if (player == null || player._limbs == null || player._limbs.Length < 2)
             {
                 freeRightOn = false;
+                freeLeftOn = false;
                 limbUpdatesOff = false;
                 return;
             }
+            EndFreeLeft(player);
             if (freeRightOn)
             {
                 freeRightOn = false;
@@ -72,21 +83,26 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer || __instance._limbs == null || __instance._limbs.Length < 2)
                 return;
-            if (!Active)
+            bool supportHeld = !Active && SupportHeld;
+            if (!Active && !supportHeld)
             {
-                if (freeRightOn || limbUpdatesOff)
+                if (freeRightOn || freeLeftOn || limbUpdatesOff)
                     ReleaseArms();
                 return;
             }
+            if (!supportHeld)
+                EndFreeLeft(__instance);
             IKSolverLimb left = __instance._limbs[0].solver;
             IKSolverLimb right = __instance._limbs[1].solver;
 
             // What EFT aimed each hand at: the right at the gun's grip, the left at the support (its own target, when the mod set one).
-            // IkProcess just wrote IKPosition from the markers, also on the right while the free target is on it.
+            // IkProcess just wrote IKPosition from the markers, also on the right while the free target is on it. Held by the right hand
+            // alone, the left's target is its own free one (or a reload latch): the support is the gun's left marker EFT aimed it at.
             Vector3 gripPosition = right.IKPosition;
             Quaternion gripRotation = right.IKRotation;
-            Vector3 supportPosition = left.target != null ? left.target.position : left.IKPosition;
-            Quaternion supportRotation = left.target != null ? left.target.rotation : left.IKRotation;
+            bool supportFromTarget = !supportHeld && left.target != null;
+            Vector3 supportPosition = supportFromTarget ? left.target.position : left.IKPosition;
+            Quaternion supportRotation = supportFromTarget ? left.target.rotation : left.IKRotation;
 
             // The plane rides EFT's sway / inertia: that moves Weapon_root_anim (PlayerBones.ShiftWeaponRoot / Kinematics) under
             // Weapon_root, gun mesh and markers with it, so a plane on Weapon_root mirrored the hand the OPPOSITE way to the gun's sway
@@ -94,9 +110,21 @@ namespace TarkovVR.Patches.Core.Player
             // models Weapon_root_anim sits on Weapon_root at rest (zero offset, zero turn), so its x is the same centre plane.
             if (!GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
                 return;
-            if (!HandMirror.TryMirrorPalm(gripRotation, planeNormal, rightToLeft: true, out Quaternion leftRotation))
-                return;
-            Vector3 leftPosition = ReflectPoint(gripPosition, planePoint, planeNormal);
+            Vector3 leftPosition = Vector3.zero;
+            Quaternion leftRotation = Quaternion.identity;
+            Transform freeLeft = null;
+            if (supportHeld)
+            {
+                freeLeft = VRGlobals.vrPlayer.LeftControllerHand;
+                if (freeLeft == null)
+                    return;
+            }
+            else
+            {
+                if (!HandMirror.TryMirrorPalm(gripRotation, planeNormal, rightToLeft: true, out leftRotation))
+                    return;
+                leftPosition = ReflectPoint(gripPosition, planePoint, planeNormal);
+            }
             bool supporting = VRGlobals.vrPlayer.isSupporting;
             Vector3 rightPosition = Vector3.zero;
             Quaternion rightRotation = Quaternion.identity;
@@ -121,17 +149,34 @@ namespace TarkovVR.Patches.Core.Player
                 rightEnabledBefore = __instance._limbs[1].enabled;
             }
 
-            // Left arm, on the gun: EFT solves it by hand (IkApply); the component's own update would solve it again onto the mod's target
-            if (!leftSwapped)
-            {
-                leftTargetBefore = left.target;
-                leftSwapped = true;
-            }
-            left.target = null;
-            __instance._limbs[0].enabled = false;
             left.IKPositionWeight = left.IKRotationWeight = 1f;
-            left.SetIKPosition(leftPosition);
-            left.SetIKRotation(leftRotation);
+            if (supportHeld)
+            {
+                // Left arm, off the gun: its own target, also for its own update later this frame (the free right hand's way). On a
+                // bolt, handle or round (the gun hand's reload latch, on this arm then) the latch.
+                if (!freeLeftOn)
+                {
+                    freeLeftOn = true;
+                    leftTargetOriginal = left.target;
+                }
+                freeLeftTarget = freeLeft;
+                Transform held = Source.Weapons.VRReloadController.ArmLatch(rightArm: false);
+                left.target = held != null ? held : freeLeft;
+                __instance._limbs[0].enabled = true;
+            }
+            else
+            {
+                // Left arm, on the gun: EFT solves it by hand (IkApply); the component's own update would solve it again onto the mod's target
+                if (!leftSwapped)
+                {
+                    leftTargetBefore = left.target;
+                    leftSwapped = true;
+                }
+                left.target = null;
+                __instance._limbs[0].enabled = false;
+                left.SetIKPosition(leftPosition);
+                left.SetIKRotation(leftRotation);
+            }
 
             right.IKPositionWeight = right.IKRotationWeight = 1f;
             if (supporting)
@@ -170,6 +215,16 @@ namespace TarkovVR.Patches.Core.Player
                 right.target = held != null ? held : freeTarget;
                 __instance._limbs[1].enabled = true;
             }
+        }
+
+        // The free left hand's target off, back to what was there (only if it's still ours: a reload latch is VRReloadController's)
+        private static void EndFreeLeft(EFT.Player player)
+        {
+            if (!freeLeftOn)
+                return;
+            freeLeftOn = false;
+            if (player._limbs[0].solver.target == freeLeftTarget)
+                player._limbs[0].solver.target = leftTargetOriginal;
         }
 
         [HarmonyPostfix]

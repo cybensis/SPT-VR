@@ -111,24 +111,46 @@ namespace TarkovVR.Source.Player.Body
         // Before the right hand's own finger update (it may put the open pose on): the gun grip, after the trigger discipline
         public static void CaptureGunHandGrip()
         {
-            if (!TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active || VRGlobals.player == null || !EnsureBones())
+            bool active = TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active;
+            if (!(active || TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld) || VRGlobals.player == null || !EnsureBones())
             {
                 rightAnimated = leftAnimated = rightFinal = leftFinal = null;
                 return;
             }
-            Capture(right: true, ref rightAnimated, rightFinal);
+            if (active)
+                Capture(right: true, ref rightAnimated, rightFinal);
+        }
+
+        // The right hand holding the gun alone (RealLeftHandedPatches.SupportHeld): the left's foregrip grip as EFT animated it, before
+        // the left hand's own finger update puts its open pose on (it's free then). Kept on after the left takes the gun back while
+        // the right stays on the foregrip: the left's open pose eases out over a few frames, and read after it the right hand opened
+        // and closed again. A fresh foregrip grab reads it after the left's update as before (that ease is the hand closing on it).
+        private static bool supportGripEarly;
+
+        public static void CaptureSupportGrip()
+        {
+            bool onForegrip = TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
+            supportGripEarly = TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld || (supportGripEarly && onForegrip);
+            if (!supportGripEarly || VRGlobals.player == null || !EnsureBones())
+                return;
+            Capture(right: false, ref leftAnimated, leftFinal);
         }
 
         // End of HandsInteractionController.LateUpdate, with RealLeftHandedPatches' arm swap
         public static void ApplyRealLeftHanded()
         {
+            if (TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld && !TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active)
+            {
+                ApplySupportHeld();
+                return;
+            }
             if (!TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active || VRGlobals.player == null || rightAnimated == null || !EnsureBones())
                 return;
             int count = rightToLeft.Length;
             if (mirroredOut == null || mirroredOut.Length != count)
                 mirroredOut = new Quaternion[count];
             bool supporting = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
-            if (supporting)
+            if (supporting && !supportGripEarly)
                 Capture(right: false, ref leftAnimated, leftFinal);
 
             MirrorLocals(rightAnimated, rightToLeft: true, mirroredOut);
@@ -140,6 +162,21 @@ namespace TarkovVR.Source.Player.Body
                 for (int index = 0; index < count; index++)
                     rightToLeft[index].from.localRotation = mirroredOut[index];
             }
+            Record(right: true, ref rightFinal);
+            Record(right: false, ref leftFinal);
+        }
+
+        // Only the right hand: the left's foregrip grip mirrored onto it (CaptureSupportGrip); the left keeps its own open pose
+        private static void ApplySupportHeld()
+        {
+            if (VRGlobals.player == null || leftAnimated == null || !EnsureBones())
+                return;
+            int count = rightToLeft.Length;
+            if (mirroredOut == null || mirroredOut.Length != count)
+                mirroredOut = new Quaternion[count];
+            MirrorLocals(leftAnimated, rightToLeft: false, mirroredOut);
+            for (int index = 0; index < count; index++)
+                rightToLeft[index].from.localRotation = mirroredOut[index];
             Record(right: true, ref rightFinal);
             Record(right: false, ref leftFinal);
         }

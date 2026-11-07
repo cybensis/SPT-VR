@@ -568,6 +568,7 @@ namespace TarkovVR.Source.Player.VRManager
                 VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
                 VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
                 VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, PlaceRightControllerHand);
+                VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, PlaceLeftControllerHand);
             }
             else
             {
@@ -783,6 +784,44 @@ namespace TarkovVR.Source.Player.VRManager
             rightControllerHand.localPosition = controllerPosition + rightHandedPrimaryHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
             rightControllerHand.localRotation = controllerRotation * Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + rightHandedPrimaryHandRotOffset.x,
                 rightHandedPrimaryHandRotOffset.y, rightHandedPrimaryHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
+        }
+
+        // The same for the left hand: its own free pose at the left controller (PlaceOffHand's, unswapped), the left arm's target while
+        // the right hand holds the gun alone by the foregrip with the gun in the left hand (RealLeftHandedPatches.SupportHeld)
+        private Transform leftControllerHand;
+
+        public Transform LeftControllerHand
+        {
+            get
+            {
+                if (LeftHand == null || LeftHand.transform.parent == null)
+                    return null;
+                if (leftControllerHand == null || leftControllerHand.parent != LeftHand.transform.parent)
+                {
+                    if (leftControllerHand == null)
+                        leftControllerHand = new GameObject("LeftControllerHand").transform;
+                    leftControllerHand.SetParent(LeftHand.transform.parent, worldPositionStays: false);
+                    PlaceLeftControllerHand(VRInput.LeftHandPose, SteamVR_Input_Sources.LeftHand);
+                }
+                return leftControllerHand;
+            }
+        }
+
+        private void PlaceLeftControllerHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
+        {
+            if (leftControllerHand == null)
+                return;
+            Vector3 controllerPosition = fromAction.localPosition;
+            Quaternion controllerRotation = fromAction.localRotation;
+            if (alignFreeHands && VRGlobals.vrControllerType == "index")
+            {
+                leftControllerHand.localPosition = controllerPosition + controllerRotation * freeLeftHandWrist;
+                leftControllerHand.localRotation = controllerRotation * Quaternion.Euler(freeLeftHandRotation);
+                return;
+            }
+            leftControllerHand.localPosition = controllerPosition + rightHandedOtherHandPosOffset - controllerRotation * Vector3.forward * controllerLength;
+            leftControllerHand.localRotation = controllerRotation * Quaternion.Euler(VRSettings.GetSecondaryHandVertOffset() + rightHandedOtherHandRotOffset.x,
+                rightHandedOtherHandRotOffset.y, VRSettings.GetSecondaryHandHorOffset() + rightHandedOtherHandRotOffset.z);
         }
 
         // A rotation / point reflected through the plane x = 0 (the controllers' own left-right mirror)

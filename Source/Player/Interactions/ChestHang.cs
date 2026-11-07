@@ -199,7 +199,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (SupportOnly)
             {
-                bool near = HandNearGun(fc);
+                // The gun in the left hand: the right hand is the one holding it, the left takes it back (at the grip, as off the sling)
+                bool near = Handedness.GunInLeftHand ? LeftHandAtGrip(fc) : HandNearGun(fc);
                 HandInRegrabZone = near;
                 RegrabZonePulse(near);
                 if (!supporting)
@@ -215,6 +216,8 @@ namespace TarkovVR.Source.Player.Interactions
                     // SupportOnly itself - clearing it HERE first made wasDetached/fromSupport read
                     // false inside = no retake sound/haptic (headset-confirmed silent).
                     Reattach(restore: true);
+                    if (Handedness.GunInLeftHand)
+                        VRPlayerManager.CacheGunInHand();   // the holder back in its clean pose, as off the sling
                     gripSeen = true;
                 }
                 prevGrip = grip;
@@ -263,9 +266,10 @@ namespace TarkovVR.Source.Player.Interactions
                 if (releaseTimer >= slingDelay)
                 {
                     releaseTimer = 0f;
-                    // left hand still on it - hand the gun to the support hand (not from the left hand: that hold assumes the support
-                    // hand is the left; the gun goes to the sling)
-                    if (supporting && !Handedness.GunInLeftHand)
+                    // the support hand still on it - hand the gun to that hand. With the gun in the left hand that's the right hand:
+                    // GunInLeftHand stays on (the rig's LeftHand, the support pose and isSupporting all follow the right controller
+                    // then, so the hold below is the same), RealLeftHandedPatches.SupportHeld draws the arms
+                    if (supporting)
                         BeginSupportHold(fc);
                     else
                         BeginHang(fc);
@@ -395,6 +399,9 @@ namespace TarkovVR.Source.Player.Interactions
             var rightHand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.RightHand : null;
             var player = VRGlobals.player;
             if (arm == null || rightHand == null || player == null)
+                return;
+            // The gun in the left hand, held by the right hand alone: that arm is on the foregrip, RealLeftHandedPatches has both
+            if (Handedness.GunInLeftHand)
                 return;
             // The gun hand on the charging handle (VRReloadController's latch) keeps its own target
             if (arm.solver.target == null)

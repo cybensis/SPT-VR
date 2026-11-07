@@ -899,7 +899,9 @@ namespace TarkovVR.Source.Player.Interactions
 
             bool free = VRGlobals.inGame && !VRGlobals.menuOpen
                         && !VRGlobals.usingItem && !EatingInteractionController.ManualActive
-                        && VRGlobals.vrPlayer != null && !VRGlobals.vrPlayer.isSupporting
+                        && VRGlobals.vrPlayer != null
+                        // supporting = this hand on the foregrip, except with the gun in the left hand held by the right alone (free then)
+                        && (!VRGlobals.vrPlayer.isSupporting || TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld)
                         && !leftHandAnimating;
 
             float wTarget = free ? Mathf.Clamp01(handPoseWeight) : 0f;
