@@ -117,6 +117,9 @@ namespace TarkovVR.Source.Weapons
                     AddPart(weaponRoot, chamberedRound);
                 }
             }
+            // The MDR's deflector, open or in the hand
+            if (deflectorFor == firearmController && deflectorBone != null && (HoldingDeflector || DeflectorOpen(firearmController)))
+                AddPart(weaponRoot, deflectorBone);
             // The magazine release pressed in
             if (releaseParts != null && releasePartsFor == firearmController && releasePressShown > 0f)
             {

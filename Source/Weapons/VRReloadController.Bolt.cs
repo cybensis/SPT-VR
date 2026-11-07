@@ -346,6 +346,7 @@ namespace TarkovVR.Source.Weapons
             Transform handRig = HandRig(gunHand);
             controllerToKnob = Quaternion.Inverse(boltFrame.rotation) * (KnobWorld(state, bolt) - handRig.position);
             LatchHand(boltKnob, gunHand);
+            SetLatchPivot(KnobWorld(state, bolt));
             boltHandFingers = null;
             // The clip's hand on the knob is the right hand's: the gun hand, or the off hand with the gun in the left hand
             if (OnRightArm(gunHand) && bolt.hold != null)

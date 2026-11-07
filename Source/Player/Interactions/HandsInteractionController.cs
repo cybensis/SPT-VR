@@ -425,6 +425,8 @@ namespace TarkovVR.Source.Player.Interactions
             VRReloadController.ApplyChamberView();
             // A bolt-action's bolt left open or being worked: its bones after the animator
             VRReloadController.ApplyBolt();
+            // The MDR's deflector held open or being worked
+            VRReloadController.ApplyDeflector();
             VRReloadController.ApplyMagazineReleaseButton();
             // A magazine picked up off the ground: its ground item stays hidden while our model of it is held
             VRReloadController.KeepGroundMagazineHidden();

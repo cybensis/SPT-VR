@@ -404,6 +404,11 @@ namespace TarkovVR.Source.Weapons
             handleFullyBack = false;
             HoldingChargingHandle = true;
             LatchHand(handleView, gunHand);
+            // The wiggle turns the hand about where it holds the handle
+            if (sideHandle && TryGetSideKnobPoint(firearmController, out Vector3 sideKnobPoint))
+                SetLatchPivot(sideKnobPoint);
+            else if (!sideHandle)
+                SetLatchPivot(ChargingHandleGrabPoint(backWorld));
             handAtHandleGrabInSlot = handleBone.InverseTransformPoint(LatchedHandRig.position);
             StartHandleNotch(firearmController, backWorld);
             handleHandFingers = null;
@@ -625,6 +630,9 @@ namespace TarkovVR.Source.Weapons
             // Racked back on a malfunction: the bolt goes home and that clears it (a notch doesn't hold it)
             if (snapForward && malfunctionRacked && MalfunctionClearsByHand(firearmController))
                 RackClearsMalfunction(firearmController);
+            // The MDR's deflector shut over a failure to eject or feed: the bolt goes back onto it, nothing cleared
+            else if (snapForward && malfunctionRackBlocked)
+                PlayFirstGunSound(firearmController, SoundHand.GunBody, "HandleIn", "SlideIn");
             else if (staysInNotch)
                 firearmController.FirearmsAnimator.SetBoltCatch(true);
             else if (snapForward)

@@ -37,6 +37,7 @@ namespace TarkovVR.Source.Weapons
         public static Weapon.EMalfunctionState testMalfunctionNextShot = Weapon.EMalfunctionState.None;
 
         private static bool malfunctionRacked;                  // this grab has been all the way back on a malfunctioned gun
+        private static bool malfunctionRackBlocked;             // ... but the MDR's deflector was shut over it: nothing clears
         private static int hardSlideTugsDone;
         private static bool hardSlideTugging;
         private static bool hardSlideFree = true;
@@ -107,6 +108,7 @@ namespace TarkovVR.Source.Weapons
         private static void BeginMalfunctionGrab(FirearmController firearmController)
         {
             malfunctionRacked = false;
+            malfunctionRackBlocked = false;
             hardSlideTugsDone = 0;
             hardSlideTugging = false;
             Weapon.EMalfunctionState malfunction = firearmController.Item.MalfState.State;
@@ -130,6 +132,7 @@ namespace TarkovVR.Source.Weapons
                 SetMalfunctionPose(firearmController, 1f);
             malfunctionPoseOffFor = null;
             malfunctionRacked = false;
+            malfunctionRackBlocked = false;
         }
 
         private static void SetMalfunctionPose(FirearmController firearmController, float weight)
@@ -145,6 +148,14 @@ namespace TarkovVR.Source.Weapons
         {
             if (firearmController.Item.MalfState.State == Weapon.EMalfunctionState.None || !MalfunctionClearsByHand(firearmController))
                 return false;
+            // The MDR's deflector shut over a failure to eject or feed: the rack does nothing for it (VRReloadController.Deflector)
+            if (DeflectorBlocksClearing(firearmController))
+            {
+                malfunctionRackBlocked = true;
+                if (debugLog)
+                    LogAction($"[VRReload] racked back on a {firearmController.Item.MalfState.State} with the deflector shut: not cleared");
+                return true;
+            }
             malfunctionRacked = true;
             if (debugLog)
                 LogAction($"[VRReload] racked back on a {firearmController.Item.MalfState.State}: cleared as it goes forward");
@@ -233,7 +244,7 @@ namespace TarkovVR.Source.Weapons
         {
             bool handMayTakeIt = gunHand ? ChestHang.SupportOnly : !VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached;
             if (!handMayTakeIt || weapon.MalfState.State != Weapon.EMalfunctionState.Jam || !MalfunctionClearsByHand(firearmController)
-                || !TryGetJamPort(firearmController, out Vector3 port))
+                || DeflectorBlocksClearing(firearmController) || !TryGetJamPort(firearmController, out Vector3 port))
                 return false;
             bool atPort = HandTouchesCapsule(gunHand, port, port, jamPortRadius);
             SetZoneViz(ref jamPortZoneViz, debugZones, port, jamPortRadius, atPort ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.9f, 0f, 0.3f));
