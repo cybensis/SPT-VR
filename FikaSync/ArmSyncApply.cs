@@ -107,6 +107,9 @@ namespace SptVrFikaSync
         // players only (flatscreen/other observed players keep their normal aim-down-sights animation).
         public static bool IsWeaponSynced(int netId) => weaponRemote.ContainsKey(netId);
 
+        // Any VR pose received from this NetId this raid (arms or weapon): a VR player (BoltRoundSync scopes to them)
+        public static bool IsVrPlayer(int netId) => weaponRemote.ContainsKey(netId) || remote.ContainsKey(netId);
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ObservedPlayer), nameof(ObservedPlayer.LateUpdate))]
         private static void DriveRemoteArms(ObservedPlayer __instance)

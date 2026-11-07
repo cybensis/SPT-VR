@@ -22,8 +22,9 @@ namespace TarkovVR.Source.Weapons
     //    run as a network transaction (FIKA syncs it like any move). NOT Tarkov's ReloadInternalMagWithOpenBoltOperation: its Prepare
     //    throws out a chambered round and it plays the reload animation. The gun's hands controller is asked about the move like any
     //    touching the gun in hands, and would animate the chamber one and refuse the magazine ones: BoltActionPatches.LetSingleRoundIn
-    //    lets ours through (LetsSingleRoundIn). In co-op the host replays it on its copy of you and must accept it too: with SPT-VR it
-    //    does (the same patch, for other players' copies); a host without SPT-VR refuses it and the round stays in the stack.
+    //    lets ours through (LetsSingleRoundIn). In co-op the host replays it on its copy of you and must accept it before our client
+    //    applies it: the FIKA sync module does that on every peer that has it (SptVrFikaSync.BoltRoundSync, VR players only); a host
+    //    without the module refuses it and the round stays in the stack.
     //  - Into an empty chamber it goes in the chamber but waits for the bolt (WaitingForRack, like a round a magazine brought in): the
     //    chamber shows empty while open, closing the bolt chambers it (BoltClosed shows the round). Otherwise the top of the magazine.
     //  - Letting go anywhere before it's in puts it back (it never left the stack): no drop to the ground (not built).
@@ -150,12 +151,15 @@ namespace TarkovVR.Source.Weapons
             return null;
         }
 
-        // The gun's hands controller asking about an inventory move (BoltActionPatches.LetSingleRoundIn): true = one round from outside
-        // an open bolt-action into its chamber or its magazine - ours, while it's in flight, or another player's in co-op (only SPT-VR
-        // makes this move: Tarkov loads these guns through LoadMagOperation, left alone) - to go through with no animation
+        // The gun's hands controller asking about an inventory move (BoltActionPatches.LetSingleRoundIn): true = our own round from outside
+        // an open bolt-action into its chamber or its magazine, while it's in flight, to go through with no animation. Other players'
+        // copies of a VR player making the same move are the FIKA sync module's (SptVrFikaSync.BoltRoundSync, the same rule, VR players
+        // only) - it runs on every peer, the desktop host included, which has to accept the move before our client applies it.
         internal static bool LetsSingleRoundIn(FirearmController controller, IInventoryOperation operation)
         {
-            if (!singleRoundLoading || controller == null || operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo) || move.To1 == null)
+            if (!singleRoundLoading || controller == null || controller._player == null || !controller._player.IsYourPlayer || !roundLoading || heldRoundFor != controller)
+                return false;
+            if (operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo) || move.To1 == null)
                 return false;
             Weapon weapon = controller.Item;
             if (weapon == null || !weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload)
@@ -168,12 +172,7 @@ namespace TarkovVR.Source.Weapons
             bool intoGun = magazine != null && ReferenceEquals(into, magazine.Cartridges);
             foreach (Slot chamber in weapon.Chambers)
                 intoGun |= ReferenceEquals(into, chamber);
-            if (!intoGun)
-                return false;
-            EFT.Player player = controller._player;
-            if (player != null && player.IsYourPlayer)
-                return roundLoading && heldRoundFor == controller;
-            return true;
+            return intoGun;
         }
 
         // One round from the stack: into an empty chamber, else onto the top of the magazine (merged with a stack of the same type, or a

@@ -30,7 +30,8 @@ namespace TarkovVR.Patches.Core.Player
         // back). Idling.Execute takes a round into the chamber as its own LoadCartridgeToChamber (headset: the first round "takes over
         // and does an animation ... and auto closes the bolt") and refuses one into the internal magazine, which Tarkov only loads
         // through its reload (LoadMagOperation): "Can't perform operation RemoveSuboperation ... ->StackSlot cartridges", every round
-        // after the first. Succeeding keeps the move as it is, no animation: the hand did the loading.
+        // after the first. Succeeding keeps the move as it is, no animation: the hand did the loading. Our own player only; the copies of
+        // a VR player on other peers (the co-op host) are the FIKA sync module's BoltRoundSync.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController.Idling), nameof(EFT.Player.FirearmController.Idling.Execute),
             new[] { typeof(EFT.InventoryLogic.Operations.IInventoryOperation), typeof(Callback) })]
