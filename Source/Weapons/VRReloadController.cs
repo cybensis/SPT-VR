@@ -1227,6 +1227,7 @@ namespace TarkovVR.Source.Weapons
         // Not when the longest side runs across the gun (the Beta-C dual drum is wider than it is tall): if it's nowhere near
         // the way the magazine hangs from the well, the side closest to that direction is its length.
         public static float minLengthAxisAlignment = 0.5f;   // cos of how far the longest side may be off the well to body direction
+        public static float minBodyOffsetAlongLength = 0.005f; // m the body's middle must sit off the well point along its length to say which end is out
         private static bool TryGetMagazineShape(GameObject prop, Vector3 wellPointInProp, out Vector3 axisInProp, out float length, out float thinnestSide)
         {
             axisInProp = Vector3.zero;
@@ -1281,10 +1282,21 @@ namespace TarkovVR.Source.Weapons
             }
 
             Vector3 axis = sides[lengthSide];
-            if (Vector3.Dot(axis, towardBody) < 0f)
-                axis = -axis;
             if (axis.sqrMagnitude < 1e-8f)
                 return false;
+            // Which end hangs out of the well: the body's middle is well below the well point on almost every magazine. Not on one
+            // modelled centred on its own origin with no ModPlacer (the MP7's 20-round: its body's middle IS the well point), where
+            // the test fell to the mesh's own axis, toward its top: the track pointed up into the gun and never caught it (headset:
+            // "It wasnt locking onto a track at all", the 40-round fine). Then out is the seated well bone's -z, as in every
+            // straight-out rifle's own clip (Tools/gen_reload_holds wellAxis).
+            float bodyAlong = Vector3.Dot(axis.normalized, towardBody);
+            if (Mathf.Abs(bodyAlong) >= minBodyOffsetAlongLength)
+            {
+                if (bodyAlong < 0f)
+                    axis = -axis;
+            }
+            else if ((SeatedRotation(prop) * Vector3.Scale(axis, SeatedScale(prop))).z > 0f)
+                axis = -axis;
             axisInProp = axis.normalized;
             length = lengthSide == 0 ? bodySize.x : lengthSide == 1 ? bodySize.y : bodySize.z;
             thinnestSide = Mathf.Min(bodySize.x, Mathf.Min(bodySize.y, bodySize.z));
@@ -1861,6 +1873,13 @@ namespace TarkovVR.Source.Weapons
             Vector3 seatedScale = SeatedScale(prop);
             Vector3 wellInPropFrame = Quaternion.Inverse(seatedRotation) * -seatedPosition;
             return new Vector3(wellInPropFrame.x / seatedScale.x, wellInPropFrame.y / seatedScale.y, wellInPropFrame.z / seatedScale.z);
+        }
+
+        // The model's turn on its slot bone seated (SlotView.InsertItem): its ModPlacer's, else Tarkov's default
+        private static Quaternion SeatedRotation(GameObject prop)
+        {
+            ModPlacer modPlacer = prop.GetComponent<ModPlacer>();
+            return modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
         }
 
         private static Vector3 SeatedScale(GameObject prop)
