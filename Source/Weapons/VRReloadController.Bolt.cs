@@ -432,6 +432,7 @@ namespace TarkovVR.Source.Weapons
                 state.spentCase = false;
                 state.roundShown = false;
                 firearmController.Firearms.StartSpawnShell(firearmController._player.Velocity * 0.66f);
+                syncShellsThrown++;   // co-op: other players' copies throw theirs now (VRReloadController.Sync)
                 if (boltDebugLog)
                     Plugin.MyLog.LogInfo("[VRReload] bolt back: the spent case comes out");
                 return;
@@ -482,6 +483,7 @@ namespace TarkovVR.Source.Weapons
             try
             {
                 firearmController.Firearms.SetRoundIntoWeapon(ammo);
+                syncRoundsShown++;   // co-op: other players' copies show theirs now (VRReloadController.Sync)
             }
             catch (System.Exception exception)
             {

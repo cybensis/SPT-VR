@@ -1,7 +1,9 @@
+using System.Runtime.CompilerServices;
 using EFT;
 using Fika.Core.Main.Players;
 using SptVrFikaSync;
 using TarkovVR.Source.Player.VRManager;
+using TarkovVR.Source.Weapons;
 using UnityEngine;
 
 namespace TarkovVR.ModSupport.FIKA
@@ -19,6 +21,7 @@ namespace TarkovVR.ModSupport.FIKA
         public static bool sendWeaponPose = true;     // send the held gun's pose while armed
         public static bool sendEatingPose = true;     // send manual-eating wrist+prop poses
         public static bool sendFingerPoses = true;    // send finger poses (authored open-hand / Index curls)
+        public static bool sendReloadState = true;    // send the manual reload (hands on parts, magazines, bolt / handle) with the weapon pose
         public static float sendInterval = 0.05f;     // ~20/s
         public static float fingerSendInterval = 0.05f; // finger cadence (own timer - the shared throttle belongs to the arm/weapon packets)
 
@@ -26,6 +29,8 @@ namespace TarkovVR.ModSupport.FIKA
         private static float lastFingerSend;
         private static bool fingersWereActive;
         private static bool wasEating;
+        private static bool wasSendingReload;
+        private static bool loggedReloadBuildError;
 
         // Called every frame from VRPlayerManager.LateUpdate (guarded by InstalledMods.FIKAInstalled).
         public static void Tick()
@@ -43,6 +48,15 @@ namespace TarkovVR.ModSupport.FIKA
             {
                 if (local != null) FikaVrSync.SendEatingStop(local.NetId);
                 wasEating = false;
+            }
+
+            // Reload state STOP (once, not throttled): no gun in hands any more, or running with it (the weapon pose isn't sent then
+            // either), so observers put their copy of the gun back the moment it ends
+            bool reloadNow = sendReloadState && local != null && local.HandsController is Player.FirearmController && !local.IsSprintEnabled;
+            if (wasSendingReload && !reloadNow)
+            {
+                if (local != null) FikaVrSync.SendReloadStop(local.NetId);
+                wasSendingReload = false;
             }
 
             // Finger poses: independent cadence, sent while either hand's pose system is driving
@@ -111,6 +125,26 @@ namespace TarkovVR.ModSupport.FIKA
             if (local != null) FikaVrSync.SendEatingSound(local.NetId, name);
         }
 
+        // One reload sound the manual reload played (VRReloadController.PlayFelt), by event name, for the other players' copy of the
+        // gun. Its caller is FIKAInstalled-gated and this doesn't inline into it, so FIKA types only JIT with FIKA.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void SendReloadSound(string name)
+        {
+            FikaPlayer local = VRGlobals.player as FikaPlayer;
+            if (local != null && sendReloadState) FikaVrSync.SendReloadSound(local.NetId, name);
+        }
+
+        // FIKA's own "cycle the bolt" packet for a bolt-action shot (BoltActionPatches.BoltStaysShut: the bolt is worked by hand, and
+        // FIKA would only send it from the fire operation that skip ends). Its other side (ObservedFirearmController.
+        // HandleObservedBoltAction) moves the next round into the chamber on their copy of you; the sync module's BoltCycleSync does
+        // that without the cycle animation.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void SendBoltCycle(Player.FirearmController controller)
+        {
+            if (controller is Fika.Core.Main.ClientClasses.HandsControllers.FikaClientFirearmController fikaController)
+                fikaController.SendBoltActionReloadPacket();
+        }
+
         private static void DispatchHeldOrEmpty(FikaPlayer local, VRPlayerManager rig, Transform chest)
         {
             var hc = local.HandsController;
@@ -139,6 +173,35 @@ namespace TarkovVR.ModSupport.FIKA
                     lRot = Quaternion.Inverse(chest.rotation) * rig.LeftHand.transform.rotation;
                 }
                 FikaVrSync.SendWeaponPose(local.NetId, wPos, wRot, leftOnGrip, lPos, lRot);
+                // The manual reload on top (the module draws it on the observed gun the pose above just placed). A bad frame is
+                // logged once and never breaks this LateUpdate.
+                bool reloadBuilt = false;
+                if (isFirearm && sendReloadState)
+                {
+                    try { reloadBuilt = VRReloadController.TryBuildSync((Player.FirearmController)hc); }
+                    catch (System.Exception exception)
+                    {
+                        if (!loggedReloadBuildError)
+                        {
+                            loggedReloadBuildError = true;
+                            Plugin.MyLog.LogError($"[VRArmSync] reload state not built: {exception}");
+                        }
+                    }
+                }
+                if (reloadBuilt)
+                {
+                    FikaVrSync.SendReloadState(local.NetId,
+                        VRReloadController.syncManualReload, VRReloadController.syncManualBolt,
+                        VRReloadController.syncDriveLeft, VRReloadController.syncDriveRight,
+                        VRReloadController.syncLeftPosition, VRReloadController.syncLeftRotation,
+                        VRReloadController.syncRightPosition, VRReloadController.syncRightRotation,
+                        VRReloadController.syncPropItems, VRReloadController.syncPropPositions, VRReloadController.syncPropRotations,
+                        VRReloadController.syncPartPaths, VRReloadController.syncPartPositions, VRReloadController.syncPartRotations,
+                        VRReloadController.syncPartShown, VRReloadController.syncHiddenGroundItem,
+                        VRReloadController.syncBoltCatch, VRReloadController.syncBoltOpenDriven, VRReloadController.syncBoltOpen,
+                        VRReloadController.syncShellsThrown, VRReloadController.syncRoundsShown);
+                    wasSendingReload = true;
+                }
             }
             // Empty hands: stream both controller hand poses (the module drives the arm IK). (Eating/meds
             // is handled by its own branch above; everything else falls back to FIKA's vanilla anim.)

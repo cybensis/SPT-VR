@@ -621,6 +621,9 @@ namespace TarkovVR.Source.Weapons
         // 0 = closed, 1 = Tarkov's locked-back pose
         private static void SetBoltOpen(FirearmsAnimator firearmsAnimator, float open)
         {
+            // Co-op: other players' copies of the gun mirror the layer while it's written (VRReloadController.Sync)
+            boltOpenWritten = open;
+            boltOpenWrittenFrame = Time.frameCount;
             IAnimator animator = firearmsAnimator?.Animator;
             if (animator == null)
                 return;

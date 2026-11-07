@@ -4,7 +4,9 @@ using HarmonyLib;
 
 namespace SptVrFikaSync
 {
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.0.0")]
+    // 2.1.0: the manual reload sync adds packet types (VRReloadPacket / VRReloadSoundPacket). Every peer needs this version or newer:
+    // a peer whose module doesn't register them throws on them inside FIKA's packet loop (the "busy hands" drop).
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.1.0")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module. When present we relocate a
     // dragged corpse's loot waypoint here (the VR mod can't — it doesn't run on a headless). Soft so this

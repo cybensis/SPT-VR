@@ -22,7 +22,18 @@ namespace TarkovVR.Patches.Core.Player
             if (controller == null || controller.CurrentOperation != __instance)
                 return;
             if (VRReloadController.BoltShotFired(controller))
+            {
+                // Co-op: FIKA tells the other players to cycle the bolt (and move the next round into the chamber on their copy of
+                // you) only from this operation once the trigger is let go, and this skip ends it first, trigger still held - so their
+                // copy's magazine never gave up the round and drifted from yours. Sent here instead; the sync module's
+                // BoltCycleSync does their move without the animation (the hand works the bolt).
+                if (ModSupport.InstalledMods.FIKAInstalled)
+                {
+                    try { ModSupport.FIKA.VRArmSync.SendBoltCycle(controller); }
+                    catch (System.Exception exception) { Plugin.MyLog.LogWarning($"[VRReload] bolt cycle not sent to the other players: {exception.Message}"); }
+                }
                 controller.FastForwardCurrentState();
+            }
         }
 
         // A single round into an open bolt-action by hand (VRReloadController.Rounds): its inventory move is put to the gun's hands

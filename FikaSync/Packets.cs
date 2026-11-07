@@ -233,6 +233,122 @@ namespace SptVrFikaSync
         }
     }
 
+    // One VR player's MANUAL RELOAD state, sent with the weapon pose while a firearm is in hands (SPT-VR's VRReloadController.Sync):
+    // the rendered wrists and which arms to drive to them, the props in the hands (magazines, a round) by item id, every part of the
+    // gun it moves or hides by path under the gun's root (local pose + shown), the bolt catch / bolt-open layer, and event counters.
+    // Wrists and props are in the gun's frame (Weapon_root), so they ride the observed gun ArmSyncApply placed. Ids and paths are
+    // FikaVrSync.StableHash'd (no strings at runtime). Active=false is the one-shot stop (put the observed gun back).
+    internal struct VRReloadPacket : INetSerializable
+    {
+        public const byte ManualReload = 1, ManualBolt = 2, DriveLeft = 4, DriveRight = 8, BoltCatch = 16, BoltOpenDriven = 32;
+
+        public int NetId;
+        public bool Active;
+        public byte Flags;
+        public float BoltOpen;
+        public int ShellsThrown;        // counters: each change = one event (a dropped packet can't lose one)
+        public int RoundsShown;
+        public int HiddenGroundItem;    // the ground magazine whose model is in the hand (0 = none)
+        public Vector3 LeftPos;   public Quaternion LeftRot;
+        public Vector3 RightPos;  public Quaternion RightRot;
+        public byte PropCount;
+        public int[] PropItems;
+        public Vector3[] PropPositions;
+        public Quaternion[] PropRotations;
+        public byte PartCount;
+        public int[] PartPaths;
+        public Vector3[] PartPositions;     // local (in the part's parent)
+        public Quaternion[] PartRotations;
+        public bool[] PartShown;
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(NetId);
+            writer.Put(Active);
+            if (!Active)
+                return;
+            writer.Put(Flags);
+            writer.Put(BoltOpen);
+            writer.Put(ShellsThrown);
+            writer.Put(RoundsShown);
+            writer.Put(HiddenGroundItem);
+            writer.PutUnmanaged(LeftPos);  writer.PutUnmanaged(LeftRot);
+            writer.PutUnmanaged(RightPos); writer.PutUnmanaged(RightRot);
+            writer.Put(PropCount);
+            for (int i = 0; i < PropCount; i++)
+            {
+                writer.Put(PropItems[i]);
+                writer.PutUnmanaged(PropPositions[i]);
+                writer.PutUnmanaged(PropRotations[i]);
+            }
+            writer.Put(PartCount);
+            for (int i = 0; i < PartCount; i++)
+            {
+                writer.Put(PartPaths[i]);
+                writer.PutUnmanaged(PartPositions[i]);
+                writer.PutUnmanaged(PartRotations[i]);
+                writer.Put(PartShown[i]);
+            }
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            NetId = reader.GetInt();
+            Active = reader.GetBool();
+            if (!Active)
+                return;
+            Flags = reader.GetByte();
+            BoltOpen = reader.GetFloat();
+            ShellsThrown = reader.GetInt();
+            RoundsShown = reader.GetInt();
+            HiddenGroundItem = reader.GetInt();
+            LeftPos = reader.GetUnmanaged<Vector3>();   LeftRot = reader.GetUnmanaged<Quaternion>();
+            RightPos = reader.GetUnmanaged<Vector3>();  RightRot = reader.GetUnmanaged<Quaternion>();
+            PropCount = reader.GetByte();
+            PropItems = new int[PropCount];
+            PropPositions = new Vector3[PropCount];
+            PropRotations = new Quaternion[PropCount];
+            for (int i = 0; i < PropCount; i++)
+            {
+                PropItems[i] = reader.GetInt();
+                PropPositions[i] = reader.GetUnmanaged<Vector3>();
+                PropRotations[i] = reader.GetUnmanaged<Quaternion>();
+            }
+            PartCount = reader.GetByte();
+            PartPaths = new int[PartCount];
+            PartPositions = new Vector3[PartCount];
+            PartRotations = new Quaternion[PartCount];
+            PartShown = new bool[PartCount];
+            for (int i = 0; i < PartCount; i++)
+            {
+                PartPaths[i] = reader.GetInt();
+                PartPositions[i] = reader.GetUnmanaged<Vector3>();
+                PartRotations[i] = reader.GetUnmanaged<Quaternion>();
+                PartShown[i] = reader.GetBool();
+            }
+        }
+    }
+
+    // One reload sound the VR player's manual reload played, by a stable hash of its event name (as VREatingSoundPacket): their copy
+    // of the gun skips Tarkov's reload animations, whose sound events these replace
+    internal struct VRReloadSoundPacket : INetSerializable
+    {
+        public int NetId;
+        public int NameHash;
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(NetId);
+            writer.Put(NameHash);
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            NetId = reader.GetInt();
+            NameHash = reader.GetInt();
+        }
+    }
+
     // A body drag: the FULL ragdoll pose (one world transform per RigidbodySpawner bone), or a release
     // marker. The receiver freezes the corpse's ragdoll kinematic and snaps every bone to this pose, so
     // observers see the EXACT same ragdoll the dragger does — no local-physics divergence (which caused

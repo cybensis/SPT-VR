@@ -1766,6 +1766,7 @@ namespace TarkovVR.Source.Weapons
         {
             ReturnPropToPool(pendingProp);
             pendingProp = null;
+            pendingPropItem = null;
         }
 
         // The move never happened: the magazine is still in the gun, show it again
@@ -1887,6 +1888,7 @@ namespace TarkovVR.Source.Weapons
         private static void CommitHold()
         {
             pendingProp = heldProp;
+            pendingPropItem = heldMagazine;
             pendingHiddenView = hiddenGunMagazineView;
             heldProp = null;
             hiddenGunMagazineView = null;
@@ -2315,6 +2317,13 @@ namespace TarkovVR.Source.Weapons
             finally
             {
                 playingOwnSound = false;
+            }
+            // Co-op: other players hear it from their copy of the gun (their copy skips Tarkov's reload animations and their sounds).
+            // Optional: it must never break the sound here.
+            if (ModSupport.InstalledMods.FIKAInstalled)
+            {
+                try { ModSupport.FIKA.VRArmSync.SendReloadSound(soundName); }
+                catch (System.Exception exception) { LogAction($"[VRReload] reload sound not sent: {exception.Message}"); }
             }
         }
 

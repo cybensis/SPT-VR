@@ -33,6 +33,7 @@ namespace SptVrFikaSync
         public static bool enableWeaponSync = true;   // sync the held gun's pose (aim) while armed
         public static bool enableMeleeHitSync = true; // replay VR-melee surface hits (sparks/glass) on observers
         public static bool enableEatingSync = true;   // sync manual-eating gestures (food rides the synced hands)
+        public static bool enableReloadSync = true;   // sync the manual reload (hands on parts, magazines, bolt / handle, sounds)
         public static bool enableBodyDragSync = true;
         // Sync dragging a DOWNED/revive teammate (a live player, not a Corpse). Relocates the downed
         // teammate's authoritative position so a revive lands at the dragged-to spot, and drives their
@@ -87,8 +88,11 @@ namespace SptVrFikaSync
             BodyDragApply.ResetState();
             DownedDragApply.ResetState();
             FingerSyncApply.ResetState();
+            ReloadSyncApply.ResetState();
             if (ev.Manager is FikaServer server)
             {
+                server.RegisterPacket<VRReloadPacket, NetPeer>(OnReloadServer);
+                server.RegisterPacket<VRReloadSoundPacket, NetPeer>(OnReloadSoundServer);
                 server.RegisterPacket<VRArmsPacket, NetPeer>(OnArmsServer);
                 server.RegisterPacket<VRFingersPacket, NetPeer>(OnFingersServer);
                 server.RegisterPacket<VRWeaponPacket, NetPeer>(OnWeaponServer);
@@ -101,6 +105,8 @@ namespace SptVrFikaSync
             }
             else if (ev.Manager is FikaClient client)
             {
+                client.RegisterPacket<VRReloadPacket>(OnReloadClient);
+                client.RegisterPacket<VRReloadSoundPacket>(OnReloadSoundClient);
                 client.RegisterPacket<VRArmsPacket>(OnArmsClient);
                 client.RegisterPacket<VRFingersPacket>(OnFingersClient);
                 client.RegisterPacket<VRWeaponPacket>(OnWeaponClient);
@@ -322,6 +328,119 @@ namespace SptVrFikaSync
         {
             try { EatingSyncApply.QueueSound(p.NetId, p.NameHash); }
             catch (Exception e) { LogOnce(ref _eatErr, "eating sound recv", e); }
+        }
+
+        // ===== MANUAL RELOAD (hands on parts, magazines, bolt / handle; ReloadSyncApply draws it) =====
+        // Reusable send buffers, as the eating's (one local VR player per peer, sent synchronously)
+        private static int[] _rPropItems = new int[0];
+        private static Vector3[] _rPropPos = new Vector3[0];
+        private static Quaternion[] _rPropRot = new Quaternion[0];
+        private static int[] _rPartPaths = new int[0];
+        private static Vector3[] _rPartPos = new Vector3[0];
+        private static Quaternion[] _rPartRot = new Quaternion[0];
+        private static bool[] _rPartShown = new bool[0];
+
+        // The local VR player's reload state (SPT-VR's VRReloadController.Sync buffers). Item ids and part paths go as StableHash
+        // (no strings on the wire); capped at 255 props / parts.
+        public static void SendReloadState(int netId, bool manualReload, bool manualBolt, bool driveLeft, bool driveRight,
+            Vector3 leftPos, Quaternion leftRot, Vector3 rightPos, Quaternion rightRot,
+            System.Collections.Generic.List<string> propItems,
+            System.Collections.Generic.List<Vector3> propPositions,
+            System.Collections.Generic.List<Quaternion> propRotations,
+            System.Collections.Generic.List<string> partPaths,
+            System.Collections.Generic.List<Vector3> partPositions,
+            System.Collections.Generic.List<Quaternion> partRotations,
+            System.Collections.Generic.List<bool> partShown,
+            string hiddenGroundItem, bool boltCatch, bool boltOpenDriven, float boltOpen, int shellsThrown, int roundsShown)
+        {
+            if (!enableReloadSync)
+                return;
+            int propCount = System.Math.Min(propItems.Count, 255);
+            int partCount = System.Math.Min(partPaths.Count, 255);
+            if (_rPropItems.Length < propCount)
+            {
+                _rPropItems = new int[propCount]; _rPropPos = new Vector3[propCount]; _rPropRot = new Quaternion[propCount];
+            }
+            if (_rPartPaths.Length < partCount)
+            {
+                _rPartPaths = new int[partCount]; _rPartPos = new Vector3[partCount];
+                _rPartRot = new Quaternion[partCount]; _rPartShown = new bool[partCount];
+            }
+            for (int i = 0; i < propCount; i++)
+            {
+                _rPropItems[i] = StableHash(propItems[i]);
+                _rPropPos[i] = propPositions[i];
+                _rPropRot[i] = propRotations[i];
+            }
+            for (int i = 0; i < partCount; i++)
+            {
+                _rPartPaths[i] = StableHash(partPaths[i]);
+                _rPartPos[i] = partPositions[i];
+                _rPartRot[i] = partRotations[i];
+                _rPartShown[i] = partShown[i];
+            }
+            VRReloadPacket p = default;
+            p.NetId = netId;
+            p.Active = true;
+            p.Flags = (byte)((manualReload ? VRReloadPacket.ManualReload : 0) | (manualBolt ? VRReloadPacket.ManualBolt : 0)
+                | (driveLeft ? VRReloadPacket.DriveLeft : 0) | (driveRight ? VRReloadPacket.DriveRight : 0)
+                | (boltCatch ? VRReloadPacket.BoltCatch : 0) | (boltOpenDriven ? VRReloadPacket.BoltOpenDriven : 0));
+            p.BoltOpen = boltOpen;
+            p.ShellsThrown = shellsThrown;
+            p.RoundsShown = roundsShown;
+            p.HiddenGroundItem = StableHash(hiddenGroundItem);
+            p.LeftPos = leftPos; p.LeftRot = leftRot; p.RightPos = rightPos; p.RightRot = rightRot;
+            p.PropCount = (byte)propCount; p.PropItems = _rPropItems; p.PropPositions = _rPropPos; p.PropRotations = _rPropRot;
+            p.PartCount = (byte)partCount; p.PartPaths = _rPartPaths; p.PartPositions = _rPartPos; p.PartRotations = _rPartRot;
+            p.PartShown = _rPartShown;
+            SendUnreliableBroadcast(ref p);
+        }
+
+        // No gun in hands any more (or running with it): observers put their copy of the gun back. Reliable: a lost stop would leave
+        // it overridden until the stale timeout.
+        public static void SendReloadStop(int netId)
+        {
+            if (!enableReloadSync)
+                return;
+            VRReloadPacket p = default;
+            p.NetId = netId;
+            p.Active = false;
+            SendReliableBroadcast(ref p);
+        }
+
+        public static void SendReloadSound(int netId, string name)
+        {
+            if (!enableReloadSync || string.IsNullOrEmpty(name))
+                return;
+            VRReloadSoundPacket p = default;
+            p.NetId = netId; p.NameHash = StableHash(name);
+            SendUnreliableBroadcast(ref p);
+        }
+
+        private static void OnReloadServer(VRReloadPacket p, NetPeer sender)
+        {
+            try { ReloadSyncApply.Store(p); }
+            catch (Exception e) { LogOnce(ref _reloadErr, "reload recv", e); }
+            Singleton<FikaServer>.Instance?.SendData(ref p, p.Active ? DeliveryMethod.Unreliable : DeliveryMethod.ReliableOrdered, sender);
+        }
+
+        private static void OnReloadClient(VRReloadPacket p)
+        {
+            try { ReloadSyncApply.Store(p); }
+            catch (Exception e) { LogOnce(ref _reloadErr, "reload recv", e); }
+        }
+
+        private static void OnReloadSoundServer(VRReloadSoundPacket p, NetPeer sender)
+        {
+            try { ReloadSyncApply.QueueSound(p.NetId, p.NameHash); }
+            catch (Exception e) { LogOnce(ref _reloadErr, "reload sound recv", e); }
+            Singleton<FikaServer>.Instance?.SendData(ref p, DeliveryMethod.Unreliable, sender);
+        }
+
+        private static void OnReloadSoundClient(VRReloadSoundPacket p)
+        {
+            try { ReloadSyncApply.QueueSound(p.NetId, p.NameHash); }
+            catch (Exception e) { LogOnce(ref _reloadErr, "reload sound recv", e); }
         }
 
         // ===== BODY DRAG =====
@@ -559,7 +678,7 @@ namespace SptVrFikaSync
                 Singleton<FikaClient>.Instance?.SendData(ref p, DeliveryMethod.ReliableOrdered, broadcast: true);
         }
 
-        private static bool _armErr, _bodyErr, _meleeErr, _eatErr;
+        private static bool _armErr, _bodyErr, _meleeErr, _eatErr, _reloadErr;
         private static void LogOnce(ref bool latch, string what, Exception e)
         {
             if (latch)
