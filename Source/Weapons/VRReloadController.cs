@@ -2087,9 +2087,11 @@ namespace TarkovVR.Source.Weapons
         private static void ApplyGunHandFingers(bool rightArm)
         {
             Vector3[] pose = HandleInGunHand ? handleHandFingers ?? (rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS) : BoltFingerPose(gunHand: true);
-            // A single round: the gun's own clip's hand on the bolt knob (a small thing between the fingers), else the hand on a T
+            // A single round: the same thumb-and-index pinch as the left hand's, mirrored onto the right (the round sits between those
+            // fingertips and points along the index, so the pose IS the hold). The bolt clip's hand on the knob it used before was a
+            // closed grip: headset, "the hold position of the bullet on the right hand still is pretty awkward for putting the bullet in".
             if (pose == null && RoundInGunHand)
-                pose = rightArm ? boltBonesData?.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
+                pose = rightArm ? RightHandRoundPinch() ?? boltBonesData?.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
             if (pose != null)
                 gunHandFingerPoseShown = pose;
 
@@ -2119,6 +2121,27 @@ namespace TarkovVR.Source.Weapons
                 if (gunHandFingerBones[i] != null)
                     gunHandFingerBones[i].localRotation = Quaternion.Slerp(gunHandFingerBones[i].localRotation, Quaternion.Euler(gunHandFingerPoseShown[i]), gunHandFingerWeight);
             }
+        }
+
+        // The left hand's round pinch (MAGAZINE_PULL_FINGERS) mirrored onto the right hand, as the right hand's pose-order eulers. Worked
+        // out each call (HandMirror's rest poses come from the body's hands mesh, which a change of clothes can swap); null until that
+        // mesh is found.
+        private static readonly Vector3[] rightRoundPinch = new Vector3[16];
+        private static readonly Quaternion[] leftRoundPinchScratch = new Quaternion[16];
+        private static readonly Quaternion[] rightRoundPinchScratch = new Quaternion[16];
+
+        private static Vector3[] RightHandRoundPinch()
+        {
+            for (int index = 0; index < 16; index++)
+            {
+                leftRoundPinchScratch[index] = index < MAGAZINE_PULL_FINGERS.Length ? Quaternion.Euler(MAGAZINE_PULL_FINGERS[index]) : Quaternion.identity;
+                rightRoundPinchScratch[index] = Quaternion.identity;
+            }
+            if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPose(leftRoundPinchScratch, rightToLeft: false, rightRoundPinchScratch))
+                return null;
+            for (int index = 0; index < 16; index++)
+                rightRoundPinch[index] = rightRoundPinchScratch[index].eulerAngles;
+            return rightRoundPinch;
         }
 
         // The palm, then three joints a finger, thumb first. Found by name: the palm also carries attach points.
