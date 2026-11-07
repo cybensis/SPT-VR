@@ -48,6 +48,11 @@ namespace TarkovVR.Source.Weapons
         public static float jamCaseGive = 0.006f;               // m the stuck case gives toward the pull, all of it at the break
         public static float jamCaseWiggleDegrees = 15f;         // deg it tips with the hand's turn while stuck (about its end in the gun)
         public static float jamCaseStrain = 1f;                 // the building buzz in that hand while it pulls (0 = none)
+        // The thumb on the case ("Thumb needs to be closed a bit more but I imagine this will also depend on the bullet type"): the round hold
+        // was made on the Mosin's 7.62x54R, a fatter round than most cases
+        public static float jamCaseThumbClose = 12f;            // deg the thumb closes past the round hold's
+        public static float jamCaseThumbPerMm = 2f;             // deg more per mm the case is thinner than that round (less for a fatter one)
+        public static float roundHoldDiameterMm = 12.4f;        // the round the hold was made on: 7.62x54R, its case body
         public static bool HoldingJamCase { get; private set; }
         public static bool JamCaseInGunHand => HoldingJamCase && jamCaseInGunHand;
         private static bool jamCaseInGunHand;
@@ -68,6 +73,8 @@ namespace TarkovVR.Source.Weapons
         private static float jamHandSnapStartTime;
         private static Vector3 jamCaseInHandPosition;           // out: the case as it came out, in the palm bone's frame
         private static Quaternion jamCaseInHandRotation;
+        private static float jamCaseDiameterMm;
+        private static readonly Vector3[] jamCaseFingers = new Vector3[16];
 
         // The malfunction is the hands' to clear: Manual Reload, and a handle, slide or bolt they work
         internal static bool MalfunctionClearsByHand(FirearmController firearmController)
@@ -262,6 +269,7 @@ namespace TarkovVR.Source.Weapons
             jamCaseWontClear = false;
             MeasureLongAxis(stuckCase.gameObject, out jamCaseAxisInProp, out jamCaseCenterInProp, out float caseLength);
             jamCasePivotInCase = CaseEndInGun(firearmController, stuckCase.transform, caseLength);
+            jamCaseDiameterMm = DiameterMm(stuckCase.gameObject);
             HoldingJamCase = true;
 
             // The hand locked on it ("It should keep its current hand position but while holding the bullet, the fingers lock to the bullet
@@ -278,7 +286,7 @@ namespace TarkovVR.Source.Weapons
             controllerAtJamGrabInGun = weaponRoot.InverseTransformPoint(controller.position);
             controllerRotationAtJamGrabInGun = Quaternion.Inverse(weaponRoot.rotation) * controller.rotation;
             if (debugLog)
-                LogAction($"[VRReload] took the stuck case ({(gunHand ? "gun" : "off")} hand), length {caseLength * 100f:0.0} cm");
+                LogAction($"[VRReload] took the stuck case ({(gunHand ? "gun" : "off")} hand), length {caseLength * 100f:0.0} cm, diameter {jamCaseDiameterMm:0.0} mm, thumb closed {JamCaseThumbClose():0.0} deg more");
             PlayFirstGunSound(firearmController, JamCaseHand, "ShellGrab");
             Pulse(JamCaseHand, 0.3f, 0.03f);
         }
@@ -292,6 +300,56 @@ namespace TarkovVR.Source.Weapons
             Vector3 chamber = chamberBones != null && chamberBones.Length > 0 && chamberBones[0] != null ? chamberBones[0].position : firearmController.WeaponRoot.position;
             Vector3 end = (center + axis - chamber).sqrMagnitude < (center - axis - chamber).sqrMagnitude ? center + axis : center - axis;
             return caseTransform.InverseTransformPoint(end);
+        }
+
+        // Across the round's model: its biggest mesh's two shorter sides, averaged (the full round's mesh is in the case model too, hidden;
+        // across, it's the case's)
+        private static float DiameterMm(GameObject prop)
+        {
+            MeshFilter biggest = null;
+            float biggestVolume = 0f;
+            foreach (MeshFilter meshFilter in prop.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (meshFilter.sharedMesh == null)
+                    continue;
+                Vector3 size = meshFilter.sharedMesh.bounds.size;
+                float volume = size.x * size.y * size.z;
+                if (biggest == null || volume > biggestVolume)
+                {
+                    biggest = meshFilter;
+                    biggestVolume = volume;
+                }
+            }
+            if (biggest == null)
+                return roundHoldDiameterMm;
+            Vector3 extent = Vector3.Scale(biggest.sharedMesh.bounds.size, biggest.transform.lossyScale);
+            float longest = Mathf.Max(extent.x, Mathf.Max(extent.y, extent.z));
+            return (extent.x + extent.y + extent.z - longest) * 0.5f * 1000f;
+        }
+
+        private static float JamCaseThumbClose()
+        {
+            return jamCaseThumbClose + (roundHoldDiameterMm - jamCaseDiameterMm) * jamCaseThumbPerMm;
+        }
+
+        // The round hold's fingers with the thumb closed onto this case: its three joints bent further the way the finger tracking curls a
+        // thumb (about HandsInteractionController.curlAxis, tapering by curlJointScale toward the tip; that curl's sign is + on both hands)
+        private static Vector3[] JamCaseFingers(bool rightArm)
+        {
+            Vector3[] pose = RoundFingers(rightArm);
+            if (pose == null)
+                return null;
+            for (int index = 0; index < jamCaseFingers.Length; index++)
+                jamCaseFingers[index] = index < pose.Length ? pose[index] : Vector3.zero;
+            float close = JamCaseThumbClose();
+            // Pose order: the palm, then the thumb's three joints
+            for (int joint = 0; joint < 3 && 1 + joint < pose.Length; joint++)
+            {
+                float bend = close * Mathf.Pow(TarkovVR.Source.Player.Interactions.HandsInteractionController.curlJointScale, joint);
+                jamCaseFingers[1 + joint] = (Quaternion.Euler(pose[1 + joint])
+                    * Quaternion.AngleAxis(bend, TarkovVR.Source.Player.Interactions.HandsInteractionController.curlAxis)).eulerAngles;
+            }
+            return jamCaseFingers;
         }
 
         // The point on the case's length nearest a world point (kept off its very ends), in its own frame

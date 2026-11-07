@@ -2051,9 +2051,11 @@ namespace TarkovVR.Source.Weapons
                 return handleHandFingers ?? (rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS);
             if (HoldingBolt && !BoltInGunHand)
                 return BoltFingerPose(gunHand: false);
-            // A round, or the stuck case of a failure to eject: already the arm's own pose (RoundFingers)
-            if ((HoldingRound && !RoundInGunHand) || (HoldingJamCase && !jamCaseInGunHand))
+            // A round, or the stuck case of a failure to eject (its thumb closed onto it): already the arm's own pose (RoundFingers)
+            if (HoldingRound && !RoundInGunHand)
                 return RoundFingers(rightArm);
+            if (HoldingJamCase && !jamCaseInGunHand)
+                return JamCaseFingers(rightArm);
             // The magazine: only ever held in the left hand in the clips
             rightHandPose = false;
             if (HoldingMagazine || HoldingSeatedMagazine || HoldingPalmedMagazine)
@@ -2177,8 +2179,10 @@ namespace TarkovVR.Source.Weapons
             Vector3[] pose = HandleInGunHand ? handleHandFingers ?? (rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS) : BoltFingerPose(gunHand: true);
             // A single round: the clip's hold (RoundFingers). The bolt clip's hand on the knob it used first was a closed grip: headset,
             // "the hold position of the bullet on the right hand still is pretty awkward for putting the bullet in".
-            if (pose == null && (RoundInGunHand || JamCaseInGunHand))
+            if (pose == null && RoundInGunHand)
                 pose = RoundFingers(rightArm);
+            else if (pose == null && JamCaseInGunHand)
+                pose = JamCaseFingers(rightArm);
             if (pose != null)
                 gunHandFingerPoseShown = pose;
 
