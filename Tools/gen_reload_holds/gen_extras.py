@@ -48,19 +48,58 @@ def fullBackTime(g,path,wp):
 # clip_names), AA-12 14.5, MDR 13.0, M1A 12.0 (the op rod's handle). Second scan (the first one's printout was cut off): knobs riding
 # the bolt or carrier that moves (9A-91 10.2, ASh-12 16.9, G36 10.9: HANDLE_CARRIERS, the part the runtime moves), and bolts that are
 # the handle themselves, with no knob of their own (PP-91 8.8, PPSh 8.3, Uzi Pro 5.3, VPO-101 12.1: the back of the bolt is inside
-# the receiver, so the grab zone is where the clip's hand is, HANDLE_GRAB_AT_HOLD). Left out: the RPD (no clip moves its handle
+# the receiver, so the grab zone is where the clip's hand is, HANDLE_GRAB_AT_HOLD). AVT-40 / SVT-40 (2026-11-07, both rigs one
+# animation set avt40): the carrier itself, 10 cm straight back in avt40_charge_* (left hand over the top) and rechamber (right hand),
+# its knob part of the carrier mesh (HANDLE_KNOB_SIDE). Left out: the RPD (no clip moves its handle
 # bones), the M60 (no rack clip), the VSK-94 (no clips of its own), the AGS-30 and NSV (mounted).
 # gen_holds' own left/right hold search on that bone, merged into its handles by gen_export; handleBones tells the runtime the bone.
 HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghing_handle','hk_ump':'weapon_charge','tdi_kriss_vector':'weapon_charge',
                   'zid_pkm':'weapon_charge','kel_tec_rfb':'weapon_charge','iwi_uzi_9x19':'weapon_charge','sword_int_mk_18':'weapon_charge','r11_rsass':'weapon_charghing_000',
                   'tochmash_sr2m':'weapon_charging_handle','mps_aa_12':'weapon_charge','dt_mdr':'weapon_charge_000','springfield_m1a':'weapon_bolthandle',
                   'kbp_9a91':'weapon_bolt_charge','ckib_ash_12':'weapon_charging_handle','hk_g36':'weapon_charge_handle',
-                  'zmz_pp-9':'weapon_bolt','zis_ppsh41':'weapon_bolt','iwi_uzi_pro':'weapon_bolt','vepr_hunter_vpo-101':'weapon_bolt'}
+                  'zmz_pp-9':'weapon_bolt','zis_ppsh41':'weapon_bolt','iwi_uzi_pro':'weapon_bolt','vepr_hunter_vpo-101':'weapon_bolt',
+                  'toz_avt_40':'weapon_bolt_carrier','toz_svt_40':'weapon_bolt_carrier'}
 HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier'}
 # (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's hand is too)
 # The MDR's handle part is a rod running back into the gun with the knob at its front: the back of it is nowhere near the knob
 # (headset: "the collision position is not correct for when you grab it", the grab pose itself right)
 HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12','dt_mdr')
+# A knob sticking out of the carrier where the clip's palm bone is far off it (AVT/SVT: the left hand reaches over the top, its palm
+# 15 cm from the knob; the fingertips on it): the grab zone on the knob itself, the centre of the bone's mesh vertices within 1 cm of
+# its furthest point to that side, in the bone's frame. (axis, sign): the AVT/SVT knob is the carrier's +x, (4.5,-4.6,-1.5) cm.
+HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1)}
+def meshKnobPoint(folder,container,boneLeaf,axis,sign,shell=0.01):
+    from UnityPy.helpers.MeshHelper import MeshHandler
+    env=UnityPy.load(ROOT+folder+'/'+container,ROOT+folder+'/client_assets.bundle')
+    def toParent(t,p):
+        s=t.m_LocalScale; r=t.m_LocalRotation; a=t.m_LocalPosition; q=np.array([r.x,r.y,r.z,r.w]); v=p*np.array([s.x,s.y,s.z])
+        return v+2*np.cross(q[:3],np.cross(q[:3],v)+q[3]*v)+np.array([a.x,a.y,a.z])
+    # The rig can hold the bone more than once: the copy with the most vertices (LOD0)
+    best=[]
+    for o in env.objects:
+        if o.type.name!='Transform': continue
+        t=o.read()
+        if t.m_GameObject.read().m_Name!=boneLeaf: continue
+        points=[]
+        def walk(tr,chain):
+            for c in tr.m_GameObject.read().m_Components:
+                ptr=c.component if hasattr(c,'component') else c
+                try: comp=ptr.read()
+                except Exception: continue
+                if type(comp).__name__!='MeshFilter': continue
+                try:
+                    h=MeshHandler(comp.m_Mesh.read()); h.process()
+                except Exception: continue
+                for p in np.array(h.m_Vertices,float).reshape(-1,3):
+                    for link in chain: p=toParent(link,p)
+                    points.append(p)
+            for ch in tr.m_Children:
+                c=ch.read(); walk(c,[c]+chain)
+        walk(t,[])
+        if len(points)>len(best): best=points
+    if not best: return None
+    v=np.array(best); side=v[:,axis]*sign
+    return [round(float(x),4) for x in v[side>=side.max()-shell].mean(0)]
 HANDLE_BONE_GUNS={}
 for folder,v in census.items():
     if not os.path.isdir(ROOT+folder): continue
@@ -128,6 +167,9 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     if rig in HANDLE_CARRIERS: handleCarriers[family]=HANDLE_CARRIERS[rig]
     grabHold=extraHandles.get(family) or extraGunHandHandles.get(family)
     if rig in HANDLE_GRAB_AT_HOLD and grabHold: handleGrabPoints[family]=grabHold['position']
+    if rig in HANDLE_KNOB_SIDE:
+        knob=meshKnobPoint(folder,container,boneName,*HANDLE_KNOB_SIDE[rig])
+        if knob: handleGrabPoints[family]=knob
     print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
           'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
 

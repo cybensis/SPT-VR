@@ -561,10 +561,43 @@ namespace TarkovVR.Source.Weapons
             weapon = firearmController.Item;
             if (weapon == null)
                 return false;
-            if (weapon.ReloadMode != Weapon.EReloadMode.ExternalMagazine && weapon.ReloadMode != Weapon.EReloadMode.ExternalMagazineWithInternalReloadSupport)
-                return false;
             magazineSlot = weapon.GetMagazineSlot();
-            return magazineSlot != null;
+            if (magazineSlot == null || !TakesDetachableMagazine(weapon, magazineSlot))
+            {
+                magazineSlot = null;
+                return false;
+            }
+            return true;
+        }
+
+        // Tarkov's ReloadMode only says "detachable" while a magazine is in: with the slot empty it's the template's, and the AVT, SVT,
+        // M700, AXMC and TRG templates (and the SKS's / Mosin's, for their detachable ones) say InternalMagazine. Pulled empty, those
+        // were no magazine gun any more, so no magazine could go back in by hand. Then it's whether the slot takes a detachable one.
+        private static readonly Dictionary<MongoID, bool> slotTakesDetachable = new Dictionary<MongoID, bool>();
+        private static bool TakesDetachableMagazine(Weapon weapon, Slot magazineSlot)
+        {
+            Weapon.EReloadMode reloadMode = weapon.ReloadMode;
+            if (reloadMode == Weapon.EReloadMode.ExternalMagazine || reloadMode == Weapon.EReloadMode.ExternalMagazineWithInternalReloadSupport)
+                return true;
+            if (reloadMode != Weapon.EReloadMode.InternalMagazine || weapon.GetCurrentMagazine() != null)
+                return false;
+            if (!slotTakesDetachable.TryGetValue(weapon.TemplateId, out bool takes))
+            {
+                ItemFactory itemFactory = Singleton<ItemFactory>.Instance;
+                if (itemFactory == null)
+                    return false;
+                foreach (ItemFilter filter in magazineSlot.Filters)
+                {
+                    foreach (MongoID templateId in filter.Filter)
+                    {
+                        if (itemFactory.ItemTemplates.TryGetValue(templateId, out ItemTemplate template) && template is MagazineTemplate magazineTemplate
+                            && magazineTemplate.ReloadMagType == Weapon.EReloadMode.ExternalMagazine)
+                            takes = true;
+                    }
+                }
+                slotTakesDetachable[weapon.TemplateId] = takes;
+            }
+            return takes;
         }
 
         private static bool InGunMagazineGrabZone(FirearmController firearmController, Weapon weapon, Slot magazineSlot, Vector3 palm)
