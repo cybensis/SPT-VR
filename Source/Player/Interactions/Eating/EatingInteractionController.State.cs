@@ -173,6 +173,16 @@ namespace TarkovVR.Source.Player.Interactions
         // your grip without breaking the authored look. 0 = rigid lock (the old behavior);
         // for fully free rotation use pathRotationFree / pullRotationFree instead.
         public static float pullWiggleDeg = 2f;
+        // The manual reload's hand latch (VRReloadController.LatchHand / ApplyLatchWiggle) for the eating latches (pull-open, reach-in):
+        // the hand EASES onto the authored pose at the grab and back onto the controller at the release (the old latch jumped on and
+        // snapped off), and wiggles about the point it holds - the index fingertip on the lid, the palm in the bag - by the controller's
+        // turn since the grab measured against the HOLDING hand (so turning the item doesn't count), capped at latchWiggleDegrees.
+        // Tilt opens (caps, tabs) keep pullWiggleDeg about the wrist: their gesture IS the hand's turn, a wiggle would count it twice.
+        // false = the old latch, exactly.
+        public static bool reloadStyleLatch = true;
+        public static float latchWiggleDegrees = 15f;   // = VRReloadController.handWiggleDegrees
+        public static float latchSnapTime = 0.06f;      // s onto the authored pose (= handSnapTime)
+        public static float latchReleaseTime = 0.08f;   // s back onto the controller (= handReleaseTime)
 
         //--- Runtime ----------------------------------------------------------------
         // Closed: can shut. Ready: lid open, utensil/hand empty — ready to take food.
@@ -269,6 +279,18 @@ namespace TarkovVR.Source.Player.Interactions
         private static GameObject pullLatch;        // the glue point (child of the holding hand's rig target)
         private static Quaternion latchGrabActRot = Quaternion.identity;   // acting target rotation at grab (the wiggle reference)
         private static Quaternion latchGrabLocalRot = Quaternion.identity; // latch local rotation at grab (the freeze-mode anchor)
+        // reloadStyleLatch: where the rendered hand was at the grab (the ease-in start, holding-target frame), the controller's turn
+        // then (the wiggle reference, same frame), and the ease back to the controller after a release (handLatched stays on meanwhile,
+        // so the IK + pin keep following the latch)
+        private static float latchGrabTime;
+        private static Vector3 latchStartWorldPosition;
+        private static Quaternion latchStartWorldRotation = Quaternion.identity;
+        private static Vector3 latchFrozenLocalPosition;    // the freeze-at-grab latch's spot, re-written each frame under the ease/wiggle
+        private static Vector3 latchStartLocalPosition;
+        private static Quaternion latchStartLocalRotation = Quaternion.identity;
+        private static Quaternion latchControllerAtGrabInHolder = Quaternion.identity;
+        private static bool latchReleasing;
+        private static float latchReleaseStartTime;
         // OpenGrip prop-ride: the latch keeps a fixed offset to the clip-animated lid/cover
         // bone (captured at the grab), so the hand moves WITH the visible lid as the pull
         // scrubs it. No openGripT (or no name) = the latch just stays where you grabbed.

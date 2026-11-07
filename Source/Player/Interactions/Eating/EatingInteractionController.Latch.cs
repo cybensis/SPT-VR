@@ -24,6 +24,7 @@ namespace TarkovVR.Source.Player.Interactions
         // drives the scrub. The acting RIG target keeps controller-tracking throughout.
         private static void LatchHandToItem(Hand h, Transform acting, Transform anchor)
         {
+            CaptureLatchStart(h, acting);
             latchedHandIsDominant = h == Hand.Dominant;
             if (pullLatch == null) pullLatch = new GameObject("EatPullLatch");
             pullLatch.transform.SetParent(anchor, false);
@@ -31,6 +32,8 @@ namespace TarkovVR.Source.Player.Interactions
             pullLatch.transform.rotation = acting.rotation;
             latchGrabActRot = acting.rotation;                     // wiggle reference
             latchGrabLocalRot = pullLatch.transform.localRotation; // freeze-mode rotation anchor (rides the item)
+            latchFrozenLocalPosition = pullLatch.transform.localPosition;
+            BeginLatchEase(anchor, acting);
 
             // OpenGrip: the hand rides the lid/cover bone from here (DriveLatch). With
             // pullSnapToGrip it JUMPS onto the bone (+ the tunable pullSnapPos offset);
@@ -57,13 +60,98 @@ namespace TarkovVR.Source.Player.Interactions
             handLatched = true;
         }
 
-        private static void EndPull()
+        // immediate: the finish / cancel, whose put-away owns the arms from this frame
+        private static void EndPull(bool immediate = false)
         {
             pullingOpen = false;
             pullSqueezeDone = false;  // per-grab: the next grab squeezes again before the physical part
             pullAwaitRelease = false;
-            handLatched = false; // DriveArms re-aims the IK at the rig target next Tick -> hand snaps back
+            ReleaseLatch(immediate);
+        }
+
+        // Off the latch: DriveArms re-aims the IK at the rig target next Tick -> the hand snaps back. reloadStyleLatch eases it back
+        // first (DriveLatchRelease), the latch still holding the arm meanwhile.
+        private static void ReleaseLatch(bool immediate)
+        {
+            if (reloadStyleLatch && !immediate && handLatched && pullLatch != null && latchReleaseTime > 0f)
+            {
+                if (!latchReleasing)
+                {
+                    latchReleasing = true;
+                    latchReleaseStartTime = Time.time;
+                }
+                return;
+            }
+            handLatched = false;
+            latchReleasing = false;
             if (pullLatch != null) { UnityEngine.Object.Destroy(pullLatch); pullLatch = null; }
+        }
+
+        // A grab while the last release is still easing back starts from where that hand is drawn, not from its controller
+        private static void CaptureLatchStart(Hand grabbingHand, Transform acting)
+        {
+            bool sameHandEasingBack = latchReleasing && handLatched && pullLatch != null && latchedHandIsDominant == (grabbingHand == Hand.Dominant);
+            latchStartWorldPosition = sameHandEasingBack ? pullLatch.transform.position : acting.position;
+            latchStartWorldRotation = sameHandEasingBack ? pullLatch.transform.rotation : acting.rotation;
+            latchReleasing = false;
+        }
+
+        // After the latch is parented and placed: the ease-in start and the wiggle's reference, in the holding target's frame
+        private static void BeginLatchEase(Transform anchor, Transform acting)
+        {
+            latchStartLocalPosition = anchor.InverseTransformPoint(latchStartWorldPosition);
+            latchStartLocalRotation = Quaternion.Inverse(anchor.rotation) * latchStartWorldRotation;
+            latchControllerAtGrabInHolder = Quaternion.Inverse(anchor.rotation) * acting.rotation;
+            latchGrabTime = Time.time;
+        }
+
+        // reloadStyleLatch, after a latch mode has written this frame's whole pose: eased in from where the hand was at the grab, then the
+        // wiggle (VRReloadController.ApplyLatchWiggle): the controller's turn since the grab in the holding target's frame, capped, about
+        // the point the hand holds (pivotInHand, in the latch's frame = the pinned wrist's)
+        private static void ShapeLatch(bool wiggle, Vector3 pivotInHand)
+        {
+            Transform latch = pullLatch.transform;
+            Transform holder = latch.parent;
+            if (!reloadStyleLatch || holder == null)
+                return;
+            float sinceGrab = Time.time - latchGrabTime;
+            if (latchSnapTime > 0f && sinceGrab < latchSnapTime * 3f)
+            {
+                float blend = 1f - Mathf.Exp(-sinceGrab / (latchSnapTime / 3f));
+                latch.localPosition = Vector3.Lerp(latchStartLocalPosition, latch.localPosition, blend);
+                latch.localRotation = Quaternion.Slerp(latchStartLocalRotation, latch.localRotation, blend);
+            }
+            if (!wiggle || latchWiggleDegrees <= 0f)
+                return;
+            Transform controller = latchedHandIsDominant ? RightHand() : LeftHand();
+            if (controller == null)
+                return;
+            Quaternion turnInHolder = Quaternion.Inverse(holder.rotation) * controller.rotation * Quaternion.Inverse(latchControllerAtGrabInHolder);
+            turnInHolder = Quaternion.RotateTowards(Quaternion.identity, turnInHolder, latchWiggleDegrees);
+            Quaternion turn = holder.rotation * turnInHolder * Quaternion.Inverse(holder.rotation);
+            Vector3 pivot = latch.position + latch.rotation * pivotInHand;
+            latch.SetPositionAndRotation(pivot + turn * (latch.position - pivot), turn * latch.rotation);
+        }
+
+        // After a release (reloadStyleLatch): the hand eases from where it's drawn back onto its controller, then the arm is the controller's
+        // again. LateZeroProps, after the latch modes.
+        private static void DriveLatchRelease()
+        {
+            if (!latchReleasing)
+                return;
+            Transform controller = latchedHandIsDominant ? RightHand() : LeftHand();
+            if (!handLatched || pullLatch == null || controller == null)
+            {
+                ReleaseLatch(immediate: true);
+                return;
+            }
+            Transform latch = pullLatch.transform;
+            float ease = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(latchReleaseTime / 3f, 0.001f));
+            latch.SetPositionAndRotation(Vector3.Lerp(latch.position, controller.position, ease), Quaternion.Slerp(latch.rotation, controller.rotation, ease));
+            // There, or after a while regardless: it trails a hand that keeps moving and would never quite arrive
+            bool arrived = (latch.position - controller.position).sqrMagnitude < 0.003f * 0.003f && Quaternion.Angle(latch.rotation, controller.rotation) < 2f;
+            if (arrived || Time.time - latchReleaseStartTime > latchReleaseTime * 4f)
+                ReleaseLatch(immediate: true);
         }
 
         // Per-frame latch update. Runs at the END of LateZeroProps — AFTER the prop
@@ -93,6 +181,9 @@ namespace TarkovVR.Source.Player.Interactions
             // where it grabbed (rotation live via pullRotationFree) while the clip cracks
             // the tab under it.
             bool triggerKind = def != null && def.openGesture == OpenGestureKind.Trigger;
+            // reloadStyleLatch: a pull's wiggle turns the hand about the fingertip on the lid (ShapeLatch). A tilt's gesture IS the
+            // hand's turn: it keeps the old small wiggle about the wrist.
+            bool contactWiggle = reloadStyleLatch && (def == null || def.openGesture == OpenGestureKind.Pull);
 
             // Baked HandPath: replay the authored palm pose for the current scrub time —
             // sampled in ITEM-root space off the vanilla clip, re-anchored through the same
@@ -109,9 +200,11 @@ namespace TarkovVR.Source.Player.Interactions
                     Transform act = latchedHandIsDominant ? RightHand() : LeftHand();
                     if (act != null) worldRot = act.rotation;
                 }
-                else
+                else if (!contactWiggle)
                     worldRot = WiggleDelta() * worldRot; // authored rotation + clamped controller wiggle
                 pullLatch.transform.SetPositionAndRotation(worldPos, worldRot);
+                bool pathWiggle = contactWiggle && !pathRotationFree;
+                ShapeLatch(pathWiggle, pathWiggle ? FingerOffsetInWristFrame() : Vector3.zero);
                 return;
             }
 
@@ -127,10 +220,13 @@ namespace TarkovVR.Source.Player.Interactions
                 rot = act != null ? act.rotation : pullLatch.transform.rotation;
             }
             else if (riding)
-                rot = WiggleDelta() * (holdingTarget.rotation * (Quaternion.Inverse(holdingWrist.rotation) * openGripT.rotation) * propGrabLocalRot);
+                rot = (contactWiggle ? Quaternion.identity : WiggleDelta()) * (holdingTarget.rotation * (Quaternion.Inverse(holdingWrist.rotation) * openGripT.rotation) * propGrabLocalRot);
             else
-                rot = WiggleDelta() * (holdingTarget != null ? holdingTarget.rotation * latchGrabLocalRot : pullLatch.transform.rotation);
+                rot = (contactWiggle ? Quaternion.identity : WiggleDelta()) * (holdingTarget != null ? holdingTarget.rotation * latchGrabLocalRot : pullLatch.transform.rotation);
             pullLatch.transform.rotation = rot;
+            // Frozen where it grabbed: written every frame here, since ShapeLatch moves the latch off it
+            if (reloadStyleLatch && !riding)
+                pullLatch.transform.localPosition = latchFrozenLocalPosition;
 
             if (riding)
             {
@@ -142,6 +238,8 @@ namespace TarkovVR.Source.Player.Interactions
                 pullLatch.transform.position = gripWorld
                     - (pullSnapToGrip ? rot * FingerOffsetInWristFrame() : Vector3.zero);
             }
+            bool grabWiggle = contactWiggle && !pullRotationFree;
+            ShapeLatch(grabWiggle, grabWiggle ? FingerOffsetInWristFrame() : Vector3.zero);
         }
 
         // The controller's rotation deviation from its grab-moment orientation, clamped to
@@ -296,24 +394,25 @@ namespace TarkovVR.Source.Player.Interactions
             reachGrabbed = false;
             reachProgress = 0f;
 
+            CaptureLatchStart(s.takeHand, acting);
             latchedHandIsDominant = s.takeHand == Hand.Dominant;
             if (pullLatch == null) pullLatch = new GameObject("EatPullLatch");
             pullLatch.transform.SetParent(anchor, false);
             pullLatch.transform.position = acting.position;
             pullLatch.transform.rotation = acting.rotation;
+            BeginLatchEase(anchor, acting);
             handLatched = true;
 
             PulseHand(latchedHandIsDominant);
             LogStep("[ManualEat] Hand locked onto the bag mouth — push in to reach.");
         }
 
-        private static void EndReach()
+        private static void EndReach(bool immediate = false)
         {
             if (!reachingIn) return;
             reachingIn = false;
             reachGrabbed = false;
-            handLatched = false; // the IK re-aims at the rig target next Tick -> hand snaps back to the controller
-            if (pullLatch != null) { UnityEngine.Object.Destroy(pullLatch); pullLatch = null; }
+            ReleaseLatch(immediate); // the IK re-aims at the rig target -> hand back to the controller
         }
 
         // Per-frame reach update (LateZeroProps tail, right after DriveLatch — same frame
@@ -347,6 +446,8 @@ namespace TarkovVR.Source.Player.Interactions
                     ? acting.rotation
                     : anchor.rotation * (Quaternion.Inverse(holdingWrist.rotation) * (baseT.rotation * lr));
                 pullLatch.transform.SetPositionAndRotation(worldPos, worldRot);
+                // The authored roll: the wiggle turns the hand about the palm in the bag
+                ShapeLatch(!reachRotationFree, reachPalmLocal);
                 return;
             }
 
@@ -356,6 +457,7 @@ namespace TarkovVR.Source.Player.Interactions
             Quaternion rot = acting.rotation;
             pullLatch.transform.rotation = rot;
             pullLatch.transform.position = railPalmWorld - rot * reachPalmLocal;
+            ShapeLatch(false, Vector3.zero); // the rail's rotation is the controller's already: only the ease
         }
     }
 }

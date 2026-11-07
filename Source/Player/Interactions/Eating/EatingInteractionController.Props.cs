@@ -324,6 +324,7 @@ namespace TarkovVR.Source.Player.Interactions
             // rides camRoot). Still pre-FinalIK, so the IK + pin aim at the result.
             DriveLatch();
             DriveReachLatch(); // the ReachBag rail (mutually exclusive with the pull latch)
+            DriveLatchRelease(); // reloadStyleLatch: a released hand easing back onto its controller
 
             // Zone debug spheres last, off the final hand/head poses for this frame
             // (self-cleans when debugZones is toggled off mid-eat).

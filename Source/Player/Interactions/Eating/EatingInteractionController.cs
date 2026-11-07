@@ -314,8 +314,8 @@ namespace TarkovVR.Source.Player.Interactions
         // Tick complete the finish once it engages (deadline = give-up fallback).
         private static void RequestFinish(bool cancel)
         {
-            EndPull();  // a cancel can land mid pull-open — unlatch so the put-away owns the arms
-            EndReach(); // ...or mid reach-in (same latch plumbing, same reason)
+            EndPull(immediate: true);  // a cancel can land mid pull-open — unlatch so the put-away owns the arms
+            EndReach(immediate: true); // ...or mid reach-in (same latch plumbing, same reason)
             if (InOpenState())
             {
                 EnterUseState();
@@ -606,7 +606,7 @@ namespace TarkovVR.Source.Player.Interactions
             pullProgress = 0f; pullGrabProgress = 0f; pullGrabLocal = Vector3.zero; pullPalmLocal = Vector3.zero;
             pullSqueezeDone = false; pullAwaitRelease = false; pullGrabRel = Quaternion.identity;
             pullAnimStart = -1f; pullSoundsFired = 0;
-            handLatched = false; latchedHandIsDominant = false;
+            handLatched = false; latchedHandIsDominant = false; latchReleasing = false;
             if (pullLatch != null) { UnityEngine.Object.Destroy(pullLatch); pullLatch = null; }
             reachingIn = false; reachGrabbed = false; reachProgress = 0f;
             reachEntryPalmLocal = reachAxisLocal = reachPalmLocal = Vector3.zero;
