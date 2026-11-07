@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Diz.LanguageExtensions;
 using EFT;
 using EFT.InventoryLogic;
+using EFT.InventoryLogic.Operations;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
@@ -19,7 +20,10 @@ namespace TarkovVR.Source.Weapons
     // open, the off hand's pouch grip is a round, not a magazine.
     //  - The inventory move is Tarkov's own ApplySingleItemToAddress (merge / transfer / split / move of one round), built simulated and
     //    run as a network transaction (FIKA syncs it like any move). NOT Tarkov's ReloadInternalMagWithOpenBoltOperation: its Prepare
-    //    throws out a chambered round and it plays the reload animation.
+    //    throws out a chambered round and it plays the reload animation. The gun's hands controller is asked about the move like any
+    //    touching the gun in hands, and would animate the chamber one and refuse the magazine ones: BoltActionPatches.LetSingleRoundIn
+    //    lets ours through (LetsSingleRoundIn). In co-op the host replays it on its copy of you and must accept it too: with SPT-VR it
+    //    does (the same patch, for other players' copies); a host without SPT-VR refuses it and the round stays in the stack.
     //  - Into an empty chamber it goes in the chamber but waits for the bolt (WaitingForRack, like a round a magazine brought in): the
     //    chamber shows empty while open, closing the bolt chambers it (BoltClosed shows the round). Otherwise the top of the magazine.
     //  - Letting go anywhere before it's in puts it back (it never left the stack): no drop to the ground (not built).
@@ -28,6 +32,7 @@ namespace TarkovVR.Source.Weapons
         public static bool singleRoundLoading = true;
         public static float roundLoadRadius = 0.06f;        // m from the round's middle to the chamber that loads it
         public static float roundOutPastPinch = 0.25f;      // share of the round's length its middle sits past the pinch (the fingers hold its base)
+        public static bool flipHeldRound = false;           // the round the other way round in the fingers, should a round model break PointRoundAlongBore's rule
 
         public static bool HoldingRound { get; private set; }
         public static bool RoundInGunHand => HoldingRound && roundInGunHand;
@@ -100,6 +105,7 @@ namespace TarkovVR.Source.Weapons
             roundOnRightArm = OnRightArm(gunHand);
             roundLoading = false;
             MeasureRound(prop);
+            PointRoundAlongBore(firearmController);
             HoldingRound = true;
             PlaceHeldRound();
             PulseRoundHand(gunHand, 0.25f, 0.03f);
@@ -142,6 +148,32 @@ namespace TarkovVR.Source.Weapons
                 }
             }
             return null;
+        }
+
+        // The gun's hands controller asking about an inventory move (BoltActionPatches.LetSingleRoundIn): true = one round from outside
+        // an open bolt-action into its chamber or its magazine - ours, while it's in flight, or another player's in co-op (only SPT-VR
+        // makes this move: Tarkov loads these guns through LoadMagOperation, left alone) - to go through with no animation
+        internal static bool LetsSingleRoundIn(FirearmController controller, IInventoryOperation operation)
+        {
+            if (!singleRoundLoading || controller == null || operation is LoadMagOperation || !(operation is IOneItemOperation move) || !(move.Item1 is Ammo) || move.To1 == null)
+                return false;
+            Weapon weapon = controller.Item;
+            if (weapon == null || !weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload)
+                return false;
+            // From outside the gun, not a round moving inside it (Tarkov's own discharge / chambering)
+            if (move.From1 != null && move.From1.IsChildOf(weapon))
+                return false;
+            object into = move.To1.Container;
+            Magazine magazine = weapon.GetCurrentMagazine();
+            bool intoGun = magazine != null && ReferenceEquals(into, magazine.Cartridges);
+            foreach (Slot chamber in weapon.Chambers)
+                intoGun |= ReferenceEquals(into, chamber);
+            if (!intoGun)
+                return false;
+            EFT.Player player = controller._player;
+            if (player != null && player.IsYourPlayer)
+                return roundLoading && heldRoundFor == controller;
+            return true;
         }
 
         // One round from the stack: into an empty chamber, else onto the top of the magazine (merged with a stack of the same type, or a
@@ -295,6 +327,24 @@ namespace TarkovVR.Source.Weapons
             roundAxisInProp = prop.transform.InverseTransformDirection(axisWorld).normalized;
             roundCenterInProp = prop.transform.InverseTransformPoint(biggest.transform.TransformPoint(bounds.center));
             roundLength = axisWorld.magnitude;
+        }
+
+        // Its length axis turned to run from the base to the bullet: the mesh's longest side has no set direction, and the pinch held
+        // the bullet's tip (headset: "holding the bullet tip in between my thumb and index"). Tarkov seats a round in the chamber at the
+        // chamber bone's rotation turned 90 deg about x (Firearms.ParentShellToTransform), bullet down the bore (Weapon_root -up): that
+        // is the bullet's direction in the round's own frame.
+        private static void PointRoundAlongBore(FirearmController firearmController)
+        {
+            Transform[] chamberBones = firearmController.Firearms != null ? firearmController.Firearms._patronInWeaponTransforms : null;
+            Transform weaponRoot = firearmController.WeaponRoot;
+            if (chamberBones != null && chamberBones.Length > 0 && chamberBones[0] != null && weaponRoot != null)
+            {
+                Vector3 bulletInRound = Quaternion.Inverse(chamberBones[0].rotation * Quaternion.Euler(90f, 0f, 0f)) * -weaponRoot.up;
+                if (Vector3.Dot(roundAxisInProp, bulletInRound) < 0f)
+                    roundAxisInProp = -roundAxisInProp;
+            }
+            if (flipHeldRound)
+                roundAxisInProp = -roundAxisInProp;
         }
 
         private static Vector3 RoundCenterWorld()

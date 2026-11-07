@@ -1,3 +1,5 @@
+using Comfort.Common;
+using Diz.LanguageExtensions;
 using HarmonyLib;
 using TarkovVR.Source.Weapons;
 
@@ -21,6 +23,23 @@ namespace TarkovVR.Patches.Core.Player
                 return;
             if (VRReloadController.BoltShotFired(controller))
                 controller.FastForwardCurrentState();
+        }
+
+        // A single round into an open bolt-action by hand (VRReloadController.Rounds): its inventory move is put to the gun's hands
+        // controller like any move touching the gun in hands, after it's applied (AbstractAsyncOperation.InProcess: a fail rolls it
+        // back). Idling.Execute takes a round into the chamber as its own LoadCartridgeToChamber (headset: the first round "takes over
+        // and does an animation ... and auto closes the bolt") and refuses one into the internal magazine, which Tarkov only loads
+        // through its reload (LoadMagOperation): "Can't perform operation RemoveSuboperation ... ->StackSlot cartridges", every round
+        // after the first. Succeeding keeps the move as it is, no animation: the hand did the loading.
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController.Idling), nameof(EFT.Player.FirearmController.Idling.Execute),
+            new[] { typeof(EFT.InventoryLogic.Operations.IInventoryOperation), typeof(Callback) })]
+        private static bool LetSingleRoundIn(EFT.Player.FirearmController.Idling __instance, EFT.InventoryLogic.Operations.IInventoryOperation operation, Comfort.Common.Callback callback)
+        {
+            if (!VRReloadController.LetsSingleRoundIn(__instance.Controller, operation))
+                return true;
+            callback?.Succeed();
+            return false;
         }
     }
 }
