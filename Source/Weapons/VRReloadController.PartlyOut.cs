@@ -7,18 +7,18 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // A pistol's magazine sits inside the grip, so a hand can't take hold of it seated. With Manual Reload the release lets it
-    // drop onto the hand under the well: it slides out a little and rests there, and from there the hand can grab it (grip, or
-    // the trigger with a new magazine in the hand, for palming) and push it back in or pull it out. Take the hand away first
-    // and it falls. No hand under the well: the release drops it straight away, as on any gun.
+    // A pistol's magazine sits inside the grip, so a hand can't take hold of it seated. With Manual Reload, holding the release
+    // (B) slides it partly out of the well and keeps it there, hand or no hand ("if you hold B it makes the mag come out
+    // partially"); from there the off hand can grab it (grip, or the trigger with a new magazine in the hand, for palming) and push
+    // it back in or pull it out. The release let go while it's partly out: it falls ("if you let go while it's partially out, it'll
+    // fall to the floor") - so a tap just drops it.
     public static partial class VRReloadController
     {
-        public static float partlyOutDistance = 0.045f;     // m the magazine slides out onto the hand (headset: at 0.03 the hands were too close to take it)
+        public static float partlyOutDistance = 0.045f;     // m the magazine slides out (headset: at 0.03 the hands were too close to take it)
         public static float partlyOutPullLeft = 0.02f;      // m from there to it coming free in the hand
         public static float partlyOutSpeed = 0.4f;          // m/s
-        public static float belowWellDepth = 0.10f;         // m below the magazine that counts as the hand under it
+        public static float belowWellDepth = 0.10f;         // m below the magazine where the hand takes it partly out
         public static float belowWellRadius = 0.08f;        // m
-        public static float partlyOutHandAwayTime = 0.2f;   // s the hand can be away before it falls, so a shaky hand doesn't drop it
 
         private static FirearmController partlyOutFor;
         private static Slot partlyOutSlot;
@@ -27,7 +27,6 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 partlyOutAxisInParent;
         private static float partlyOutPosition;
         private static float partlyOutTarget;
-        private static float partlyOutHandLeftTime;
         private static bool railStartedPartlyOut;           // the hand took it partly out: pushing it back up seats it
         private static GameObject belowWellZoneViz;
 
@@ -53,8 +52,9 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // The release went down. False = this doesn't apply, it drops as usual.
-        private static bool TrySlideMagazineOntoHand()
+        // The release went down: a pistol's magazine slides partly out, the hand under the well or not. False = this doesn't apply,
+        // it drops as usual.
+        private static bool TrySlideMagazinePartlyOut()
         {
             if (MagazinePartlyOut)
                 return true;
@@ -62,8 +62,6 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None
                 || ChestHang.Detached || weapon.MalfState.State == Weapon.EMalfunctionState.Feed || weapon.GetCurrentMagazine() == null)
-                return false;
-            if (!OffHandUnderMagazine(firearmController, magazineSlot, onItToo: false))
                 return false;
             if (!StartPartlyOut(firearmController, magazineSlot, 0f, partlyOutDistance))
                 return false;
@@ -92,13 +90,12 @@ namespace TarkovVR.Source.Weapons
                 : partlyOutView.parent.InverseTransformDirection(downTheMagazine.normalized);
             partlyOutPosition = position;
             partlyOutTarget = target;
-            partlyOutHandLeftTime = -1f;
             partlyOutView.localPosition = partlyOutRestLocalPosition + partlyOutAxisInParent * partlyOutPosition;
             return true;
         }
 
-        // Every frame while it's resting on the hand
-        private static void UpdateMagazinePartlyOut()
+        // Every frame while it's partly out: it stays while the release is held (releaseHeld: Tick's MagazineReleaseHeld)
+        private static void UpdateMagazinePartlyOut(bool releaseHeld)
         {
             if (!MagazinePartlyOut)
                 return;
@@ -115,18 +112,11 @@ namespace TarkovVR.Source.Weapons
             partlyOutPosition = Mathf.MoveTowards(partlyOutPosition, partlyOutTarget, partlyOutSpeed * Time.deltaTime);
             partlyOutView.localPosition = partlyOutRestLocalPosition + partlyOutAxisInParent * partlyOutPosition;
 
-            if (OffHandUnderMagazine(firearmController, partlyOutSlot, onItToo: true))
-            {
-                partlyOutHandLeftTime = -1f;
-                return;
-            }
-            if (partlyOutHandLeftTime < 0f)
-                partlyOutHandLeftTime = Time.time;
-            else if (Time.time - partlyOutHandLeftTime >= partlyOutHandAwayTime)
+            if (!releaseHeld)
                 MagazineFallsOut();
         }
 
-        // Nothing under it any more
+        // The release let go of while it's partly out
         private static void MagazineFallsOut()
         {
             FirearmController firearmController = partlyOutFor;
@@ -159,7 +149,7 @@ namespace TarkovVR.Source.Weapons
             return position;
         }
 
-        // Let go of it part way, still out: it rests on the hand again (and falls if the hand isn't there)
+        // Let go of it part way, still out: partly out again (and it falls straight away unless the release is still held)
         private static void ReturnToPartlyOut()
         {
             FirearmController firearmController = heldForFirearm;
@@ -184,15 +174,15 @@ namespace TarkovVR.Source.Weapons
 
         private static void UpdateBelowWellViz(FirearmController firearmController, Slot magazineSlot)
         {
-            if (!MagazineSlidesOntoHand || HoldingGunMagazine
+            // Only partly out: that's the only time the hand takes it there
+            if (!MagazineSlidesOntoHand || !MagazinePartlyOut || HoldingGunMagazine
                 || !TryGetBelowWellCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 zoneEnd))
             {
                 SetZoneViz(ref belowWellZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }
-            Vector3 zoneStart = MagazinePartlyOut ? magazineCenter : magazineBottom;
-            bool inReach = OffHandTouchesCapsule(zoneStart, zoneEnd, belowWellRadius);
-            SetCapsuleZoneViz(ref belowWellZoneViz, zoneStart, zoneEnd, belowWellRadius, inReach ? new Color(0f, 1f, 0f, 0.25f) : new Color(1f, 0f, 1f, 0.25f));
+            bool inReach = OffHandTouchesCapsule(magazineCenter, zoneEnd, belowWellRadius);
+            SetCapsuleZoneViz(ref belowWellZoneViz, magazineCenter, zoneEnd, belowWellRadius, inReach ? new Color(0f, 1f, 0f, 0.25f) : new Color(1f, 0f, 1f, 0.25f));
         }
     }
 }

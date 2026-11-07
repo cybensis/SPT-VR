@@ -344,7 +344,7 @@ namespace TarkovVR.Source.Weapons
                     UpdateHeldMagazine(gripReleased, releaseLetGo);
             }
             UpdatePalmedMagazine(gripReleased);
-            UpdateMagazinePartlyOut();
+            UpdateMagazinePartlyOut(releaseState);
             if (HoldingChargingHandle)
             {
                 if (!ChargingHandleHoldIsStillValid())
@@ -413,7 +413,7 @@ namespace TarkovVR.Source.Weapons
             UpdatePalmZoneBlip();
             if (triggerPressed)
                 TryStartPalming();
-            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine && !TrySlideMagazineOntoHand())
+            if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine && !TrySlideMagazinePartlyOut())
                 TryReleaseMagazine();
             // The gun hand on the handle leaves the off hand where it is: on the foregrip, holding the gun up
             if (OffHandAtBolt)
@@ -512,11 +512,11 @@ namespace TarkovVR.Source.Weapons
             // from the support grip.
             if (!VRSettings.GetManualReloadOn() && (VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting))
                 return false;
-            // A pistol's has to come down onto the hand first (the release, with the hand under the well)
+            // A pistol's has to come partly out first (the release held)
             if (MagazineSlidesOntoHand && !MagazinePartlyOut)
                 return false;
-            // Resting on the hand: wherever it counts as on the hand, the hand can take it (headset: it stayed up on the hand and still
-            // couldn't be grabbed, the palm had to be right at the magazine)
+            // Partly out: the magazine and below it, the hand can take it there (headset: with the palm having to be right at the
+            // magazine it couldn't be grabbed)
             if (MagazinePartlyOut)
                 return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
             return TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
@@ -1609,8 +1609,8 @@ namespace TarkovVR.Source.Weapons
                 LogAction($"[VRReload] {magazine.LocalizedShortName()} dropped");
         }
 
-        // B (Y left-handed): the magazine falls out of the well (into the rig in the hideout; a pistol's with a hand under
-        // the well stops on it first, see VRReloadController.PartlyOut.cs). Returns false
+        // B (Y left-handed): the magazine falls out of the well (into the rig in the hideout; a pistol's slides partly out while
+        // B is held and falls when it's let go, see VRReloadController.PartlyOut.cs). Returns false
         // when it doesn't apply, so B keeps its old job on that gun.
         public static bool TryReleaseMagazine()
         {

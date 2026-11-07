@@ -135,7 +135,7 @@ namespace TarkovVR.Source.Weapons
             if (!CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return RefusePalming("the gun isn't ready");
             if (MagazineSlidesOntoHand && !MagazinePartlyOut)
-                return RefusePalming("a pistol's magazine has to come down onto the hand first: the release, with the hand under the well");
+                return RefusePalming("a pistol's magazine has to come partly out first: hold the release");
             PalmHold palmHold = FindPalmHold(firearmController);
             if (palmHold == null)
                 return RefusePalming($"no palming pose for '{AnimationFamily(firearmController)}'");
