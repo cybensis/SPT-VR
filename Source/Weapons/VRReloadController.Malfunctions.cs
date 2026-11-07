@@ -1,5 +1,7 @@
 using EFT;
+using EFT.AssetsManager;
 using EFT.InventoryLogic;
+using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -38,6 +40,22 @@ namespace TarkovVR.Source.Weapons
         private static bool hardSlideFree = true;
         private static FirearmController malfunctionPoseOffFor;
         private static GameObject jamPortZoneViz;
+
+        // The stuck case of a failure to eject in the fingers
+        public static float jamCasePullOut = 0.03f;             // m the hand pulls it away from where it took it: out, cleared
+        public static float jamCaseSnapTime = 0.08f;            // s it takes from the port into the fingers
+        public static bool HoldingJamCase { get; private set; }
+        public static bool JamCaseInGunHand => HoldingJamCase && jamCaseInGunHand;
+        private static bool jamCaseInGunHand;
+        private static bool jamCaseOnRightArm;                  // the arm drawing that hand (OnRightArm), as it was at the grab
+        private static bool jamCaseOut;
+        private static FirearmController jamCaseFor;
+        private static AmmoPoolObject jamCase;
+        private static Vector3 jamCaseAxisInProp, jamCaseCenterInProp;
+        private static Vector3 handAtJamGrabInGun;
+        private static float jamCaseGrabTime;
+        private static Vector3 jamCaseStartPosition;
+        private static Quaternion jamCaseStartRotation;
 
         // The malfunction is the hands' to clear: Manual Reload, and a handle, slide or bolt they work
         internal static bool MalfunctionClearsByHand(FirearmController firearmController)
@@ -174,14 +192,179 @@ namespace TarkovVR.Source.Weapons
             return atPort;
         }
 
+        // No case model in the port (shells not shown): cleared on the spot
         private static void ClearJamAtPort(FirearmController firearmController, bool gunHand)
         {
             if (debugLog)
-                LogAction($"[VRReload] the stuck case taken out at the ejection port ({(gunHand ? "gun" : "off")} hand)");
+                LogAction($"[VRReload] the stuck case taken out at the ejection port ({(gunHand ? "gun" : "off")} hand), no case model to hold");
             SoundHand hand = gunHand ? SoundHand.GunHand : SoundHand.OffHand;
             PlayFirstGunSound(firearmController, hand, "ShellRemove", "ShellPull", "ShellGrab");
             Pulse(hand, 0.45f, 0.04f);
             RepairByHand(firearmController);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The case in the fingers ("pulling the bullet out doesn't seem to have your fingers actually grab the bullet"): Tarkov's own case
+        // model, the one in the port (Firearms._shellsInShellPort), held like a single round (the Mosin clip's hold, HoldInPalm + RoundFingers).
+        // Pulled jamCasePullOut away from where the hand took it, it's out: cleared. The trigger let go: thrown with the hand's motion
+        // (Tarkov's spent-shell physics and bounce sounds), or back in the port if it wasn't out.
+
+        private static SoundHand JamCaseHand => jamCaseInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
+
+        private static Vector3 HandWorldVelocity(bool gunHand)
+        {
+            if (!gunHand)
+                return OffHandWorldVelocity();
+            Vector3 trackingVelocity = ControllerVelocity.GetSteamVRVelocity(Handedness.GunHandSource);
+            Vector3 handVelocity = VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform.TransformDirection(trackingVelocity) : trackingVelocity;
+            return handVelocity + VRGlobals.player.Velocity;
+        }
+
+        private static void TakeJamCase(FirearmController firearmController, bool gunHand)
+        {
+            Firearms firearms = firearmController.Firearms;
+            AmmoPoolObject stuckCase = firearms != null && firearms._shellsInShellPort != null && firearms._shellsInShellPort.Length > 0
+                ? firearms._shellsInShellPort[0] : null;
+            if (stuckCase == null)
+            {
+                ClearJamAtPort(firearmController, gunHand);
+                return;
+            }
+            // Out of the port's slot: Tarkov's repair throws whatever is there (SpawnShellAfterJam), and it's in the hand now
+            firearms._shellsInShellPort[0] = null;
+            // Off the gun too: the gun rides the controllers' rig, which moves after the arms are posed
+            stuckCase.transform.SetParent(null, worldPositionStays: true);
+            jamCase = stuckCase;
+            jamCaseFor = firearmController;
+            jamCaseInGunHand = gunHand;
+            jamCaseOnRightArm = OnRightArm(gunHand);
+            jamCaseOut = false;
+            MeasureLongAxis(stuckCase.gameObject, out jamCaseAxisInProp, out jamCaseCenterInProp, out _);
+            jamCaseStartPosition = stuckCase.transform.position;
+            jamCaseStartRotation = stuckCase.transform.rotation;
+            jamCaseGrabTime = Time.time;
+            handAtJamGrabInGun = firearmController.WeaponRoot.InverseTransformPoint(HandPalm(gunHand));
+            HoldingJamCase = true;
+            if (debugLog)
+                LogAction($"[VRReload] took the stuck case ({(gunHand ? "gun" : "off")} hand)");
+            PlayFirstGunSound(firearmController, JamCaseHand, "ShellGrab");
+            Pulse(JamCaseHand, 0.3f, 0.03f);
+        }
+
+        // From Tick, with that hand's trigger
+        private static void UpdateJamCase(bool offTriggerReleased, bool gunTriggerReleased)
+        {
+            if (!HoldingJamCase)
+                return;
+            if (!JamCaseHoldIsStillValid())
+            {
+                // Cleared some other way meanwhile (a rack): it's out
+                LetGoOfJamCase(throwIt: jamCaseOut || jamCaseFor == null || jamCaseFor.Item == null || jamCaseFor.Item.MalfState.State != Weapon.EMalfunctionState.Jam);
+                return;
+            }
+            if (!jamCaseOut)
+            {
+                Vector3 handInGun = jamCaseFor.WeaponRoot.InverseTransformPoint(HandPalm(jamCaseInGunHand));
+                if ((handInGun - handAtJamGrabInGun).magnitude >= jamCasePullOut)
+                {
+                    PlayFirstGunSound(jamCaseFor, JamCaseHand, "ShellPull", "ShellRemove");
+                    Pulse(JamCaseHand, 0.45f, 0.04f);
+                    jamCaseOut = RepairByHand(jamCaseFor);
+                }
+            }
+            if (jamCaseInGunHand ? gunTriggerReleased : offTriggerReleased)
+                LetGoOfJamCase(throwIt: jamCaseOut);
+        }
+
+        private static bool JamCaseHoldIsStillValid()
+        {
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || jamCase == null || jamCaseFor == null)
+                return false;
+            if (VRGlobals.firearmController != jamCaseFor || jamCaseFor.WeaponRoot == null)
+                return false;
+            // The gun hand only while the off hand holds the gun up; the off hand only while the gun hand has the grip
+            if (jamCaseInGunHand ? !ChestHang.SupportOnly : ChestHang.Detached)
+                return false;
+            // The gun went from one hand to the other: that arm isn't this hand's any more
+            if (jamCaseOnRightArm != OnRightArm(jamCaseInGunHand))
+                return false;
+            return jamCaseOut || jamCaseFor.Item.MalfState.State == Weapon.EMalfunctionState.Jam;
+        }
+
+        private static void LetGoOfJamCase(bool throwIt)
+        {
+            AmmoPoolObject heldCase = jamCase;
+            FirearmController firearmController = jamCaseFor;
+            bool gunHand = jamCaseInGunHand;
+            HoldingJamCase = false;
+            jamCase = null;
+            jamCaseFor = null;
+            if (heldCase == null)
+                return;
+            Firearms firearms = firearmController != null ? firearmController.Firearms : null;
+            if (!throwIt && firearms != null && firearms._shellsInShellPort != null && firearms._shellsInShellPort.Length > 0
+                && firearms._shellsInShellPort[0] == null && firearms._shellPortsTransforms.Count > 0 && firearms._shellPortsTransforms[0] != null)
+            {
+                // Not out: back in the port the way Tarkov seats it, where its repair finds it
+                firearms._shellsInShellPort[0] = heldCase;
+                Firearms.ParentShellToTransform(heldCase.gameObject, firearms._shellPortsTransforms[0]);
+                if (debugLog)
+                    LogAction("[VRReload] let go of the stuck case before it was out: back in the port");
+                return;
+            }
+            ThrowJamCase(heldCase, firearms, HandWorldVelocity(gunHand));
+        }
+
+        // Tarkov's own spent shell from here on (SpawnShellAfterJam's steps): in the world's shells, its physics, its bounce sounds, gone after 3 s
+        private static void ThrowJamCase(AmmoPoolObject heldCase, Firearms firearms, Vector3 velocity)
+        {
+            try
+            {
+                AmmoPoolObject shell = heldCase;
+                GameWorld gameWorld = Comfort.Common.Singleton<GameWorld>.Instance;
+                AmmoPoolObject thrown = gameWorld != null ? gameWorld.SpawnShellInTheWorld(ref shell) : null;
+                if (thrown == null)
+                {
+                    EFT.AssetsManager.AssetPoolObject.ReturnToPool(heldCase.gameObject);
+                    return;
+                }
+                thrown.transform.parent = null;
+                Vector3 spin = Random.insideUnitSphere * 6f;
+                if (firearms != null)
+                    firearms.UseGameObjectForShellExtraction(Vector3.zero, spin, thrown, velocity);
+                else
+                    thrown.EnablePhysics(Vector3.zero, spin, velocity, Vector3.forward);
+                thrown.SetUsed(isUsed: true);
+                thrown.StartAutoDestroyCountDown(3f);
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogWarning($"[VRReload] throwing the stuck case failed, back to Tarkov's pool: {exception.Message}");
+                EFT.AssetsManager.AssetPoolObject.ReturnToPool(heldCase.gameObject);
+            }
+        }
+
+        // After the holding hand's fingers are posed, like a held round (ApplyHeldFingerPose / ApplyGunHandFingerPose). Eased from the port
+        // into the fingers over jamCaseSnapTime: the hand takes it from up to jamPortRadius away.
+        private static void PlaceJamCase()
+        {
+            if (!HoldingJamCase || jamCase == null)
+                return;
+            Transform palm = ArmPalm(jamCaseOnRightArm);
+            if (palm == null && !jamCaseOnRightArm)
+                palm = TarkovVR.Patches.Core.VR.InitVRPatches.leftPalm;
+            if (palm == null || !HoldInPalm(jamCaseOnRightArm, jamCase.transform, jamCaseAxisInProp, jamCaseCenterInProp, out Vector3 holdPosition, out Quaternion holdRotation))
+                return;
+            Vector3 position = palm.position + palm.rotation * holdPosition;
+            Quaternion rotation = palm.rotation * holdRotation;
+            float blend = jamCaseSnapTime > 0f ? Mathf.Clamp01((Time.time - jamCaseGrabTime) / jamCaseSnapTime) : 1f;
+            if (blend < 1f)
+            {
+                blend = blend * blend * (3f - 2f * blend);
+                position = Vector3.Lerp(jamCaseStartPosition, position, blend);
+                rotation = Quaternion.Slerp(jamCaseStartRotation, rotation, blend);
+            }
+            jamCase.transform.SetPositionAndRotation(position, rotation);
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

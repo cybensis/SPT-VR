@@ -341,9 +341,15 @@ namespace TarkovVR.Source.Weapons
         // Its length = the longest side of its biggest mesh's own bounds (never Renderer.bounds: the world box grows with the rotation)
         private static void MeasureRound(GameObject prop)
         {
-            roundAxisInProp = Vector3.forward;
-            roundCenterInProp = Vector3.zero;
-            roundLength = 0.06f;
+            MeasureLongAxis(prop, out roundAxisInProp, out roundCenterInProp, out roundLength);
+        }
+
+        // Also the stuck case of a failure to eject (VRReloadController.Malfunctions)
+        private static void MeasureLongAxis(GameObject prop, out Vector3 axisInProp, out Vector3 centerInProp, out float length)
+        {
+            axisInProp = Vector3.forward;
+            centerInProp = Vector3.zero;
+            length = 0.06f;
             MeshFilter biggest = null;
             float biggestVolume = 0f;
             foreach (MeshFilter meshFilter in prop.GetComponentsInChildren<MeshFilter>(true))
@@ -364,9 +370,9 @@ namespace TarkovVR.Source.Weapons
             Vector3 extent = bounds.size;
             Vector3 axisLocal = extent.x >= extent.y && extent.x >= extent.z ? Vector3.right : extent.y >= extent.z ? Vector3.up : Vector3.forward;
             Vector3 axisWorld = biggest.transform.TransformVector(axisLocal * Vector3.Dot(extent, axisLocal));
-            roundAxisInProp = prop.transform.InverseTransformDirection(axisWorld).normalized;
-            roundCenterInProp = prop.transform.InverseTransformPoint(biggest.transform.TransformPoint(bounds.center));
-            roundLength = axisWorld.magnitude;
+            axisInProp = prop.transform.InverseTransformDirection(axisWorld).normalized;
+            centerInProp = prop.transform.InverseTransformPoint(biggest.transform.TransformPoint(bounds.center));
+            length = axisWorld.magnitude;
         }
 
         // Its length axis turned to run from the base to the bullet: the mesh's longest side has no set direction, and the pinch held
@@ -425,13 +431,20 @@ namespace TarkovVR.Source.Weapons
         // spins it about its length). False until HandMirror has the hands mesh.
         private static bool RoundHoldInPalm(bool rightArm, out Vector3 position, out Quaternion rotation)
         {
+            return HoldInPalm(rightArm, heldRoundProp.transform, roundAxisInProp, roundCenterInProp, out position, out rotation);
+        }
+
+        // The same hold for anything shaped like a round, from its own measure (MeasureLongAxis): the stuck case of a failure to eject is
+        // the same model with the bullet hidden (AmmoPoolObject.SetUsed), seated the same way (ParentShellToTransform)
+        private static bool HoldInPalm(bool rightArm, Transform prop, Vector3 axisInProp, Vector3 centerInProp, out Vector3 position, out Quaternion rotation)
+        {
             position = roundHoldPosition;
             rotation = roundHoldBoneRotation.normalized * Quaternion.Euler(90f, 0f, 0f);
             if (rightArm)
                 return true;
-            Vector3 axis = roundAxisInProp.sqrMagnitude > 1e-6f ? roundAxisInProp.normalized : Vector3.forward;
+            Vector3 axis = axisInProp.sqrMagnitude > 1e-6f ? axisInProp.normalized : Vector3.forward;
             Vector3 normal = Vector3.Cross(axis, Mathf.Abs(axis.x) < 0.9f ? Vector3.right : Vector3.up).normalized;
-            Vector3 point = Vector3.Scale(roundCenterInProp, heldRoundProp.transform.lossyScale);
+            Vector3 point = Vector3.Scale(centerInProp, prop.lossyScale);
             return MirrorHold(normal, point, leftToRight: false, ref position, ref rotation);
         }
 

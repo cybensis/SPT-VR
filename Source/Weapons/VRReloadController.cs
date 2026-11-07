@@ -74,14 +74,14 @@ namespace TarkovVR.Source.Weapons
         public static bool OwnsOffHand { get; private set; }            // holding a magazine, or reaching for one
         // Holding a part of the gun, without the zones it's only reaching into (GunSpots: the chest pouch zone overlaps the chest sling)
         public static bool OffHandHolds => HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand)
-            || HoldingSeatedMagazine || HoldingPalmedMagazine || (HoldingRound && !RoundInGunHand);
-        public static bool GunHandHolds => HandleInGunHand || BoltInGunHand || RoundInGunHand;
+            || HoldingSeatedMagazine || HoldingPalmedMagazine || (HoldingRound && !RoundInGunHand) || (HoldingJamCase && !jamCaseInGunHand);
+        public static bool GunHandHolds => HandleInGunHand || BoltInGunHand || RoundInGunHand || JamCaseInGunHand;
         // A hand on one of the gun's own parts, for GunHaptics (what happens to the gun reaches it): the handle, the bolt, a
         // magazine on the track (the gun's own, still in the well, included) or held seated. A held round or a magazine off the
         // track isn't on the gun.
         internal static bool OffHandOnGunPart => (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand)
-            || (HoldingMagazine && onRail) || HoldingSeatedMagazine;
-        internal static bool GunHandOnGunPart => HandleInGunHand || BoltInGunHand;
+            || (HoldingMagazine && onRail) || HoldingSeatedMagazine || (HoldingJamCase && !jamCaseInGunHand && !jamCaseOut);
+        internal static bool GunHandOnGunPart => HandleInGunHand || BoltInGunHand || (JamCaseInGunHand && !jamCaseOut);
         public static bool HoldingMagazine => heldSource != HeldMagazineSource.None;
         public static bool HoldingGunMagazine => heldSource == HeldMagazineSource.FromGun;   // still in the gun as far as Tarkov knows: no firing
 
@@ -375,18 +375,20 @@ namespace TarkovVR.Source.Weapons
                 else
                     UpdateChargingHandle(HandleInGunHand ? gunHandTriggerReleased : triggerReleased);
             }
+            // The stuck case of a failure to eject in the fingers (VRReloadController.Malfunctions)
+            UpdateJamCase(triggerReleased, gunHandTriggerReleased);
             if (boltReleaseFor != null)
                 UpdateBoltRelease();
             // A bolt-action's bolt, by either hand's trigger (VRReloadController.Bolt)
             TickBolt(triggerPressed, triggerReleased, gunHandTriggerPressed, gunHandTriggerReleased,
-                handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingRound);
+                handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingRound || HoldingJamCase);
             // A single round in the fingers, for an open bolt-action (VRReloadController.Rounds)
             if (HoldingRound)
                 UpdateHeldRound(gripReleased, gunHandGripReleased);
             UpdateHandLatch();
             UpdateMagazineReleaseButton(releaseState);
 
-            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound;
+            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound || HoldingJamCase;
             // On a gun that loads through its open bolt, the pouch grip is a round, not a magazine: the off hand's, or the gun hand's
             // while the off hand holds the gun up
             if (!handBusy && gripPressed && TryGrabRound(gunHand: false))
@@ -424,7 +426,7 @@ namespace TarkovVR.Source.Weapons
                 bool pressLeftToMagazine = ChestHang.GripPressLeftToMagazineFrame == Time.frameCount && GunMagazineGrabbable(weapon) && !MagazinePartlyOut;
                 // Before the handle: on an AK the handle rides the carrier right at the port (a rack would clear it too)
                 if (triggerPressed && atJamPort)
-                    ClearJamAtPort(firearmController, gunHand: false);
+                    TakeJamCase(firearmController, gunHand: false);
                 else if (gripPressed && (inGrabZone || pressLeftToMagazine))
                     GrabFromGun(firearmController, weapon, magazineSlot, takenWithRelease: false);
                 // Manual Reload, two-handing with the support hand at the magazine (a pistol): the mag release takes it
@@ -441,7 +443,7 @@ namespace TarkovVR.Source.Weapons
             {
                 bool gunHandAtJamPort = InJamPortZone(heldFirearm, heldWeapon, gunHand: true);
                 if (gunHandTriggerPressed && gunHandAtJamPort)
-                    ClearJamAtPort(heldFirearm, gunHand: true);
+                    TakeJamCase(heldFirearm, gunHand: true);
                 else if (gunHandTriggerPressed && InChargingHandleZone(heldFirearm, heldWeapon, gunHand: true))
                     GrabChargingHandle(heldFirearm, heldWeapon, gunHand: true);
             }
@@ -456,7 +458,7 @@ namespace TarkovVR.Source.Weapons
             // The gun hand on the handle leaves the off hand where it is: on the foregrip, holding the gun up
             if (OffHandAtBolt)
                 OffHandAtChargingHandle = true;
-            OwnsOffHand = HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine
+            OwnsOffHand = (HoldingJamCase && !jamCaseInGunHand) || HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine
                 || (HoldingRound && !RoundInGunHand) || reaching;
 
             UpdateZoneViz();
@@ -2030,9 +2032,11 @@ namespace TarkovVR.Source.Weapons
             }
             finally
             {
-                // A round in this hand goes where the fingers now are
+                // A round (or a stuck case) in this hand goes where the fingers now are
                 if (HoldingRound && !roundOnRightArm)
                     PlaceHeldRound();
+                if (HoldingJamCase && !jamCaseOnRightArm)
+                    PlaceJamCase();
             }
         }
 
@@ -2047,8 +2051,8 @@ namespace TarkovVR.Source.Weapons
                 return handleHandFingers ?? (rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS);
             if (HoldingBolt && !BoltInGunHand)
                 return BoltFingerPose(gunHand: false);
-            // A round: already the arm's own pose (RoundFingers)
-            if (HoldingRound && !RoundInGunHand)
+            // A round, or the stuck case of a failure to eject: already the arm's own pose (RoundFingers)
+            if ((HoldingRound && !RoundInGunHand) || (HoldingJamCase && !jamCaseInGunHand))
                 return RoundFingers(rightArm);
             // The magazine: only ever held in the left hand in the clips
             rightHandPose = false;
@@ -2117,9 +2121,11 @@ namespace TarkovVR.Source.Weapons
             }
             finally
             {
-                // A round in this hand goes where the fingers now are
+                // A round (or a stuck case) in this hand goes where the fingers now are
                 if (HoldingRound && roundOnRightArm)
                     PlaceHeldRound();
+                if (HoldingJamCase && jamCaseOnRightArm)
+                    PlaceJamCase();
             }
         }
 
@@ -2171,7 +2177,7 @@ namespace TarkovVR.Source.Weapons
             Vector3[] pose = HandleInGunHand ? handleHandFingers ?? (rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS) : BoltFingerPose(gunHand: true);
             // A single round: the clip's hold (RoundFingers). The bolt clip's hand on the knob it used first was a closed grip: headset,
             // "the hold position of the bullet on the right hand still is pretty awkward for putting the bullet in".
-            if (pose == null && RoundInGunHand)
+            if (pose == null && (RoundInGunHand || JamCaseInGunHand))
                 pose = RoundFingers(rightArm);
             if (pose != null)
                 gunHandFingerPoseShown = pose;
