@@ -768,10 +768,11 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             // Held by an empty magazine the bolt only comes onto the catch: no slam
             bool heldOnCatch = firearmController.FirearmsAnimator.GetBoltCatch() && BoltStaysBack(weapon);
+            // The gun's own slam, felt by the hands on its body: the hand that let go of the handle isn't on it any more
             if (!heldOnCatch)
-                PlayFirstGunSound(firearmController, HandleSoundHand, "BoltIn", "SlideIn");
-            PlayGunSound(firearmController, "HandleIn", HandleSoundHand);
-            PulseHandleHand(heldOnCatch ? 0.4f : 0.8f, 0.06f);
+                PlayFirstGunSound(firearmController, SoundHand.GunBody, "BoltIn", "SlideIn");
+            PlayGunSound(firearmController, "HandleIn", SoundHand.GunBody);
+            Pulse(SoundHand.GunBody, heldOnCatch ? 0.4f : 0.8f, 0.06f);
             BoltStripsRound(weapon);
             if (firearmController.FirearmsAnimator.GetBoltCatch())
             {

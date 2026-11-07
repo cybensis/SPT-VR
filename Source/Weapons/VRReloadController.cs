@@ -76,6 +76,12 @@ namespace TarkovVR.Source.Weapons
         public static bool OffHandHolds => HoldingMagazine || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand)
             || HoldingSeatedMagazine || HoldingPalmedMagazine || (HoldingRound && !RoundInGunHand);
         public static bool GunHandHolds => HandleInGunHand || BoltInGunHand || RoundInGunHand;
+        // A hand on one of the gun's own parts, for GunHaptics (what happens to the gun reaches it): the handle, the bolt, a
+        // magazine on the track (the gun's own, still in the well, included) or held seated. A held round or a magazine off the
+        // track isn't on the gun.
+        internal static bool OffHandOnGunPart => (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand)
+            || (HoldingMagazine && onRail) || HoldingSeatedMagazine;
+        internal static bool GunHandOnGunPart => HandleInGunHand || BoltInGunHand;
         public static bool HoldingMagazine => heldSource != HeldMagazineSource.None;
         public static bool HoldingGunMagazine => heldSource == HeldMagazineSource.FromGun;   // still in the gun as far as Tarkov knows: no firing
 
@@ -257,8 +263,25 @@ namespace TarkovVR.Source.Weapons
         private static FirearmController gunSoundPlayerFor;
         private static BaseSoundPlayer gunSoundPlayer;
 
-        // Which controller(s) feel a reload sound: the hand doing it
-        private enum SoundHand { OffHand, GunHand, BothHands }
+        // Which controller(s) feel a reload sound or pulse: the hand doing it, and how it reaches the others on the gun (GunHaptics)
+        private readonly struct SoundHand
+        {
+            public readonly bool? gunHandActs;      // null = no hand: the gun's own parts moving
+            public readonly GunHaptics.Feel feel;
+
+            private SoundHand(bool? gunHandActs, GunHaptics.Feel feel)
+            {
+                this.gunHandActs = gunHandActs;
+                this.feel = feel;
+            }
+
+            public static SoundHand OffHand => new SoundHand(false, GunHaptics.Feel.Carried);
+            public static SoundHand GunHand => new SoundHand(true, GunHaptics.Feel.Carried);
+            public static SoundHand GunBody => new SoundHand(null, GunHaptics.Feel.Mechanism);  // a slam, the magazine falling free
+            public static SoundHand OffHandAlone => new SoundHand(false, GunHaptics.Feel.Alone); // the pouch, a blip
+            public static SoundHand GunHandAlone => new SoundHand(true, GunHaptics.Feel.Alone);
+            public SoundHand Seating => new SoundHand(gunHandActs, GunHaptics.Feel.Mechanism); // this hand, and the gun's whole body: a magazine seating or coming free
+        }
         private static SoundHand playingSoundHand;
         private static bool playingOwnSound;                // true inside our SoundEventHandler call: the clip it plays is ours
 
@@ -603,8 +626,8 @@ namespace TarkovVR.Source.Weapons
             // Tarkov won't unload a Feed malfunction either (it wants the jam examined first)
             if (weapon.MalfState.State == Weapon.EMalfunctionState.Feed)
             {
-                Pulse(0.2f, 0.03f);
-                Pulse(0.2f, 0.03f, 0.08f);
+                Pulse(SoundHand.OffHandAlone, 0.2f, 0.03f);
+                Pulse(SoundHand.OffHandAlone, 0.2f, 0.03f, 0.08f);
                 return;
             }
 
@@ -670,8 +693,8 @@ namespace TarkovVR.Source.Weapons
             if (magazine == null)
             {
                 // Nothing that fits: a short double buzz
-                Pulse(0.2f, 0.03f);
-                Pulse(0.2f, 0.03f, 0.08f);
+                Pulse(SoundHand.OffHandAlone, 0.2f, 0.03f);
+                Pulse(SoundHand.OffHandAlone, 0.2f, 0.03f, 0.08f);
                 return;
             }
             if (!HoldNewMagazine(firearmController, weapon, magazineSlot, magazine, HeldMagazineSource.FromPouch, startFrom: null))
@@ -679,8 +702,8 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 LogAction($"[VRReload] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
-            PlayGunSound(firearmController, "MagPullOut");
-            Pulse(0.35f, 0.05f);
+            PlayGunSound(firearmController, "MagPullOut", SoundHand.OffHandAlone);
+            Pulse(SoundHand.OffHandAlone, 0.35f, 0.05f);
         }
 
         // The loot hold has a magazine that fits the gun in the off hand: it becomes a magazine held for the reload, like
@@ -724,7 +747,7 @@ namespace TarkovVR.Source.Weapons
             HideGroundMagazine(lootItem);
             if (debugLog)
                 LogAction($"[VRReload] picked {magazine.LocalizedShortName()} ({magazine.Count} rounds) up off the ground");
-            Pulse(0.25f, 0.04f);
+            Pulse(SoundHand.OffHandAlone, 0.25f, 0.04f);
         }
 
         // Re-asserted every Update and LateUpdate: the loot drop schedules its own make-visible a moment later
@@ -1021,8 +1044,8 @@ namespace TarkovVR.Source.Weapons
                 if (heldSource == HeldMagazineSource.FromGun)
                 {
                     // The gun's own magazine pushed back in: nothing changed in the inventory
-                    PlayGunSound(heldForFirearm, "MagIn");
-                    Pulse(0.6f, 0.06f);
+                    PlayGunSound(heldForFirearm, "MagIn", SoundHand.OffHand.Seating);
+                    Pulse(SoundHand.OffHand.Seating, 0.6f, 0.06f);
                     CancelHold();
                     if (!gripReleased)
                         BeginSeatedHold(firearmController, well);
@@ -1127,8 +1150,8 @@ namespace TarkovVR.Source.Weapons
                 freeHoldRotation = grabRotation;
             }
             ReleaseHandLatch();
-            PlayGunSound(heldForFirearm, "MagOut");
-            Pulse(0.5f, 0.04f);
+            PlayGunSound(heldForFirearm, "MagOut", SoundHand.OffHand.Seating);
+            Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
             if (debugLog)
                 LogAction($"[VRReload] {heldMagazine.LocalizedShortName()} out of the well: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
         }
@@ -1486,7 +1509,7 @@ namespace TarkovVR.Source.Weapons
             if (heldSource == HeldMagazineSource.FromPouch)
             {
                 // Never left the rig
-                PlayGunSound(heldForFirearm, "MagSbrosnik");
+                PlayGunSound(heldForFirearm, "MagSbrosnik", SoundHand.OffHandAlone);
                 DestroyProp();
                 ClearHold();
                 return;
@@ -1500,8 +1523,8 @@ namespace TarkovVR.Source.Weapons
                     VRGlobals.player.InventoryController.TryRunNetworkTransaction(groundToRig);
                     if (debugLog)
                         LogAction($"[VRReload] {heldMagazine.LocalizedShortName()} off the ground put in the rig");
-                    PlayGunSound(heldForFirearm, "MagSbrosnik");
-                    Pulse(0.4f, 0.05f);
+                    PlayGunSound(heldForFirearm, "MagSbrosnik", SoundHand.OffHandAlone);
+                    Pulse(SoundHand.OffHandAlone, 0.4f, 0.05f);
                     DestroyProp();
                     ClearHold();
                 }
@@ -1579,8 +1602,8 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 LogAction($"[VRReload] seated {magazine.LocalizedShortName()}");
-            PlayGunSound(firearmController, "MagIn");
-            Pulse(0.8f, 0.07f);
+            PlayGunSound(firearmController, "MagIn", SoundHand.OffHand.Seating);
+            Pulse(SoundHand.OffHand.Seating, 0.8f, 0.07f);
             return true;
         }
 
@@ -1618,8 +1641,8 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 LogAction($"[VRReload] {magazine.LocalizedShortName()} put in the rig");
-            PlayGunSound(firearmController, "MagSbrosnik");
-            Pulse(0.4f, 0.05f);
+            PlayGunSound(firearmController, "MagSbrosnik", SoundHand.OffHandAlone);
+            Pulse(SoundHand.OffHandAlone, 0.4f, 0.05f);
         }
 
         // Tarkov only drops to the ground in a raid (ItemUiContext.UnloadWeapon); in the hideout FIKA's item sync also
@@ -1689,7 +1712,7 @@ namespace TarkovVR.Source.Weapons
             if (!VRSettings.GetManualReloadOn())
                 PlayGunSound(firearmController, "Button", ReleasePressingHand(firearmController));
             // Falls out of the gun the gun hand holds
-            PlayGunSound(firearmController, "MagOut", SoundHand.GunHand);
+            PlayGunSound(firearmController, "MagOut", SoundHand.GunBody);
         }
 
         private static SoundHand ReleasePressingHand(FirearmController firearmController)
@@ -2289,10 +2312,16 @@ namespace TarkovVR.Source.Weapons
             return Handedness.OffHandSource;
         }
 
+        // The off hand working on the gun (the gun hand feels it through the gun)
         private static void Pulse(float amplitude, float duration, float delay = 0f)
         {
+            Pulse(SoundHand.OffHand, amplitude, duration, delay);
+        }
+
+        private static void Pulse(SoundHand hand, float amplitude, float duration, float delay = 0f)
+        {
             if (haptics)
-                VRInput.Haptic.Execute(delay, duration, 120f, amplitude, OffHandSource());
+                GunHaptics.Pulse(hand.gunHandActs, hand.feel, amplitude, duration, 120f, delay);
         }
 
         private static SoundHand HandleSoundHand => handleInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
@@ -2300,24 +2329,23 @@ namespace TarkovVR.Source.Weapons
         // Whichever hand has the charging handle
         private static void PulseHandleHand(float amplitude, float duration)
         {
-            if (handleInGunHand)
-                PulseGunHand(amplitude, duration);
-            else
-                Pulse(amplitude, duration);
+            Pulse(HandleSoundHand, amplitude, duration);
         }
 
         private static void PulseGunHand(float amplitude, float duration)
         {
-            if (!haptics)
-                return;
-            SteamVR_Input_Sources gunHand = Handedness.GunHandSource;
-            VRInput.Haptic.Execute(0f, duration, 120f, amplitude, gunHand);
+            Pulse(SoundHand.GunHand, amplitude, duration);
         }
 
         // The gun's own reload sounds, by the names its animation fires (WeaponRecon): Button, MagOut, MagSbrosnik (the dump
         // pouch), MagPullOut (a new magazine from the pouch), MagIn. The gun's sound player resolves "Snd" + name; a gun
         // without that sound stays silent.
-        private static void PlayGunSound(FirearmController firearmController, string soundName, SoundHand hand = SoundHand.OffHand)
+        private static void PlayGunSound(FirearmController firearmController, string soundName)
+        {
+            PlayGunSound(firearmController, soundName, SoundHand.OffHand);
+        }
+
+        private static void PlayGunSound(FirearmController firearmController, string soundName, SoundHand hand)
         {
             BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
             if (soundPlayer != null)
@@ -2376,15 +2404,17 @@ namespace TarkovVR.Source.Weapons
         }
 
         // BaseSoundPlayer.PlayClip postfix (VRMagazinePatches): one of our reload sounds also plays on the controller(s) doing
-        // the work, live off the audio like the eating sounds (AudioHaptics). The source carries every clip still ringing on it.
+        // the work and the hands on the gun (GunHaptics), live off the audio like the eating sounds (AudioHaptics). The source
+        // carries every clip still ringing on it.
         public static void OnGunClipPlayed(BaseSoundPlayer soundPlayer, AudioClip clip)
         {
             if (!playingOwnSound || !haptics || !soundHaptics || soundPlayer == null || soundPlayer != gunSoundPlayer || clip == null)
                 return;
-            bool offHand = playingSoundHand != SoundHand.GunHand;
-            bool gunHand = playingSoundHand != SoundHand.OffHand;
+            GunHaptics.Gains(playingSoundHand.gunHandActs, playingSoundHand.feel, out float gunGain, out float gunPitch, out float offGain, out float offPitch);
             bool offIsLeft = OffHandSource() == SteamVR_Input_Sources.LeftHand;
-            AudioHaptics.OnClipPlayed(soundPlayer._clipsSource, clip, offIsLeft ? offHand : gunHand, offIsLeft ? gunHand : offHand,
+            AudioHaptics.OnClipPlayed(soundPlayer._clipsSource, clip,
+                offIsLeft ? offGain : gunGain, offIsLeft ? gunGain : offGain,
+                offIsLeft ? offPitch : gunPitch, offIsLeft ? gunPitch : offPitch,
                 soundHapticsStrength, soundHapticsIdleStop);
         }
 

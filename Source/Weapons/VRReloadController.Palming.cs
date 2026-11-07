@@ -85,7 +85,7 @@ namespace TarkovVR.Source.Weapons
                 && TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
                 && (!MagazineSlidesOntoHand || MagazinePartlyOut) && FindPalmHold(firearmController) != null && InPalmZone(firearmController, weapon, magazineSlot);
             if (inZone && !palmZoneEntered)
-                Pulse(0.2f, 0.03f);
+                Pulse(SoundHand.OffHandAlone, 0.2f, 0.03f);
             palmZoneEntered = inZone;
         }
 
@@ -201,7 +201,7 @@ namespace TarkovVR.Source.Weapons
                     Quaternion handRotation = oldProp.transform.rotation;
                     CommitHold();
                     RunDrop(oldMagazine, firearmController, handPosition, handRotation, OffHandWorldVelocity());
-                    PlayGunSound(firearmController, "MagOut");
+                    PlayGunSound(firearmController, "MagOut", SoundHand.OffHand.Seating);
                 }
                 else
                 {
@@ -240,8 +240,8 @@ namespace TarkovVR.Source.Weapons
             freeHoldRotation = newRotation;
             magazineHandFingers = activePalmHold.fingers;
 
-            PlayGunSound(firearmController, "MagOut");
-            Pulse(0.5f, 0.04f);
+            PlayGunSound(firearmController, "MagOut", SoundHand.OffHand.Seating);
+            Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
             LogAction($"[VRReload] {oldMagazine.LocalizedShortName()} out and in the hand, {newMagazine.LocalizedShortName()} next");
         }
 
@@ -367,8 +367,8 @@ namespace TarkovVR.Source.Weapons
             }
             else
             {
-                PlayGunSound(palmedFor, "MagSbrosnik");
-                Pulse(0.4f, 0.05f);
+                PlayGunSound(palmedFor, "MagSbrosnik", SoundHand.OffHandAlone);
+                Pulse(SoundHand.OffHandAlone, 0.4f, 0.05f);
             }
             DropPalmedModel();
         }

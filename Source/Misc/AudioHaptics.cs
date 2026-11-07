@@ -8,7 +8,7 @@ namespace TarkovVR.Source.Misc
     // Audio -> controller haptics, LIVE: a read-only OnAudioFilterRead tap on the
     // AudioSource that's actually playing the eating sound publishes per-buffer RMS +
     // zero-crossing rate from the AUDIO THREAD; a main-thread pump converts those into
-    // SteamVR haptic pulses (one Haptic.Execute per ~20ms window, both hands) so you
+    // controller haptics (one level per ~20ms window, to each hand that feels it, through HapticMixer) so you
     // feel exactly what you hear — the lid roll's ratchet, each gulp, the holster thump,
     // and the gun's reload sounds (VRReloadController.OnGunClipPlayed).
     //
@@ -30,14 +30,20 @@ namespace TarkovVR.Source.Misc
         public static float windowSec = 0.02f;     // one haptic pulse per window
         public static float minAmp = 0.04f;        // skip windows quieter than this
         public static float minFreq = 60f;         // LRA band the audio frequency maps into
-        public static float maxFreq = 300f;
+        public static float maxFreq = 200f;        // was 300: a sustained full-strength buzz up there is what made the controller audibly hum
         public static float peakDecay = 0.995f;    // auto-gain: running peak decay per window
         public static float freqSmoothing = 0.35f; // per-window lerp toward the measured texture
+        // Onsets over sustain: a click / ratchet / slam lands as a short sharp hit, the steady part after it falls back. Crisper,
+        // and the controller hums less (the hum is the sustained part). sustainGain 1 + onsetBoost 0 = the old flat envelope.
+        public static float sustainGain = 0.55f;   // a sound's steady part comes through at this much...
+        public static float onsetBoost = 1.6f;     // ...and its sudden rises this much harder
+        public static float onsetFollow = 0.3f;    // per window, how fast the steady level catches up with the sound (0.3 = ~60 ms)
 
         private static HapticAudioTap tap;          // the filter component (on the pooled source GO)
         private static BetterSource trackedBs;      // the BetterSource the clip was played on
         private static string expectedClipName;     // what should be playing for us to render
-        private static bool renderLeft, renderRight; // which controller(s) get the pulses
+        private static float leftGain, rightGain;   // how much each controller gets: the hand doing it 1, one feeling it through the thing it holds less
+        private static float leftPitch = 1f, rightPitch = 1f; // and how much lower (HapticMixer.throughPitch)
         private static float clipStrength = 1f;      // the caller's scale on top of strength
         private static float clipIdleStop = 1f;      // the caller's idleStopSec
         private static Coroutine pump;
@@ -47,11 +53,15 @@ namespace TarkovVR.Source.Misc
         // picks the hand(s) to render on, and makes sure the pump is running.
         // idleStop < 0 = idleStopSec; it must end before the clip's owner hands the source
         // back to the pool (see DestroyTap).
-        public static void OnClipPlayed(BetterSource bs, AudioClip clip, bool leftHand = true, bool rightHand = true, float scale = 1f, float idleStop = -1f)
+        public static void OnClipPlayed(BetterSource bs, AudioClip clip, float leftHandGain, float rightHandGain, float leftHandPitch = 1f, float rightHandPitch = 1f,
+            float scale = 1f, float idleStop = -1f)
         {
             if (!enabled || bs == null || bs.source1 == null || clip == null || VRGlobals.vrPlayer == null) return;
-            renderLeft = leftHand;
-            renderRight = rightHand;
+            if (leftHandGain <= 0f && rightHandGain <= 0f) return;
+            leftGain = leftHandGain;
+            rightGain = rightHandGain;
+            leftPitch = leftHandPitch;
+            rightPitch = rightHandPitch;
             clipStrength = scale;
             clipIdleStop = idleStop < 0f ? idleStopSec : idleStop;
             if (tap == null || tap.gameObject != bs.source1.gameObject)
@@ -110,6 +120,7 @@ namespace TarkovVR.Source.Misc
         {
             var wait = new WaitForSeconds(windowSec);
             float peak = 0.02f;   // auto-gain reference (foley levels vary wildly)
+            float steadyLevel = 0f; // the slow follower the onsets are measured over
             float freq = 140f;
             int lastBuffers = -1;
             float idle = 0f;
@@ -120,7 +131,8 @@ namespace TarkovVR.Source.Misc
                     && trackedBs.PlayBackState == BetterSource.EPlayBackState.Playing
                     && trackedBs._lastPlayingClipName == expectedClipName;
                 if (live) idle = 0f;
-                else if ((idle += windowSec) >= clipIdleStop)
+                else steadyLevel = 0f; // the next clip's first hit is an onset, not measured over the last one's tail
+                if (!live && (idle += windowSec) >= clipIdleStop)
                 {
                     DestroyTap();
                     trackedBs = null; expectedClipName = null;
@@ -135,7 +147,10 @@ namespace TarkovVR.Source.Misc
                         lastBuffers = b;
                         float rms = tap.Rms;
                         peak = Mathf.Max(peak * peakDecay, rms, 0.02f);
-                        amp = Mathf.Clamp01(rms / peak) * strength * clipStrength;
+                        float level = Mathf.Clamp01(rms / peak);
+                        float onset = Mathf.Max(0f, level - steadyLevel);
+                        steadyLevel = Mathf.Lerp(steadyLevel, level, onsetFollow);
+                        amp = Mathf.Clamp01(sustainGain * level + onsetBoost * onset) * strength * clipStrength;
                         // The raw audio ZCR runs hundreds of Hz..kHz — LOG-map it into the
                         // LRA band so textures differentiate (a thuddy glug lands low, a
                         // crinkle lands high; linear clamping pegged everything at max).
@@ -146,10 +161,10 @@ namespace TarkovVR.Source.Misc
                 }
                 if (amp >= minAmp)
                 {
-                    // Pulses run 1.5x the window so they bridge to the next one — reads as a
-                    // continuous buzz, not ticks.
-                    if (renderLeft) VRInput.Haptic.Execute(0f, windowSec * 1.5f, freq, amp, SteamVR_Input_Sources.LeftHand);
-                    if (renderRight) VRInput.Haptic.Execute(0f, windowSec * 1.5f, freq, amp, SteamVR_Input_Sources.RightHand);
+                    // Held 1.5x the window so it bridges to the next one: reads as a continuous buzz, not ticks. Through the
+                    // mixer, so it plays alongside the knocks instead of cutting them off.
+                    if (leftGain > 0f) HapticMixer.Stream(SteamVR_Input_Sources.LeftHand, amp * leftGain, freq * leftPitch, windowSec * 1.5f);
+                    if (rightGain > 0f) HapticMixer.Stream(SteamVR_Input_Sources.RightHand, amp * rightGain, freq * rightPitch, windowSec * 1.5f);
                 }
                 yield return wait;
             }

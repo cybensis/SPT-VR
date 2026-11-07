@@ -304,7 +304,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static void Haptic(Hand hand, float amplitude, float duration)
         {
             SteamVR_Input_Sources source = hand.gunHand ? Handedness.GunHandSource : Handedness.OffHandSource;
-            VRInput.Haptic.Execute(0f, duration, 95f, amplitude, source);
+            TarkovVR.Source.Misc.HapticMixer.PlayPulse(source, amplitude, duration, 95f);
         }
 
         private static int SlotIndex(EquipmentSlot slot)

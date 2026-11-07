@@ -143,12 +143,10 @@ namespace TarkovVR.Source.Weapons
             return VRGlobals.handsInteractionController != null ? VRGlobals.handsInteractionController.PalmOrigin(OnRightArm(gunHand)) : VRGlobals.vrPlayer.RightHand.transform.position;
         }
 
+        // The hand with the round, alone: taking one, putting it back, one that won't go in
         private static void PulseRoundHand(bool gunHand, float amplitude, float duration, float delay = 0f)
         {
-            if (!gunHand)
-                Pulse(amplitude, duration, delay);
-            else if (haptics)
-                VRInput.Haptic.Execute(delay, duration, 120f, amplitude, Handedness.GunHandSource);
+            Pulse(gunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone, amplitude, duration, delay);
         }
 
         // A loose stack (in a container's grid: not the rounds in another magazine) the gun takes, the type already in it first
@@ -289,8 +287,10 @@ namespace TarkovVR.Source.Weapons
             }
             roundLoading = true;
             DestroyRoundProp();
-            PlayFirstGunSound(firearmController, roundInGunHand ? SoundHand.GunHand : SoundHand.OffHand, "AmmoIn", "PatronIn", "Patron", "MagIn");
-            PulseRoundHand(roundInGunHand, 0.4f, 0.04f);
+            // Pushed in at the gun: the hand holding the gun feels it go in
+            SoundHand loadingHand = roundInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
+            PlayFirstGunSound(firearmController, loadingHand, "AmmoIn", "PatronIn", "Patron", "MagIn");
+            Pulse(loadingHand, 0.4f, 0.04f);
             VRGlobals.player.InventoryController.TryRunNetworkTransaction(operation, result =>
             {
                 if (result.Succeed)

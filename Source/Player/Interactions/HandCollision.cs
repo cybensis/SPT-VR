@@ -155,8 +155,8 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 float amp = Mathf.Clamp01(approach / 3f) * hapticStrength;
                 if (amp > 0.05f)
-                    VRInput.Haptic.Execute(0f, 0.05f, 90f, amp,
-                        physRight ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand);
+                    TarkovVR.Source.Misc.HapticMixer.PlayPulse(physRight ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand,
+                        amp, 0.05f, 90f);
             }
             s.inContact = contactNow;
         }

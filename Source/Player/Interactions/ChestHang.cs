@@ -3,6 +3,7 @@ using EFT;
 using EFT.InventoryLogic;
 using EFT.UI;
 using TarkovVR.Patches.Core.Player;
+using TarkovVR.Source.Misc;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
@@ -400,7 +401,7 @@ namespace TarkovVR.Source.Player.Interactions
             OffHandAtGunGrip = atGrip;
             // A light blip on the off hand coming into reach of the grip (as the regrab zone's): only where a press would swap
             if (atGrip && !swapZoneIn && hangHaptics)
-                VRInput.Haptic.Execute(0f, 0.07f, 95f, 0.25f, Handedness.OffHandSource);
+                HapticMixer.PlayPulse(Handedness.OffHandSource, 0.25f, 0.07f, 95f);
             swapZoneIn = atGrip;
             if (magazineNearer && offGripPressed)
                 GripPressLeftToMagazineFrame = Time.frameCount;
@@ -478,7 +479,7 @@ namespace TarkovVR.Source.Player.Interactions
             swapZoneIn = true;
             OffHandAtGunGrip = false;
             if (hangHaptics)
-                Pulse(0.45f);
+                Pulse(0.45f, throughGun: true);
             PlayGripSound();
         }
 
@@ -506,8 +507,9 @@ namespace TarkovVR.Source.Player.Interactions
             detachedGun = fc;
             DetachCommon();
             SupportOnly = true;
+            // The gun hand lets go, and the support hand now carries the whole gun: it feels that through the gun
             if (hangHaptics)
-                Pulse(0.35f);
+                Pulse(0.35f, throughGun: true);
         }
 
         // Shared detach work: free the dominant arm (the HandsIsEmpty pattern). NOTE the collision
@@ -613,7 +615,7 @@ namespace TarkovVR.Source.Player.Interactions
                 VRGlobals.ikManager.rightArmIk.enabled = false;
             }
             if (hangHaptics && wasDetached)
-                Pulse(0.45f);
+                Pulse(0.45f, throughGun: true);
             // Same cloth-grab foley for every grab - off the sling included ("it just sounds better"
             // than the full weapon pickup clatter, headset-picked).
             if (wasDetached)
@@ -1147,10 +1149,10 @@ namespace TarkovVR.Source.Player.Interactions
             return flat.sqrMagnitude > 1e-6f ? Quaternion.LookRotation(flat.normalized) : Quaternion.identity;
         }
 
-        internal static void Pulse(float amp)
+        // The gun hand; throughGun = it took hold of the gun, so a hand already on it feels that through the gun (GunHaptics)
+        internal static void Pulse(float amp, bool throughGun = false)
         {
-            SteamVR_Input_Sources gunHand = Handedness.GunHandSource;
-            VRInput.Haptic.Execute(0f, 0.07f, 95f, amp, gunHand);
+            GunHaptics.Pulse(true, throughGun ? GunHaptics.Feel.Carried : GunHaptics.Feel.Alone, amp, 0.07f, 95f);
         }
     }
 }

@@ -518,10 +518,15 @@ namespace TarkovVR.Source.Player.Interactions
             if (phase != Phase.Closed || (!pullingOpen && !playingOpen)) return; // opening only
             try
             {
-                // The OPENING hand's controller (same role->physical mapping as PulseHand).
+                // The OPENING hand's controller (same role->physical mapping as PulseHand) full; the other hand holds the
+                // item being opened and feels it through it.
                 bool dominantActs = style == null || style.openHand == Hand.Dominant;
-                bool useLeft = HandSource(dominantActs) == SteamVR_Input_Sources.LeftHand;
-                TarkovVR.Source.Misc.AudioHaptics.OnClipPlayed(sp._clipsSource, clip, useLeft, !useLeft);
+                bool openerIsLeft = HandSource(dominantActs) == SteamVR_Input_Sources.LeftHand;
+                float holderGain = TarkovVR.Source.Misc.HapticMixer.throughGain;
+                float holderPitch = TarkovVR.Source.Misc.HapticMixer.throughPitch;
+                TarkovVR.Source.Misc.AudioHaptics.OnClipPlayed(sp._clipsSource, clip,
+                    openerIsLeft ? 1f : holderGain, openerIsLeft ? holderGain : 1f,
+                    openerIsLeft ? 1f : holderPitch, openerIsLeft ? holderPitch : 1f);
             }
             catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] OnEatAudio: {ex.Message}"); }
         }

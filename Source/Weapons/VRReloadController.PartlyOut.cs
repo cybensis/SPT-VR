@@ -65,8 +65,8 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (!StartPartlyOut(firearmController, magazineSlot, 0f, partlyOutDistance))
                 return false;
-            PlayGunSound(firearmController, "MagOut");
-            Pulse(0.3f, 0.04f);
+            PlayGunSound(firearmController, "MagOut", SoundHand.GunBody);
+            Pulse(SoundHand.GunBody, 0.3f, 0.04f);
             return true;
         }
 
@@ -165,8 +165,8 @@ namespace TarkovVR.Source.Weapons
             FirearmController firearmController = heldForFirearm;
             Transform well = magazineWell;
             bool palming = HoldingPalmedMagazine;
-            PlayGunSound(firearmController, "MagIn");
-            Pulse(0.6f, 0.06f);
+            PlayGunSound(firearmController, "MagIn", SoundHand.OffHand.Seating);
+            Pulse(SoundHand.OffHand.Seating, 0.6f, 0.06f);
             CancelHold();
             if (!gripReleased && !palming)
                 BeginSeatedHold(firearmController, well);

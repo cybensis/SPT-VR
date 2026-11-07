@@ -379,15 +379,10 @@ namespace TarkovVR.Source.Player.Interactions
         private static void FikaSendGunSurfaceHit(Vector3 point, Vector3 normal, Vector3 direction, float damage)
             => FikaVrSync.SendMeleeHit(point, normal, direction, damage);
 
+        // The gun hitting something: every hand on the gun feels it (GunHaptics)
         private static void Pulse(float duration, float freq, float amp)
         {
-            SteamVR_Input_Sources gunHand = Handedness.GunHandSource;
-            VRInput.Haptic.Execute(0f, duration, freq, amp, gunHand);
-            if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting)
-            {
-                SteamVR_Input_Sources offHand = Handedness.OffHandSource;
-                VRInput.Haptic.Execute(0f, duration, freq, amp * 0.7f, offHand);
-            }
+            TarkovVR.Source.Weapons.GunHaptics.Pulse(null, TarkovVR.Source.Weapons.GunHaptics.Feel.Mechanism, amp, duration, freq);
         }
     }
 }
