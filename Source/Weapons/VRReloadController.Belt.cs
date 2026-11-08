@@ -8,8 +8,9 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Belt-fed machine guns by hand (Manual Reload), Tarkov's own reload done by the hands (his design, 2026-11-08): PKM / PKP / PKTM and
-    // RPD / RPDN (gen_lmgs.py; the M60s' clips don't move their cover, not done yet).
+    // Belt-fed machine guns by hand (Manual Reload), Tarkov's own reload done by the hands (his design, 2026-11-08): PKM / PKP / PKTM,
+    // RPD / RPDN and M60E4 / E6 (gen_lmgs.py; the M60's clips key its cover as quaternion curves). The M60's LBT pouch has no belt data:
+    // it goes in laid, as Tarkov has it.
     //  - A scope on the swinging mount (the PKP's, the RPDN's: Tarkov flips it aside first, pk_sight_open / rpdn_sight_open): its latch is
     //    taken with either hand's trigger and swung aside, its button pressed while held. The cover won't lift with it over the cover.
     //  - The feed cover: the trigger at its free end lifts it about its hinge (the clip's axis and travel), the hand riding it; let go past
@@ -58,6 +59,8 @@ namespace TarkovVR.Source.Weapons
 
         private sealed class BeltData
         {
+            public string box;              // the box model it was read on
+            public HashSet<string> boxIds;  // the item templates that are that model; another box (the M60's LBT pouch) skips the belt step
             public string prefix;           // "belt_link_": belt_link_001..count, each nested under the one before
             public int count;
             public int anchor;              // the last link still in the box (1-based)
@@ -85,6 +88,8 @@ namespace TarkovVR.Source.Weapons
             {
                 data.belt = new BeltData
                 {
+                    box = string.IsNullOrEmpty(belt.box) ? null : belt.box,
+                    boxIds = belt.boxIds != null && belt.boxIds.Count > 0 ? new HashSet<string>(belt.boxIds) : null,
                     prefix = belt.prefix,
                     count = belt.count,
                     anchor = belt.anchor,
@@ -114,6 +119,12 @@ namespace TarkovVR.Source.Weapons
                 button = string.IsNullOrEmpty(saved.button) ? null : saved.button,
                 buttonTravel = saved.buttonTravel != null && saved.buttonTravel.Length >= 3 ? Vector3From(saved.buttonTravel, 0) : Vector3.zero,
             };
+        }
+
+        // A box of the model the belt data was read on (by its item template: what its pooled model is called isn't ours to rely on)
+        private static bool BeltFits(Magazine box, BeltData belt)
+        {
+            return box != null && belt != null && (belt.boxIds == null || belt.boxIds.Contains(box.TemplateId.ToString()));
         }
 
         // Our belt gun in our hands, Manual Reload on
@@ -224,7 +235,8 @@ namespace TarkovVR.Source.Weapons
             if (propRope.simulating)
                 StashRope(propRope);
             LmgState state = LmgStateOf(firearmController.Item);
-            state.beltOut = true;
+            // A box we have no belt shape for goes in laid, as Tarkov has it
+            state.beltOut = BeltFits(heldMagazine, data.belt);
             Weapon weapon = firearmController.Item;
             state.waitsForCharge = (weapon.Chambers == null || weapon.Chambers.Length == 0) && chargingHandle && TryGetChargingHandle(firearmController, weapon);
             if (beltDebugLog)
@@ -1076,9 +1088,12 @@ namespace TarkovVR.Source.Weapons
                         latch.button.localPosition = latch.buttonRest + data.latch.buttonTravel * latchButtonPressed;
                 }
                 Transform box = GunBoxView(firearmController);
-                if (box == null || data.belt == null)
+                bool fits = BeltFits(firearmController.Item.GetCurrentMagazine(), data.belt);
+                if (box == null || data.belt == null || !fits)
                 {
                     ReleaseRope(gunRope);
+                    if (box != null && !fits)
+                        state.beltOut = false;
                     return;
                 }
                 if (!BindRope(gunRope, box, data.belt))
@@ -1136,7 +1151,7 @@ namespace TarkovVR.Source.Weapons
         {
             LmgData data = null;
             bool wanted = HoldingMagazine && heldProp != null && heldMagazine != null && heldMagazine.IsMagazineWithBelt && heldForFirearm != null
-                && TryGetLmg(heldForFirearm, out data) && data.belt != null;
+                && TryGetLmg(heldForFirearm, out data) && data.belt != null && BeltFits(heldMagazine, data.belt);
             if (!wanted)
             {
                 ReleaseRope(propRope);

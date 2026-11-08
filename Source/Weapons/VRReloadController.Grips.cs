@@ -181,6 +181,8 @@ namespace TarkovVR.Source.Weapons
 
         public sealed class SavedBelt
         {
+            public string box;              // the box model it was read on (its root's name): another box on the gun has its own shape
+            public List<string> boxIds;     // the item templates that are that model
             public string prefix;
             public int count;
             public int anchor;

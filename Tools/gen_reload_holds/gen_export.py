@@ -244,6 +244,8 @@ for f,h in lmg.get('lmgHandles',{}).items():
     out['handleBones'][f]=h['bone']; out['handleCarriers'][f]=h['bone']
     if h.get('knobs'): out['handleKnobs'][f]=h['knobs']
     if h.get('folds'): out['handleKnobFolds'][f]=h['folds']
+    if h.get('grabPoint'): out['handleGrabPoints'][f]=h['grabPoint']
+    if h.get('boltBones'): out['boltBones'][f]=h['boltBones']
     if h.get('gunHand'): out['gunHandHandles'][f]=h['gunHand']
     if h.get('offHand'): out['handles'][f]=h['offHand']
 out['handleTravels']={f:h['travel'] for f,h in lmg.get('lmgHandles',{}).items() if h.get('travel')}
