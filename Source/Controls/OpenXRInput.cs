@@ -179,6 +179,22 @@ namespace TarkovVR.Source.Controls
             return controllers[hand].hasTriggerTouch;
         }
 
+        // How far the fingers wrap the handle (0..1, the squeeze value; Touch: the grip's travel)
+        public static float GetGripValue(int hand)
+        {
+            SampleButtonsOncePerFrame();
+            return controllers[hand].squeezeValue;
+        }
+
+        // Counts the grip as held from now (no press edge), as if squeezed: from here it lets go like a held grip does, under
+        // gripReleaseThreshold. For a hand back on the gun by touch alone (VRReloadController's press check).
+        public static void HoldGrip(int hand)
+        {
+            SampleButtonsOncePerFrame();
+            controllers[hand].current.grip = true;
+            controllers[hand].previous.grip = true;
+        }
+
         // A thumb resting on A, B or the stick (not a Touch controller's thumb rest). False = the controller can't tell.
         public static bool TryGetThumbTouch(int hand, out bool touched)
         {

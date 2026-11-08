@@ -323,7 +323,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // A press check's gesture (thumb on A/B/the stick, finger on the trigger, one hand on a pistol) holds the gun like the grip:
                 // letting go of the grip for it doesn't sling it (VRReloadController.PressCheck)
                 bool gunHandHolds = Handedness.GunHandGrip.state
-                    || (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting && VRReloadController.PressCheckGesture);
+                    || (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting && VRReloadController.PressCheckHoldsGun);
                 ChestHang.UpdateInput(gunHandHolds, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
                 // A gun's body spot placed by hand (the trigger held on it)
                 GunSpots.Tick();
@@ -447,6 +447,8 @@ namespace TarkovVR.Source.Player.Interactions
             // Same open-hand treatment for the RIGHT hand while it's off the gun (ChestHang
             // sling / support-only) - the animator still curls it in the grip pose otherwise.
             UpdateRightHandFingers();
+            // A press check: the gun hand's fingers hooked over the back of the slide (VRReloadController.PressCheck places the hand)
+            UpdatePressCheckHook();
             // That hand on the charging handle: the rack clip's finger pose on top
             VRReloadController.ApplyGunHandFingerPose();
             // Left-handed stage 2 test (off by default): the gun hand's grip mirrored onto the free off hand

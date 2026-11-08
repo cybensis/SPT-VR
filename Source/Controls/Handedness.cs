@@ -57,6 +57,22 @@ namespace TarkovVR.Source.Controls
 
         // The gun hand's thumb on A/B/X/Y or its stick (OpenXR touch sensors). False = can't tell: SteamVR has no touch action in the
         // mod's manifest, and some controllers have no sensor there.
+        public static bool TryGetGunHandGripValue(out float value)
+        {
+            value = 0f;
+            if (!VRInput.UsingOpenXR)
+                return false;
+            value = OpenXRInput.GetGripValue(GunHandIsLeft ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND);
+            return true;
+        }
+
+        // The gun hand's grip counted as held from now, without a squeeze (OpenXR only)
+        public static void HoldGunHandGrip()
+        {
+            if (VRInput.UsingOpenXR)
+                OpenXRInput.HoldGrip(GunHandIsLeft ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND);
+        }
+
         public static bool TryGetGunHandThumbTouch(out bool touched)
         {
             touched = false;

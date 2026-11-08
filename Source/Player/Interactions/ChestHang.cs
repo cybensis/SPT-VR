@@ -533,6 +533,9 @@ namespace TarkovVR.Source.Player.Interactions
 
         internal static void KeepGunHandFree()
         {
+            // A press check's marker on the gun hand: the gun's own back first, or it's saved below as the gun's and given back on the
+            // next grab (headset: the hand flew off to it when the pistol was taken from its slot)
+            VRReloadController.CancelPressCheck();
             var arm = VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null;
             var rightHand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.RightHand : null;
             var player = VRGlobals.player;
@@ -558,6 +561,12 @@ namespace TarkovVR.Source.Player.Interactions
         private static void GiveGunHandMarkerBack()
         {
             var player = VRGlobals.player;
+            // (never a press check's marker: that's no part of the gun)
+            if (VRReloadController.IsPressCheckMarker(gunHandMarker))
+            {
+                var gun = VRGlobals.firearmController;
+                gunHandMarker = gun != null && gun.HandsHierarchy != null ? gun.HandsHierarchy.GetTransform(ECharacterWeaponBones.weapon_R_IK_marker) : null;
+            }
             // Not when something else set it since: a new gun gathered its own, empty hands point it at the hand
             if (player != null && player._markers.Length > 1 && freedHandMarker != null && player._markers[1] == freedHandMarker
                 && gunHandMarker != null && !player.HandsIsEmpty)

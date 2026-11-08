@@ -2263,10 +2263,7 @@ namespace TarkovVR.Source.Weapons
                 if (OffHandOnRightArm)
                     ApplyOffHandFingerPose();
                 else
-                {
                     ApplyGunHandFingers(rightArm: true);
-                    ApplyPressCheckFingers();
-                }
             }
             finally
             {
