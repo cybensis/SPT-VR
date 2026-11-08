@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using EFT.Interactive;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -47,10 +46,6 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static Scene sandbox;
         private static bool? hullQueriesWork;            // Physics.ClosestPoint on a sandbox hull, checked on the first one built
-        private static bool reflectionResolved;
-        private static MethodInfo getVertexBuffer;       // Mesh.GetVertexBuffer(int), Unity 2021.2+ (we compile against 2019.4)
-        private static MethodInfo getVertexBufferStride;
-        private static MethodInfo requestBufferReadback; // AsyncGPUReadback.Request(GraphicsBuffer, Action<AsyncGPUReadbackRequest>)
 
         private GraspShape(string itemName)
         {
@@ -272,49 +267,33 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // A non-readable mesh's vertices back from its GPU buffer
 
-        private static void ResolveReflection()
-        {
-            if (reflectionResolved)
-                return;
-            reflectionResolved = true;
-            getVertexBuffer = typeof(Mesh).GetMethod("GetVertexBuffer", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(int) }, null);
-            getVertexBufferStride = typeof(Mesh).GetMethod("GetVertexBufferStride", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(int) }, null);
-            foreach (MethodInfo method in typeof(AsyncGPUReadback).GetMethods(BindingFlags.Public | BindingFlags.Static))
-            {
-                if (method.Name != "Request")
-                    continue;
-                ParameterInfo[] parameters = method.GetParameters();
-                if (parameters.Length == 2 && parameters[0].ParameterType.Name == "GraphicsBuffer" && parameters[1].ParameterType == typeof(Action<AsyncGPUReadbackRequest>))
-                {
-                    requestBufferReadback = method;
-                    break;
-                }
-            }
-            if (getVertexBuffer == null || requestBufferReadback == null)
-                Plugin.MyLog.LogWarning("[Grasp] no GPU vertex readback in this Unity: grips use the boxes of non-readable items");
-        }
-
         private void RequestGpuVertices(Part part, Mesh mesh)
         {
-            ResolveReflection();
-            if (getVertexBuffer == null || requestBufferReadback == null || !SystemInfo.supportsAsyncGPUReadback
-                || !TryGetPositionLayout(mesh, out int stream, out int offset, out int stride, out VertexAttributeFormat format))
+            if (!SystemInfo.supportsAsyncGPUReadback || !mesh.HasVertexAttribute(VertexAttribute.Position))
             {
                 hullsSkipped++;
                 return;
             }
-            IDisposable buffer;
+            VertexAttributeFormat format = mesh.GetVertexAttributeFormat(VertexAttribute.Position);
+            if (mesh.GetVertexAttributeDimension(VertexAttribute.Position) < 3 || (format != VertexAttributeFormat.Float32 && format != VertexAttributeFormat.Float16))
+            {
+                hullsSkipped++;
+                return;
+            }
+            int stream = mesh.GetVertexAttributeStream(VertexAttribute.Position);
+            int offset = mesh.GetVertexAttributeOffset(VertexAttribute.Position);
+            int stride = mesh.GetVertexBufferStride(stream);
+            int vertexCount = mesh.vertexCount;
+            GraphicsBuffer buffer;
             try
             {
-                buffer = getVertexBuffer.Invoke(mesh, new object[] { stream }) as IDisposable;
-                if (getVertexBufferStride != null)
-                    stride = (int)getVertexBufferStride.Invoke(mesh, new object[] { stream });
+                buffer = mesh.GetVertexBuffer(stream);
             }
             catch (Exception exception)
             {
                 hullsFailed++;
                 if (HandsInteractionController.graspDebug)
-                    Plugin.MyLog.LogWarning($"[Grasp] {itemName}: no vertex buffer: {exception.InnerException?.Message ?? exception.Message}");
+                    Plugin.MyLog.LogWarning($"[Grasp] {itemName}: no vertex buffer: {exception.Message}");
                 return;
             }
             if (buffer == null)
@@ -322,90 +301,41 @@ namespace TarkovVR.Source.Player.Interactions
                 hullsFailed++;
                 return;
             }
-            int vertexCount = mesh.vertexCount;
-            Action<AsyncGPUReadbackRequest> arrived = request =>
-            {
-                // The readback owned the buffer until now
-                buffer.Dispose();
-                if (disposed)
-                    return;
-                if (request.hasError)
-                {
-                    hullsFailed++;
-                    return;
-                }
-                try
-                {
-                    Vector3[] vertices = ReadPositions(request.GetData<byte>().ToArray(), vertexCount, offset, stride, format);
-                    if (vertices == null)
-                        hullsFailed++;
-                    else
-                        BuildHull(part, vertices, fromGpu: true);
-                }
-                catch (Exception exception)
-                {
-                    hullsFailed++;
-                    if (HandsInteractionController.graspDebug)
-                        Plugin.MyLog.LogWarning($"[Grasp] {itemName}: readback unreadable: {exception.Message}");
-                }
-            };
             try
             {
-                requestBufferReadback.Invoke(null, new object[] { buffer, arrived });
+                AsyncGPUReadback.Request(buffer, request =>
+                {
+                    // The readback owned the buffer until now
+                    buffer.Dispose();
+                    if (disposed)
+                        return;
+                    if (request.hasError)
+                    {
+                        hullsFailed++;
+                        return;
+                    }
+                    try
+                    {
+                        Vector3[] vertices = ReadPositions(request.GetData<byte>().ToArray(), vertexCount, offset, stride, format);
+                        if (vertices == null)
+                            hullsFailed++;
+                        else
+                            BuildHull(part, vertices, fromGpu: true);
+                    }
+                    catch (Exception exception)
+                    {
+                        hullsFailed++;
+                        if (HandsInteractionController.graspDebug)
+                            Plugin.MyLog.LogWarning($"[Grasp] {itemName}: readback unreadable: {exception.Message}");
+                    }
+                });
             }
             catch (Exception exception)
             {
                 buffer.Dispose();
                 hullsFailed++;
                 if (HandsInteractionController.graspDebug)
-                    Plugin.MyLog.LogWarning($"[Grasp] {itemName}: readback refused: {exception.InnerException?.Message ?? exception.Message}");
-            }
-        }
-
-        // Where the positions sit in their vertex stream: attributes are laid out in the order GetVertexAttributes lists them, packed
-        private static bool TryGetPositionLayout(Mesh mesh, out int stream, out int offset, out int stride, out VertexAttributeFormat format)
-        {
-            stream = 0;
-            offset = 0;
-            stride = 0;
-            format = VertexAttributeFormat.Float32;
-            VertexAttributeDescriptor[] attributes = mesh.GetVertexAttributes();
-            int positionIndex = Array.FindIndex(attributes, attribute => attribute.attribute == VertexAttribute.Position);
-            if (positionIndex < 0)
-                return false;
-            VertexAttributeDescriptor position = attributes[positionIndex];
-            if (position.dimension < 3 || (position.format != VertexAttributeFormat.Float32 && position.format != VertexAttributeFormat.Float16))
-                return false;
-            stream = position.stream;
-            format = position.format;
-            for (int index = 0; index < attributes.Length; index++)
-            {
-                if (attributes[index].stream != stream)
-                    continue;
-                int size = FormatSize(attributes[index].format) * attributes[index].dimension;
-                if (index < positionIndex)
-                    offset += size;
-                stride += size;
-            }
-            return stride > 0;
-        }
-
-        private static int FormatSize(VertexAttributeFormat format)
-        {
-            switch (format)
-            {
-                case VertexAttributeFormat.Float32:
-                case VertexAttributeFormat.UInt32:
-                case VertexAttributeFormat.SInt32:
-                    return 4;
-                case VertexAttributeFormat.Float16:
-                case VertexAttributeFormat.UNorm16:
-                case VertexAttributeFormat.SNorm16:
-                case VertexAttributeFormat.UInt16:
-                case VertexAttributeFormat.SInt16:
-                    return 2;
-                default:
-                    return 1;
+                    Plugin.MyLog.LogWarning($"[Grasp] {itemName}: readback refused: {exception.Message}");
             }
         }
 
