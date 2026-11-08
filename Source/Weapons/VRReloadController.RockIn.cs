@@ -177,9 +177,15 @@ namespace TarkovVR.Source.Weapons
             handAlongTrack = rockedDegrees / heldRockIn.angle * railLength;
             if (!railPullingOut)
                 handAlongTrack = Mathf.Min(handAlongTrack, Vector3.Dot(moved, outward));
-            // A belt box going on: pushed straight up onto the gun (the way it hangs) seats it too. (Coming off is the plain pull, UpdateRail.)
-            if (rockAwayInWell != Vector3.zero && !railPullingOut)
-                handAlongTrack = Mathf.Min(handAlongTrack, Vector3.Dot(moved, magazineWell.TransformDirection(rockAwayInWell).normalized));
+            // A belt box: pushed straight up onto the gun (the way it hangs) seats it too, and coming off is the same run backwards - rocked out,
+            // pulled away from the hinge or pulled straight down, whichever is furthest (BeltBoxComesOff)
+            if (rockAwayInWell != Vector3.zero)
+            {
+                float alongAway = Vector3.Dot(moved, magazineWell.TransformDirection(rockAwayInWell).normalized);
+                handAlongTrack = railPullingOut ? Mathf.Max(handAlongTrack, Mathf.Max(Vector3.Dot(moved, outward), alongAway))
+                    : Mathf.Min(handAlongTrack, alongAway);
+                lastRockTerms = new Vector3(rockedDegrees, Vector3.Dot(moved, outward), alongAway);
+            }
             handOffTrack = HandOffRockingMagazine();
         }
 
@@ -192,7 +198,60 @@ namespace TarkovVR.Source.Weapons
             Vector3 off = RockLeverNow() - heldPoint;
             Vector3 outward = heldPoint.normalized;
             float alongOutward = Vector3.Dot(off, outward);
-            return (alongOutward < 0f ? off - outward * alongOutward : off).magnitude;
+            // A belt box coming off: pulling it away from the hinge is taking it out, not coming off it (as pushing it toward the hinge
+            // going in isn't)
+            bool along = alongOutward < 0f || (railPullingOut && heldRockIn.pivot != Vector3.zero);
+            return (along ? off - outward * alongOutward : off).magnitude;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // A belt box off its hinge (the PKM's): going in run backwards. Going in has no catch, pushing toward the hinge isn't coming off it,
+        // and coming off the track leaves the box where it is in the hand. Coming off had all three the other way: the mag catch held it
+        // until B (the same hand that holds and pulls it), pulling away from the hinge read as the hand coming off it, and that cancelled
+        // the hold - the box back in the gun, the hand off it (his: "it gets stuck on the track and I have to pull my hand way down", "my hand
+        // comes off the box at a point", "works perfect going in, horrible being taken out"). Every take-out change before measured the
+        // pull differently and kept those three, so none of them changed anything. Now: no catch (the box's latch is on the box, under the
+        // gripping hand), pulling away is taking it out, and too far off the track it comes away WITH the hand once it has moved at all.
+        private static Vector3 lastRockTerms;                // this frame's rock (deg), away from the hinge, down (m): the take-out log
+        private static float boxPullLogTime;
+
+        private static void BeltBoxComesOff(float trackPosition, float handOffTrack, bool gripReleased)
+        {
+            railPosition = Mathf.Clamp(trackPosition, 0f, railLength);
+            if (railPosition >= magazineCatchDistance)
+                magazineCatchPassed = true;
+            if (beltDebugLog && Time.time >= boxPullLogTime)
+            {
+                boxPullLogTime = Time.time + 0.25f;
+                Plugin.MyLog.LogInfo($"[VRBelt] box coming off: {railPosition / railLength * 100f:0}% out (rock {lastRockTerms.x:0.#} deg, away {lastRockTerms.y * 100f:0.#} cm, "
+                    + $"down {lastRockTerms.z * 100f:0.#} cm), hand off it {handOffTrack * 100f:0.#} cm");
+            }
+            if (gripReleased)
+            {
+                // Let go part way: back in the gun, as a box let go part way in stays in the hand
+                if (beltDebugLog)
+                    Plugin.MyLog.LogInfo($"[VRBelt] box coming off: let go at {railPosition / railLength * 100f:0}%, back in");
+                CancelHold();
+                return;
+            }
+            if (handOffTrack > rockInInsertEscape)
+            {
+                if (beltDebugLog)
+                    Plugin.MyLog.LogInfo($"[VRBelt] box coming off: hand {handOffTrack * 100f:0.#} cm off it at {railPosition / railLength * 100f:0}% - "
+                        + (magazineCatchPassed ? "it comes with the hand" : "it stays (not moved yet)"));
+                if (magazineCatchPassed)
+                    ComeFreeOfWell();
+                else
+                    CancelHold();
+                return;
+            }
+            PlaceOnRail();
+            if (trackPosition >= railLength)
+            {
+                if (beltDebugLog)
+                    Plugin.MyLog.LogInfo("[VRBelt] box coming off: off the gun");
+                ComeFreeOfWell();
+            }
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

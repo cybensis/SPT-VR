@@ -1150,11 +1150,9 @@ namespace TarkovVR.Source.Weapons
             Vector3 handDelta = MagazineHandRig.position - magazineWell.TransformPoint(handAtRailStartInWell);
             float handAlongTrack = Vector3.Dot(handDelta, axis);
             float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
-            // A belt box comes off by the plain pull along the well's track (the first setup's: the one he could take it out with - "it didn't
-            // work this bad the box take out that was first setup ... now it's almost impossible"); its rock is only how it's drawn
-            // (PlaceOnRail). Going in it rocks as measured (that one "works perfect").
-            bool plainPull = railPullingOut && heldRockIn != null && heldRockIn.pivot != Vector3.zero;
-            if (heldRockIn != null && !plainPull)
+            // A belt box on its hinge (the PKM's): comes off as it goes on, run backwards (BeltBoxComesOff)
+            bool boxOnHinge = heldRockIn != null && heldRockIn.pivot != Vector3.zero;
+            if (heldRockIn != null)
                 MeasureHandOnRock(out handAlongTrack, out handOffTrack);
             // A pistol's magazine goes in right under the gun hand: the controllers meet (headset), so it goes further than the hand does
             else if (handAlongTrack < 0f && VRGlobals.vrPlayer.isWeapPistol)
@@ -1162,6 +1160,11 @@ namespace TarkovVR.Source.Weapons
             float trackPosition = railPositionAtStart + handAlongTrack;
             railBlend = Mathf.MoveTowards(railBlend, 1f, Time.deltaTime / Mathf.Max(railCaptureTime, 0.001f));
 
+            if (railPullingOut && boxOnHinge)
+            {
+                BeltBoxComesOff(trackPosition, handOffTrack, gripReleased);
+                return;
+            }
             if (railPullingOut)
             {
                 // Manual Reload: the mag catch holds it seated until B is down; once past the catch it slides freely
@@ -1172,7 +1175,7 @@ namespace TarkovVR.Source.Weapons
                     magazineCatchPassed = true;
 
                 // The controller away from where the hand holds the magazine: along the track too while the catch holds it
-                float handOffMagazine = heldRockIn != null && !plainPull ? HandOffRockingMagazine() : (handDelta - axis * (railPosition - railPositionAtStart)).magnitude;
+                float handOffMagazine = heldRockIn != null ? HandOffRockingMagazine() : (handDelta - axis * (railPosition - railPositionAtStart)).magnitude;
                 if (RockedMagazineLeaves(gripReleased, handOffMagazine))
                     return;
                 bool gaveBackToSupport = grabbedWithRelease && releaseLetGo && !magazineCatchPassed;
@@ -1188,7 +1191,7 @@ namespace TarkovVR.Source.Weapons
                 }
                 PlaceOnRail();
                 // Rocked back home past the catch, or back up from partly out: the catch holds it again
-                if ((railStartedPartlyOut || (heldRockIn != null && !plainPull && magazineCatchPassed)) && railPosition <= 0f)
+                if ((railStartedPartlyOut || (heldRockIn != null && magazineCatchPassed)) && railPosition <= 0f)
                 {
                     PushedBackIn(gripReleased);
                     return;
