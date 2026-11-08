@@ -13,7 +13,17 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
         private static void KeepLeftArmOnController(EFT.Player __instance)
         {
-            if (!__instance.IsYourPlayer || !VRGunController.KeepLeftHandOnController())
+            if (!__instance.IsYourPlayer)
+                return;
+            // The gun arm too (VRGunController.keepGunArmOffAnimation): a weapon switch's body draw drops it through RIGHT_HAND_WEIGHT.
+            // The field as well: VisualPass checks it right after the IK for PlayerBones.Kinematics, which pulls the gun to the animated hand.
+            if (VRGunController.KeepGunArmOffAnimation(__instance))
+            {
+                __instance._firstPersonRightHand = 1f;
+                __instance._limbs[1].solver.IKPositionWeight = 1f;
+                __instance._limbs[1].solver.IKRotationWeight = 1f;
+            }
+            if (!VRGunController.KeepLeftHandOnController())
                 return;
 
             __instance._limbs[0].solver.IKPositionWeight = 1f;

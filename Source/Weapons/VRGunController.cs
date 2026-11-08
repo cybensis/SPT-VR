@@ -15,6 +15,16 @@ namespace TarkovVR.Source.Weapons
     public static class VRGunController
     {
         public static bool enabled = true;    // false = the old behavior, for comparing in the headset
+        // The gun arm the same way (his ask: "get rid of the take out animation when switching guns"): a weapon switch plays the BODY
+        // animator's draw, whose RIGHT_HAND_WEIGHT curve dropped the right arm's IK weight (1 - curve) and handed the arm, and with it the
+        // gun (PlayerBones.Kinematics below 1), to that take-out - however fast the hands animator's draw was skipped. Only a switch plays
+        // it: a slung gun taken back never goes through Tarkov. false = Tarkov's weight, to compare.
+        public static bool keepGunArmOffAnimation = true;
+
+        public static bool KeepGunArmOffAnimation(EFT.Player player)
+        {
+            return enabled && keepGunArmOffAnimation && player != null && player.HandsController is EFT.Player.FirearmController;
+        }
 
         private static Vector3 heldWeaponHolderPosition;
         private static Transform heldForWeaponHolder;
