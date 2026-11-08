@@ -15,7 +15,7 @@ namespace TarkovVR.Source.Player.Interactions
         // with no roll, so 30 here. The pinky a little open (headset).
         // His headset tuning 2026-11-08 (with VRReloadController's wrist open 30 and offset):
         public static Vector3 pressCheckHookFinger = new Vector3(30f, 40f, 45f);   // index to ring
-        public static Vector3 pressCheckHookPinky = new Vector3(0f, 15f, 15f);
+        public static Vector3 pressCheckHookPinky = new Vector3(-15f, -5f, 5f);
         // deg on top of the gripping thumb, its base / knuckle / tip joint: + closes it toward the palm, - opens it (his ask: "anything to
         // adjust the thumb open/close"). Bending the base moves the knuckle the gun turns about, the rest bends from it.
         public static Vector3 pressCheckHookThumb = Vector3.zero;

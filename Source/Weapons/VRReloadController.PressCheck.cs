@@ -43,11 +43,11 @@ namespace TarkovVR.Source.Weapons
         public static float pressCheckTravelScale = 1f;     // the slide's travel: x the gun's own check distance (Tarkov's clip: 1.35-3.3 cm)
         public static float pressCheckSlideSpeed = 0.4f;    // m/s the slide can follow the trigger at
         public static float pressCheckGripReturn = 0.6f;    // the grip's value (how far the fingers wrap it, no squeeze) that puts the hand back on it
-        public static Vector3 pressCheckHandOffset = new Vector3(-0.03f, 0f, 0f);   // m the gun moved in the hand at the full turn: x right, y back, z up along the gun
+        public static Vector3 pressCheckHandOffset = new Vector3(-0.04f, 0f, 0f);   // m the gun moved in the hand at the full turn: x right, y back, z up along the gun
         public static Vector3 pressCheckHandTurn = Vector3.zero;     // deg more turn at the full turn, about the knuckle, in the gun's frame
         // deg the thumb turned about its knuckle on the gun, in the gun's frame (x right, y back, z up): z swings it to the sides (his
         // ask: open it "to the left"; HandsInteractionController.pressCheckHookThumb only curls it in or out)
-        public static Vector3 pressCheckThumbTurn = Vector3.zero;
+        public static Vector3 pressCheckThumbTurn = new Vector3(0f, 0f, -40f);   // (his headset tuning 2026-11-08)
         public static bool pressCheckRoundRides = true;     // the chambered round comes back with the slide (the extractor has it)
         public static bool pressCheckDebug = false;
 
