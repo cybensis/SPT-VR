@@ -121,15 +121,33 @@ namespace TarkovVR.Patches.Visuals
             var vrShader = (ComputeShader)Resources.Load(GPUInstancerConstants.CAMERA_VR_COMPUTE_RESOURCE_PATH);
             if (vrShader != null)
             {
-                AccessTools.StaticFieldRefAccess<ComputeShader>(typeof(GPUInstancerManager), "_cameraComputeShader") = vrShader;
-
                 var kernelIDs = new int[GPUInstancerConstants.CAMERA_COMPUTE_KERNELS.Length];
                 for (int i = 0; i < kernelIDs.Length; i++)
                 {
                     kernelIDs[i] = vrShader.FindKernel(GPUInstancerConstants.CAMERA_COMPUTE_KERNELS[i]);
                 }
-                AccessTools.StaticFieldRefAccess<int[]>(typeof(GPUInstancerManager), "_cameraComputeKernelIDs") = kernelIDs;
+                // Both fields are protected static in the game (public in our publicized reference; AllowUnsafeBlocks lets Mono skip the
+                // access check, as for every other private member we touch). Written directly; the reflection that did this before stays
+                // only as a fallback, in case an access check ever refuses the direct write (it's in its own method, so a refusal at JIT
+                // time lands in this catch too)
+                try
+                {
+                    SetCameraComputeShader(vrShader, kernelIDs);
+                }
+                catch (MemberAccessException exception)
+                {
+                    Plugin.MyLog.LogWarning($"[GPUInstancer] direct write refused ({exception.GetType().Name}), set by reflection instead");
+                    AccessTools.StaticFieldRefAccess<ComputeShader>(typeof(GPUInstancerManager), "_cameraComputeShader") = vrShader;
+                    AccessTools.StaticFieldRefAccess<int[]>(typeof(GPUInstancerManager), "_cameraComputeKernelIDs") = kernelIDs;
+                }
             }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void SetCameraComputeShader(ComputeShader shader, int[] kernelIDs)
+        {
+            GPUInstancerManager._cameraComputeShader = shader;
+            GPUInstancerManager._cameraComputeKernelIDs = kernelIDs;
         }
 
         [HarmonyPrefix]

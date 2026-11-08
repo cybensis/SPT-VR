@@ -166,8 +166,9 @@ namespace TarkovVR.ModSupport.DynamicMaps
             var interacter = MenuPatches.vrUiInteracter;
             if (interacter == null) return;
 
-            // Cast inside the method — only resolves MapView type when actually called
-            dynamic mapView = _mapViewRef;
+            // Cast inside the method: MapView (DynamicMaps') only resolves when this runs, and this component only exists once the
+            // DynamicMaps patch above has added it. (Was C# dynamic = the runtime binder on every frame the map was open.)
+            MapView mapView = (MapView)_mapViewRef;
 
             bool triggerHeld = VRInput.RightTrigger.axis > 0.5f;
             if (triggerHeld)

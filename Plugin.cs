@@ -31,6 +31,12 @@ namespace TarkovVR
     [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
     // Soft: FuckThisCulling (GPU occlusion culling) gets stereo support patches (ModSupport/FuckThisCulling) when installed
     [BepInDependency("com.rootdarkarchon.fuckthisculling", BepInDependency.DependencyFlags.SoftDependency)]
+    // Soft: the mods with VR support patches (ModSupport), so each is in the Chainloader registry when ApplyModSupport looks
+    [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.Amanda.Graphics", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.mpstark.dynamicmaps", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.tyfon.weaponcustomizer", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("com.kmyuhkyuk.KmyTarkovConfiguration", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
@@ -314,148 +320,27 @@ namespace TarkovVR
                 ? "ORBIT detected — dragged corpses will relocate their loot waypoints."
                 : "ORBIT not installed — corpse loot-relocation limited to vanilla DeadBodiesController.");
 
-            string modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\kmyuhkyuk-KmyTarkovApi\\KmyTarkovConfiguration.dll");
-
-            if (File.Exists(modDllPath))
+            InstalledMods.EFTApiInstalled = ApplyModSupport("com.kmyuhkyuk.KmyTarkovConfiguration", "KmyTarkovConfiguration (EFT API)", "TarkovVR.ModSupport.EFTApi");
+            InstalledMods.AmandsGraphicsInstalled = ApplyModSupport("com.Amanda.Graphics", "AmandsGraphics", "TarkovVR.ModSupport.AmandsGraphics");
+            InstalledMods.FIKAInstalled = ApplyModSupport("com.fika.core", "FIKA", "TarkovVR.ModSupport.FIKA");
+            if (InstalledMods.FIKAInstalled)
             {
-                // Load the assembly
-                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
-
-                // Check for the required types and methods in the loaded assembly
-                Type configViewType = modAssembly.GetType("EFTConfiguration.Views.EFTConfigurationView");
-                if (configViewType != null)
+                // The custom-packet sync (arm poses + body-drag) now lives in the standalone
+                // SPT-VR-FikaSync.dll module, which self-initializes via its OWN plugin so that
+                // flatscreen / headless peers can register + relay + render it too (that's the fix
+                // for the "Undefined packet" busy-hands crash). We only feed it the VR-side hooks it
+                // needs for the body-drag steal arbitration.
+                try
                 {
-                    // Apply conditional patches
-                    InstalledMods.EFTApiInstalled = true;
-                    ApplyPatches("TarkovVR.ModSupport.EFTApi");
-                    MyLog.LogInfo("Dependent mod found and patches applied.");
+                    BindFikaSyncHooks();
                 }
-                else
+                catch (Exception e)
                 {
-                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
+                    MyLog.LogError($"SPT-VR-FikaSync.dll missing or failed to bind ({e.Message}). Install it next to SPT-VR.dll for co-op sync.");
                 }
             }
-            else
-            {
-                MyLog.LogWarning("EFT API dll not found, support patches will not be applied.");
-            }
-
-            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\AmandsGraphics.dll");
-
-            if (File.Exists(modDllPath))
-            {
-                // Load the assembly
-                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
-
-                // Check for the required types and methods in the loaded assembly
-                Type configViewType = modAssembly.GetType("AmandsGraphics.AmandsGraphicsClass");
-                if (configViewType != null)
-                {
-                    // Apply conditional patches
-                    InstalledMods.AmandsGraphicsInstalled = true;
-                    ApplyPatches("TarkovVR.ModSupport.AmandsGraphics");
-                    MyLog.LogInfo("AmandsGraphics found and patches applied.");
-                }
-                else
-                {
-                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
-                }
-            }
-            else
-            {
-                MyLog.LogWarning("AmandsGraphics dll not found, support patches will not be applied.");
-            }
-
-            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Fika\\Fika.Core.dll");
-
-            if (File.Exists(modDllPath))
-            {
-                // Load the assembly
-                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
-
-                // Check for the required types and methods in the loaded assembly
-                Type configViewType = modAssembly.GetType("MatchMakerUI");
-                if (configViewType != null)
-                {
-                    // Apply conditional patches
-                    InstalledMods.FIKAInstalled = true;
-                    ApplyPatches("TarkovVR.ModSupport.FIKA");
-                    // The custom-packet sync (arm poses + body-drag) now lives in the standalone
-                    // SPT-VR-FikaSync.dll module, which self-initializes via its OWN plugin so that
-                    // flatscreen / headless peers can register + relay + render it too (that's the fix
-                    // for the "Undefined packet" busy-hands crash). We only feed it the VR-side hooks it
-                    // needs for the body-drag steal arbitration.
-                    try
-                    {
-                        BindFikaSyncHooks();
-                    }
-                    catch (Exception e)
-                    {
-                        MyLog.LogError($"SPT-VR-FikaSync.dll missing or failed to bind ({e.Message}). Install it next to SPT-VR.dll for co-op sync.");
-                    }
-                    MyLog.LogInfo("Dependent mod found and patches applied.");
-                }
-                else
-                {
-                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
-                }
-            }
-            else
-            {
-                MyLog.LogWarning("FIKA Core dll not found, support patches will not be applied.");
-            }
-            
-            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\DynamicMaps\\DynamicMaps.dll");
-
-            if (File.Exists(modDllPath))
-            {
-                // Load the assembly
-                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
-
-                // Check for the required types and methods in the loaded assembly
-                Type configViewType = modAssembly.GetType("DynamicMaps.Plugin");
-                if (configViewType != null)
-                {
-                    // Apply conditional patches
-                    InstalledMods.DynamicMapsInstalled = true;
-                    ApplyPatches("TarkovVR.ModSupport.DynamicMaps");
-                    MyLog.LogInfo("Dependent mod found and patches applied.");
-                }
-                else
-                {
-                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
-                }
-            }
-            else
-            {
-                MyLog.LogWarning("DynamicMaps dll not found, support patches will not be applied.");
-            }
-
-            modDllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BepInEx\\plugins\\Tyfon.WeaponCustomizer.dll");
-
-            if (File.Exists(modDllPath))
-            {
-                // Load the assembly
-                Assembly modAssembly = Assembly.LoadFrom(modDllPath);
-
-                // Check for the required types and methods in the loaded assembly
-                Type configViewType = modAssembly.GetType("WeaponCustomizer.DraggableBone");
-                if (configViewType != null)
-                {
-                    // Apply conditional patches
-                    InstalledMods.WeaponCustomizerInstalled = true;
-                    ApplyPatches("TarkovVR.ModSupport.WeaponCustomizer");
-                    MyLog.LogInfo("Dependent mod found and patches applied.");
-                }
-                else
-                {
-                    MyLog.LogWarning("Required types/methods not found in the dependent mod.");
-                }
-            }
-            else
-            {
-                MyLog.LogWarning("WeaponCustomizer dll not found, support patches will not be applied.");
-            }
+            InstalledMods.DynamicMapsInstalled = ApplyModSupport("com.mpstark.dynamicmaps", "DynamicMaps", "TarkovVR.ModSupport.DynamicMaps");
+            InstalledMods.WeaponCustomizerInstalled = ApplyModSupport("com.tyfon.weaponcustomizer", "WeaponCustomizer", "TarkovVR.ModSupport.WeaponCustomizer");
 
             // FuckThisCulling: the eyes take turns in its visibility test (StereoCullingPatches). Patched against its private
             // internals, so only the version it was written for.
@@ -478,6 +363,29 @@ namespace TarkovVR
                 else
                     MyLog.LogWarning($"FuckThisCulling {cullingVersion}: SPT-VR's stereo support was written for 0.4.1 and is NOT applied - objects only the right eye sees may be hidden.");
             }
+        }
+
+        // Another mod's VR support: found through BepInEx's registry by its plugin ID, wherever its DLL sits (each is a soft dependency
+        // above, so it's loaded and registered before us). Was: its DLL loaded from one fixed path and a type looked up by name - a mod in
+        // another folder went unseen, and the EFT API check named a namespace KmyTarkovConfiguration had since renamed, so those patches
+        // never applied. Patches that fail (another version of the mod) are logged and the rest of our start carries on. True = installed.
+        private bool ApplyModSupport(string pluginId, string modName, string patchNamespace)
+        {
+            if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue(pluginId, out PluginInfo modInfo))
+            {
+                MyLog.LogInfo($"{modName} not installed, its VR support isn't applied.");
+                return false;
+            }
+            try
+            {
+                ApplyPatches(patchNamespace);
+                MyLog.LogInfo($"{modName} {modInfo.Metadata.Version} found: VR support applied.");
+            }
+            catch (Exception e)
+            {
+                MyLog.LogError($"{modName} {modInfo.Metadata.Version}: VR support failed to apply (another version of it?): {e}");
+            }
+            return true;
         }
 
         // Bind the body-drag steal-arbitration hooks into the FikaSync companion module. Isolated into

@@ -217,7 +217,7 @@ namespace TarkovVR.Source.Graphics
             Rect area = rect.rect;
             Vector3 scale = rect.lossyScale;
             CanvasRenderer canvasRenderer = graphic.canvasRenderer;
-            string text = graphic.GetType().GetProperty("text")?.GetValue(graphic) as string;
+            string text = graphic is Text uiText ? uiText.text : graphic is TMPro.TMP_Text tmpText ? tmpText.text : null;
             if (text != null && text.Length > 40)
                 text = text.Substring(0, 40) + "...";
             Plugin.MyLog.LogInfo($"[UiCamGate] {what} '{(parent != null ? parent.name + "/" : "")}{canvas.name}' ({renderMode}): '{graphic.name}' "

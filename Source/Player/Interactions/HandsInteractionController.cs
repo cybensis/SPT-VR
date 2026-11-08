@@ -1465,8 +1465,8 @@ namespace TarkovVR.Source.Player.Interactions
             if (syncer != null) Destroy(syncer);
             // Also drop our network-pose interpolator (FIKASupport.LootSyncSmoother) if one was
             // running — we drive the item directly now, so the smoother must not fight our hold.
-            // By name so this file keeps no FIKA compile dependency.
-            Component smoother = item.GetComponent("LootSyncSmoother");
+            // Our own class with no FIKA types in it: safe to name without FIKA installed.
+            Component smoother = item.GetComponent<LootSyncSmoother>();
             if (smoother != null) Destroy(smoother);
         }
 

@@ -667,7 +667,6 @@ namespace TarkovVR.Patches.UI
             }
         }
         
-        private static readonly FieldInfo PossibleInteractionsChangedField = typeof(Player).GetField("PossibleInteractionsChanged", BindingFlags.Instance | BindingFlags.NonPublic);
         private const float InteractionRayRadius = 0.03f;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "InteractionRaycast")]
@@ -820,8 +819,8 @@ namespace TarkovVR.Patches.UI
                 {
                     __instance._lastInteractionState = stationaryWeapon2.State;
                 }
-                var eventDelegate = (Action)PossibleInteractionsChangedField?.GetValue(__instance);
-                eventDelegate?.Invoke();
+                // Player's own: raises PossibleInteractionsChanged, exactly what the original does here
+                __instance.ForceInteractionsChanged();
             }
             if (player != __instance.InteractablePlayer || __instance._nextCastHasForceEvent)
             {
@@ -831,8 +830,8 @@ namespace TarkovVR.Patches.UI
                 {
                     UnityEngine.Debug.LogWarning(__instance.Profile.Nickname + " wants to interact to himself");
                 }
-                var eventDelegate = (Action)PossibleInteractionsChangedField?.GetValue(__instance);
-                eventDelegate?.Invoke();
+                // Player's own: raises PossibleInteractionsChanged, exactly what the original does here
+                __instance.ForceInteractionsChanged();
             }
             if (player == null && interactableObject == null)
             {

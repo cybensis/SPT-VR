@@ -23,7 +23,13 @@ namespace TarkovVR.Source.Misc
         public static float mainMinMs = 0.01f;         // items below this (both eyes and other together) are summed into one line
         private static readonly string[] cameraMessages =
             { "OnPreCull", "OnPreRender", "OnPostRender", "OnRenderImage", "OnWillRenderObject", "OnBecameVisible", "OnBecameInvisible", "OnRenderObject" };
-        private static readonly string[] callbackFields = { "onPreCull", "onPreRender", "onPostRender" };
+        // Unity's static camera callbacks (public fields): read and written through these, named for the report
+        private static readonly (string name, Func<Camera.CameraCallback> get, Action<Camera.CameraCallback> set)[] cameraCallbacks =
+        {
+            ("onPreCull", () => Camera.onPreCull, callback => Camera.onPreCull = callback),
+            ("onPreRender", () => Camera.onPreRender, callback => Camera.onPreRender = callback),
+            ("onPostRender", () => Camera.onPostRender, callback => Camera.onPostRender = callback),
+        };
 
         private class MainItem
         {
@@ -88,35 +94,35 @@ namespace TarkovVR.Source.Misc
         // Every handler on Unity's camera callbacks, each in a timing wrapper (Camera's static delegate fields)
         private static void WrapCameraCallbacks()
         {
-            foreach (string fieldName in callbackFields)
+            foreach (var (name, get, set) in cameraCallbacks)
             {
-                FieldInfo field = typeof(Camera).GetField(fieldName, BindingFlags.Public | BindingFlags.Static);
-                if (field == null || !(field.GetValue(null) is Camera.CameraCallback current)) continue;
+                Camera.CameraCallback current = get();
+                if (current == null) continue;
                 Camera.CameraCallback rebuilt = null;
                 foreach (Delegate handler in current.GetInvocationList())
                 {
                     var inner = (Camera.CameraCallback)handler;
                     MethodInfo method = handler.Method;
-                    int k = NewMainItem($"[Camera.{fieldName}] {method.DeclaringType?.Name}.{method.Name} ({method.DeclaringType?.Assembly.GetName().Name})", false);
+                    int k = NewMainItem($"[Camera.{name}] {method.DeclaringType?.Name}.{method.Name} ({method.DeclaringType?.Assembly.GetName().Name})", false);
                     Camera.CameraCallback wrapper = camera => TimedCallback(inner, camera, k);
                     wrappedCallbacks[wrapper] = inner;
                     rebuilt += wrapper;
                 }
-                field.SetValue(null, rebuilt);
+                set(rebuilt);
             }
         }
 
         // Our wrappers back to the handlers they wrap; anything added during the run stays as it is
         private static void UnwrapCameraCallbacks()
         {
-            foreach (string fieldName in callbackFields)
+            foreach (var (_, get, set) in cameraCallbacks)
             {
-                FieldInfo field = typeof(Camera).GetField(fieldName, BindingFlags.Public | BindingFlags.Static);
-                if (field == null || !(field.GetValue(null) is Camera.CameraCallback current)) continue;
+                Camera.CameraCallback current = get();
+                if (current == null) continue;
                 Camera.CameraCallback rebuilt = null;
                 foreach (Delegate handler in current.GetInvocationList())
                     rebuilt += (Camera.CameraCallback)(wrappedCallbacks.TryGetValue(handler, out Delegate original) ? original : handler);
-                field.SetValue(null, rebuilt);
+                set(rebuilt);
             }
             wrappedCallbacks.Clear();
         }
