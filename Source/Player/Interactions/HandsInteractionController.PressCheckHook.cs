@@ -15,6 +15,9 @@ namespace TarkovVR.Source.Player.Interactions
         // with no roll, so 30 here. The pinky a little open (headset).
         public static Vector3 pressCheckHookFinger = new Vector3(30f, 70f, 45f);   // index to ring
         public static Vector3 pressCheckHookPinky = new Vector3(20f, 55f, 35f);
+        // deg on top of the gripping thumb, its base / knuckle / tip joint: + closes it toward the palm, - opens it (his ask: "anything to
+        // adjust the thumb open/close"). Bending the base moves the knuckle the gun turns about, the rest bends from it.
+        public static Vector3 pressCheckHookThumb = Vector3.zero;
 
         private void UpdatePressCheckHook()
         {
@@ -36,7 +39,7 @@ namespace TarkovVR.Source.Player.Interactions
                 bool thumb = rightFingerIsThumb != null && finger < rightFingerIsThumb.Length && rightFingerIsThumb[finger];
                 if (thumb)
                 {
-                    KeepThumbOnGun(joints);
+                    KeepThumbOnGun(joints, Mathf.SmoothStep(0f, 1f, progress));
                     poseIndex += Mathf.Min(joints.Length, 3);
                     continue;
                 }
@@ -58,8 +61,9 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The thumb joint the gun turns about gets the gun's turn against the hand, so it and the rest of the thumb stay where they
-        // grip: worked in the gun's frame (the palm's turn there is known), not from the bones' world poses this frame
-        private void KeepThumbOnGun(Transform[] joints)
+        // grip: worked in the gun's frame (the palm's turn there is known), not from the bones' world poses this frame. The thumb bend
+        // knob on top, eased in with the turn: the joints before that one first (they carry it), then it, then the ones after.
+        private void KeepThumbOnGun(Transform[] joints, float amount)
         {
             if (!VRReloadController.TryGetPressCheckThumb(out int pivotJoint, out Quaternion palmInGun, out Quaternion thumbJointInGun)
                 || pivotJoint >= joints.Length || joints[pivotJoint] == null)
@@ -67,15 +71,35 @@ namespace TarkovVR.Source.Player.Interactions
             Quaternion parentInGun = palmInGun;
             for (int joint = 0; joint < pivotJoint; joint++)
             {
-                if (joints[joint] != null)
-                    parentInGun = parentInGun * joints[joint].localRotation;
+                if (joints[joint] == null)
+                    continue;
+                BendThumbJoint(joints[joint], pressCheckHookThumb[joint] * amount);
+                parentInGun = parentInGun * joints[joint].localRotation;
             }
             Transform pivot = joints[pivotJoint];
             Quaternion animated = RecoverAnimated(pivot);
-            Quaternion shown = Quaternion.Inverse(parentInGun) * thumbJointInGun;
+            Quaternion shown = Quaternion.Inverse(parentInGun) * thumbJointInGun
+                * Quaternion.AngleAxis(pressCheckHookThumb[pivotJoint] * amount * rightCurlSign, curlAxis);
             pivot.localRotation = shown;
             fingerBaseRot[pivot] = animated;
             fingerOutRot[pivot] = shown;
+            for (int joint = pivotJoint + 1; joint < joints.Length && joint < 3; joint++)
+            {
+                if (joints[joint] != null)
+                    BendThumbJoint(joints[joint], pressCheckHookThumb[joint] * amount);
+            }
+        }
+
+        // A thumb joint bent on top of how EFT animates it (nothing written for no bend)
+        private void BendThumbJoint(Transform joint, float degrees)
+        {
+            if (degrees == 0f)
+                return;
+            Quaternion animated = RecoverAnimated(joint);
+            Quaternion shown = animated * Quaternion.AngleAxis(degrees * rightCurlSign, curlAxis);
+            joint.localRotation = shown;
+            fingerBaseRot[joint] = animated;
+            fingerOutRot[joint] = shown;
         }
     }
 }
