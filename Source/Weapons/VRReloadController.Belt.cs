@@ -396,6 +396,28 @@ namespace TarkovVR.Source.Weapons
             return false;
         }
 
+        // The middle of a belt box's body, in its own frame: its biggest mesh (not the belt's links, the rounds or the spent links)
+        private static bool TryBeltBoxBodyCenter(GameObject box, out Vector3 center)
+        {
+            center = Vector3.zero;
+            float biggest = 0f;
+            foreach (MeshFilter meshFilter in box.GetComponentsInChildren<MeshFilter>(true))
+            {
+                string name = meshFilter.name;
+                if (meshFilter.sharedMesh == null || name.IndexOf("belt", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("link", System.StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf("patron", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+                Bounds bounds = meshFilter.sharedMesh.bounds;
+                Vector3 size = Vector3.Scale(bounds.size, meshFilter.transform.lossyScale);
+                float volume = Mathf.Abs(size.x * size.y * size.z);
+                if (volume <= biggest)
+                    continue;
+                biggest = volume;
+                center = box.transform.InverseTransformPoint(meshFilter.transform.TransformPoint(bounds.center));
+            }
+            return biggest > 0f;
+        }
+
         // A world point's distance (metres) to the box's body, 0 inside
         private static float DistanceToBox(Transform box, Vector3 world)
         {

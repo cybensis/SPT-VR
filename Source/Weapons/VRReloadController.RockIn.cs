@@ -124,12 +124,26 @@ namespace TarkovVR.Source.Weapons
 
         // The hand holds the magazine rigidly, so a point on it says how far the hand has rocked it, whether that came from the arm or
         // the wrist: its middle, fixed to the controller from here on. The hand holding it (MagazineHandRig): a belt box may be the gun hand's.
+        // A belt box's middle is its body's: the middle of everything it draws sits far off it (the belt and the spent links, which a box
+        // just taken off the gun still has in the model's rest shape - a lever 25-30 cm off the hinge, so the hand had to sweep a long arc
+        // to rock it out: his "it gets stuck on the track and I have to pull my hand way down"; going in, the hanging belt and hidden spent
+        // links put it much nearer). rockAwayInWell: the way it hangs off the well, seated (well point to its body's middle).
+        private static Vector3 rockAwayInWell;
+
         private static void StartRockLever()
         {
             Transform controller = MagazineHandRig;
-            Vector3 middle = heldProp.transform.TransformPoint(MagazineCenterInProp(heldProp));
+            Vector3 bodyCenter = Vector3.zero;
+            bool beltBox = heldRockIn.pivot != Vector3.zero && TryBeltBoxBodyCenter(heldProp, out bodyCenter);
+            Vector3 centerInProp = beltBox ? bodyCenter : MagazineCenterInProp(heldProp);
+            Vector3 middle = heldProp.transform.TransformPoint(centerInProp);
             rockLeverOnHand = controller.InverseTransformPoint(middle);
             rockLeverStartInWell = magazineWell.InverseTransformVector(middle - RockPivotWorld());
+            rockAwayInWell = beltBox ? (seatedLocalRotation * (centerInProp - propWellPointLocal)).normalized : Vector3.zero;
+            if (beltBox && beltDebugLog)
+                Plugin.MyLog.LogInfo($"[VRBelt] box {(railPullingOut ? "coming off" : "going on")}: rocked about its edge from its body's middle "
+                    + $"{((middle - RockPivotWorld()).magnitude * 100f):0.#} cm off the hinge (the whole model's middle: "
+                    + $"{((heldProp.transform.TransformPoint(MagazineCenterInProp(heldProp)) - RockPivotWorld()).magnitude * 100f):0.#} cm)");
         }
 
         private static Vector3 RockLeverNow()
@@ -167,6 +181,12 @@ namespace TarkovVR.Source.Weapons
             // away from the hinge as well as rocked out. An AK's keeps its own pull (rocking only).
             else if (heldRockIn.pivot != Vector3.zero)
                 handAlongTrack = Mathf.Max(handAlongTrack, Vector3.Dot(moved, outward));
+            // And straight down off the gun / up onto it (the way it hangs) as much as a magazine slides, both ways alike
+            if (rockAwayInWell != Vector3.zero)
+            {
+                float along = Vector3.Dot(moved, magazineWell.TransformDirection(rockAwayInWell).normalized);
+                handAlongTrack = railPullingOut ? Mathf.Max(handAlongTrack, along) : Mathf.Min(handAlongTrack, along);
+            }
             handOffTrack = HandOffRockingMagazine();
         }
 
