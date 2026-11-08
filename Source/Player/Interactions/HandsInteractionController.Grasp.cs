@@ -49,6 +49,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             public LootItem item;
             public GraspShape shape;
+            public bool ownsShape;                              // false = the other hand's (two hands on one item share it)
             public bool pinch;
             public float blend;                                 // 0 open .. 1 closed on it
             public bool released;
@@ -70,8 +71,10 @@ namespace TarkovVR.Source.Player.Interactions
 
             public void Clear()
             {
-                shape?.Dispose();
+                if (ownsShape)
+                    shape?.Dispose();
                 shape = null;
+                ownsShape = false;
                 item = null;
                 pinch = false;
                 blend = 0f;
@@ -92,10 +95,17 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The grab
 
-        private void BeginGrasp(GraspHand hand, LootItem item)
+        // sharedShape: the other hand's, when this one takes hold of an item that hand already holds (it stays that hand's to dispose)
+        private void BeginGrasp(GraspHand hand, LootItem item, GraspShape sharedShape = null)
         {
             hand.Clear();
             hand.item = item;
+            if (sharedShape != null)
+            {
+                hand.shape = sharedShape;
+                return;
+            }
+            hand.ownsShape = true;
             try
             {
                 hand.shape = GraspShape.Build(item);
@@ -124,16 +134,26 @@ namespace TarkovVR.Source.Player.Interactions
                 return false;
             GraspHand hand = graspHands[dominant ? 1 : 0];
             BeginGrasp(hand, item);
-            if (hand.shape == null || !TryGetGraspContact(dominant, hand.pinch, out Vector3 contact, out Vector3 normal, out Vector3 along))
+            if (hand.shape == null || !TryGraspItemShift(dominant, hand.shape, hand.pinch, item.transform.position, item.transform.rotation, out Vector3 shift))
                 return false;
-            Vector3 itemPosition = item.transform.position;
-            Quaternion itemRotation = item.transform.rotation;
+            itemTarget = item.transform.position + shift;
+            return true;
+        }
+
+        // How far (world) the item would move to sit in this hand's grasp - its nearest point onto the palm's contact point, then out until
+        // the palm's patch isn't inside it. A second hand taking a held item moves by minus this instead (HandsInteractionController.TwoHanded).
+        private bool TryGraspItemShift(bool dominant, GraspShape shape, bool pinch, Vector3 itemPosition, Quaternion itemRotation, out Vector3 shift)
+        {
+            shift = Vector3.zero;
+            if (!TryGetGraspContact(dominant, pinch, out Vector3 contact, out Vector3 normal, out Vector3 along))
+                return false;
+            Vector3 movedTo = itemPosition;
             // (a palm inside it: its nearest way out comes to the palm, as the old placement did)
-            if (hand.shape.NearestSurface(contact, itemPosition, itemRotation, out Vector3 surface, out _, out _))
-                itemPosition += contact - surface;
+            if (shape.NearestSurface(contact, movedTo, itemRotation, out Vector3 surface, out _, out _))
+                movedTo += contact - surface;
             Vector3 across = Vector3.Cross(normal, along);
-            float halfAcross = hand.pinch ? 0.008f : graspPalmHalfWidth;
-            float halfAlong = hand.pinch ? 0.01f : graspPalmHalfLength;
+            float halfAcross = pinch ? 0.008f : graspPalmHalfWidth;
+            float halfAlong = pinch ? 0.01f : graspPalmHalfLength;
             for (int step = 0; step < 20; step++)
             {
                 bool palmInside = false;
@@ -142,14 +162,14 @@ namespace TarkovVR.Source.Player.Interactions
                     for (int column = -1; column <= 1 && !palmInside; column++)
                     {
                         Vector3 underSkin = contact + along * (row * halfAlong) + across * (column * halfAcross) - normal * 0.002f;
-                        palmInside = hand.shape.Touches(underSkin, 0.0005f, itemPosition, itemRotation);
+                        palmInside = shape.Touches(underSkin, 0.0005f, movedTo, itemRotation);
                     }
                 }
                 if (!palmInside)
                     break;
-                itemPosition += normal * 0.003f;
+                movedTo += normal * 0.003f;
             }
-            itemTarget = itemPosition;
+            shift = movedTo - itemPosition;
             return true;
         }
 
@@ -221,15 +241,17 @@ namespace TarkovVR.Source.Player.Interactions
         private void ApplyGrasp(bool dominant, Transform[][] fingers, bool[] thumbs, float curlSign, float weight)
         {
             GraspHand hand = graspHands[dominant ? 1 : 0];
-            bool holdingHere = graspItems && heldItem != null && heldInDominantHand == dominant && cachedHand != null && HeldItemAlive();
-            // A hold that didn't come through BeginSummon
+            bool holdingHere = graspItems && HoldsLoot(dominant) && GraspRig(dominant) != null && HeldItemAlive();
+            // A hold that didn't come through BeginSummon, or the second hand on it (HandsInteractionController.TwoHanded)
             if (holdingHere && hand.item != heldItem)
-                BeginGrasp(hand, heldItem);
+            {
+                GraspHand otherHand = graspHands[dominant ? 0 : 1];
+                BeginGrasp(hand, heldItem, dominant != heldInDominantHand && otherHand.item == heldItem ? otherHand.shape : null);
+            }
             if (hand.item == null)
                 return;
-            if (!holdingHere)
-                hand.released = true;
-            float closed = !holdingHere ? 0f : isSummoningLoot ? Mathf.InverseLerp(0.5f, 1f, summonT) : 1f;
+            hand.released = !holdingHere;
+            float closed = !holdingHere ? 0f : isSummoningLoot && dominant == heldInDominantHand ? Mathf.InverseLerp(0.5f, 1f, summonT) : 1f;
             hand.blend = Mathf.MoveTowards(hand.blend, closed, Time.deltaTime / Mathf.Max(0.01f, closed >= hand.blend ? graspCloseTime : graspOpenTime));
             if (hand.released && hand.blend <= 0f)
             {
@@ -284,18 +306,22 @@ namespace TarkovVR.Source.Player.Interactions
             if (palm == null)
                 return;
             hand.palm = palm;
-            // The item in the rig hand's frame: where the summon will put it, or where it is
+            // The item in the frame of what this hand's arm reaches for (its rig hand, or the second hand's grip on the item): where the
+            // summon will put it, or where it is
+            Transform rig = GraspRig(dominant);
+            if (rig == null)
+                return;
             Vector3 itemInRigPosition;
             Quaternion itemInRigRotation;
-            Quaternion rigInverse = Quaternion.Inverse(cachedHand.rotation);
-            if (isSummoningLoot)
+            Quaternion rigInverse = Quaternion.Inverse(rig.rotation);
+            if (isSummoningLoot && rig == cachedHand)
             {
                 itemInRigPosition = rigInverse * (cachedHand.TransformPoint(summonRestOffset) - cachedHand.position);
                 itemInRigRotation = cachedGrabRotation;
             }
             else
             {
-                itemInRigPosition = rigInverse * (heldItem.transform.position - cachedHand.position);
+                itemInRigPosition = rigInverse * (heldItem.transform.position - rig.position);
                 itemInRigRotation = rigInverse * heldItem.transform.rotation;
             }
             // ...and in the palm's: through the arm IK's last result, or taking the palm to be on the rig hand (the IK's target)
@@ -515,16 +541,20 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void CaptureRigInPalm(LimbIK armIk)
         {
-            if (this == null || armIk == null || armIk.solver == null || armIk.solver.bone3 == null || cachedHand == null || heldItem == null)
+            if (this == null || armIk == null || armIk.solver == null || armIk.solver.bone3 == null || heldItem == null)
                 return;
             Transform bone = armIk.solver.bone3.transform;
-            GraspHand hand = graspHands[heldInDominantHand ? 1 : 0];
-            if (bone == null || hand.item == null || hand.palm != bone)
-                return;
-            Quaternion boneInverse = Quaternion.Inverse(bone.rotation);
-            hand.rigInPalmPosition = boneInverse * (cachedHand.position - bone.position);
-            hand.rigInPalmRotation = boneInverse * cachedHand.rotation;
-            hand.rigInPalmTime = Time.time;
+            for (int handIndex = 0; handIndex < graspHands.Length; handIndex++)
+            {
+                GraspHand hand = graspHands[handIndex];
+                Transform rig = GraspRig(handIndex == 1);
+                if (bone == null || rig == null || hand.item == null || hand.palm != bone)
+                    continue;
+                Quaternion boneInverse = Quaternion.Inverse(bone.rotation);
+                hand.rigInPalmPosition = boneInverse * (rig.position - bone.position);
+                hand.rigInPalmRotation = boneInverse * rig.rotation;
+                hand.rigInPalmTime = Time.time;
+            }
         }
 
         private static Transform FingersPalm(Transform[][] fingers)

@@ -367,6 +367,8 @@ namespace TarkovVR.Source.Player.Interactions
             // always snaps the item's collider surface onto the palm. No-op while holding,
             // summoning, or when disabled.
             UpdateLootPointer();
+            // The free hand taking hold of the held item too, or letting go of it (HandsInteractionController.TwoHanded)
+            UpdateSecondHand();
 
             // Drop check runs after ProcessInputStates so backpack pickup (stateUp) is handled first
             if (heldItem != null)
@@ -393,6 +395,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void LateUpdate()
         {
+            // A second hand on the held item: still holding it, its arm still on its grip
+            KeepSecondHand();
             // While an item is flying to the palm, the summon drives its position; once it
             // arrives the normal held-item maintenance takes over (same cached fields).
             if (isSummoningLoot)
@@ -936,7 +940,12 @@ namespace TarkovVR.Source.Player.Interactions
             cachedRigidbody.detectCollisions = true;
             cachedRigidbody.useGravity = false;
 
-            Vector3 naturalPosition = cachedHand.TransformPoint(cachedGrabOffset);
+            // Both hands on it: turned about the anchor's grip toward the second hand (HandsInteractionController.TwoHanded)
+            bool twoHanded = TryTwoHandedPose(out Vector3 naturalPosition, out Quaternion twoHandedRotation);
+            if (twoHanded)
+                heldItem.transform.rotation = twoHandedRotation;
+            else
+                naturalPosition = cachedHand.TransformPoint(cachedGrabOffset);
             Vector3 clampedPosition = ClampPositionToGeometry(naturalPosition, cachedItemPosition);
 
             // Forced drop if the constraint has pulled the item too far from where the hand wants it
@@ -946,7 +955,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            if ((clampedPosition - naturalPosition).sqrMagnitude > 0.0001f)
+            if ((clampedPosition - naturalPosition).sqrMagnitude > 0.0001f || twoHanded)
                 heldItem.transform.position = clampedPosition;
             else
                 heldItem.transform.localPosition = cachedGrabOffset;
@@ -1101,6 +1110,13 @@ namespace TarkovVR.Source.Player.Interactions
             // The grip that HOLDS the item is the one that drops it (either hand can summon now).
             if ((heldInDominantHand ? primaryHandGrip : secondaryHandGrip).state)
                 return;
+
+            // The other hand holds it too: it's passed to that hand, not dropped
+            if (secondHandHolding)
+            {
+                HandOffToSecondHand();
+                return;
+            }
 
             ReleaseHeldItem();
         }

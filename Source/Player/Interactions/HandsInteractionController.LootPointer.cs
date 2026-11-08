@@ -944,7 +944,7 @@ namespace TarkovVR.Source.Player.Interactions
                     // else replays the static baked open pose. While HOLDING a loot item in this hand,
                     // skeletal is suppressed (the grip squeeze would clench the fist through the item)
                     // - the baked rest pose shows instead, like before finger tracking.
-                    bool holdingInThisHand = heldItem != null && !heldInDominantHand;
+                    bool holdingInThisHand = HoldsLoot(false);
                     if (holdingInThisHand
                         || !(SkeletalActive(false) && ApplySkeletalCurls(false, leftFingerJoints, leftFingerIsThumb, basePose, leftCurlSign, handWeightBlend, leftDeltas: !mirrored)))
                         ReplayRestPose(basePose, staticDeltas: !mirrored);
