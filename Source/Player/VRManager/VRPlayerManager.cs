@@ -1175,8 +1175,11 @@ namespace TarkovVR.Source.Player.VRManager
             // If holding a loot item, skip ALL gun/scope IK logic — just position hand freely
             // Must come BEFORE scopeTransform check so heldItem always wins
             // Same while holding or reaching for a magazine, so the grab never turns into a foregrip snap
+            // Same with the gun slung (his ask: "disable all the off hand gun hand pose locking while the gun is slung ... I have my hand
+            // around the sight location the hand can sometimes get locked and doesn't rotate": the scope grab below froze the hand, and
+            // the foregrip snap took it onto the hanging gun)
             if ((VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
-                || VRReloadController.OwnsOffHand || VRReloadController.ShellInOffHand)
+                || VRReloadController.OwnsOffHand || VRReloadController.ShellInOffHand || TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
             {
                 handLock = false;
                 hapticTriggered = false;

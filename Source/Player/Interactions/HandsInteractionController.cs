@@ -769,8 +769,8 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (collider.gameObject.layer == 6)
                 {
-                    // Don't enter scope zone while holding a loot item
-                    if (heldItem != null) 
+                    // Don't enter scope zone while holding a loot item, or with the gun slung (the scope grab freezes the hand on it)
+                    if (heldItem != null || ChestHang.Hanging)
                         continue;
                     
                     scopeTransform = collider.transform;

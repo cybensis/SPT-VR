@@ -44,9 +44,11 @@ namespace TarkovVR.Source.Weapons
         public static float pistolCatchRadius = 0.05f;      // m off the track that still catches it
         public static float railExitMargin = 0.02f;         // m past the top of the track before a magazine being put in comes off it
         public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
-        public static float handReleaseTime = 0.08f;        // s the rendered hand takes to go from the magazine back to the controller
+        // s the rendered hand takes to go from a part of the gun back to the controller, eased in and out (his ask: "a sorta flicker ... when your
+        // hand disconnects"; 0.08 with an exponential ease started at full speed: a pop)
+        public static float handReleaseTime = 0.16f;
         public static bool snapHandToGrip = true;           // grabbing the gun's magazine moves the hand onto it where the animation holds it
-        public static float handSnapTime = 0.06f;           // s that move takes
+        public static float handSnapTime = 0.12f;           // s a hand takes to move onto a part's grip, eased in and out (0.06 before)
         // A hand locked on a part of the gun (the handle, a slide, the bolt, a magazine on the track, the MDR's deflector) turns with the
         // controller a little, about the point it holds ("I really liked the hand pivot on the bullet ... while holding charging handle, you
         // have a bit of wiggle on the hand"). Capped: those holds have the fingers shaped around the part. 0 = rigid, as before.
@@ -60,6 +62,12 @@ namespace TarkovVR.Source.Weapons
         public static bool reuseLastGrabPose = true;        // guns without a measured reload grip: new magazines sit in the hand the way the last one pulled off a gun did
         public static bool magazineFingers = true;          // the animation's finger pose while holding a magazine
         public static float fingerBlendRate = 12f;          // 1/s ease of that finger pose in and out
+        public static float fingerPoseSwitchRate = 14f;     // 1/s ease from one held finger pose to the next (they jumped while held)
+        // Reaching for a part of the gun (a charging handle, a bolt, the magazine on the gun): the fingers shape toward its grip as the hand
+        // comes up to it, up to preGrabShape at the edge of its grab zone, from preGrabReach outside it (his ask: "when you're getting close to a
+        // grab pose, can you sorta transition the hand animation into a grab pose"). 0 = none.
+        public static float preGrabShape = 0.6f;
+        public static float preGrabReach = 0.12f;
         public static float dropAngularSpeed = 3f;          // rad/s tumble on a dropped magazine
         public static bool sounds = true;                   // the gun's own reload sounds
         public static bool haptics = true;
@@ -159,6 +167,13 @@ namespace TarkovVR.Source.Weapons
         private static Transform latchedHandRig;            // that hand's controller transform in its arm's frame (HandRig), as it was at the grab
         private static Vector3 handSnapLocalPosition;       // the animation's grip, in the magazine's frame
         private static Quaternion handSnapLocalRotation;
+        private static Vector3 handSnapStartLocalPosition;  // where that move started from, same frame
+        private static Quaternion handSnapStartLocalRotation;
+        private static float handSnapStartTime;
+        private static Transform handReleaseFrame;          // the controller hand's parent (the rig): the let-go eases from there, walking carries it
+        private static Vector3 handReleaseStartPosition;
+        private static Quaternion handReleaseStartRotation;
+        private static float handReleaseStartTime;
         // The latch's own pose on what it holds, before the wiggle (the wiggle is put on top every frame, never into this)
         private static Vector3 latchBaseLocalPosition;
         private static Quaternion latchBaseLocalRotation = Quaternion.identity;
@@ -189,6 +204,15 @@ namespace TarkovVR.Source.Weapons
         private static Transform[] offRightFingerBones;
         private static readonly Quaternion[] leftPoseScratch = new Quaternion[16];
         private static readonly Quaternion[] rightPoseScratch = new Quaternion[16];
+        // What each hand's held finger pose eases toward, so a switch from one pose to the next while held doesn't jump
+        private static readonly Quaternion[] offHandPoseShown = new Quaternion[16];
+        private static readonly Quaternion[] gunHandPoseShown = new Quaternion[16];
+        private static readonly Quaternion[] poseTargetScratch = new Quaternion[16];
+        private static bool offHandPoseShownValid, gunHandPoseShownValid;
+        // The pre-grab shape this tick (UpdatePreGrab): a pose for each hand and how far toward it
+        private static Vector3[] offHandPreGrabPose, gunHandPreGrabPose;
+        private static bool offHandPreGrabPoseIsRight, gunHandPreGrabPoseIsRight;
+        private static float offHandPreGrabWeight, gunHandPreGrabWeight;
         private static float gunHandFingerWeight;
         private static Vector3[] gunHandFingerPoseShown;
         private static Transform gunHandPalm;
@@ -476,6 +500,10 @@ namespace TarkovVR.Source.Weapons
                 else if (gunHandTriggerPressed && InChargingHandleZone(heldFirearm, heldWeapon, gunHand: true))
                     GrabChargingHandle(heldFirearm, heldWeapon, gunHand: true);
             }
+            // The hands reaching for a part of the gun: their fingers shape toward its grip (after the grabs: a grab this tick holds it)
+            UpdatePreGrab();
+            // The off hand's arm: a switch of what it reaches for blends (ArmTargetBlend)
+            TarkovVR.Source.Player.Body.ArmTargetBlend.EnsureHooked();
             // Manual Reload, like the real button: B lets the magazine fall out of the well, unless the off hand has it
             // (on the track, still on it from seating it, or cupping it from the support grip just above)
             // A new magazine in the hand, at the gun's: the trigger takes that one too (palming)
@@ -1550,6 +1578,16 @@ namespace TarkovVR.Source.Weapons
         {
             if (!handLatched || handLatch == null)
                 return;
+            // A new move (or the old one's target jumping): eased from where the hand is now. Small moves of a target that's followed every
+            // frame (the MDR deflector's clip path) carry on in the same ease, then follow it exactly.
+            bool fresh = !handLatchSnapping || (holder.TransformPoint(handSnapLocalPosition) - handPosition).sqrMagnitude > 0.015f * 0.015f
+                || Quaternion.Angle(holder.rotation * handSnapLocalRotation, handRotation) > 8f;
+            if (fresh)
+            {
+                handSnapStartLocalPosition = latchBaseLocalPosition;
+                handSnapStartLocalRotation = latchBaseLocalRotation;
+                handSnapStartTime = Time.time;
+            }
             handSnapLocalPosition = holder.InverseTransformPoint(handPosition);
             handSnapLocalRotation = Quaternion.Inverse(holder.rotation) * handRotation;
             handLatchSnapping = true;
@@ -1558,12 +1596,20 @@ namespace TarkovVR.Source.Weapons
         // The hand eases from the magazine back to the controller, then the arm goes back to LeftHand
         private static void ReleaseHandLatch()
         {
-            if (!handLatched)
+            if (!handLatched || handLatchReleasing)
                 return;
             handLatchReleasing = true;
             handLatchSnapping = false;
             if (handLatch != null)
+            {
                 handLatch.SetParent(null, worldPositionStays: true);
+                // Where it lets go from, in the rig's frame (the controller hand's parent), so walking and turning carry it along
+                Transform handRig = LatchedHandRig;
+                handReleaseFrame = handRig != null ? handRig.parent : null;
+                handReleaseStartPosition = handReleaseFrame != null ? handReleaseFrame.InverseTransformPoint(handLatch.position) : handLatch.position;
+                handReleaseStartRotation = handReleaseFrame != null ? Quaternion.Inverse(handReleaseFrame.rotation) * handLatch.rotation : handLatch.rotation;
+                handReleaseStartTime = Time.time;
+            }
         }
 
         private static void ReleaseHandLatchNow()
@@ -1626,15 +1672,19 @@ namespace TarkovVR.Source.Weapons
                     handLatchReleasing = false;
                     return;
                 }
+                // Eased in and out over handReleaseTime from where it let go onto the controller as it is now (it ends on time, moving or not)
                 Transform handRig = LatchedHandRig;
-                float ease = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(handReleaseTime / 3f, 0.001f));
-                handLatch.position = Vector3.Lerp(handLatch.position, handRig.position, ease);
-                handLatch.rotation = Quaternion.Slerp(handLatch.rotation, handRig.rotation, ease);
-                if ((handLatch.position - handRig.position).sqrMagnitude < 0.003f * 0.003f && Quaternion.Angle(handLatch.rotation, handRig.rotation) < 2f)
+                float releaseTime = (Time.time - handReleaseStartTime) / Mathf.Max(handReleaseTime, 0.001f);
+                if (releaseTime >= 1f)
                 {
                     ReleaseHandLatchNow();
                     return;
                 }
+                float release = Mathf.SmoothStep(0f, 1f, releaseTime);
+                Vector3 releaseFrom = handReleaseFrame != null ? handReleaseFrame.TransformPoint(handReleaseStartPosition) : handReleaseStartPosition;
+                Quaternion releaseFromRotation = handReleaseFrame != null ? handReleaseFrame.rotation * handReleaseStartRotation : handReleaseStartRotation;
+                handLatch.position = Vector3.Lerp(releaseFrom, handRig.position, release);
+                handLatch.rotation = Quaternion.Slerp(releaseFromRotation, handRig.rotation, release);
             }
             // The stuck case of a failure to eject places the latch itself, fully free (PullStuckCase)
             else if (!(HoldingJamCase && !jamCaseOut))
@@ -1649,9 +1699,11 @@ namespace TarkovVR.Source.Weapons
                 }
                 if (handLatchSnapping)
                 {
-                    float ease = 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(handSnapTime / 3f, 0.001f));
-                    latchBaseLocalPosition = Vector3.Lerp(latchBaseLocalPosition, handSnapLocalPosition, ease);
-                    latchBaseLocalRotation = Quaternion.Slerp(latchBaseLocalRotation, handSnapLocalRotation, ease);
+                    // Eased in and out (an exponential ease starts at full speed: it read as a pop)
+                    float snapTime = (Time.time - handSnapStartTime) / Mathf.Max(handSnapTime, 0.001f);
+                    float snap = snapTime >= 1f ? 1f : Mathf.SmoothStep(0f, 1f, snapTime);
+                    latchBaseLocalPosition = Vector3.Lerp(handSnapStartLocalPosition, handSnapLocalPosition, snap);
+                    latchBaseLocalRotation = Quaternion.Slerp(handSnapStartLocalRotation, handSnapLocalRotation, snap);
                 }
                 handLatch.localPosition = latchBaseLocalPosition;
                 handLatch.localRotation = latchBaseLocalRotation;
@@ -2213,16 +2265,33 @@ namespace TarkovVR.Source.Weapons
         {
             latchThumbShown = Mathf.MoveTowards(latchThumbShown, latchThumbTarget, Time.deltaTime / Mathf.Max(releaseButtonTime, 0.001f));
             Vector3[] pose = OffHandPose(out bool rightHandPose);
+            float target = pose != null && magazineFingers ? 1f : 0f;
+            // Nothing held: reaching for a part of the gun shapes the fingers part way toward its grip (UpdatePreGrab)
+            if (pose == null && magazineFingers && offHandPreGrabPose != null && offHandPreGrabWeight > 0f)
+            {
+                pose = offHandPreGrabPose;
+                rightHandPose = offHandPreGrabPoseIsRight;
+                target = offHandPreGrabWeight;
+            }
             if (pose != null)
             {
                 fingerPoseShown = pose;
                 fingerPoseShownIsRight = rightHandPose;
             }
+            // The off hand changed arms (the gun went to the other hand): the eased pose was the other hand's bones
+            if (offHandPoseOnRightArm != OffHandOnRightArm)
+            {
+                offHandPoseOnRightArm = OffHandOnRightArm;
+                offHandPoseShownValid = false;
+            }
 
-            float target = pose != null && magazineFingers ? 1f : 0f;
             fingerWeight = Mathf.Lerp(fingerWeight, target, 1f - Mathf.Exp(-fingerBlendRate * Time.deltaTime));
             if (fingerWeight < 0.01f || fingerPoseShown == null)
+            {
+                // Out of it: the next pose comes in from the hand's own (the weight's ease), not from this one
+                offHandPoseShownValid = false;
                 return;
+            }
             if (OffHandOnRightArm)
             {
                 ApplyOffHandPoseOnRight();
@@ -2237,23 +2306,42 @@ namespace TarkovVR.Source.Weapons
             if (leftPalmBones == null || leftPalmBones.Length == 0 || leftPalmBones[0] != leftPalm)
                 leftPalmBones = leftPalm.GetComponentsInChildren<Transform>(true);
 
-            int boneCount = Mathf.Min(leftPalmBones.Length, fingerPoseShown.Length);
+            int boneCount = Mathf.Min(leftPalmBones.Length, Mathf.Min(fingerPoseShown.Length, 16));
+            for (int i = 0; i < boneCount; i++)
+                poseTargetScratch[i] = Quaternion.Euler(fingerPoseShown[i]);
+            EaseShownPose(offHandPoseShown, ref offHandPoseShownValid, poseTargetScratch, boneCount);
             for (int i = 1; i < boneCount; i++)
-                leftPalmBones[i].localRotation = Quaternion.Slerp(leftPalmBones[i].localRotation, Quaternion.Euler(fingerPoseShown[i]), fingerWeight);
+                leftPalmBones[i].localRotation = Quaternion.Slerp(leftPalmBones[i].localRotation, offHandPoseShown[i], fingerWeight);
             ApplyLatchThumb(leftPalmBones);
         }
 
-        // A left-hand pose on the left hand's bones the way the off hand's is put on above (its palm's children in order)
-        private static void ApplyLeftHandPose(Vector3[] pose, float weight)
+        private static bool offHandPoseOnRightArm;
+
+        // A hand's held pose eased toward the one it should have now, so going from one pose to the next while held doesn't jump (a grab's
+        // pre-shape to its grip, a magazine's pull grip to its insert grip, a shell's hold to its path). Fresh: straight to it - the hand's
+        // weight eases it in from the hand's own pose.
+        private static void EaseShownPose(Quaternion[] shown, ref bool valid, Quaternion[] target, int count)
+        {
+            float ease = 1f - Mathf.Exp(-fingerPoseSwitchRate * Time.deltaTime);
+            for (int i = 0; i < count; i++)
+                shown[i] = valid ? Quaternion.Slerp(shown[i], target[i], ease) : target[i];
+            valid = true;
+        }
+
+        // A left-hand pose on the left hand's bones the way the off hand's is put on above (its palm's children in order), eased like it
+        private static void ApplyLeftHandPose(Vector3[] pose, float weight, Quaternion[] shown, ref bool shownValid)
         {
             Transform leftPalm = InitVRPatches.leftPalm;
             if (leftPalm == null)
                 return;
             if (leftPalmBones == null || leftPalmBones.Length == 0 || leftPalmBones[0] != leftPalm)
                 leftPalmBones = leftPalm.GetComponentsInChildren<Transform>(true);
-            int boneCount = Mathf.Min(leftPalmBones.Length, pose.Length);
+            int boneCount = Mathf.Min(leftPalmBones.Length, Mathf.Min(pose.Length, 16));
+            for (int i = 0; i < boneCount; i++)
+                poseTargetScratch[i] = Quaternion.Euler(pose[i]);
+            EaseShownPose(shown, ref shownValid, poseTargetScratch, boneCount);
             for (int i = 1; i < boneCount; i++)
-                leftPalmBones[i].localRotation = Quaternion.Slerp(leftPalmBones[i].localRotation, Quaternion.Euler(pose[i]), weight);
+                leftPalmBones[i].localRotation = Quaternion.Slerp(leftPalmBones[i].localRotation, shown[i], weight);
         }
 
         // The same for the RIGHT hand, after that hand's own finger update: the gun hand on the charging handle / bolt, or the off hand
@@ -2292,31 +2380,34 @@ namespace TarkovVR.Source.Weapons
                 offRightPalm = palm;
                 offRightFingerBones = FingerBonesInPoseOrder(palm);
             }
-            int boneCount = Mathf.Min(offRightFingerBones.Length, fingerPoseShown.Length);
+            int boneCount;
             if (fingerPoseShownIsRight)
             {
-                for (int i = 1; i < boneCount; i++)
-                {
-                    if (offRightFingerBones[i] != null)
-                        offRightFingerBones[i].localRotation = Quaternion.Slerp(offRightFingerBones[i].localRotation, Quaternion.Euler(fingerPoseShown[i]), fingerWeight);
-                }
-                return;
+                boneCount = Mathf.Min(offRightFingerBones.Length, Mathf.Min(fingerPoseShown.Length, 16));
+                for (int i = 0; i < boneCount; i++)
+                    poseTargetScratch[i] = Quaternion.Euler(fingerPoseShown[i]);
             }
-            for (int i = 0; i < leftPoseScratch.Length; i++)
-                leftPoseScratch[i] = i < fingerPoseShown.Length ? Quaternion.Euler(fingerPoseShown[i]) : Quaternion.identity;
-            if (latchThumbShown > 0f && latchThumbPose != null)
+            else
             {
-                int firstJoint = 1 + latchFinger * 3;
-                for (int joint = 0; joint < latchThumbPose.Length && firstJoint + joint < leftPoseScratch.Length; joint++)
-                    leftPoseScratch[firstJoint + joint] = Quaternion.Slerp(leftPoseScratch[firstJoint + joint], Quaternion.Euler(latchThumbPose[joint]), latchThumbShown);
+                for (int i = 0; i < leftPoseScratch.Length; i++)
+                    leftPoseScratch[i] = i < fingerPoseShown.Length ? Quaternion.Euler(fingerPoseShown[i]) : Quaternion.identity;
+                if (latchThumbShown > 0f && latchThumbPose != null)
+                {
+                    int firstJoint = 1 + latchFinger * 3;
+                    for (int joint = 0; joint < latchThumbPose.Length && firstJoint + joint < leftPoseScratch.Length; joint++)
+                        leftPoseScratch[firstJoint + joint] = Quaternion.Slerp(leftPoseScratch[firstJoint + joint], Quaternion.Euler(latchThumbPose[joint]), latchThumbShown);
+                }
+                if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPose(leftPoseScratch, rightToLeft: false, rightPoseScratch))
+                    return;
+                boneCount = Mathf.Min(offRightFingerBones.Length, Mathf.Min(rightPoseScratch.Length, 16));
+                for (int i = 0; i < boneCount; i++)
+                    poseTargetScratch[i] = rightPoseScratch[i];
             }
-            if (!TarkovVR.Source.Player.Body.HandMirror.TryMirrorPose(leftPoseScratch, rightToLeft: false, rightPoseScratch))
-                return;
-            boneCount = Mathf.Min(offRightFingerBones.Length, rightPoseScratch.Length);
+            EaseShownPose(offHandPoseShown, ref offHandPoseShownValid, poseTargetScratch, boneCount);
             for (int i = 1; i < boneCount; i++)
             {
                 if (offRightFingerBones[i] != null)
-                    offRightFingerBones[i].localRotation = Quaternion.Slerp(offRightFingerBones[i].localRotation, rightPoseScratch[i], fingerWeight);
+                    offRightFingerBones[i].localRotation = Quaternion.Slerp(offRightFingerBones[i].localRotation, offHandPoseShown[i], fingerWeight);
             }
         }
 
@@ -2332,16 +2423,30 @@ namespace TarkovVR.Source.Weapons
                 pose = RoundFingers(rightArm);
             else if (pose == null && DeflectorInGunHand)
                 pose = DeflectorFingers(rightArm);
+            float target = pose != null && magazineFingers ? 1f : 0f;
+            // Off the grip and reaching for the handle or the bolt: part way toward its grip (UpdatePreGrab)
+            if (pose == null && magazineFingers && gunHandPreGrabPose != null && gunHandPreGrabWeight > 0f)
+            {
+                pose = gunHandPreGrabPose;
+                target = gunHandPreGrabWeight;
+            }
             if (pose != null)
                 gunHandFingerPoseShown = pose;
+            if (gunHandPoseOnRightArm != rightArm)
+            {
+                gunHandPoseOnRightArm = rightArm;
+                gunHandPoseShownValid = false;
+            }
 
-            float target = pose != null && magazineFingers ? 1f : 0f;
             gunHandFingerWeight = Mathf.Lerp(gunHandFingerWeight, target, 1f - Mathf.Exp(-fingerBlendRate * Time.deltaTime));
             if (gunHandFingerWeight < 0.01f || gunHandFingerPoseShown == null)
+            {
+                gunHandPoseShownValid = false;
                 return;
+            }
             if (!rightArm)
             {
-                ApplyLeftHandPose(gunHandFingerPoseShown, gunHandFingerWeight);
+                ApplyLeftHandPose(gunHandFingerPoseShown, gunHandFingerWeight, gunHandPoseShown, ref gunHandPoseShownValid);
                 return;
             }
 
@@ -2355,12 +2460,116 @@ namespace TarkovVR.Source.Weapons
                 gunHandFingerBones = FingerBonesInPoseOrder(palm);
             }
 
-            int boneCount = Mathf.Min(gunHandFingerBones.Length, gunHandFingerPoseShown.Length);
+            int boneCount = Mathf.Min(gunHandFingerBones.Length, Mathf.Min(gunHandFingerPoseShown.Length, 16));
+            for (int i = 0; i < boneCount; i++)
+                poseTargetScratch[i] = Quaternion.Euler(gunHandFingerPoseShown[i]);
+            EaseShownPose(gunHandPoseShown, ref gunHandPoseShownValid, poseTargetScratch, boneCount);
             for (int i = 1; i < boneCount; i++)
             {
                 if (gunHandFingerBones[i] != null)
-                    gunHandFingerBones[i].localRotation = Quaternion.Slerp(gunHandFingerBones[i].localRotation, Quaternion.Euler(gunHandFingerPoseShown[i]), gunHandFingerWeight);
+                    gunHandFingerBones[i].localRotation = Quaternion.Slerp(gunHandFingerBones[i].localRotation, gunHandPoseShown[i], gunHandFingerWeight);
             }
+        }
+
+        private static bool gunHandPoseOnRightArm = true;
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Reaching for a part of the gun: the fingers shape toward its grip (preGrabShape)
+
+        // From Tick, after the grabs: the nearest part each free hand could take now and how near it is. The off hand while the gun hand
+        // has the grip (the charging handle, a bolt-action's knob, the magazine on the gun); the gun hand off the grip with the off hand
+        // holding the gun up (the handle, the knob) - the same hands that may take them.
+        private static void UpdatePreGrab()
+        {
+            offHandPreGrabPose = null;
+            offHandPreGrabWeight = 0f;
+            gunHandPreGrabPose = null;
+            gunHandPreGrabWeight = 0f;
+            if (preGrabShape <= 0f || !enabled || VRGlobals.vrPlayer == null || VRGlobals.menuOpen)
+                return;
+            if (HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound || HoldingJamCase
+                || HoldingDeflector || PressCheckActive)
+                return;
+            FirearmController firearmController = VRGlobals.firearmController;
+            if (firearmController == null || firearmController.Item == null || firearmController.IsInLauncherMode()
+                || !(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+                return;
+            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+                return;
+            if (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting)
+                PreGrabFor(firearmController, gunHand: false, out offHandPreGrabPose, out offHandPreGrabPoseIsRight, out offHandPreGrabWeight);
+            if (ChestHang.SupportOnly && !ChestHang.HandInRegrabZone)
+                PreGrabFor(firearmController, gunHand: true, out gunHandPreGrabPose, out gunHandPreGrabPoseIsRight, out gunHandPreGrabWeight);
+        }
+
+        private static void PreGrabFor(FirearmController firearmController, bool gunHand, out Vector3[] pose, out bool poseIsRight, out float weight)
+        {
+            pose = null;
+            poseIsRight = false;
+            weight = 0f;
+            Weapon weapon = firearmController.Item;
+            bool rightArm = OnRightArm(gunHand);
+            float nearest = float.MaxValue;     // m outside the part's grab zone (0 or less: in it)
+            Vector3[] nearestPose = null;
+            bool nearestIsRight = false;
+
+            // The charging handle (or a pistol's slide): the hold this arm takes it with, its clip's fingers
+            if (chargingHandle && HandsMayWorkAction(firearmController, weapon) && TryGetChargingHandle(firearmController, weapon))
+            {
+                Vector3 backWorld = firearmController.WeaponRoot.up;
+                string family = AnimationFamily(firearmController);
+                HandleHold hold = null;
+                if (rightArm)
+                    gunHandHandleHolds.TryGetValue(family, out hold);
+                else
+                    handleHolds.TryGetValue(family, out hold);
+                Vector3[] fingers = hold?.fingers ?? (rightArm ? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS);
+                for (int zone = 0; zone < HandleZoneCount; zone++)
+                {
+                    Vector3 grabPoint = HandleZonePoint(zone, backWorld);
+                    float outside = HandDistanceToCapsule(gunHand, grabPoint, grabPoint + backWorld * handleZoneBack) - handleGrabRadius;
+                    if (outside < nearest)
+                    {
+                        nearest = outside;
+                        nearestPose = fingers;
+                        nearestIsRight = rightArm;
+                    }
+                }
+            }
+            // A bolt-action's knob
+            if (CanWorkBolt(firearmController, out BoltData bolt) && EnsureBoltBones(firearmController, bolt))
+            {
+                if (!boltClosedPoseRead)
+                    ReadClosedBoltPose();
+                if (boltClosedPoseRead)
+                {
+                    Vector3 knob = KnobWorld(BoltStateOf(weapon), bolt);
+                    float outside = HandDistanceToCapsule(gunHand, knob, knob) - boltGrabRadius;
+                    if (outside < nearest)
+                    {
+                        nearest = outside;
+                        nearestPose = rightArm ? bolt.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
+                        nearestIsRight = rightArm;
+                    }
+                }
+            }
+            // The magazine on the gun (the off hand's: the pull's pinch, the left hand's pose, mirrored for the right arm)
+            if (!gunHand && !MagazinePartlyOut && CanStartGrab(out _, out Weapon magazineWeapon, out Slot magazineSlot) && GunMagazineGrabbable(magazineWeapon)
+                && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
+            {
+                float outside = DistanceToSegment(OffHandPalm(), magazineCenter, magazineBottom) - magazineGrabRadius;
+                if (outside < nearest)
+                {
+                    nearest = outside;
+                    nearestPose = MAGAZINE_PULL_FINGERS;
+                    nearestIsRight = false;
+                }
+            }
+            if (nearestPose == null || nearest >= preGrabReach)
+                return;
+            pose = nearestPose;
+            poseIsRight = nearestIsRight;
+            weight = preGrabShape * (1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(nearest / Mathf.Max(preGrabReach, 0.01f))));
         }
 
         // The palm, then three joints a finger, thumb first. Found by name: the palm also carries attach points.
