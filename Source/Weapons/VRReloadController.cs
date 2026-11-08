@@ -1121,14 +1121,16 @@ namespace TarkovVR.Source.Weapons
             float catchReach = pistolTrack ? pistolCatchReach : railLength + railExitMargin;
             float catchRadius = pistolTrack ? pistolCatchRadius : railCaptureRadius;
             bool inCatchZone = alongTrack >= -0.005f && alongTrack <= catchReach && offTrack <= catchRadius && angle <= railCaptureAngle;
+            // A belt box on its hinge: caught hooked (where its well point sits at the full rock, off the well). Before the arming below: a box
+            // that just came off sits right in that spot, and armed by the old straight track it was hooked straight back on (his video:
+            // pulled down, it snapped between the hand and the gun - the log's four or five "going on" right after each "off the gun").
+            if (heldRockIn != null && heldRockIn.pivot != Vector3.zero)
+                inCatchZone = HookedOnPivot(propTransform);
             if (!railCatchArmed)
             {
                 railCatchArmed = !inCatchZone && topOffset.magnitude >= railCatchClearance;
                 return;
             }
-            // A belt box on its hinge: caught hooked (where its well point sits at the full rock, off the well)
-            if (heldRockIn != null && heldRockIn.pivot != Vector3.zero)
-                inCatchZone = HookedOnPivot(propTransform);
             // A new magazine only with the well empty (the gun's own, out in the hand, still counts as in it for Tarkov)
             if (inCatchZone && (heldSource == HeldMagazineSource.FromGun || heldForFirearm.Item.GetCurrentMagazine() == null))
             {
@@ -1319,7 +1321,9 @@ namespace TarkovVR.Source.Weapons
             lastGrabRotation = grabRotation;
             ToLeftPalm(heldProp, magazineWell, ref lastGrabPosition, ref lastGrabRotation);
             hasLastGrabPose = true;
-            if (heldReloadGrip?.pull != null)
+            // A belt box off its hinge stays in the hand just as it is: the clip's carry (pk_mag_out's) turned it face-up with the rounds
+            // through the fingers (his video)
+            if (heldReloadGrip?.pull != null && !(heldRockIn != null && heldRockIn.pivot != Vector3.zero))
             {
                 freeHoldPosition = heldReloadGrip.pull.position;
                 freeHoldRotation = Quaternion.Euler(heldReloadGrip.pull.rotation);

@@ -129,6 +129,7 @@ namespace TarkovVR.Source.Weapons
         // to rock it out: his "it gets stuck on the track and I have to pull my hand way down"; going in, the hanging belt and hidden spent
         // links put it much nearer). rockAwayInWell: the way it hangs off the well, seated (well point to its body's middle).
         private static Vector3 rockAwayInWell;
+        private static Quaternion rockHandRotationAtStart = Quaternion.identity;
 
         private static void StartRockLever()
         {
@@ -138,6 +139,7 @@ namespace TarkovVR.Source.Weapons
             Vector3 centerInProp = beltBox ? bodyCenter : MagazineCenterInProp(heldProp);
             Vector3 middle = heldProp.transform.TransformPoint(centerInProp);
             rockLeverOnHand = controller.InverseTransformPoint(middle);
+            rockHandRotationAtStart = controller.rotation;
             rockLeverStartInWell = magazineWell.InverseTransformVector(middle - RockPivotWorld());
             rockAwayInWell = beltBox ? (seatedLocalRotation * (centerInProp - propWellPointLocal)).normalized : Vector3.zero;
             if (beltBox && beltDebugLog && !railPullingOut)
@@ -182,9 +184,18 @@ namespace TarkovVR.Source.Weapons
             if (rockAwayInWell != Vector3.zero)
             {
                 float alongAway = Vector3.Dot(moved, magazineWell.TransformDirection(rockAwayInWell).normalized);
-                handAlongTrack = railPullingOut ? Mathf.Max(handAlongTrack, Mathf.Max(Vector3.Dot(moved, outward), alongAway))
+                // The hand's own roll about the hinge's line (his video: "rolling it out to the left, the same way I roll it into place,
+                // doesn't work"): held by its far end, a roll of the wrist turns the box about the HAND, which carried the lever point the
+                // other way round the hinge - read as rocking it back in. The hand's turn itself, same sense as the box's.
+                Quaternion turned = MagazineHandRig.rotation * Quaternion.Inverse(rockHandRotationAtStart);
+                if (turned.w < 0f)
+                    turned = new Quaternion(-turned.x, -turned.y, -turned.z, -turned.w);
+                float rolledDegrees = 2f * Mathf.Atan2(Vector3.Dot(new Vector3(turned.x, turned.y, turned.z), hinge), turned.w) * Mathf.Rad2Deg;
+                float rolled = rolledDegrees / heldRockIn.angle * railLength;
+                handAlongTrack = railPullingOut ? Mathf.Max(handAlongTrack, Mathf.Max(Mathf.Max(Vector3.Dot(moved, outward), alongAway), rolled))
                     : Mathf.Min(handAlongTrack, alongAway);
                 lastRockTerms = new Vector3(rockedDegrees, Vector3.Dot(moved, outward), alongAway);
+                lastRollDegrees = rolledDegrees;
             }
             handOffTrack = HandOffRockingMagazine();
         }
@@ -217,6 +228,7 @@ namespace TarkovVR.Source.Weapons
         // half as far again as the real one and slid off it. Now it rocks out only beltBoxRockOutDegrees and then it's the hand's.
         public static float beltBoxRockOutDegrees = 8f;     // deg a belt box rocks off its edge before it comes away in the hand (it hooks on at its full angle)
         private static Vector3 lastRockTerms;                // this frame's rock (deg), away from the hinge, down (m): the take-out log
+        private static float lastRollDegrees;               // and the hand's own roll about the hinge's line
         private static float boxPullLogTime;
 
         private static void BeltBoxComesOff(float trackPosition, float handOffTrack, bool gripReleased)
@@ -229,7 +241,7 @@ namespace TarkovVR.Source.Weapons
             if (beltDebugLog && Time.time >= boxPullLogTime)
             {
                 boxPullLogTime = Time.time + 0.25f;
-                Plugin.MyLog.LogInfo($"[VRBelt] box coming off: {railPosition / freeAt * 100f:0}% out (rock {lastRockTerms.x:0.#} deg, away {lastRockTerms.y * 100f:0.#} cm, "
+                Plugin.MyLog.LogInfo($"[VRBelt] box coming off: {railPosition / freeAt * 100f:0}% out (rock {lastRockTerms.x:0.#} deg, hand roll {lastRollDegrees:0.#} deg, away {lastRockTerms.y * 100f:0.#} cm, "
                     + $"down {lastRockTerms.z * 100f:0.#} cm), hand off it {handOffTrack * 100f:0.#} cm");
             }
             if (gripReleased)
