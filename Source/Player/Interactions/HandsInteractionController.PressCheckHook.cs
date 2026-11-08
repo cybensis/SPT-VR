@@ -33,8 +33,8 @@ namespace TarkovVR.Source.Player.Interactions
             float closeFrom = Mathf.Clamp(VRReloadController.pressCheckFingersCloseFrom, 0.05f, 0.95f);
             float open = Mathf.SmoothStep(0f, 1f, progress / closeFrom);
             float close = Mathf.SmoothStep(0f, 1f, (progress - closeFrom) / (1f - closeFrom));
-            // The slide drawn back: the fingers tilt back with it from their knuckles (a turn in the palm's frame = the first joints' parent)
-            Quaternion drag = VRReloadController.PressCheckFingerDrag();
+            // The slide drawn back: each finger tilts back with it from its knuckle (below, from its own knuckle-to-tip direction)
+            bool dragging = VRReloadController.TryGetPressCheckDrag(out Vector3 backInPalm, out float pull);
             int poseIndex = 0;
             for (int finger = 0; finger < rightFingerJoints.Length; finger++)
             {
@@ -48,22 +48,45 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 bool pinky = joints.Length > 0 && joints[0] != null && joints[0].name.IndexOf("Digit5", System.StringComparison.OrdinalIgnoreCase) >= 0;
                 Vector3 bends = pinky ? pressCheckHookPinky : pressCheckHookFinger;
-                for (int joint = 0; joint < joints.Length && joint < 3; joint++, poseIndex++)
+                int jointCount = Mathf.Min(joints.Length, 3);
+                for (int joint = 0; joint < jointCount; joint++)
                 {
-                    if (joints[joint] == null || poseIndex >= rightRestPoseEuler.Length)
+                    pressCheckJointAnimated[joint] = Quaternion.identity;
+                    pressCheckJointShown[joint] = Quaternion.identity;
+                    if (joints[joint] == null || poseIndex + joint >= rightRestPoseEuler.Length)
                         continue;
                     Quaternion animated = RecoverAnimated(joints[joint]);
-                    Quaternion openPose = Quaternion.Euler(rightRestPoseEuler[poseIndex]);
+                    Quaternion openPose = Quaternion.Euler(rightRestPoseEuler[poseIndex + joint]);
                     Quaternion onSlide = openPose * Quaternion.AngleAxis(bends[joint] * rightCurlSign, curlAxis);
-                    Quaternion shown = Quaternion.Slerp(animated, Quaternion.Slerp(openPose, onSlide, close), open);
-                    if (joint == 0)
-                        shown = drag * shown;
-                    joints[joint].localRotation = shown;
-                    fingerBaseRot[joints[joint]] = animated;
-                    fingerOutRot[joints[joint]] = shown;
+                    pressCheckJointAnimated[joint] = animated;
+                    pressCheckJointShown[joint] = Quaternion.Slerp(animated, Quaternion.Slerp(openPose, onSlide, close), open);
+                }
+                poseIndex += jointCount;
+                // The finger as posed, knuckle to tip in the palm's frame (to the last joint, along the local chain - the bones' world poses
+                // aren't this frame's yet), turned toward the gun's back by as much as keeps the tip with the slide
+                if (dragging && jointCount == 3 && joints[0] != null && joints[1] != null && joints[2] != null)
+                {
+                    Vector3 toTip = pressCheckJointShown[0] * (joints[1].localPosition + pressCheckJointShown[1] * joints[2].localPosition);
+                    Vector3 axis = Vector3.Cross(toTip, backInPalm);
+                    if (axis.sqrMagnitude > 1e-10f)
+                    {
+                        float reach = Mathf.Max(VRReloadController.pressCheckFingerReach, 0.01f);
+                        pressCheckJointShown[0] = Quaternion.AngleAxis(Mathf.Atan2(pull, reach) * Mathf.Rad2Deg, axis) * pressCheckJointShown[0];
+                    }
+                }
+                for (int joint = 0; joint < jointCount; joint++)
+                {
+                    if (joints[joint] == null)
+                        continue;
+                    joints[joint].localRotation = pressCheckJointShown[joint];
+                    fingerBaseRot[joints[joint]] = pressCheckJointAnimated[joint];
+                    fingerOutRot[joints[joint]] = pressCheckJointShown[joint];
                 }
             }
         }
+
+        private static readonly Quaternion[] pressCheckJointAnimated = new Quaternion[3];
+        private static readonly Quaternion[] pressCheckJointShown = new Quaternion[3];
 
         // The thumb joint the gun turns about gets the gun's turn against the hand, so it and the rest of the thumb stay where they
         // grip: worked in the gun's frame (the palm's turn there is known), not from the bones' world poses this frame. The thumb bend

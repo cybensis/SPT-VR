@@ -45,6 +45,9 @@ namespace TarkovVR.Source.Weapons
         public static float pressCheckGripReturn = 0.6f;    // the grip's value (how far the fingers wrap it, no squeeze) that puts the hand back on it
         public static Vector3 pressCheckHandOffset = new Vector3(-0.03f, 0f, 0f);   // m the gun moved in the hand at the full turn: x right, y back, z up along the gun
         public static Vector3 pressCheckHandTurn = Vector3.zero;     // deg more turn at the full turn, about the knuckle, in the gun's frame
+        // deg the thumb turned about its knuckle on the gun, in the gun's frame (x right, y back, z up): z swings it to the sides (his
+        // ask: open it "to the left"; HandsInteractionController.pressCheckHookThumb only curls it in or out)
+        public static Vector3 pressCheckThumbTurn = Vector3.zero;
         public static bool pressCheckRoundRides = true;     // the chambered round comes back with the slide (the extractor has it)
         public static bool pressCheckDebug = false;
 
@@ -316,20 +319,27 @@ namespace TarkovVR.Source.Weapons
         {
             thumbJoint = pressCheckPivotThumbJoint;
             palmInGun = HandTurnInFrame() * pressCheckPalmTurnInFrame;
-            thumbJointInGun = pressCheckThumbInFrame;
+            // The thumb turn knob, eased in with the turn, from the gun's frame into the marker's
+            Quaternion thumbTurn = Quaternion.Slerp(Quaternion.identity,
+                Quaternion.Inverse(pressCheckFrameInGun) * Quaternion.Euler(pressCheckThumbTurn) * pressCheckFrameInGun, Mathf.SmoothStep(0f, 1f, pressCheckShown));
+            thumbJointInGun = thumbTurn * pressCheckThumbInFrame;
             return pressCheckFor != null;
         }
 
         // The slide drawn back: the fingers on it tilt back from their knuckles toward the back of the gun, far enough for their tips to
-        // keep up with it. As a turn in the palm's frame, for the fingers' first joints (HandsInteractionController.PressCheckHook).
-        public static Quaternion PressCheckFingerDrag()
+        // keep up with it. The gun's back in the palm's frame and how far the slide is back; HandsInteractionController.PressCheckHook
+        // turns each finger from its own knuckle-to-tip direction toward it. (A tilt about the gun's sideways axis assumed fingers
+        // pointing up from the knuckles: with the knuckles above the slide and the fingers down onto it, that took the tips FORWARD -
+        // headset, "they rotate towards the front".)
+        public static bool TryGetPressCheckDrag(out Vector3 backInPalm, out float pull)
         {
-            if (pressCheckFor == null || pressCheckPull <= 0f)
-                return Quaternion.identity;
-            float degrees = Mathf.Atan2(pressCheckPull, Mathf.Max(pressCheckFingerReach, 0.01f)) * Mathf.Rad2Deg;
+            backInPalm = Vector3.zero;
+            pull = pressCheckFor != null ? pressCheckPull : 0f;
+            if (pull <= 0f)
+                return false;
             Quaternion palmInFrame = HandTurnInFrame() * pressCheckPalmTurnInFrame;
-            Vector3 axis = Quaternion.Inverse(palmInFrame) * Vector3.Cross(pressCheckUpInFrame, pressCheckBackInFrame);
-            return Quaternion.AngleAxis(degrees, axis);
+            backInPalm = Quaternion.Inverse(palmInFrame) * pressCheckBackInFrame;
+            return true;
         }
 
         // Our marker where the palm sits on the gun now: the grip turned about the knuckle, as EFT's marker for the palm
