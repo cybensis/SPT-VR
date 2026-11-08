@@ -18,7 +18,11 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool buildHulls = true;
         public static bool readGpuMeshes = true;        // non-readable meshes: their vertices back from the GPU (AsyncGPUReadback)
         public static int maxParts = 10;                 // the biggest parts by volume; the rest (screws, decals) don't shape a grip
-        public static int maxHullPoints = 1500;          // vertices into a hull, thinned on a grid (cooking time)
+        // A hull = each part's furthest vertex in this many directions spread over a sphere. A hull of n points has at most 2n-4 faces and
+        // PhysX cooks at most 255 polygons (more = its "partial hull" warning on every grab, headset log 2026-11-07), so 100 = at most
+        // 196. They're ~20 deg apart: half a millimetre off a 6 cm bottle.
+        public static int hullDirections = 100;
+        public static int preThinPoints = 4000;          // the grid thinning first, so the direction search stays cheap
         public static float hullCellSize = 0.003f;       // m: the thinning grid's first cell
         public static float minHullThickness = 0.002f;   // m: a part flatter than this keeps its box (a flat point set can't be cooked)
 
@@ -170,7 +174,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (disposed)
                 return;
-            List<Vector3> points = ThinnedItemPoints(part.meshToItem, meshVertices);
+            List<Vector3> points = HullPoints(part.meshToItem, meshVertices);
             if (points == null || points.Count < 8)
             {
                 hullsFailed++;
@@ -210,9 +214,10 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The mesh's vertices in the item's frame, at most maxHullPoints of them: one per grid cell, the cell doubled until they fit. The
-        // first vertex in a cell stands for it, so the extremes survive the thinning give or take a cell.
-        private static List<Vector3> ThinnedItemPoints(Matrix4x4 meshToItem, Vector3[] meshVertices)
+        // The mesh's vertices in the item's frame, cut to what a hull needs: thinned on a grid first (one vertex per cell, the cell doubled
+        // until preThinPoints fit; the first vertex in a cell stands for it), then the one furthest along each of hullDirections directions
+        // spread evenly over a sphere - every one on the hull, spread around it, and few enough for PhysX's 255-polygon limit
+        private static List<Vector3> HullPoints(Matrix4x4 meshToItem, Vector3[] meshVertices)
         {
             if (meshVertices == null || meshVertices.Length == 0)
                 return null;
@@ -220,23 +225,62 @@ namespace TarkovVR.Source.Player.Interactions
             var all = new List<Vector3>(meshVertices.Length / step + 1);
             for (int index = 0; index < meshVertices.Length; index += step)
                 all.Add(meshToItem.MultiplyPoint3x4(meshVertices[index]));
-            if (all.Count <= maxHullPoints)
-                return all;
-            var cells = new HashSet<Vector3Int>();
-            var kept = new List<Vector3>();
-            for (float cell = hullCellSize; cell < 1f; cell *= 2f)
+            List<Vector3> kept = all;
+            if (all.Count > preThinPoints)
             {
-                cells.Clear();
-                kept.Clear();
-                foreach (Vector3 point in all)
+                var cells = new HashSet<Vector3Int>();
+                kept = new List<Vector3>();
+                for (float cell = hullCellSize; cell < 1f; cell *= 2f)
                 {
-                    if (cells.Add(new Vector3Int(Mathf.FloorToInt(point.x / cell), Mathf.FloorToInt(point.y / cell), Mathf.FloorToInt(point.z / cell))))
-                        kept.Add(point);
+                    cells.Clear();
+                    kept.Clear();
+                    foreach (Vector3 point in all)
+                    {
+                        if (cells.Add(new Vector3Int(Mathf.FloorToInt(point.x / cell), Mathf.FloorToInt(point.y / cell), Mathf.FloorToInt(point.z / cell))))
+                            kept.Add(point);
+                    }
+                    if (kept.Count <= preThinPoints)
+                        break;
                 }
-                if (kept.Count <= maxHullPoints)
-                    break;
             }
-            return kept;
+            var furthest = new HashSet<int>();
+            foreach (Vector3 direction in SphereDirections(Mathf.Clamp(hullDirections, 8, 127)))
+            {
+                int best = 0;
+                float bestReach = float.MinValue;
+                for (int index = 0; index < kept.Count; index++)
+                {
+                    float reach = Vector3.Dot(kept[index], direction);
+                    if (reach > bestReach)
+                    {
+                        bestReach = reach;
+                        best = index;
+                    }
+                }
+                furthest.Add(best);
+            }
+            var points = new List<Vector3>(furthest.Count);
+            foreach (int index in furthest)
+                points.Add(kept[index]);
+            return points;
+        }
+
+        // Evenly spread unit directions (a Fibonacci sphere)
+        private static Vector3[] sphereDirections;
+        private static Vector3[] SphereDirections(int count)
+        {
+            if (sphereDirections != null && sphereDirections.Length == count)
+                return sphereDirections;
+            var directions = new Vector3[count];
+            float goldenAngle = Mathf.PI * (3f - Mathf.Sqrt(5f));
+            for (int index = 0; index < count; index++)
+            {
+                float height = 1f - 2f * (index + 0.5f) / count;
+                float ring = Mathf.Sqrt(1f - height * height);
+                float angle = goldenAngle * index;
+                directions[index] = new Vector3(Mathf.Cos(angle) * ring, height, Mathf.Sin(angle) * ring);
+            }
+            return sphereDirections = directions;
         }
 
         private void EnsureHolder()
