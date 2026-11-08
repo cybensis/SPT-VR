@@ -93,7 +93,7 @@ namespace TarkovVR.Source.Weapons
         // is still in the magazine (Tarkov's insert chambers one at once; it has to be racked first). On a truly empty
         // chamber the trigger goes through: Tarkov dry-fires (the click, the finger) without looking at the bolt catch.
         public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine || MagazinePartlyOut || BoltBlocksFiring || DeflectorBlocksFiring
-            || PressCheckBlocksFiring;
+            || PressCheckBlocksFiring || ShotgunBlocksFiring;
 
         private static bool ChamberLoaded => VRGlobals.firearmController != null && VRGlobals.firearmController.Item != null
             && VRGlobals.firearmController.Item.ChamberAmmoCount > 0;
@@ -103,7 +103,7 @@ namespace TarkovVR.Source.Weapons
         private static bool RoundStillInMagazine => ChamberLoaded && (BoltLockedBack || WaitingForRack(VRGlobals.firearmController.Item));
 
         // On that round the trigger clicks like an empty gun, it's never handed to Tarkov (it would fire)
-        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && RoundStillInMagazine && !BoltBlocksFiring && !PressCheckBlocksFiring;
+        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && RoundStillInMagazine && !BoltBlocksFiring && !PressCheckBlocksFiring && !ShotgunBlocksFiring;
 
         // Tarkov's own empty-gun trigger (Idling.SetTriggerPressed: SetAmmoInChamber, then SetFire) with the chamber shown
         // empty, as it looks with the bolt open: the animator plays its dry fire, the click and the finger. Local only:
@@ -400,6 +400,8 @@ namespace TarkovVR.Source.Weapons
             // A bolt-action's bolt, by either hand's trigger (VRReloadController.Bolt)
             TickBolt(triggerPressed, triggerReleased, gunHandTriggerPressed, gunHandTriggerReleased,
                 handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingRound || HoldingJamCase || HoldingDeflector);
+            // A tube shotgun's pump, by the support hand (VRReloadController.Shotgun)
+            TickShotgun();
             // A single round in the fingers, for an open bolt-action (VRReloadController.Rounds)
             if (HoldingRound)
                 UpdateHeldRound(gripReleased, gunHandGripReleased);
@@ -411,12 +413,12 @@ namespace TarkovVR.Source.Weapons
             bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector;
             // On a gun that loads through its open bolt, the pouch grip is a round, not a magazine: the off hand's, or the gun hand's
             // while the off hand holds the gun up
-            if (!handBusy && gripPressed && TryGrabRound(gunHand: false))
+            if (!handBusy && gripPressed && (TryGrabShell(gunHand: false) || TryGrabRound(gunHand: false)))
             {
                 gripPressed = false;
                 handBusy = true;
             }
-            else if (!handBusy && gunHandGripPressed && TryGrabRound(gunHand: true))
+            else if (!handBusy && gunHandGripPressed && (TryGrabShell(gunHand: true) || TryGrabRound(gunHand: true)))
                 handBusy = true;
             UpdateBoltSlap(handFree: !handBusy);
             if (!handBusy)

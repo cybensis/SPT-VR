@@ -40,12 +40,17 @@ namespace SptVrFikaSync
             return false;
         }
 
-        // One round from outside an open-bolt-loaded gun (SupportsInternalReload + MustBoltBeOpennedForInternalReload) into its chamber or
-        // its magazine's cartridges, not as Tarkov's own reload. A merge asks with a sub-operation of its own: the operation it belongs to
-        // says where.
+        // One round from outside an open-bolt-loaded gun (SupportsInternalReload + MustBoltBeOpennedForInternalReload), or a tube shotgun's
+        // shell (SPT-VR's VRReloadController.Shotgun: through the loading port or the ejection port), into its chamber or its magazine's
+        // cartridges, not as Tarkov's own reload. Not a revolver's cylinder (the MC-255 is a shotgun too). A merge asks with a sub-operation
+        // of its own: the operation it belongs to says where.
         internal static bool IsSingleRoundIntoGun(Weapon weapon, IInventoryOperation operation)
         {
-            if (weapon == null || !weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload)
+            if (weapon == null || !weapon.SupportsInternalReload)
+                return false;
+            bool tubeShotgun = weapon.WeapClass == "shotgun" && weapon.ReloadMode == Weapon.EReloadMode.InternalMagazine && !weapon.BoltAction
+                && !(weapon.GetCurrentMagazine() is CylinderMagazine);
+            if (!weapon.MustBoltBeOpennedForInternalReload && !tubeShotgun)
                 return false;
             if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && IsRoundIntoGun(weapon, subOperation.BaseInventoryOperation))
                 return true;

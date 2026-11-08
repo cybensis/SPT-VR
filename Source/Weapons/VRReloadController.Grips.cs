@@ -154,6 +154,51 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedPressCheck> pressChecks;
             public Dictionary<string, SavedReleasePress> releasePress;
             public Dictionary<string, SavedBolt> bolts;
+            public Dictionary<string, SavedShotgun> shotguns;
+        }
+
+        // A tube shotgun (gen_shotguns.py), by its clips' family: the pump stroke's bones, the shell's paths into the tube and through the
+        // ejection port, the shell in the left palm. Poses are position + quaternion (7 numbers), in the weapon bone's frame (metres).
+        public sealed class SavedShotgun
+        {
+            public SavedPump pump;          // null on a semi-auto
+            public SavedShellPath tube;
+            public SavedShellPath port;
+            public SavedShellHold hold;
+        }
+
+        public sealed class SavedPump
+        {
+            public float travel;            // m the pump comes back
+            public List<SavedPumpBone> bones;
+        }
+
+        public sealed class SavedPumpBone
+        {
+            public string path;             // under the weapon bone
+            public List<float[]> keys;      // its local pose at evenly spaced points of the stroke, closed to all the way back
+        }
+
+        public sealed class SavedShellPath
+        {
+            public List<SavedShellKey> keys;
+            public float length;
+            public List<float[]> close;     // [how far the action is still open, the shell's pose] as the action closes on it
+        }
+
+        public sealed class SavedShellKey
+        {
+            public float s;                 // share of the path's length
+            public float[] shell;           // the patron_in_weapon bone the shell model sits on
+            public float[] palm;            // the left palm
+            public float[] fingers;         // the left hand's, pose order (palm first)
+        }
+
+        public sealed class SavedShellHold
+        {
+            public float[] position;        // the shell's bone in the left palm's frame
+            public float[] rotation;
+            public float[] fingers;
         }
 
         // A bolt-action's bolt (gen_bolts.py): the slide and turn bones, how far, the knob, the gun hand's hold on it
@@ -603,6 +648,15 @@ namespace TarkovVR.Source.Weapons
                             knob = new Vector3(saved.knob[0], saved.knob[1], saved.knob[2]),
                             hold = saved.hold != null && saved.hold.position != null && saved.hold.rotation != null ? HandleHoldFrom(saved.hold) : null,
                         };
+                    }
+                }
+                if (generated.shotguns != null)
+                {
+                    foreach (KeyValuePair<string, SavedShotgun> entry in generated.shotguns)
+                    {
+                        ShotgunData shotgun = ShotgunFrom(entry.Value);
+                        if (shotgun != null)
+                            shotgunGuns[entry.Key] = shotgun;
                     }
                 }
                 if (generated.sideHandles != null)

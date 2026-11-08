@@ -177,7 +177,8 @@ namespace TarkovVR.Source.Weapons
             if (!singleRoundLoading || controller == null || controller._player == null || !controller._player.IsYourPlayer || !roundLoading || heldRoundFor != controller)
                 return false;
             Weapon weapon = controller.Item;
-            if (weapon == null || !weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload)
+            // A tube shotgun's shell by hand too (VRReloadController.Shotgun): its chamber or its tube
+            if (weapon == null || !weapon.SupportsInternalReload || !(weapon.MustBoltBeOpennedForInternalReload || TryGetShotgun(controller, out _)))
                 return false;
             // A merge asks with a sub-operation of its own (AddSuboperation / RemoveSuboperation): the operation it belongs to says where
             if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && IsRoundIntoGun(weapon, subOperation.BaseInventoryOperation))
@@ -242,6 +243,12 @@ namespace TarkovVR.Source.Weapons
         // gripReleased / gunHandGripReleased: the two hands' grips let go this frame; the one holding the round counts
         private static void UpdateHeldRound(bool gripReleased, bool gunHandGripReleased)
         {
+            // A tube shotgun's shell has its own ports and paths (VRReloadController.Shotgun)
+            if (HoldingShell)
+            {
+                UpdateHeldShell(gripReleased, gunHandGripReleased);
+                return;
+            }
             if (roundLoading)
                 return;
             if (!HeldRoundIsStillValid())
@@ -323,6 +330,10 @@ namespace TarkovVR.Source.Weapons
 
         private static void EndRoundHold()
         {
+            ReleaseShellHand();
+            heldShell = null;
+            shellPath = null;
+            shellCommitted = false;
             HoldingRound = false;
             roundLoading = false;
             heldRoundSource = null;
@@ -331,6 +342,9 @@ namespace TarkovVR.Source.Weapons
 
         private static void DestroyRoundProp()
         {
+            // A shell on its way in rides the gun's bones: off them before it goes back to the pool
+            if (heldRoundProp != null && heldRoundProp.transform.parent != null)
+                heldRoundProp.transform.SetParent(null, worldPositionStays: true);
             ReturnPropToPool(heldRoundProp);
             heldRoundProp = null;
         }
@@ -404,6 +418,11 @@ namespace TarkovVR.Source.Weapons
         {
             if (!HoldingRound || heldRoundProp == null || VRGlobals.handsInteractionController == null)
                 return;
+            if (HoldingShell)
+            {
+                PlaceHeldShell();
+                return;
+            }
             Transform palm = ArmPalm(roundOnRightArm);
             if (palm == null && !roundOnRightArm)
                 palm = InitVRPatches.leftPalm;
@@ -452,6 +471,8 @@ namespace TarkovVR.Source.Weapons
         // the magazine pull's on the left, mirrored on the right (falling back to the bolt clip's closed hand there).
         private static Vector3[] RoundFingers(bool rightArm)
         {
+            if (HoldingShell)
+                return ShellFingers(rightArm);
             if (!bakedRoundHold)
                 return rightArm ? MirroredPose(MAGAZINE_PULL_FINGERS, rightToLeft: false, mirroredRoundPinch) ?? boltBonesData?.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
             return rightArm ? ROUND_HOLD_FINGERS : MirroredPose(ROUND_HOLD_FINGERS, rightToLeft: true, mirroredRoundHold) ?? MAGAZINE_PULL_FINGERS;
@@ -492,7 +513,12 @@ namespace TarkovVR.Source.Weapons
         // debugZones: the load zone while a round is in the hand (green once the round is in it)
         private static void UpdateRoundViz()
         {
-            bool show = debugZones && HoldingRound && heldRoundFor != null && TryGetLoadPoint(heldRoundFor, out Vector3 loadPoint);
+            if (!HoldingShell || shellPath != null)
+            {
+                SetZoneViz(ref tubeZoneViz, false, Vector3.zero, 0f, Color.clear);
+                SetZoneViz(ref portZoneViz, false, Vector3.zero, 0f, Color.clear);
+            }
+            bool show = debugZones && HoldingRound && !HoldingShell && heldRoundFor != null && TryGetLoadPoint(heldRoundFor, out Vector3 loadPoint);
             if (!show)
             {
                 SetZoneViz(ref roundZoneViz, false, Vector3.zero, 0f, Color.clear);

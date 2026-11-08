@@ -26,6 +26,11 @@ namespace TarkovVR.Source.Weapons
         public static float releaseButtonTime = 0.06f;      // s for the button to go all the way in or out (Tarkov's mag-out: ~0.1)
         public static bool releaseFinger = true;            // the gun hand's index finger presses the button
         public static bool holdSeatedMagazine = true;       // the hand stays on a magazine it seated while the grip is held
+        // A pistol's magazine seated with the grip still held: the hand goes on into the two-handed grip (his ask), eased from the magazine
+        // onto EFT's support pose, then handed to the two-handing as if the grip were pressed there (VRPlayerManager.TakeSupportGrip)
+        public static bool pistolSupportAfterSeat = true;
+        public static float pistolSupportDelay = 0.15f;     // s the grip stays held on the seated magazine before the hand moves on
+        public static float pistolSupportMoveTime = 0.3f;   // s the move takes at most (it hands over as soon as it's there)
         public static float boltReleaseTime = 0.08f;        // s for the bolt to run forward (Tarkov: the paddle 0.07, then the bolt 0.13)
         public static bool slapBoltRelease = true;
         public static float boltSlapRadius = 0.07f;         // m palm to the bolt catch that counts as hitting it
@@ -75,6 +80,8 @@ namespace TarkovVR.Source.Weapons
         private static FirearmController seatedHoldFor;
         private static Transform seatedHoldWell;
         private static Vector3 handAtSeatInWell;            // the controller (LeftHand) when the magazine seated
+        private static float seatedHoldStartTime;
+        private static float pistolSupportMoveStart = -1f;  // the hand on its way to the support grip since then (-1: not)
 
         private static FirearmController boltReleaseFor;
         private static float boltReleaseStartTime;
@@ -690,6 +697,8 @@ namespace TarkovVR.Source.Weapons
             seatedHoldFor = firearmController;
             seatedHoldWell = well;
             handAtSeatInWell = well.InverseTransformPoint(VRGlobals.vrPlayer.LeftHand.transform.position);
+            seatedHoldStartTime = Time.time;
+            pistolSupportMoveStart = -1f;
             // ClearHold just started easing it back to the controller: it stays on the magazine instead
             handLatch.SetParent(well, worldPositionStays: true);
             handLatchReleasing = false;
@@ -724,9 +733,65 @@ namespace TarkovVR.Source.Weapons
                     ReleaseHandLatch();
                 return;
             }
+            if (UpdatePistolSupportMove(firearmController))
+                return;
             Vector3 handOffMagazine = VRGlobals.vrPlayer.LeftHand.transform.position - seatedHoldWell.TransformPoint(handAtSeatInWell);
             if (handOffMagazine.sqrMagnitude > railLateralEscape * railLateralEscape)
                 EndSeatedHold();
+        }
+
+        // A pistol, the magazine in and the grip still held: the latched hand eases onto the support pose, then two-handing takes it.
+        // True while that's under way (or done this frame).
+        private static bool UpdatePistolSupportMove(FirearmController firearmController)
+        {
+            if (!pistolSupportAfterSeat || !VRGlobals.vrPlayer.isWeapPistol || VRGlobals.vrPlayer.isSupporting || expectedOperation == ExpectedOperation.Insert
+                || firearmController.Item.GetCurrentMagazine() == null)
+                return false;
+            if (pistolSupportMoveStart < 0f)
+            {
+                if (Time.time - seatedHoldStartTime < pistolSupportDelay)
+                    return false;
+                pistolSupportMoveStart = Time.time;
+                // The gun in the left hand: its support pose is the right side's mirror image (RealLeftHandedPatches), straight over
+                if (!Handedness.GunInLeftHand && TryGetSupportGripPose(out Vector3 position, out Quaternion rotation) && handLatch != null && handLatch.parent != null)
+                    SnapHandTo(handLatch.parent, position, rotation);
+                if (debugLog)
+                    LogAction("[VRReload] pistol magazine seated, grip still held: the hand goes onto the support grip");
+            }
+            // The latch's own pose against where it's easing to (the controller's twist wiggles it on top: UpdateHandLatch)
+            bool arrived = !handLatchSnapping || ((latchBaseLocalPosition - handSnapLocalPosition).sqrMagnitude < 0.006f * 0.006f
+                && Quaternion.Angle(latchBaseLocalRotation, handSnapLocalRotation) < 4f);
+            if (!arrived && Time.time - pistolSupportMoveStart < pistolSupportMoveTime)
+                return true;
+            // There: two-handing has it. The latch lets go; seeing the support grip it gives the arm straight to EFT's IK (UpdateHandLatch).
+            VRGlobals.vrPlayer.TakeSupportGrip();
+            seatedHoldFor = null;
+            seatedHoldWell = null;
+            pistolSupportMoveStart = -1f;
+            ReleaseHandLatch();
+            Pulse(0.3f, 0.03f);
+            return true;
+        }
+
+        // Where EFT's IK puts the support hand (Player.IkProcess): the gun's left marker, onto its grip pose near the grip reference
+        private static bool TryGetSupportGripPose(out Vector3 position, out Quaternion rotation)
+        {
+            Transform marker = TarkovVR.Patches.Core.Player.WeaponPatches.previousLeftHandMarker;
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (marker == null || VRGlobals.player == null)
+                return false;
+            position = marker.position;
+            rotation = marker.rotation;
+            Transform[] gripPoses = VRGlobals.player._ikTargets;
+            Transform[] gripReferences = VRGlobals.player._gripReferences;
+            if (gripPoses != null && gripReferences != null && gripPoses.Length > 0 && gripReferences.Length > 0 && gripPoses[0] != null && gripReferences[0] != null)
+            {
+                float weight = Mathf.InverseLerp(0.1f, 0f, Vector3.Distance(marker.position, gripReferences[0].position));
+                position = Vector3.Lerp(position, gripPoses[0].position, weight);
+                rotation = Quaternion.Lerp(rotation, gripPoses[0].rotation, weight);
+            }
+            return true;
         }
 
         private static void EndSeatedHold()

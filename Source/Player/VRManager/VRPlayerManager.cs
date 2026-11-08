@@ -1176,7 +1176,7 @@ namespace TarkovVR.Source.Player.VRManager
             // Must come BEFORE scopeTransform check so heldItem always wins
             // Same while holding or reaching for a magazine, so the grab never turns into a foregrip snap
             if ((VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
-                || VRReloadController.OwnsOffHand)
+                || VRReloadController.OwnsOffHand || VRReloadController.ShellInOffHand)
             {
                 handLock = false;
                 hapticTriggered = false;
@@ -1412,6 +1412,31 @@ namespace TarkovVR.Source.Player.VRManager
                 leftArmIk.enabled = true;
                 isEnteringTwoHandedMode = false;
             }
+        }
+
+        // Two-handing taken without the grip press at the support point: a pistol's magazine seated with the grip still held
+        // (VRReloadController.UpdateSeatedHold), the hand already moved onto the support pose. As if the grip were pressed there now -
+        // the same entry as UpdateLeftHand's, and handLock so the hold / toggle setting decides when it lets go, like any support grab.
+        // The reload latch still on the arm hands it to EFT's IK itself once it sees isSupporting (VRReloadController.UpdateHandLatch).
+        public void TakeSupportGrip()
+        {
+            if (isSupporting || LeftHand == null || VRGlobals.player == null || rawRightHand == null)
+                return;
+            if (isWeapPistol)
+                VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
+            initialRightHandRotation = rawRightHand.transform.rotation;
+            isSupporting = true;
+            handLock = true;
+            hapticTriggered = true;
+            if (UIPatches.stancePanel)
+            {
+                UIPatches.stancePanel.AnimatedHide();
+                UIPatches.stancePanel.gameObject.SetActive(false);
+            }
+            if (UIPatches.healthPanel)
+                UIPatches.healthPanel.AnimatedHide();
+            if (UIPatches.extractionTimerUi)
+                UIPatches.extractionTimerUi.Hide();
         }
 
         protected void SpawnHands()

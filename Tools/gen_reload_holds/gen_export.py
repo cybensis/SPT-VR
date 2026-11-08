@@ -233,6 +233,9 @@ print('bolts the handle moves:',out['boltBones'],'side handles:',{f:(h['travel']
 # gen_bolts.py: bolt-action rifles' bolts, by their bolt clip's family (the slide and turn bones, how far, the dominant hand's hold on the knob)
 out['bolts']=json.load(open('bolts.json'))['bolts'] if os.path.exists('bolts.json') else {}
 print('bolt-action bolts:',{f:(b['slider'],b['turner'],b['distance'],b['turnDegrees']) for f,b in out['bolts'].items()})
+# gen_shotguns.py: tube shotguns, by their clips' family (the pump stroke's bones, the shell's paths into the tube and the ejection port, its hold)
+out['shotguns']=json.load(open('shotguns.json'))['shotguns'] if os.path.exists('shotguns.json') else {}
+print('shotguns:',{f:(bool(g['pump']),g['tube']['length'],g['port']['length']) for f,g in out['shotguns'].items()})
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]
 for holds in (out['handles'],out['gunHandHandles'],out['handleAlternates'],out['gunHandHandleAlternates'],out['rockIn'],out['palms'],out['slides'],out['wellAxes']):
