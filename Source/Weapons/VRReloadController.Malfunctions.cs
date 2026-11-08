@@ -92,6 +92,9 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             if (weapon.BoltAction)
                 return ManualBoltOn(firearmController);
+            // A pump gun: a stroke of the pump (VRReloadController.Shotgun); a semi-auto shotgun has its handle, below
+            if (ManualShotgunOn(firearmController, out ShotgunData shotgun) && PumpMode(weapon, shotgun))
+                return true;
             return chargingHandle && (TryGetChargingHandle(firearmController, weapon) || TryGetSideKnobPoint(firearmController, out _));
         }
 

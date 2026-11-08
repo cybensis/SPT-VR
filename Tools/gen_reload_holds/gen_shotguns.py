@@ -157,5 +157,80 @@ for family,(folder,container,clipFolder,pumpClip,tubeClip,portClip,actionBone) i
     tube,hold=tubePath(tree,clips[tubeClip])
     port=portPath(tree,clips[portClip],actionBone,closedLocal,travelInWeapon)
     out[family]=dict(pump=pump,tube=tube,port=port,hold=hold)
+
+# Semi-autos' bolt handles (VRReloadController's charging handle on these guns): the bone the hand pulls back, its travel (back =
+# +y in the gun frame, fullBackTime), the gun hand's hold on it (ridingHold 'R': only the right hand racks in their clips; the
+# steadiest of the rack clips), and on the MR-153 / MP-155, whose knob is part of the carrier's mesh, the knob's middle (that
+# mesh's vertices furthest to the right, +x). The M3's handle is its mod_charge slot's own item: the runtime finds it.
+SEMI_HANDLES={
+    'mr153':('mr153','weapon_izhmeh_mr153_12g_container.bundle','mr153','weapon_slide_0',['mr153_reload_first_empty_0','mr153_out_to_idle_arm_0'],
+             [('mp155','weapon_kalashnikov_mp155_12g_container.bundle')]),
+    'm3s90':('benelli','weapon_benelli_m3_s90_12g_container.bundle','m3s90','mod_charge',['m3s90_sa_ammo_in_first_no_catch','m3s90_sa_out_to_idle_charge_0'],None),
+}
+def meshKnobPoint(folder,container,boneLeaf,axis,sign,shell=0.01):
+    from UnityPy.helpers.MeshHelper import MeshHandler
+    env=UnityPy.load(ROOT+folder+'/'+container,ROOT+folder+'/client_assets.bundle')
+    def toParent(t,p):
+        s=t.m_LocalScale; r=t.m_LocalRotation; a=t.m_LocalPosition; q=np.array([r.x,r.y,r.z,r.w]); v=p*np.array([s.x,s.y,s.z])
+        return v+2*np.cross(q[:3],np.cross(q[:3],v)+q[3]*v)+np.array([a.x,a.y,a.z])
+    best=[]
+    for o in env.objects:
+        if o.type.name!='Transform': continue
+        t=o.read()
+        if t.m_GameObject.read().m_Name!=boneLeaf: continue
+        points=[]
+        def walk(tr,chain):
+            for c in tr.m_GameObject.read().m_Components:
+                ptr=c.component if hasattr(c,'component') else c
+                try: comp=ptr.read()
+                except Exception: continue
+                if type(comp).__name__!='MeshFilter': continue
+                try:
+                    h=MeshHandler(comp.m_Mesh.read()); h.process()
+                except Exception: continue
+                for q in np.array(h.m_Vertices,float).reshape(-1,3):
+                    for link in chain: q=toParent(link,q)
+                    points.append(q)
+            for ch in tr.m_Children:
+                c=ch.read(); walk(c,[c]+chain)
+        walk(t,[])
+        if len(points)>len(best): best=points
+    if not best: return None
+    v=np.array(best); side=v[:,axis]*sign
+    return [round(float(x),4) for x in v[side>=side.max()-shell].mean(0)]
+def fullBackTime(g,path,wp):
+    stop=float(g['clip'].m_MuscleClip.m_StopTime); rest=None; rows=[]
+    for i in range(int(stop*30)+1):
+        t=i/30; c={}; q,_,_=g['worldAt'](path,t,c); wpp,wr,_=g['worldAt'](wp,t,c); inGun=g['rotate'](conj(wr),q-wpp)
+        if rest is None: rest=inGun
+        rows.append((t,float(inGun[1]-rest[1])))
+    # The FIRST frame all the way back: these clips' hand leaves the handle once the bolt locks back (the plateau's middle had it off
+    # fetching a shell)
+    top=max(r[1] for r in rows); plateau=[r[0] for r in rows if r[1]>=top-0.002]
+    return plateau[0],top
+for family,(folder,container,clipFolder,boneLeaf,rackClips,mates) in SEMI_HANDLES.items():
+    tree=loadTree(ROOT+folder+'/'+container); P=tree[0]; clips=clipsOf(clipFolder)
+    charge=bone(P,'/'+boneLeaf); wp=bone(P,'Weapon_root_anim/weapon'); best=None
+    for n in rackClips:
+        g=setup(tree,clips[n]); h=ridingHold(g,charge,'R')
+        if h and (best is None or h['drift']<best['drift']): h['clip']=n; best=h
+    g=setup(tree,clips[rackClips[0]]); tBack,top=fullBackTime(g,charge,wp)
+    if best is None:
+        # A yank the hand doesn't ride: the right palm on it at full pull
+        palm=bone(P,'/Base HumanRPalm'); c={}; cp,cr,_=g['worldAt'](charge,tBack,c); pp,pr,_=g['worldAt'](palm,tBack,c)
+        best=dict(position=[round(float(x),4) for x in g['rotate'](conj(cr),pp-cp)],rotation=toUnityEuler(qmul(conj(cr),pr)),
+                  fingers=eulerList([np.array(g['localAt'](j,tBack)[1],float) for j in fingerPaths(P,'R')]),travel=round(float(top),3),clip=rackClips[0]+' (full pull)')
+    # The closed right fingers at full pull, in the handle bone's frame: where the clip's hand has the knob
+    c={}; cp,cr,_=g['worldAt'](charge,tBack,c)
+    grasp=np.mean([g['rotate'](conj(cr),g['worldAt'](j,tBack,c)[0]-cp) for j in fingerPaths(P,'R')[1:]],axis=0)
+    knob=meshKnobPoint(folder,container,boneLeaf,0,1) if mates is not None else None
+    handle=dict(bone=boneLeaf,carrier=boneLeaf if mates is not None else None,travel=round(float(top),4),grabPoint=knob,
+                gunHandHold=dict(position=best['position'],rotation=best['rotation'],fingers=best['fingers'],travel=round(float(top),3)))
+    out[family]['handle']=handle
+    print(f'{family} handle {boneLeaf}: {top*100:.1f} cm back at {tBack:.2f}s, right hold from {best["clip"]}, knob {knob}, fingers at {np.round(grasp,4)}'
+          + (f' ({np.linalg.norm(np.array(knob)-grasp)*100:.1f} cm off the knob)' if knob else ''),flush=True)
+    for mateFolder,mateContainer in (mates or []):
+        other=meshKnobPoint(mateFolder,mateContainer,boneLeaf,0,1)
+        print(f'  {mateFolder} knob {other}' + (f' ({np.linalg.norm(np.array(other)-np.array(knob))*100:.1f} cm from the {family} one)' if other and knob else ''),flush=True)
 json.dump(dict(shotguns=out),open('shotguns.json','w'),separators=(',',':'))
 print('wrote shotguns.json',os.path.getsize('shotguns.json'),'bytes')

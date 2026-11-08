@@ -300,8 +300,9 @@ namespace TarkovVR.Source.Weapons
                         foundHandleCarrier = foundHandleBone;
                 }
             }
-            // An empty slot on a gun whose handle slides on its own: there's nothing there to take hold of
-            return foundHandleBone != null && (foundHandleModel != null || foundHandleCarrier != null);
+            // An empty slot on a gun whose handle slides on its own: there's nothing there to take hold of. A tube shotgun worked by its pump
+            // (the M3 in pump mode): its handle isn't what works the action then.
+            return foundHandleBone != null && (foundHandleModel != null || foundHandleCarrier != null) && !ShotgunInPumpMode(firearmController);
         }
 
         private static Transform FindRigBone(FirearmController firearmController, string boneName)
@@ -749,6 +750,9 @@ namespace TarkovVR.Source.Weapons
             // Our own rechamber runs for a frame while the handle is back
             if (!(handleForFirearm.CurrentOperation is FirearmController.Idling) && expectedOperation != ExpectedOperation.Rechamber)
                 return false;
+            // The M3 switched to pump mode meanwhile
+            if (ShotgunInPumpMode(handleForFirearm))
+                return false;
             return handleView != null && handleBone != null;
         }
 
@@ -1023,7 +1027,9 @@ namespace TarkovVR.Source.Weapons
                 PlayFirstGunSound(firearmController, SoundHand.GunBody, "BoltIn", "SlideIn");
             PlayGunSound(firearmController, "HandleIn", SoundHand.GunBody);
             Pulse(SoundHand.GunBody, heldOnCatch ? 0.4f : 0.8f, 0.06f);
-            BoltStripsRound(weapon);
+            // A tube shotgun's shell has no model in the chamber until it's shown (the load put it there in the inventory only)
+            if (BoltStripsRound(weapon) && HandsLoadShotgun(firearmController) && firearmController.Firearms != null && !firearmController.Firearms.HasPatronInWeapon())
+                ShowChamberedRound(firearmController);
             if (firearmController.FirearmsAnimator.GetBoltCatch())
             {
                 if (debugLog)
@@ -1034,13 +1040,14 @@ namespace TarkovVR.Source.Weapons
 
         // The bolt going forward takes the round a magazine brought in on a closed bolt into the chamber, however it was let go:
         // the handle from a full pull, or slapped (an MP5's out of its notch, which it went into from that same pull)
-        private static void BoltStripsRound(Weapon weapon)
+        private static bool BoltStripsRound(Weapon weapon)
         {
             if (!WaitingForRack(weapon) || weapon.GetCurrentMagazine() == null)
-                return;
+                return false;
             if (debugLog)
                 LogAction("[VRReload] racked: the round goes into the chamber");
             weaponsWaitingForRack.Remove(weapon);
+            return true;
         }
 
         // An empty magazine catches the bolt (the follower pushes the catch up); no magazine, or rounds left, it closes.

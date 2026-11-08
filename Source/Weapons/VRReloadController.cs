@@ -500,6 +500,9 @@ namespace TarkovVR.Source.Weapons
                 else if (gunHandTriggerPressed && InChargingHandleZone(heldFirearm, heldWeapon, gunHand: true))
                     GrabChargingHandle(heldFirearm, heldWeapon, gunHand: true);
             }
+            // A tube shotgun (VRReloadController.Shotgun): a semi-auto's bolt handle, a shell stuck in the port
+            if (!handBusy)
+                TickShotgunGrabs(triggerPressed, gunHandTriggerPressed);
             // The hands reaching for a part of the gun: their fingers shape toward its grip (after the grabs: a grab this tick holds it)
             UpdatePreGrab();
             // The off hand's arm: a switch of what it reaches for blends (ArmTargetBlend)
@@ -2897,10 +2900,14 @@ namespace TarkovVR.Source.Weapons
                 SetZoneViz(ref grabZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref pouchZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref wellZoneViz, false, Vector3.zero, 0f, Color.clear);
-                SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
-                SetZoneViz(ref otherKnobZoneViz, false, Vector3.zero, 0f, Color.clear);
-                SetZoneViz(ref sideHandleZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref belowWellZoneViz, false, Vector3.zero, 0f, Color.clear);
+                // A semi-auto shotgun's bolt handle has its zone too (VRReloadController.Shotgun)
+                if (!ShowShotgunHandleZone())
+                {
+                    SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
+                    SetZoneViz(ref otherKnobZoneViz, false, Vector3.zero, 0f, Color.clear);
+                    SetZoneViz(ref sideHandleZoneViz, false, Vector3.zero, 0f, Color.clear);
+                }
                 return;
             }
 

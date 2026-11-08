@@ -47,6 +47,9 @@ namespace TarkovVR.Source.Weapons
         // grip pose, which isn't one of the stroke's bones; while the pump is open the left arm aims at our point on the pump instead
         public static bool pumpHandFollows = true;
         public static float pumpFullBack = 0.92f;           // share of the stroke that counts as all the way back
+        // A semi-auto's shell into the tube with the bolt closed on an empty chamber stays in the tube until the bolt handle is racked
+        // (WaitingForRack, like a magazine put in on a closed bolt). false = it goes straight into the chamber (before there was a handle).
+        public static bool semiShellWaitsForHandle = true;
         public static bool shotgunDebugLog = true;          // grabs, paths, strokes (on for its first headset rounds)
 
         public static bool HoldingShell => HoldingRound && heldShell != null;
@@ -269,6 +272,12 @@ namespace TarkovVR.Source.Weapons
         private static bool PumpMode(Weapon weapon, ShotgunData data)
         {
             return pumpByHand && data != null && data.HasPump && weapon.SelectedFireMode != Weapon.EFireMode.semiauto;
+        }
+
+        // The gun's action is its pump right now, whoever works it (pumpByHand or not): the M3's bolt handle is the semi-auto mode's only
+        private static bool ShotgunInPumpMode(FirearmController firearmController)
+        {
+            return TryGetShotgun(firearmController, out ShotgunData data) && data.HasPump && firearmController.Item.SelectedFireMode != Weapon.EFireMode.semiauto;
         }
 
         // The clip's frame: the weapon bone under Weapon_root_anim
@@ -640,11 +649,16 @@ namespace TarkovVR.Source.Weapons
             }
             if (!pumpGun && shellIntoChamber)
             {
-                // A semi-auto: its bolt locked back runs forward on it (ReleaseBolt strips it); closed, it's simply in
-                if (firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch())
+                // A semi-auto: its bolt locked back runs forward on it (ReleaseBolt strips it). Closed, it's in the tube until the bolt handle
+                // is racked (BoltSlamsForward shows it then); a gun with no handle data, simply in.
+                bool boltBack = firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch();
+                if (boltBack)
                     ReleaseBolt(firearmController);
-                BoltStripsRound(weapon);
-                ShowChamberedRound(firearmController);
+                if (boltBack || !semiShellWaitsForHandle || !chargingHandle || !TryGetChargingHandle(firearmController, weapon))
+                {
+                    BoltStripsRound(weapon);
+                    ShowChamberedRound(firearmController);
+                }
             }
             if (shotgunDebugLog)
                 Plugin.MyLog.LogInfo($"[VRShotgun] shell home ({(shellIntoPort ? "ejection port" : "tube")}), chamber {weapon.ChamberAmmoCount}{(WaitingForRack(weapon) ? " waiting for the action" : "")}");
@@ -830,6 +844,7 @@ namespace TarkovVR.Source.Weapons
             public bool backThisStroke;     // has been all the way back since it was last closed
             public bool roundShown;         // Tarkov's rechamber already showed the next shell
             public bool spentCase;          // fired, the pump not worked since (pumpAfterShotByHand)
+            public bool malfunctionRacked;  // all the way back on a malfunction this stroke: closing it clears it
         }
         private static readonly Dictionary<Weapon, PumpState> pumpStates = new Dictionary<Weapon, PumpState>();
         private static float pumpRestDistance;              // the two controllers' distance with the pump closed
@@ -858,6 +873,61 @@ namespace TarkovVR.Source.Weapons
                 HoldPumpHand();
             if (!pumpHandWanted)
                 ReleasePumpHand();
+        }
+
+        // From Tick, no hand busy: what the magazine guns' grab block does (CanStartGrab, which a tube shotgun isn't for) - a semi-auto's bolt
+        // handle by the trigger (the off hand off the gun, or the gun hand while the off hand holds it up), and a shell stuck in the port of
+        // either kind (a pump gun's support hand off the pump for it; a full stroke clears it too)
+        private static void TickShotgunGrabs(bool triggerPressed, bool gunHandTriggerPressed)
+        {
+            if (!CanWorkShotgun(out FirearmController firearmController, out Weapon weapon))
+                return;
+            if (!ChestHang.Detached)
+            {
+                bool atJamPort = InJamPortZone(firearmController, weapon, gunHand: false);
+                bool inHandleZone = !atJamPort && !VRGlobals.vrPlayer.isSupporting && InChargingHandleZone(firearmController, weapon);
+                if (atJamPort || inHandleZone)
+                    OffHandAtChargingHandle = true;
+                if (triggerPressed && atJamPort)
+                    TakeJamCase(firearmController, gunHand: false);
+                else if (triggerPressed && inHandleZone)
+                    GrabChargingHandle(firearmController, weapon);
+            }
+            else if (ChestHang.SupportOnly)
+            {
+                bool gunHandAtJamPort = InJamPortZone(firearmController, weapon, gunHand: true);
+                if (gunHandTriggerPressed && gunHandAtJamPort)
+                    TakeJamCase(firearmController, gunHand: true);
+                else if (gunHandTriggerPressed && InChargingHandleZone(firearmController, weapon, gunHand: true))
+                    GrabChargingHandle(firearmController, weapon, gunHand: true);
+            }
+        }
+
+        // Our tube shotgun, idle, nothing in the hands but the gun
+        private static bool CanWorkShotgun(out FirearmController firearmController, out Weapon weapon)
+        {
+            firearmController = VRGlobals.firearmController;
+            weapon = null;
+            if (!enabled || !shotguns || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
+                return false;
+            if (!ManualShotgunOn(firearmController, out _) || firearmController.IsInLauncherMode() || firearmController.WeaponRoot == null)
+                return false;
+            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+                return false;
+            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+                return false;
+            weapon = firearmController.Item;
+            return true;
+        }
+
+        // UpdateZoneViz (debugZones) on a gun with no detachable magazine: a semi-auto shotgun's handle zone; false = none to show
+        private static bool ShowShotgunHandleZone()
+        {
+            if (!debugZones || !CanWorkShotgun(out FirearmController firearmController, out Weapon weapon) || !chargingHandle
+                || !TryGetChargingHandle(firearmController, weapon))
+                return false;
+            UpdateChargingHandleViz(firearmController, weapon, show: true);
+            return true;
         }
 
         private static void HoldPumpHand()
@@ -914,8 +984,10 @@ namespace TarkovVR.Source.Weapons
                 pumpForwardSounded = false;
                 pumpPeak = 1f;
             }
+            // A malfunction is the pump's to clear (VRReloadController.Malfunctions): a full stroke, back and closed
+            bool malfunction = weapon.MalfState.State != Weapon.EMalfunctionState.None;
             bool working = VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached && !VRGlobals.menuOpen && !HoldingRound
-                && weapon.MalfState.State == Weapon.EMalfunctionState.None;
+                && (!malfunction || MalfunctionClearsByHand(firearmController));
             if (!working)
             {
                 PumpHeld = false;
@@ -927,6 +999,11 @@ namespace TarkovVR.Source.Weapons
             {
                 PumpHeld = true;
                 pumpRestDistance = distance + (state.open > 0f ? pumpDeadzone + state.open * span : 0f);
+                // A hard slide holds the pump until it breaks free (StuckPull, its tugs counted from this hold on, as a handle's from its
+                // grab); one already open is moving
+                hardSlideTugsDone = 0;
+                hardSlideTugging = false;
+                hardSlideFree = weapon.MalfState.State != Weapon.EMalfunctionState.HardSlide || state.open > 0f;
             }
             float pull = pumpRestDistance - distance;
             if (pull < 0f)
@@ -936,8 +1013,31 @@ namespace TarkovVR.Source.Weapons
             }
             else if (state.open <= 0f && pull < pumpDeadzone)
                 pumpRestDistance = Mathf.Lerp(pumpRestDistance, distance, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(pumpRestFollowTime, 0.01f)));
-            MovePump(firearmController, state, Mathf.Clamp01((pull - pumpDeadzone) / span));
+            float back = Mathf.Max(pull - pumpDeadzone, 0f);
+            if (malfunction)
+                back = StuckPull(firearmController, back, SoundHand.OffHand);
+            MovePump(firearmController, state, Mathf.Clamp01(back / span));
+            PumpMalfunctionPose(firearmController, state);
             DrivePumpHand(firearmController, data, state);
+        }
+
+        // Tarkov's malfunction pose off while the pump is open (it would hold the action where the malfunction left it; its own repair has
+        // it off too), back on once the pump is closed with the malfunction still there
+        private static void PumpMalfunctionPose(FirearmController firearmController, PumpState state)
+        {
+            if (firearmController.Item.MalfState.State == Weapon.EMalfunctionState.None)
+                return;
+            bool poseOff = malfunctionPoseOffWhileHeld && state.open > 0f;
+            if (poseOff && malfunctionPoseOffFor != firearmController)
+            {
+                SetMalfunctionPose(firearmController, 0f);
+                malfunctionPoseOffFor = firearmController;
+            }
+            else if (!poseOff && malfunctionPoseOffFor == firearmController)
+            {
+                SetMalfunctionPose(firearmController, 1f);
+                malfunctionPoseOffFor = null;
+            }
         }
 
         // The stroke sounds are the whole stroke (the M870's pump back 0.34 s, the M3's 0.77): each plays as its stroke starts, once
@@ -985,6 +1085,16 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             state.backThisStroke = true;
             Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
+            // A malfunction (misfire, failure to feed or eject, a slide that broke free): cleared as the pump closes (PumpClosed: Tarkov's
+            // repair throws the dud or stuck shell out and chambers the next), no rechamber of ours
+            if (MalfunctionRackedBack(firearmController))
+            {
+                state.malfunctionRacked = true;
+                state.roundShown = false;
+                if (shotgunDebugLog)
+                    Plugin.MyLog.LogInfo($"[VRShotgun] pump back on a {weapon.MalfState.State}: cleared as it closes");
+                return;
+            }
             // The shot's fired shell: out of the port (Tarkov's own flying shell, from where the shot put it). Tarkov counted the next one
             // into the chamber at the shot; it comes up now and is chambered as the pump closes.
             if (state.spentCase)
@@ -1019,7 +1129,15 @@ namespace TarkovVR.Source.Weapons
             Pulse(SoundHand.OffHand.Seating, 0.6f, 0.05f);
             if (firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch())
                 firearmController.FirearmsAnimator.SetBoltCatch(false);
-            if (state.backThisStroke)
+            bool clearsMalfunction = state.backThisStroke && state.malfunctionRacked && MalfunctionClearsByHand(firearmController);
+            state.malfunctionRacked = false;
+            if (clearsMalfunction)
+            {
+                // The next shell chambered by the repair: shown if it didn't show it
+                if (RepairByHand(firearmController) && weapon.ChamberAmmoCount > 0 && firearmController.Firearms != null && !firearmController.Firearms.HasPatronInWeapon())
+                    ShowChamberedRound(firearmController);
+            }
+            else if (state.backThisStroke)
             {
                 BoltStripsRound(weapon);
                 if (!state.roundShown)
@@ -1042,6 +1160,7 @@ namespace TarkovVR.Source.Weapons
             state.backThisStroke = false;
             state.roundShown = false;
             state.spentCase = false;
+            state.malfunctionRacked = false;
             ReturnPortShell();
         }
 

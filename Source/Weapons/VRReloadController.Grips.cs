@@ -165,6 +165,19 @@ namespace TarkovVR.Source.Weapons
             public SavedShellPath tube;
             public SavedShellPath port;
             public SavedShellHold hold;
+            public SavedShotgunHandle handle;   // a semi-auto's bolt handle (the M3's in its semi-auto mode)
+        }
+
+        // The bone the hand pulls (the M3: its mod_charge, found as on the magazine guns; the MR-153 / MP-155: the slide bone its knob is part
+        // of), the bone that comes back with it (null = found as on the magazine guns), the knob in that bone's frame (null = the handle
+        // model's back end), the right hand's hold on it all the way back (that bone's frame, closed)
+        public sealed class SavedShotgunHandle
+        {
+            public string bone;
+            public string carrier;
+            public float travel;
+            public float[] grabPoint;
+            public SavedHandleHold gunHandHold;
         }
 
         public sealed class SavedPump
@@ -260,6 +273,8 @@ namespace TarkovVR.Source.Weapons
                 return family;
 
             family = templateId;
+            // The shotgun families come from the data (below): loaded before this is worked out once and kept
+            LoadRecordedGrips();
             RuntimeAnimatorController animatorController = firearmController.FirearmsAnimator?.Animator?.runtimeAnimatorController;
             if (animatorController != null)
             {
@@ -276,6 +291,26 @@ namespace TarkovVR.Source.Weapons
                             family = clip.name.Substring(0, nameEnd).ToLowerInvariant();
                             break;
                         }
+                    }
+                }
+                // A tube shotgun (no magazine clips): the shotgun data's family its clips are named after (TryGetShotgun's rule: the MP-155
+                // plays the MR-153's), so its bolt handle's data is found by it
+                if (family == templateId && firearmController.Item.ReloadMode == Weapon.EReloadMode.InternalMagazine)
+                {
+                    foreach (AnimationClip clip in animatorController.animationClips)
+                    {
+                        if (clip == null)
+                            continue;
+                        foreach (string known in shotgunGuns.Keys)
+                        {
+                            if (clip.name.StartsWith(known + "_", StringComparison.OrdinalIgnoreCase))
+                            {
+                                family = known;
+                                break;
+                            }
+                        }
+                        if (family != templateId)
+                            break;
                     }
                 }
             }
@@ -655,8 +690,21 @@ namespace TarkovVR.Source.Weapons
                     foreach (KeyValuePair<string, SavedShotgun> entry in generated.shotguns)
                     {
                         ShotgunData shotgun = ShotgunFrom(entry.Value);
-                        if (shotgun != null)
-                            shotgunGuns[entry.Key] = shotgun;
+                        if (shotgun == null)
+                            continue;
+                        shotgunGuns[entry.Key] = shotgun;
+                        // Its bolt handle: worked as a magazine gun's (TryGetChargingHandle, by the family AnimationFamily gives a shotgun)
+                        SavedShotgunHandle handle = entry.Value.handle;
+                        if (handle == null || string.IsNullOrEmpty(handle.bone))
+                            continue;
+                        if (handle.bone != "mod_charge")
+                            handleBoneNames[entry.Key] = handle.bone;
+                        if (!string.IsNullOrEmpty(handle.carrier))
+                            handleCarrierNames[entry.Key] = handle.carrier;
+                        if (handle.grabPoint != null && handle.grabPoint.Length >= 3)
+                            handleGrabPoints[entry.Key] = new Vector3(handle.grabPoint[0], handle.grabPoint[1], handle.grabPoint[2]);
+                        if (handle.gunHandHold != null && handle.gunHandHold.position != null && handle.gunHandHold.rotation != null)
+                            gunHandHandleHolds[entry.Key] = HandleHoldFrom(handle.gunHandHold);
                     }
                 }
                 if (generated.sideHandles != null)
