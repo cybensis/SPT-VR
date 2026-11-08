@@ -155,6 +155,37 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedReleasePress> releasePress;
             public Dictionary<string, SavedBolt> bolts;
             public Dictionary<string, SavedShotgun> shotguns;
+            public Dictionary<string, SavedLmg> lmgs;
+            public Dictionary<string, float> handleTravels;
+        }
+
+        // A belt-fed machine gun (gen_lmgs.py), by its clips' family: the feed cover and the scope mount's latch as hinges (bone, axis in its
+        // closed frame, degrees; the latch's button and how far it presses in its parent's frame), the belt as Tarkov's box insert clip leaves
+        // it hanging (every link's position + quaternion in the box root's frame, the last one still in the box), the way the box leaves
+        public sealed class SavedLmg
+        {
+            public SavedHinge cover;
+            public SavedHinge latch;
+            public SavedBelt belt;
+            public float[] wellAxis;
+        }
+
+        public sealed class SavedHinge
+        {
+            public string bone;
+            public float[] axis;
+            public float angle;
+            public string button;
+            public float[] buttonTravel;
+        }
+
+        public sealed class SavedBelt
+        {
+            public string prefix;
+            public int count;
+            public int anchor;
+            public float spacing;
+            public List<float[]> hanging;
         }
 
         // A tube shotgun (gen_shotguns.py), by its clips' family: the pump stroke's bones, the shell's paths into the tube and through the
@@ -706,6 +737,24 @@ namespace TarkovVR.Source.Weapons
                         if (handle.gunHandHold != null && handle.gunHandHold.position != null && handle.gunHandHold.rotation != null)
                             gunHandHandleHolds[entry.Key] = HandleHoldFrom(handle.gunHandHold);
                     }
+                }
+                if (generated.lmgs != null)
+                {
+                    foreach (KeyValuePair<string, SavedLmg> entry in generated.lmgs)
+                    {
+                        LmgData lmg = LmgFrom(entry.Value);
+                        if (lmg == null)
+                            continue;
+                        lmgGuns[entry.Key] = lmg;
+                        // The box's own way off the gun (it hooks on and swings off; the box mesh's long side runs along the gun)
+                        if (entry.Value.wellAxis != null && entry.Value.wellAxis.Length >= 3 && !wellAxes.ContainsKey(entry.Key))
+                            wellAxes[entry.Key] = new Vector3(entry.Value.wellAxis[0], entry.Value.wellAxis[1], entry.Value.wellAxis[2]);
+                    }
+                }
+                if (generated.handleTravels != null)
+                {
+                    foreach (KeyValuePair<string, float> entry in generated.handleTravels)
+                        handleTravels[entry.Key] = entry.Value;
                 }
                 if (generated.sideHandles != null)
                 {

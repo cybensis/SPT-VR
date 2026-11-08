@@ -138,6 +138,8 @@ namespace TarkovVR.Source.Weapons
         // no knob of its own, whose back end is inside the receiver: grabbed where its clip's hand is, in the bone's frame (PPSh, PP-91)
         private static readonly Dictionary<string, string> handleCarrierNames = new Dictionary<string, string>();
         private static readonly Dictionary<string, Vector3> handleGrabPoints = new Dictionary<string, Vector3>();
+        // How far the handle comes back where no clip hand rides it to say (the RPD's, from its charge clip)
+        private static readonly Dictionary<string, float> handleTravels = new Dictionary<string, float>();
         private static Vector3? foundHandleGrabLocal;
         // Ambidextrous, a knob each side (the MDR's paddles): left then right, in the handle bone's frame. A zone on each; the left hand's
         // holds are on the left one, the right hand's (or their mirror) on the right.
@@ -490,6 +492,8 @@ namespace TarkovVR.Source.Weapons
             heldHandleTravel = handleTravel;
             LoadRecordedGrips();
             string family = AnimationFamily(firearmController);
+            if (handleTravels.TryGetValue(family, out float familyTravel) && familyTravel > 0f)
+                heldHandleTravel = familyTravel;
             if (foundHandleKnobs != null && !sideHandle)
                 StartKnobFold(firearmController, family);
             handleHolds.TryGetValue(family, out HandleHold offHandHold);
@@ -796,6 +800,8 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             PlayFirstGunSound(firearmController, HandleSoundHand, "HandleOut", "SlideOut", "BoltOut");
             PulseHandleHand(0.5f, 0.04f);
+            // A belt gun without a chamber (the RPD) is cocked now (VRReloadController.Belt)
+            BeltGunCharged(firearmController);
             // A malfunction: cleared as the bolt goes home, by Tarkov's repair, which throws the round out itself
             if (MalfunctionRackedBack(firearmController))
             {

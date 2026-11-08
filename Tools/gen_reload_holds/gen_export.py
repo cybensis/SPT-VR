@@ -236,6 +236,18 @@ print('bolt-action bolts:',{f:(b['slider'],b['turner'],b['distance'],b['turnDegr
 # gen_shotguns.py: tube shotguns, by their clips' family (the pump stroke's bones, the shell's paths into the tube and the ejection port, its hold)
 out['shotguns']=json.load(open('shotguns.json'))['shotguns'] if os.path.exists('shotguns.json') else {}
 print('shotguns:',{f:(bool(g['pump']),g['tube']['length'],g['port']['length']) for f,g in out['shotguns'].items()})
+# gen_lmgs.py: belt-fed machine guns (the feed cover and the scope mount's latch as hinges, the belt hanging out of a box not yet laid), and
+# the RPD's charging handle (no clip hand rides it: taken where the hand is; its travel the clip's own)
+lmg=json.load(open('lmgs.json')) if os.path.exists('lmgs.json') else {}
+out['lmgs']=lmg.get('lmgs',{})
+for f,h in lmg.get('lmgHandles',{}).items():
+    out['handleBones'][f]=h['bone']; out['handleCarriers'][f]=h['bone']
+    if h.get('knobs'): out['handleKnobs'][f]=h['knobs']
+    if h.get('folds'): out['handleKnobFolds'][f]=h['folds']
+    if h.get('gunHand'): out['gunHandHandles'][f]=h['gunHand']
+    if h.get('offHand'): out['handles'][f]=h['offHand']
+out['handleTravels']={f:h['travel'] for f,h in lmg.get('lmgHandles',{}).items() if h.get('travel')}
+print('lmgs:',{f:(g['cover']['bone'] if g.get('cover') else None,bool(g.get('latch')),g['belt']['anchor'] if g.get('belt') else None) for f,g in out['lmgs'].items()})
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]
 for holds in (out['handles'],out['gunHandHandles'],out['handleAlternates'],out['gunHandHandleAlternates'],out['rockIn'],out['palms'],out['slides'],out['wellAxes']):

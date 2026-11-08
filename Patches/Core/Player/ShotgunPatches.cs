@@ -15,6 +15,8 @@ namespace TarkovVR.Patches.Core.Player
             if (__instance == null || !__instance.IsYourPlayer)
                 return;
             VRReloadController.ApplyShotgunBeforeIk();
+            // A belt gun's cover, scope latch and belt (VRReloadController.Belt): the same window, the hand on the cover rides it
+            VRReloadController.ApplyBeltGunBeforeIk();
         }
     }
 }
