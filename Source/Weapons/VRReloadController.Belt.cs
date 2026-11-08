@@ -75,6 +75,8 @@ namespace TarkovVR.Source.Weapons
             public float spacing;
             public Vector3[] positions;     // hanging, box root frame
             public Quaternion[] rotations;
+            public Vector3[] laidPositions; // Tarkov's belt in the tray (its idle clip), box root frame; null = not baked
+            public Quaternion[] laidRotations;
         }
 
         private sealed class LmgData
@@ -110,6 +112,16 @@ namespace TarkovVR.Source.Weapons
                     float[] pose = belt.hanging[link];
                     data.belt.positions[link] = Vector3From(pose, 0);
                     data.belt.rotations[link] = QuaternionFrom(pose, 3);
+                }
+                if (belt.laid != null && belt.laid.Count == belt.count)
+                {
+                    data.belt.laidPositions = new Vector3[belt.count];
+                    data.belt.laidRotations = new Quaternion[belt.count];
+                    for (int link = 0; link < belt.count; link++)
+                    {
+                        data.belt.laidPositions[link] = Vector3From(belt.laid[link], 0);
+                        data.belt.laidRotations[link] = QuaternionFrom(belt.laid[link], 3);
+                    }
                 }
             }
             return data.cover != null ? data : null;
@@ -567,6 +579,12 @@ namespace TarkovVR.Source.Weapons
             public Transform[] spentCells;          // empty_link_*: the fired side of the belt
             public readonly List<GameObject> hiddenCells = new List<GameObject>();
             public bool[] collides;                 // per point: the clip's hanging pose has it clear of the body, so it's kept clear
+            // Does the animator pose this box's belt (its binding to the box took)? Read off a frame we wrote it: the animator re-poses every
+            // link each frame if it does. Not driven, the laid belt is ours to hold in Tarkov's laid pose.
+            public bool animatorDrives = true;
+            public bool drivesKnown;
+            public Quaternion[] writtenLocal;
+            public int writtenFrame = -10;
         }
         private static readonly BeltRope gunRope = new BeltRope(), propRope = new BeltRope();
         private static Vector3[] beltStash = new Vector3[0];
@@ -625,6 +643,10 @@ namespace TarkovVR.Source.Weapons
             rope.lengths = new float[count];
             rope.laidPositions = new Vector3[count];
             rope.laidRotations = new Quaternion[count];
+            rope.writtenLocal = new Quaternion[count];
+            rope.writtenFrame = -10;
+            rope.animatorDrives = true;
+            rope.drivesKnown = false;
             float scale = Mathf.Abs(box.lossyScale.x);
             for (int link = 0; link < count - 1; link++)
                 rope.lengths[link] = Mathf.Max((data.positions[link + 1] - data.positions[link]).magnitude, data.spacing * 0.5f) * scale;
@@ -945,6 +967,22 @@ namespace TarkovVR.Source.Weapons
                 }
                 rope.links[link].SetPositionAndRotation(position, rotation);
             }
+            RememberWritten(rope);
+        }
+
+        private static void RememberWritten(BeltRope rope)
+        {
+            for (int link = 0; link < rope.links.Length; link++)
+                rope.writtenLocal[link] = rope.links[link].localRotation;
+            rope.writtenFrame = Time.frameCount;
+        }
+
+        // Tarkov's laid belt, held by us (a box the animator doesn't pose)
+        private static void WriteLaid(BeltRope rope)
+        {
+            for (int link = 0; link < rope.links.Length; link++)
+                rope.links[link].SetPositionAndRotation(rope.laidPositions[link], rope.laidRotations[link]);
+            RememberWritten(rope);
         }
 
         private static Transform GunBoxView(FirearmController firearmController)
@@ -1254,26 +1292,53 @@ namespace TarkovVR.Source.Weapons
                 }
                 if (!BindRope(gunRope, box, data.belt))
                     return;
-                // The animator's pose this frame = the belt laid (Tarkov's idle keys it): the tray, and where a lay eases to
                 BeltRope rope = gunRope;
                 int count = data.belt.count;
+                // Does the animator pose this box's belt? Off a frame we wrote it: it re-poses every link each frame if it does (his round 2: the
+                // laid belt "looks wrong" = left where the hand put it, nothing posing it after)
+                if (rope.writtenFrame == Time.frameCount - 1)
+                {
+                    bool reposed = false;
+                    for (int link = 0; link < count && !reposed; link++)
+                        reposed = Quaternion.Angle(rope.links[link].localRotation, rope.writtenLocal[link]) > 0.05f;
+                    if (!rope.drivesKnown || rope.animatorDrives != reposed)
+                    {
+                        rope.drivesKnown = true;
+                        rope.animatorDrives = reposed;
+                        if (beltDebugLog)
+                            Plugin.MyLog.LogInfo($"[VRBelt] {firearmController.Item.LocalizedShortName()}: the animator {(reposed ? "poses" : "doesn't pose")} this box's belt");
+                    }
+                }
+                // The belt laid, where a lay eases to and the tray is: Tarkov's own (its idle clip, baked); without it, the animator's pose now
+                bool baked = data.belt.laidPositions != null;
                 for (int link = 0; link < count; link++)
                 {
-                    rope.laidPositions[link] = rope.links[link].position;
-                    rope.laidRotations[link] = rope.links[link].rotation;
+                    rope.laidPositions[link] = baked ? box.TransformPoint(data.belt.laidPositions[link]) : rope.links[link].position;
+                    rope.laidRotations[link] = baked ? box.rotation * data.belt.laidRotations[link] : rope.links[link].rotation;
                 }
                 rope.laidEndLocal = box.InverseTransformPoint(rope.laidPositions[count - 1]);
                 if (!state.beltOut && !beltLaying)
                 {
                     StopRope(rope);
+                    // Laid: the animator's, or held in Tarkov's laid pose by us where the animator doesn't pose this box
+                    if (!rope.animatorDrives && baked)
+                        WriteLaid(rope);
                     return;
                 }
                 if (!rope.simulating)
                 {
-                    StartRope(rope, beltLiftFromTray ? rope.laidPositions : FreshStash(rope));
-                    // The stash / laid pose has no far end of its own (laidPositions): from the last link's turn
+                    // Out of the tray: from where the belt is now (laid)
                     if (beltLiftFromTray)
-                        rope.points[count] = rope.previous[count] = EndOfLink(rope, rope.points[count - 1], rope.laidRotations[count - 1]);
+                    {
+                        for (int link = 0; link < count; link++)
+                            rope.points[link] = rope.links[link].position;
+                        StartRope(rope, null);
+                        for (int link = 0; link < count; link++)
+                            rope.points[link] = rope.previous[link] = rope.links[link].position;
+                        rope.points[count] = rope.previous[count] = EndOfLink(rope, rope.points[count - 1], rope.links[count - 1].rotation);
+                    }
+                    else
+                        StartRope(rope, FreshStash(rope));
                     beltLiftFromTray = false;
                 }
                 float deltaTime = Mathf.Clamp(Time.deltaTime, 0.001f, 1f / 30f);
@@ -1333,13 +1398,15 @@ namespace TarkovVR.Source.Weapons
         // and on so the animator binds the new box's bones. Two things go wrong with VR in that (his round 1: the left hand off the foregrip,
         // B mid reload starting an animation, the belt's laid pose not the animator's):
         //  - the binding is by path from the animator's object, and VR moved Weapon_root off its place onto the rig (WeaponPatches): every bone
-        //    of the gun stops being animated. Weapon_root goes back to its place for the toggle and is bound again there, then back on the rig.
+        //    of the gun stops being animated. Weapon_root goes back to its place for the toggle and Tarkov's own WeaponPrefab.RebindAnimator
+        //    binds it there (bones + its animation events), then it goes back on the rig.
         //  - the animator's keepAnimatorStateOnDisable is off (the prefab's): the toggle restarts every layer from its entry state with every
         //    parameter at its default. After one of our own box moves (Manual Reload: Tarkov's operation skipped to its end, nothing of its
         //    clip to come), the animator is put back exactly as it was.
 
         internal sealed class AnimatorRebind
         {
+            public WeaponPrefab prefab;
             public Animator animator;
             public Transform weaponRoot, rigParent;
             public Vector3 localPosition;
@@ -1365,7 +1432,7 @@ namespace TarkovVR.Source.Weapons
                 Animator animator = prefab._formerAnimator;
                 if (animator == null)
                     return null;
-                AnimatorRebind rebind = new AnimatorRebind { animator = animator };
+                AnimatorRebind rebind = new AnimatorRebind { prefab = prefab, animator = animator };
                 // Weapon_root back where the animator's paths have it: RightHandPositioner/weaponHolder hangs where it was (WeaponPatches)
                 Transform weaponRoot = firearmController.WeaponRoot;
                 Transform holder = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform : null;
@@ -1424,9 +1491,19 @@ namespace TarkovVR.Source.Weapons
                 Animator animator = rebind.animator;
                 if (rebind.weaponRoot != null)
                 {
-                    // Bound now, with Weapon_root where its paths say (the toggle's own binding may wait for the animator's next update)
-                    if (animator != null && animator.isActiveAndEnabled)
-                        animator.Rebind();
+                    // Bound now, with Weapon_root where its paths say, by Tarkov's own rebind: the bones, AND its animation events subscribed
+                    // again. A bare Animator.Rebind (round 2) made the state behaviours anew with nothing listening to them: no FireEnd / IdleStart
+                    // ever came, so the fire operation never ended (his "fires 2-3 bullets then the whole gun breaks, can't switch guns").
+                    // (WeaponPrefab.RebindAnimator's own steps: its IPlayer parameter needs the voice-chat assembly referenced)
+                    if (animator != null && animator.isActiveAndEnabled && rebind.prefab != null && rebind.prefab._animator != null && VRGlobals.player != null)
+                    {
+                        AnimationEventSystem.AnimationEventsEmitter emitter = rebind.prefab._animationEventsEmitter;
+                        if (emitter != null)
+                            emitter.RemoveBindedAnimator();
+                        rebind.prefab._animator.RebindBones();
+                        if (emitter != null)
+                            emitter.SetAnimator(rebind.prefab._animator, AnimationEventSystem.AnimationEventsEmitter.EEmitType.EmitOnDemand, VRGlobals.player.ProfileId);
+                    }
                     rebind.weaponRoot.SetParent(rebind.rigParent, worldPositionStays: false);
                     rebind.weaponRoot.localPosition = rebind.localPosition;
                     rebind.weaponRoot.localRotation = rebind.localRotation;

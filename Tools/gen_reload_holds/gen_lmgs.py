@@ -143,8 +143,9 @@ def belt(tree,boxRoot,idleClip,insertClip):
     boxFile=boxRoot.split('/')[-1]+'.bundle'
     boxIds=sorted(i for i,it in ITEMS.items() if it.get('_props',{}).get('Prefab',{}).get('path','').endswith('/'+boxFile))
     print(f'  box templates {boxIds}',flush=True)
+    # Laid too: Tarkov's own belt in the tray (its idle clip), every link in the box frame - where a belt the hand lays goes
     return dict(box=boxRoot.split('/')[-1],boxIds=boxIds,prefix='belt_link_',count=len(links),anchor=anchor,spacing=round(spacing,5),
-                hanging=[r4(list(p)+list(q)) for p,q in hanging])
+                hanging=[r4(list(p)+list(q)) for p,q in hanging],laid=[r4(list(p)+list(q)) for p,q in laid])
 
 # Which way the box leaves the gun, in the mod_magazine bone's frame (the runtime's magazine track, wellAxes): the box root's first 1-6 cm
 # off its seat in the box-out clip, averaged; how much it turns over that, printed (a box that swings off only roughly follows a line)

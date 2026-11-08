@@ -188,6 +188,7 @@ namespace TarkovVR.Source.Weapons
             public int anchor;
             public float spacing;
             public List<float[]> hanging;
+            public List<float[]> laid;          // Tarkov's belt in the tray (its idle clip), the same frame
         }
 
         // A tube shotgun (gen_shotguns.py), by its clips' family: the pump stroke's bones, the shell's paths into the tube and through the
