@@ -18,6 +18,7 @@ namespace TarkovVR.Source.Weapons
 
         private sealed class RockIn
         {
+            public Vector3 pivot;       // the hinge's point in the well bone's frame: zero = the well itself (an AK's); a belt box's hooked edge
             public Vector3 axis;        // in the well bone's frame; turning about it by a positive angle tilts the magazine out
             public float angle;         // degrees to come free
             public Vector3[] thumb;     // the off thumb's three joints on the catch; null = the clip doesn't press it
@@ -115,19 +116,36 @@ namespace TarkovVR.Source.Weapons
             return magazineWell.TransformDirection(RockRotation(railLength) * railAxisInWell).normalized;
         }
 
+        // The hinge, world: the well itself, or a belt box's hooked edge
+        private static Vector3 RockPivotWorld() => magazineWell.TransformPoint(heldRockIn.pivot);
+
+        // A magazine at this much of the rock (0 seated): where its seated pose turns to about the hinge, in the well's frame
+        private static Vector3 RockedLocalPosition(float position) => heldRockIn.pivot + RockRotation(position) * (seatedLocalPosition - heldRockIn.pivot);
+
         // The hand holds the magazine rigidly, so a point on it says how far the hand has rocked it, whether that came from the arm or
-        // the wrist: its middle, fixed to the controller from here on
+        // the wrist: its middle, fixed to the controller from here on. The hand holding it (MagazineHandRig): a belt box may be the gun hand's.
         private static void StartRockLever()
         {
-            Transform controller = VRGlobals.vrPlayer.LeftHand.transform;
+            Transform controller = MagazineHandRig;
             Vector3 middle = heldProp.transform.TransformPoint(MagazineCenterInProp(heldProp));
             rockLeverOnHand = controller.InverseTransformPoint(middle);
-            rockLeverStartInWell = magazineWell.InverseTransformVector(middle - magazineWell.position);
+            rockLeverStartInWell = magazineWell.InverseTransformVector(middle - RockPivotWorld());
         }
 
         private static Vector3 RockLeverNow()
         {
-            return VRGlobals.vrPlayer.LeftHand.transform.TransformPoint(rockLeverOnHand) - magazineWell.position;
+            return MagazineHandRig.TransformPoint(rockLeverOnHand) - RockPivotWorld();
+        }
+
+        // A belt box going in is caught hooked: held near where its well point sits at the full rock (on the hinge, that's off the well),
+        // turned about that way (AK magazines keep their own catch along the track)
+        public static float rockHookCatchRadius = 0.06f;   // m the box's well point to where it is hooked
+        private static bool HookedOnPivot(Transform propTransform)
+        {
+            Vector3 hookedWellPoint = magazineWell.TransformPoint(heldRockIn.pivot + RockRotation(railLength) * (-heldRockIn.pivot));
+            Vector3 wellPointNow = propTransform.TransformPoint(propWellPointLocal);
+            Quaternion hookedRotation = magazineWell.rotation * (RockRotation(railLength) * seatedLocalRotation);
+            return (wellPointNow - hookedWellPoint).magnitude <= rockHookCatchRadius && Quaternion.Angle(propTransform.rotation, hookedRotation) <= railCaptureAngle;
         }
 
         // The controller's move since the track started as a turn about the hinge, in track metres, and how far it is off the magazine.

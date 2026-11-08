@@ -805,8 +805,7 @@ namespace TarkovVR.Source.Weapons
             seatedLocalRotation = propTransform.localRotation;
             heldReloadGrip = FindReloadGrip(firearmController, magazine, prop, propWellPointLocal);
             railAxisInWell = RailAxisInWell(firearmController, prop, propTransform.localScale);
-            heldRockIn = RockInOf(firearmController);
-            ArmBoxPaths(firearmController, magazine);
+            heldRockIn = RockInOf(firearmController) ?? BeltBoxRockIn(firearmController, magazine);
 
             hiddenGunMagazineView = magazineView.ItemView;
             hiddenGunMagazineView.gameObject.SetActive(false);
@@ -1032,8 +1031,7 @@ namespace TarkovVR.Source.Weapons
             seatedLocalPosition = modPlacer != null ? modPlacer.ModPosition : Vector3.zero;
             seatedLocalRotation = modPlacer != null ? Quaternion.Euler(modPlacer.ModRotation) : Quaternion.Euler(90f, 0f, 0f);
             railAxisInWell = RailAxisInWell(firearmController, prop, seatedScale);
-            heldRockIn = RockInOf(firearmController);
-            ArmBoxPaths(firearmController, magazine);
+            heldRockIn = RockInOf(firearmController) ?? BeltBoxRockIn(firearmController, magazine);
 
             heldSource = source;
             heldMagazine = magazine;
@@ -1128,17 +1126,9 @@ namespace TarkovVR.Source.Weapons
                 railCatchArmed = !inCatchZone && topOffset.magnitude >= railCatchClearance;
                 return;
             }
-            // A belt box with its clips' path: caught where it's held near that path, and onto it there
-            if (heldBoxInsert != null && (heldSource == HeldMagazineSource.FromGun || heldForFirearm.Item.GetCurrentMagazine() == null))
-            {
-                float caughtAt = BoxPathCatch(propTransform);
-                if (caughtAt >= 0f)
-                {
-                    GetPoseIn(MagazineHandRig, propTransform, out railEntryHandPosition, out railEntryHandRotation);
-                    StartRail(pullingOut: false, startPosition: caughtAt * railLength);
-                }
-                return;
-            }
+            // A belt box on its hinge: caught hooked (where its well point sits at the full rock, off the well)
+            if (heldRockIn != null && heldRockIn.pivot != Vector3.zero)
+                inCatchZone = HookedOnPivot(propTransform);
             // A new magazine only with the well empty (the gun's own, out in the hand, still counts as in it for Tarkov)
             if (inCatchZone && (heldSource == HeldMagazineSource.FromGun || heldForFirearm.Item.GetCurrentMagazine() == null))
             {
@@ -1160,15 +1150,7 @@ namespace TarkovVR.Source.Weapons
             Vector3 handDelta = MagazineHandRig.position - magazineWell.TransformPoint(handAtRailStartInWell);
             float handAlongTrack = Vector3.Dot(handDelta, axis);
             float handOffTrack = (handDelta - axis * handAlongTrack).magnitude;
-            float boxPathOff = 0f;
-            if (heldBoxPath != null)
-            {
-                // A belt box along its clips' path: where the hand's hold puts it on the path
-                MeasureHandOnBoxPath(out float onPath, out boxPathOff);
-                handAlongTrack = onPath - railPositionAtStart;
-                handOffTrack = boxPathOff;
-            }
-            else if (heldRockIn != null)
+            if (heldRockIn != null)
                 MeasureHandOnRock(out handAlongTrack, out handOffTrack);
             // A pistol's magazine goes in right under the gun hand: the controllers meet (headset), so it goes further than the hand does
             else if (handAlongTrack < 0f && VRGlobals.vrPlayer.isWeapPistol)
@@ -1186,7 +1168,7 @@ namespace TarkovVR.Source.Weapons
                     magazineCatchPassed = true;
 
                 // The controller away from where the hand holds the magazine: along the track too while the catch holds it
-                float handOffMagazine = heldBoxPath != null ? boxPathOff : heldRockIn != null ? HandOffRockingMagazine() : (handDelta - axis * (railPosition - railPositionAtStart)).magnitude;
+                float handOffMagazine = heldRockIn != null ? HandOffRockingMagazine() : (handDelta - axis * (railPosition - railPositionAtStart)).magnitude;
                 if (RockedMagazineLeaves(gripReleased, handOffMagazine))
                     return;
                 bool gaveBackToSupport = grabbedWithRelease && releaseLetGo && !magazineCatchPassed;
@@ -1213,8 +1195,7 @@ namespace TarkovVR.Source.Weapons
             }
 
             // Rocking in, only coming away from the magazine lets go of it: tilted too far it stays hooked
-            bool cameOffTrack = heldBoxPath != null ? handOffTrack > railLateralEscape
-                : heldRockIn != null ? handOffTrack > rockInInsertEscape
+            bool cameOffTrack = heldRockIn != null ? handOffTrack > rockInInsertEscape
                 : handOffTrack > railLateralEscape || trackPosition > InsertTrackLength + railExitMargin;
             if (cameOffTrack)
             {
@@ -1266,12 +1247,11 @@ namespace TarkovVR.Source.Weapons
         {
             Vector3 railPositionWorld;
             Quaternion railRotationWorld;
-            if (heldBoxPath != null)
-                BoxPathPose(heldBoxPath, railPosition / Mathf.Max(railLength, 0.001f), out railPositionWorld, out railRotationWorld);
-            else if (heldRockIn != null)
+            if (heldRockIn != null)
             {
+                // About the hinge: the well itself (an AK's), or a belt box's hooked edge
                 Quaternion rock = RockRotation(railPosition);
-                railPositionWorld = magazineWell.TransformPoint(rock * seatedLocalPosition);
+                railPositionWorld = magazineWell.TransformPoint(RockedLocalPosition(railPosition));
                 railRotationWorld = magazineWell.rotation * (rock * seatedLocalRotation);
             }
             else
@@ -1306,8 +1286,7 @@ namespace TarkovVR.Source.Weapons
             heldProp.transform.SetParent(magazineWell, worldPositionStays: true);
             LatchHand(heldProp.transform, magazineInGunHand);
             SetLatchPivot(heldProp.transform.TransformPoint(MagazineCenterInProp(heldProp)));
-            StartBoxPath();
-            if (heldRockIn != null && heldBoxPath == null)
+            if (heldRockIn != null)
                 StartRockLever();
         }
 
@@ -2299,7 +2278,6 @@ namespace TarkovVR.Source.Weapons
             heldForFirearm = null;
             heldReloadGrip = null;
             heldRockIn = null;
-            heldBoxPull = heldBoxInsert = heldBoxPath = null;
             magazineWell = null;
             magazineLeftWell = false;
             OwnsOffHand = false;

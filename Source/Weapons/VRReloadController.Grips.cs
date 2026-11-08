@@ -172,14 +172,15 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, string> hands;            // part -> "L" / "R": the hand the clips work it with (cover, latch, belt, box, charge)
             public Dictionary<string, SavedPartHold> holds;     // that hand on it: cover, latch, belt (its end), boxPull, boxInsert
             public List<SavedSupportSpot> supportSpots;         // the left hand's places on the gun: at rest, then aiming (the PKM's box)
-            public SavedBoxPath boxPath;                        // the box's way off (pull) and onto (insert) the gun, from its clips
+            public SavedBoxRock boxRock;                        // the box rocking on and off across the gun (the PKM's), like an AK magazine
         }
 
-        // Each: the box root's pose (position + quaternion) in its seated frame, from seated outward, at even steps along the way
-        public sealed class SavedBoxPath
+        // A hinge in the slot bone's frame: about axis through pivot (metres), angle degrees open
+        public sealed class SavedBoxRock
         {
-            public List<float[]> pull;
-            public List<float[]> insert;
+            public float[] axis;
+            public float angle;
+            public float[] pivot;
         }
 
         // Where the gun's clips put the left IK marker (position + quaternion, weapon bone frame), and the left hand's fingers there
@@ -837,6 +838,7 @@ namespace TarkovVR.Source.Weapons
                     {
                         rockInGuns[entry.Key] = new RockIn
                         {
+                            pivot = Vector3.zero,
                             axis = new Vector3(entry.Value.axis[0], entry.Value.axis[1], entry.Value.axis[2]),
                             angle = entry.Value.angle,
                             thumb = entry.Value.thumb != null ? FingersFrom(entry.Value.thumb) : null,

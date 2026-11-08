@@ -296,47 +296,64 @@ def meshPoint(folder,container,boneLeaf):
         if points: return r4(toParent(t,np.mean(points,axis=0)))
     return None
 
-# The box's way off and onto the gun (his PKM: "it rocks out to the left, rocks in from the left"): not a slide down a line, and not a
-# turn about one point either (a roll and a pull together - fitted to a single pivot it's 4-6 cm off), so the clip's own path. The box
-# root's pose in its SEATED frame (the idle clip's; at runtime the slot bone stays there) from seated outward: the out clip forward, the
-# in clip backward from the seat, until the root has come BOX_PATH_TRAVEL off its seat. Kept at even steps of pose distance (position +
-# turn x BOX_PATH_LEVER), so a stretch where it only turns (the in clip's last roll into the latch) gets its share of the path.
-BOX_PATH_TRAVEL=0.10
-BOX_PATH_LEVER=0.10
-BOX_PATH_SAMPLES=24
-def boxPath(tree,boxRoot,clip,seat,reverse=False):
-    P=tree[0]; g=setup(tree,clip); stop=float(clip.m_MuscleClip.m_StopTime); weapon=bone(P,'Weapon_root_anim/weapon')
-    sp,sr=seat; rows=[]
+# The box rocking on and off the gun like an AK magazine, but across it (his PKM: "it should just rock in similar to how an AK mag does
+# but from left to right of the gun instead of front to back"; "start in this position where it's hooking into the mag slot then as you
+# push up/tilt, it pushes the other side up into position"). Tarkov's pk_mag_out rolls the box about the barrel; as a path to follow it was
+# "too exact and hard to get right". A hinge on the box body's top edge that stays hooked as it rolls out (the one the roll lifts), along
+# the barrel (the weapon frame's y: the stock sits at y -23 cm, the barrel at -52), BOX_ROCK degrees open. The body: its biggest box
+# collider (the mesh data isn't in the box's own bundle). Slot frame = the seated box root's (ModPlacer identity on these boxes).
+BOX_ROCK={'pk':25.0}
+def boxBody(box):
+    env=UnityPy.load(MAGAZINES+box); T={o.path_id:o.read() for o in env.objects if o.type.name=='Transform'}
+    def toParent(t,p):
+        sc=t.m_LocalScale; r=t.m_LocalRotation; a=t.m_LocalPosition
+        q=np.array([r.x,r.y,r.z,r.w]); v=p*np.array([sc.x,sc.y,sc.z])
+        return v+2*np.cross(q[:3],np.cross(q[:3],v)+q[3]*v)+np.array([a.x,a.y,a.z])
+    best=None
+    for o in env.objects:
+        if o.type.name!='BoxCollider': continue
+        d=o.read(); go=d.m_GameObject.read()
+        tr=None
+        for c in go.m_Components:
+            pid=c.component.path_id if hasattr(c,'component') else c.path_id
+            if pid in T: tr=T[pid]
+        if tr is None: continue
+        chain=[]; t=tr
+        while t is not None:
+            chain.append(t); f=t.m_Father.path_id; t=T.get(f) if f else None
+        centre=np.array([d.m_Center.x,d.m_Center.y,d.m_Center.z]); half=np.array([d.m_Size.x,d.m_Size.y,d.m_Size.z])/2
+        corners=[]
+        for sx in (-1,1):
+            for sy in (-1,1):
+                for sz in (-1,1):
+                    q=centre+half*np.array([sx,sy,sz])
+                    for link in chain[:-1]: q=toParent(link,q)
+                    corners.append(q)
+        corners=np.array(corners); volume=float(np.prod(corners.max(0)-corners.min(0)))
+        # the closest-detail one (LOD0): LOD1's also wraps the mount, 6 cm past the box's end
+        lod=0 if 'lod0' in go.m_Name.lower() else 1
+        if best is None or (lod,-volume)<(best[4],-best[0]): best=(volume,corners.min(0),corners.max(0),go.m_Name,lod)
+    return best
+def boxRock(family,tree,boxRoot,outClip,seat,angle):
+    body=boxBody(GUNS[family][3])
+    if body is None: print('  box rock: no body collider',flush=True); return None
+    _,lo,hi,name,_=body
+    axis=np.array([0.0,-1.0,0.0])
+    # the out clip's roll sense about the barrel: which top end it lifts (that end stays hooked)
+    g=setup(tree,outClip); stop=float(outClip.m_MuscleClip.m_StopTime); weapon=bone(tree[0],'Weapon_root_anim/weapon'); sp,sr=seat; roll=0.0
     for i in range(int(stop*60)+1):
-        t=min(i/60,stop); c={}
-        wp,wr,_=g['worldAt'](weapon,t,c); bp,br,_=g['worldAt'](boxRoot,t,c)
-        p=g['rotate'](conj(sr),g['rotate'](conj(wr),bp-wp)-sp); q=qmul(conj(sr),qmul(conj(wr),br))
-        rows.append((t,p,q if q[3]>=0 else -q))
-    if reverse: rows=rows[::-1]
-    # from the last frame still seated (root within 2 mm, turned under 2 deg); the seat itself first
-    start=0
-    for i,(t,p,q) in enumerate(rows):
-        if np.linalg.norm(p)<0.002 and ang(q,np.array([0,0,0,1.0]))<2: start=i
-        elif np.linalg.norm(p)>=0.02: break
-    seq=[(rows[start][0],np.zeros(3),np.array([0,0,0,1.0]))]
-    for t,p,q in rows[start+1:]:
-        seq.append((t,p,q))
-        if np.linalg.norm(p)>=BOX_PATH_TRAVEL: break
-    dist=[0.0]
-    for (_,p0,q0),(_,p1,q1) in zip(seq,seq[1:]):
-        dist.append(dist[-1]+float(np.linalg.norm(p1-p0))+BOX_PATH_LEVER*math.radians(ang(q0,q1)))
-    total=dist[-1]
-    out=[]
-    for k in range(BOX_PATH_SAMPLES):
-        d=total*k/(BOX_PATH_SAMPLES-1); j=max(0,min(len(dist)-2,int(np.searchsorted(dist,d,side='right'))-1))
-        f=(d-dist[j])/max(dist[j+1]-dist[j],1e-9); p=seq[j][1]*(1-f)+seq[j+1][1]*f
-        q0,q1=seq[j][2],seq[j+1][2]
-        if np.dot(q0,q1)<0: q1=-q1
-        q=q0*(1-f)+q1*f; q=q/np.linalg.norm(q)
-        out.append(r4(list(p)+list(q)))
-    endTurn=ang(seq[-1][2],np.array([0,0,0,1.0]))
-    print(f"  box path {'in' if reverse else 'out'} ({clip.m_Name}): t{seq[0][0]:.2f}-{seq[-1][0]:.2f}, root {np.linalg.norm(seq[-1][1])*100:.1f} cm off, turned {endTurn:.0f} deg, {total*100:.1f} cm of path",flush=True)
-    return out
+        t=min(i/60,stop); c={}; wp,wr,_=g['worldAt'](weapon,t,c); bp,br,_=g['worldAt'](boxRoot,t,c)
+        rel=qmul(conj(sr),qmul(conj(wr),br)); rel=rel if rel[3]>=0 else -rel
+        if np.linalg.norm(g['rotate'](conj(sr),g['rotate'](conj(wr),bp-wp)-sp))>0.05:
+            roll=float(np.dot(rel[:3],axis)); break
+    turned=np.array(list(np.sin(np.radians(10))*axis)+[np.cos(np.radians(10))])*(1 if roll>=0 else -1)
+    def rotate(q,v): return g['rotate'](q,v)
+    rightEnd=np.array([hi[0],(lo[1]+hi[1])/2,hi[2]]); leftEnd=np.array([lo[0],(lo[1]+hi[1])/2,hi[2]])
+    lifts=rotate(turned,rightEnd)[2]>rightEnd[2]
+    pivot=rightEnd if lifts else leftEnd
+    if roll<0: axis=-axis
+    print(f'  box rock: body {name} {np.round(lo*100,1)}..{np.round(hi*100,1)} cm, the clip rolls {"+" if roll>=0 else "-"} about the barrel, hooked on the {"right" if lifts else "left"} top edge {np.round(pivot*100,1)} cm, {angle} deg',flush=True)
+    return dict(axis=r4(axis),angle=angle,pivot=r4(pivot))
 
 # The left hand's places on the gun: where its clips put the left IK marker and hand marker (and that hand's fingers) at rest and aiming.
 # The PKM's aiming clip moves the left hand from the handguard to the box (his: "ADSing seems to trigger an animation change where your
@@ -370,7 +387,8 @@ for family,(folder,container,latchContainer,box,idleName,coverName,latchName,ins
     entry['wellAxis']=boxAxis(tree,boxRoot,clips[outName])
     gIdle=setup(tree,clips[idleName]); cIdle={}; wpI,wrI,_=gIdle['worldAt'](bone(tree[0],'Weapon_root_anim/weapon'),0.0,cIdle); bpI,brI,_=gIdle['worldAt'](boxRoot,0.0,cIdle)
     seatPose=(gIdle['rotate'](conj(wrI),bpI-wpI),qmul(conj(wrI),brI))
-    entry['boxPath']=dict(pull=boxPath(tree,boxRoot,clips[outName],seatPose),insert=boxPath(tree,boxRoot,clips[insertName],seatPose,reverse=True))
+    if family in BOX_ROCK:
+        entry['boxRock']=boxRock(family,tree,boxRoot,clips[outName],seatPose,BOX_ROCK[family])
     print(f'{family}: cover {entry["cover"]}, latch {latch}',flush=True)
     # The hands on each part, and which hand that is
     holds={}
