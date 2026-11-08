@@ -52,6 +52,14 @@ namespace TarkovVR.Source.Weapons
         public static int beltIterations = 10;
         public static float beltJumpDistance = 0.4f;        // m the box moves in a frame that's a jump (the rig recentred): the belt moves with it
         public static bool beltDebugLog = true;             // grabs, refusals, the belt's states (on for its first headset rounds)
+        // His: "right hand pulls the charging handle on the RPD, left hand is the mag release", "the way they should for every gun". Each
+        // part only for the hand its clips work it with (gen_lmgs "hands": the PKM's right hand does it all, the RPD's and M60's left all
+        // but the handle). false = either hand, any part.
+        public static bool beltGunHandsFromClips = true;
+        // The hand onto the clip's hold as it takes a part (the cover, the latch; the box through the magazine holds), the belt's end into
+        // the fingers as the clip pinches it. false = the hand stays where it took hold (the pinch fingers).
+        public static bool beltGunSnapHands = true;
+        public static float partMirrorPlaneTolerance = 0.03f; // m a part's bone off the gun's centre plane its hold still mirrors across (the gun in the other hand)
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The data (ReloadHolds.json "lmgs")
@@ -79,11 +87,24 @@ namespace TarkovVR.Source.Weapons
             public Quaternion[] laidRotations;
         }
 
+        // A clip's palm on a part, in the part's frame
+        private sealed class PartHold
+        {
+            public bool rightHand;
+            public Vector3 position;
+            public Quaternion rotation;
+            public Vector3[] fingers;
+        }
+
         private sealed class LmgData
         {
             public HingeData cover;
             public HingeData latch;
             public BeltData belt;
+            public PartHold coverHold, latchHold, beltHold;
+            public MagazineHold boxPull, boxInsert;     // the box in the palm's frame (FindReloadGrip)
+            public bool hasHands;                       // read: which hand works each part
+            public bool coverByGunHand, latchByGunHand, beltByGunHand, boxByGunHand, chargeByGunHand;
         }
 
         private static readonly Dictionary<string, LmgData> lmgGuns = new Dictionary<string, LmgData>();
@@ -93,6 +114,30 @@ namespace TarkovVR.Source.Weapons
             if (saved == null)
                 return null;
             LmgData data = new LmgData { cover = HingeFrom(saved.cover), latch = HingeFrom(saved.latch) };
+            // The clip's right hand = the gun hand (with the gun in the left hand, that one, mirrored)
+            if (saved.hands != null && saved.hands.Count > 0)
+            {
+                data.hasHands = true;
+                bool ByGunHand(string part) => saved.hands.TryGetValue(part, out string hand) && hand == "R";
+                data.coverByGunHand = ByGunHand("cover");
+                data.latchByGunHand = ByGunHand("latch");
+                data.beltByGunHand = ByGunHand("belt");
+                data.boxByGunHand = ByGunHand("box");
+                data.chargeByGunHand = ByGunHand("charge");
+            }
+            if (saved.holds != null)
+            {
+                saved.holds.TryGetValue("cover", out SavedPartHold cover);
+                saved.holds.TryGetValue("latch", out SavedPartHold latch);
+                saved.holds.TryGetValue("belt", out SavedPartHold beltEnd);
+                saved.holds.TryGetValue("boxPull", out SavedPartHold boxPull);
+                saved.holds.TryGetValue("boxInsert", out SavedPartHold boxInsert);
+                data.coverHold = PartHoldFrom(cover);
+                data.latchHold = PartHoldFrom(latch);
+                data.beltHold = PartHoldFrom(beltEnd);
+                data.boxPull = BoxHoldFrom(boxPull);
+                data.boxInsert = BoxHoldFrom(boxInsert);
+            }
             SavedBelt belt = saved.belt;
             if (belt != null && belt.hanging != null && belt.hanging.Count == belt.count && belt.count >= 3 && belt.anchor >= 1 && belt.anchor < belt.count)
             {
@@ -139,6 +184,86 @@ namespace TarkovVR.Source.Weapons
                 button = string.IsNullOrEmpty(saved.button) ? null : saved.button,
                 buttonTravel = saved.buttonTravel != null && saved.buttonTravel.Length >= 3 ? Vector3From(saved.buttonTravel, 0) : Vector3.zero,
             };
+        }
+
+        private static PartHold PartHoldFrom(SavedPartHold saved)
+        {
+            if (saved == null || saved.position == null || saved.position.Length < 3 || saved.rotation == null || saved.rotation.Length < 3)
+                return null;
+            return new PartHold
+            {
+                rightHand = saved.hand == "R",
+                position = Vector3From(saved.position, 0),
+                rotation = Quaternion.Euler(Vector3From(saved.rotation, 0)),
+                fingers = saved.fingers != null && saved.fingers.Length >= 48 ? FingersFrom(saved.fingers) : null,
+            };
+        }
+
+        private static MagazineHold BoxHoldFrom(SavedPartHold saved)
+        {
+            if (saved == null || saved.position == null || saved.position.Length < 3 || saved.rotation == null || saved.rotation.Length < 3)
+                return null;
+            return new MagazineHold
+            {
+                position = Vector3From(saved.position, 0),
+                rotation = Vector3From(saved.rotation, 0),
+                fingers = saved.fingers != null && saved.fingers.Length >= 48 ? FingersFrom(saved.fingers) : null,
+                inBoneFrame = saved.inBoneFrame,
+                rightHand = saved.hand == "R",
+            };
+        }
+
+        // Which hand may work a part: the one the clips work it with (beltGunHandsFromClips), else either
+        private static bool HandWorksPart(LmgData data, bool partIsTheGunHands, bool gunHand)
+        {
+            return !beltGunHandsFromClips || data == null || !data.hasHands || partIsTheGunHands == gunHand;
+        }
+
+        // Not a belt gun: any hand, as before
+        private static bool BeltBoxHandMay(FirearmController firearmController, bool gunHand)
+        {
+            return !TryGetLmg(firearmController, out LmgData data) || HandWorksPart(data, data.boxByGunHand, gunHand);
+        }
+
+        private static bool BeltChargeHandMay(FirearmController firearmController, bool gunHand)
+        {
+            return !TryGetLmg(firearmController, out LmgData data) || HandWorksPart(data, data.chargeByGunHand, gunHand);
+        }
+
+        // A part's hold for this arm, world: as the clip has it, or for the other arm (the gun in the left hand) its mirror image through
+        // the gun's centre plane, where the part's bone is on that plane (the cover; not a mount off to one side). False: none for it.
+        private static bool PartHoldWorld(PartHold hold, Transform frame, bool rightArm, out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (hold == null || frame == null)
+                return false;
+            Vector3 local = hold.position;
+            Quaternion turn = hold.rotation;
+            if (hold.rightHand != rightArm)
+            {
+                if (!TarkovVR.Patches.Core.Player.RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
+                    return false;
+                Quaternion toFrame = Quaternion.Inverse(frame.rotation);
+                Vector3 normal = (toFrame * planeNormal).normalized;
+                Vector3 point = toFrame * (planePoint - frame.position);
+                if (Mathf.Abs(Vector3.Dot(point, normal)) > partMirrorPlaneTolerance
+                    || !TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(turn, normal, rightToLeft: hold.rightHand, out turn))
+                    return false;
+                local -= 2f * Vector3.Dot(local - point, normal) * normal;
+            }
+            position = frame.position + frame.rotation * local;
+            rotation = frame.rotation * turn;
+            return true;
+        }
+
+        // Its fingers for this arm (mirrored for the other one)
+        private static readonly Vector3[] mirroredPartFingers = new Vector3[16];
+        private static Vector3[] PartFingers(PartHold hold, bool rightArm)
+        {
+            if (hold?.fingers == null)
+                return null;
+            return hold.rightHand == rightArm ? hold.fingers : MirroredPose(hold.fingers, rightToLeft: hold.rightHand, mirroredPartFingers);
         }
 
         // A box of the model the belt data was read on (by its item template: what its pooled model is called isn't ours to rely on)
@@ -299,6 +424,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 hingeAcrossAtGrab;           // the controller about the hinge at the grab, in the bone's parent frame
         private static Transform hingeRider;                // ours, on the part where the hand took it
         private static float latchButtonPressed;
+        private static PartHold heldPartHold;               // the clip's hand on the part held now (a hinge or the belt's end): its fingers
         private static bool HingeInGunHand => HoldingHinge && hingeInGunHand;
 
         private static HingeRig RigOf(HingeKind kind) => kind == HingeKind.Cover ? coverRig : latchRig;
@@ -460,11 +586,20 @@ namespace TarkovVR.Source.Weapons
             hingeRider.SetPositionAndRotation(controller.position, controller.rotation);
             LatchHand(hingeRider, gunHand);
             SetLatchPivot(rig.grab.position);
+            // His "why isn't the hand locking into the animation position": onto the clip's hand on it, riding it from there (hingeRider is
+            // the bone's), its fingers the clip's
+            heldPartHold = kind == HingeKind.Cover ? data.coverHold : data.latchHold;
+            Vector3 palmPosition = Vector3.zero;
+            Quaternion palmRotation = Quaternion.identity;
+            bool snapped = beltGunSnapHands && PartHoldWorld(heldPartHold, rig.bone, hingeOnRightArm, out palmPosition, out palmRotation);
+            if (snapped)
+                SnapHandTo(hingeRider, palmPosition, palmRotation);
             if (kind == HingeKind.Latch)
                 PlayFirstGunSound(firearmController, hand, "SightButtonIn");
             Pulse(hand, 0.3f, 0.03f);
             if (beltDebugLog)
-                Plugin.MyLog.LogInfo($"[VRBelt] took the {kind} ({(gunHand ? "gun" : "off")} hand), {hingeOpenAtGrab:0.00} open");
+                Plugin.MyLog.LogInfo($"[VRBelt] took the {kind} ({(gunHand ? "gun" : "off")} hand), {hingeOpenAtGrab:0.00} open, "
+                    + (snapped ? $"onto the clip's hold ({(Vector3.Distance(palmPosition, controller.position) * 100f):0.#} cm from the hand)" : heldPartHold == null ? "no hold read" : "no hold for this arm"));
         }
 
         // From Tick: the part follows the hand about its hinge
@@ -503,6 +638,7 @@ namespace TarkovVR.Source.Weapons
             HoldingHinge = false;
             FirearmController firearmController = hingeHeldFor;
             hingeHeldFor = null;
+            heldPartHold = null;
             ReleaseHandLatch();
             if (firearmController == null || firearmController.Item == null)
                 return;
@@ -603,6 +739,11 @@ namespace TarkovVR.Source.Weapons
         private static float beltEndEase;
         private static Vector3 beltEndTarget;               // this frame's, world (inside the belt's reach)
         private static bool beltEndAtTray;                  // the held end where letting go lays it (its blip once on the way in)
+        // The end held in the clip's pinch (heldPartHold): the last link turned and placed so the hand is on it as the clip has it, both its
+        // ends pinned (the far one at beltFarTarget), easing in from how it lay at the grab
+        private static bool beltEndTurned;
+        private static Quaternion beltEndTurnAtGrab, beltEndTurn;
+        private static Vector3 beltFarTarget;
 
         private static bool BindRope(BeltRope rope, Transform box, BeltData data)
         {
@@ -837,7 +978,11 @@ namespace TarkovVR.Source.Weapons
             return length;
         }
 
-        private static bool PointFixed(BeltRope rope, int point, bool endHeld) => point <= rope.pinned || (endHeld && point == rope.data.count - 1);
+        private static bool PointFixed(BeltRope rope, int point, bool endHeld) => point <= rope.pinned || (endHeld && point == rope.data.count - 1)
+            || (endHeld && point == rope.data.count && EndTurnHeld(rope));
+
+        // The gun's belt held in the clip's pinch (UpdateBeltHold): its last link's far end is the hand's too
+        private static bool EndTurnHeld(BeltRope rope) => rope == gunRope && HoldingBelt && beltEndTurned;
 
         // Gravity and the last step's motion on the free points, then the links' lengths and the belt's bend held (a few rounds)
         private static void StepRope(BeltRope rope, bool endHeld, Vector3 endTarget, float deltaTime)
@@ -881,10 +1026,13 @@ namespace TarkovVR.Source.Weapons
             int end = count - 1;
             // Bent by b at the middle point, two links of length L reach 2 L cos(b / 2) apart
             float minFold = 2f * Mathf.Cos(0.5f * Mathf.Deg2Rad * Mathf.Clamp(beltMaxBendDegrees, 0f, 170f));
+            bool farHeld = endHeld && EndTurnHeld(rope);
             for (int iteration = 0; iteration < beltIterations; iteration++)
             {
                 if (endHeld)
                     points[end] = endTarget;
+                if (farHeld)
+                    points[count] = beltFarTarget;
                 for (int point = rope.pinned; point < count; point++)
                 {
                     Vector3 delta = points[point + 1] - points[point];
@@ -939,6 +1087,8 @@ namespace TarkovVR.Source.Weapons
             }
             if (endHeld)
                 points[end] = endTarget;
+            if (farHeld)
+                points[count] = beltFarTarget;
         }
 
         // The links onto the points: the ones in the box as the clip has them, the rest turned onto their own stretch from the link before
@@ -959,6 +1109,9 @@ namespace TarkovVR.Source.Weapons
                     rotation = along.sqrMagnitude > 1e-10f ? Quaternion.FromToRotation(previousRotation * Vector3.left, along) * previousRotation : previousRotation;
                 }
                 previousRotation = rotation;
+                // In the clip's pinch: the end link exactly as the hand holds it (the stretch alone leaves its twist the link before's)
+                if (link == count - 1 && EndTurnHeld(rope))
+                    rotation = beltEndTurn;
                 Vector3 position = points[link];
                 if (layBlend > 0f)
                 {
@@ -1024,13 +1177,19 @@ namespace TarkovVR.Source.Weapons
             beltEndEase = 0f;
             beltEndTarget = beltEndAtGrab;
             beltEndAtTray = fromTray;
+            // The clip's pinch on its end (gen_lmgs), on the arm it was read on: a floppy belt isn't mirrored (its end isn't on the gun's plane)
+            LmgData data = TryGetLmg(firearmController, out LmgData lmg) ? lmg : null;
+            heldPartHold = data?.beltHold;
+            beltEndTurned = beltGunSnapHands && heldPartHold != null && heldPartHold.rightHand == beltOnRightArm;
+            beltEndTurnAtGrab = beltEndTurn = gunRope.links[count - 1].rotation;
             if (beltHandHolder == null)
                 beltHandHolder = new GameObject("VRBeltHand").transform;
             beltHandHolder.SetPositionAndRotation(controller.position, controller.rotation);
             LatchHand(beltHandHolder, gunHand);
             Pulse(hand, 0.3f, 0.03f);
             if (beltDebugLog)
-                Plugin.MyLog.LogInfo($"[VRBelt] took the belt {(fromTray ? "out of the tray" : "by its end")} ({(gunHand ? "gun" : "off")} hand)");
+                Plugin.MyLog.LogInfo($"[VRBelt] took the belt {(fromTray ? "out of the tray" : "by its end")} ({(gunHand ? "gun" : "off")} hand), "
+                    + (beltEndTurned ? "into the clip's pinch" : heldPartHold == null ? "no hold read" : "no hold for this arm"));
         }
 
         // From Tick: the end follows the hand within the belt's reach (a link more out of the box when pulled), the hand stopping where the
@@ -1052,8 +1211,18 @@ namespace TarkovVR.Source.Weapons
             LmgState state = LmgStateOf(firearmController.Item);
             Transform controller = HandRig(beltInGunHand);
             Vector3 wanted = controller.TransformPoint(beltEndInController);
+            // In the clip's pinch: the hand (the latch, on the controller) is the palm; the link is where that puts it (palm = link * hold)
+            Quaternion wantedTurn = Quaternion.identity;
+            if (beltEndTurned)
+            {
+                wantedTurn = controller.rotation * Quaternion.Inverse(heldPartHold.rotation);
+                wanted = controller.position - wantedTurn * heldPartHold.position;
+            }
             beltEndEase = Mathf.MoveTowards(beltEndEase, 1f, Time.deltaTime / Mathf.Max(beltTipEaseTime, 0.001f));
-            Vector3 eased = Vector3.Lerp(beltEndAtGrab, wanted, Mathf.SmoothStep(0f, 1f, beltEndEase));
+            float easeShown = Mathf.SmoothStep(0f, 1f, beltEndEase);
+            Vector3 eased = Vector3.Lerp(beltEndAtGrab, wanted, easeShown);
+            if (beltEndTurned)
+                beltEndTurn = Quaternion.Slerp(beltEndTurnAtGrab, wantedTurn, easeShown);
             Vector3 target = eased;
             if (gunRope.simulating)
             {
@@ -1075,6 +1244,8 @@ namespace TarkovVR.Source.Weapons
                     target = mouth + (target - mouth).normalized * reach;
             }
             beltEndTarget = target;
+            if (beltEndTurned)
+                beltFarTarget = EndOfLink(gunRope, target, beltEndTurn);
             // The hand stays on the controller, but no further than the belt reaches
             beltHandHolder.SetPositionAndRotation(controller.position + (target - eased), controller.rotation);
             // His: hold the trigger to carry the end, place it on the feed and let go. At the tray with the cover open: a blip coming in, and
@@ -1098,6 +1269,8 @@ namespace TarkovVR.Source.Weapons
             SoundHand hand = beltInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
             HoldingBelt = false;
             beltHeldFor = null;
+            beltEndTurned = false;
+            heldPartHold = null;
             ReleaseHandLatch();
             beltLaying = true;
             beltLayProgress = 0f;
@@ -1113,6 +1286,8 @@ namespace TarkovVR.Source.Weapons
                 return;
             HoldingBelt = false;
             beltHeldFor = null;
+            beltEndTurned = false;
+            heldPartHold = null;
             ReleaseHandLatch();
             if (beltDebugLog)
                 Plugin.MyLog.LogInfo("[VRBelt] let go of the belt");
@@ -1132,8 +1307,11 @@ namespace TarkovVR.Source.Weapons
             LmgState state = LmgStateOf(weapon);
             float nearest = float.MaxValue;
             int part = -1;                  // 0 cover, 1 latch, 2 the belt's hanging end, 3 the belt in the tray
-            bool showZones = debugZones && !gunHand;
-            if (EnsureHinge(firearmController, data, HingeKind.Cover, out HingeRig cover))
+            // Only the parts this hand works in the clips (HandWorksPart): their zones show for that hand
+            bool coverHand = HandWorksPart(data, data.coverByGunHand, gunHand), latchHand = HandWorksPart(data, data.latchByGunHand, gunHand);
+            bool beltHand = HandWorksPart(data, data.beltByGunHand, gunHand);
+            bool showZones = debugZones;
+            if (coverHand && EnsureHinge(firearmController, data, HingeKind.Cover, out HingeRig cover))
             {
                 float outside = HandDistanceToCapsule(gunHand, cover.grab.position, cover.grab.position) - hingeGrabRadius;
                 if (outside <= 0f && outside < nearest)
@@ -1144,7 +1322,7 @@ namespace TarkovVR.Source.Weapons
                 if (showZones)
                     SetZoneViz(ref coverZoneViz, true, cover.grab.position, hingeGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.6f, 1f, 0.3f));
             }
-            if (LatchPresent(firearmController, data, out HingeRig latch))
+            if (latchHand && LatchPresent(firearmController, data, out HingeRig latch))
             {
                 Vector3 from = latch.button != null ? latch.button.position : latch.grab.position;
                 float outside = HandDistanceToCapsule(gunHand, from, latch.grab.position) - hingeGrabRadius;
@@ -1156,7 +1334,7 @@ namespace TarkovVR.Source.Weapons
                 if (showZones)
                     SetCapsuleZoneViz(ref latchZoneViz, from, latch.grab.position, hingeGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(0.7f, 0.3f, 1f, 0.3f));
             }
-            bool boxOn = weapon.GetCurrentMagazine() != null && gunRope.links != null && gunRope.box == GunBoxView(firearmController);
+            bool boxOn = beltHand && weapon.GetCurrentMagazine() != null && gunRope.links != null && gunRope.box == GunBoxView(firearmController);
             if (boxOn && state.beltOut && gunRope.simulating)
             {
                 int count = gunRope.data.count;
@@ -1170,8 +1348,6 @@ namespace TarkovVR.Source.Weapons
                 if (showZones)
                     SetCapsuleZoneViz(ref beltZoneViz, mouth, end, beltGrabRadius, outside <= 0f ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.9f, 0f, 0.3f));
             }
-            else if (showZones)
-                SetZoneViz(ref beltZoneViz, false, Vector3.zero, 0f, Color.clear);
             if (boxOn && !state.beltOut && CoverOpenEnough(state))
             {
                 Vector3 end = gunRope.links[gunRope.data.count - 1].position;
@@ -1209,16 +1385,18 @@ namespace TarkovVR.Source.Weapons
             UpdateHinge(triggerReleased, gunHandTriggerReleased);
             UpdateBeltHold(triggerReleased, gunHandTriggerReleased);
             latchButtonPressed = Mathf.MoveTowards(latchButtonPressed, HoldingHinge && heldHinge == HingeKind.Latch ? 1f : 0f, Time.deltaTime / 0.08f);
-            FirearmController firearmController = VRGlobals.firearmController;
-            if (!TryGetLmg(firearmController, out _))
+            // The zones off: this tick's grabs (TickBeltGunGrabs, after this) show the ones a hand may take now
+            if (debugZones)
             {
-                beltLaying = false;
-                if (!debugZones)
-                    return;
                 SetZoneViz(ref coverZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref latchZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref beltZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref trayZoneViz, false, Vector3.zero, 0f, Color.clear);
+            }
+            FirearmController firearmController = VRGlobals.firearmController;
+            if (!TryGetLmg(firearmController, out _))
+            {
+                beltLaying = false;
                 return;
             }
             LmgState state = LmgStateOf(firearmController.Item);
@@ -1386,10 +1564,14 @@ namespace TarkovVR.Source.Weapons
             WriteRope(propRope, 0f);
         }
 
-        // The hands' fingers on these parts: the magazine pull's pinch (the left's; mirrored for the right arm)
+        // The hands' fingers on these parts, for this arm: the clip's on it (heldPartHold), else the magazine pull's pinch (the left's;
+        // mirrored for the right arm)
         private static readonly Vector3[] mirroredBeltPinch = new Vector3[16];
         private static Vector3[] BeltGunFingers(bool rightArm)
         {
+            Vector3[] clip = PartFingers(heldPartHold, rightArm);
+            if (clip != null)
+                return clip;
             return rightArm ? MirroredPose(MAGAZINE_PULL_FINGERS, rightToLeft: false, mirroredBeltPinch) ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
         }
 

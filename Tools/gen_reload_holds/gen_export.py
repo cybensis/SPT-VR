@@ -237,7 +237,7 @@ print('bolt-action bolts:',{f:(b['slider'],b['turner'],b['distance'],b['turnDegr
 out['shotguns']=json.load(open('shotguns.json'))['shotguns'] if os.path.exists('shotguns.json') else {}
 print('shotguns:',{f:(bool(g['pump']),g['tube']['length'],g['port']['length']) for f,g in out['shotguns'].items()})
 # gen_lmgs.py: belt-fed machine guns (the feed cover and the scope mount's latch as hinges, the belt hanging out of a box not yet laid), and
-# the RPD's charging handle (no clip hand rides it: taken where the hand is; its travel the clip's own)
+# the RPD's charging handle; per part the hand the clips work it with and its hold on it (hands / holds)
 lmg=json.load(open('lmgs.json')) if os.path.exists('lmgs.json') else {}
 out['lmgs']=lmg.get('lmgs',{})
 for f,h in lmg.get('lmgHandles',{}).items():

@@ -291,8 +291,8 @@ namespace TarkovVR.Source.Weapons
             {
                 freeHoldPosition = heldReloadGrip.insert.position;
                 freeHoldRotation = Quaternion.Euler(heldReloadGrip.insert.rotation);
-                ToOffHandPalm(prop, magazineWell, ref freeHoldPosition, ref freeHoldRotation);
-                magazineHandFingers = heldReloadGrip.insert.fingers ?? MAGAZINE_INSERT_FINGERS;
+                ToOffHandPalm(prop, magazineWell, ref freeHoldPosition, ref freeHoldRotation, heldReloadGrip.insert.rightHand);
+                magazineHandFingers = MagazineFingersFrom(heldReloadGrip.insert, MAGAZINE_INSERT_FINGERS);
             }
             else
             {

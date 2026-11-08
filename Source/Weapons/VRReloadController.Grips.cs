@@ -39,6 +39,7 @@ namespace TarkovVR.Source.Weapons
             public float magazineLength;
             public Vector3[] fingers;        // null = the M4A1's
             public bool inBoneFrame;         // generated: the pose of the magazine's slot bone (the clips move the bone, not the model)
+            public bool rightHand;           // read on the right palm (a belt gun's box the gun hand carries: the PKM's), not the left
         }
 
         private sealed class ReloadGrip
@@ -168,6 +169,18 @@ namespace TarkovVR.Source.Weapons
             public SavedHinge latch;
             public SavedBelt belt;
             public float[] wellAxis;
+            public Dictionary<string, string> hands;            // part -> "L" / "R": the hand the clips work it with (cover, latch, belt, box, charge)
+            public Dictionary<string, SavedPartHold> holds;     // that hand on it: cover, latch, belt (its end), boxPull, boxInsert
+        }
+
+        // The palm in the part's frame (the box's: the box in the palm's frame, like the magazine holds); hand = the clip's palm
+        public sealed class SavedPartHold
+        {
+            public string hand;
+            public float[] position;
+            public float[] rotation;
+            public float[] fingers;
+            public bool inBoneFrame;
         }
 
         public sealed class SavedHinge
@@ -369,6 +382,21 @@ namespace TarkovVR.Source.Weapons
                 insert = ResolveHold(family, magazineType, false, prop, lengthAxis, length, out string insertSource),
             };
             grip.pull = WithInsertThumb(grip.pull, grip.insert);
+            // A belt gun's box: the hand the clips carry it with, on it as they have it (gen_lmgs; the PKM's right hand). Not the magazine
+            // reader's, which only ever reads the left palm - on a PKM that hand never leaves the foregrip.
+            if (TryGetLmg(firearmController, out LmgData lmg) && lmg.belt != null && BeltFits(magazine, lmg.belt))
+            {
+                if (lmg.boxPull != null)
+                {
+                    grip.pull = InModelFrame(lmg.boxPull, prop);
+                    pullSource = $"the belt gun's ({(lmg.boxPull.rightHand ? "right" : "left")} hand)";
+                }
+                if (lmg.boxInsert != null)
+                {
+                    grip.insert = InModelFrame(lmg.boxInsert, prop);
+                    insertSource = $"the belt gun's ({(lmg.boxInsert.rightHand ? "right" : "left")} hand)";
+                }
+            }
             LogAction($"[VRReload] {firearmController.Item.LocalizedShortName()} with {magazine.LocalizedShortName()}: animations '{family}', "
                 + $"magazine type {magazineType}, length {length * 100f:0.#} cm, pull hold {pullSource}, insert hold {insertSource}");
             return grip.pull != null || grip.insert != null ? grip : null;
@@ -424,6 +452,7 @@ namespace TarkovVR.Source.Weapons
                 rotation = (boneRotation * seatedRotation).eulerAngles,
                 magazineLength = hold.magazineLength,
                 fingers = hold.fingers,
+                rightHand = hold.rightHand,
             };
         }
 
