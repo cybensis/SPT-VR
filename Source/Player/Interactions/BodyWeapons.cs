@@ -30,6 +30,15 @@ namespace TarkovVR.Source.Player.Interactions
         public static float gunGrabRadius = 0.06f;      // m any point of the hand (palm, fingertips) off a gun's barrel line: anywhere on it takes it
         public static float switchTimeout = 3f;         // s before a switch that never lands is given up
         public static bool debugLog = false;            // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
+        // The gun a grab switches to: its draw skipped the moment Tarkov starts it (BodyWeaponPatches.SkipDraw), before the animator plays a
+        // frame of it (his report 2026-11-08: the switch still played the base game's swing-up and its sound; UpdateSwitch's skip came a
+        // frame later, after the draw's first frame, and only while the switch still counted as under way)
+        public static bool skipDrawAtSpawn = true;
+        // One log line a frame for switchTraceTime after a grab starts a switch: the hands' operation, the arms animator's layer 1, the
+        // gun's animated root and its hand holder - what moves if a swing still shows (on for its first headset round)
+        public static bool switchTrace = true;
+        public static float switchTraceTime = 1.5f;
+        private static Item lastSwitchItem;
 
         private static readonly EquipmentSlot[] bodySlots =
             { EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster, EquipmentSlot.Scabbard };
@@ -82,6 +91,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (!grip)
                 GrabbedThisPress = false;
+            if (switchTrace && lastSwitchItem != null && Time.time - switchStarted <= switchTraceTime)
+                TraceSwitchFrame();
             if (Switching)
             {
                 HandAtBodyGun = false;
@@ -277,6 +288,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
 
             switchingTo = takenItem;
+            lastSwitchItem = takenItem;
             standIn = takenModel;
             Transform handTransform = VRGlobals.vrPlayer.RightHand.transform;
             standInInHandRotation = Quaternion.Inverse(handTransform.rotation) * takenModel.transform.rotation;
@@ -357,6 +369,62 @@ namespace TarkovVR.Source.Player.Interactions
                     Plugin.MyLog.LogInfo($"[BodyWeapons] {switchingTo.LocalizedShortName()} in hand after {Time.time - switchStarted:0.00} s");
                 EndSwitch();
             }
+        }
+
+        // Player.SpawnController -> FirearmController.Spawn (BodyWeaponPatches.SkipDraw): the gun a grab asked for, its draw just started
+        internal static void OnDrawStarted(FirearmController firearmController)
+        {
+            try
+            {
+                if (!skipDrawAtSpawn || !fastSwitch || !Active || firearmController == null || firearmController._player == null || !firearmController._player.IsYourPlayer)
+                    return;
+                if (lastSwitchItem == null || firearmController.Item != lastSwitchItem || Time.time - switchStarted > switchTimeout)
+                    return;
+                if (!(firearmController.CurrentOperation is FirearmController.SpawnOperation spawn))
+                    return;
+                // The round its draw would have racked in, shown now (a gun the hand racks had it taken out of the draw already:
+                // VRReloadController.TakeRackOutOfDraw)
+                if (spawn._ammoFromMagToChamber != null)
+                {
+                    spawn.OnAddAmmoInChamber();
+                    spawn._ammoFromMagToChamber = null;
+                }
+                WeaponPatches.SkipDrawOrPutAway(firearmController);
+                if (switchTrace || debugLog)
+                    Plugin.MyLog.LogInfo($"[BodyWeapons] draw of {firearmController.Item.LocalizedShortName()} skipped as it started (+{Time.time - switchStarted:0.000}s, frame {Time.frameCount}): op now {firearmController.CurrentOperation?.GetType().Name}");
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogError($"[BodyWeapons] skipping the draw failed: {exception}");
+            }
+        }
+
+        private static void TraceSwitchFrame()
+        {
+            EFT.Player player = VRGlobals.player;
+            if (player == null)
+                return;
+            object hands = player.HandsController;
+            FirearmController firearmController = hands as FirearmController;
+            string handsText = hands is EFT.Player.AbstractHandsController controller ? $"{controller.GetType().Name} {controller.Item?.LocalizedShortName()}" : "none";
+            string operation = firearmController != null ? firearmController.CurrentOperation?.GetType().Name ?? "none" : "-";
+            string armsLayer = "-";
+            if (player.ArmsAnimatorCommon != null)
+            {
+                var state = player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+                bool idle = firearmController != null && firearmController.FirearmsAnimator != null && state.IsName(firearmController.FirearmsAnimator.FullIdleStateName);
+                armsLayer = $"{state.fullPathHash} t{state.normalizedTime:0.00}{(idle ? " (idle)" : "")}";
+            }
+            Transform animatedRoot = player.ProceduralWeaponAnimation != null && player.ProceduralWeaponAnimation.HandsContainer != null
+                ? player.ProceduralWeaponAnimation.HandsContainer.WeaponRootAnim : null;
+            string animatedPose = animatedRoot != null ? $"{(animatedRoot.localPosition * 100f).ToString("F1")} cm {animatedRoot.localEulerAngles.ToString("F0")}" : "-";
+            string rootParent = firearmController != null && firearmController.WeaponRoot != null && firearmController.WeaponRoot.parent != null ? firearmController.WeaponRoot.parent.name : "-";
+            Transform holder = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform : null;
+            string holderPose = holder != null ? $"{(holder.localPosition * 100f).ToString("F1")} cm {holder.localEulerAngles.ToString("F0")}" : "-";
+            var gunController = WeaponPatches.currentGunInteractController;
+            Plugin.MyLog.LogInfo($"[BodyWeapons] switch +{Time.time - switchStarted:0.000}s f{Time.frameCount}: {handsText}, op {operation}, arms layer 1 {armsLayer}, "
+                + $"Weapon_root_anim {animatedPose}, WeaponRoot under {rootParent}, holder {holderPose}, gun controller {(gunController != null ? gunController.enabled.ToString() : "none")}, "
+                + $"switchingWeapon {VRGlobals.switchingWeapon}, switching {Switching}");
         }
 
         private static void EndSwitch()
