@@ -196,6 +196,30 @@ namespace TarkovVR.Source.Player.Body
             }
         }
 
+        // The gun in the left hand, a press check (VRReloadController.PressCheck): the left hand shows the mirror image of the press-check
+        // fingers worked out for the right hand that holds the gun as far as EFT knows (by right bone; one not given keeps the captured
+        // grip). After ApplyRealLeftHanded, which put the grip's mirror on.
+        private static Quaternion[] mirrorPressFrom, mirrorPressOut;
+
+        public static void ApplyMirroredRight(Dictionary<Transform, Quaternion> rightLocals)
+        {
+            if (!TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active || VRGlobals.player == null || rightAnimated == null || rightLocals == null || !EnsureBones())
+                return;
+            int count = rightToLeft.Length;
+            if (mirrorPressFrom == null || mirrorPressFrom.Length != count)
+            {
+                mirrorPressFrom = new Quaternion[count];
+                mirrorPressOut = new Quaternion[count];
+            }
+            for (int index = 0; index < count; index++)
+                mirrorPressFrom[index] = rightLocals.TryGetValue(rightToLeft[index].from, out Quaternion local) ? local
+                    : index < rightAnimated.Length ? rightAnimated[index] : rightToLeft[index].from.localRotation;
+            MirrorLocals(mirrorPressFrom, rightToLeft: true, mirrorPressOut);
+            for (int index = 0; index < count; index++)
+                rightToLeft[index].to.localRotation = mirrorPressOut[index];
+            Record(right: false, ref leftFinal);
+        }
+
         private static void Record(bool right, ref Quaternion[] final)
         {
             int count = rightToLeft.Length;

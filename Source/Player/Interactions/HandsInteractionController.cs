@@ -455,6 +455,8 @@ namespace TarkovVR.Source.Player.Interactions
             TarkovVR.Source.Player.Body.HandMirror.ApplyTest();
             // Real left-handed test (off by default): the gun in the left hand - both hands' fingers swapped onto their mirror images
             TarkovVR.Source.Player.Body.HandMirror.ApplyRealLeftHanded();
+            // The gun in the left hand, a press check: its fingers' mirror image on the left (after the grip's, above)
+            ApplyPressCheckHookLeft();
 
             // AFTER both finger updates: buffer the rendered joint locals for the FIKA finger sync
             // (VRArmSync sends them on its own cadence).

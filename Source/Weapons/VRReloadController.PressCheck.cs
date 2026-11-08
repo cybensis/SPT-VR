@@ -73,8 +73,13 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 pressCheckPalmInFrame;
         private static Quaternion pressCheckPalmTurnInFrame = Quaternion.identity;
         private static Vector3 pressCheckPivotInFrame;
-        private static int pressCheckPivotThumbJoint;       // which thumb joint that is (0..2), and its turn in the frame: it stays there
-        private static Quaternion pressCheckThumbInFrame = Quaternion.identity;
+        private static int pressCheckPivotThumbJoint;       // which thumb joint that is (0..2)
+        private static int pressCheckSerial;                // a new one each press check (HandsInteractionController takes the thumb's reference then)
+        // The gun in the left hand: worked for the right hand EFT holds it with, shown on the left as its mirror image; where the left
+        // hand held the gun at the start, in the rig (weaponHolder's parent)
+        private static bool pressCheckLeftHand;
+        private static Vector3 pressCheckLeftInRigPosition;
+        private static Quaternion pressCheckLeftInRigRotation = Quaternion.identity;
         private static Vector3 pressCheckSidewaysInFrame;   // the main turn's axis (fingers from the gun's forward toward its up)
         private static Vector3 pressCheckBackInFrame;       // the gun's length, toward the back (the wrist roll's axis)
         private static Vector3 pressCheckUpInFrame;         // the gun's up (the sights' side): the fingers' tilt back with the slide
@@ -111,7 +116,8 @@ namespace TarkovVR.Source.Weapons
         {
             get
             {
-                if (!pressCheck || !enabled || Handedness.GunInLeftHand || Handedness.LeftHanded)
+                // (the gun in the left hand works mirrored; left-handed mode, the whole body mirrored, isn't worked out)
+                if (!pressCheck || !enabled || Handedness.LeftHanded)
                     return false;
                 if (!Handedness.TryGetGunHandThumbTouch(out bool thumbOn) || !thumbOn)
                     return false;
@@ -238,7 +244,9 @@ namespace TarkovVR.Source.Weapons
         {
             Transform slide = FindRigBone(firearmController, data.slideBone);
             Transform gunMarker = firearmController.HandsHierarchy != null ? firearmController.HandsHierarchy.GetTransform(ECharacterWeaponBones.weapon_R_IK_marker) : null;
-            Transform palm = ArmPalm(rightArm: true);
+            // The hand on the gun: the left one with the gun in the left hand (Handedness.GunInLeftHand)
+            bool leftHand = Handedness.GunInLeftHand;
+            Transform palm = ArmPalm(rightArm: !leftHand);
             Transform gun = firearmController.WeaponRoot;
             if (slide == null || slide.parent == null || gunMarker == null || gunMarker.parent == null || palm == null || gun == null)
                 return false;
@@ -251,11 +259,31 @@ namespace TarkovVR.Source.Weapons
             // The grip as it is now (the hand on it): the palm and the knuckle in the marker's frame, the palm against the gun's marker
             Transform frame = gunMarker.parent;
             Quaternion frameInverse = Quaternion.Inverse(frame.rotation);
-            pressCheckPalmInFrame = frame.InverseTransformPoint(palm.position);
-            pressCheckPalmTurnInFrame = frameInverse * palm.rotation;
-            pressCheckPivotInFrame = frame.InverseTransformPoint(pivot.position);
             pressCheckPivotThumbJoint = pivotJoint;
-            pressCheckThumbInFrame = frameInverse * pivot.rotation;
+            pressCheckLeftHand = leftHand;
+            if (leftHand)
+            {
+                // The gun in the left hand: EFT holds it with the RIGHT hand on its marker and the left is drawn as that hand's mirror image
+                // across the gun's centre plane (RealLeftHandedPatches). So the press check is worked for that right hand - its palm the
+                // marker itself, its thumb knuckle the left one's mirrored - and comes out on the left as its mirror image, left fingers
+                // included (HandMirror.ApplyMirroredRight). Where the left hand holds the gun now, in the rig: it stays there
+                // (HoldPressCheckLeftHand: the offset and the wrist roll move the mirror plane, so the mirror alone wouldn't keep it).
+                Transform rig = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform.parent : null;
+                if (rig == null || !TarkovVR.Patches.Core.Player.RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal)
+                    || !TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(gunMarker.rotation, planeNormal, rightToLeft: true, out Quaternion leftGrip))
+                    return false;
+                pressCheckPalmInFrame = gunMarker.localPosition;
+                pressCheckPalmTurnInFrame = gunMarker.localRotation;
+                pressCheckPivotInFrame = frame.InverseTransformPoint(TarkovVR.Patches.Core.Player.RealLeftHandedPatches.ReflectPoint(pivot.position, planePoint, planeNormal));
+                pressCheckLeftInRigPosition = rig.InverseTransformPoint(TarkovVR.Patches.Core.Player.RealLeftHandedPatches.ReflectPoint(gunMarker.position, planePoint, planeNormal));
+                pressCheckLeftInRigRotation = Quaternion.Inverse(rig.rotation) * leftGrip;
+            }
+            else
+            {
+                pressCheckPalmInFrame = frame.InverseTransformPoint(palm.position);
+                pressCheckPalmTurnInFrame = frameInverse * palm.rotation;
+                pressCheckPivotInFrame = frame.InverseTransformPoint(pivot.position);
+            }
             // WeaponRoot: -up toward the muzzle, +forward the sights' side
             pressCheckSidewaysInFrame = frameInverse * Vector3.Cross(-gun.up, gun.forward);
             pressCheckBackInFrame = frameInverse * gun.up;
@@ -263,9 +291,11 @@ namespace TarkovVR.Source.Weapons
             pressCheckFrameInGun = Quaternion.Inverse(gun.rotation) * frame.rotation;
             pressCheckGunMarkerStartPosition = gunMarker.localPosition;
             pressCheckGunMarkerStartRotation = gunMarker.localRotation;
+            // (the gun in the left hand: the right palm worked for IS the marker)
             Quaternion markerInverse = Quaternion.Inverse(gunMarker.rotation);
-            pressCheckPalmInMarker = markerInverse * (palm.position - gunMarker.position);
-            pressCheckPalmTurnInMarker = markerInverse * palm.rotation;
+            pressCheckPalmInMarker = leftHand ? Vector3.zero : markerInverse * (palm.position - gunMarker.position);
+            pressCheckPalmTurnInMarker = leftHand ? Quaternion.identity : markerInverse * palm.rotation;
+            pressCheckSerial++;
 
             pressCheckFor = firearmController;
             pressCheckData = data;
@@ -297,7 +327,8 @@ namespace TarkovVR.Source.Weapons
             PulseGunHand(0.15f, 0.02f);
             if (pressCheckDebug)
                 Plugin.MyLog.LogInfo($"[PressCheck] start on '{AnimationFamily(firearmController)}': slide '{slide.name}', travel {data.travel * 100f:0.00} cm, " +
-                    $"turning about '{pivot.name}' at {pressCheckPivotInFrame * 100f} in '{frame.name}', palm at {pressCheckPalmInFrame * 100f}, round shown: {pressCheckRound != null}");
+                    $"turning about '{pivot.name}' at {pressCheckPivotInFrame * 100f} in '{frame.name}', palm at {pressCheckPalmInFrame * 100f}, round shown: {pressCheckRound != null}, " +
+                    $"{(leftHand ? "left hand (mirrored)" : "right hand")}");
             return true;
         }
 
@@ -313,17 +344,40 @@ namespace TarkovVR.Source.Weapons
                 * Quaternion.AngleAxis(pressCheckTurnAngle * turn, pressCheckSidewaysInFrame);
         }
 
-        // The thumb stays on the gun from the knuckle out (it turns with the gun, against the hand): the joint the gun turns about, the
-        // palm's turn on the gun now, that joint's turn at the start, both in the marker's frame (HandsInteractionController.PressCheckHook)
-        public static bool TryGetPressCheckThumb(out int thumbJoint, out Quaternion palmInGun, out Quaternion thumbJointInGun)
+        // The thumb stays on the gun from the knuckle out (it turns with the gun, against the hand), for HandsInteractionController.
+        // PressCheckHook, all in the marker's frame: this press check's number (it takes the thumb's reference on a new one: the palm at
+        // the start and the thumb's grip as EFT animates it), the joint the gun turns about, the palm's turn on the gun now and at the
+        // start, and the thumb turn knob (eased in with the turn, from the gun's frame into the marker's)
+        public static bool TryGetPressCheckThumb(out int serial, out int thumbJoint, out Quaternion palmNow, out Quaternion palmAtStart, out Quaternion thumbTurn)
         {
+            serial = pressCheckSerial;
             thumbJoint = pressCheckPivotThumbJoint;
-            palmInGun = HandTurnInFrame() * pressCheckPalmTurnInFrame;
-            // The thumb turn knob, eased in with the turn, from the gun's frame into the marker's
-            Quaternion thumbTurn = Quaternion.Slerp(Quaternion.identity,
+            palmNow = HandTurnInFrame() * pressCheckPalmTurnInFrame;
+            palmAtStart = pressCheckPalmTurnInFrame;
+            thumbTurn = Quaternion.Slerp(Quaternion.identity,
                 Quaternion.Inverse(pressCheckFrameInGun) * Quaternion.Euler(pressCheckThumbTurn) * pressCheckFrameInGun, Mathf.SmoothStep(0f, 1f, pressCheckShown));
-            thumbJointInGun = thumbTurn * pressCheckThumbInFrame;
             return pressCheckFor != null;
+        }
+
+        // The gun in the left hand: the fingers are worked for the right hand and shown mirrored on the left (HandsInteractionController)
+        public static bool PressCheckOnLeftHand => pressCheckFor != null && pressCheckLeftHand;
+
+        // GunInteractionController.UpdateWeaponPosition, after the marker anchor (which lands our marker - the right hand's - on the rig):
+        // the gun in the left hand, the left hand is drawn as the mirror image of that marker across the gun's centre plane, which the
+        // turn's wrist roll and the offset move. The gun moved, as one, by what brings that mirror image back to where the left hand held
+        // it at the start, in the rig: the left hand stays on the left controller.
+        public static void HoldPressCheckLeftHand(Transform holder)
+        {
+            if (pressCheckFor == null || !pressCheckLeftHand || holder == null || holder.parent == null || pressCheckMarker == null)
+                return;
+            if (!TarkovVR.Patches.Core.Player.RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal)
+                || !TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(pressCheckMarker.rotation, planeNormal, rightToLeft: true, out Quaternion leftNow))
+                return;
+            Vector3 leftNowPosition = TarkovVR.Patches.Core.Player.RealLeftHandedPatches.ReflectPoint(pressCheckMarker.position, planePoint, planeNormal);
+            Transform rig = holder.parent;
+            Vector3 leftWantedPosition = rig.TransformPoint(pressCheckLeftInRigPosition);
+            Quaternion fix = rig.rotation * pressCheckLeftInRigRotation * Quaternion.Inverse(leftNow);
+            holder.SetPositionAndRotation(leftWantedPosition + fix * (holder.position - leftNowPosition), fix * holder.rotation);
         }
 
         // The slide drawn back: the fingers on it tilt back from their knuckles toward the back of the gun, far enough for their tips to

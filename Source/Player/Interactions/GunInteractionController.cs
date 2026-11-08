@@ -557,6 +557,9 @@ public class GunInteractionController : MonoBehaviour
                 VRGunController.RememberGunPosition(VRGlobals.weaponHolder.transform);
         }
 
+        // A press check with the gun in the left hand: the gun moved so the left hand (the marker's mirror image) stays on the left controller
+        TarkovVR.Source.Weapons.VRReloadController.HoldPressCheckLeftHand(VRGlobals.weaponHolder.transform);
+
         // Physical weapon collision: after the marker anchor lands the gun, pull it back along the barrel
         // by the measured wall penetration (world-space add = last holder write of the frame, so the
         // anchor math can't cancel it). See WeaponCollision.

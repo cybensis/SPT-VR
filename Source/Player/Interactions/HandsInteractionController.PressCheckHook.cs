@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
 
@@ -7,12 +8,12 @@ namespace TarkovVR.Source.Player.Interactions
     // let go of the grip and open (the open-hand pose, rightRestPoseEuler), then come down onto the top of the slide (that pose bent
     // about each joint's flexion axis, the way the finger tracking and the loot grip close this hand: curlAxis, rightCurlSign). The
     // thumb stays exactly where it grips the frame (his design): from the knuckle out it turns with the gun, against the hand.
+    // Always worked for the RIGHT hand: with the gun in the left hand that's the hand EFT holds it with, and the left shows its mirror
+    // image (nothing written on the free right hand; HandMirror.ApplyMirroredRight, from ApplyPressCheckHookLeft after the grip's mirror).
     internal partial class HandsInteractionController
     {
         // deg on the slide: knuckle / middle / tip joint. The turn leaves the knuckles beside the slide at about its middle height
-        // (1911, offline), so the knuckle bends most to reach over the top, then the rest wraps down onto it. The wrist's roll open
-        // (VRReloadController.pressCheckWristOpen, 15) tips the fingers that much further over already: 45 headset-looked right
-        // with no roll, so 30 here. The pinky a little open (headset).
+        // (1911, offline), so the knuckle bends most to reach over the top, then the rest wraps down onto it.
         // His headset tuning 2026-11-08 (with VRReloadController's wrist open 30 and offset):
         public static Vector3 pressCheckHookFinger = new Vector3(30f, 40f, 45f);   // index to ring
         public static Vector3 pressCheckHookPinky = new Vector3(-15f, -5f, 5f);
@@ -20,8 +21,18 @@ namespace TarkovVR.Source.Player.Interactions
         // adjust the thumb open/close"). Bending the base moves the knuckle the gun turns about, the rest bends from it.
         public static Vector3 pressCheckHookThumb = Vector3.zero;
 
+        private static readonly Quaternion[] pressCheckJointAnimated = new Quaternion[3];
+        private static readonly Quaternion[] pressCheckJointShown = new Quaternion[3];
+        // The gun in the left hand: the right hand's press-check pose by bone, for the left's mirror image
+        private readonly Dictionary<Transform, Quaternion> pressCheckMirrorLocals = new Dictionary<Transform, Quaternion>();
+        private bool pressCheckMirrorReady;
+        // The thumb's joint the gun turns about, as it grips at the start of this press check, in the marker's frame
+        private int pressCheckThumbSerial = -1;
+        private Quaternion pressCheckThumbInGun = Quaternion.identity;
+
         private void UpdatePressCheckHook()
         {
+            pressCheckMirrorReady = false;
             float progress = VRReloadController.PressCheckProgress;
             if (progress <= 0f || rightRestPoseEuler == null || rightRestPoseEuler.Length == 0)
                 return;
@@ -29,6 +40,9 @@ namespace TarkovVR.Source.Player.Interactions
                 ResolveRightFingers();
             if (rightFingerJoints == null)
                 return;
+            bool mirrored = VRReloadController.PressCheckOnLeftHand;
+            if (mirrored)
+                pressCheckMirrorLocals.Clear();
             // Opening over the first part of the turn, closing onto the slide over the rest (both ways round on the way back)
             float closeFrom = Mathf.Clamp(VRReloadController.pressCheckFingersCloseFrom, 0.05f, 0.95f);
             float open = Mathf.SmoothStep(0f, 1f, progress / closeFrom);
@@ -42,7 +56,7 @@ namespace TarkovVR.Source.Player.Interactions
                 bool thumb = rightFingerIsThumb != null && finger < rightFingerIsThumb.Length && rightFingerIsThumb[finger];
                 if (thumb)
                 {
-                    KeepThumbOnGun(joints, Mathf.SmoothStep(0f, 1f, progress));
+                    KeepThumbOnGun(joints, Mathf.SmoothStep(0f, 1f, progress), mirrored);
                     poseIndex += Mathf.Min(joints.Length, 3);
                     continue;
                 }
@@ -76,58 +90,76 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 for (int joint = 0; joint < jointCount; joint++)
                 {
-                    if (joints[joint] == null)
-                        continue;
-                    joints[joint].localRotation = pressCheckJointShown[joint];
-                    fingerBaseRot[joints[joint]] = pressCheckJointAnimated[joint];
-                    fingerOutRot[joints[joint]] = pressCheckJointShown[joint];
+                    if (joints[joint] != null)
+                        SetHookJoint(joints[joint], pressCheckJointAnimated[joint], pressCheckJointShown[joint], mirrored);
                 }
             }
+            pressCheckMirrorReady = mirrored;
         }
 
-        private static readonly Quaternion[] pressCheckJointAnimated = new Quaternion[3];
-        private static readonly Quaternion[] pressCheckJointShown = new Quaternion[3];
-
-        // The thumb joint the gun turns about gets the gun's turn against the hand, so it and the rest of the thumb stay where they
-        // grip: worked in the gun's frame (the palm's turn there is known), not from the bones' world poses this frame. The thumb bend
-        // knob on top, eased in with the turn: the joints before that one first (they carry it), then it, then the ones after.
-        private void KeepThumbOnGun(Transform[] joints, float amount)
+        // The right hand's joint as the press check has it: on the bone (the gun in the right hand), or kept for the left's mirror image
+        private void SetHookJoint(Transform joint, Quaternion animated, Quaternion shown, bool mirrored)
         {
-            if (!VRReloadController.TryGetPressCheckThumb(out int pivotJoint, out Quaternion palmInGun, out Quaternion thumbJointInGun)
-                || pivotJoint >= joints.Length || joints[pivotJoint] == null)
-                return;
-            Quaternion parentInGun = palmInGun;
-            for (int joint = 0; joint < pivotJoint; joint++)
+            if (mirrored)
             {
-                if (joints[joint] == null)
-                    continue;
-                BendThumbJoint(joints[joint], pressCheckHookThumb[joint] * amount);
-                parentInGun = parentInGun * joints[joint].localRotation;
-            }
-            Transform pivot = joints[pivotJoint];
-            Quaternion animated = RecoverAnimated(pivot);
-            Quaternion shown = Quaternion.Inverse(parentInGun) * thumbJointInGun
-                * Quaternion.AngleAxis(pressCheckHookThumb[pivotJoint] * amount * rightCurlSign, curlAxis);
-            pivot.localRotation = shown;
-            fingerBaseRot[pivot] = animated;
-            fingerOutRot[pivot] = shown;
-            for (int joint = pivotJoint + 1; joint < joints.Length && joint < 3; joint++)
-            {
-                if (joints[joint] != null)
-                    BendThumbJoint(joints[joint], pressCheckHookThumb[joint] * amount);
-            }
-        }
-
-        // A thumb joint bent on top of how EFT animates it (nothing written for no bend)
-        private void BendThumbJoint(Transform joint, float degrees)
-        {
-            if (degrees == 0f)
+                pressCheckMirrorLocals[joint] = shown;
                 return;
-            Quaternion animated = RecoverAnimated(joint);
-            Quaternion shown = animated * Quaternion.AngleAxis(degrees * rightCurlSign, curlAxis);
+            }
             joint.localRotation = shown;
             fingerBaseRot[joint] = animated;
             fingerOutRot[joint] = shown;
+        }
+
+        // After HandMirror.ApplyRealLeftHanded (the grip's mirror on the left): the gun in the left hand, the press check's mirror image
+        private void ApplyPressCheckHookLeft()
+        {
+            if (pressCheckMirrorReady && VRReloadController.PressCheckOnLeftHand)
+                TarkovVR.Source.Player.Body.HandMirror.ApplyMirroredRight(pressCheckMirrorLocals);
+        }
+
+        // The thumb joint the gun turns about gets the gun's turn against the hand, so it and the rest of the thumb stay where they
+        // grip: worked in the gun's frame (the palm's turn there is known), not from the bones' world poses this frame. Its reference is
+        // taken when a press check starts: the palm there and the thumb's grip as EFT animates it. The thumb knobs on top, eased in with
+        // the turn: the joints before that one first (they carry it), then it, then the ones after.
+        private readonly Quaternion[] pressCheckThumbShown = new Quaternion[3];
+
+        private void KeepThumbOnGun(Transform[] joints, float amount, bool mirrored)
+        {
+            if (!VRReloadController.TryGetPressCheckThumb(out int serial, out int pivotJoint, out Quaternion palmNow, out Quaternion palmAtStart, out Quaternion thumbTurn)
+                || pivotJoint >= joints.Length || joints[pivotJoint] == null)
+                return;
+            if (serial != pressCheckThumbSerial)
+            {
+                pressCheckThumbSerial = serial;
+                pressCheckThumbInGun = palmAtStart;
+                for (int joint = 0; joint <= pivotJoint; joint++)
+                {
+                    if (joints[joint] != null)
+                        pressCheckThumbInGun = pressCheckThumbInGun * RecoverAnimated(joints[joint]);
+                }
+            }
+            int jointCount = Mathf.Min(joints.Length, 3);
+            for (int joint = 0; joint < jointCount; joint++)
+                pressCheckThumbShown[joint] = joints[joint] != null ? RecoverAnimated(joints[joint]) : Quaternion.identity;
+            Quaternion parentInGun = palmNow;
+            for (int joint = 0; joint < pivotJoint; joint++)
+            {
+                pressCheckThumbShown[joint] = pressCheckThumbShown[joint] * Quaternion.AngleAxis(pressCheckHookThumb[joint] * amount * rightCurlSign, curlAxis);
+                parentInGun = parentInGun * pressCheckThumbShown[joint];
+            }
+            pressCheckThumbShown[pivotJoint] = Quaternion.Inverse(parentInGun) * thumbTurn * pressCheckThumbInGun
+                * Quaternion.AngleAxis(pressCheckHookThumb[pivotJoint] * amount * rightCurlSign, curlAxis);
+            for (int joint = pivotJoint + 1; joint < jointCount; joint++)
+                pressCheckThumbShown[joint] = pressCheckThumbShown[joint] * Quaternion.AngleAxis(pressCheckHookThumb[joint] * amount * rightCurlSign, curlAxis);
+            for (int joint = 0; joint < jointCount; joint++)
+            {
+                if (joints[joint] == null)
+                    continue;
+                // Untouched joints (no bend, not the one it turns about) left to EFT on the hand itself
+                if (!mirrored && joint != pivotJoint && pressCheckHookThumb[joint] == 0f)
+                    continue;
+                SetHookJoint(joints[joint], RecoverAnimated(joints[joint]), pressCheckThumbShown[joint], mirrored);
+            }
         }
     }
 }
