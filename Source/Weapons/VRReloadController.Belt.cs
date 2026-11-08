@@ -38,9 +38,17 @@ namespace TarkovVR.Source.Weapons
         public static float beltLayTime = 0.15f;            // s the belt eases into the animator's laid pose
         public static float beltTipEaseTime = 0.1f;         // s the end eases into the hand at the grab
         public static int beltExtraOut = 6;                 // links the hand can draw out of the box past the clip's own
-        public static float beltDamping = 0.97f;            // share of each point's motion it keeps a step (lower = less swing)
+        public static float beltDamping = 0.9f;             // share of each point's motion it keeps a step (lower = less swing)
         public static float beltMaxSpeed = 4f;              // m/s a belt point moves at most (a snap turn doesn't fling it)
         public static float beltMaxBendDegrees = 50f;       // deg two links meet at, at most
+        // The belt keeps the shape Tarkov's clip gives it hanging out of the box (his round 1: a free rope "just hangs down through the
+        // drum"): each step every free link is pulled this share of the way back to it, in the box's frame. Held, the pull fades toward the
+        // end in the hand, so the belt bends to follow the hand from the box out.
+        public static float beltShapeFree = 0.25f;
+        public static float beltShapeHeld = 0.3f;
+        public static float beltGravity = 0.3f;             // share of gravity on the free links (the shape spring carries the rest)
+        public static float beltBoxMargin = 0.004f;         // m the free links stay off the box's body (kept out of it, not through it)
+        public static bool beltHidesSpentLinks = true;      // the fired side's empty links hidden while the belt is out of the tray (they'd hang off its end)
         public static int beltIterations = 10;
         public static float beltJumpDistance = 0.4f;        // m the box moves in a frame that's a jump (the rig recentred): the belt moves with it
         public static bool beltDebugLog = true;             // grabs, refusals, the belt's states (on for its first headset rounds)
@@ -224,7 +232,7 @@ namespace TarkovVR.Source.Weapons
             LmgState state = LmgStateOf(firearmController.Item);
             state.beltOut = false;
             beltLaying = false;
-            gunRope.simulating = false;
+            StopRope(gunRope);
         }
 
         // A box seated by hand (TryInsert): its belt hangs out of it until the hand lays it; no chamber, the handle first
@@ -554,6 +562,11 @@ namespace TarkovVR.Source.Weapons
             public Vector3[] laidPositions;         // the animator's pose this frame (the gun's box: the belt laid)
             public Quaternion[] laidRotations;
             public Vector3 laidEndLocal;            // the laid belt's end, in the box's frame (read in Update)
+            public Transform body;                  // the box's own body mesh (its biggest, not the belt's): the free links stay out of it
+            public Bounds bodyBounds;               // in that mesh's frame
+            public Transform[] spentCells;          // empty_link_*: the fired side of the belt
+            public readonly List<GameObject> hiddenCells = new List<GameObject>();
+            public bool[] collides;                 // per point: the clip's hanging pose has it clear of the body, so it's kept clear
         }
         private static readonly BeltRope gunRope = new BeltRope(), propRope = new BeltRope();
         private static Vector3[] beltStash = new Vector3[0];
@@ -571,6 +584,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 beltEndAtGrab;
         private static float beltEndEase;
         private static Vector3 beltEndTarget;               // this frame's, world (inside the belt's reach)
+        private static bool beltEndAtTray;                  // the held end where letting go lays it (its blip once on the way in)
 
         private static bool BindRope(BeltRope rope, Transform box, BeltData data)
         {
@@ -616,12 +630,70 @@ namespace TarkovVR.Source.Weapons
                 rope.lengths[link] = Mathf.Max((data.positions[link + 1] - data.positions[link]).magnitude, data.spacing * 0.5f) * scale;
             rope.lengths[count - 1] = data.spacing * scale;
             rope.simulating = false;
+            // The box's body: its biggest mesh outside the belt
+            Transform beltRoot = links[0].parent;
+            rope.body = null;
+            float biggest = 0f;
+            foreach (MeshFilter meshFilter in box.GetComponentsInChildren<MeshFilter>(false))
+            {
+                if (meshFilter.sharedMesh == null || (beltRoot != null && meshFilter.transform.IsChildOf(beltRoot)))
+                    continue;
+                Vector3 size = Vector3.Scale(meshFilter.sharedMesh.bounds.size, meshFilter.transform.lossyScale);
+                float volume = Mathf.Abs(size.x * size.y * size.z);
+                if (volume > biggest)
+                {
+                    biggest = volume;
+                    rope.body = meshFilter.transform;
+                    rope.bodyBounds = meshFilter.sharedMesh.bounds;
+                }
+            }
+            List<Transform> cells = new List<Transform>();
+            foreach (Transform part in box.GetComponentsInChildren<Transform>(true))
+            {
+                if (part.name.StartsWith("empty_link_", System.StringComparison.Ordinal))
+                    cells.Add(part);
+            }
+            rope.spentCells = cells.ToArray();
+            rope.hiddenCells.Clear();
             return true;
+        }
+
+        // Out of the tray: the fired side's empty links hidden (Tarkov's belt visual shows them per shot; no shot comes while it's out)
+        private static void HideSpentCells(BeltRope rope)
+        {
+            if (!beltHidesSpentLinks || rope.spentCells == null)
+                return;
+            foreach (Transform cell in rope.spentCells)
+            {
+                if (cell != null && cell.gameObject.activeSelf)
+                {
+                    cell.gameObject.SetActive(false);
+                    rope.hiddenCells.Add(cell.gameObject);
+                }
+            }
+        }
+
+        private static void ShowSpentCells(BeltRope rope)
+        {
+            foreach (GameObject cell in rope.hiddenCells)
+            {
+                if (cell != null)
+                    cell.SetActive(true);
+            }
+            rope.hiddenCells.Clear();
+        }
+
+        // The chain stops (laid: the animator has it; the box gone): what it hid back
+        private static void StopRope(BeltRope rope)
+        {
+            rope.simulating = false;
+            ShowSpentCells(rope);
         }
 
         // Its links back as they were (a box of Tarkov's pool, on the gun or in the hand)
         private static void ReleaseRope(BeltRope rope)
         {
+            ShowSpentCells(rope);
             if (rope.links != null)
             {
                 for (int link = 0; link < rope.links.Length; link++)
@@ -656,6 +728,59 @@ namespace TarkovVR.Source.Weapons
             rope.pinned = rope.data.anchor - 1;
             rope.lastBoxPosition = rope.box.position;
             rope.simulating = true;
+            HideSpentCells(rope);
+            // Kept out of the body: the free links the clip itself has clear of it (not the mouth's, at the box's opening)
+            if (rope.collides == null || rope.collides.Length != count + 1)
+                rope.collides = new bool[count + 1];
+            for (int point = 0; point <= count; point++)
+            {
+                Vector3 hanging = HangingPoint(rope, point);
+                rope.collides[point] = point > rope.data.anchor && (OutOfBody(rope, hanging) - hanging).sqrMagnitude < 1e-10f;
+            }
+        }
+
+        // Where the clip has a link hanging (its far end for the point past the last link), now
+        private static Vector3 HangingPoint(BeltRope rope, int point)
+        {
+            int count = rope.data.count;
+            if (point < count)
+                return rope.box.TransformPoint(rope.data.positions[point]);
+            return EndOfLink(rope, rope.box.TransformPoint(rope.data.positions[count - 1]), rope.box.rotation * rope.data.rotations[count - 1]);
+        }
+
+        // Out of the box's body: a point inside its box (shrunk by the margin's sign, in the mesh's frame) goes out through the nearest face
+        private static Vector3 OutOfBody(BeltRope rope, Vector3 point)
+        {
+            if (rope.body == null)
+                return point;
+            Vector3 local = rope.body.InverseTransformPoint(point);
+            Vector3 scale = rope.body.lossyScale;
+            Vector3 margin = new Vector3(beltBoxMargin / Mathf.Max(Mathf.Abs(scale.x), 1e-4f), beltBoxMargin / Mathf.Max(Mathf.Abs(scale.y), 1e-4f),
+                beltBoxMargin / Mathf.Max(Mathf.Abs(scale.z), 1e-4f));
+            Vector3 min = rope.bodyBounds.min - margin, max = rope.bodyBounds.max + margin;
+            if (local.x <= min.x || local.x >= max.x || local.y <= min.y || local.y >= max.y || local.z <= min.z || local.z >= max.z)
+                return point;
+            // The way out that's shortest in metres
+            float best = float.MaxValue;
+            Vector3 moved = local;
+            for (int axis = 0; axis < 3; axis++)
+            {
+                float axisScale = Mathf.Abs(scale[axis]);
+                float toMin = (local[axis] - min[axis]) * axisScale, toMax = (max[axis] - local[axis]) * axisScale;
+                if (toMin < best)
+                {
+                    best = toMin;
+                    moved = local;
+                    moved[axis] = min[axis];
+                }
+                if (toMax < best)
+                {
+                    best = toMax;
+                    moved = local;
+                    moved[axis] = max[axis];
+                }
+            }
+            return rope.body.TransformPoint(moved);
         }
 
         private static void StashRope(BeltRope rope)
@@ -709,13 +834,27 @@ namespace TarkovVR.Source.Weapons
             rope.lastBoxPosition = rope.box.position;
             for (int point = 0; point <= rope.pinned; point++)
                 points[point] = previous[point] = rope.box.TransformPoint(rope.data.positions[point]);
-            Vector3 fall = Physics.gravity * (deltaTime * deltaTime);
+            Vector3 fall = Physics.gravity * (beltGravity * deltaTime * deltaTime);
             float maxStep = beltMaxSpeed * deltaTime;
+            // The clip's own hanging shape pulls the free links back (the links drawn out past it have none: they were in the box). Held,
+            // it fades out toward the end in the hand.
+            int firstFree = rope.data.anchor;
+            float span = Mathf.Max(1f, count - firstFree);
             for (int point = rope.pinned + 1; point <= count; point++)
             {
                 Vector3 motion = Vector3.ClampMagnitude((points[point] - previous[point]) * beltDamping, maxStep);
                 previous[point] = points[point];
                 points[point] += motion + fall;
+                if (point >= firstFree)
+                {
+                    float shape = beltShapeFree;
+                    if (endHeld)
+                    {
+                        float alongToEnd = Mathf.Clamp01((point - firstFree) / span);
+                        shape = beltShapeHeld * (1f - alongToEnd) * (1f - alongToEnd);
+                    }
+                    points[point] = Vector3.Lerp(points[point], HangingPoint(rope, point), shape);
+                }
             }
             int end = count - 1;
             // Bent by b at the middle point, two links of length L reach 2 L cos(b / 2) apart
@@ -742,6 +881,15 @@ namespace TarkovVR.Source.Weapons
                     {
                         points[point] += correction * 0.5f;
                         points[point + 1] -= correction * 0.5f;
+                    }
+                }
+                // Out of the box's body (the drum): the free links the clip keeps clear of it
+                if (rope.collides != null)
+                {
+                    for (int point = rope.pinned + 1; point <= count; point++)
+                    {
+                        if (rope.collides[point] && !PointFixed(rope, point, endHeld))
+                            points[point] = OutOfBody(rope, points[point]);
                     }
                 }
                 // Two links apart no nearer than the sharpest bend allows (a belt folds, it doesn't kink)
@@ -837,6 +985,7 @@ namespace TarkovVR.Source.Weapons
             beltEndInController = controller.InverseTransformPoint(HandPalm(gunHand));
             beltEndEase = 0f;
             beltEndTarget = beltEndAtGrab;
+            beltEndAtTray = fromTray;
             if (beltHandHolder == null)
                 beltHandHolder = new GameObject("VRBeltHand").transform;
             beltHandHolder.SetPositionAndRotation(controller.position, controller.rotation);
@@ -890,13 +1039,20 @@ namespace TarkovVR.Source.Weapons
             beltEndTarget = target;
             // The hand stays on the controller, but no further than the belt reaches
             beltHandHolder.SetPositionAndRotation(controller.position + (target - eased), controller.rotation);
-            if (CoverOpenEnough(state) && (target - gunRope.box.TransformPoint(gunRope.laidEndLocal)).magnitude <= beltLayRadius)
-            {
-                BeginLay(firearmController);
-                return;
-            }
+            // His: hold the trigger to carry the end, place it on the feed and let go. At the tray with the cover open: a blip coming in, and
+            // letting go there lays it; let go anywhere else, it drops and hangs. (It went in by touch before: lifted out of the tray it went
+            // straight back in, the round-1 log's took-out / laid pairs.)
+            bool atTray = CoverOpenEnough(state) && (target - gunRope.box.TransformPoint(gunRope.laidEndLocal)).magnitude <= beltLayRadius;
+            if (atTray && !beltEndAtTray)
+                Pulse(beltInGunHand ? SoundHand.GunHand : SoundHand.OffHand, 0.25f, 0.03f);
+            beltEndAtTray = atTray;
             if (beltInGunHand ? gunTriggerReleased : offTriggerReleased)
-                LetGoOfBelt();
+            {
+                if (atTray)
+                    BeginLay(firearmController);
+                else
+                    LetGoOfBelt();
+            }
         }
 
         private static void BeginLay(FirearmController firearmController)
@@ -1037,7 +1193,7 @@ namespace TarkovVR.Source.Weapons
                 state.coverSettle = state.latchSettle = -1f;
                 state.beltOut = state.waitsForCharge = false;
                 beltLaying = false;
-                gunRope.simulating = false;
+                StopRope(gunRope);
                 return;
             }
             if (!HoldingHinge || heldHinge != HingeKind.Cover)
@@ -1109,7 +1265,7 @@ namespace TarkovVR.Source.Weapons
                 rope.laidEndLocal = box.InverseTransformPoint(rope.laidPositions[count - 1]);
                 if (!state.beltOut && !beltLaying)
                 {
-                    rope.simulating = false;
+                    StopRope(rope);
                     return;
                 }
                 if (!rope.simulating)
@@ -1136,7 +1292,7 @@ namespace TarkovVR.Source.Weapons
                     // In: the animator has it from here
                     beltLaying = false;
                     state.beltOut = false;
-                    rope.simulating = false;
+                    StopRope(rope);
                 }
             }
             catch (System.Exception exception)
@@ -1170,6 +1326,137 @@ namespace TarkovVR.Source.Weapons
         private static Vector3[] BeltGunFingers(bool rightArm)
         {
             return rightArm ? MirroredPose(MAGAZINE_PULL_FINGERS, rightToLeft: false, mirroredBeltPinch) ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // A belt box going on or off: Tarkov's WeaponPrefab.UpdateAnimatorHierarchy (BeltGunPatches) turns the hands-and-gun animator's object off
+        // and on so the animator binds the new box's bones. Two things go wrong with VR in that (his round 1: the left hand off the foregrip,
+        // B mid reload starting an animation, the belt's laid pose not the animator's):
+        //  - the binding is by path from the animator's object, and VR moved Weapon_root off its place onto the rig (WeaponPatches): every bone
+        //    of the gun stops being animated. Weapon_root goes back to its place for the toggle and is bound again there, then back on the rig.
+        //  - the animator's keepAnimatorStateOnDisable is off (the prefab's): the toggle restarts every layer from its entry state with every
+        //    parameter at its default. After one of our own box moves (Manual Reload: Tarkov's operation skipped to its end, nothing of its
+        //    clip to come), the animator is put back exactly as it was.
+
+        internal sealed class AnimatorRebind
+        {
+            public Animator animator;
+            public Transform weaponRoot, rigParent;
+            public Vector3 localPosition;
+            public Quaternion localRotation;
+            public Vector3 localScale;
+            public bool restoreState;
+            public int[] stateHashes;
+            public float[] stateTimes;
+            public float[] layerWeights;
+            public AnimatorControllerParameter[] parameters;
+            public float[] parameterValues;
+        }
+        public static bool rebindBeltGunAnimator = true;    // false = Tarkov's toggle as it is (the gun's bones unbound after a box swap)
+
+        internal static AnimatorRebind BeforeAnimatorRebind(WeaponPrefab prefab)
+        {
+            try
+            {
+                FirearmController firearmController = VRGlobals.firearmController;
+                if (!rebindBeltGunAnimator || prefab == null || firearmController == null || firearmController._weaponPrefab != prefab
+                    || firearmController._player == null || !firearmController._player.IsYourPlayer)
+                    return null;
+                Animator animator = prefab._formerAnimator;
+                if (animator == null)
+                    return null;
+                AnimatorRebind rebind = new AnimatorRebind { animator = animator };
+                // Weapon_root back where the animator's paths have it: RightHandPositioner/weaponHolder hangs where it was (WeaponPatches)
+                Transform weaponRoot = firearmController.WeaponRoot;
+                Transform holder = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform : null;
+                if (weaponRoot != null && holder != null && weaponRoot.parent == holder && holder.parent != null && holder.parent.parent != null)
+                {
+                    rebind.weaponRoot = weaponRoot;
+                    rebind.rigParent = holder;
+                    rebind.localPosition = weaponRoot.localPosition;
+                    rebind.localRotation = weaponRoot.localRotation;
+                    rebind.localScale = weaponRoot.localScale;
+                    weaponRoot.SetParent(holder.parent.parent, worldPositionStays: false);
+                }
+                // Our own box move (Manual Reload's belt guns): the animator's state as it is now, to put back
+                if (TryGetLmg(firearmController, out _) && animator.isActiveAndEnabled && animator.runtimeAnimatorController != null)
+                {
+                    int layers = animator.layerCount;
+                    rebind.restoreState = true;
+                    rebind.stateHashes = new int[layers];
+                    rebind.stateTimes = new float[layers];
+                    rebind.layerWeights = new float[layers];
+                    for (int layer = 0; layer < layers; layer++)
+                    {
+                        AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(layer);
+                        rebind.stateHashes[layer] = state.fullPathHash;
+                        rebind.stateTimes[layer] = state.loop ? Mathf.Repeat(state.normalizedTime, 1f) : Mathf.Min(state.normalizedTime, 1f);
+                        rebind.layerWeights[layer] = animator.GetLayerWeight(layer);
+                    }
+                    rebind.parameters = animator.parameters;
+                    rebind.parameterValues = new float[rebind.parameters.Length];
+                    for (int index = 0; index < rebind.parameters.Length; index++)
+                    {
+                        AnimatorControllerParameter parameter = rebind.parameters[index];
+                        switch (parameter.type)
+                        {
+                            case AnimatorControllerParameterType.Float: rebind.parameterValues[index] = animator.GetFloat(parameter.nameHash); break;
+                            case AnimatorControllerParameterType.Int: rebind.parameterValues[index] = animator.GetInteger(parameter.nameHash); break;
+                            case AnimatorControllerParameterType.Bool: rebind.parameterValues[index] = animator.GetBool(parameter.nameHash) ? 1f : 0f; break;
+                        }
+                    }
+                }
+                return rebind;
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogError($"[VRBelt] before the animator rebind: {exception}");
+                return null;
+            }
+        }
+
+        internal static void AfterAnimatorRebind(AnimatorRebind rebind)
+        {
+            if (rebind == null)
+                return;
+            try
+            {
+                Animator animator = rebind.animator;
+                if (rebind.weaponRoot != null)
+                {
+                    // Bound now, with Weapon_root where its paths say (the toggle's own binding may wait for the animator's next update)
+                    if (animator != null && animator.isActiveAndEnabled)
+                        animator.Rebind();
+                    rebind.weaponRoot.SetParent(rebind.rigParent, worldPositionStays: false);
+                    rebind.weaponRoot.localPosition = rebind.localPosition;
+                    rebind.weaponRoot.localRotation = rebind.localRotation;
+                    rebind.weaponRoot.localScale = rebind.localScale;
+                }
+                if (rebind.restoreState && animator != null && animator.isActiveAndEnabled && animator.layerCount == rebind.stateHashes.Length)
+                {
+                    for (int index = 0; index < rebind.parameters.Length; index++)
+                    {
+                        AnimatorControllerParameter parameter = rebind.parameters[index];
+                        switch (parameter.type)
+                        {
+                            case AnimatorControllerParameterType.Float: animator.SetFloat(parameter.nameHash, rebind.parameterValues[index]); break;
+                            case AnimatorControllerParameterType.Int: animator.SetInteger(parameter.nameHash, (int)rebind.parameterValues[index]); break;
+                            case AnimatorControllerParameterType.Bool: animator.SetBool(parameter.nameHash, rebind.parameterValues[index] > 0.5f); break;
+                        }
+                    }
+                    for (int layer = 0; layer < rebind.stateHashes.Length; layer++)
+                    {
+                        animator.SetLayerWeight(layer, rebind.layerWeights[layer]);
+                        animator.Play(rebind.stateHashes[layer], layer, rebind.stateTimes[layer]);
+                    }
+                }
+                if (beltDebugLog)
+                    Plugin.MyLog.LogInfo($"[VRBelt] animator rebound for the box{(rebind.weaponRoot != null ? ", Weapon_root bound in its place" : "")}{(rebind.restoreState ? ", its state put back" : "")}");
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogError($"[VRBelt] after the animator rebind: {exception}");
+            }
         }
     }
 }
