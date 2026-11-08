@@ -216,6 +216,10 @@ out['handleCarriers']=extras.get('handleCarriers',{})
 out['handleGrabPoints']=extras.get('handleGrabPoints',{})
 # Ambidextrous knobs (left, right), and the over-the-top hold for a palm above the handle: its travel the gun's own
 out['handleKnobs']=extras.get('handleKnobs',{})
+# Each knob's fold as it's taken (bone, local axis, degrees), same order as handleKnobs
+out['handleKnobFolds']=extras.get('handleKnobFolds',{})
+# Tarkov's chamber check per pistol: the pinching hand's palm in the slide bone's frame + fingers, and the clip's slide travel as is
+out['pressChecks']={f:{k:v for k,v in h.items() if k not in ('clip','t')} for f,h in extras.get('pressChecks',{}).items()}
 out['handleOverTop']={f:dict(h,travel=out['handles'][f]['travel'] if f in out['handles'] else handleTravel(f,h['travel']))
                       for f,h in extras.get('handleOverTop',{}).items()}
 out['rockIn'].update(extras.get('rockIn',{}))

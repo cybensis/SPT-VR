@@ -165,7 +165,7 @@ for folder,v in census.items():
             family=m.group(1).lower()
             HANDLE_BONE_GUNS[family]=(folder,)+next(((c,b,k) for c,b,k in matching if family in c),matching[0])
 extraHandles={}; extraGunHandHandles={}; handleBones={}; handleCarriers={}; handleGrabPoints={}; extraMovesWithBolt=[]; namedTrees={}
-handleKnobs={}; handleOverTop={}
+handleKnobs={}; handleOverTop={}; handleKnobFolds={}
 for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     _,clips=loadFolder(folder)
     tree=loadTree(ROOT+folder+'/'+container); P=tree[0]; J=fingerPaths(P)
@@ -238,6 +238,25 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
                 handleOverTop[family]=dict(position=[round(float(x),4) for x in np.array(m4['position'])+shift],rotation=m4['rotation'],
                                            fingers=m4['fingers'],travel=extraHandles[family]['travel'])
             print(f'{family} knobs {handleKnobs[family]}, over the top {handleOverTop.get(family,{}).get("position")}',flush=True)
+            # Each paddle folds out about its pin as the hand takes it (his ask: "make the paddles fold out when you grab them"). The
+            # clips only ever fold the left one (45 deg, the hand under it): its turn at full pull, in its own frame; the right one's is
+            # that turn mirrored across the gun's centre plane (the handle frame's x: the paddles sit at +-x), back in its own frame.
+            hold=extraHandles.get(family)
+            if hold:
+                g=setup(tree,clips[hold['clip']]); t,_=fullBackTime(g,charge,wp)
+                left,right=(bone(P,'/'+part) for part in HANDLE_KNOB_PAIRS[rig])
+                foldLocal=qmul(conj(np.array(g['localAt'](left,0.0)[1],float)),np.array(g['localAt'](left,t)[1],float))
+                c={}; _,chargeRot,_=g['worldAt'](charge,0.0,c); _,leftRot,_=g['worldAt'](left,0.0,c); _,rightRot,_=g['worldAt'](right,0.0,c)
+                leftInCharge=qmul(conj(chargeRot),leftRot); rightInCharge=qmul(conj(chargeRot),rightRot)
+                foldCharge=qmul(qmul(leftInCharge,foldLocal),conj(leftInCharge))
+                mirrored=np.array([foldCharge[0],-foldCharge[1],-foldCharge[2],foldCharge[3]])
+                foldRight=qmul(qmul(conj(rightInCharge),mirrored),rightInCharge)
+                def axisAngle(q):
+                    q=q if q[3]>=0 else -q; s=np.linalg.norm(q[:3])
+                    return [round(float(x),4) for x in (q[:3]/s if s>1e-9 else np.array([1.0,0,0]))],round(2*math.degrees(math.atan2(s,q[3])),1)
+                handleKnobFolds[family]=[dict(bone=name,axis=axisAngle(q)[0],angle=axisAngle(q)[1]) for name,q in
+                                         ((HANDLE_KNOB_PAIRS[rig][0],foldLocal),(HANDLE_KNOB_PAIRS[rig][1],foldRight))]
+                print(f'{family} paddle folds {handleKnobFolds[family]} (clip {hold["clip"]} t {t:.2f})',flush=True)
     print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
           'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
 
@@ -294,6 +313,53 @@ for family,spec in SIDE_HANDLE_GUNS.items():
         position=[round(float(x),4) for x in g['rotate'](conj(br),pp-bp)],rotation=toUnityEuler(qmul(conj(br),pr)),
         fingers=eulerList([np.array(g['localAt'](j,t)[1],float) for j in fingerPaths(P,spec['side'])]),clip=spec['clip'])
     print(f'{family} side handle:',{k:v for k,v in sideHandles[family].items() if k!='fingers'},flush=True)
+# Press checks (his ask 2026-11-07: thumb on A/B/stick + finger on the trigger with the grip let go = the gun hand pinches the back
+# of the slide, the trigger draws it back far enough to see the round). Tarkov's own chamber check (<prefix>_check_chamber): the
+# gun hand stays on the grip, the OTHER hand pinches the slide over the top and it pops back ~2 cm (1911: 2.04) and holds. Read
+# at the middle of that hold: the hand that moved most off the gun (L in every one checked), its palm in the slide bone's frame,
+# its fingers, and how far back the slide is. The runtime mirrors a left hand onto the gun hand. The Glock 17's folder has no
+# check clip: the 18C's (same slide, same rig layout).
+PRESS_CHECK_FROM={'glock':'glock18c'}
+pressChecks={}
+for family,slideHold in sorted(R['slides'].items()):
+    source=PRESS_CHECK_FROM.get(family,family)
+    folder=famFolder.get(source)
+    if folder is None: continue
+    clipNames=census.get(folder,{}).get('clips',[])
+    clipName=next((n for n in clipNames if n.lower()==source+'_check_chamber'),None)
+    if clipName is None: continue
+    tree=None
+    for c in sorted(os.listdir(ROOT+folder)):
+        if not (c.endswith('_container.bundle') and c.startswith('weapon_')): continue
+        candidate=loadTree(ROOT+folder+'/'+c)
+        if bone(candidate[0],'/'+slideHold['bone']) and bone(candidate[0],'/Base HumanLPalm') and bone(candidate[0],'/Base HumanRPalm'):
+            tree=candidate; break
+    if tree is None: continue
+    clip=None
+    for o in UnityPy.load(ROOT+folder+'/client_assets.bundle').objects:
+        if o.type.name!='AnimationClip': continue
+        try: candidateClip=o.read()
+        except Exception: continue
+        if candidateClip.m_Name==clipName:
+            clip=candidateClip; break
+    if clip is None: continue
+    P=tree[0]; slide=bone(P,'/'+slideHold['bone']); wp=bone(P,'Weapon_root_anim/weapon'); g=setup(tree,clip)
+    stop=float(clip.m_MuscleClip.m_StopTime); rows=[]
+    for i in range(int(stop*30)+1):
+        t=i/30; c={}
+        sp,_,_=g['worldAt'](slide,t,c); wpp,wr,_=g['worldAt'](wp,t,c)
+        rows.append((t,g['rotate'](conj(wr),sp-wpp)))
+    rest=rows[0][1]; backs=[(t,float(p[1]-rest[1])) for t,p in rows]; top=max(b for _,b in backs)
+    if top<0.005: continue
+    plateau=[t for t,b in backs if b>=top-0.002]; t=plateau[len(plateau)//2]
+    def palmInGun(side,time):
+        c={}; pp,_,_=g['worldAt'](bone(P,f'/Base Human{side}Palm'),time,c); wpp,wr,_=g['worldAt'](wp,time,c); return g['rotate'](conj(wr),pp-wpp)
+    side=max('LR',key=lambda s:float(np.linalg.norm(palmInGun(s,t)-palmInGun(s,0.0))))
+    c={}; sp,sr,_=g['worldAt'](slide,t,c); pp,pr,_=g['worldAt'](bone(P,f'/Base Human{side}Palm'),t,c)
+    pressChecks[family]=dict(bone=slideHold['bone'],hand=side,position=[round(float(x),4) for x in g['rotate'](conj(sr),pp-sp)],
+        rotation=toUnityEuler(qmul(conj(sr),pr)),fingers=eulerList([np.array(g['localAt'](j,t)[1],float) for j in fingerPaths(P,side)]),
+        travel=round(top,4),clip=clipName,t=round(t,3))
+    print(f'{family} press check: {side} hand, slide back {top*100:.2f} cm, palm {pressChecks[family]["position"]} ({clipName} t {t:.2f})',flush=True)
 LOW_ROCK_GUNS=('ak50',)
 rockIns={}
 for family in LOW_ROCK_GUNS:
@@ -304,4 +370,4 @@ for family in LOW_ROCK_GUNS:
         print(f'{family} rock-in:',{k:v for k,v in rocks.items() if k!='thumb'},flush=True)
 json.dump(dict(boltBones=boltBones,sideHandles=sideHandles,rockIn=rockIns,handles=extraHandles,gunHandHandles=extraGunHandHandles,
                handleBones=handleBones,handleCarriers=handleCarriers,handleGrabPoints=handleGrabPoints,handleMovesWithBolt=extraMovesWithBolt,
-               handleKnobs=handleKnobs,handleOverTop=handleOverTop),open('extras.json','w'))
+               handleKnobs=handleKnobs,handleOverTop=handleOverTop,handleKnobFolds=handleKnobFolds,pressChecks=pressChecks),open('extras.json','w'))

@@ -92,7 +92,8 @@ namespace TarkovVR.Source.Weapons
         // No firing: the gun's magazine is out in the hand, the charging handle is being worked, or the round in the chamber
         // is still in the magazine (Tarkov's insert chambers one at once; it has to be racked first). On a truly empty
         // chamber the trigger goes through: Tarkov dry-fires (the click, the finger) without looking at the bolt catch.
-        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine || MagazinePartlyOut || BoltBlocksFiring || DeflectorBlocksFiring;
+        public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine || MagazinePartlyOut || BoltBlocksFiring || DeflectorBlocksFiring
+            || PressCheckBlocksFiring;
 
         private static bool ChamberLoaded => VRGlobals.firearmController != null && VRGlobals.firearmController.Item != null
             && VRGlobals.firearmController.Item.ChamberAmmoCount > 0;
@@ -102,7 +103,7 @@ namespace TarkovVR.Source.Weapons
         private static bool RoundStillInMagazine => ChamberLoaded && (BoltLockedBack || WaitingForRack(VRGlobals.firearmController.Item));
 
         // On that round the trigger clicks like an empty gun, it's never handed to Tarkov (it would fire)
-        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && RoundStillInMagazine && !BoltBlocksFiring;
+        public static bool TriggerOnlyClicks => !HoldingGunMagazine && !HoldingChargingHandle && RoundStillInMagazine && !BoltBlocksFiring && !PressCheckBlocksFiring;
 
         // Tarkov's own empty-gun trigger (Idling.SetTriggerPressed: SetAmmoInChamber, then SetFire) with the chamber shown
         // empty, as it looks with the bolt open: the animator plays its dry fire, the click and the finger. Local only:
@@ -404,6 +405,8 @@ namespace TarkovVR.Source.Weapons
                 UpdateHeldRound(gripReleased, gunHandGripReleased);
             UpdateHandLatch();
             UpdateMagazineReleaseButton(releaseState);
+            // A press check: the gun hand off the grip onto the slide, the trigger drawing it back (VRReloadController.PressCheck)
+            UpdatePressCheck(gunHandGripState);
 
             bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector;
             // On a gun that loads through its open bolt, the pouch grip is a round, not a magazine: the off hand's, or the gun hand's
@@ -2260,7 +2263,10 @@ namespace TarkovVR.Source.Weapons
                 if (OffHandOnRightArm)
                     ApplyOffHandFingerPose();
                 else
+                {
                     ApplyGunHandFingers(rightArm: true);
+                    ApplyPressCheckFingers();
+                }
             }
             finally
             {

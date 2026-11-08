@@ -320,7 +320,11 @@ namespace TarkovVR.Source.Player.Interactions
                     || (WeaponPatches.currentGunInteractController != null
                         && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1);
                 // The grip of the hand holding the gun (the left one while the gun is in the left hand: Handedness.GunInLeftHand)
-                ChestHang.UpdateInput(Handedness.GunHandGrip.state, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
+                // A press check's gesture (thumb on A/B/the stick, finger on the trigger, one hand on a pistol) holds the gun like the grip:
+                // letting go of the grip for it doesn't sling it (VRReloadController.PressCheck)
+                bool gunHandHolds = Handedness.GunHandGrip.state
+                    || (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting && VRReloadController.PressCheckGesture);
+                ChestHang.UpdateInput(gunHandHolds, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
                 // A gun's body spot placed by hand (the trigger held on it)
                 GunSpots.Tick();
             }
@@ -427,6 +431,9 @@ namespace TarkovVR.Source.Player.Interactions
             // Pulling the charging handle: a handle on the bolt brings the carrier back, then the chambered round rides the bolt
             VRReloadController.ApplyHandleCarrier();
             VRReloadController.ApplyChamberView();
+            // The knob the hand took folding out (the MDR's paddles), and a press check's slide
+            VRReloadController.ApplyKnobFold();
+            VRReloadController.ApplyPressCheck();
             // A bolt-action's bolt left open or being worked: its bones after the animator
             VRReloadController.ApplyBolt();
             // The MDR's deflector held open or being worked

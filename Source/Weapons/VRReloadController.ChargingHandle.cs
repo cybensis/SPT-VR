@@ -148,6 +148,21 @@ namespace TarkovVR.Source.Weapons
         private static readonly Dictionary<string, HandleHold> overTopHandleHolds = new Dictionary<string, HandleHold>();
         public static float handleMirrorPlaneTolerance = 0.015f;   // m a grab point can sit off the gun's centre plane and still take the left hand's hold mirrored (a T)
         private static GameObject otherKnobZoneViz;
+        // The knob the hand took folds out about its pin (the MDR's paddles, 45 deg in its clips; the right one's the left's mirrored),
+        // and back once let go
+        private sealed class KnobFold
+        {
+            public string bone;
+            public Vector3 axis;            // in the knob bone's own frame
+            public float angle;
+        }
+        private static readonly Dictionary<string, KnobFold[]> handleKnobFolds = new Dictionary<string, KnobFold[]>();
+        public static float knobFoldTime = 0.1f;            // s a knob takes to fold out as it's taken, and back
+        private static Transform foldingKnob;
+        private static Quaternion foldingKnobRest;
+        private static KnobFold foldingKnobFold;
+        private static FirearmController foldingKnobFor;
+        private static float knobFoldShown;
         private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
         private static float heldHandleTravel;              // m this gun's handle comes back
 
@@ -432,6 +447,9 @@ namespace TarkovVR.Source.Weapons
         {
             if (!TryGetChargingHandle(firearmController, weapon))
                 return;
+            // Mid press check (the off hand coming to rack it): the slide back to rest before it's measured as the handle's rest
+            if (PressCheckActive)
+                EndPressCheck();
 
             // WeaponRoot -up is toward the muzzle, so +up is back toward the stock
             Vector3 backWorld = firearmController.WeaponRoot.up;
@@ -470,6 +488,8 @@ namespace TarkovVR.Source.Weapons
             heldHandleTravel = handleTravel;
             LoadRecordedGrips();
             string family = AnimationFamily(firearmController);
+            if (foundHandleKnobs != null && !sideHandle)
+                StartKnobFold(firearmController, family);
             handleHolds.TryGetValue(family, out HandleHold offHandHold);
             gunHandHandleHolds.TryGetValue(family, out HandleHold gunHandHold);
             // By the arm, not the controller: with the gun in the left hand the off hand is the right hand, and racks with the right
@@ -616,6 +636,52 @@ namespace TarkovVR.Source.Weapons
             if (debugLog)
                 LogAction($"[VRReload] charging handle: {(closest == main ? "main" : "other")} grip, {smallestTurn:0} deg from the hand");
             return closest;
+        }
+
+        private static void StartKnobFold(FirearmController firearmController, string family)
+        {
+            if (!handleKnobFolds.TryGetValue(family, out KnobFold[] folds) || grabbedKnob >= folds.Length)
+                return;
+            Transform knob = FindRigBone(firearmController, folds[grabbedKnob].bone);
+            if (knob == null)
+                return;
+            if (knob != foldingKnob)
+            {
+                PutFoldingKnobBack();
+                foldingKnob = knob;
+                foldingKnobRest = knob.localRotation;
+                knobFoldShown = 0f;
+            }
+            foldingKnobFold = folds[grabbedKnob];
+            foldingKnobFor = firearmController;
+        }
+
+        private static void PutFoldingKnobBack()
+        {
+            if (foldingKnob != null)
+                foldingKnob.localRotation = foldingKnobRest;
+            foldingKnob = null;
+            foldingKnobFold = null;
+            foldingKnobFor = null;
+            knobFoldShown = 0f;
+        }
+
+        // LateUpdate, after the animator: out while the handle is held, back after
+        public static void ApplyKnobFold()
+        {
+            if (foldingKnob == null || foldingKnobFold == null)
+                return;
+            // Another gun in the hands: the old one's knob straight back
+            if (foldingKnobFor != VRGlobals.firearmController)
+            {
+                PutFoldingKnobBack();
+                return;
+            }
+            bool folded = HoldingChargingHandle && handleForFirearm == foldingKnobFor;
+            knobFoldShown = Mathf.MoveTowards(knobFoldShown, folded ? 1f : 0f, Time.deltaTime / Mathf.Max(knobFoldTime, 0.001f));
+            foldingKnob.localRotation = foldingKnobRest * Quaternion.AngleAxis(foldingKnobFold.angle * Mathf.SmoothStep(0f, 1f, knobFoldShown), foldingKnobFold.axis);
+            if (!folded && knobFoldShown <= 0f)
+                PutFoldingKnobBack();
         }
 
         // The carrier is animated and we move it, so the pull can't be measured against it: two transforms of ours on the gun's

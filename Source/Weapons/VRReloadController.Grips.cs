@@ -71,6 +71,22 @@ namespace TarkovVR.Source.Weapons
             public float travel;
         }
 
+        // A knob's fold as it's taken (the MDR's paddles): its bone, the turn's axis in its own frame, how far
+        public sealed class SavedKnobFold
+        {
+            public string bone;
+            public float[] axis;
+            public float angle;
+        }
+
+        // Tarkov's chamber check on a pistol (gen_extras): the pinching hand's palm in the slide bone's frame, its fingers, which hand
+        // ("L" in every clip), how far the slide comes back
+        public sealed class SavedPressCheck : SavedHandleHold
+        {
+            public string bone;
+            public string hand;
+        }
+
         public sealed class SavedPalmHold
         {
             public SavedHold newMagazine;
@@ -134,6 +150,8 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, float[]> handleGrabPoints;
             public Dictionary<string, float[][]> handleKnobs;
             public Dictionary<string, SavedHandleHold> handleOverTop;
+            public Dictionary<string, List<SavedKnobFold>> handleKnobFolds;
+            public Dictionary<string, SavedPressCheck> pressChecks;
             public Dictionary<string, SavedReleasePress> releasePress;
             public Dictionary<string, SavedBolt> bolts;
         }
@@ -542,6 +560,30 @@ namespace TarkovVR.Source.Weapons
                     {
                         if (entry.Value != null && entry.Value.position != null && entry.Value.rotation != null)
                             overTopHandleHolds[entry.Key] = HandleHoldFrom(entry.Value);
+                    }
+                }
+                if (generated.handleKnobFolds != null)
+                {
+                    foreach (KeyValuePair<string, List<SavedKnobFold>> entry in generated.handleKnobFolds)
+                    {
+                        if (entry.Value == null || entry.Value.Exists(fold => fold == null || string.IsNullOrEmpty(fold.bone) || fold.axis == null || fold.axis.Length < 3))
+                            continue;
+                        handleKnobFolds[entry.Key] = entry.Value.ConvertAll(fold => new KnobFold
+                        {
+                            bone = fold.bone,
+                            axis = new Vector3(fold.axis[0], fold.axis[1], fold.axis[2]).normalized,
+                            angle = fold.angle,
+                        }).ToArray();
+                    }
+                }
+                if (generated.pressChecks != null)
+                {
+                    foreach (KeyValuePair<string, SavedPressCheck> entry in generated.pressChecks)
+                    {
+                        SavedPressCheck saved = entry.Value;
+                        if (saved == null || string.IsNullOrEmpty(saved.bone) || saved.position == null || saved.rotation == null || saved.travel <= 0f)
+                            continue;
+                        pressChecks[entry.Key] = new PressCheckData { slideBone = saved.bone, rightHand = saved.hand == "R", hold = HandleHoldFrom(saved), travel = saved.travel };
                     }
                 }
                 if (generated.bolts != null)

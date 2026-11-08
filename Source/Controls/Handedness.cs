@@ -54,6 +54,14 @@ namespace TarkovVR.Source.Controls
         public static VRBoolean OffHandGrip => GunHandIsLeft ? VRInput.RightGrip : VRInput.LeftGrip;
 
         public static VRSingle GunHandTrigger => GunHandIsLeft ? VRInput.LeftTrigger : VRInput.RightTrigger;
+
+        // The gun hand's thumb on A/B/X/Y or its stick (OpenXR touch sensors). False = can't tell: SteamVR has no touch action in the
+        // mod's manifest, and some controllers have no sensor there.
+        public static bool TryGetGunHandThumbTouch(out bool touched)
+        {
+            touched = false;
+            return VRInput.UsingOpenXR && OpenXRInput.TryGetThumbTouch(GunHandIsLeft ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND, out touched);
+        }
         public static VRSingle OffHandTrigger => GunHandIsLeft ? VRInput.RightTrigger : VRInput.LeftTrigger;
 
         public static VRVector2 GunHandJoystick => LeftHanded ? VRInput.LeftJoystick : VRInput.RightJoystick;

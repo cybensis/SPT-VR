@@ -71,6 +71,8 @@ namespace TarkovVR.Source.Controls
             public float triggerValue;
             public bool triggerTouched;
             public bool hasTriggerTouch;    // the controller senses a finger on the trigger (Index, Touch); a Vive wand doesn't
+            public bool thumbTouched;       // a thumb on A, B or the stick
+            public bool hasThumbTouch;      // the controller senses one there (Index, Touch)
             public float squeezeValue;
             public float gripForce;
             public bool hasGripForce;       // a force sensor in the handle (Index)
@@ -177,6 +179,14 @@ namespace TarkovVR.Source.Controls
             return controllers[hand].hasTriggerTouch;
         }
 
+        // A thumb resting on A, B or the stick (not a Touch controller's thumb rest). False = the controller can't tell.
+        public static bool TryGetThumbTouch(int hand, out bool touched)
+        {
+            SampleButtonsOncePerFrame();
+            touched = controllers[hand].thumbTouched;
+            return controllers[hand].hasThumbTouch;
+        }
+
         public static Vector2 GetStick(int hand)
         {
             SampleButtonsOncePerFrame();
@@ -199,6 +209,8 @@ namespace TarkovVR.Source.Controls
                     controller.triggerValue = 0f;
                     controller.triggerTouched = false;
                     controller.hasTriggerTouch = false;
+                    controller.thumbTouched = false;
+                    controller.hasThumbTouch = false;
                     controller.squeezeValue = 0f;
                     controller.gripForce = 0f;
                     controller.hasGripForce = false;
@@ -210,6 +222,11 @@ namespace TarkovVR.Source.Controls
                 InputDevice device = controller.device;
                 device.TryGetFeatureValue(CommonUsages.trigger, out controller.triggerValue);
                 controller.hasTriggerTouch = device.TryGetFeatureValue(triggerTouchUsage, out controller.triggerTouched);
+                bool hasPrimaryTouch = device.TryGetFeatureValue(CommonUsages.primaryTouch, out bool primaryTouched);
+                bool hasSecondaryTouch = device.TryGetFeatureValue(CommonUsages.secondaryTouch, out bool secondaryTouched);
+                bool hasStickTouch = device.TryGetFeatureValue(CommonUsages.primary2DAxisTouch, out bool stickTouched);
+                controller.hasThumbTouch = hasPrimaryTouch || hasSecondaryTouch || hasStickTouch;
+                controller.thumbTouched = primaryTouched || secondaryTouched || stickTouched;
                 device.TryGetFeatureValue(CommonUsages.grip, out controller.squeezeValue);
                 device.TryGetFeatureValue(CommonUsages.primary2DAxis, out controller.stickAxis);
                 device.TryGetFeatureValue(CommonUsages.primaryButton, out controller.current.primary);
