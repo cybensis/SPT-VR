@@ -1389,12 +1389,29 @@ namespace TarkovVR.Source.Player.VRManager
 
         public void ForceUnlockHand()
         {
+            bool wasTwoHanding = isSupporting || isEnteringTwoHandedMode;
             handLock = false;
             isSupporting = false;
             //secondaryGripHeld = true;
 
             if (isWeapPistol)
                 VRGlobals.player._markers[0] = LeftHand.transform;
+
+            // Two-handing ended here, not by the left hand letting go of the gun (UpdateRightHand's release): the sling taking the gun
+            // from the left hand alone, a hand swap, a menu. Undo what two-handing did to the left arm the way that release does - EFT's
+            // left marker back on the left hand, the arm's own update on its controller. Else EFT kept solving the free left arm toward
+            // the slung gun's foregrip marker with the arm's own update off (headset: "my left hand is jittering/lagging" walking after
+            // the gun went to its slot from the left hand alone, until a foregrip grab and release). Only while the arm is still the
+            // two-handed one (no target): a reload latch on it is VRReloadController's.
+            var leftArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null;
+            if (wasTwoHanding && leftArmIk != null && leftArmIk.solver != null && leftArmIk.solver.target == null && LeftHand != null)
+            {
+                if (VRGlobals.player != null)
+                    VRGlobals.player._markers[0] = LeftHand.transform;
+                leftArmIk.solver.target = LeftHand.transform;
+                leftArmIk.enabled = true;
+                isEnteringTwoHandedMode = false;
+            }
         }
 
         protected void SpawnHands()
