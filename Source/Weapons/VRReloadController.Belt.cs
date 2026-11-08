@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using EFT;
 using EFT.InventoryLogic;
+using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -85,6 +86,20 @@ namespace TarkovVR.Source.Weapons
             public Quaternion[] rotations;
             public Vector3[] laidPositions; // Tarkov's belt in the tray (its idle clip), box root frame; null = not baked
             public Quaternion[] laidRotations;
+            // The box's other bones the idle clip keys (the spent links hanging off the last one, the lid, the rounds), their local poses:
+            // held so where the animator doesn't pose a box put on by hand (his PKM: "the empty belt is coming out the top")
+            public string[] idleNames;
+            public Vector3[] idlePositions, idleScales;
+            public Quaternion[] idleRotations;
+        }
+
+        // A place for the left hand on the gun (SupportSpot*): where the clips put its IK marker, the weapon bone's frame
+        private sealed class SupportSpot
+        {
+            public string name;
+            public Vector3 ikPosition;
+            public Quaternion ikRotation;
+            public Vector3[] fingers;
         }
 
         // A clip's palm on a part, in the part's frame
@@ -105,6 +120,7 @@ namespace TarkovVR.Source.Weapons
             public MagazineHold boxPull, boxInsert;     // the box in the palm's frame (FindReloadGrip)
             public bool hasHands;                       // read: which hand works each part
             public bool coverByGunHand, latchByGunHand, beltByGunHand, boxByGunHand, chargeByGunHand;
+            public SupportSpot[] supportSpots;          // the first is where its clips have the left hand at rest
         }
 
         private static readonly Dictionary<string, LmgData> lmgGuns = new Dictionary<string, LmgData>();
@@ -124,6 +140,23 @@ namespace TarkovVR.Source.Weapons
                 data.beltByGunHand = ByGunHand("belt");
                 data.boxByGunHand = ByGunHand("box");
                 data.chargeByGunHand = ByGunHand("charge");
+            }
+            if (saved.supportSpots != null && saved.supportSpots.Count >= 2)
+            {
+                List<SupportSpot> spots = new List<SupportSpot>();
+                foreach (SavedSupportSpot spot in saved.supportSpots)
+                {
+                    if (spot?.ik == null || spot.ik.Length < 7)
+                        continue;
+                    spots.Add(new SupportSpot
+                    {
+                        name = spot.name,
+                        ikPosition = Vector3From(spot.ik, 0),
+                        ikRotation = QuaternionFrom(spot.ik, 3),
+                        fingers = spot.fingers != null && spot.fingers.Length >= 48 ? FingersFrom(spot.fingers) : null,
+                    });
+                }
+                data.supportSpots = spots.Count >= 2 ? spots.ToArray() : null;
             }
             if (saved.holds != null)
             {
@@ -157,6 +190,22 @@ namespace TarkovVR.Source.Weapons
                     float[] pose = belt.hanging[link];
                     data.belt.positions[link] = Vector3From(pose, 0);
                     data.belt.rotations[link] = QuaternionFrom(pose, 3);
+                }
+                SavedIdleLocals idle = belt.idleLocals;
+                if (idle?.names != null && idle.poses != null && idle.names.Count == idle.poses.Count)
+                {
+                    int bones = idle.names.Count;
+                    data.belt.idleNames = idle.names.ToArray();
+                    data.belt.idlePositions = new Vector3[bones];
+                    data.belt.idleRotations = new Quaternion[bones];
+                    data.belt.idleScales = new Vector3[bones];
+                    for (int bone = 0; bone < bones; bone++)
+                    {
+                        float[] pose = idle.poses[bone];
+                        data.belt.idlePositions[bone] = Vector3From(pose, 0);
+                        data.belt.idleRotations[bone] = QuaternionFrom(pose, 3);
+                        data.belt.idleScales[bone] = pose.Length >= 10 ? Vector3From(pose, 7) : Vector3.one;
+                    }
                 }
                 if (belt.laid != null && belt.laid.Count == belt.count)
                 {
@@ -223,6 +272,13 @@ namespace TarkovVR.Source.Weapons
         private static bool BeltBoxHandMay(FirearmController firearmController, bool gunHand)
         {
             return !TryGetLmg(firearmController, out LmgData data) || HandWorksPart(data, data.boxByGunHand, gunHand);
+        }
+
+        // His RPD: "Left hand should be controlling the mag release": the box the clips take off with the off hand has its release on that
+        // hand's button, with the hand on the box (ThumbWorksCatch, as an AK's paddle); the PKM's box is the gun hand's, on B as before
+        private static bool BeltBoxReleasedByOffHand(FirearmController firearmController)
+        {
+            return beltGunHandsFromClips && TryGetLmg(firearmController, out LmgData data) && data.hasHands && !data.boxByGunHand;
         }
 
         private static bool BeltChargeHandMay(FirearmController firearmController, bool gunHand)
@@ -719,6 +775,7 @@ namespace TarkovVR.Source.Weapons
             // link each frame if it does. Not driven, the laid belt is ours to hold in Tarkov's laid pose.
             public bool animatorDrives = true;
             public bool drivesKnown;
+            public Transform[] idleBones;           // BeltData.idleNames, found in this box (null where it has none of that name)
             public Quaternion[] writtenLocal;
             public int writtenFrame = -10;
         }
@@ -788,6 +845,20 @@ namespace TarkovVR.Source.Weapons
             rope.writtenFrame = -10;
             rope.animatorDrives = true;
             rope.drivesKnown = false;
+            rope.idleBones = null;
+            if (data.idleNames != null)
+            {
+                // By name in this box (unique in each box model; ammo_belt_fake's own empty links are another root, not under it)
+                Dictionary<string, Transform> byName = new Dictionary<string, Transform>();
+                foreach (Transform part in box.GetComponentsInChildren<Transform>(true))
+                {
+                    if (!byName.ContainsKey(part.name))
+                        byName[part.name] = part;
+                }
+                rope.idleBones = new Transform[data.idleNames.Length];
+                for (int bone = 0; bone < data.idleNames.Length; bone++)
+                    byName.TryGetValue(data.idleNames[bone], out rope.idleBones[bone]);
+            }
             float scale = Mathf.Abs(box.lossyScale.x);
             for (int link = 0; link < count - 1; link++)
                 rope.lengths[link] = Mathf.Max((data.positions[link + 1] - data.positions[link]).magnitude, data.spacing * 0.5f) * scale;
@@ -1130,6 +1201,23 @@ namespace TarkovVR.Source.Weapons
             rope.writtenFrame = Time.frameCount;
         }
 
+        // The box's other idle-keyed bones as the idle clip has them (a box the animator doesn't pose: they'd sit in the model's rest shape)
+        private static void WriteIdleBones(BeltRope rope)
+        {
+            BeltData data = rope.data;
+            if (rope.idleBones == null || data.idleNames == null)
+                return;
+            for (int bone = 0; bone < rope.idleBones.Length; bone++)
+            {
+                Transform part = rope.idleBones[bone];
+                if (part == null)
+                    continue;
+                part.localPosition = data.idlePositions[bone];
+                part.localRotation = data.idleRotations[bone];
+                part.localScale = data.idleScales[bone];
+            }
+        }
+
         // Tarkov's laid belt, held by us (a box the animator doesn't pose)
         private static void WriteLaid(BeltRope rope)
         {
@@ -1435,6 +1523,91 @@ namespace TarkovVR.Source.Weapons
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The support hand's place on a gun with two (the PKM: the handguard at rest, the box aiming - his "ADSing seems to trigger an
+        // animation change where your off hand moves to the box"). Two-handing hands the left arm to Tarkov's IK on the gun's
+        // weapon_L_IK_marker, and the PKM's aiming clip moves that marker onto the box. The hand takes the spot it's nearer as it grabs
+        // (VRPlayerManager.SupportGripPoint) and stays there: the marker is put back on it every frame after the animator. Manual Reload
+        // or not; not with the gun in the left hand (that arm swap mirrors the grip).
+
+        public static bool supportSpots = true;
+        private static int supportSpot = -1;                // the spot the hand takes / has (index into LmgData.supportSpots)
+        private static FirearmController supportSpotFor;
+
+        private static bool TryGetSupportSpots(FirearmController firearmController, out SupportSpot[] spots, out Transform weaponBone)
+        {
+            spots = null;
+            weaponBone = null;
+            if (!enabled || !supportSpots || Handedness.GunInLeftHand || firearmController == null || firearmController.Item == null
+                || !firearmController.Item.IsBeltMachineGun || firearmController._player == null || !firearmController._player.IsYourPlayer
+                || firearmController.HandsHierarchy == null)
+                return false;
+            LoadRecordedGrips();
+            if (!lmgGuns.TryGetValue(AnimationFamily(firearmController), out LmgData data) || data.supportSpots == null)
+                return false;
+            Transform[] bones = firearmController.HandsHierarchy.Transforms;
+            if (bones == null || bones.Length <= (int)ECharacterWeaponBones.weapon_L_IK_marker)
+                return false;
+            weaponBone = bones[(int)ECharacterWeaponBones.weapon];
+            spots = data.supportSpots;
+            return weaponBone != null && bones[(int)ECharacterWeaponBones.weapon_L_IK_marker] != null;
+        }
+
+        private static Vector3 SpotWorld(Transform weaponBone, SupportSpot spot) => weaponBone.position + weaponBone.rotation * spot.ikPosition;
+
+        // VRPlayerManager.SupportGripPoint, each UpdateLeftHand: where the support grab is. Not two-handing: the spot nearest the hand (the one
+        // a grab now takes); two-handing: the one it took. False: the gun's own marker as before.
+        public static bool SupportSpotPoint(out Vector3 point)
+        {
+            point = Vector3.zero;
+            FirearmController firearmController = VRGlobals.firearmController;
+            if (VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null || !TryGetSupportSpots(firearmController, out SupportSpot[] spots, out Transform weaponBone))
+            {
+                supportSpot = -1;
+                return false;
+            }
+            if (!VRGlobals.vrPlayer.isSupporting || supportSpotFor != firearmController || supportSpot < 0 || supportSpot >= spots.Length)
+            {
+                Vector3 hand = VRGlobals.vrPlayer.LeftHand.transform.position;
+                int nearest = 0;
+                for (int spot = 1; spot < spots.Length; spot++)
+                {
+                    if ((SpotWorld(weaponBone, spots[spot]) - hand).sqrMagnitude < (SpotWorld(weaponBone, spots[nearest]) - hand).sqrMagnitude)
+                        nearest = spot;
+                }
+                if (beltDebugLog && VRGlobals.vrPlayer.isSupporting)
+                    Plugin.MyLog.LogInfo($"[VRBelt] support hand on the {spots[nearest].name}");
+                supportSpot = nearest;
+                supportSpotFor = firearmController;
+            }
+            point = SpotWorld(weaponBone, spots[supportSpot]);
+            return true;
+        }
+
+        // After the animator: the left IK marker on the spot the hand has (the aiming clip moved it)
+        private static void ApplySupportSpot()
+        {
+            FirearmController firearmController = VRGlobals.firearmController;
+            if (supportSpot < 0 || supportSpotFor != firearmController || VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.isSupporting
+                || !TryGetSupportSpots(firearmController, out SupportSpot[] spots, out Transform weaponBone) || supportSpot >= spots.Length)
+                return;
+            SupportSpot spot = spots[supportSpot];
+            Transform marker = firearmController.HandsHierarchy.Transforms[(int)ECharacterWeaponBones.weapon_L_IK_marker];
+            marker.SetPositionAndRotation(SpotWorld(weaponBone, spot), weaponBone.rotation * spot.ikRotation);
+        }
+
+        // A spot other than the rest one (the box): its clip's fingers. At rest Tarkov's own grip poser shapes the hand (the marker is on its
+        // grip reference); off it the fingers are the animator's, which outside the aim are the handguard's.
+        private static bool SupportSpotFingers(out Vector3[] fingers)
+        {
+            fingers = null;
+            if (supportSpot <= 0 || VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.isSupporting || supportSpotFor != VRGlobals.firearmController
+                || !TryGetSupportSpots(supportSpotFor, out SupportSpot[] spots, out _) || supportSpot >= spots.Length)
+                return false;
+            fingers = spots[supportSpot].fingers;
+            return fingers != null;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Player.LateUpdate prefix (ShotgunPatches): after the animator (which keys the cover, the latch and every belt link each frame), before
         // Tarkov's IK reads where the hands go - a hand latched to the cover rides it
 
@@ -1442,6 +1615,7 @@ namespace TarkovVR.Source.Weapons
         {
             try
             {
+                ApplySupportSpot();
                 ApplyPropRope();
                 FirearmController firearmController = VRGlobals.firearmController;
                 if (!TryGetLmg(firearmController, out LmgData data))
@@ -1501,6 +1675,8 @@ namespace TarkovVR.Source.Weapons
                     // Laid: the animator's, or held in Tarkov's laid pose by us where the animator doesn't pose this box
                     if (!rope.animatorDrives && baked)
                         WriteLaid(rope);
+                    if (!rope.animatorDrives)
+                        WriteIdleBones(rope);
                     return;
                 }
                 if (!rope.simulating)
@@ -1530,6 +1706,8 @@ namespace TarkovVR.Source.Weapons
                     blend = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(beltLayProgress));
                 }
                 WriteRope(rope, blend);
+                if (rope.drivesKnown && !rope.animatorDrives)
+                    WriteIdleBones(rope);
                 if (beltLaying && beltLayProgress >= 1f)
                 {
                     // In: the animator has it from here

@@ -65,7 +65,7 @@ namespace TarkovVR.Source.Weapons
         // The off hand presses this gun's catch, on the off controller's button, not the gun hand's finger
         private static bool ThumbWorksCatch(FirearmController firearmController)
         {
-            return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null
+            return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null || BeltBoxReleasedByOffHand(firearmController)
                 || (offHandThumbCatches && firearmController != null && offHandCatchGuns.Contains(AnimationFamily(firearmController)))
                 || (offHandThumbCatches && ReleasePressOf(firearmController)?.offHand == true);
         }

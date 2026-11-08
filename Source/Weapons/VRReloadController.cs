@@ -712,7 +712,7 @@ namespace TarkovVR.Source.Weapons
             if (HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound)
                 return float.MaxValue;
             if (touchPoints == null || touchPoints.Count == 0 || !CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
-                || !GunMagazineGrabbable(weapon) || MagazinePartlyOut
+                || !GunMagazineGrabbable(weapon) || MagazinePartlyOut || !BeltBoxHandMay(firearmController, gunHand: false)
                 || !TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
                 return float.MaxValue;
             float nearest = float.MaxValue;
@@ -2339,6 +2339,9 @@ namespace TarkovVR.Source.Weapons
                 rightHandPose = rightArm;
                 return MagazineFingersFor(rightArm);
             }
+            // Two-handing a gun on its other spot (the PKM's box): that spot's fingers
+            if (SupportSpotFingers(out Vector3[] spotFingers))
+                return spotFingers;
             return null;
         }
 

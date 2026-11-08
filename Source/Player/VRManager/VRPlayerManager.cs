@@ -48,6 +48,9 @@ namespace TarkovVR.Source.Player.VRManager
         // right side, where the right hand supports (the same plane RealLeftHandedPatches mirrors the foregrip pose across)
         public static Vector3 SupportGripPoint()
         {
+            // A gun with two places for it (the PKM: the handguard, or the box as its aiming clip has it): the one the hand is nearer
+            if (VRReloadController.SupportSpotPoint(out Vector3 spotPoint))
+                return spotPoint;
             Vector3 point = leftHandGunIK.position;
             if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
                 point = RealLeftHandedPatches.ReflectPoint(point, planePoint, planeNormal);

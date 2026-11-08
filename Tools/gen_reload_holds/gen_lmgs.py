@@ -144,8 +144,19 @@ def belt(tree,boxRoot,idleClip,insertClip):
     boxFile=boxRoot.split('/')[-1]+'.bundle'
     boxIds=sorted(i for i,it in ITEMS.items() if it.get('_props',{}).get('Prefab',{}).get('path','').endswith('/'+boxFile))
     print(f'  box templates {boxIds}',flush=True)
+    # Every other box bone the idle clip keys, its local pose there (name, position, quaternion, scale): the spent links hanging off the
+    # last one (empty_link_*), the fake belt, the lid. Where the animator doesn't pose a box put on by hand, the runtime holds them so
+    # (his PKM: "the empty belt is coming out the top" - the spent links left in the model's own rest shape)
+    keyed=sorted({o[0] for o in gi['owner'] if o[0] and o[0].startswith(boxRoot+'/') and not re.match(r'^belt_link_\d+$',o[0].split('/')[-1])})
+    names=[path.split('/')[-1] for path in keyed]; poses=[]
+    for path in keyed:
+        pos,rot,scale,_=gi['localAt'](path,0.0)
+        poses.append(r4(list(pos)+list(rot)+list(scale)))
+    idleLocals=dict(names=names,poses=poses)
+    print(f'  idle-keyed box bones besides the links: {len(names)} ({", ".join(sorted({re.sub(r"_[0-9]+$","_*",n) for n in names}))}), '
+          f'duplicate names: {sorted({n for n in names if names.count(n)>1})}',flush=True)
     # Laid too: Tarkov's own belt in the tray (its idle clip), every link in the box frame - where a belt the hand lays goes
-    return dict(_seated=seated,_hangT=hangT,_end=links[-1],box=boxRoot.split('/')[-1],boxIds=boxIds,prefix='belt_link_',count=len(links),anchor=anchor,spacing=round(spacing,5),
+    return dict(_seated=seated,idleLocals=idleLocals,_hangT=hangT,_end=links[-1],box=boxRoot.split('/')[-1],boxIds=boxIds,prefix='belt_link_',count=len(links),anchor=anchor,spacing=round(spacing,5),
                 hanging=[r4(list(p)+list(q)) for p,q in hanging],laid=[r4(list(p)+list(q)) for p,q in laid])
 
 # Which way the box leaves the gun, in the mod_magazine bone's frame (the runtime's magazine track, wellAxes): the box root's first 1-6 cm
@@ -285,6 +296,19 @@ def meshPoint(folder,container,boneLeaf):
         if points: return r4(toParent(t,np.mean(points,axis=0)))
     return None
 
+# The left hand's places on the gun: where its clips put the left IK marker and hand marker (and that hand's fingers) at rest and aiming.
+# The PKM's aiming clip moves the left hand from the handguard to the box (his: "ADSing seems to trigger an animation change where your
+# off hand moves to the box"); the runtime lets the hand take whichever is nearer and keeps it there. Weapon bone frame.
+AIM_IDLE={'pk':'pk_idle_ironsight'}
+def supportSpot(tree,clip,name):
+    P=tree[0]; g=setup(tree,clip); c={}
+    wp,wr,_=g['worldAt'](bone(P,'Weapon_root_anim/weapon'),0.0,c)
+    spot=dict(name=name)
+    for key,leaf in (('ik','/weapon_L_IK_marker'),('hand','/weapon_L_hand_marker')):
+        mp,mr,_=g['worldAt'](bone(P,leaf),0.0,c); spot[key]=r4(list(g['rotate'](conj(wr),mp-wp))+list(qmul(conj(wr),mr)))
+    spot['fingers']=eulerList([np.array(g['localAt'](j,0.0)[1],float) for j in fingerPaths(P,'L')])
+    return spot
+
 # The clip each gun's charging handle is read off for whose hand it is (the PKM's hold itself comes from gen_holds)
 CHARGE_CLIPS={'pk':'pk_charge','rpd_reload':'rpd_reload_start_arm_0','m60_v1':'m60_v_1_charge'}
 def holdOnly(h): return {k:v for k,v in h.items() if k in ('hand','position','rotation','fingers','inBoneFrame')} if h else None
@@ -328,6 +352,11 @@ for family,(folder,container,latchContainer,box,idleName,coverName,latchName,ins
     hands.pop('boxPull',None); hands.pop('boxInsert',None)
     if chargeHold: hands['charge']=chargeHold['hand']
     entry['hands']=hands
+    if family in AIM_IDLE:
+        spots=[supportSpot(tree,clips[idleName],'foregrip'),supportSpot(tree,clips[AIM_IDLE[family]],'box')]
+        apart=np.linalg.norm(np.array(spots[0]['ik'][:3])-np.array(spots[1]['ik'][:3]))
+        print(f"  support spots (the left IK marker): foregrip {np.round(np.array(spots[0]['ik'][:3])*100,1)} cm, box {np.round(np.array(spots[1]['ik'][:3])*100,1)} cm (weapon frame), {apart*100:.1f} cm apart",flush=True)
+        entry['supportSpots']=spots
     entry['holds']={k:holdOnly(h) for k,h in holds.items() if h}
     print(f'  hands: {hands}',flush=True)
     for f in [family]+mates: out[f]=entry

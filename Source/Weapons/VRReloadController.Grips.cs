@@ -171,6 +171,22 @@ namespace TarkovVR.Source.Weapons
             public float[] wellAxis;
             public Dictionary<string, string> hands;            // part -> "L" / "R": the hand the clips work it with (cover, latch, belt, box, charge)
             public Dictionary<string, SavedPartHold> holds;     // that hand on it: cover, latch, belt (its end), boxPull, boxInsert
+            public List<SavedSupportSpot> supportSpots;         // the left hand's places on the gun: at rest, then aiming (the PKM's box)
+        }
+
+        // Where the gun's clips put the left IK marker (position + quaternion, weapon bone frame), and the left hand's fingers there
+        public sealed class SavedSupportSpot
+        {
+            public string name;
+            public float[] ik;
+            public float[] fingers;
+        }
+
+        // Every other box bone the idle clip keys (names, and local position + quaternion + scale each)
+        public sealed class SavedIdleLocals
+        {
+            public List<string> names;
+            public List<float[]> poses;
         }
 
         // The palm in the part's frame (the box's: the box in the palm's frame, like the magazine holds); hand = the clip's palm
@@ -202,6 +218,7 @@ namespace TarkovVR.Source.Weapons
             public float spacing;
             public List<float[]> hanging;
             public List<float[]> laid;          // Tarkov's belt in the tray (its idle clip), the same frame
+            public SavedIdleLocals idleLocals;  // the box's other bones as the idle clip has them (the spent links, the lid...)
         }
 
         // A tube shotgun (gen_shotguns.py), by its clips' family: the pump stroke's bones, the shell's paths into the tube and through the
