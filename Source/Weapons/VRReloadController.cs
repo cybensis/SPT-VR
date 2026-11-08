@@ -2599,6 +2599,7 @@ namespace TarkovVR.Source.Weapons
                 SetZoneViz(ref pouchZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref wellZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
+                SetZoneViz(ref otherKnobZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref sideHandleZoneViz, false, Vector3.zero, 0f, Color.clear);
                 SetZoneViz(ref belowWellZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;

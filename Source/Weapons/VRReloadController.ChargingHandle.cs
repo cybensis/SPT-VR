@@ -139,6 +139,15 @@ namespace TarkovVR.Source.Weapons
         private static readonly Dictionary<string, string> handleCarrierNames = new Dictionary<string, string>();
         private static readonly Dictionary<string, Vector3> handleGrabPoints = new Dictionary<string, Vector3>();
         private static Vector3? foundHandleGrabLocal;
+        // Ambidextrous, a knob each side (the MDR's paddles): left then right, in the handle bone's frame. A zone on each; the left hand's
+        // holds are on the left one, the right hand's (or their mirror) on the right.
+        private static readonly Dictionary<string, Vector3[]> handleKnobs = new Dictionary<string, Vector3[]>();
+        private static Vector3[] foundHandleKnobs;
+        private static int grabbedKnob;                     // which of those the hand took, while holding
+        // The left hand over the top of the handle, for a palm above it (the MDR's, moved over from the M4's: every MDR clip racks underhand)
+        private static readonly Dictionary<string, HandleHold> overTopHandleHolds = new Dictionary<string, HandleHold>();
+        public static float handleMirrorPlaneTolerance = 0.015f;   // m a grab point can sit off the gun's centre plane and still take the left hand's hold mirrored (a T)
+        private static GameObject otherKnobZoneViz;
         private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
         private static float heldHandleTravel;              // m this gun's handle comes back
 
@@ -222,6 +231,7 @@ namespace TarkovVR.Source.Weapons
                 foundHandleModel = null;
                 foundHandleCarrier = null;
                 foundHandleGrabLocal = null;
+                foundHandleKnobs = null;
                 foreach (Slot slot in weapon.AllSlots)
                 {
                     if (slot.ID != EWeaponModType.mod_charge.ToString())
@@ -251,6 +261,8 @@ namespace TarkovVR.Source.Weapons
                     foundHandleCarrier = carrier != null ? carrier : namedHandle;
                     if (handleGrabPoints.TryGetValue(family, out Vector3 grabLocal))
                         foundHandleGrabLocal = grabLocal;
+                    if (handleKnobs.TryGetValue(family, out Vector3[] knobs) && knobs.Length > 0)
+                        foundHandleKnobs = knobs;
                 }
                 else if (foundHandleBone == null)
                 {
@@ -297,12 +309,28 @@ namespace TarkovVR.Source.Weapons
             return found;
         }
 
-        // Where the hand takes it: the back of the fitted handle, or the bone where a handle built into the carrier sits
+        // Where the hand takes it: the back of the fitted handle, or the bone where a handle built into the carrier sits. A pair of knobs:
+        // the one taken while holding, else the left.
         private static Vector3 ChargingHandleGrabPoint(Vector3 backWorld)
         {
+            if (foundHandleKnobs != null)
+                return HandleKnobPoint(HoldingChargingHandle ? grabbedKnob : 0);
             if (foundHandleGrabLocal.HasValue)
                 return foundHandleBone.position + foundHandleBone.rotation * foundHandleGrabLocal.Value;
             return foundHandleModel != null ? HandleGrabPoint(foundHandleModel, backWorld) : foundHandleBone.position;
+        }
+
+        private static Vector3 HandleKnobPoint(int knob)
+        {
+            return foundHandleBone.position + foundHandleBone.rotation * foundHandleKnobs[Mathf.Clamp(knob, 0, foundHandleKnobs.Length - 1)];
+        }
+
+        // The grab zones: at the grab point, or on each of a pair of knobs
+        private static int HandleZoneCount => foundHandleKnobs != null ? foundHandleKnobs.Length : 1;
+
+        private static Vector3 HandleZonePoint(int zone, Vector3 backWorld)
+        {
+            return foundHandleKnobs != null ? HandleKnobPoint(zone) : ChargingHandleGrabPoint(backWorld);
         }
 
         // On a jammed gun only when the hands clear it (VRReloadController.Malfunctions); else that's the interaction menu's, which this
@@ -312,8 +340,31 @@ namespace TarkovVR.Source.Weapons
             if (!chargingHandle || !HandsMayWorkAction(firearmController, weapon) || !TryGetChargingHandle(firearmController, weapon))
                 return false;
             Vector3 backWorld = firearmController.WeaponRoot.up;
-            Vector3 grabPoint = ChargingHandleGrabPoint(backWorld);
-            return HandTouchesCapsule(gunHand, grabPoint, grabPoint + backWorld * handleZoneBack, handleGrabRadius);
+            for (int zone = 0; zone < HandleZoneCount; zone++)
+            {
+                Vector3 grabPoint = HandleZonePoint(zone, backWorld);
+                if (HandTouchesCapsule(gunHand, grabPoint, grabPoint + backWorld * handleZoneBack, handleGrabRadius))
+                    return true;
+            }
+            return false;
+        }
+
+        // The knob the hand is nearest of a pair
+        private static int NearestHandleKnob(bool gunHand, Vector3 backWorld)
+        {
+            int nearest = 0;
+            float nearestDistance = float.MaxValue;
+            for (int zone = 0; zone < HandleZoneCount; zone++)
+            {
+                Vector3 grabPoint = HandleZonePoint(zone, backWorld);
+                float distance = HandDistanceToCapsule(gunHand, grabPoint, grabPoint + backWorld * handleZoneBack);
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearest = zone;
+                }
+            }
+            return nearest;
         }
 
         private static bool OffHandTouchesCapsule(Vector3 start, Vector3 end, float radius)
@@ -325,16 +376,19 @@ namespace TarkovVR.Source.Weapons
         private static readonly List<Vector3> handTouchPoints = new List<Vector3>();
         private static bool HandTouchesCapsule(bool gunHand, Vector3 start, Vector3 end, float radius)
         {
+            return HandDistanceToCapsule(gunHand, start, end) <= radius;
+        }
+
+        private static float HandDistanceToCapsule(bool gunHand, Vector3 start, Vector3 end)
+        {
             if (VRGlobals.handsInteractionController == null)
-                return DistanceToSegment(gunHand ? VRGlobals.vrPlayer.RightHand.transform.position : OffHandPalm(), start, end) <= radius;
+                return DistanceToSegment(gunHand ? VRGlobals.vrPlayer.RightHand.transform.position : OffHandPalm(), start, end);
             // The hand you see: the arm drawing it (OnRightArm), not the controller
             VRGlobals.handsInteractionController.GetHandTouchPoints(OnRightArm(gunHand), handTouchPoints);
+            float nearest = float.MaxValue;
             foreach (Vector3 point in handTouchPoints)
-            {
-                if (DistanceToSegment(point, start, end) <= radius)
-                    return true;
-            }
-            return false;
+                nearest = Mathf.Min(nearest, DistanceToSegment(point, start, end));
+            return nearest;
         }
 
         // The back end of the handle (the T on an AR): the handle model is a long bar reaching forward into the receiver,
@@ -381,6 +435,7 @@ namespace TarkovVR.Source.Weapons
 
             // WeaponRoot -up is toward the muzzle, so +up is back toward the stock
             Vector3 backWorld = firearmController.WeaponRoot.up;
+            grabbedKnob = foundHandleKnobs != null && !sideHandle ? NearestHandleKnob(gunHand, backWorld) : 0;
             handleCarrier = sideHandle ? null : foundHandleCarrier;
             if (sideHandle)
             {
@@ -429,9 +484,9 @@ namespace TarkovVR.Source.Weapons
                 heldHandleTravel = otherHandHold.travel;
             if (handleCarrier != null && BoltLockedBack)
                 heldHandleTravel = Mathf.Min(heldHandleTravel, handleLockedBackTravel);
-            if (handleHold != null)
+            HandleHold grip = sideHandle ? handleHold : HandleGripFor(firearmController, rightArm, family, offHandHold, gunHandHold, backWorld);
+            if (grip != null)
             {
-                HandleHold grip = sideHandle ? handleHold : HoldHandIsTurnedTo(handleHold, rightArm ? gunHandHandleAlternates : handleAlternates, family);
                 handleHandFingers = grip.fingers;
                 SnapHandTo(handleView, handleBone.position + handleBone.rotation * grip.position, handleBone.rotation * Quaternion.Euler(grip.rotation));
             }
@@ -446,15 +501,106 @@ namespace TarkovVR.Source.Weapons
                 Transform patron = patrons != null && patrons.Length > 0 ? patrons[0] : null;
                 LogAction($"[VRReload] grabbed the charging handle '{handleView.name}', bolt locked back: {BoltLockedBack}, chamber: {weapon.ChamberAmmoCount}, " +
                     $"catch layer: {firearmsAnimator.BOLT_CATCH_LAYER_INDEX}, idle position: {firearmsAnimator.HasParameter(AnimationControllerParametersTable.FLOAT_IDLEPOSITION)}, " +
-                    $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}, gun hand: {gunHand}, hold from a clip: {handleHold != null}, carrier: {(handleCarrier != null ? handleCarrier.name : "none")}");
+                    $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}, gun hand: {gunHand}, hold from a clip: {grip != null}, " +
+                    $"knob: {(foundHandleKnobs != null ? (grabbedKnob == 0 ? "left" : "right") : "one")}, carrier: {(handleCarrier != null ? handleCarrier.name : "none")}");
             }
             PulseHandleHand(0.3f, 0.04f);
         }
 
-        private static HandleHold HoldHandIsTurnedTo(HandleHold main, Dictionary<string, List<HandleHold>> alternates, string family)
+        // The hold this arm takes the handle with; null = the hand stays where it took hold. Its own clip's, the one the hand is turned
+        // closest to - or, with the palm above the knob, the over-the-top one where the gun has it. No clip of the right hand's: the left
+        // hand's mirrored across the handle where that maps the handle onto itself (a T on the gun's centre plane, a pair of knobs), so
+        // the gun in the left hand racks with the right hand as the left one would. A pair of knobs: the left hand's holds are on the
+        // left one, the right hand's on the right; the other knob is taken where the hand is.
+        private static HandleHold HandleGripFor(FirearmController firearmController, bool rightArm, string family, HandleHold offHandHold, HandleHold gunHandHold, Vector3 backWorld)
+        {
+            if (foundHandleKnobs != null && foundHandleKnobs.Length > 1 && grabbedKnob != (rightArm ? 1 : 0))
+                return null;
+            HandleHold main = rightArm ? gunHandHold : offHandHold;
+            HandleHold overTop = null;
+            List<HandleHold> others = null;
+            if (main != null)
+            {
+                (rightArm ? gunHandHandleAlternates : handleAlternates).TryGetValue(family, out others);
+                if (!rightArm)
+                    overTopHandleHolds.TryGetValue(family, out overTop);
+            }
+            else if (rightArm && offHandHold != null && TryHandleMirrorPlane(backWorld, out Vector3 normal, out Vector3 point))
+            {
+                main = MirroredHandleHold(offHandHold, normal, point);
+                if (overTopHandleHolds.TryGetValue(family, out HandleHold leftOverTop))
+                    overTop = MirroredHandleHold(leftOverTop, normal, point);
+                if (handleAlternates.TryGetValue(family, out List<HandleHold> leftOthers))
+                {
+                    others = new List<HandleHold>();
+                    foreach (HandleHold other in leftOthers)
+                    {
+                        HandleHold mirrored = MirroredHandleHold(other, normal, point);
+                        if (mirrored != null)
+                            others.Add(mirrored);
+                    }
+                }
+                if (debugLog)
+                    LogAction($"[VRReload] charging handle: the left hand's hold mirrored for the right ({(main != null ? "ok" : "no hands mesh yet")})");
+            }
+            if (main == null)
+                return null;
+            if (overTop != null && PalmAboveHandle(firearmController, rightArm, backWorld))
+            {
+                if (debugLog)
+                    LogAction("[VRReload] charging handle: over-the-top grip (palm above the knob)");
+                return overTop;
+            }
+            return HoldHandIsTurnedTo(main, others);
+        }
+
+        // The palm above the point it took (the gun's up: WeaponRoot +z, the sights' side)
+        private static bool PalmAboveHandle(FirearmController firearmController, bool rightArm, Vector3 backWorld)
+        {
+            Vector3 palm = VRGlobals.handsInteractionController != null ? VRGlobals.handsInteractionController.PalmOrigin(dominant: rightArm) : LatchedHandRig.position;
+            return Vector3.Dot(palm - ChargingHandleGrabPoint(backWorld), firearmController.WeaponRoot.forward) > 0f;
+        }
+
+        // The plane mirroring the handle onto itself, in the hold frame (handleBone): between a pair of knobs, or the gun's centre plane
+        // with the grab point on it
+        private static bool TryHandleMirrorPlane(Vector3 backWorld, out Vector3 normal, out Vector3 point)
+        {
+            if (foundHandleKnobs != null && foundHandleKnobs.Length > 1)
+            {
+                normal = (foundHandleKnobs[1] - foundHandleKnobs[0]).normalized;
+                point = (foundHandleKnobs[0] + foundHandleKnobs[1]) * 0.5f;
+                return true;
+            }
+            normal = Vector3.right;
+            point = Vector3.zero;
+            if (!TarkovVR.Patches.Core.Player.RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
+                return false;
+            Quaternion toFrame = Quaternion.Inverse(handleBone.rotation);
+            normal = (toFrame * planeNormal).normalized;
+            point = toFrame * (planePoint - handleBone.position);
+            Vector3 grabPoint = toFrame * (ChargingHandleGrabPoint(backWorld) - handleBone.position);
+            return Mathf.Abs(Vector3.Dot(grabPoint - point, normal)) <= handleMirrorPlaneTolerance;
+        }
+
+        // A left-hand hold as the right hand's mirror image of it through that plane: the palm reflected and turned into the right palm's
+        // frame (HandMirror.TryMirrorPalm), the fingers mirrored. Null until HandMirror has the hands mesh.
+        private static HandleHold MirroredHandleHold(HandleHold hold, Vector3 normal, Vector3 point)
+        {
+            if (hold == null || !TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(Quaternion.Euler(hold.rotation), normal, rightToLeft: false, out Quaternion rotation))
+                return null;
+            return new HandleHold
+            {
+                position = hold.position - 2f * Vector3.Dot(hold.position - point, normal) * normal,
+                rotation = rotation.eulerAngles,
+                fingers = hold.fingers != null ? MirroredPose(hold.fingers, rightToLeft: false, new Vector3[16]) : null,
+                travel = hold.travel,
+            };
+        }
+
+        private static HandleHold HoldHandIsTurnedTo(HandleHold main, List<HandleHold> others)
         {
             HandleHold closest = main;
-            if (!alternates.TryGetValue(family, out List<HandleHold> others))
+            if (others == null || others.Count == 0)
                 return closest;
             Quaternion handRotation = LatchedHandRig.rotation;
             float smallestTurn = Quaternion.Angle(handRotation, handleBone.rotation * Quaternion.Euler(main.rotation));
@@ -836,14 +982,27 @@ namespace TarkovVR.Source.Weapons
             if (!hasHandle || HoldingChargingHandle)
             {
                 SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);
+                SetZoneViz(ref otherKnobZoneViz, false, Vector3.zero, 0f, Color.clear);
                 return;
             }
             Vector3 backWorld = firearmController.WeaponRoot.up;
-            Vector3 grabPoint = ChargingHandleGrabPoint(backWorld);
-            Vector3 zoneEnd = grabPoint + backWorld * handleZoneBack;
-            bool inReach = OffHandTouchesCapsule(grabPoint, zoneEnd, handleGrabRadius)
-                || (ChestHang.SupportOnly && HandTouchesCapsule(true, grabPoint, zoneEnd, handleGrabRadius));
-            SetCapsuleZoneViz(ref handleZoneViz, grabPoint, zoneEnd, handleGrabRadius, inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f));
+            for (int zone = 0; zone < 2; zone++)
+            {
+                if (zone >= HandleZoneCount)
+                {
+                    SetZoneViz(ref otherKnobZoneViz, false, Vector3.zero, 0f, Color.clear);
+                    continue;
+                }
+                Vector3 grabPoint = HandleZonePoint(zone, backWorld);
+                Vector3 zoneEnd = grabPoint + backWorld * handleZoneBack;
+                bool inReach = OffHandTouchesCapsule(grabPoint, zoneEnd, handleGrabRadius)
+                    || (ChestHang.SupportOnly && HandTouchesCapsule(true, grabPoint, zoneEnd, handleGrabRadius));
+                Color color = inReach ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.4f, 0f, 0.3f);
+                if (zone == 0)
+                    SetCapsuleZoneViz(ref handleZoneViz, grabPoint, zoneEnd, handleGrabRadius, color);
+                else
+                    SetCapsuleZoneViz(ref otherKnobZoneViz, grabPoint, zoneEnd, handleGrabRadius, color);
+            }
         }
     }
 }

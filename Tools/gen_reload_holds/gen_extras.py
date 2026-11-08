@@ -61,9 +61,52 @@ HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghin
                   'toz_avt_40':'weapon_bolt_carrier','toz_svt_40':'weapon_bolt_carrier'}
 HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier'}
 # (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's hand is too)
-# The MDR's handle part is a rod running back into the gun with the knob at its front: the back of it is nowhere near the knob
-# (headset: "the collision position is not correct for when you grab it", the grab pose itself right)
-HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12','dt_mdr')
+HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12')
+# Ambidextrous: a knob on each side (the MDR's: a rod running back into the gun, a folding paddle each side at its front, on bones of
+# their own). The zone on each paddle, the box centre of its mesh in the handle bone's frame, left first. Was the clip's palm bone
+# (HANDLE_GRAB_AT_HOLD), but Tarkov's MDR racks underhand: that's the wrist 10 cm below and 6 cm left of the knob (headset 2026-11-07,
+# a picture: the zone far off to the side, "should be on charging handle in middle of gun").
+HANDLE_KNOB_PAIRS={'dt_mdr':('weapon_charge_002','weapon_charge_012')}
+# Over the top, for a palm above the handle (his ask: "the m4 pose for grabbing the handle if your palm is above the handle"; every
+# MDR clip racks underhand, the left hand under the left paddle): the M4's hold (m4a1_reload_charge_0, the index curled over the T's
+# left wing, thumb behind it) moved onto the left paddle. The wing in the M4's mod_charge frame, from the Colt handle's mesh (its bar
+# runs forward, mounted turned 90 deg about x): box centre and outer edge. Outer edges matched across (the hand comes from outside),
+# centres along and up the gun.
+OVER_TOP_FROM_M4=('dt_mdr',)
+AR_WING_CENTRE=np.array([-0.0226,-0.0098,0.0038]); AR_WING_OUTER_X=-0.0272
+def meshPartBox(folder,container,frameLeaf,partLeaf):
+    from UnityPy.helpers.MeshHelper import MeshHandler
+    env=UnityPy.load(ROOT+folder+'/'+container,ROOT+folder+'/client_assets.bundle')
+    def toParent(t,p):
+        s=t.m_LocalScale; r=t.m_LocalRotation; a=t.m_LocalPosition; q=np.array([r.x,r.y,r.z,r.w]); v=p*np.array([s.x,s.y,s.z])
+        return v+2*np.cross(q[:3],np.cross(q[:3],v)+q[3]*v)+np.array([a.x,a.y,a.z])
+    # The part's mesh vertices in the frame bone's frame; the rig holds it more than once: the copy with the most vertices (LOD0)
+    best=[]
+    for o in env.objects:
+        if o.type.name!='Transform': continue
+        t=o.read()
+        if t.m_GameObject.read().m_Name!=frameLeaf: continue
+        points=[]
+        def walk(tr,chain,inPart):
+            inPart=inPart or tr.m_GameObject.read().m_Name==partLeaf
+            if inPart:
+                for c in tr.m_GameObject.read().m_Components:
+                    ptr=c.component if hasattr(c,'component') else c
+                    try: comp=ptr.read()
+                    except Exception: continue
+                    if type(comp).__name__!='MeshFilter': continue
+                    try:
+                        h=MeshHandler(comp.m_Mesh.read()); h.process()
+                    except Exception: continue
+                    for p in np.array(h.m_Vertices,float).reshape(-1,3):
+                        for link in chain: p=toParent(link,p)
+                        points.append(p)
+            for ch in tr.m_Children:
+                c=ch.read(); walk(c,[c]+chain,inPart)
+        walk(t,[],False)
+        if len(points)>len(best): best=points
+    if not best: return None
+    v=np.array(best); return v.min(0),v.max(0)
 # A knob sticking out of the carrier where the clip's palm bone is far off it (AVT/SVT: the left hand reaches over the top, its palm
 # 15 cm from the knob; the fingertips on it): the grab zone on the knob itself, the centre of the bone's mesh vertices within 1 cm of
 # its furthest point to that side, in the bone's frame. (axis, sign): the AVT/SVT knob is the carrier's +x, (4.5,-4.6,-1.5) cm.
@@ -122,6 +165,7 @@ for folder,v in census.items():
             family=m.group(1).lower()
             HANDLE_BONE_GUNS[family]=(folder,)+next(((c,b,k) for c,b,k in matching if family in c),matching[0])
 extraHandles={}; extraGunHandHandles={}; handleBones={}; handleCarriers={}; handleGrabPoints={}; extraMovesWithBolt=[]; namedTrees={}
+handleKnobs={}; handleOverTop={}
 for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     _,clips=loadFolder(folder)
     tree=loadTree(ROOT+folder+'/'+container); P=tree[0]; J=fingerPaths(P)
@@ -183,6 +227,17 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     if rig in HANDLE_KNOB_SIDE:
         knob=meshKnobPoint(folder,container,boneName,*HANDLE_KNOB_SIDE[rig])
         if knob: handleGrabPoints[family]=knob
+    if rig in HANDLE_KNOB_PAIRS:
+        boxes=[meshPartBox(folder,container,boneName,part) for part in HANDLE_KNOB_PAIRS[rig]]
+        if all(boxes):
+            handleKnobs[family]=[[round(float(x),4) for x in (lo+hi)/2] for lo,hi in boxes]
+            handleGrabPoints[family]=handleKnobs[family][0]
+            m4=R['handles'].get('m4a1')
+            if rig in OVER_TOP_FROM_M4 and m4 and family in extraHandles:
+                lo,hi=boxes[0]; shift=(lo+hi)/2-AR_WING_CENTRE; shift[0]=lo[0]-AR_WING_OUTER_X
+                handleOverTop[family]=dict(position=[round(float(x),4) for x in np.array(m4['position'])+shift],rotation=m4['rotation'],
+                                           fingers=m4['fingers'],travel=extraHandles[family]['travel'])
+            print(f'{family} knobs {handleKnobs[family]}, over the top {handleOverTop.get(family,{}).get("position")}',flush=True)
     print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
           'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
 
@@ -248,4 +303,5 @@ for family in LOW_ROCK_GUNS:
         rockIns[family]=dict(axis=rocks['axis'],angle=rocks['angle'],thumb=rocks['thumb'])
         print(f'{family} rock-in:',{k:v for k,v in rocks.items() if k!='thumb'},flush=True)
 json.dump(dict(boltBones=boltBones,sideHandles=sideHandles,rockIn=rockIns,handles=extraHandles,gunHandHandles=extraGunHandHandles,
-               handleBones=handleBones,handleCarriers=handleCarriers,handleGrabPoints=handleGrabPoints,handleMovesWithBolt=extraMovesWithBolt),open('extras.json','w'))
+               handleBones=handleBones,handleCarriers=handleCarriers,handleGrabPoints=handleGrabPoints,handleMovesWithBolt=extraMovesWithBolt,
+               handleKnobs=handleKnobs,handleOverTop=handleOverTop),open('extras.json','w'))

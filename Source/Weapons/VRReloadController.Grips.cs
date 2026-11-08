@@ -132,6 +132,8 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, string> handleBones;
             public Dictionary<string, string> handleCarriers;
             public Dictionary<string, float[]> handleGrabPoints;
+            public Dictionary<string, float[][]> handleKnobs;
+            public Dictionary<string, SavedHandleHold> handleOverTop;
             public Dictionary<string, SavedReleasePress> releasePress;
             public Dictionary<string, SavedBolt> bolts;
         }
@@ -523,6 +525,23 @@ namespace TarkovVR.Source.Weapons
                     {
                         if (entry.Value != null && entry.Value.Length >= 3)
                             handleGrabPoints[entry.Key] = new Vector3(entry.Value[0], entry.Value[1], entry.Value[2]);
+                    }
+                }
+                if (generated.handleKnobs != null)
+                {
+                    foreach (KeyValuePair<string, float[][]> entry in generated.handleKnobs)
+                    {
+                        if (entry.Value == null || entry.Value.Length == 0 || System.Array.Exists(entry.Value, knob => knob == null || knob.Length < 3))
+                            continue;
+                        handleKnobs[entry.Key] = System.Array.ConvertAll(entry.Value, knob => new Vector3(knob[0], knob[1], knob[2]));
+                    }
+                }
+                if (generated.handleOverTop != null)
+                {
+                    foreach (KeyValuePair<string, SavedHandleHold> entry in generated.handleOverTop)
+                    {
+                        if (entry.Value != null && entry.Value.position != null && entry.Value.rotation != null)
+                            overTopHandleHolds[entry.Key] = HandleHoldFrom(entry.Value);
                     }
                 }
                 if (generated.bolts != null)

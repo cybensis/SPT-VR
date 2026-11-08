@@ -214,6 +214,10 @@ out['boltBones']=extras['boltBones']
 out['handleBones']=extras.get('handleBones',{})
 out['handleCarriers']=extras.get('handleCarriers',{})
 out['handleGrabPoints']=extras.get('handleGrabPoints',{})
+# Ambidextrous knobs (left, right), and the over-the-top hold for a palm above the handle: its travel the gun's own
+out['handleKnobs']=extras.get('handleKnobs',{})
+out['handleOverTop']={f:dict(h,travel=out['handles'][f]['travel'] if f in out['handles'] else handleTravel(f,h['travel']))
+                      for f,h in extras.get('handleOverTop',{}).items()}
 out['rockIn'].update(extras.get('rockIn',{}))
 # gen_release.py: who presses each gun's release in its own mag_out clip. Not where a rock-in or thumb catch already says (the off thumb)
 release=json.load(open('release.json')) if os.path.exists('release.json') else {}
