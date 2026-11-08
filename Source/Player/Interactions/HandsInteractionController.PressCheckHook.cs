@@ -13,8 +13,9 @@ namespace TarkovVR.Source.Player.Interactions
         // (1911, offline), so the knuckle bends most to reach over the top, then the rest wraps down onto it. The wrist's roll open
         // (VRReloadController.pressCheckWristOpen, 15) tips the fingers that much further over already: 45 headset-looked right
         // with no roll, so 30 here. The pinky a little open (headset).
-        public static Vector3 pressCheckHookFinger = new Vector3(30f, 70f, 45f);   // index to ring
-        public static Vector3 pressCheckHookPinky = new Vector3(20f, 55f, 35f);
+        // His headset tuning 2026-11-08 (with VRReloadController's wrist open 30 and offset):
+        public static Vector3 pressCheckHookFinger = new Vector3(30f, 40f, 45f);   // index to ring
+        public static Vector3 pressCheckHookPinky = new Vector3(0f, 15f, 15f);
         // deg on top of the gripping thumb, its base / knuckle / tip joint: + closes it toward the palm, - opens it (his ask: "anything to
         // adjust the thumb open/close"). Bending the base moves the knuckle the gun turns about, the rest bends from it.
         public static Vector3 pressCheckHookThumb = Vector3.zero;
@@ -32,6 +33,8 @@ namespace TarkovVR.Source.Player.Interactions
             float closeFrom = Mathf.Clamp(VRReloadController.pressCheckFingersCloseFrom, 0.05f, 0.95f);
             float open = Mathf.SmoothStep(0f, 1f, progress / closeFrom);
             float close = Mathf.SmoothStep(0f, 1f, (progress - closeFrom) / (1f - closeFrom));
+            // The slide drawn back: the fingers tilt back with it from their knuckles (a turn in the palm's frame = the first joints' parent)
+            Quaternion drag = VRReloadController.PressCheckFingerDrag();
             int poseIndex = 0;
             for (int finger = 0; finger < rightFingerJoints.Length; finger++)
             {
@@ -53,6 +56,8 @@ namespace TarkovVR.Source.Player.Interactions
                     Quaternion openPose = Quaternion.Euler(rightRestPoseEuler[poseIndex]);
                     Quaternion onSlide = openPose * Quaternion.AngleAxis(bends[joint] * rightCurlSign, curlAxis);
                     Quaternion shown = Quaternion.Slerp(animated, Quaternion.Slerp(openPose, onSlide, close), open);
+                    if (joint == 0)
+                        shown = drag * shown;
                     joints[joint].localRotation = shown;
                     fingerBaseRot[joints[joint]] = animated;
                     fingerOutRot[joints[joint]] = shown;

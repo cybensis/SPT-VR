@@ -24,9 +24,9 @@ namespace TarkovVR.Source.Weapons
     // transform of ours next to the gun's weapon_R_IK_marker, put where the hand sits on the turned gun: EFT's arm IK puts the hand on
     // it, and the gun's anchor (GunInteractionController.UpdateWeaponPosition) lands that marker on your hand. The gun's turn itself
     // is a rotation of weaponHolder (ApplyPressCheckGunTurn, from UpdateWeaponPosition before the anchor; absolute from its own rest,
-    // so collision's per-frame strip can't stack it). The slide comes back with the fingers: the hand moves back with it on the gun,
-    // so the gun body goes forward under it, as a real press check works. Only Tarkov's slide bone and how far the slide comes back in
-    // its own chamber check are used from the data (pressChecks in ReloadHolds.json).
+    // so collision's per-frame strip can't stack it). As the slide comes back only the fingers go with it, tilting back from their
+    // knuckles (his call; the whole hand riding the slide was the first version), with the gun's own slide sounds. Only Tarkov's slide
+    // bone and how far the slide comes back in its own chamber check are used from the data (pressChecks in ReloadHolds.json).
     public static partial class VRReloadController
     {
         public static bool pressCheck = true;
@@ -35,12 +35,15 @@ namespace TarkovVR.Source.Weapons
         public static int pressCheckPivotJoint = 1;         // the thumb joint it turns about: 0 its base, 1 its big knuckle, 2 its middle
         // deg the hand also rolls about the gun's length, the same knuckle (the thumb stays): the heel of the palm off the grip, the
         // fingers further over the slide (headset: "the wrist needs to be open more, it's going through the grip")
-        public static float pressCheckWristOpen = 15f;
+        public static float pressCheckWristOpen = 30f;       // (his headset tuning 2026-11-08, with the offset and finger bends below)
+        // m from the knuckles to the fingertips on the slide: as the slide comes back only the fingers tilt back from the knuckles, by
+        // as much as keeps their tips with it (his: "the only things that should move with the slide are the fingers")
+        public static float pressCheckFingerReach = 0.05f;
         public static float pressCheckFingersCloseFrom = 0.6f;   // share of the turn with the fingers opening; after it they close onto the slide
         public static float pressCheckTravelScale = 1f;     // the slide's travel: x the gun's own check distance (Tarkov's clip: 1.35-3.3 cm)
         public static float pressCheckSlideSpeed = 0.4f;    // m/s the slide can follow the trigger at
         public static float pressCheckGripReturn = 0.6f;    // the grip's value (how far the fingers wrap it, no squeeze) that puts the hand back on it
-        public static Vector3 pressCheckHandOffset = Vector3.zero;   // m the gun moved in the hand at the full turn: x right, y back, z up along the gun
+        public static Vector3 pressCheckHandOffset = new Vector3(-0.03f, 0f, 0f);   // m the gun moved in the hand at the full turn: x right, y back, z up along the gun
         public static Vector3 pressCheckHandTurn = Vector3.zero;     // deg more turn at the full turn, about the knuckle, in the gun's frame
         public static bool pressCheckRoundRides = true;     // the chambered round comes back with the slide (the extractor has it)
         public static bool pressCheckDebug = false;
@@ -71,7 +74,7 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion pressCheckThumbInFrame = Quaternion.identity;
         private static Vector3 pressCheckSidewaysInFrame;   // the main turn's axis (fingers from the gun's forward toward its up)
         private static Vector3 pressCheckBackInFrame;       // the gun's length, toward the back (the wrist roll's axis)
-        private static Vector3 pressCheckBackMetreInFrame;  // one metre back in the frame's own (scaled) units: the slide pull
+        private static Vector3 pressCheckUpInFrame;         // the gun's up (the sights' side): the fingers' tilt back with the slide
         private static Quaternion pressCheckFrameInGun = Quaternion.identity;   // the frame in WeaponRoot's, at the start
         private static Vector3 pressCheckGunMarkerStartPosition;    // the gun marker against the frame at the start: its own animation since
         private static Quaternion pressCheckGunMarkerStartRotation = Quaternion.identity;   // carries onto ours
@@ -87,6 +90,8 @@ namespace TarkovVR.Source.Weapons
         private static float pressCheckShown;               // 0 = the grip, 1 = turned, fingers on the slide
         private static float pressCheckPull;                // m the slide is back
         private static bool pressCheckPulsedBack;
+        private static bool pressCheckSlideOut;             // the slide's out sound played, its in sound not yet
+        public static float pressCheckSoundOut = 0.3f;      // share of the slide's travel where its out sound plays (back in under half that)
         private static bool pressCheckTriggerLock;          // ended with the trigger down: no shot until it's let go
         private static FirearmController pressCheckDataFor;
         private static PressCheckData pressCheckDataCached;
@@ -188,6 +193,17 @@ namespace TarkovVR.Source.Weapons
             }
             else if (pressCheckPulsedBack && pressCheckPull < travel * 0.5f)
                 pressCheckPulsedBack = false;
+            // The gun's own slide sounds (his ask: "a sound for when the slide is pulled"): out as it comes back, in as it goes home
+            if (!pressCheckSlideOut && travel > 0f && pressCheckPull >= travel * pressCheckSoundOut)
+            {
+                pressCheckSlideOut = true;
+                PlayFirstGunSound(pressCheckFor, SoundHand.GunHand, "SlideOut", "HandleOut", "BoltOut");
+            }
+            else if (pressCheckSlideOut && pressCheckPull <= travel * pressCheckSoundOut * 0.5f)
+            {
+                pressCheckSlideOut = false;
+                PlayFirstGunSound(pressCheckFor, SoundHand.GunHand, "SlideIn", "HandleIn", "BoltIn");
+            }
 
             PlacePressCheckMarker();
             if (!wanted && pressCheckShown <= 0f && pressCheckPull <= 0f)
@@ -240,7 +256,7 @@ namespace TarkovVR.Source.Weapons
             // WeaponRoot: -up toward the muzzle, +forward the sights' side
             pressCheckSidewaysInFrame = frameInverse * Vector3.Cross(-gun.up, gun.forward);
             pressCheckBackInFrame = frameInverse * gun.up;
-            pressCheckBackMetreInFrame = frame.InverseTransformVector(gun.up);
+            pressCheckUpInFrame = frameInverse * gun.forward;
             pressCheckFrameInGun = Quaternion.Inverse(gun.rotation) * frame.rotation;
             pressCheckGunMarkerStartPosition = gunMarker.localPosition;
             pressCheckGunMarkerStartRotation = gunMarker.localRotation;
@@ -262,6 +278,7 @@ namespace TarkovVR.Source.Weapons
             pressCheckShown = 0f;
             pressCheckPull = 0f;
             pressCheckPulsedBack = false;
+            pressCheckSlideOut = false;
 
             // The chambered round, to see once the slide is back (none = an empty chamber, which is what you'd see)
             Transform[] chamberBones = firearmController.Firearms._patronInWeaponTransforms;
@@ -303,8 +320,19 @@ namespace TarkovVR.Source.Weapons
             return pressCheckFor != null;
         }
 
-        // Our marker where the palm sits on the gun now: the grip turned about the knuckle, moved back with the slide (the fingers have
-        // it), and that as EFT's marker for the palm
+        // The slide drawn back: the fingers on it tilt back from their knuckles toward the back of the gun, far enough for their tips to
+        // keep up with it. As a turn in the palm's frame, for the fingers' first joints (HandsInteractionController.PressCheckHook).
+        public static Quaternion PressCheckFingerDrag()
+        {
+            if (pressCheckFor == null || pressCheckPull <= 0f)
+                return Quaternion.identity;
+            float degrees = Mathf.Atan2(pressCheckPull, Mathf.Max(pressCheckFingerReach, 0.01f)) * Mathf.Rad2Deg;
+            Quaternion palmInFrame = HandTurnInFrame() * pressCheckPalmTurnInFrame;
+            Vector3 axis = Quaternion.Inverse(palmInFrame) * Vector3.Cross(pressCheckUpInFrame, pressCheckBackInFrame);
+            return Quaternion.AngleAxis(degrees, axis);
+        }
+
+        // Our marker where the palm sits on the gun now: the grip turned about the knuckle, as EFT's marker for the palm
         private static void PlacePressCheckMarker()
         {
             if (pressCheckMarker == null || pressCheckGunMarker == null || pressCheckFor == null)
@@ -313,9 +341,10 @@ namespace TarkovVR.Source.Weapons
             Transform frame = pressCheckMarker.parent;
             Quaternion turn = HandTurnInFrame();
             float amount = Mathf.SmoothStep(0f, 1f, pressCheckShown);
-            // The palm on the gun, in the frame: turned about the knuckle, moved back with the slide, the live offset on top
+            // The palm on the gun, in the frame: turned about the knuckle, the offset on top. It stays there as the slide comes back:
+            // only the fingers go with the slide (PressCheckFingerDrag)
             Vector3 palm = pressCheckPivotInFrame + turn * (pressCheckPalmInFrame - pressCheckPivotInFrame)
-                + pressCheckBackMetreInFrame * pressCheckPull - frame.InverseTransformVector(gun.rotation * pressCheckHandOffset) * amount;
+                - frame.InverseTransformVector(gun.rotation * pressCheckHandOffset) * amount;
             Quaternion palmTurn = turn * pressCheckPalmTurnInFrame;
             // EFT's marker for that palm (the palm's offset against the marker is in metres, the frame may be scaled)
             Quaternion markerTurn = palmTurn * Quaternion.Inverse(pressCheckPalmTurnInMarker);
