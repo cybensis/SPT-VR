@@ -163,6 +163,10 @@ namespace TarkovVR.Source.Weapons
             handAlongTrack = rockedDegrees / heldRockIn.angle * railLength;
             if (!railPullingOut)
                 handAlongTrack = Mathf.Min(handAlongTrack, Vector3.Dot(moved, outward));
+            // A belt box on its edge comes off the same way it goes on (his PKM: "really hard to take the box out but easy to put in"): pulled
+            // away from the hinge as well as rocked out. An AK's keeps its own pull (rocking only).
+            else if (heldRockIn.pivot != Vector3.zero)
+                handAlongTrack = Mathf.Max(handAlongTrack, Vector3.Dot(moved, outward));
             handOffTrack = HandOffRockingMagazine();
         }
 

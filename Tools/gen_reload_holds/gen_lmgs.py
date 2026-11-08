@@ -302,7 +302,9 @@ def meshPoint(folder,container,boneLeaf):
 # "too exact and hard to get right". A hinge on the box body's top edge that stays hooked as it rolls out (the one the roll lifts), along
 # the barrel (the weapon frame's y: the stock sits at y -23 cm, the barrel at -52), BOX_ROCK degrees open. The body: its biggest box
 # collider (the mesh data isn't in the box's own bundle). Slot frame = the seated box root's (ModPlacer identity on these boxes).
-BOX_ROCK={'pk':25.0}
+# family: (degrees open, the top edge it hooks on: 'left' / 'right' of the gun). The PKM's is the LEFT edge, the right side swinging: the
+# headset, round 1 (the right edge, read off which end the clip's roll lifts) "it's hooking the wrong side"
+BOX_ROCK={'pk':(25.0,'left')}
 def boxBody(box):
     env=UnityPy.load(MAGAZINES+box); T={o.path_id:o.read() for o in env.objects if o.type.name=='Transform'}
     def toParent(t,p):
@@ -334,7 +336,7 @@ def boxBody(box):
         lod=0 if 'lod0' in go.m_Name.lower() else 1
         if best is None or (lod,-volume)<(best[4],-best[0]): best=(volume,corners.min(0),corners.max(0),go.m_Name,lod)
     return best
-def boxRock(family,tree,boxRoot,outClip,seat,angle):
+def boxRock(family,tree,boxRoot,outClip,seat,angle,hookSide):
     body=boxBody(GUNS[family][3])
     if body is None: print('  box rock: no body collider',flush=True); return None
     _,lo,hi,name,_=body
@@ -349,10 +351,14 @@ def boxRock(family,tree,boxRoot,outClip,seat,angle):
     turned=np.array(list(np.sin(np.radians(10))*axis)+[np.cos(np.radians(10))])*(1 if roll>=0 else -1)
     def rotate(q,v): return g['rotate'](q,v)
     rightEnd=np.array([hi[0],(lo[1]+hi[1])/2,hi[2]]); leftEnd=np.array([lo[0],(lo[1]+hi[1])/2,hi[2]])
-    lifts=rotate(turned,rightEnd)[2]>rightEnd[2]
-    pivot=rightEnd if lifts else leftEnd
-    if roll<0: axis=-axis
-    print(f'  box rock: body {name} {np.round(lo*100,1)}..{np.round(hi*100,1)} cm, the clip rolls {"+" if roll>=0 else "-"} about the barrel, hooked on the {"right" if lifts else "left"} top edge {np.round(pivot*100,1)} cm, {angle} deg',flush=True)
+    clipLifts='right' if rotate(turned,rightEnd)[2]>rightEnd[2] else 'left'
+    pivot=leftEnd if hookSide=='left' else rightEnd
+    swinging=rightEnd if hookSide=='left' else leftEnd
+    # Positive = out: the swinging end goes down about the hinge
+    q=np.array(list(np.sin(np.radians(5))*axis)+[np.cos(np.radians(5))])
+    if (pivot+rotate(q,swinging-pivot))[2]>swinging[2]: axis=-axis
+    print(f'  box rock: body {name} {np.round(lo*100,1)}..{np.round(hi*100,1)} cm, hooked on the {hookSide} top edge {np.round(pivot*100,1)} cm '
+          f'(the clip roll lifts the {clipLifts} end), axis {np.round(axis,2)}, {angle} deg',flush=True)
     return dict(axis=r4(axis),angle=angle,pivot=r4(pivot))
 
 # The left hand's places on the gun: where its clips put the left IK marker and hand marker (and that hand's fingers) at rest and aiming.
@@ -388,7 +394,7 @@ for family,(folder,container,latchContainer,box,idleName,coverName,latchName,ins
     gIdle=setup(tree,clips[idleName]); cIdle={}; wpI,wrI,_=gIdle['worldAt'](bone(tree[0],'Weapon_root_anim/weapon'),0.0,cIdle); bpI,brI,_=gIdle['worldAt'](boxRoot,0.0,cIdle)
     seatPose=(gIdle['rotate'](conj(wrI),bpI-wpI),qmul(conj(wrI),brI))
     if family in BOX_ROCK:
-        entry['boxRock']=boxRock(family,tree,boxRoot,clips[outName],seatPose,BOX_ROCK[family])
+        entry['boxRock']=boxRock(family,tree,boxRoot,clips[outName],seatPose,*BOX_ROCK[family])
     print(f'{family}: cover {entry["cover"]}, latch {latch}',flush=True)
     # The hands on each part, and which hand that is
     holds={}
