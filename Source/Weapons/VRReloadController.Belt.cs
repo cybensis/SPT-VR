@@ -98,6 +98,7 @@ namespace TarkovVR.Source.Weapons
         private sealed class SupportSpot
         {
             public string name;
+            public bool onBox;
             public Vector3 ikPosition;
             public Quaternion ikRotation;
             public Vector3[] fingers;
@@ -122,6 +123,14 @@ namespace TarkovVR.Source.Weapons
             public bool hasHands;                       // read: which hand works each part
             public bool coverByGunHand, latchByGunHand, beltByGunHand, boxByGunHand, chargeByGunHand;
             public SupportSpot[] supportSpots;          // the first is where its clips have the left hand at rest
+            public BoxPath pullPath, insertPath;        // the box's way off / onto the gun (its clips'); null = the straight track
+        }
+
+        // The box's way off or onto the gun, from seated outward: the box root's pose in its seated frame at even steps (0 seated .. 1 off)
+        private sealed class BoxPath
+        {
+            public Vector3[] positions;
+            public Quaternion[] rotations;
         }
 
         private static readonly Dictionary<string, LmgData> lmgGuns = new Dictionary<string, LmgData>();
@@ -152,12 +161,18 @@ namespace TarkovVR.Source.Weapons
                     spots.Add(new SupportSpot
                     {
                         name = spot.name,
+                        onBox = spot.onBox,
                         ikPosition = Vector3From(spot.ik, 0),
                         ikRotation = QuaternionFrom(spot.ik, 3),
                         fingers = spot.fingers != null && spot.fingers.Length >= 48 ? FingersFrom(spot.fingers) : null,
                     });
                 }
                 data.supportSpots = spots.Count >= 2 ? spots.ToArray() : null;
+            }
+            if (saved.boxPath != null)
+            {
+                data.pullPath = BoxPathFrom(saved.boxPath.pull);
+                data.insertPath = BoxPathFrom(saved.boxPath.insert);
             }
             if (saved.holds != null)
             {
@@ -234,6 +249,21 @@ namespace TarkovVR.Source.Weapons
                 button = string.IsNullOrEmpty(saved.button) ? null : saved.button,
                 buttonTravel = saved.buttonTravel != null && saved.buttonTravel.Length >= 3 ? Vector3From(saved.buttonTravel, 0) : Vector3.zero,
             };
+        }
+
+        private static BoxPath BoxPathFrom(List<float[]> saved)
+        {
+            if (saved == null || saved.Count < 2)
+                return null;
+            BoxPath path = new BoxPath { positions = new Vector3[saved.Count], rotations = new Quaternion[saved.Count] };
+            for (int step = 0; step < saved.Count; step++)
+            {
+                if (saved[step] == null || saved[step].Length < 7)
+                    return null;
+                path.positions[step] = Vector3From(saved[step], 0);
+                path.rotations[step] = QuaternionFrom(saved[step], 3);
+            }
+            return path;
         }
 
         private static PartHold PartHoldFrom(SavedPartHold saved)
@@ -323,6 +353,174 @@ namespace TarkovVR.Source.Weapons
             return hold.rightHand == rightArm ? hold.fingers : MirroredPose(hold.fingers, rightToLeft: hold.rightHand, mirroredPartFingers);
         }
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The box on and off the gun along its clips' path (his PKM: "it rocks out to the left, rocks in from the left"). The magazine track
+        // (UpdateRail / PlaceOnRail) runs as for any magazine, railPosition 0 seated .. railLength off; with a path the box is at that share
+        // of the way along it, and where along it comes from how the hand holds it: the pose the hand would have the box in (the controller
+        // and the box in it as when the track started), matched against the path - pulling it, rolling it, or both moves it on as the clip
+        // does. Off the path by more than the usual track escape lets go, as on a straight track.
+
+        public static bool beltBoxPaths = true;             // false = the straight track (the well axis) like a magazine
+        public static float boxPathTurnLever = 0.10f;       // m a radian of turn counts as when matching the hand to the path
+        public static float boxPathCatchFrom = 0.3f;        // share of the way out a box going in has to be caught at least (not shoved straight into the seat)
+        private static BoxPath heldBoxPath;                 // the held box's (pull or insert, by railPullingOut): null on a straight track
+        private static BoxPath heldBoxPull, heldBoxInsert;
+        private static Vector3 boxPathHandPosition;         // the box in the controller's frame when the track started
+        private static Quaternion boxPathHandRotation = Quaternion.identity;
+
+        // GrabFromGun / ArmNewMagazine: the paths of this box on this gun, if it's the belt box they were read on
+        private static void ArmBoxPaths(FirearmController firearmController, Magazine magazine)
+        {
+            heldBoxPull = heldBoxInsert = heldBoxPath = null;
+            if (!beltBoxPaths || !TryGetLmg(firearmController, out LmgData data) || data.belt == null || !BeltFits(magazine, data.belt))
+                return;
+            heldBoxPull = data.pullPath;
+            heldBoxInsert = data.insertPath;
+        }
+
+        private static BoxPath BoxPathNow => railPullingOut ? heldBoxPull : heldBoxInsert;
+        private static bool OnBoxPath => onRail && BoxPathNow != null;
+
+        // The box's world pose share along the path (0 seated .. 1 off)
+        private static void BoxPathPose(BoxPath path, float share, out Vector3 position, out Quaternion rotation)
+        {
+            int last = path.positions.Length - 1;
+            float scaled = Mathf.Clamp01(share) * last;
+            int step = Mathf.Min(Mathf.FloorToInt(scaled), last - 1);
+            float blend = scaled - step;
+            Vector3 local = Vector3.Lerp(path.positions[step], path.positions[step + 1], blend);
+            Quaternion turn = Quaternion.Slerp(path.rotations[step], path.rotations[step + 1], blend);
+            Vector3 seatedPosition = magazineWell.TransformPoint(seatedLocalPosition);
+            Quaternion seatedRotation = magazineWell.rotation * seatedLocalRotation;
+            position = seatedPosition + seatedRotation * local;
+            rotation = seatedRotation * turn;
+        }
+
+        // The share along the path whose pose is nearest this one (position, plus the turn at boxPathTurnLever per radian), and how far the
+        // position is off it then
+        private static float NearestOnBoxPath(BoxPath path, Vector3 position, Quaternion rotation, out float positionOff)
+        {
+            int last = path.positions.Length - 1;
+            float bestShare = 0f, bestScore = float.MaxValue;
+            positionOff = float.MaxValue;
+            // Every step, then halfway points either side of the best for a finer share
+            for (int pass = 0; pass < 2; pass++)
+            {
+                int samples = pass == 0 ? last + 1 : 9;
+                float from = pass == 0 ? 0f : Mathf.Max(0f, bestShare - 1f / last), to = pass == 0 ? 1f : Mathf.Min(1f, bestShare + 1f / last);
+                for (int sample = 0; sample < samples; sample++)
+                {
+                    float share = samples == 1 ? from : Mathf.Lerp(from, to, sample / (float)(samples - 1));
+                    BoxPathPose(path, share, out Vector3 pathPosition, out Quaternion pathRotation);
+                    float off = (position - pathPosition).magnitude;
+                    float score = off + boxPathTurnLever * Quaternion.Angle(rotation, pathRotation) * Mathf.Deg2Rad;
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestShare = share;
+                        positionOff = off;
+                    }
+                }
+            }
+            return bestShare;
+        }
+
+        // StartRail: the box in the controller as the track starts
+        private static void StartBoxPath()
+        {
+            heldBoxPath = BoxPathNow;
+            if (heldBoxPath == null)
+                return;
+            GetPoseIn(MagazineHandRig, heldProp.transform, out boxPathHandPosition, out boxPathHandRotation);
+        }
+
+        // UpdateRail: where along the path the hand has the box (in track metres), and how far off it the hand is
+        private static void MeasureHandOnBoxPath(out float trackPosition, out float handOffTrack)
+        {
+            Transform hand = MagazineHandRig;
+            Vector3 position = hand.position + hand.rotation * boxPathHandPosition;
+            Quaternion rotation = hand.rotation * boxPathHandRotation;
+            float share = NearestOnBoxPath(heldBoxPath, position, rotation, out handOffTrack);
+            trackPosition = share * railLength;
+        }
+
+        // UpdateFreeHold: a box going in is caught where it's held near its path (from boxPathCatchFrom of the way out): the share it's at,
+        // or -1
+        private static float BoxPathCatch(Transform propTransform)
+        {
+            if (heldBoxInsert == null || magazineWell == null)
+                return -1f;
+            float share = NearestOnBoxPath(heldBoxInsert, propTransform.position, propTransform.rotation, out float off);
+            BoxPathPose(heldBoxInsert, share, out _, out Quaternion pathRotation);
+            return share >= boxPathCatchFrom && off <= railCaptureRadius && Quaternion.Angle(propTransform.rotation, pathRotation) <= railCaptureAngle ? share : -1f;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The belt box's grab zone: its body, any point of the hand within beltBoxGrabMargin of it (the magazine capsule down a magazine's
+        // length sits inside the box's middle - his "I have to go kinda into the box to grab it rather than by its side")
+
+        public static float beltBoxGrabMargin = 0.04f;      // m any point of the hand off the box's body (its mesh bounds)
+        private static Transform beltBoxBoundsFor;
+        private static Bounds beltBoxBounds;                // in the box view's own frame
+
+        private static bool HandAtBeltBox(FirearmController firearmController, Slot magazineSlot, bool gunHand)
+        {
+            ContainerCollectionView.SlotView view = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
+            Transform box = view != null ? view.ItemView : null;
+            if (box == null)
+                return false;
+            if (beltBoxBoundsFor != box)
+            {
+                beltBoxBoundsFor = box;
+                beltBoxBounds = new Bounds();
+                bool any = false;
+                foreach (MeshFilter meshFilter in box.GetComponentsInChildren<MeshFilter>(false))
+                {
+                    // The box's own body, not the belt and rounds hanging off it
+                    if (meshFilter.sharedMesh == null || meshFilter.name.IndexOf("belt", System.StringComparison.OrdinalIgnoreCase) >= 0
+                        || meshFilter.name.IndexOf("patron", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        continue;
+                    Bounds bounds = meshFilter.sharedMesh.bounds;
+                    for (int corner = 0; corner < 8; corner++)
+                    {
+                        Vector3 local = bounds.center + Vector3.Scale(bounds.extents, new Vector3((corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1));
+                        Vector3 inBox = box.InverseTransformPoint(meshFilter.transform.TransformPoint(local));
+                        if (!any)
+                            beltBoxBounds = new Bounds(inBox, Vector3.zero);
+                        else
+                            beltBoxBounds.Encapsulate(inBox);
+                        any = true;
+                    }
+                }
+                if (beltDebugLog)
+                    Plugin.MyLog.LogInfo($"[VRBelt] box '{box.name}' grab zone: body {(beltBoxBounds.size * 100f).ToString("F1")} cm");
+            }
+            if (beltBoxBounds.size.sqrMagnitude < 1e-6f)
+                return false;
+            if (VRGlobals.handsInteractionController == null)
+                return DistanceToBox(box, HandPalm(gunHand)) <= beltBoxGrabMargin;
+            VRGlobals.handsInteractionController.GetHandTouchPoints(OnRightArm(gunHand), handTouchPoints);
+            foreach (Vector3 point in handTouchPoints)
+            {
+                if (DistanceToBox(box, point) <= beltBoxGrabMargin)
+                    return true;
+            }
+            return false;
+        }
+
+        // A world point's distance (metres) to the box's body, 0 inside
+        private static float DistanceToBox(Transform box, Vector3 world)
+        {
+            Vector3 local = box.InverseTransformPoint(world);
+            Vector3 closest = beltBoxBounds.ClosestPoint(local);
+            return (box.TransformPoint(closest) - world).magnitude;
+        }
+
+        // The left hand two-handing the gun on the box (the PKM's support spot there): the box can't come off under it (his: "you can't take
+        // the ammo box out if left hand is holding onto it, left hand needs to be on foregrip")
+        private static bool SupportHandOnBox => supportSpotDriving && supportSpot > 0 && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting
+            && supportSpotFor != null && TryGetSupportSpots(supportSpotFor, out SupportSpot[] spots, out _) && supportSpot < spots.Length && spots[supportSpot].onBox;
+
         // A box of the model the belt data was read on (by its item template: what its pooled model is called isn't ours to rely on)
         private static bool BeltFits(Magazine box, BeltData belt)
         {
@@ -403,11 +601,15 @@ namespace TarkovVR.Source.Weapons
         // The box comes off only with the cover open (GrabFromGun, TryReleaseMagazine): true = it stays, the hand told so
         private static bool BeltBoxStaysOn(FirearmController firearmController, SoundHand hand)
         {
-            if (!TryGetLmg(firearmController, out _) || CoverOpenEnough(LmgStateOf(firearmController.Item)))
+            if (!TryGetLmg(firearmController, out _))
+                return false;
+            bool coverShut = !CoverOpenEnough(LmgStateOf(firearmController.Item));
+            bool heldUnder = SupportHandOnBox;
+            if (!coverShut && !heldUnder)
                 return false;
             Refuse(hand);
             if (beltDebugLog)
-                Plugin.MyLog.LogInfo("[VRBelt] the box stays on: the cover is shut");
+                Plugin.MyLog.LogInfo(coverShut ? "[VRBelt] the box stays on: the cover is shut" : "[VRBelt] the box stays on: the left hand holds it (take the handguard)");
             return true;
         }
 
@@ -1566,12 +1768,17 @@ namespace TarkovVR.Source.Weapons
                 supportSpot = -1;
                 return false;
             }
-            if (!VRGlobals.vrPlayer.isSupporting || supportSpotFor != firearmController || supportSpot < 0 || supportSpot >= spots.Length)
+            bool boxOn = firearmController.Item.GetCurrentMagazine() != null;
+            if (!VRGlobals.vrPlayer.isSupporting || supportSpotFor != firearmController || supportSpot < 0 || supportSpot >= spots.Length
+                || (spots[supportSpot].onBox && !boxOn))
             {
                 Vector3 hand = VRGlobals.vrPlayer.LeftHand.transform.position;
                 int nearest = 0;
                 for (int spot = 1; spot < spots.Length; spot++)
                 {
+                    // On the box: only with one on the gun (his: "you shouldn't be able to hold on the ammo box spot if it's not in the gun")
+                    if (spots[spot].onBox && !boxOn)
+                        continue;
                     if ((SpotWorld(weaponBone, spots[spot]) - hand).sqrMagnitude < (SpotWorld(weaponBone, spots[nearest]) - hand).sqrMagnitude)
                         nearest = spot;
                 }

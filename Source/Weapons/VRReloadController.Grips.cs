@@ -172,12 +172,21 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, string> hands;            // part -> "L" / "R": the hand the clips work it with (cover, latch, belt, box, charge)
             public Dictionary<string, SavedPartHold> holds;     // that hand on it: cover, latch, belt (its end), boxPull, boxInsert
             public List<SavedSupportSpot> supportSpots;         // the left hand's places on the gun: at rest, then aiming (the PKM's box)
+            public SavedBoxPath boxPath;                        // the box's way off (pull) and onto (insert) the gun, from its clips
+        }
+
+        // Each: the box root's pose (position + quaternion) in its seated frame, from seated outward, at even steps along the way
+        public sealed class SavedBoxPath
+        {
+            public List<float[]> pull;
+            public List<float[]> insert;
         }
 
         // Where the gun's clips put the left IK marker (position + quaternion, weapon bone frame), and the left hand's fingers there
         public sealed class SavedSupportSpot
         {
             public string name;
+            public bool onBox;              // a place on the box: only with a box on the gun
             public float[] ik;
             public float[] fingers;
         }

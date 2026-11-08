@@ -296,6 +296,48 @@ def meshPoint(folder,container,boneLeaf):
         if points: return r4(toParent(t,np.mean(points,axis=0)))
     return None
 
+# The box's way off and onto the gun (his PKM: "it rocks out to the left, rocks in from the left"): not a slide down a line, and not a
+# turn about one point either (a roll and a pull together - fitted to a single pivot it's 4-6 cm off), so the clip's own path. The box
+# root's pose in its SEATED frame (the idle clip's; at runtime the slot bone stays there) from seated outward: the out clip forward, the
+# in clip backward from the seat, until the root has come BOX_PATH_TRAVEL off its seat. Kept at even steps of pose distance (position +
+# turn x BOX_PATH_LEVER), so a stretch where it only turns (the in clip's last roll into the latch) gets its share of the path.
+BOX_PATH_TRAVEL=0.10
+BOX_PATH_LEVER=0.10
+BOX_PATH_SAMPLES=24
+def boxPath(tree,boxRoot,clip,seat,reverse=False):
+    P=tree[0]; g=setup(tree,clip); stop=float(clip.m_MuscleClip.m_StopTime); weapon=bone(P,'Weapon_root_anim/weapon')
+    sp,sr=seat; rows=[]
+    for i in range(int(stop*60)+1):
+        t=min(i/60,stop); c={}
+        wp,wr,_=g['worldAt'](weapon,t,c); bp,br,_=g['worldAt'](boxRoot,t,c)
+        p=g['rotate'](conj(sr),g['rotate'](conj(wr),bp-wp)-sp); q=qmul(conj(sr),qmul(conj(wr),br))
+        rows.append((t,p,q if q[3]>=0 else -q))
+    if reverse: rows=rows[::-1]
+    # from the last frame still seated (root within 2 mm, turned under 2 deg); the seat itself first
+    start=0
+    for i,(t,p,q) in enumerate(rows):
+        if np.linalg.norm(p)<0.002 and ang(q,np.array([0,0,0,1.0]))<2: start=i
+        elif np.linalg.norm(p)>=0.02: break
+    seq=[(rows[start][0],np.zeros(3),np.array([0,0,0,1.0]))]
+    for t,p,q in rows[start+1:]:
+        seq.append((t,p,q))
+        if np.linalg.norm(p)>=BOX_PATH_TRAVEL: break
+    dist=[0.0]
+    for (_,p0,q0),(_,p1,q1) in zip(seq,seq[1:]):
+        dist.append(dist[-1]+float(np.linalg.norm(p1-p0))+BOX_PATH_LEVER*math.radians(ang(q0,q1)))
+    total=dist[-1]
+    out=[]
+    for k in range(BOX_PATH_SAMPLES):
+        d=total*k/(BOX_PATH_SAMPLES-1); j=max(0,min(len(dist)-2,int(np.searchsorted(dist,d,side='right'))-1))
+        f=(d-dist[j])/max(dist[j+1]-dist[j],1e-9); p=seq[j][1]*(1-f)+seq[j+1][1]*f
+        q0,q1=seq[j][2],seq[j+1][2]
+        if np.dot(q0,q1)<0: q1=-q1
+        q=q0*(1-f)+q1*f; q=q/np.linalg.norm(q)
+        out.append(r4(list(p)+list(q)))
+    endTurn=ang(seq[-1][2],np.array([0,0,0,1.0]))
+    print(f"  box path {'in' if reverse else 'out'} ({clip.m_Name}): t{seq[0][0]:.2f}-{seq[-1][0]:.2f}, root {np.linalg.norm(seq[-1][1])*100:.1f} cm off, turned {endTurn:.0f} deg, {total*100:.1f} cm of path",flush=True)
+    return out
+
 # The left hand's places on the gun: where its clips put the left IK marker and hand marker (and that hand's fingers) at rest and aiming.
 # The PKM's aiming clip moves the left hand from the handguard to the box (his: "ADSing seems to trigger an animation change where your
 # off hand moves to the box"); the runtime lets the hand take whichever is nearer and keeps it there. Weapon bone frame.
@@ -326,6 +368,9 @@ for family,(folder,container,latchContainer,box,idleName,coverName,latchName,ins
     entry['latch']=latch
     entry['belt']=belt(tree,boxRoot,clips[idleName],clips[insertName])
     entry['wellAxis']=boxAxis(tree,boxRoot,clips[outName])
+    gIdle=setup(tree,clips[idleName]); cIdle={}; wpI,wrI,_=gIdle['worldAt'](bone(tree[0],'Weapon_root_anim/weapon'),0.0,cIdle); bpI,brI,_=gIdle['worldAt'](boxRoot,0.0,cIdle)
+    seatPose=(gIdle['rotate'](conj(wrI),bpI-wpI),qmul(conj(wrI),brI))
+    entry['boxPath']=dict(pull=boxPath(tree,boxRoot,clips[outName],seatPose),insert=boxPath(tree,boxRoot,clips[insertName],seatPose,reverse=True))
     print(f'{family}: cover {entry["cover"]}, latch {latch}',flush=True)
     # The hands on each part, and which hand that is
     holds={}
@@ -354,6 +399,7 @@ for family,(folder,container,latchContainer,box,idleName,coverName,latchName,ins
     entry['hands']=hands
     if family in AIM_IDLE:
         spots=[supportSpot(tree,clips[idleName],'foregrip'),supportSpot(tree,clips[AIM_IDLE[family]],'box')]
+        spots[1]['onBox']=True      # only with a box on the gun (his: "you shouldn't be able to hold on the ammo box spot if it's not in the gun")
         apart=np.linalg.norm(np.array(spots[0]['ik'][:3])-np.array(spots[1]['ik'][:3]))
         print(f"  support spots (the left IK marker): foregrip {np.round(np.array(spots[0]['ik'][:3])*100,1)} cm, box {np.round(np.array(spots[1]['ik'][:3])*100,1)} cm (weapon frame), {apart*100:.1f} cm apart",flush=True)
         entry['supportSpots']=spots

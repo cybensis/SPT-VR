@@ -358,6 +358,8 @@ namespace TarkovVR.Source.Player.Interactions
             detachedGun = fc;
             DetachCommon();
             Hanging = true;
+            // No ADS with the gun off the grip (DetachedAimPatches)
+            TarkovVR.Patches.Core.Player.DetachedAimPatches.StopAimingOffTheGrip();
             if (hangHaptics && !snap)
                 Pulse(0.6f);
         }
@@ -508,6 +510,7 @@ namespace TarkovVR.Source.Player.Interactions
             detachedGun = fc;
             DetachCommon();
             SupportOnly = true;
+            TarkovVR.Patches.Core.Player.DetachedAimPatches.StopAimingOffTheGrip();
             // The gun hand lets go, and the support hand now carries the whole gun: it feels that through the gun
             if (hangHaptics)
                 Pulse(0.35f, throughGun: true);
