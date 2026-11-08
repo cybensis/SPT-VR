@@ -10,16 +10,17 @@ namespace TarkovVR.Source.Weapons
 {
     // A press check on a pistol, one-handed (his ask 2026-11-07, a picture of John Wick's). The grip let go with the thumb still on
     // A/B/the stick and the finger on the trigger (OpenXR touch sensors) = the gun hand comes off the grip into the hook of his
-    // pictures (John Wick's, a real one, another VR game's - all the same grip): the hand on the gun's LEFT side, palm against it,
-    // wrist low by the grip, the fingers up the side and hooked over the top of the slide's back, the thumb up and toward the muzzle.
+    // pictures (John Wick's, a real one, another VR game's - all the same grip): the hand on the gun's RIGHT side, palm against it,
+    // wrist low by the grip, the fingers up the side and hooked over the top of the slide's back (index at the back of the slide).
     // The trigger then draws the slide back, as far as the trigger goes, up to just far enough to see the round. Touching the grip
     // again (its value, no squeeze) puts the hand back on it.
     //
-    // The hook is posed from the gun itself: the slide's back-top-left edge (its meshes), the middle knuckle forward of the back
-    // face, below the top and just out from the left side, the fingers pointing up (tilted toward the muzzle), index toward the
-    // muzzle, so the palm faces the gun; the fingers curled from the open-hand pose (HandsInteractionController.PressCheckHook).
-    // Earlier versions, both headset-rejected: Tarkov's own chamber check (the OTHER hand pinching the slide over the top, mirrored
-    // onto the gun hand: "this looks terrible"), then the hand BEHIND the gun, palm forward (a misreading of his picture: "not right").
+    // The hook is posed from the gun itself: the slide's back-top-right edge (its meshes), the middle knuckle forward of the back
+    // face, below the top and just out from the right side, the fingers pointing up (tilted toward the muzzle), index toward the
+    // back, so the palm faces the gun; the fingers curled from the open-hand pose (HandsInteractionController.PressCheckHook).
+    // Earlier versions, all headset-rejected: Tarkov's own chamber check (the OTHER hand pinching the slide over the top, mirrored
+    // onto the gun hand: "this looks terrible"), the hand BEHIND the gun, palm forward ("not right"), then on the LEFT side (his:
+    // "palm is against the right side").
     // Only Tarkov's slide bone and how far the slide comes back are used (pressChecks in ReloadHolds.json).
     //
     // The hand is put there through EFT's own right marker (_markers[1] = a transform of ours next to the gun's weapon_R_IK_marker):
@@ -33,10 +34,10 @@ namespace TarkovVR.Source.Weapons
         public static float pressCheckTravelScale = 1f;     // the slide's travel: x the gun's own check distance (Tarkov's clip: 1.35-3.3 cm)
         public static float pressCheckSlideSpeed = 0.4f;    // m/s the slide can follow the trigger at
         public static float pressCheckGripReturn = 0.6f;    // the grip's value (how far the fingers wrap it, no squeeze) that puts the hand back on it
-        // The hook: the middle finger's knuckle against the slide's back-top-left edge, the hand tilted forward from straight up
+        // The hook: the middle finger's knuckle against the slide's back-top-right edge, the hand tilted forward from straight up
         public static float pressCheckHookForward = 0.025f; // m forward of the slide's back face
         public static float pressCheckHookBelow = 0.035f;   // m below the slide's top (the fingers reach up and over it)
-        public static float pressCheckHookOut = 0.012f;     // m out from the slide's left side
+        public static float pressCheckHookOut = 0.012f;     // m out from the slide's right side
         public static float pressCheckHookTilt = 10f;       // deg toward the muzzle
         public static Vector3 pressCheckHandOffset = Vector3.zero;   // m on top: x right, y back, z up along the gun (live tuning)
         public static Vector3 pressCheckHandTurn = Vector3.zero;     // deg on top, in the hand's own frame
@@ -57,7 +58,7 @@ namespace TarkovVR.Source.Weapons
         private static Transform pressCheckSlide;
         private static Vector3 pressCheckSlideRest;
         private static Vector3 pressCheckSlideAxis;         // one metre back, in the slide's parent's frame
-        private static Vector3 pressCheckRearTop;           // the slide's back-top-left edge, in the slide's frame (unscaled)
+        private static Vector3 pressCheckRearTop;           // the slide's back-top-right edge, in the slide's frame (unscaled)
         private static Transform pressCheckGunMarker;       // the gun's own weapon_R_IK_marker
         private static Transform pressCheckMarker;          // ours, next to it: EFT's _markers[1] while the hand is on the slide
         private static Vector3 pressCheckKnuckle;           // the middle finger's knuckle, from the wrist, in the palm's frame (unscaled)
@@ -240,7 +241,7 @@ namespace TarkovVR.Source.Weapons
             PulseGunHand(0.15f, 0.02f);
             if (pressCheckDebug)
                 Plugin.MyLog.LogInfo($"[PressCheck] start on '{AnimationFamily(firearmController)}': slide '{slide.name}', travel {data.travel * 100f:0.00} cm, " +
-                    $"back-top-left edge {pressCheckRearTop * 100f} cm in the slide's frame, knuckle {pressCheckKnuckle * 100f} cm from the wrist, round shown: {pressCheckRound != null}");
+                    $"back-top-right edge {pressCheckRearTop * 100f} cm in the slide's frame, knuckle {pressCheckKnuckle * 100f} cm from the wrist, round shown: {pressCheckRound != null}");
             return true;
         }
 
@@ -257,11 +258,11 @@ namespace TarkovVR.Source.Weapons
             return pressCheckKnuckle.sqrMagnitude > 1e-6f && pressCheckAcross.sqrMagnitude > 1e-6f;
         }
 
-        // The slide's back-top-left edge: the furthest its meshes (sights on it included) reach back, up and to the left
+        // The slide's back-top-right edge: the furthest its meshes (sights on it included) reach back, up and to the right
         private static bool TryMeasureSlide(Transform slide, Transform weaponRoot)
         {
             Vector3 back = weaponRoot.up, up = weaponRoot.forward, right = weaponRoot.right;
-            float mostBack = float.MinValue, mostUp = float.MinValue, leftMost = float.MaxValue;
+            float mostBack = float.MinValue, mostUp = float.MinValue, rightMost = float.MinValue;
             foreach (MeshFilter meshFilter in slide.GetComponentsInChildren<MeshFilter>())
             {
                 if (meshFilter == null || meshFilter.sharedMesh == null)
@@ -274,12 +275,12 @@ namespace TarkovVR.Source.Weapons
                     Vector3 offset = meshTransform.TransformPoint(local) - slide.position;
                     mostBack = Mathf.Max(mostBack, Vector3.Dot(offset, back));
                     mostUp = Mathf.Max(mostUp, Vector3.Dot(offset, up));
-                    leftMost = Mathf.Min(leftMost, Vector3.Dot(offset, right));
+                    rightMost = Mathf.Max(rightMost, Vector3.Dot(offset, right));
                 }
             }
             if (mostBack == float.MinValue)
                 return false;
-            Vector3 edge = back * mostBack + up * mostUp + right * leftMost;
+            Vector3 edge = back * mostBack + up * mostUp + right * rightMost;
             pressCheckRearTop = Quaternion.Inverse(slide.rotation) * edge;
             return true;
         }
@@ -291,16 +292,16 @@ namespace TarkovVR.Source.Weapons
                 return;
             Transform weaponRoot = pressCheckFor.WeaponRoot;
             Vector3 back = weaponRoot.up, up = weaponRoot.forward, right = weaponRoot.right;
-            // The back-top-left edge where the slide is now (drawn back by the pull)
+            // The back-top-right edge where the slide is now (drawn back by the pull)
             Vector3 slideAt = pressCheckSlide.parent.TransformPoint(pressCheckSlideRest + pressCheckSlideAxis * pressCheckPull);
             Vector3 edge = slideAt + pressCheckSlide.rotation * pressCheckRearTop;
-            // The palm: fingers pointing up (tilted toward the muzzle), index toward the muzzle - a right hand that way has its palm
-            // toward the gun's right, i.e. flat on its left side - the middle knuckle forward of the back face, below the top, just
+            // The palm: fingers pointing up (tilted toward the muzzle), index toward the back - a right hand that way has its palm
+            // toward the gun's left, i.e. flat on its right side - the middle knuckle forward of the back face, below the top, just
             // out from the side
             Vector3 fingersUp = Quaternion.AngleAxis(pressCheckHookTilt, right) * up;
-            Quaternion palmRotation = Quaternion.LookRotation(fingersUp, -back) * Quaternion.Inverse(Quaternion.LookRotation(pressCheckKnuckle, pressCheckAcross));
+            Quaternion palmRotation = Quaternion.LookRotation(fingersUp, back) * Quaternion.Inverse(Quaternion.LookRotation(pressCheckKnuckle, pressCheckAcross));
             palmRotation = palmRotation * Quaternion.Euler(pressCheckHandTurn);
-            Vector3 knuckle = edge - back * pressCheckHookForward - up * pressCheckHookBelow - right * pressCheckHookOut
+            Vector3 knuckle = edge - back * pressCheckHookForward - up * pressCheckHookBelow + right * pressCheckHookOut
                 + right * pressCheckHandOffset.x + back * pressCheckHandOffset.y + up * pressCheckHandOffset.z;
             Vector3 palm = knuckle - palmRotation * pressCheckKnuckle;
             // The marker that puts the palm there, as EFT's IK has it against the grip marker
