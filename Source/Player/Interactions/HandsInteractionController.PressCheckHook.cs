@@ -3,13 +3,14 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The press check's hook (his picture, VRReloadController.PressCheck places the hand): the fingers hooked over the back of the slide,
-    // the pinky tucked under, the thumb up. Bent from the open-hand pose (rightRestPoseEuler, the hand you see off the gun) about each
-    // joint's flexion axis, the way the finger tracking and the loot grip close this hand (curlAxis, rightCurlSign).
+    // The press check's hook (his pictures, VRReloadController.PressCheck puts the hand on the gun's left side): the fingers up the
+    // side and over the top of the slide's back, the pinky (off the back of the slide) tucked, the thumb up. Bent from the open-hand
+    // pose (rightRestPoseEuler, the hand you see off the gun) about each joint's flexion axis, the way the finger tracking and the
+    // loot grip close this hand (curlAxis, rightCurlSign).
     internal partial class HandsInteractionController
     {
-        public static Vector3 pressCheckHookFinger = new Vector3(20f, 95f, 55f);   // deg knuckle / middle / tip joint: index, middle, ring
-        public static Vector3 pressCheckHookPinky = new Vector3(45f, 95f, 60f);    // deg the same for the pinky
+        public static Vector3 pressCheckHookFinger = new Vector3(10f, 90f, 70f);   // deg knuckle / middle / tip joint: index, middle, ring
+        public static Vector3 pressCheckHookPinky = new Vector3(30f, 100f, 70f);   // deg the same for the pinky
         public static Vector3 pressCheckHookThumb = Vector3.zero;                  // deg the thumb's three joints (0 = the open hand's, up)
 
         private void UpdatePressCheckHook()
