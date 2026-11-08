@@ -212,32 +212,38 @@ namespace TarkovVR.Source.Weapons
         // comes off the box at a point", "works perfect going in, horrible being taken out"). Every take-out change before measured the
         // pull differently and kept those three, so none of them changed anything. Now: no catch (the box's latch is on the box, under the
         // gripping hand), pulling away is taking it out, and too far off the track it comes away WITH the hand once it has moved at all.
+        // Round 2 (his log): it still came off along the whole 25 deg hook - "it starts doing some sort of railed animation" - the pull drove
+        // the box round its arc (78 % out with the hand not turned at all), and the drawn hand on its far end, ~25 cm off the hinge, swept
+        // half as far again as the real one and slid off it. Now it rocks out only beltBoxRockOutDegrees and then it's the hand's.
+        public static float beltBoxRockOutDegrees = 8f;     // deg a belt box rocks off its edge before it comes away in the hand (it hooks on at its full angle)
         private static Vector3 lastRockTerms;                // this frame's rock (deg), away from the hinge, down (m): the take-out log
         private static float boxPullLogTime;
 
         private static void BeltBoxComesOff(float trackPosition, float handOffTrack, bool gripReleased)
         {
-            railPosition = Mathf.Clamp(trackPosition, 0f, railLength);
-            if (railPosition >= magazineCatchDistance)
+            // Off once rocked this far (in track metres: the full hook angle is railLength)
+            float freeAt = railLength * Mathf.Clamp(beltBoxRockOutDegrees / Mathf.Max(heldRockIn.angle, 1f), 0.05f, 1f);
+            railPosition = Mathf.Clamp(trackPosition, 0f, freeAt);
+            if (railPosition >= Mathf.Min(magazineCatchDistance, freeAt * 0.5f))
                 magazineCatchPassed = true;
             if (beltDebugLog && Time.time >= boxPullLogTime)
             {
                 boxPullLogTime = Time.time + 0.25f;
-                Plugin.MyLog.LogInfo($"[VRBelt] box coming off: {railPosition / railLength * 100f:0}% out (rock {lastRockTerms.x:0.#} deg, away {lastRockTerms.y * 100f:0.#} cm, "
+                Plugin.MyLog.LogInfo($"[VRBelt] box coming off: {railPosition / freeAt * 100f:0}% out (rock {lastRockTerms.x:0.#} deg, away {lastRockTerms.y * 100f:0.#} cm, "
                     + $"down {lastRockTerms.z * 100f:0.#} cm), hand off it {handOffTrack * 100f:0.#} cm");
             }
             if (gripReleased)
             {
                 // Let go part way: back in the gun, as a box let go part way in stays in the hand
                 if (beltDebugLog)
-                    Plugin.MyLog.LogInfo($"[VRBelt] box coming off: let go at {railPosition / railLength * 100f:0}%, back in");
+                    Plugin.MyLog.LogInfo($"[VRBelt] box coming off: let go at {railPosition / freeAt * 100f:0}%, back in");
                 CancelHold();
                 return;
             }
             if (handOffTrack > rockInInsertEscape)
             {
                 if (beltDebugLog)
-                    Plugin.MyLog.LogInfo($"[VRBelt] box coming off: hand {handOffTrack * 100f:0.#} cm off it at {railPosition / railLength * 100f:0}% - "
+                    Plugin.MyLog.LogInfo($"[VRBelt] box coming off: hand {handOffTrack * 100f:0.#} cm off it at {railPosition / freeAt * 100f:0}% - "
                         + (magazineCatchPassed ? "it comes with the hand" : "it stays (not moved yet)"));
                 if (magazineCatchPassed)
                     ComeFreeOfWell();
@@ -246,7 +252,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
             PlaceOnRail();
-            if (trackPosition >= railLength)
+            if (trackPosition >= freeAt)
             {
                 if (beltDebugLog)
                     Plugin.MyLog.LogInfo("[VRBelt] box coming off: off the gun");
