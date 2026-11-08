@@ -257,6 +257,14 @@ namespace TarkovVR.Source.Weapons
                 && firearmController._player.IsYourPlayer && TryGetShotgun(firearmController, out data);
         }
 
+        // The hands load this shotgun (Manual Reload + its data): the off hand's weapon-part menu isn't needed (GunInteractionController's
+        // ManualReloadReplacesMenu; it only knew magazine guns, so a tube shotgun kept the menu - his report "the shotgun still has the
+        // weapon interact menu when bringing offhand up to it")
+        public static bool HandsLoadShotgun(FirearmController firearmController)
+        {
+            return ManualShotgunOn(firearmController, out _);
+        }
+
         // Worked as a pump gun now: the M3 switched to semi-auto is a semi-auto
         private static bool PumpMode(Weapon weapon, ShotgunData data)
         {
