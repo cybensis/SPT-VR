@@ -843,8 +843,24 @@ namespace TarkovVR.Source.Weapons
         {
             pumpHandWanted = false;
             TickPump();
+            // Nothing measuring the pull (the gun hand let go of the grip: the off hand holds the gun alone; Tarkov's rechamber under way)
+            // but the pump left open: the hand stays on it (his round 2: "if I pull the pump back, then let go of main hand, my offhand moved
+            // back to default foregrip position")
+            if (!pumpHandWanted)
+                HoldPumpHand();
             if (!pumpHandWanted)
                 ReleasePumpHand();
+        }
+
+        private static void HoldPumpHand()
+        {
+            FirearmController firearmController = VRGlobals.firearmController;
+            if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.isSupporting || VRGlobals.menuOpen || HoldingRound)
+                return;
+            if (!ManualShotgunOn(firearmController, out ShotgunData data) || !PumpMode(firearmController.Item, data)
+                || !pumpStates.TryGetValue(firearmController.Item, out PumpState state))
+                return;
+            DrivePumpHand(firearmController, data, state);
         }
 
         private static void TickPump()
