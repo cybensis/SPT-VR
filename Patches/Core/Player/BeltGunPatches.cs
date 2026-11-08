@@ -21,5 +21,14 @@ namespace TarkovVR.Patches.Core.Player
         {
             VRReloadController.AfterAnimatorRebind(__state);
         }
+
+        // The PKM's support hand on the handguard through an aim (VRReloadController.Belt support spots): Tarkov's grip fingers kept on
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player), nameof(EFT.Player.IkProcess))]
+        private static void SupportSpotGrip(EFT.Player __instance)
+        {
+            if (__instance != null && __instance.IsYourPlayer)
+                VRReloadController.AfterSupportIkProcess(__instance);
+        }
     }
 }

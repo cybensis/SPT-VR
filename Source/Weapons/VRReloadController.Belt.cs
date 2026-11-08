@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using EFT;
 using EFT.InventoryLogic;
+using RootMotion.FinalIK;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
@@ -1574,8 +1575,6 @@ namespace TarkovVR.Source.Weapons
                     if ((SpotWorld(weaponBone, spots[spot]) - hand).sqrMagnitude < (SpotWorld(weaponBone, spots[nearest]) - hand).sqrMagnitude)
                         nearest = spot;
                 }
-                if (beltDebugLog && VRGlobals.vrPlayer.isSupporting)
-                    Plugin.MyLog.LogInfo($"[VRBelt] support hand on the {spots[nearest].name}");
                 supportSpot = nearest;
                 supportSpotFor = firearmController;
             }
@@ -1583,16 +1582,101 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // After the animator: the left IK marker on the spot the hand has (the aiming clip moved it)
+        // After the animator: the hand on the spot it took. Round 1 only put the left IK marker there (headset: the hand under the box still
+        // went to the handguard), so the arm now aims at our own point on the spot - the pump's way (VRReloadController.Shotgun, CONFIRMED):
+        // the solver's target wins over the IK position Tarkov's IkProcess writes from the marker. The rest spot: where Tarkov's own grip
+        // has the hand there (its GripPose, _ikTargets[0]); the box: the aiming clip's marker. The marker goes there too (the grip poser's
+        // weight follows it), and AfterSupportIkProcess holds the rest spot's grip fingers through an aim.
+        private static Transform supportSpotTarget;
+        private static bool supportSpotDriving;
+        private static int supportSpotLogged = -1;
+        private static float supportSpotCheckTime = -1f;
+
         private static void ApplySupportSpot()
         {
             FirearmController firearmController = VRGlobals.firearmController;
-            if (supportSpot < 0 || supportSpotFor != firearmController || VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.isSupporting
-                || !TryGetSupportSpots(firearmController, out SupportSpot[] spots, out Transform weaponBone) || supportSpot >= spots.Length)
+            LimbIK leftArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null;
+            SupportSpot[] spots = null;
+            Transform weaponBone = null;
+            bool holding = supportSpot >= 0 && supportSpotFor == firearmController && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting
+                && leftArmIk != null && leftArmIk.solver != null && VRGlobals.player != null
+                && TryGetSupportSpots(firearmController, out spots, out weaponBone) && supportSpot < spots.Length
+                // Not over a reload latch or the pump's point: theirs while they have it
+                && (leftArmIk.solver.target == null || leftArmIk.solver.target == supportSpotTarget);
+            if (!holding)
+            {
+                ReleaseSupportSpot(leftArmIk);
                 return;
+            }
             SupportSpot spot = spots[supportSpot];
+            Vector3 markerPosition = SpotWorld(weaponBone, spot);
+            Quaternion markerRotation = weaponBone.rotation * spot.ikRotation;
             Transform marker = firearmController.HandsHierarchy.Transforms[(int)ECharacterWeaponBones.weapon_L_IK_marker];
-            marker.SetPositionAndRotation(SpotWorld(weaponBone, spot), weaponBone.rotation * spot.ikRotation);
+            marker.SetPositionAndRotation(markerPosition, markerRotation);
+            Transform grip = supportSpot == 0 && VRGlobals.player._ikTargets != null && VRGlobals.player._ikTargets.Length > 0 ? VRGlobals.player._ikTargets[0] : null;
+            if (supportSpotTarget == null)
+                supportSpotTarget = new GameObject("VRSupportSpot").transform;
+            // On the gun: it rides whatever moves the gun later this frame
+            if (supportSpotTarget.parent != weaponBone)
+                supportSpotTarget.SetParent(weaponBone, worldPositionStays: false);
+            supportSpotTarget.SetPositionAndRotation(grip != null ? grip.position : markerPosition, grip != null ? grip.rotation : markerRotation);
+            leftArmIk.solver.target = supportSpotTarget;
+            supportSpotDriving = true;
+            if (supportSpotLogged != supportSpot)
+            {
+                supportSpotLogged = supportSpot;
+                supportSpotCheckTime = Time.time + 0.5f;
+                if (beltDebugLog)
+                    Plugin.MyLog.LogInfo($"[VRBelt] support hand on the {spot.name}: the controller {SpotDistances(spots, weaponBone, VRGlobals.vrPlayer.LeftHand.transform.position)}"
+                        + (supportSpot == 0 ? $", Tarkov's grip {(grip != null ? "found" : "not found: on the marker")}" : ""));
+            }
+            // A moment in: where the drawn hand is (the line that tells whether this held)
+            if (supportSpotCheckTime > 0f && Time.time >= supportSpotCheckTime)
+            {
+                supportSpotCheckTime = -1f;
+                Transform palm = ArmPalm(rightArm: false);
+                if (beltDebugLog && palm != null)
+                    Plugin.MyLog.LogInfo($"[VRBelt] support hand drawn: {SpotDistances(spots, weaponBone, palm.position)}, {((palm.position - supportSpotTarget.position).magnitude * 100f):0.#} cm off its target");
+            }
+        }
+
+        private static string SpotDistances(SupportSpot[] spots, Transform weaponBone, Vector3 point)
+        {
+            string text = "";
+            for (int spot = 0; spot < spots.Length; spot++)
+                text += $"{(spot > 0 ? ", " : "")}{((SpotWorld(weaponBone, spots[spot]) - point).magnitude * 100f):0.#} cm from the {spots[spot].name}";
+            return text;
+        }
+
+        // Back to Tarkov's IK (still two-handing: no target), or the controller if two-handing ended without UpdateRightHand's release
+        // (VRPlayerManager.ForceUnlockHand only hands the arm back where it has no target)
+        private static void ReleaseSupportSpot(LimbIK leftArmIk)
+        {
+            supportSpotLogged = -1;
+            supportSpotCheckTime = -1f;
+            if (!supportSpotDriving)
+                return;
+            supportSpotDriving = false;
+            if (leftArmIk == null || leftArmIk.solver == null || leftArmIk.solver.target != supportSpotTarget)
+                return;
+            bool supporting = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
+            if (supporting || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null)
+            {
+                leftArmIk.solver.target = null;
+                return;
+            }
+            if (VRGlobals.player != null)
+                VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
+            leftArmIk.solver.target = VRGlobals.vrPlayer.LeftHand.transform;
+            leftArmIk.enabled = true;
+        }
+
+        // Player.IkProcess postfix (BeltGunPatches): it just set the left grip poser's weight off the marker's distance to the grip; on the
+        // rest spot the hand holds Tarkov's grip, aiming or not
+        public static void AfterSupportIkProcess(EFT.Player player)
+        {
+            if (supportSpotDriving && supportSpot == 0 && player != null && player.HandPosers != null && player.HandPosers.Length > 0 && player.HandPosers[0] != null)
+                player.HandPosers[0].GripWeight = 1f;
         }
 
         // A spot other than the rest one (the box): its clip's fingers. At rest Tarkov's own grip poser shapes the hand (the marker is on its
