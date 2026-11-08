@@ -140,8 +140,8 @@ namespace TarkovVR.Source.Weapons
             rockLeverOnHand = controller.InverseTransformPoint(middle);
             rockLeverStartInWell = magazineWell.InverseTransformVector(middle - RockPivotWorld());
             rockAwayInWell = beltBox ? (seatedLocalRotation * (centerInProp - propWellPointLocal)).normalized : Vector3.zero;
-            if (beltBox && beltDebugLog)
-                Plugin.MyLog.LogInfo($"[VRBelt] box {(railPullingOut ? "coming off" : "going on")}: rocked about its edge from its body's middle "
+            if (beltBox && beltDebugLog && !railPullingOut)
+                Plugin.MyLog.LogInfo($"[VRBelt] box going on: rocked about its edge from its body's middle "
                     + $"{((middle - RockPivotWorld()).magnitude * 100f):0.#} cm off the hinge (the whole model's middle: "
                     + $"{((heldProp.transform.TransformPoint(MagazineCenterInProp(heldProp)) - RockPivotWorld()).magnitude * 100f):0.#} cm)");
         }
@@ -177,16 +177,9 @@ namespace TarkovVR.Source.Weapons
             handAlongTrack = rockedDegrees / heldRockIn.angle * railLength;
             if (!railPullingOut)
                 handAlongTrack = Mathf.Min(handAlongTrack, Vector3.Dot(moved, outward));
-            // A belt box on its edge comes off the same way it goes on (his PKM: "really hard to take the box out but easy to put in"): pulled
-            // away from the hinge as well as rocked out. An AK's keeps its own pull (rocking only).
-            else if (heldRockIn.pivot != Vector3.zero)
-                handAlongTrack = Mathf.Max(handAlongTrack, Vector3.Dot(moved, outward));
-            // And straight down off the gun / up onto it (the way it hangs) as much as a magazine slides, both ways alike
-            if (rockAwayInWell != Vector3.zero)
-            {
-                float along = Vector3.Dot(moved, magazineWell.TransformDirection(rockAwayInWell).normalized);
-                handAlongTrack = railPullingOut ? Mathf.Max(handAlongTrack, along) : Mathf.Min(handAlongTrack, along);
-            }
+            // A belt box going on: pushed straight up onto the gun (the way it hangs) seats it too. (Coming off is the plain pull, UpdateRail.)
+            if (rockAwayInWell != Vector3.zero && !railPullingOut)
+                handAlongTrack = Mathf.Min(handAlongTrack, Vector3.Dot(moved, magazineWell.TransformDirection(rockAwayInWell).normalized));
             handOffTrack = HandOffRockingMagazine();
         }
 
