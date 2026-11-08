@@ -50,7 +50,31 @@ namespace TarkovVR.Source.Player.Interactions
         private readonly HashSet<int> ignoredColliders = new HashSet<int>();   // e.g. broken glass - never (re)copy these into the sandbox
         private Vector3 lastQueryCenter = new Vector3(1e9f, 1e9f, 1e9f);
         private float nextQueryTime;
-        private readonly Collider[] proximityBuf = new Collider[8];
+        private readonly Collider[] proximityBuf = new Collider[32];   // room for our own colliders (skipped) without crowding out the world's
+
+        // Our own player's colliders (the body, the guns on it, the gun in hands) and any weapon model are never world geometry here (his
+        // report: the first draw of another gun "takes half a second before the gun is properly attached to my hand" - the switch trace
+        // showed the holder pushed 14 cm / 26 deg two frames after the spawn, dragged back at the drive's capped speed, snapping home at
+        // +0.22 s: the fresh gun's own colliders, at the hand, copied in as world). Cached by instance id, the cache cleared now and
+        // then (a pooled gun model can come back as loot).
+        private readonly Dictionary<int, bool> ownColliders = new Dictionary<int, bool>();
+        private float ownCollidersClearTime;
+
+        private bool IsOwnCollider(Collider collider)
+        {
+            if (Time.time > ownCollidersClearTime)
+            {
+                ownColliders.Clear();
+                ownCollidersClearTime = Time.time + 2f;
+            }
+            int id = collider.GetInstanceID();
+            if (ownColliders.TryGetValue(id, out bool own))
+                return own;
+            EFT.Player owner = collider.GetComponentInParent<EFT.Player>(true);
+            own = (owner != null && owner.IsYourPlayer) || collider.GetComponentInParent<WeaponPrefab>(true) != null;
+            ownColliders[id] = own;
+            return own;
+        }
 
         public bool RecentlyContacted => active && Time.time - lastContactTime < contactMemory;
         public bool Active => active;
@@ -186,8 +210,14 @@ namespace TarkovVR.Source.Player.Interactions
             float muzzleTravel = (targetPos - rb.position).magnitude
                                + Quaternion.Angle(rb.rotation, targetRot) * Mathf.Deg2Rad * len;
             float reachRadius = contactLeadMargin + Mathf.Max(builtBodyR, builtBarrelR) + muzzleTravel;
-            int near = Physics.OverlapCapsuleNonAlloc(rb.position, muzzle, reachRadius, proximityBuf,
+            int found = Physics.OverlapCapsuleNonAlloc(rb.position, muzzle, reachRadius, proximityBuf,
                                                       worldMask, QueryTriggerInteraction.Collide);
+            int near = 0;
+            for (int i = 0; i < found; i++)
+            {
+                if (proximityBuf[i] != null && !IsOwnCollider(proximityBuf[i]))
+                    near++;
+            }
             if (near == 0)
             {
                 rb.position = targetPos;
@@ -250,7 +280,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (src == null)
                     continue;
                 int id = src.GetInstanceID();
-                if (ignoredColliders.Contains(id))
+                if (ignoredColliders.Contains(id) || IsOwnCollider(src))
                     continue;
                 if (colliderCopies.TryGetValue(id, out GameObject existing))
                 {
