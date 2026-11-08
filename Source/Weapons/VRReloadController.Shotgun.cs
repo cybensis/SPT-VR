@@ -855,7 +855,9 @@ namespace TarkovVR.Source.Weapons
         private static void HoldPumpHand()
         {
             FirearmController firearmController = VRGlobals.firearmController;
-            if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.isSupporting || VRGlobals.menuOpen || HoldingRound)
+            // A shell in the gun hand doesn't count (his round 3: taking one out with the pump open moved the hand off it); the off hand
+            // holding one isn't on the gun (isSupporting)
+            if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.isSupporting || VRGlobals.menuOpen || ShellInOffHand)
                 return;
             if (!ManualShotgunOn(firearmController, out ShotgunData data) || !PumpMode(firearmController.Item, data)
                 || !pumpStates.TryGetValue(firearmController.Item, out PumpState state))
