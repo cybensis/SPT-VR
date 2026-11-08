@@ -527,6 +527,9 @@ public class GunInteractionController : MonoBehaviour
         // Strip last frame's collision offsets so the anchor below measures the pristine pose
         // (they are re-resolved and re-applied fresh by WeaponCollision.Apply after the anchor).
         TarkovVR.Source.Player.Interactions.WeaponCollision.PreAnchor();
+        // A press check turns the gun in the hand about the thumb's knuckle (VRReloadController.PressCheck): before the anchor, which
+        // then lands the hand's marker on the turned gun at your hand
+        TarkovVR.Source.Weapons.VRReloadController.ApplyPressCheckGunTurn(VRGlobals.weaponHolder.transform);
 
         if (!WeaponPatches.grenadeEquipped && VRGlobals.firearmController != null)
         {

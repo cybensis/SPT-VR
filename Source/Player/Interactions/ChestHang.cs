@@ -693,6 +693,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void SaveHolderOnce()
         {
+            // A press check turns the holder: its own rotation back before it's saved (else every restore would keep the turn)
+            VRReloadController.CancelPressCheck();
             if (holderSaved || VRGlobals.weaponHolder == null)
                 return;
             Transform holder = VRGlobals.weaponHolder.transform;
