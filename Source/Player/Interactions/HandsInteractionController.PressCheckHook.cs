@@ -10,9 +10,11 @@ namespace TarkovVR.Source.Player.Interactions
     internal partial class HandsInteractionController
     {
         // deg on the slide: knuckle / middle / tip joint. The turn leaves the knuckles beside the slide at about its middle height
-        // (1911, offline), so the knuckle bends most to reach over the top, then the rest wraps down onto it.
-        public static Vector3 pressCheckHookFinger = new Vector3(45f, 70f, 45f);   // index to ring
-        public static Vector3 pressCheckHookPinky = new Vector3(45f, 75f, 45f);
+        // (1911, offline), so the knuckle bends most to reach over the top, then the rest wraps down onto it. The wrist's roll open
+        // (VRReloadController.pressCheckWristOpen, 15) tips the fingers that much further over already: 45 headset-looked right
+        // with no roll, so 30 here. The pinky a little open (headset).
+        public static Vector3 pressCheckHookFinger = new Vector3(30f, 70f, 45f);   // index to ring
+        public static Vector3 pressCheckHookPinky = new Vector3(20f, 55f, 35f);
 
         private void UpdatePressCheckHook()
         {

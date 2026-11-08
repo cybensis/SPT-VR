@@ -33,6 +33,9 @@ namespace TarkovVR.Source.Weapons
         public static float pressCheckBlendTime = 0.3f;     // s the turn takes, both ways
         public static float pressCheckTurnAngle = 90f;      // deg the gun turns in the hand about the thumb's knuckle
         public static int pressCheckPivotJoint = 1;         // the thumb joint it turns about: 0 its base, 1 its big knuckle, 2 its middle
+        // deg the hand also rolls about the gun's length, the same knuckle (the thumb stays): the heel of the palm off the grip, the
+        // fingers further over the slide (headset: "the wrist needs to be open more, it's going through the grip")
+        public static float pressCheckWristOpen = 15f;
         public static float pressCheckFingersCloseFrom = 0.6f;   // share of the turn with the fingers opening; after it they close onto the slide
         public static float pressCheckTravelScale = 1f;     // the slide's travel: x the gun's own check distance (Tarkov's clip: 1.35-3.3 cm)
         public static float pressCheckSlideSpeed = 0.4f;    // m/s the slide can follow the trigger at
@@ -58,12 +61,20 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 pressCheckSlideAxis;         // one metre back, in the slide's parent's frame
         private static Transform pressCheckGunMarker;       // the gun's own weapon_R_IK_marker
         private static Transform pressCheckMarker;          // ours, next to it: EFT's _markers[1] during the press check
-        // The grip, at the start, in the gun's (WeaponRoot's) frame, unscaled: the palm, the knuckle it turns about
-        private static Vector3 pressCheckPalmInGun;
-        private static Quaternion pressCheckPalmTurnInGun = Quaternion.identity;
-        private static Vector3 pressCheckPivotInGun;
-        private static int pressCheckPivotThumbJoint;       // which thumb joint that is (0..2), and its turn in the gun: it stays there
-        private static Quaternion pressCheckThumbInGun = Quaternion.identity;
+        // The grip, at the start, in the frame our marker lives in (the gun marker's parent: it sways and breathes with the gun as EFT
+        // animates it, so the hand does too - worked in WeaponRoot's frame it held still while the gun swayed, headset: "the hand
+        // doesn't follow eft's inertia/breathing idle animation"): the palm, the knuckle it turns about, the turn's axes there
+        private static Vector3 pressCheckPalmInFrame;
+        private static Quaternion pressCheckPalmTurnInFrame = Quaternion.identity;
+        private static Vector3 pressCheckPivotInFrame;
+        private static int pressCheckPivotThumbJoint;       // which thumb joint that is (0..2), and its turn in the frame: it stays there
+        private static Quaternion pressCheckThumbInFrame = Quaternion.identity;
+        private static Vector3 pressCheckSidewaysInFrame;   // the main turn's axis (fingers from the gun's forward toward its up)
+        private static Vector3 pressCheckBackInFrame;       // the gun's length, toward the back (the wrist roll's axis)
+        private static Vector3 pressCheckBackMetreInFrame;  // one metre back in the frame's own (scaled) units: the slide pull
+        private static Quaternion pressCheckFrameInGun = Quaternion.identity;   // the frame in WeaponRoot's, at the start
+        private static Vector3 pressCheckGunMarkerStartPosition;    // the gun marker against the frame at the start: its own animation since
+        private static Quaternion pressCheckGunMarkerStartRotation = Quaternion.identity;   // carries onto ours
         private static Vector3 pressCheckPalmInMarker;      // where EFT's IK puts the palm against its marker, in the marker's frame
         private static Quaternion pressCheckPalmTurnInMarker = Quaternion.identity;
         private static Transform pressCheckHolder;          // weaponHolder while it's turned, its own rotation, the gun in it
@@ -218,13 +229,21 @@ namespace TarkovVR.Source.Weapons
             Transform pivot = bones[1 + pivotJoint];
             if (pivot == null)
                 return false;
-            // The grip as it is now (the hand on it): the palm and the knuckle in the gun's frame, the palm against the gun's marker
-            Quaternion gunInverse = Quaternion.Inverse(gun.rotation);
-            pressCheckPalmInGun = gunInverse * (palm.position - gun.position);
-            pressCheckPalmTurnInGun = gunInverse * palm.rotation;
-            pressCheckPivotInGun = gunInverse * (pivot.position - gun.position);
+            // The grip as it is now (the hand on it): the palm and the knuckle in the marker's frame, the palm against the gun's marker
+            Transform frame = gunMarker.parent;
+            Quaternion frameInverse = Quaternion.Inverse(frame.rotation);
+            pressCheckPalmInFrame = frame.InverseTransformPoint(palm.position);
+            pressCheckPalmTurnInFrame = frameInverse * palm.rotation;
+            pressCheckPivotInFrame = frame.InverseTransformPoint(pivot.position);
             pressCheckPivotThumbJoint = pivotJoint;
-            pressCheckThumbInGun = gunInverse * pivot.rotation;
+            pressCheckThumbInFrame = frameInverse * pivot.rotation;
+            // WeaponRoot: -up toward the muzzle, +forward the sights' side
+            pressCheckSidewaysInFrame = frameInverse * Vector3.Cross(-gun.up, gun.forward);
+            pressCheckBackInFrame = frameInverse * gun.up;
+            pressCheckBackMetreInFrame = frame.InverseTransformVector(gun.up);
+            pressCheckFrameInGun = Quaternion.Inverse(gun.rotation) * frame.rotation;
+            pressCheckGunMarkerStartPosition = gunMarker.localPosition;
+            pressCheckGunMarkerStartRotation = gunMarker.localRotation;
             Quaternion markerInverse = Quaternion.Inverse(gunMarker.rotation);
             pressCheckPalmInMarker = markerInverse * (palm.position - gunMarker.position);
             pressCheckPalmTurnInMarker = markerInverse * palm.rotation;
@@ -258,27 +277,29 @@ namespace TarkovVR.Source.Weapons
             PulseGunHand(0.15f, 0.02f);
             if (pressCheckDebug)
                 Plugin.MyLog.LogInfo($"[PressCheck] start on '{AnimationFamily(firearmController)}': slide '{slide.name}', travel {data.travel * 100f:0.00} cm, " +
-                    $"turning about '{pivot.name}' at {pressCheckPivotInGun * 100f} cm in the gun, palm at {pressCheckPalmInGun * 100f}, round shown: {pressCheckRound != null}");
+                    $"turning about '{pivot.name}' at {pressCheckPivotInFrame * 100f} in '{frame.name}', palm at {pressCheckPalmInFrame * 100f}, round shown: {pressCheckRound != null}");
             return true;
         }
 
-        // How far the hand has turned on the gun about the knuckle (the gun turns the other way in the hand): the fingers from round
-        // the grip (the gun's forward) toward pointing up the slide (its up), about the gun's sideways axis. In the gun's frame.
-        private static Quaternion HandTurnOnGun()
+        // How far the hand has turned on the gun about the knuckle (the gun turns the other way in the hand), in the marker's frame:
+        // the fingers from round the grip (the gun's forward) toward pointing up the slide (its up), about the gun's sideways axis;
+        // then the wrist rolled open about the gun's length (the palm on the gun's right: its heel, below the knuckle, out to the right)
+        private static Quaternion HandTurnInFrame()
         {
             float turn = Mathf.SmoothStep(0f, 1f, pressCheckShown);
-            Vector3 forward = Vector3.down, up = Vector3.forward;   // WeaponRoot: -up toward the muzzle, +forward the sights' side
-            return Quaternion.Slerp(Quaternion.identity, Quaternion.Euler(pressCheckHandTurn), turn)
-                * Quaternion.AngleAxis(pressCheckTurnAngle * turn, Vector3.Cross(forward, up));
+            Quaternion more = Quaternion.Inverse(pressCheckFrameInGun) * Quaternion.Euler(pressCheckHandTurn) * pressCheckFrameInGun;
+            return Quaternion.Slerp(Quaternion.identity, more, turn)
+                * Quaternion.AngleAxis(-pressCheckWristOpen * turn, pressCheckBackInFrame)
+                * Quaternion.AngleAxis(pressCheckTurnAngle * turn, pressCheckSidewaysInFrame);
         }
 
         // The thumb stays on the gun from the knuckle out (it turns with the gun, against the hand): the joint the gun turns about, the
-        // palm's turn in the gun now, that joint's turn in the gun at the start (HandsInteractionController.PressCheckHook sets it)
+        // palm's turn on the gun now, that joint's turn at the start, both in the marker's frame (HandsInteractionController.PressCheckHook)
         public static bool TryGetPressCheckThumb(out int thumbJoint, out Quaternion palmInGun, out Quaternion thumbJointInGun)
         {
             thumbJoint = pressCheckPivotThumbJoint;
-            palmInGun = HandTurnOnGun() * pressCheckPalmTurnInGun;
-            thumbJointInGun = pressCheckThumbInGun;
+            palmInGun = HandTurnInFrame() * pressCheckPalmTurnInFrame;
+            thumbJointInGun = pressCheckThumbInFrame;
             return pressCheckFor != null;
         }
 
@@ -289,19 +310,20 @@ namespace TarkovVR.Source.Weapons
             if (pressCheckMarker == null || pressCheckGunMarker == null || pressCheckFor == null)
                 return;
             Transform gun = pressCheckFor.WeaponRoot;
-            Quaternion turn = HandTurnOnGun();
-            float amount = Mathf.SmoothStep(0f, 1f, pressCheckShown);
-            Vector3 palmInGun = pressCheckPivotInGun + turn * (pressCheckPalmInGun - pressCheckPivotInGun)
-                - pressCheckHandOffset * amount + Vector3.up * pressCheckPull;
-            Quaternion palmTurnInGun = turn * pressCheckPalmTurnInGun;
-            Vector3 palm = gun.position + gun.rotation * palmInGun;
-            Quaternion palmRotation = gun.rotation * palmTurnInGun;
-            Quaternion markerRotation = palmRotation * Quaternion.Inverse(pressCheckPalmTurnInMarker);
-            Vector3 markerPosition = palm - markerRotation * pressCheckPalmInMarker;
-
             Transform frame = pressCheckMarker.parent;
-            pressCheckMarker.localPosition = frame.InverseTransformPoint(markerPosition);
-            pressCheckMarker.localRotation = Quaternion.Inverse(frame.rotation) * markerRotation;
+            Quaternion turn = HandTurnInFrame();
+            float amount = Mathf.SmoothStep(0f, 1f, pressCheckShown);
+            // The palm on the gun, in the frame: turned about the knuckle, moved back with the slide, the live offset on top
+            Vector3 palm = pressCheckPivotInFrame + turn * (pressCheckPalmInFrame - pressCheckPivotInFrame)
+                + pressCheckBackMetreInFrame * pressCheckPull - frame.InverseTransformVector(gun.rotation * pressCheckHandOffset) * amount;
+            Quaternion palmTurn = turn * pressCheckPalmTurnInFrame;
+            // EFT's marker for that palm (the palm's offset against the marker is in metres, the frame may be scaled)
+            Quaternion markerTurn = palmTurn * Quaternion.Inverse(pressCheckPalmTurnInMarker);
+            Vector3 markerAt = palm - frame.InverseTransformVector(frame.rotation * (markerTurn * pressCheckPalmInMarker));
+            // And whatever the gun's own marker has been animated by since the start (it carries the hand's breathing), on ours
+            Quaternion markerMoved = pressCheckGunMarker.localRotation * Quaternion.Inverse(pressCheckGunMarkerStartRotation);
+            pressCheckMarker.localPosition = pressCheckGunMarker.localPosition + markerMoved * (markerAt - pressCheckGunMarkerStartPosition);
+            pressCheckMarker.localRotation = markerMoved * markerTurn;
 
             EFT.Player player = VRGlobals.player;
             if (player != null && player._markers.Length > 1 && player._markers[1] != pressCheckMarker)
@@ -329,8 +351,9 @@ namespace TarkovVR.Source.Weapons
                 pressCheckHolderRest = holder.localRotation;
                 pressCheckGunInHolder = Quaternion.Inverse(holder.rotation) * pressCheckFor.WeaponRoot.rotation;
             }
-            // The gun's rotation in its own frame = the hand's turn on it, undone
-            Quaternion gunTurn = Quaternion.Inverse(HandTurnOnGun());
+            // The gun's rotation in its own frame = the hand's turn on it, undone (the turn's in the marker's frame: into WeaponRoot's
+            // by that frame's rest pose in it, so EFT's sway moves gun and hand together on top instead of shaking the turn)
+            Quaternion gunTurn = Quaternion.Inverse(pressCheckFrameInGun * HandTurnInFrame() * Quaternion.Inverse(pressCheckFrameInGun));
             holder.localRotation = pressCheckHolderRest * pressCheckGunInHolder * gunTurn * Quaternion.Inverse(pressCheckGunInHolder);
         }
 
