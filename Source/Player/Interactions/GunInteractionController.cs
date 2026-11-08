@@ -320,7 +320,8 @@ public class GunInteractionController : MonoBehaviour
     {
         if (VRReloadController.MalfunctionClearsByHand(VRGlobals.firearmController))
             return true;
-        return (VRReloadController.ManualReloadActive() || VRReloadController.HandsLoadShotgun(VRGlobals.firearmController))
+        return (VRReloadController.ManualReloadActive() || VRReloadController.HandsLoadShotgun(VRGlobals.firearmController)
+                || VRReloadController.HandsLoadBoltAction(VRGlobals.firearmController))
             && VRGlobals.firearmController.Weapon.MalfState.State == EFT.InventoryLogic.Weapon.EMalfunctionState.None;
     }
 

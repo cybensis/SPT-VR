@@ -161,6 +161,17 @@ namespace TarkovVR.Source.Weapons
                 && firearmController._player.IsYourPlayer && TryGetBolt(firearmController, out _);
         }
 
+        // The hands load this bolt-action round by round through its open action (the Mosin's internal magazine, VRReloadController.Rounds):
+        // the off hand's weapon-part menu isn't needed (GunInteractionController.ManualReloadReplacesMenu; the bolt-actions with a detachable
+        // magazine already had it off, the Mosins kept it - his "yes, do the Mosins too")
+        public static bool HandsLoadBoltAction(FirearmController firearmController)
+        {
+            if (!singleRoundLoading || !ManualBoltOn(firearmController))
+                return false;
+            Weapon weapon = firearmController.Item;
+            return weapon != null && weapon.SupportsInternalReload && weapon.MustBoltBeOpennedForInternalReload;
+        }
+
         private static BoltState BoltStateOf(Weapon weapon)
         {
             if (!boltStates.TryGetValue(weapon, out BoltState state))
