@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using EFT;
 using EFT.InventoryLogic;
+using RootMotion.FinalIK;
+using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -34,8 +36,16 @@ namespace TarkovVR.Source.Weapons
         public static float shellFinishSpeed = 0.35f;       // m/s the rest of the way once it's in
         public static float shellFollowSpeed = 1.2f;        // m/s the shell follows the hand along the path at most (no jumps)
         public static float shellSnapTime = 0.08f;          // s the shell eases from the hand onto the path
-        public static float pumpDeadzone = 0.015f;          // m the support hand comes back before the pump moves
-        public static float pumpRestFollowTime = 0.6f;      // s the closed pump's rest follows a slow drift of the hands (no creeping open)
+        // m the support hand comes back before the pump moves (headset round 1: 1.5 cm was "a bit too easy to accidentally pull")
+        public static float pumpDeadzone = 0.035f;
+        public static float pumpRestFollowTime = 0.4f;      // s the closed pump's rest follows a slow drift of the hands (no creeping open)
+        // After a shot the pump is the hand's (his round 1: "shooting automatically does a pump after each shot"): Tarkov's pump after the
+        // shot is skipped (BoltActionPatches, like a bolt-action's bolt), the fired shell stays in and the trigger is dead until the pump
+        // has been all the way back. false = Tarkov pumps after every shot.
+        public static bool pumpAfterShotByHand = true;
+        // The support hand rides the pump (round 1: "the hand does not seem to move with the pump"): Tarkov's IK holds it on the foregrip's
+        // grip pose, which isn't one of the stroke's bones; while the pump is open the left arm aims at our point on the pump instead
+        public static bool pumpHandFollows = true;
         public static float pumpFullBack = 0.92f;           // share of the stroke that counts as all the way back
         public static bool shotgunDebugLog = true;          // grabs, paths, strokes (on for its first headset rounds)
 
@@ -52,7 +62,7 @@ namespace TarkovVR.Source.Weapons
                 if (InsertingShell)
                     return true;
                 FirearmController firearmController = VRGlobals.firearmController;
-                if (firearmController == null || firearmController.Item == null || !pumpStates.TryGetValue(firearmController.Item, out PumpState state) || state.open <= 0f)
+                if (firearmController == null || firearmController.Item == null || !pumpStates.TryGetValue(firearmController.Item, out PumpState state) || (state.open <= 0f && !state.spentCase))
                     return false;
                 return ManualShotgunOn(firearmController, out ShotgunData data) && PumpMode(firearmController.Item, data);
             }
@@ -811,6 +821,7 @@ namespace TarkovVR.Source.Weapons
             public float open;              // 0 = closed .. 1 = all the way back
             public bool backThisStroke;     // has been all the way back since it was last closed
             public bool roundShown;         // Tarkov's rechamber already showed the next shell
+            public bool spentCase;          // fired, the pump not worked since (pumpAfterShotByHand)
         }
         private static readonly Dictionary<Weapon, PumpState> pumpStates = new Dictionary<Weapon, PumpState>();
         private static float pumpRestDistance;              // the two controllers' distance with the pump closed
@@ -827,8 +838,16 @@ namespace TarkovVR.Source.Weapons
             return state;
         }
 
-        // From Tick: the support hand on the pump moves it
+        // From Tick: the support hand on the pump moves it, and rides it
         private static void TickShotgun()
+        {
+            pumpHandWanted = false;
+            TickPump();
+            if (!pumpHandWanted)
+                ReleasePumpHand();
+        }
+
+        private static void TickPump()
         {
             FirearmController firearmController = VRGlobals.firearmController;
             if (!ManualShotgunOn(firearmController, out ShotgunData data) || !VRGlobals.inGame || VRGlobals.vrPlayer == null
@@ -892,6 +911,7 @@ namespace TarkovVR.Source.Weapons
             else if (state.open <= 0f && pull < pumpDeadzone)
                 pumpRestDistance = Mathf.Lerp(pumpRestDistance, distance, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(pumpRestFollowTime, 0.01f)));
             MovePump(firearmController, state, Mathf.Clamp01((pull - pumpDeadzone) / span));
+            DrivePumpHand(firearmController, data, state);
         }
 
         // The stroke sounds are the whole stroke (the M870's pump back 0.34 s, the M3's 0.77): each plays as its stroke starts, once
@@ -939,6 +959,18 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             state.backThisStroke = true;
             Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
+            // The shot's fired shell: out of the port (Tarkov's own flying shell, from where the shot put it). Tarkov counted the next one
+            // into the chamber at the shot; it comes up now and is chambered as the pump closes.
+            if (state.spentCase)
+            {
+                state.spentCase = false;
+                state.roundShown = false;
+                firearmController.Firearms.StartSpawnShell(firearmController._player.Velocity * 0.66f);
+                syncShellsThrown++;   // co-op: other players' copies throw theirs now (VRReloadController.Sync)
+                if (shotgunDebugLog)
+                    Plugin.MyLog.LogInfo($"[VRShotgun] pump back: the fired shell comes out, chamber {weapon.ChamberAmmoCount}");
+                return;
+            }
             if (weapon.ChamberAmmoCount == 0 || WaitingForRack(weapon))
             {
                 state.roundShown = false;
@@ -983,7 +1015,101 @@ namespace TarkovVR.Source.Weapons
             state.open = 0f;
             state.backThisStroke = false;
             state.roundShown = false;
+            state.spentCase = false;
             ReturnPortShell();
+        }
+
+        // The shot is out (FireOperation.OnFireEvent, BoltActionPatches): true = the pump after it is the hand's, the caller skips Tarkov's
+        // (its fire operation fast-forwarded to idle: no pump animation, no shell thrown, no round shown). Not on a malfunction.
+        public static bool PumpShotFired(FirearmController firearmController)
+        {
+            if (!pumpAfterShotByHand || !ManualShotgunOn(firearmController, out ShotgunData data) || !PumpMode(firearmController.Item, data)
+                || firearmController.Item.MalfState.State != Weapon.EMalfunctionState.None)
+                return false;
+            PumpState state = PumpStateOf(firearmController.Item);
+            state.spentCase = true;
+            state.backThisStroke = false;
+            state.roundShown = false;
+            // Its last shell: Tarkov's catch would hold the pump back, which the skipped pump never did - closed, the fired shell in
+            if (firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch())
+                firearmController.FirearmsAnimator.SetBoltCatch(false);
+            if (shotgunDebugLog)
+                Plugin.MyLog.LogInfo($"[VRShotgun] shot: the fired shell stays in until the pump, chamber {firearmController.Item.ChamberAmmoCount}");
+            return true;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The support hand on the pump
+
+        private static Transform pumpHandTarget;            // ours, under the weapon frame: where the left arm aims while the pump is open
+        private static bool pumpHandDriving;
+        private static bool pumpHandWanted;                 // this tick
+        private static FirearmController pumpHandOffsetFor;
+        private static Vector3 palmInMarkerPosition;        // the rendered palm on the gun's left marker with the pump closed
+        private static Quaternion palmInMarkerRotation = Quaternion.identity;
+
+        // From TickShotgun, two-handing a pump gun: closed, where the hand sits on the gun's left marker (Tarkov's IK puts it there, onto the
+        // foregrip's grip pose); open, the arm aims there on the marker as the pump has it
+        private static void DrivePumpHand(FirearmController firearmController, ShotgunData data, PumpState state)
+        {
+            if (!pumpHandFollows || Handedness.GunInLeftHand || VRGlobals.ikManager == null || VRGlobals.ikManager.leftArmIk == null)
+                return;
+            // The marker bone the stroke's keys move (the same one Tarkov's IK reads while two-handing), its keys local to its parent
+            Transform frame = ShotgunFrame(firearmController);
+            Transform palm = ArmPalm(rightArm: false);
+            int markerBone = data.pumpBonePaths != null ? System.Array.IndexOf(data.pumpBonePaths, "weapon_L_IK_marker") : -1;
+            if (frame == null || palm == null || markerBone < 0 || !EnsurePumpBones(firearmController, data, frame))
+                return;
+            Transform marker = pumpBones[markerBone];
+            if (marker == null)
+                return;
+            if (state.open <= 0f)
+            {
+                // Read off the last frame's solved hand (Update: what it rendered), on the marker as the animator had it
+                Quaternion toMarker = Quaternion.Inverse(marker.rotation);
+                palmInMarkerPosition = toMarker * (palm.position - marker.position);
+                palmInMarkerRotation = toMarker * palm.rotation;
+                pumpHandOffsetFor = firearmController;
+                return;
+            }
+            if (pumpHandOffsetFor != firearmController)
+            {
+                // Taken already open (a catch held it back): on the marker itself until it has been closed once
+                palmInMarkerPosition = Vector3.zero;
+                palmInMarkerRotation = Quaternion.identity;
+                pumpHandOffsetFor = firearmController;
+            }
+            Vector3[] positions = data.pumpPositions[markerBone];
+            Quaternion[] rotations = data.pumpRotations[markerBone];
+            if (positions.Length < 2)
+                return;
+            float scaled = Mathf.Clamp01(state.open) * (positions.Length - 1);
+            int index = Mathf.Min(Mathf.FloorToInt(scaled), positions.Length - 2);
+            float blend = scaled - index;
+            Transform markerParent = marker.parent != null ? marker.parent : frame;
+            Vector3 markerPosition = markerParent.TransformPoint(Vector3.Lerp(positions[index], positions[index + 1], blend));
+            Quaternion markerRotation = markerParent.rotation * Quaternion.Slerp(rotations[index], rotations[index + 1], blend);
+            if (pumpHandTarget == null)
+                pumpHandTarget = new GameObject("VRPumpHand").transform;
+            if (pumpHandTarget.parent != frame)
+                pumpHandTarget.SetParent(frame, worldPositionStays: false);
+            pumpHandTarget.SetPositionAndRotation(markerPosition + markerRotation * palmInMarkerPosition, markerRotation * palmInMarkerRotation);
+            VRGlobals.ikManager.leftArmIk.solver.target = pumpHandTarget;
+            pumpHandDriving = true;
+            pumpHandWanted = true;
+        }
+
+        // Back to Tarkov's IK (two-handing: no target), or the controller if the hand left the gun meanwhile
+        private static void ReleasePumpHand()
+        {
+            if (!pumpHandDriving)
+                return;
+            pumpHandDriving = false;
+            LimbIK leftArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null;
+            if (leftArmIk == null || leftArmIk.solver.target != pumpHandTarget)
+                return;
+            bool supporting = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
+            leftArmIk.solver.target = supporting || VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null ? null : VRGlobals.vrPlayer.LeftHand.transform;
         }
 
         private static bool EnsurePumpBones(FirearmController firearmController, ShotgunData data, Transform frame)

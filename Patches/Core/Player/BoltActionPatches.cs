@@ -16,8 +16,15 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.Player.FirearmController.FireOperation), nameof(EFT.Player.FirearmController.FireOperation.OnFireEvent))]
         private static void BoltStaysShut(EFT.Player.FirearmController.FireOperation __instance)
         {
+            // A pump shotgun's shot, the pump by hand (VRReloadController.Shotgun): its pump after the shot doesn't play either. Its fire
+            // operation is the plain one; FIKA already has the shot (MakeShot ran in this event), the other players' copies pump on their own.
             if (!(__instance is EFT.Player.FirearmController.BoltActionFireOperation))
+            {
+                EFT.Player.FirearmController shotgunController = __instance.Controller;
+                if (shotgunController != null && shotgunController.CurrentOperation == __instance && VRReloadController.PumpShotFired(shotgunController))
+                    shotgunController.FastForwardCurrentState();
                 return;
+            }
             EFT.Player.FirearmController controller = __instance.Controller;
             if (controller == null || controller.CurrentOperation != __instance)
                 return;
