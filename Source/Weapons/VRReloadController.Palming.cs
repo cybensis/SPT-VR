@@ -201,7 +201,7 @@ namespace TarkovVR.Source.Weapons
                     Quaternion handRotation = oldProp.transform.rotation;
                     CommitHold();
                     RunDrop(oldMagazine, firearmController, handPosition, handRotation, OffHandWorldVelocity());
-                    PlayGunSound(firearmController, "MagOut", SoundHand.OffHand.Seating);
+                    PlayFirstGunSound(firearmController, SoundHand.OffHand.Seating, MAG_OUT_SOUNDS);
                 }
                 else
                 {
@@ -240,7 +240,7 @@ namespace TarkovVR.Source.Weapons
             freeHoldRotation = newRotation;
             magazineHandFingers = activePalmHold.fingers;
 
-            PlayGunSound(firearmController, "MagOut", SoundHand.OffHand.Seating);
+            PlayFirstGunSound(firearmController, SoundHand.OffHand.Seating, MAG_OUT_SOUNDS);
             Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
             LogAction($"[VRReload] {oldMagazine.LocalizedShortName()} out and in the hand, {newMagazine.LocalizedShortName()} next");
         }
@@ -367,7 +367,7 @@ namespace TarkovVR.Source.Weapons
             }
             else
             {
-                PlayGunSound(palmedFor, "MagSbrosnik", SoundHand.OffHandAlone);
+                PlayFirstGunSound(palmedFor, SoundHand.OffHandAlone, MAG_INTO_POUCH_SOUNDS);
                 Pulse(SoundHand.OffHandAlone, 0.4f, 0.05f);
             }
             DropPalmedModel();

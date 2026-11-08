@@ -374,7 +374,7 @@ namespace TarkovVR.Source.Weapons
             HoldingRound = true;
             ShowShellHoldFingers();
             PlaceHeldRound();
-            PlayFirstGunSound(firearmController, gunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone, "ShellOutRig");
+            PlayFirstGunSound(firearmController, gunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone, "ShellOutRig", "AmmoCatch");
             PulseRoundHand(gunHand, 0.25f, 0.03f);
             if (shotgunDebugLog)
                 Plugin.MyLog.LogInfo($"[VRShotgun] took a shell of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack) in the {(gunHand ? "gun" : "off")} hand, "
@@ -605,9 +605,9 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             SoundHand hand = roundInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
             if (shellIntoPort)
-                PlayFirstGunSound(firearmController, hand, "ShellInPort", "ShellIn", "LoadOne", "AmmoIn", "PatronIn");
+                PlayFirstGunSound(firearmController, hand, "ShellInPort", "ShellInsert", "LoadOne", "ShellIn", "AmmoIn");
             else
-                PlayFirstGunSound(firearmController, hand, "ShellIn", "LoadOne", "AmmoIn", "PatronIn");
+                PlayFirstGunSound(firearmController, hand, "ShellIn", "LoadOne", "AmmoIn");
             Pulse(hand.Seating, 0.45f, 0.04f);
             bool pumpGun = PumpMode(weapon, heldShell);
             GameObject prop = heldRoundProp;
@@ -865,6 +865,9 @@ namespace TarkovVR.Source.Weapons
                 state.open = 1f;
                 state.backThisStroke = true;
                 state.roundShown = false;
+                pumpBackSounded = true;
+                pumpForwardSounded = false;
+                pumpPeak = 1f;
             }
             bool working = VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached && !VRGlobals.menuOpen && !HoldingRound
                 && weapon.MalfState.State == Weapon.EMalfunctionState.None;
@@ -891,10 +894,32 @@ namespace TarkovVR.Source.Weapons
             MovePump(firearmController, state, Mathf.Clamp01((pull - pumpDeadzone) / span));
         }
 
+        // The stroke sounds are the whole stroke (the M870's pump back 0.34 s, the M3's 0.77): each plays as its stroke starts, once
+        private static bool pumpBackSounded, pumpForwardSounded;
+        private static float pumpPeak;
+
         private static void MovePump(FirearmController firearmController, PumpState state, float open)
         {
             float previous = state.open;
             state.open = open;
+            if (!pumpBackSounded && previous < 0.1f && open >= 0.1f)
+            {
+                pumpBackSounded = true;
+                pumpForwardSounded = false;
+                PlayFirstGunSound(firearmController, SoundHand.OffHand, "PumpBack", "PumpOut", "BoltOut", "SlideOut");
+            }
+            pumpPeak = Mathf.Max(pumpPeak, open);
+            if (!pumpForwardSounded && pumpPeak >= 0.3f && open <= pumpPeak - 0.1f)
+            {
+                pumpForwardSounded = true;
+                PlayFirstGunSound(firearmController, SoundHand.OffHand, "PumpForward", "PumpIn", "BoltIn", "SlideIn");
+            }
+            if (open <= 0f)
+            {
+                pumpBackSounded = false;
+                pumpForwardSounded = false;
+                pumpPeak = 0f;
+            }
             if (previous <= 0f && open > 0f)
             {
                 Pulse(SoundHand.OffHand, 0.15f, 0.02f);
@@ -913,7 +938,6 @@ namespace TarkovVR.Source.Weapons
         {
             Weapon weapon = firearmController.Item;
             state.backThisStroke = true;
-            PlayFirstGunSound(firearmController, SoundHand.OffHand, "PumpBack", "PumpOut", "BoltOut", "SlideOut");
             Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
             if (weapon.ChamberAmmoCount == 0 || WaitingForRack(weapon))
             {
@@ -934,7 +958,6 @@ namespace TarkovVR.Source.Weapons
         private static void PumpClosed(FirearmController firearmController, PumpState state)
         {
             Weapon weapon = firearmController.Item;
-            PlayFirstGunSound(firearmController, SoundHand.OffHand, "PumpForward", "PumpIn", "BoltIn", "SlideIn");
             Pulse(SoundHand.OffHand.Seating, 0.6f, 0.05f);
             if (firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch())
                 firearmController.FirearmsAnimator.SetBoltCatch(false);

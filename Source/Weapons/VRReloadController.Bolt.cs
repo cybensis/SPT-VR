@@ -95,6 +95,11 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 controllerToKnob;            // at the grab, in the gun body's rotation (m)
         private static Vector3[] boltHandFingers;
         private static bool loggedBoltSounds;
+        // The stroke's sounds, once each per stroke: guns name and cut them differently (the M700's four short ones - BoltOpen the lift,
+        // BoltBack, BoltForward, BoltClose the turn down; the Mosin's two long ones - BoltOut = "bolt toward you" 0.55 s, BoltIn = "away"
+        // 0.45 s - which only fit from the start of the movement; the DVL-10's BoltStart / BoltOut / BoltIn / BoltEnd)
+        private static bool boltPullSounded, boltPushSounded;
+        private static float boltSlidePeak;
         private static GameObject boltZoneViz;
 
         // The chamber while the bolt is open (from leaving closed until closed again), like the charging handle's: Tarkov's round
@@ -357,6 +362,13 @@ namespace TarkovVR.Source.Weapons
             }
             if (boltDebugLog)
                 Plugin.MyLog.LogInfo($"[VRReload] took the bolt ({(gunHand ? "gun" : "off")} hand), turn {state.turn:0.00} slide {state.slide:0.00}, spent case {state.spentCase}, chamber {firearmController.Item.ChamberAmmoCount}, waiting for rack {WaitingForRack(firearmController.Item)}");
+            if (state.Closed)
+            {
+                boltPullSounded = false;
+                boltPushSounded = false;
+                boltSlidePeak = 0f;
+            }
+            PlayGrabSound(firearmController, BoltSoundHand);
             PulseBoltHand(0.3f, 0.04f);
         }
 
@@ -407,11 +419,21 @@ namespace TarkovVR.Source.Weapons
             PlaceBoltKnob(state, bolt);
             ApplyBoltBones(state, bolt);
 
+            // A gun with one long sound for the whole opening (the Mosin's, the AXMC's 0.9 s) plays it as the handle starts up
+            if (!boltPullSounded && previousTurn <= 0.1f && state.turn > 0.1f && state.slide <= 0f
+                && !GunHasSound(boltForFirearm, "BoltOpen", "BoltStart", "BoltUp", "HandleUp", "BoltBack"))
+                boltPullSounded = PlayFirstGunSound(boltForFirearm, BoltSoundHand, "BoltOut", "HandleOut", "SlideOut");
             if (previousTurn < boltTurnedUp && state.turn >= boltTurnedUp)
             {
-                PlayFirstGunSound(boltForFirearm, BoltSoundHand, "BoltUp", "BoltOpen", "HandleUp");
+                PlayFirstGunSound(boltForFirearm, BoltSoundHand, "BoltOpen", "BoltStart", "BoltUp", "HandleUp");
                 PulseBoltHand(0.25f, 0.03f);
             }
+            // The pull, as it starts; the push back, as it starts (from at least halfway back); the turn down at the end
+            if (!boltPullSounded && previousSlide < 0.08f && state.slide >= 0.08f)
+                boltPullSounded = PlayFirstGunSound(boltForFirearm, BoltSoundHand, "BoltBack", "BoltOut", "HandleOut", "SlideOut");
+            boltSlidePeak = Mathf.Max(boltSlidePeak, state.slide);
+            if (!boltPushSounded && boltSlidePeak >= 0.5f && state.slide <= boltSlidePeak - 0.08f)
+                boltPushSounded = PlayFirstGunSound(boltForFirearm, BoltSoundHand, "BoltForward", "BoltIn", "HandleIn", "SlideIn");
             if (!state.backThisStroke && state.slide >= boltFullBack)
             {
                 state.backThisStroke = true;
@@ -431,7 +453,9 @@ namespace TarkovVR.Source.Weapons
         private static void BoltAllTheWayBack(FirearmController firearmController, BoltState state)
         {
             Weapon weapon = firearmController.Item;
-            PlayFirstGunSound(firearmController, BoltSoundHand, "BoltOut", "BoltBack", "HandleOut", "SlideOut");
+            // Its pull sound went with the start of the pull (UpdateHeldBolt); a gun that had none there gets it here
+            if (!boltPullSounded)
+                boltPullSounded = PlayFirstGunSound(firearmController, BoltSoundHand, "BoltBack", "BoltOut", "HandleOut", "SlideOut");
             PulseBoltHand(0.5f, 0.04f);
             // A malfunction: cleared as the bolt closes, by Tarkov's repair, which throws the round out itself
             if (MalfunctionRackedBack(firearmController))
@@ -475,7 +499,12 @@ namespace TarkovVR.Source.Weapons
         {
             Weapon weapon = firearmController.Item;
             EndBoltChamberView();
-            PlayFirstGunSound(firearmController, BoltSoundHand, "BoltIn", "BoltDown", "HandleIn", "SlideIn");
+            // The turn down's own sound (the M700's BoltClose, the DVL-10's BoltEnd); a gun with only BoltIn has it here unless the push did
+            if (!PlayFirstGunSound(firearmController, BoltSoundHand, "BoltClose", "BoltEnd", "BoltDown") && !boltPushSounded)
+                PlayFirstGunSound(firearmController, BoltSoundHand, "BoltIn", "HandleIn", "SlideIn");
+            boltPullSounded = false;
+            boltPushSounded = false;
+            boltSlidePeak = 0f;
             PulseBoltHand(0.6f, 0.05f);
             // Cycled all the way on a malfunction: closing it clears it (Tarkov's repair chambers and shows the next round). The bolt's
             // own stroke, not this grab's: it may have been let go open and taken again.

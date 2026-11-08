@@ -358,7 +358,7 @@ namespace TarkovVR.Source.Weapons
             bool releaseLetGo = !releaseState && previousReleaseState;
             if (releasePressed)
             {
-                PlayGunSound(VRGlobals.firearmController, "Button", ReleasePressingHand(VRGlobals.firearmController));
+                PlayFirstGunSound(VRGlobals.firearmController, ReleasePressingHand(VRGlobals.firearmController), MAG_BUTTON_SOUNDS);
                 if (OffHandPressesCatch(VRGlobals.firearmController))
                     Pulse(0.25f, 0.03f);
                 else
@@ -763,7 +763,7 @@ namespace TarkovVR.Source.Weapons
             if (debugLog)
                 LogAction($"[VRReload] grabbed gun magazine {magazine.LocalizedShortName()}, track axis {railAxisInWell.ToString("F2")}");
             if (!VRSettings.GetManualReloadOn())
-                PlayGunSound(firearmController, "Button");
+                PlayFirstGunSound(firearmController, SoundHand.OffHand, MAG_BUTTON_SOUNDS);
             Pulse(0.35f, 0.05f);
         }
 
@@ -782,7 +782,7 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 LogAction($"[VRReload] took {magazine.LocalizedShortName()} ({magazine.Count} rounds) from the pouch");
-            PlayGunSound(firearmController, "MagPullOut", SoundHand.OffHandAlone);
+            PlayFirstGunSound(firearmController, SoundHand.OffHandAlone, MAG_FROM_POUCH_SOUNDS);
             Pulse(SoundHand.OffHandAlone, 0.35f, 0.05f);
         }
 
@@ -1124,7 +1124,7 @@ namespace TarkovVR.Source.Weapons
                 if (heldSource == HeldMagazineSource.FromGun)
                 {
                     // The gun's own magazine pushed back in: nothing changed in the inventory
-                    PlayGunSound(heldForFirearm, "MagIn", SoundHand.OffHand.Seating);
+                    PlayFirstGunSound(heldForFirearm, SoundHand.OffHand.Seating, MAG_IN_SOUNDS);
                     Pulse(SoundHand.OffHand.Seating, 0.6f, 0.06f);
                     CancelHold();
                     if (!gripReleased)
@@ -1231,7 +1231,7 @@ namespace TarkovVR.Source.Weapons
                 freeHoldRotation = grabRotation;
             }
             ReleaseHandLatch();
-            PlayGunSound(heldForFirearm, "MagOut", SoundHand.OffHand.Seating);
+            PlayFirstGunSound(heldForFirearm, SoundHand.OffHand.Seating, MAG_OUT_SOUNDS);
             Pulse(SoundHand.OffHand.Seating, 0.5f, 0.04f);
             if (debugLog)
                 LogAction($"[VRReload] {heldMagazine.LocalizedShortName()} out of the well: hand-local position {lastGrabPosition.ToString("F3")} rotation {lastGrabRotation.eulerAngles.ToString("F1")}");
@@ -1665,7 +1665,7 @@ namespace TarkovVR.Source.Weapons
             if (heldSource == HeldMagazineSource.FromPouch)
             {
                 // Never left the rig
-                PlayGunSound(heldForFirearm, "MagSbrosnik", SoundHand.OffHandAlone);
+                PlayFirstGunSound(heldForFirearm, SoundHand.OffHandAlone, MAG_INTO_POUCH_SOUNDS);
                 DestroyProp();
                 ClearHold();
                 return;
@@ -1679,7 +1679,7 @@ namespace TarkovVR.Source.Weapons
                     VRGlobals.player.InventoryController.TryRunNetworkTransaction(groundToRig);
                     if (debugLog)
                         LogAction($"[VRReload] {heldMagazine.LocalizedShortName()} off the ground put in the rig");
-                    PlayGunSound(heldForFirearm, "MagSbrosnik", SoundHand.OffHandAlone);
+                    PlayFirstGunSound(heldForFirearm, SoundHand.OffHandAlone, MAG_INTO_POUCH_SOUNDS);
                     Pulse(SoundHand.OffHandAlone, 0.4f, 0.05f);
                     DestroyProp();
                     ClearHold();
@@ -1758,7 +1758,7 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 LogAction($"[VRReload] seated {magazine.LocalizedShortName()}");
-            PlayGunSound(firearmController, "MagIn", SoundHand.OffHand.Seating);
+            PlayFirstGunSound(firearmController, SoundHand.OffHand.Seating, MAG_IN_SOUNDS);
             Pulse(SoundHand.OffHand.Seating, 0.8f, 0.07f);
             return true;
         }
@@ -1797,7 +1797,7 @@ namespace TarkovVR.Source.Weapons
 
             if (debugLog)
                 LogAction($"[VRReload] {magazine.LocalizedShortName()} put in the rig");
-            PlayGunSound(firearmController, "MagSbrosnik", SoundHand.OffHandAlone);
+            PlayFirstGunSound(firearmController, SoundHand.OffHandAlone, MAG_INTO_POUCH_SOUNDS);
             Pulse(SoundHand.OffHandAlone, 0.4f, 0.05f);
         }
 
@@ -1866,9 +1866,9 @@ namespace TarkovVR.Source.Weapons
         private static void PlayReleaseSounds(FirearmController firearmController)
         {
             if (!VRSettings.GetManualReloadOn())
-                PlayGunSound(firearmController, "Button", ReleasePressingHand(firearmController));
+                PlayFirstGunSound(firearmController, ReleasePressingHand(firearmController), MAG_BUTTON_SOUNDS);
             // Falls out of the gun the gun hand holds
-            PlayGunSound(firearmController, "MagOut", SoundHand.GunBody);
+            PlayFirstGunSound(firearmController, SoundHand.GunBody, MAG_OUT_SOUNDS);
         }
 
         private static SoundHand ReleasePressingHand(FirearmController firearmController)
@@ -2524,21 +2524,106 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The first of these the gun has: guns name the same sound differently (an AR's HandleOut, a pistol's SlideOut, an AK's BoltOut)
-        private static void PlayFirstGunSound(FirearmController firearmController, SoundHand hand, params string[] soundNames)
+        private static bool PlayFirstGunSound(FirearmController firearmController, SoundHand hand, params string[] soundNames)
         {
             BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
             if (soundPlayer == null)
-                return;
+                return false;
             foreach (string soundName in soundNames)
             {
                 string eventName = "Snd" + soundName;
                 if (soundPlayer.AdditionalSounds.Exists(sound => sound.EventName == soundName || sound.EventName == eventName))
                 {
                     PlayFelt(soundPlayer, soundName, hand);
-                    return;
+                    return true;
                 }
             }
+            return false;
         }
+
+        // The same, where a name can come in numbered takes (BoltPullTry1..4, Try1..3, StuckBolt1..3: the clips' takes of one sound): the
+        // first name the gun has any of wins, and its takes play in turn, so a tug after a tug doesn't sound the same. The bare name is
+        // one of its takes.
+        private static readonly Dictionary<string, int> soundTakesPlayed = new Dictionary<string, int>();
+        private static readonly List<string> soundTakes = new List<string>();
+
+        private static bool PlayVariedGunSound(FirearmController firearmController, SoundHand hand, params string[] soundNames)
+        {
+            BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
+            if (soundPlayer == null)
+                return false;
+            foreach (string soundName in soundNames)
+            {
+                soundTakes.Clear();
+                foreach (BaseSoundPlayer.SoundElement sound in soundPlayer.AdditionalSounds)
+                {
+                    string name = sound.EventName.StartsWith("Snd") ? sound.EventName.Substring(3) : sound.EventName;
+                    bool take = name == soundName || (name.Length == soundName.Length + 1 && name.StartsWith(soundName) && char.IsDigit(name[name.Length - 1]));
+                    if (take && !soundTakes.Contains(name))
+                        soundTakes.Add(name);
+                }
+                if (soundTakes.Count == 0)
+                    continue;
+                soundTakes.Sort(string.CompareOrdinal);
+                soundTakesPlayed.TryGetValue(soundName, out int played);
+                soundTakesPlayed[soundName] = played + 1;
+                PlayFelt(soundPlayer, soundTakes[played % soundTakes.Count], hand);
+                return true;
+            }
+            return false;
+        }
+
+        // Taking hold of a handle / bolt / slide: the gun's own grab sound, a stuck one's on a hard slide
+        private static void PlayGrabSound(FirearmController firearmController, SoundHand hand)
+        {
+            if (firearmController.Item != null && firearmController.Item.MalfState.State == Weapon.EMalfunctionState.HardSlide
+                && PlayVariedGunSound(firearmController, hand, STUCK_GRAB_SOUNDS))
+                return;
+            PlayVariedGunSound(firearmController, hand, GRAB_SOUNDS);
+        }
+
+        // Whether the gun has any of these sounds (or a numbered take of one)
+        private static bool GunHasSound(FirearmController firearmController, params string[] soundNames)
+        {
+            BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
+            if (soundPlayer == null)
+                return false;
+            foreach (BaseSoundPlayer.SoundElement sound in soundPlayer.AdditionalSounds)
+            {
+                string name = sound.EventName.StartsWith("Snd") ? sound.EventName.Substring(3) : sound.EventName;
+                foreach (string soundName in soundNames)
+                {
+                    if (name == soundName || (name.Length == soundName.Length + 1 && name.StartsWith(soundName) && char.IsDigit(name[name.Length - 1])))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        // What each gun calls the same action's sound, first found wins: read from every gun's own sound list (its BaseSoundPlayer in the
+        // game's bundles, 2026-11-08), the meaning from the clip each name plays (e.g. the AK's StuckBoltOut = ak_jam_stuckbolt_in1-3,
+        // the M4's Jam1-2 = ar_jam_boltlock_try1-2, the Glock's Try1-3 = pistol_jam_slidelock_try, the M3's ButtonRelease =
+        // m3_bolt_release_button, the Mosin's AmmoInHand = ak74_round_in_chamber and RoundIn = mosin_round_load)
+        private static readonly string[] MAG_BUTTON_SOUNDS = { "Button", "MagButton", "MagRelease", "MagButtonStanag", "ButtonDown" };
+        private static readonly string[] MAG_OUT_SOUNDS = { "MagOut", "MagOut1", "MagOut_0", "MagOutStanag", "MagOutDrum" };
+        private static readonly string[] MAG_IN_SOUNDS = { "MagIn", "MagIn1", "MagIn_0", "MagInStanag", "MagInDrum" };
+        private static readonly string[] MAG_FROM_POUCH_SOUNDS = { "MagPullOut", "MagPullOff", "MagPullOut_0" };
+        private static readonly string[] MAG_INTO_POUCH_SOUNDS = { "MagSbrosnik", "MagPullIn" };
+        // Taking hold of a handle, bolt or slide
+        private static readonly string[] GRAB_SOUNDS = { "HandleGrab", "BoltGrab", "GrabHandle", "SlideGrab", "BoltLockGrab", "HandleTouch", "Touch", "HandTouch" };
+        // ... of one that's stuck (a hard slide): an AR's / pistol's grab of the locked bolt or slide
+        private static readonly string[] STUCK_GRAB_SOUNDS = { "JamGrab", "JamSlideGrab" };
+        // A tug on a stuck bolt / slide, and the one that frees it
+        private static readonly string[] STUCK_TUG_SOUNDS = { "StuckBoltOut", "StuckBolt", "BoltPullTry", "JamHandlePull", "BoltOutTry", "Try", "JamTry", "BoltTry",
+            "SlideTry", "BoltOutFail", "SlideOutFail", "Jam", "JamRattle", "JamHit", "SliderJammed", "Rattle", "GunRattle" };
+        private static readonly string[] STUCK_FREE_SOUNDS = { "StuckBoltMoving", "StuckBoltHit", "JamBoltOut", "JamHandleHit", "BoltHit", "JamHit", "SliderJammed", "JamRattle" };
+        // The bolt catching back (empty magazine), and letting go of it: the catch's click, then the bolt home
+        private static readonly string[] CATCH_ON_SOUNDS = { "OnBoltCatch", "BoltCatch", "CatchEngage", "SlideLock" };
+        private static readonly string[] CATCH_OFF_SOUNDS = { "OffBoltCatch", "ButtonRelease", "BoltCatchRelease", "CatchRelease", "OffCatch", "BoltCatchButton", "CatchSlider", "CatchButton" };
+        private static readonly string[] BOLT_HOME_SOUNDS = { "BoltInFast", "BoltInCatch", "SlideIn", "BoltIn", "HandleIn", "PumpForward" };
+        // The stuck case of a failure to eject: taken, then out
+        private static readonly string[] CASE_GRAB_SOUNDS = { "JamShellGrab", "ShellGrab" };
+        private static readonly string[] CASE_OUT_SOUNDS = { "JamShellRemove", "JamRemoveShell", "JamShellRemoveJam", "ShellRemove", "ShellRemoved", "ShellJamOff", "ShellPullout", "ShellPull" };
 
         private static BaseSoundPlayer GunSoundPlayerOf(FirearmController firearmController)
         {

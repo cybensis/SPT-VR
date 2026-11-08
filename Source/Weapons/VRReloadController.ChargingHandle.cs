@@ -163,6 +163,7 @@ namespace TarkovVR.Source.Weapons
         private static KnobFold foldingKnobFold;
         private static FirearmController foldingKnobFor;
         private static float knobFoldShown;
+        private static bool knobFoldWasOut;                 // held out last frame (its fold back plays a sound)
         private static Vector3[] handleHandFingers;         // null = no clip read for this gun yet: the magazine pull's pinch
         private static float heldHandleTravel;              // m this gun's handle comes back
 
@@ -524,6 +525,11 @@ namespace TarkovVR.Source.Weapons
                     $"round model shown: {(patron != null ? $"{patron.gameObject.activeSelf} ({patron.childCount} child)" : "no patron_in_weapon")}, gun hand: {gunHand}, hold from a clip: {grip != null}, " +
                     $"knob: {(foundHandleKnobs != null ? (grabbedKnob == 0 ? "left" : "right") : "one")}, carrier: {(handleCarrier != null ? handleCarrier.name : "none")}");
             }
+            // Taking it: a knob that folds out as it's taken (the MDR's paddles, the Spear's side handle) has its own sound (HandleOpen =
+            // a handle grab clip on both), else the gun's grab sound (a stuck one's on a hard slide)
+            bool knobFolds = (foldingKnob != null && foldingKnobFor == firearmController) || heldSideHandle != null;
+            if (!(knobFolds && PlayFirstGunSound(firearmController, HandleSoundHand, "HandleOpen")))
+                PlayGrabSound(firearmController, HandleSoundHand);
             PulseHandleHand(0.3f, 0.04f);
         }
 
@@ -654,6 +660,7 @@ namespace TarkovVR.Source.Weapons
             }
             foldingKnobFold = folds[grabbedKnob];
             foldingKnobFor = firearmController;
+            knobFoldWasOut = false;
         }
 
         private static void PutFoldingKnobBack()
@@ -664,6 +671,7 @@ namespace TarkovVR.Source.Weapons
             foldingKnobFold = null;
             foldingKnobFor = null;
             knobFoldShown = 0f;
+            knobFoldWasOut = false;
         }
 
         // LateUpdate, after the animator: out while the handle is held, back after
@@ -678,6 +686,10 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
             bool folded = HoldingChargingHandle && handleForFirearm == foldingKnobFor;
+            // Let go: it folds back with its own sound (the MDR's HandleClose)
+            if (knobFoldWasOut && !folded)
+                PlayFirstGunSound(foldingKnobFor, SoundHand.GunBody, "HandleClose");
+            knobFoldWasOut = folded;
             knobFoldShown = Mathf.MoveTowards(knobFoldShown, folded ? 1f : 0f, Time.deltaTime / Mathf.Max(knobFoldTime, 0.001f));
             foldingKnob.localRotation = foldingKnobRest * Quaternion.AngleAxis(foldingKnobFold.angle * Mathf.SmoothStep(0f, 1f, knobFoldShown), foldingKnobFold.axis);
             if (!folded && knobFoldShown <= 0f)
@@ -792,6 +804,7 @@ namespace TarkovVR.Source.Weapons
             {
                 if (debugLog)
                     LogAction("[VRReload] empty magazine: the bolt locks back");
+                PlayVariedGunSound(firearmController, SoundHand.GunBody, CATCH_ON_SOUNDS);
                 firearmController.FirearmsAnimator.SetBoltCatch(true);
                 return;
             }

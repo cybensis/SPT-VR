@@ -823,7 +823,7 @@ namespace TarkovVR.Source.Weapons
                     if (debugLog)
                         LogAction($"[VRReload] hand at the bolt catch at {speed:0.00} m/s (slap from {boltSlapSpeed:0.00})");
                     if (speed >= boltSlapSpeed)
-                        ReleaseBolt(firearmController);
+                        ReleaseBolt(firearmController, slapped: true);
                 }
             }
             palmWasAtBoltCatch = atCatch;
@@ -873,7 +873,7 @@ namespace TarkovVR.Source.Weapons
         // A locked-back bolt runs forward, unless an empty magazine on an empty chamber holds it (its follower keeps the
         // catch up, as with the charging handle). Tarkov's insert already counted the round in the chamber; this clears
         // the same bolt-catch flag the charging handle does.
-        private static void ReleaseBolt(FirearmController firearmController)
+        private static void ReleaseBolt(FirearmController firearmController, bool slapped = false)
         {
             FirearmsAnimator firearmsAnimator = firearmController.FirearmsAnimator;
             Weapon weapon = firearmController.Item;
@@ -889,8 +889,13 @@ namespace TarkovVR.Source.Weapons
             SetBoltOpen(firearmsAnimator, 1f);
             boltReleaseFor = firearmController;
             boltReleaseStartTime = Time.time;
-            // The off hand pressed it; the bolt running home reaches every hand on the gun
-            PlayGunSound(firearmController, "BoltInFast", SoundHand.OffHand.Seating);
+            // The catch let go (a slap: the hand hitting it, an AR's HandHit), then the bolt running home: whatever this gun calls them
+            // (only BoltInFast before, which pistols, the SCAR, the Vector and the shotguns don't have). The MP5's, out of its notch: its slap.
+            SoundHand releaseHand = SoundHand.OffHand.Seating;
+            if (!(slapped && PlayFirstGunSound(firearmController, releaseHand, "HandHit")))
+                PlayFirstGunSound(firearmController, releaseHand, CATCH_OFF_SOUNDS);
+            if (!(slapped && HandleNotchOf(firearmController) != null && PlayFirstGunSound(firearmController, releaseHand, "BoltSlapIn", "BoltSlap")))
+                PlayFirstGunSound(firearmController, releaseHand, BOLT_HOME_SOUNDS);
             Pulse(SoundHand.OffHand.Seating, 0.7f, 0.05f);
         }
 

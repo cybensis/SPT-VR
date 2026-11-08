@@ -152,6 +152,8 @@ namespace TarkovVR.Source.Weapons
             if (DeflectorBlocksClearing(firearmController))
             {
                 malfunctionRackBlocked = true;
+                // The bolt knocks the case against the shut cover (the MDR's cover_hit takes)
+                PlayVariedGunSound(firearmController, SoundHand.GunBody, "CoverJam");
                 if (debugLog)
                     LogAction($"[VRReload] racked back on a {firearmController.Item.MalfState.State} with the deflector shut: not cleared");
                 return true;
@@ -172,8 +174,17 @@ namespace TarkovVR.Source.Weapons
             {
                 hardSlideTugging = true;
                 hardSlideTugsDone++;
-                PlayFirstGunSound(firearmController, hand, "JamRattle");
-                if (hardSlideTugsDone > hardSlideStuckTugs)
+                bool freed = hardSlideTugsDone > hardSlideStuckTugs;
+                // The gun's own: its first try (an AK's StuckBoltStart), its tug takes in turn, the one that frees it (only JamRattle before:
+                // six guns have that, so most tugs were silent)
+                if (freed)
+                {
+                    if (!PlayVariedGunSound(firearmController, hand, STUCK_FREE_SOUNDS))
+                        PlayVariedGunSound(firearmController, hand, STUCK_TUG_SOUNDS);
+                }
+                else if (!(hardSlideTugsDone == 1 && PlayFirstGunSound(firearmController, hand, "StuckBoltStart")))
+                    PlayVariedGunSound(firearmController, hand, STUCK_TUG_SOUNDS);
+                if (freed)
                 {
                     hardSlideFree = true;
                     Pulse(hand.Seating, 0.6f, 0.05f);
@@ -202,6 +213,7 @@ namespace TarkovVR.Source.Weapons
             bool caughtBack = repaired && BoltStaysBack(weapon) && !firearmController.FirearmsAnimator.GetBoltCatch();
             if (caughtBack)
             {
+                PlayVariedGunSound(firearmController, SoundHand.GunBody, CATCH_ON_SOUNDS);
                 firearmController.FirearmsAnimator.SetBoltCatch(true);
                 if (debugLog)
                     LogAction("[VRReload] malfunction cleared on an empty magazine: the bolt locks back");
@@ -257,7 +269,7 @@ namespace TarkovVR.Source.Weapons
             if (debugLog)
                 LogAction($"[VRReload] the stuck case taken out at the ejection port ({(gunHand ? "gun" : "off")} hand), no case model to hold");
             SoundHand hand = gunHand ? SoundHand.GunHand : SoundHand.OffHand;
-            PlayFirstGunSound(firearmController, hand, "ShellRemove", "ShellPull", "ShellGrab");
+            PlayFirstGunSound(firearmController, hand, CASE_OUT_SOUNDS);
             Pulse(hand, 0.45f, 0.04f);
             if (RepairByHand(firearmController))
                 NextRoundWaitsForRack(firearmController);
@@ -328,7 +340,7 @@ namespace TarkovVR.Source.Weapons
             controllerRotationAtJamGrabInGun = Quaternion.Inverse(weaponRoot.rotation) * controller.rotation;
             if (debugLog)
                 LogAction($"[VRReload] took the stuck case ({(gunHand ? "gun" : "off")} hand), model length {caseLength * 100f:0.0} cm, case shown {jamCaseShownHalfLength * 200f:0.0} cm long, {jamCaseRadius * 2000f:0.0} mm across");
-            PlayFirstGunSound(firearmController, JamCaseHand, "ShellGrab");
+            PlayFirstGunSound(firearmController, JamCaseHand, CASE_GRAB_SOUNDS);
             Pulse(JamCaseHand, 0.3f, 0.03f);
         }
 
@@ -497,7 +509,7 @@ namespace TarkovVR.Source.Weapons
             if (fraction < 1f || jamCaseWontClear)
                 return;
             // Out, with a knock through the gun
-            PlayFirstGunSound(jamCaseFor, JamCaseHand, "ShellPull", "ShellRemove");
+            PlayFirstGunSound(jamCaseFor, JamCaseHand, CASE_OUT_SOUNDS);
             Pulse(JamCaseHand.Seating, 0.7f, 0.05f);
             jamCaseOut = RepairByHand(jamCaseFor);
             if (!jamCaseOut)

@@ -128,6 +128,8 @@ namespace TarkovVR.Source.Weapons
             PointRoundAlongBore(firearmController);
             HoldingRound = true;
             PlaceHeldRound();
+            // The round taken (ak74_round_catch, where the gun has it)
+            PlayFirstGunSound(firearmController, gunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone, "AmmoCatch");
             PulseRoundHand(gunHand, 0.25f, 0.03f);
             if (debugLog)
                 LogAction($"[VRReload] took a round of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack) in the {(gunHand ? "gun" : "off")} hand, "
@@ -296,7 +298,12 @@ namespace TarkovVR.Source.Weapons
             DestroyRoundProp();
             // Pushed in at the gun: the hand holding the gun feels it go in
             SoundHand loadingHand = roundInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
-            PlayFirstGunSound(firearmController, loadingHand, "AmmoIn", "PatronIn", "Patron", "MagIn");
+            // Into the chamber by hand (the Mosin's AmmoInHand = ak74_round_in_chamber), or into the magazine through the top (its RoundIn =
+            // mosin_round_load). It was AmmoIn / PatronIn / MagIn: a Mosin has none but MagIn, so every round sounded like a magazine.
+            if (intoChamber)
+                PlayFirstGunSound(firearmController, loadingHand, "RoundInChamber", "AmmoInChamber", "AmmoInHand", "RoundIn", "AmmoIn");
+            else
+                PlayFirstGunSound(firearmController, loadingHand, "RoundIn", "AmmoIn", "ShellInGun", "AmmoInHand");
             Pulse(loadingHand, 0.4f, 0.04f);
             VRGlobals.player.InventoryController.TryRunNetworkTransaction(operation, result =>
             {

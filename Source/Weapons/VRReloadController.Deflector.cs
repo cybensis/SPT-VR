@@ -78,6 +78,11 @@ namespace TarkovVR.Source.Weapons
         private static float deflectorProgressAtGrab;           // 0 shut .. 1 open along the clip's path, as it was taken
         private static Vector3 controllerAtDeflectorGrabInGun;
         private static Quaternion controllerRotationAtDeflectorGrabInGun;
+        // Its sounds (the MDR's own: CoverOpen = mdr_jam_cover_take, the latch letting go as it leaves shut; CoverClose =
+        // mdr_jam_cover_putinplace, ~1 s of swing and click, as it starts back)
+        public static float deflectorCloseSoundTurn = 4f;      // deg back from the most it was open that starts its close sound
+        private static bool deflectorOpenSounded, deflectorCloseSounded;
+        private static float deflectorPeakAngle, deflectorCloseSoundAngle;
 
         // Open far enough to count: the current gun has a deflector and it's (more than barely) open
         private static bool DeflectorOpen(FirearmController firearmController)
@@ -257,6 +262,9 @@ namespace TarkovVR.Source.Weapons
             deflectorHeldFor = firearmController;
             deflectorAngles.TryGetValue(firearmController.Item, out float angle);
             deflectorProgressAtGrab = DeflectorProgressOf(angle);
+            deflectorOpenSounded = angle > 2f;
+            deflectorCloseSounded = false;
+            deflectorPeakAngle = angle;
             Transform controller = HandRig(gunHand);
             DeflectorGunFrame(out Vector3 gunPosition, out Quaternion gunRotation);
             Quaternion toGun = Quaternion.Inverse(gunRotation);
@@ -344,6 +352,28 @@ namespace TarkovVR.Source.Weapons
             if (deflectorOnRightArm)
                 PlaceDeflectorHand(progress);
             SoundHand hand = deflectorInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
+            if (!deflectorOpenSounded && angle > 2f)
+            {
+                deflectorOpenSounded = true;
+                deflectorCloseSounded = false;
+                deflectorPeakAngle = angle;
+                PlayFirstGunSound(firearmController, hand, "CoverOpen");
+            }
+            deflectorPeakAngle = Mathf.Max(deflectorPeakAngle, angle);
+            if (deflectorOpenSounded && !deflectorCloseSounded && deflectorPeakAngle >= 15f && angle <= deflectorPeakAngle - deflectorCloseSoundTurn)
+            {
+                deflectorCloseSounded = true;
+                deflectorCloseSoundAngle = angle;
+                PlayFirstGunSound(firearmController, hand, "CoverClose");
+            }
+            // Opened up again well past where it started back: its next close sounds again
+            if (deflectorCloseSounded && angle > deflectorCloseSoundAngle + 6f)
+            {
+                deflectorCloseSounded = false;
+                deflectorPeakAngle = angle;
+            }
+            if (angle <= 0.5f)
+                deflectorOpenSounded = false;
             if (before < deflectorOpenDegrees - 0.5f && angle >= deflectorOpenDegrees - 0.5f)
                 Pulse(hand, 0.35f, 0.03f);
             else if (before > 0.5f && angle <= 0.5f)

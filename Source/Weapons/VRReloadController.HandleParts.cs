@@ -156,6 +156,9 @@ namespace TarkovVR.Source.Weapons
         {
             if (heldSideHandle != null)
             {
+                // Its knob folds away as the hand lets go (the Spear's HandleClose)
+                if (handleForFirearm != null)
+                    PlayFirstGunSound(handleForFirearm, SoundHand.GunBody, "HandleClose");
                 if (sideSlider != null)
                     sideSlider.localPosition = sideSliderRestLocalPosition;
                 if (sideBase != null)

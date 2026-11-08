@@ -206,12 +206,12 @@ namespace TarkovVR.Source.Weapons
             if (!pressCheckSlideOut && travel > 0f && pressCheckPull >= travel * pressCheckSoundOut)
             {
                 pressCheckSlideOut = true;
-                PlayFirstGunSound(pressCheckFor, SoundHand.GunHand, "SlideOut", "HandleOut", "BoltOut");
+                PlayFirstGunSound(pressCheckFor, SoundHand.GunHand, "SlideOutCheck", "SlideOutHalf", "OutCheck", "SlideOut", "HandleOut", "BoltOut");
             }
             else if (pressCheckSlideOut && pressCheckPull <= travel * pressCheckSoundOut * 0.5f)
             {
                 pressCheckSlideOut = false;
-                PlayFirstGunSound(pressCheckFor, SoundHand.GunHand, "SlideIn", "HandleIn", "BoltIn");
+                PlayFirstGunSound(pressCheckFor, SoundHand.GunHand, "SlideInCheck", "SlideInHalf", "InCheck", "SlideIn", "HandleIn", "BoltIn");
             }
 
             PlacePressCheckMarker();
