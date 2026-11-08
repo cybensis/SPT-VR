@@ -133,6 +133,8 @@ namespace TarkovVR.Source.Player.Interactions
                         }
                     }
                 }
+                // Closed on a held loot item (HandsInteractionController.Grasp), from the pose just written
+                ApplyGrasp(true, rightFingerJoints, rightFingerIsThumb, rightCurlSign, rightHandWeightBlend);
             }
 
             // Capture LAST, after our pose was written to the bones: the animator re-stomps the

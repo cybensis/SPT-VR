@@ -800,6 +800,9 @@ namespace TarkovVR.Source.Player.Interactions
             if (moveDir.sqrMagnitude < 1e-6f) moveDir = -aim;
             moveDir.Normalize();
             Vector3 targetWorld = itemPos + (palm - surface) + moveDir * summonRestDepth;
+            // The fingers close on it (graspItems): against the palm's skin, not sunk into the hand
+            if (TryGraspRestPosition(item, dominant, out Vector3 graspRest))
+                targetWorld = graspRest;
 
             float dist = Vector3.Distance(itemPos, targetWorld);
             currentSummonDuration = Mathf.Clamp(dist * summonSecPerMeter, summonMinDuration, summonMaxDuration);
@@ -945,6 +948,8 @@ namespace TarkovVR.Source.Player.Interactions
                     if (holdingInThisHand
                         || !(SkeletalActive(false) && ApplySkeletalCurls(false, leftFingerJoints, leftFingerIsThumb, basePose, leftCurlSign, handWeightBlend, leftDeltas: !mirrored)))
                         ReplayRestPose(basePose, staticDeltas: !mirrored);
+                    // Closed on a held loot item (HandsInteractionController.Grasp), from the pose just written
+                    ApplyGrasp(false, leftFingerJoints, leftFingerIsThumb, leftCurlSign, handWeightBlend);
                 }
                 return;
             }
@@ -970,6 +975,7 @@ namespace TarkovVR.Source.Player.Interactions
                     ApplyFlatFlex(joints[j], flex, sp, handWeightBlend);
                 }
             }
+            ApplyGrasp(false, leftFingerJoints, leftFingerIsThumb, leftCurlSign, handWeightBlend);
         }
 
         // Recover the ANIMATED pose for a bone: if EFT re-animated it this frame, its current
