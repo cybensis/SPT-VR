@@ -2084,6 +2084,8 @@ namespace TarkovVR.Source.Weapons
                     // BSG's own skip: runs the remaining mag-out callbacks in order, then plays idle
                     firearmController.FastForwardCurrentState();
                     ReturnPendingProp();
+                    // Start set the arms animator's MagOutFromInv trigger; the skip leaves it set (see the insert below)
+                    AnimationControllerParametersTable.ResetTriggerMagOutFromInv(firearmController.FirearmsAnimator.Animator);
                     FinishForcedOperation(firearmController);
                 }
                 else if (expectedOperation == ExpectedOperation.Insert && operation is FirearmController.InsertMagOperation insertOperation)
@@ -2095,6 +2097,10 @@ namespace TarkovVR.Source.Weapons
                     if (insertOperation.State != EFT.Player.EOperationState.Finished)
                         insertOperation.OnAddAmmoInChamber();
                     firearmController.FirearmsAnimator.Animator.Play(firearmController.FirearmsAnimator.FullIdleStateName, 1, 0.1f);
+                    // Start set the MagInFromInv trigger (InsertMagInInventoryMode); playing idle doesn't clear a trigger. Skipped before the
+                    // animator had used it, it fired from idle right after = the whole insert animation on a seated magazine (co-op, joined:
+                    // the move lands in FIKA's network update, so this skip can come first). Hosting, the animator had already used it.
+                    firearmController.FirearmsAnimator.ResetInsertMagInInventoryMode();
                     FinishForcedOperation(firearmController);
                     // Here, not in TryInsert: the move lands a frame later, and only then has Tarkov chambered the round
                     // (InsertMagResult.Run, as this operation starts)
