@@ -486,9 +486,11 @@ namespace TarkovVR.Source.Weapons
             {
                 // The mirrored grenade: the clip's left hand on the ring, mirrored with it (the position already is). Unmirrored: across
                 // the plane through the ring itself - the grenade isn't mirrored, its ring is where it is.
-                if (TryMirrorNormal(out Vector3 mirrorNormal))
+                if (MirroredInLeftHand)
                 {
-                    if (TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(rotation, mirrorNormal, rightToLeft: false, out Quaternion mirroredPalm))
+                    // Off the ring's own matrix (the -1 is in it), as the left hand's grip (RealLeftHandedPatches)
+                    if (TarkovVR.Source.Player.Body.HandMirror.TryOtherPalmFromMirroredFrame(ringMatrix * Matrix4x4.Rotate(ringData.latchRotation),
+                        rightToLeft: false, out Quaternion mirroredPalm))
                         rotation = mirroredPalm;
                 }
                 else if (RealLeftHandedPatches.GunPlane(out _, out Vector3 planeNormal)
@@ -533,11 +535,20 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The pin on the grenade: at rest on its seat, slid out along its pull
+        // Set on the pin itself (its local pose: no Transform.rotation under a mirrored grenade's -1 scale to get wrong), then read back
+        // in Unity's own terms - what SetPositionAndRotation takes, round-tripped
         private static void PinPose(float slid, out Vector3 position, out Quaternion rotation)
         {
-            Transform parent = pin.parent;
-            rotation = parent.rotation * pinRestLocalRotation;
-            position = parent.TransformPoint(pinRestLocalPosition) + PullAxisWorld() * slid;
+            SeatPin(slid);
+            position = pin.position;
+            rotation = pin.rotation;
+        }
+
+        private static void SeatPin(float slid)
+        {
+            pin.localPosition = pinRestLocalPosition + pin.parent.InverseTransformVector(PullAxisWorld() * slid);
+            pin.localRotation = pinRestLocalRotation;
+            pin.localScale = pinRestLocalScale;
         }
 
         // Where the finger hooks the ring with the pin slid that far out (mirrored onto the right hand like the latch)
@@ -649,8 +660,7 @@ namespace TarkovVR.Source.Weapons
             }
             else if (ringLatched || (!pinInHand && pull > 0f))
             {
-                PinPose(pull, out Vector3 position, out Quaternion rotation);
-                pin.SetPositionAndRotation(position, rotation);
+                SeatPin(pull);
             }
             else if (joint != null)
             {
@@ -659,8 +669,7 @@ namespace TarkovVR.Source.Weapons
             else if (pinReseated)
             {
                 // Pushed back in: on its seat through Tarkov's pin-back clip (its pin comes from the clip's own hand)
-                PinPose(0f, out Vector3 position, out Quaternion rotation);
-                pin.SetPositionAndRotation(position, rotation);
+                SeatPin(0f);
             }
         }
 
@@ -707,8 +716,16 @@ namespace TarkovVR.Source.Weapons
                 leftHold = $"; LEFT mirrored: target {Vector3.Distance(target, gripMarker.position) * 100f:0.0} cm off the grip marker (EFT's right target "
                     + $"{RealLeftHandedPatches.GrenadeIkGap * 100f:0.0} cm off it, right weight {RealLeftHandedPatches.GrenadeRightWeight:0.00}), palm "
                     + $"{Vector3.Distance(palm.position, target) * 100f:0.0} cm and {Quaternion.Angle(palm.rotation, RealLeftHandedPatches.GrenadeLeftTargetRotation):0} deg off "
-                    + $"that target, {Vector3.Distance(palm.position, VRGlobals.vrPlayer.RightHand.transform.position) * 100f:0.0} cm off the controller's rig hand, "
+                    + $"that target (its turn off the matrix vs off Transform.rotation: {RealLeftHandedPatches.GrenadeRotationGap:0} deg apart), "
+                    + $"{Vector3.Distance(palm.position, VRGlobals.vrPlayer.RightHand.transform.position) * 100f:0.0} cm off the controller's rig hand, "
                     + $"grip marker {Vector3.Distance(gripMarker.position, mirroredPositioner.position) * 100f:0.0} cm off the positioner";
+            }
+            // Either hand: the grenade and the palm in the holding controller's rig hand (the left's should be the right's with x negated)
+            if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null && body != null && palm != null)
+            {
+                Transform rigHand = VRGlobals.vrPlayer.RightHand.transform;
+                leftHold += $"; in the rig hand: body {(rigHand.InverseTransformPoint(body.position) * 100f).ToString("F1")} cm, palm "
+                    + $"{(rigHand.InverseTransformPoint(palm.position) * 100f).ToString("F1")} cm";
             }
             Plugin.MyLog.LogInfo($"[GrenadeHold] {controller.Item.LocalizedShortName()} 0.3 s in hand ({(notedSpawnFor == controller ? spawnSetup : "spawn not seen")}): {inPalm}{leftHold}; "
                 + $"holder {(holder != null ? holder.localPosition.ToString("F3") + " " + holder.localEulerAngles.ToString("F0") : "none")}, "

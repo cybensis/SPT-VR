@@ -88,7 +88,7 @@ namespace TarkovVR.Patches.Core.Player
 
         // The mirrored grenade's last left-hand target (GrenadeHold's hold line): how far EFT's right target was off the grip marker, the
         // right arm's weight then, the target itself
-        internal static float GrenadeIkGap, GrenadeRightWeight;
+        internal static float GrenadeIkGap, GrenadeRightWeight, GrenadeRotationGap;
         internal static Vector3 GrenadeLeftTarget;
         internal static Quaternion GrenadeLeftTargetRotation = Quaternion.identity;
 
@@ -146,8 +146,16 @@ namespace TarkovVR.Patches.Core.Player
                 Quaternion gripTurn = gripMarker != null ? gripMarker.rotation : gripRotation;
                 GrenadeIkGap = Vector3.Distance(gripPosition, grip);
                 GrenadeRightWeight = right.IKPositionWeight;
-                if (!HandMirror.TryMirrorPalm(gripTurn, mirrorNormal, rightToLeft: true, out leftRotation))
-                    return;
+                // The palm off the grip marker's own matrix (a mirrored frame: the -1 is in it): the rotation's sign under that scale
+                // was an assumption, and the hold came out turned (his log: palm on its target to 0.0 cm and 0 deg, the grenade in it not
+                // the right hand's mirror). Off the matrix wherever the scale's sign lands.
+                if (gripMarker == null || !HandMirror.TryOtherPalmFromMirroredFrame(gripMarker.localToWorldMatrix, rightToLeft: true, out leftRotation))
+                {
+                    if (!HandMirror.TryMirrorPalm(gripTurn, mirrorNormal, rightToLeft: true, out leftRotation))
+                        return;
+                }
+                GrenadeRotationGap = HandMirror.TryMirrorPalm(gripTurn, mirrorNormal, rightToLeft: true, out Quaternion byRotation)
+                    ? Quaternion.Angle(byRotation, leftRotation) : -1f;
                 leftPosition = grip;
                 GrenadeLeftTarget = leftPosition;
                 GrenadeLeftTargetRotation = leftRotation;

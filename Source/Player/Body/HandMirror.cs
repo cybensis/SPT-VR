@@ -101,6 +101,25 @@ namespace TarkovVR.Source.Player.Body
             return true;
         }
 
+        // A palm frame that is mirrored already - a world matrix under a -1 scale (a grenade mirrored whole in the left hand) - to the
+        // OTHER palm's rotation: TryMirrorPalm past its reflection. Straight off the matrix, so it never goes through a Transform.rotation
+        // under that scale.
+        public static bool TryOtherPalmFromMirroredFrame(Matrix4x4 frame, bool rightToLeft, out Quaternion palm)
+        {
+            palm = Quaternion.identity;
+            if (VRGlobals.player == null || !EnsureBones())
+                return false;
+            Matrix4x4 unit = Matrix4x4.identity;
+            for (int column = 0; column < 3; column++)
+            {
+                Vector3 axis = ((Vector3)frame.GetColumn(column)).normalized;
+                unit.SetColumn(column, new Vector4(axis.x, axis.y, axis.z, 0f));
+            }
+            Matrix4x4 result = unit * FlipX * (rightToLeft ? palmRightToLeft : palmLeftToRight);
+            palm = Quaternion.LookRotation(result.GetColumn(2), result.GetColumn(1));
+            return true;
+        }
+
         // The fingers while the gun is in the left hand. EFT still animates the RIGHT hand gripping the gun and the LEFT as its support
         // hand, so: the left = the right's animated grip, mirrored; the right = the left's animated foregrip pose, mirrored, only while
         // on the foregrip (off it, its own open pose: HandsInteractionController.UpdateRightHandFingers). Each is read as EFT animated
