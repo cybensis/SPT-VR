@@ -86,6 +86,12 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
+        // The mirrored grenade's last left-hand target (GrenadeHold's hold line): how far EFT's right target was off the grip marker, the
+        // right arm's weight then, the target itself
+        internal static float GrenadeIkGap, GrenadeRightWeight;
+        internal static Vector3 GrenadeLeftTarget;
+        internal static Quaternion GrenadeLeftTargetRotation = Quaternion.identity;
+
         [HarmonyPostfix]
         [HarmonyPriority(Priority.First)]
         [HarmonyPatch(typeof(EFT.Player), nameof(EFT.Player.IkProcess))]
@@ -132,10 +138,19 @@ namespace TarkovVR.Patches.Core.Player
             else if (Source.Weapons.GrenadeHold.TryMirrorNormal(out Vector3 mirrorNormal))
             {
                 // A grenade mirrored whole (its positioner scaled -1 on x): the grip marker is on the left grip already; its rotation
-                // Unity reports without the scale's sign, so the palm is mirrored through the positioner's x
-                if (!HandMirror.TryMirrorPalm(gripRotation, mirrorNormal, rightToLeft: true, out leftRotation))
+                // Unity reports without the scale's sign, so the palm is mirrored through the positioner's x. Read off the marker itself,
+                // not the right arm's IK target: EFT only writes that while the right arm's weight (1 - the clip's RIGHT_HAND_WEIGHT,
+                // VisualPass) isn't 0, else it keeps the free right hand's (his report: the left hand jumps off the grenade it took)
+                Transform gripMarker = __instance._markers != null && __instance._markers.Length > 1 ? __instance._markers[1] : null;
+                Vector3 grip = gripMarker != null ? gripMarker.position : gripPosition;
+                Quaternion gripTurn = gripMarker != null ? gripMarker.rotation : gripRotation;
+                GrenadeIkGap = Vector3.Distance(gripPosition, grip);
+                GrenadeRightWeight = right.IKPositionWeight;
+                if (!HandMirror.TryMirrorPalm(gripTurn, mirrorNormal, rightToLeft: true, out leftRotation))
                     return;
-                leftPosition = gripPosition;
+                leftPosition = grip;
+                GrenadeLeftTarget = leftPosition;
+                GrenadeLeftTargetRotation = leftRotation;
             }
             else
             {

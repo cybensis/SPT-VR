@@ -697,7 +697,20 @@ namespace TarkovVR.Source.Weapons
             string marker = holder != null && holder.parent != null && VRGlobals.player != null && VRGlobals.player._markers.Length > 1
                 ? $"{Vector3.Distance(VRGlobals.player._markers[1].position, holder.parent.position) * 100f:0.0} cm"
                 : "?";
-            Plugin.MyLog.LogInfo($"[GrenadeHold] {controller.Item.LocalizedShortName()} 0.3 s in hand ({(notedSpawnFor == controller ? spawnSetup : "spawn not seen")}): {inPalm}; "
+            // The mirrored left hold: the left hand's target against the grip marker, the rendered palm against that target and the
+            // controller's rig hand (his report: the left hand jumps off the grenade it takes)
+            string leftHold = "";
+            if (MirroredInLeftHand && palm != null && VRGlobals.player != null && VRGlobals.player._markers.Length > 1 && VRGlobals.vrPlayer != null)
+            {
+                Transform gripMarker = VRGlobals.player._markers[1];
+                Vector3 target = RealLeftHandedPatches.GrenadeLeftTarget;
+                leftHold = $"; LEFT mirrored: target {Vector3.Distance(target, gripMarker.position) * 100f:0.0} cm off the grip marker (EFT's right target "
+                    + $"{RealLeftHandedPatches.GrenadeIkGap * 100f:0.0} cm off it, right weight {RealLeftHandedPatches.GrenadeRightWeight:0.00}), palm "
+                    + $"{Vector3.Distance(palm.position, target) * 100f:0.0} cm and {Quaternion.Angle(palm.rotation, RealLeftHandedPatches.GrenadeLeftTargetRotation):0} deg off "
+                    + $"that target, {Vector3.Distance(palm.position, VRGlobals.vrPlayer.RightHand.transform.position) * 100f:0.0} cm off the controller's rig hand, "
+                    + $"grip marker {Vector3.Distance(gripMarker.position, mirroredPositioner.position) * 100f:0.0} cm off the positioner";
+            }
+            Plugin.MyLog.LogInfo($"[GrenadeHold] {controller.Item.LocalizedShortName()} 0.3 s in hand ({(notedSpawnFor == controller ? spawnSetup : "spawn not seen")}): {inPalm}{leftHold}; "
                 + $"holder {(holder != null ? holder.localPosition.ToString("F3") + " " + holder.localEulerAngles.ToString("F0") : "none")}, "
                 + $"Weapon_root {(weaponRoot != null ? weaponRoot.localPosition.ToString("F3") + " " + weaponRoot.localEulerAngles.ToString("F0") + " under " + weaponRoot.parent?.name : "none")}, "
                 + $"hands root {(VRGlobals.oldWeaponHolder != null ? VRGlobals.oldWeaponHolder.transform.localEulerAngles.ToString("F0") : "none")}, "
