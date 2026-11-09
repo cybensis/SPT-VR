@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using Comfort.Common;
 using EFT;
 using EFT.AssetsManager;
@@ -14,25 +15,31 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The grenade on the chest (his grenade plan, round 2): the grenade Tarkov would throw next shown on the top left of the chest (its own
-    // model, in the body's frame like the guns' spots), taken by either hand with its hold button (VR tab: grip, or the trigger). Which one:
+    // The grenade on the chest (his grenade plan, round 2): the grenade Tarkov would throw next shown on the top left of the chest (in
+    // the body's frame like the guns' spots), taken by either hand with its hold button (VR tab: grip, or the trigger). Which one:
     // Tarkov's own pick for its throw key (PlayerInputTranslator.vmethod_1) - the quick-access panel's grenade (TopPriorityGrenade), else a
     // random reachable one, not the type thrown last. That pick is random when the key is pressed, so it's made here once, shown, and the
     // grab takes that very one (SetItemInHands, as the key does); a new one after it's gone.
+    // What's shown is our own copy of the grenade's meshes (Look), placed by the middle of the grenade. Tarkov's model of an item is its
+    // hands prefab, whose root sits ~40 cm off the grenade, and comes out of the same pool as the grenade in your hand: one the VR hold
+    // had rebuilt (the grenade moved under the RightHandPositioner) drew it wherever that hold left it (his test: "the slot just
+    // disappears" after a grenade was put back).
     // The grab is Tarkov's own switch with the gun's put-away and the grenade's draw skipped (BodyWeapons' way), the model riding the hand
     // meanwhile. The left hand holds it the way it holds a gun (Handedness.GunInLeftHand: the right-handed hold mirrored,
-    // RealLeftHandedPatches for the arms). In the hand, GrenadeHold.
+    // RealLeftHandedPatches for the arms). In the hand, GrenadeHold; put back, its put-away is skipped too and the hands go back as they
+    // were (a gun that hung on its spot hangs there again, its draw skipped).
     // Moving the slot: the trigger held 1 s at it with the hand still (holding with the trigger: moving the hand away takes it instead), it
     // rides the hand until the trigger opens, saved like a gun spot.
     public static class GrenadeSlot
     {
         public static bool enabled = true;
-        public static Vector3 slotFromNeck = new Vector3(-0.11f, -0.20f, 0.13f);    // m, body frame (x right, y up, z forward): top left of the chest
-        public static Vector3 slotEuler = Vector3.zero;                             // the model's turn there, body frame
+        public static Vector3 slotFromNeck = new Vector3(-0.12f, -0.20f, 0.14f);    // m, body frame (x right, y up, z forward): the grenade's middle, top left of the chest (his placement)
+        public static Vector3 slotEuler = new Vector3(278.5f, 132.7f, 166f);        // the grenade body's turn there, body frame (his placement)
         public static float grabRadius = 0.08f;     // m any point of the hand (palm, knuckles, fingertips) to the grenade's middle
         public static float holdSeconds = 1f;       // trigger held at the slot with the hand still: moving the slot
         public static float stillRadius = 0.04f;    // m the hand may drift during that hold (trigger holding: farther = taken)
         public static float switchTimeout = 3f;     // s before a grab whose switch never lands is given up
+        public static float rehangSeconds = 3f;     // s a gun that hung before the grab has to come back and hang again
         public static bool debugLog = true;         // one line per grab / pick / placement (first round)
 
         private sealed class Hand
@@ -54,11 +61,20 @@ namespace TarkovVR.Source.Player.Interactions
         private static MongoID? lastThrownTemplate;
         private static readonly List<ThrowWeap> reachable = new List<ThrowWeap>(10);
 
-        // Its model
-        private static GameObject model;
-        private static ThrowWeap modelFor;
-        private static readonly List<Collider> modelColliders = new List<Collider>();
-        private static readonly Dictionary<Transform, int> modelLayers = new Dictionary<Transform, int>();
+        // What's shown: one copy per grenade type, in the grenade body's frame (GrenadePrefab.ThrowingParts[0]), with the middle of
+        // what's visible in that frame
+        private sealed class Look
+        {
+            public GameObject root;
+            public Vector3 middle;
+            public float failedAt = -1f;
+        }
+        private static readonly Dictionary<MongoID, Look> looks = new Dictionary<MongoID, Look>();
+        private static EFT.Player looksFor;
+        private static Look shownLook;
+        private static ThrowWeap shownFor;
+        private static readonly HashSet<int> poppedBySlot = new HashSet<int>();
+        private static readonly Regex lowerLod = new Regex(@"LOD[1-9]", RegexOptions.IgnoreCase);
 
         // A grab under way
         private static ThrowWeap switchingTo;
@@ -67,16 +83,22 @@ namespace TarkovVR.Source.Player.Interactions
         private static Vector3 inHandPosition;
         private static Quaternion inHandRotation = Quaternion.identity;
         private static Item handsBefore;
-        private static EquipmentSlot slotBefore;
-        private static bool slotBeforeKnown;
+        private static bool gunHungBefore;
 
         // The last grab: which grenade, and with which hand
         private static Item grabbedItem;
         private static bool grabbedLeft;
         private static bool grabbedByHold;
 
+        // Put back: its put-away, and the gun the hands go back to
+        private static EFT.Player.GrenadeHandsController puttingAway;
+        private static float putAwayStarted;
+        private static Item returningGun;
+        private static float returnStarted;
+
         // Moving the slot
         private static Hand placing;
+        private static Look placingLook;
         private static Vector3 placingPosition;
         private static Quaternion placingRotation = Quaternion.identity;
 
@@ -105,6 +127,7 @@ namespace TarkovVR.Source.Player.Interactions
                 hooked = true;
                 Application.onBeforeRender += OnBeforeRender;
             }
+            SkipPutAway();
             if (grabbedItem != null && !GrabbedInHands && !IsSwitching())
             {
                 grabbedItem = null;
@@ -130,13 +153,13 @@ namespace TarkovVR.Source.Player.Interactions
                 UpdatePlacing();
                 return;
             }
-            bool modelShown = model != null && model.activeSelf && modelFor == picked && picked != null;
+            bool lookShown = shownLook != null && shownLook.root != null && shownLook.root.activeSelf && picked != null && shownFor == picked;
             OffHandAtSlot = false;
             foreach (Hand hand in new[] { leftHand, rightHand })
             {
                 bool gripPressed = ReadGrip(hand);
                 bool triggerPressed = ReadTrigger(hand);
-                bool atSlot = modelShown && ReachOf(hand) < 1f;
+                bool atSlot = lookShown && ReachOf(hand) < 1f;
                 if (atSlot && !IsGunHand(hand))
                     OffHandAtSlot = true;
                 if (!atSlot || !HandFree(hand))
@@ -205,6 +228,7 @@ namespace TarkovVR.Source.Player.Interactions
             leftHand.pending = rightHand.pending = false;
             leftHand.triggerHeldAtSlot = rightHand.triggerHeldAtSlot = 0f;
             placing = null;
+            placingLook = null;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -270,22 +294,23 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
             handsBefore = HandsItem();
-            slotBeforeKnown = handsBefore != null && BodyWeapons.SlotOf(handsBefore, out slotBefore);
+            gunHungBefore = handsBefore != null && VRGlobals.player.HandsController is FirearmController && ChestHang.Hanging;
             switchingTo = picked;
             switchStarted = Time.time;
             switchHand = hand;
             grabbedItem = picked;
             grabbedLeft = hand.left;
             grabbedByHold = true;
+            Transform root = shownLook.root.transform;
             ControllerPose(hand, out Vector3 handPosition, out Quaternion handRotation);
-            inHandRotation = Quaternion.Inverse(handRotation) * model.transform.rotation;
-            inHandPosition = Quaternion.Inverse(handRotation) * (model.transform.position - handPosition);
+            inHandRotation = Quaternion.Inverse(handRotation) * root.rotation;
+            inHandPosition = Quaternion.Inverse(handRotation) * (root.position - handPosition);
             TookPress = true;
             if (IsGunHand(hand))
                 ChestHang.IgnoreGripPress();
             Haptic(hand, 0.35f, 0.04f);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeSlot] {(hand.left ? "left" : "right")} hand takes {picked.LocalizedShortName()}, in hands before: {handsBefore?.LocalizedShortName() ?? "nothing"}");
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] {(hand.left ? "left" : "right")} hand takes {picked.LocalizedShortName()}, in hands before: {handsBefore?.LocalizedShortName() ?? "nothing"}{(gunHungBefore ? " (hanging)" : "")}");
             VRGlobals.player.SetItemInHands(picked, delegate { });
         }
 
@@ -360,18 +385,82 @@ namespace TarkovVR.Source.Player.Interactions
             return grabbedByHold && item != null && item == grabbedItem;
         }
 
-        // GrenadeHold, let go before the pin was out: the hands back as they were (the grenade's on the slot again: it's in the bag)
+        // GrenadeHold, let go before the pin was out: the hands back as they were (the grenade's on the slot again: it's in the bag). Its
+        // put-away is skipped (SkipPutAway), the gun's draw too (OnGunDrawStarted); a gun that hung on its spot goes back there.
         public static void ReturnHands(EFT.Player.GrenadeHandsController grenade)
         {
             // Taken here: what the hands held before. Drawn another way (the radial menu): Tarkov's own last weapon.
             bool fromHere = grenade != null && grenade.Item == grabbedItem;
             Item back = fromHere ? handsBefore : VRGlobals.player.LastEquippedWeaponOrKnifeItem;
+            puttingAway = grenade;
+            putAwayStarted = Time.time;
             if (back != null && back.Parent != null && BodyWeapons.SlotOf(back, out EquipmentSlot slot))
+            {
+                returningGun = back;
+                returnStarted = Time.time;
+                if (fromHere && gunHungBefore)
+                    ChestHang.HangOnArrival(rehangSeconds);
                 VRInputManager.ForceCommand(SelectCommand(slot));
+            }
             else
+            {
                 VRGlobals.player.SetEmptyHands(delegate { });
-            grabbedItem = null;
+            }
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade?.Item?.LocalizedShortName()} back on the slot, hands back to {(back != null && back.Parent != null ? back.LocalizedShortName() : "empty")}{(fromHere && gunHungBefore ? " (hanging)" : "")}");
+            // grabbedItem stays until it's out of the hands (UpdateInput): a left-hand grenade stays left for its put-away
             grabbedByHold = false;
+        }
+
+        // The grenade put back: Tarkov's put-away (Remove: the hide clip, "an animation which disarms it") ended as it starts, by the
+        // clip's own end event (WeapOut: our VRGrenadeController cleanup, then Tarkov's next hands)
+        private static void SkipPutAway()
+        {
+            if (puttingAway == null)
+                return;
+            if (VRGlobals.player == null || !ReferenceEquals(VRGlobals.player.HandsController, puttingAway) || Time.time - putAwayStarted > switchTimeout)
+            {
+                puttingAway = null;
+                return;
+            }
+            if (!(puttingAway.CurrentOperation is EFT.Player.GrenadeHandsController.Remove))
+                return;
+            EFT.Player.GrenadeHandsController grenade = puttingAway;
+            puttingAway = null;
+            try
+            {
+                grenade.IEventsConsumerOnWeapOut();
+                if (debugLog)
+                    Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade.Item?.LocalizedShortName()}'s put-away skipped (+{Time.time - putAwayStarted:0.000} s)");
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogError($"[GrenadeSlot] skipping the put-away failed: {exception}");
+            }
+        }
+
+        // FirearmController.Spawn (BodyWeaponPatches.SkipDraw): the gun the hands go back to after a put-back, its draw skipped as it starts
+        internal static void OnGunDrawStarted(FirearmController firearmController)
+        {
+            try
+            {
+                if (returningGun == null || firearmController?._player == null || !firearmController._player.IsYourPlayer)
+                    return;
+                if (Time.time - returnStarted > switchTimeout)
+                {
+                    returningGun = null;
+                    return;
+                }
+                if (firearmController.Item != returningGun)
+                    return;
+                returningGun = null;
+                if (BodyWeapons.SkipDrawNow(firearmController) && debugLog)
+                    Plugin.MyLog.LogInfo($"[GrenadeSlot] {firearmController.Item.LocalizedShortName()}'s draw skipped (+{Time.time - returnStarted:0.000} s)");
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogError($"[GrenadeSlot] skipping the gun's draw failed: {exception}");
+            }
         }
 
         private static ECommand SelectCommand(EquipmentSlot slot)
@@ -390,12 +479,14 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void BeginPlacing(Hand hand)
         {
-            if (model == null)
+            if (shownLook == null || shownLook.root == null)
                 return;
+            Transform root = shownLook.root.transform;
             ControllerPose(hand, out Vector3 handPosition, out Quaternion handRotation);
-            placingRotation = Quaternion.Inverse(handRotation) * model.transform.rotation;
-            placingPosition = Quaternion.Inverse(handRotation) * (model.transform.position - handPosition);
+            placingRotation = Quaternion.Inverse(handRotation) * root.rotation;
+            placingPosition = Quaternion.Inverse(handRotation) * (root.position - handPosition);
             placing = hand;
+            placingLook = shownLook;
             Haptic(hand, 0.6f, 0.08f);
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[GrenadeSlot] moving the slot with the {(hand.left ? "left" : "right")} hand");
@@ -407,16 +498,18 @@ namespace TarkovVR.Source.Player.Interactions
             if (placing.triggerDown)
                 return;
             Hand hand = placing;
+            Look look = placingLook;
             placing = null;
+            placingLook = null;
             ControllerPose(hand, out Vector3 handPosition, out Quaternion handRotation);
             Quaternion rotation = handRotation * placingRotation;
-            Vector3 position = handPosition + handRotation * placingPosition;
+            Vector3 middle = handPosition + handRotation * placingPosition + rotation * look.middle;
             Quaternion body = ChestHang.BodyYaw(out Vector3 neck);
             Quaternion toBody = Quaternion.Inverse(body);
-            VRSettings.SetGrenadeSlot(toBody * (position - neck), toBody * rotation);
+            VRSettings.SetGrenadeSlot(toBody * (middle - neck), toBody * rotation);
             Haptic(hand, 0.45f, 0.06f);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeSlot] slot placed at {(toBody * (position - neck)).ToString("F3")} from the neck (body frame)");
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] slot placed: middle {(toBody * (middle - neck)).ToString("F3")} from the neck, turn {(toBody * rotation).eulerAngles.ToString("F1")} (body frame)");
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -431,103 +524,219 @@ namespace TarkovVR.Source.Player.Interactions
                 // In the hands already (not a switch's stand-in): Tarkov's own model there
                 if (shown != null && switchingTo == null && HandsItem() == shown)
                     shown = null;
-                if (shown == null)
-                {
-                    if (model != null && model.activeSelf)
-                        model.SetActive(false);
+                Look look = shown != null ? LookOf(shown) : null;
+                if (shownLook != null && shownLook != look && shownLook.root != null && shownLook.root.activeSelf)
+                    shownLook.root.SetActive(false);
+                shownLook = look;
+                shownFor = look != null ? shown : null;
+                if (look == null)
                     return;
-                }
-                if (modelFor != shown || model == null)
-                    BuildModel(shown);
-                if (model == null)
-                    return;
-                if (!model.activeSelf)
-                    model.SetActive(true);
+                if (!look.root.activeSelf)
+                    look.root.SetActive(true);
+                Transform root = look.root.transform;
                 if (switchingTo != null && switchHand != null)
                 {
                     ControllerPose(switchHand, out Vector3 handPosition, out Quaternion handRotation);
-                    model.transform.SetPositionAndRotation(handPosition + handRotation * inHandPosition, handRotation * inHandRotation);
+                    root.SetPositionAndRotation(handPosition + handRotation * inHandPosition, handRotation * inHandRotation);
                 }
                 else if (placing != null)
                 {
                     ControllerPose(placing, out Vector3 handPosition, out Quaternion handRotation);
-                    model.transform.SetPositionAndRotation(handPosition + handRotation * placingPosition, handRotation * placingRotation);
+                    root.SetPositionAndRotation(handPosition + handRotation * placingPosition, handRotation * placingRotation);
                 }
                 else
                 {
-                    SlotPose(out Vector3 position, out Quaternion rotation);
-                    model.transform.SetPositionAndRotation(position, rotation);
+                    SlotPose(look, out Vector3 position, out Quaternion rotation);
+                    root.SetPositionAndRotation(position, rotation);
                 }
             }
             catch (System.Exception exception)
             {
-                Plugin.MyLog.LogError($"[GrenadeSlot] drawing the slot: {exception.Message}");
+                Plugin.MyLog.LogError($"[GrenadeSlot] drawing the slot: {exception}");
                 enabled = false;
             }
         }
 
-        private static void SlotPose(out Vector3 position, out Quaternion rotation)
+        // The look's root at the slot: its middle where it was placed (or the default), its body turned as placed
+        private static void SlotPose(Look look, out Vector3 position, out Quaternion rotation)
         {
             Quaternion body = ChestHang.BodyYaw(out Vector3 neck);
-            if (VRSettings.GetGrenadeSlot(out Vector3 placedPosition, out Quaternion placedRotation))
+            if (!VRSettings.GetGrenadeSlot(out Vector3 middleFromNeck, out Quaternion turn))
             {
-                position = neck + body * placedPosition;
-                rotation = body * placedRotation;
-                return;
+                middleFromNeck = slotFromNeck;
+                turn = Quaternion.Euler(slotEuler);
             }
-            position = neck + body * slotFromNeck;
-            rotation = body * Quaternion.Euler(slotEuler);
+            rotation = body * turn;
+            position = neck + body * middleFromNeck - rotation * look.middle;
         }
 
-        // Tarkov's own model of it, from its pool: colliders off (the weapon collision copies nearby colliders), drawn on the gun's
-        // layer; both put back before it goes back
-        private static void BuildModel(ThrowWeap grenade)
+        private static Look LookOf(ThrowWeap grenade)
         {
-            ReturnModel();
+            if (!ReferenceEquals(VRGlobals.player, looksFor))
+            {
+                ClearLooks();
+                looksFor = VRGlobals.player;
+            }
+            if (looks.TryGetValue(grenade.TemplateId, out Look look))
+            {
+                if (look.root != null)
+                    return look;
+                if (look.failedAt >= 0f && Time.time - look.failedAt < 5f)
+                    return null;
+            }
+            look = MakeLook(grenade) ?? new Look { failedAt = Time.time };
+            looks[grenade.TemplateId] = look;
+            return look.root != null ? look : null;
+        }
+
+        private static void ClearLooks()
+        {
+            foreach (Look look in looks.Values)
+            {
+                if (look.root != null)
+                    UnityEngine.Object.Destroy(look.root);
+            }
+            looks.Clear();
+            poppedBySlot.Clear();
+            shownLook = null;
+            shownFor = null;
+            placingLook = null;
+        }
+
+        // The grenade's model out of Tarkov's pool for a moment: its visible meshes copied (in the frame of its body, GrenadePrefab
+        // .ThrowingParts[0] - a model the VR hold rebuilt keeps the grenade's own parts in place relative to it), then it goes straight
+        // back. Hidden throwing parts count (a thrown grenade's model comes back with them off); other hidden parts and lower LODs don't.
+        private static Look MakeLook(ThrowWeap grenade)
+        {
             ObjectsFactory factory = Singleton<ObjectsFactory>.Instance;
-            if (factory == null)
-                return;
-            model = factory.CreateItem(grenade, isAnimated: false);
-            modelFor = grenade;
-            if (model == null)
-                return;
-            foreach (Collider collider in model.GetComponentsInChildren<Collider>())
+            GameObject pooled = factory != null ? factory.CreateItem(grenade, isAnimated: false) : null;
+            if (pooled == null)
+                return null;
+            Transform top = pooled.transform;
+            try
             {
-                if (!collider.enabled)
-                    continue;
-                collider.enabled = false;
-                modelColliders.Add(collider);
+                poppedBySlot.Add(pooled.GetInstanceID());
+                bool rebuiltByVrHold = pooled.GetComponentInChildren<HandsPositioner>(true) != null;
+                // Its animator's pose now (the model played it on the slot the first build drew it on: TurnOldPlacement measures that)
+                foreach (Animator animator in pooled.GetComponentsInChildren<Animator>())
+                {
+                    if (animator.isActiveAndEnabled && animator.runtimeAnimatorController != null)
+                        animator.Update(0f);
+                }
+                HashSet<Transform> throwingParts = new HashSet<Transform>();
+                Transform body = null;
+                GrenadePrefab prefab = pooled.GetComponent<GrenadePrefab>();
+                if (prefab != null && prefab.ThrowingParts != null)
+                {
+                    foreach (string name in prefab.ThrowingParts)
+                    {
+                        Transform part = TransformTools.FindTransformRecursive(top, name);
+                        if (part == null)
+                            continue;
+                        throwingParts.Add(part);
+                        if (body == null)
+                            body = part;
+                    }
+                }
+                if (body == null)
+                    body = top;
+
+                GameObject root = new GameObject($"VRGrenadeSlot {grenade.LocalizedShortName()}");
+                int layer = LayerMask.NameToLayer("Player");
+                root.layer = layer;
+                Quaternion toBody = Quaternion.Inverse(body.rotation);
+                Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
+                int parts = 0;
+                foreach (MeshRenderer renderer in pooled.GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    if (!renderer.enabled || lowerLod.IsMatch(renderer.name) || !Shown(renderer.transform, top, throwingParts))
+                        continue;
+                    MeshFilter filter = renderer.GetComponent<MeshFilter>();
+                    Mesh mesh = filter != null ? filter.sharedMesh : null;
+                    if (mesh == null)
+                        continue;
+                    Transform source = renderer.transform;
+                    GameObject part = new GameObject(source.name);
+                    part.layer = layer;
+                    Transform partTransform = part.transform;
+                    partTransform.SetParent(root.transform, false);
+                    partTransform.localPosition = toBody * (source.position - body.position);
+                    partTransform.localRotation = toBody * source.rotation;
+                    partTransform.localScale = source.lossyScale;
+                    part.AddComponent<MeshFilter>().sharedMesh = mesh;
+                    MeshRenderer copy = part.AddComponent<MeshRenderer>();
+                    copy.sharedMaterials = renderer.sharedMaterials;
+                    copy.shadowCastingMode = renderer.shadowCastingMode;
+                    copy.receiveShadows = renderer.receiveShadows;
+                    Bounds bounds = mesh.bounds;
+                    for (int corner = 0; corner < 8; corner++)
+                    {
+                        Vector3 offset = new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f);
+                        Vector3 point = bounds.center + Vector3.Scale(bounds.extents, offset);
+                        point = partTransform.localPosition + partTransform.localRotation * Vector3.Scale(partTransform.localScale, point);
+                        min = Vector3.Min(min, point);
+                        max = Vector3.Max(max, point);
+                    }
+                    parts++;
+                }
+                if (parts == 0)
+                {
+                    UnityEngine.Object.Destroy(root);
+                    Plugin.MyLog.LogWarning($"[GrenadeSlot] {grenade.LocalizedShortName()}: no meshes to show on the slot (model {pooled.name})");
+                    return null;
+                }
+                Look look = new Look { root = root, middle = (min + max) * 0.5f };
+                root.SetActive(false);
+                if (!rebuiltByVrHold)
+                    TurnOldPlacement(top, body, look.middle);
+                if (debugLog)
+                    Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade.LocalizedShortName()}'s look: {parts} meshes, {(max - min).ToString("F3")} m, body {body.name}{(rebuiltByVrHold ? " (its model was the VR hold's)" : "")}");
+                return look;
             }
-            int layer = LayerMask.NameToLayer("Player");
-            foreach (Transform node in model.GetComponentsInChildren<Transform>(true))
+            catch (System.Exception exception)
             {
-                modelLayers[node] = node.gameObject.layer;
-                node.gameObject.layer = layer;
+                Plugin.MyLog.LogError($"[GrenadeSlot] copying {grenade.LocalizedShortName()}'s model failed: {exception}");
+                return null;
             }
-            model.SetActive(true);
+            finally
+            {
+                top.SetParent(null, worldPositionStays: false);
+                AssetPoolObject.ReturnToPool(pooled);
+            }
         }
 
-        private static void ReturnModel()
+        // Every switched-off node from it up to the model's root must be a throwing part
+        private static bool Shown(Transform node, Transform top, HashSet<Transform> throwingParts)
         {
-            if (model != null)
+            for (Transform current = node; current != null; current = current.parent)
             {
-                foreach (Collider collider in modelColliders)
-                {
-                    if (collider != null)
-                        collider.enabled = true;
-                }
-                foreach (KeyValuePair<Transform, int> entry in modelLayers)
-                {
-                    if (entry.Key != null)
-                        entry.Key.gameObject.layer = entry.Value;
-                }
-                model.transform.SetParent(null, worldPositionStays: false);
-                AssetPoolObject.ReturnToPool(model);
+                if (!current.gameObject.activeSelf && !throwingParts.Contains(current))
+                    return false;
+                if (current == top)
+                    break;
             }
-            model = null;
-            modelFor = null;
-            modelColliders.Clear();
-            modelLayers.Clear();
+            return true;
+        }
+
+        // The first build saved the model ROOT's pose (grenadeSlot); measured on a model the VR hold never had, that's the grenade's
+        // middle and body turn now, kept exactly where it was placed
+        private static void TurnOldPlacement(Transform top, Transform body, Vector3 middle)
+        {
+            if (VRSettings.GetGrenadeSlot(out _, out _) || !VRSettings.GetOldGrenadeSlot(out Vector3 rootPosition, out Quaternion rootRotation))
+                return;
+            Quaternion fromRoot = Quaternion.Inverse(top.rotation);
+            Quaternion bodyInRoot = fromRoot * body.rotation;
+            Vector3 middleInRoot = fromRoot * (body.position + body.rotation * middle - top.position);
+            Quaternion turn = rootRotation * bodyInRoot;
+            Vector3 middleFromNeck = rootPosition + rootRotation * middleInRoot;
+            VRSettings.SetGrenadeSlot(middleFromNeck, turn);
+            Plugin.MyLog.LogInfo($"[GrenadeSlot] the placed slot kept: middle {middleFromNeck.ToString("F3")} from the neck, turn {turn.eulerAngles.ToString("F1")} (body frame)");
+        }
+
+        // GrenadeHold's spawn line: did a look come from this very object
+        internal static bool CameFromSlot(GameObject handsObject)
+        {
+            return handsObject != null && poppedBySlot.Contains(handsObject.GetInstanceID());
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -551,10 +760,10 @@ namespace TarkovVR.Source.Player.Interactions
         // The rendered hand's points (palm, knuckles, fingertips) to the grenade's middle, over grabRadius: under 1 = in reach
         private static float ReachOf(Hand hand)
         {
-            if (model == null)
+            if (shownLook == null || shownLook.root == null)
                 return float.MaxValue;
-            Renderer renderer = model.GetComponentInChildren<Renderer>();
-            Vector3 middle = renderer != null ? renderer.bounds.center : model.transform.position;
+            Transform root = shownLook.root.transform;
+            Vector3 middle = root.position + root.rotation * shownLook.middle;
             // The physical right controller draws the right arm (the gun in the left hand frees it onto the right controller)
             VRGlobals.handsInteractionController.GetHandTouchPoints(!hand.left, hand.touchPoints);
             if (hand.touchPoints.Count == 0)

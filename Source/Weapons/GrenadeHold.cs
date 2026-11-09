@@ -61,6 +61,13 @@ namespace TarkovVR.Source.Weapons
         private static bool ringInReach;
         private static bool hooked;
 
+        // His report: the first grenade in hand isn't held right, the next one is (before the slot too). One line at its spawn (was
+        // its object ever in the VR hold / on the slot) and one 0.3 s into the hold (where it sits in the palm), to compare the two.
+        private static GrenadeHandsController notedSpawnFor;
+        private static string spawnSetup;
+        private static float begunAt;
+        private static bool poseLogged;
+
         // The off hand on the ring or holding the pin: its fingers (VRReloadController.OffHandPose) and its arm (ArmLatch) are ours
         public static bool OffHandBusy => controller != null && (ringLatched || pinInHand);
         internal static Vector3[] RingFingers => controller != null && (ringLatched || pinInHand) && ringData != null ? ringData.fingers : null;
@@ -79,7 +86,14 @@ namespace TarkovVR.Source.Weapons
             }
             if (grenade != controller)
                 Begin(grenade);
-            if (controller == null || thrown || putBack)
+            if (controller == null)
+                return;
+            if (debugLog && !poseLogged && Time.time - begunAt > 0.3f)
+            {
+                poseLogged = true;
+                LogHoldPose();
+            }
+            if (thrown || putBack)
                 return;
 
             holdDown = ReadHold();
@@ -112,6 +126,8 @@ namespace TarkovVR.Source.Weapons
             if (grenade == null || grenade._player == null || !grenade._player.IsYourPlayer)
                 return;
             controller = grenade;
+            begunAt = Time.time;
+            poseLogged = false;
             heldSeen = GrenadeSlot.TakenByHold(grenade.Item);
             if (GrenadeRings.TryFind(grenade.WeaponRoot, out pin, out ring, out ringData))
             {
@@ -490,6 +506,46 @@ namespace TarkovVR.Source.Weapons
                 PinPose(out Vector3 position, out Quaternion rotation);
                 pin.SetPositionAndRotation(position, rotation);
             }
+        }
+
+        // VRGrenadeController's Spawn prefix, before it sets the hold up: what the in-hand object had been before (once per controller,
+        // that prefix calls itself)
+        internal static void NoteSpawn(GrenadeHandsController grenade)
+        {
+            if (!debugLog || grenade == null || grenade == notedSpawnFor)
+                return;
+            notedSpawnFor = grenade;
+            Transform weaponRoot = grenade.WeaponRoot;
+            Transform parent = weaponRoot != null ? weaponRoot.parent : null;
+            string setup = parent == null ? "no Weapon_root parent"
+                : parent.name == "weaponHolder" ? "its object still in a VR hold"
+                : parent.Find("RightHandPositioner") != null ? "its object in the VR hands before"
+                : "its object new to the VR hands";
+            if (GrenadeSlot.CameFromSlot(grenade.ControllerGameObject))
+                setup += ", copied for the slot before";
+            spawnSetup = $"{setup} (object {grenade.ControllerGameObject.GetInstanceID()})";
+            Plugin.MyLog.LogInfo($"[GrenadeHold] {grenade.Item.LocalizedShortName()} spawning: {spawnSetup}");
+        }
+
+        // Where it sits in the holding palm, and the hold's own transforms
+        private static void LogHoldPose()
+        {
+            Transform holder = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform : null;
+            Transform weaponRoot = controller.WeaponRoot;
+            Transform body = controller._grenadeTransform;
+            LimbIK arm = VRGlobals.ikManager != null ? (Handedness.GunInLeftHand ? VRGlobals.ikManager.leftArmIk : VRGlobals.ikManager.rightArmIk) : null;
+            Transform palm = arm != null && arm.solver != null && arm.solver.bone3 != null ? arm.solver.bone3.transform : null;
+            string inPalm = palm != null && body != null
+                ? $"body at {(palm.InverseTransformPoint(body.position) * 100f).ToString("F1")} cm in the palm, turned {(Quaternion.Inverse(palm.rotation) * body.rotation).eulerAngles.ToString("F0")}"
+                : "no palm/body";
+            string marker = holder != null && holder.parent != null && VRGlobals.player != null && VRGlobals.player._markers.Length > 1
+                ? $"{Vector3.Distance(VRGlobals.player._markers[1].position, holder.parent.position) * 100f:0.0} cm"
+                : "?";
+            Plugin.MyLog.LogInfo($"[GrenadeHold] {controller.Item.LocalizedShortName()} 0.3 s in hand ({(notedSpawnFor == controller ? spawnSetup : "spawn not seen")}): {inPalm}; "
+                + $"holder {(holder != null ? holder.localPosition.ToString("F3") + " " + holder.localEulerAngles.ToString("F0") : "none")}, "
+                + $"Weapon_root {(weaponRoot != null ? weaponRoot.localPosition.ToString("F3") + " " + weaponRoot.localEulerAngles.ToString("F0") + " under " + weaponRoot.parent?.name : "none")}, "
+                + $"hands root {(VRGlobals.oldWeaponHolder != null ? VRGlobals.oldWeaponHolder.transform.localEulerAngles.ToString("F0") : "none")}, "
+                + $"grip marker {marker} off the hand, operation {controller.CurrentOperation?.GetType().Name}, arm IK {(arm != null ? arm.enabled.ToString() : "none")}");
         }
 
         private static void Haptic(Valve.VR.SteamVR_Input_Sources source, float amplitude, float duration)

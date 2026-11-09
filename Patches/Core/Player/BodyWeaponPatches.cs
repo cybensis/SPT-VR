@@ -31,6 +31,7 @@ namespace TarkovVR.Patches.Core.Player
         private static void SkipDraw(FirearmController __instance)
         {
             BodyWeapons.OnDrawStarted(__instance);
+            GrenadeSlot.OnGunDrawStarted(__instance);
         }
     }
 }

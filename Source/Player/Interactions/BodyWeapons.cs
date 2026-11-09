@@ -381,16 +381,8 @@ namespace TarkovVR.Source.Player.Interactions
                     return;
                 if (lastSwitchItem == null || firearmController.Item != lastSwitchItem || Time.time - switchStarted > switchTimeout)
                     return;
-                if (!(firearmController.CurrentOperation is FirearmController.SpawnOperation spawn))
+                if (!SkipDrawNow(firearmController))
                     return;
-                // The round its draw would have racked in, shown now (a gun the hand racks had it taken out of the draw already:
-                // VRReloadController.TakeRackOutOfDraw)
-                if (spawn._ammoFromMagToChamber != null)
-                {
-                    spawn.OnAddAmmoInChamber();
-                    spawn._ammoFromMagToChamber = null;
-                }
-                WeaponPatches.SkipDrawOrPutAway(firearmController);
                 if (switchTrace || debugLog)
                     Plugin.MyLog.LogInfo($"[BodyWeapons] draw of {firearmController.Item.LocalizedShortName()} skipped as it started (+{Time.time - switchStarted:0.000}s, frame {Time.frameCount}): op now {firearmController.CurrentOperation?.GetType().Name}");
             }
@@ -398,6 +390,22 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 Plugin.MyLog.LogError($"[BodyWeapons] skipping the draw failed: {exception}");
             }
+        }
+
+        // A draw that just started, finished now (also the gun a grenade put back returns to: GrenadeSlot). false = not drawing.
+        internal static bool SkipDrawNow(FirearmController firearmController)
+        {
+            if (!(firearmController.CurrentOperation is FirearmController.SpawnOperation spawn))
+                return false;
+            // The round its draw would have racked in, shown now (a gun the hand racks had it taken out of the draw already:
+            // VRReloadController.TakeRackOutOfDraw)
+            if (spawn._ammoFromMagToChamber != null)
+            {
+                spawn.OnAddAmmoInChamber();
+                spawn._ammoFromMagToChamber = null;
+            }
+            WeaponPatches.SkipDrawOrPutAway(firearmController);
+            return true;
         }
 
         private static void TraceSwitchFrame()

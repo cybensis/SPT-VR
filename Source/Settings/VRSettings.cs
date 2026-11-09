@@ -118,7 +118,10 @@ namespace TarkovVR.Source.Settings
             public float[] gunSpotChest { get; set; }
             public float[] gunSpotBack { get; set; }
             public float[] gunSpotHip { get; set; }
-            // The grenade slot moved by hand (GrenadeSlot): its model's position x, y, z from the neck and rotation x, y, z, w, body frame
+            // The grenade slot moved by hand (GrenadeSlot): the grenade's middle x, y, z from the neck and its body's rotation x, y, z, w,
+            // body frame
+            public float[] grenadeSlotMiddle { get; set; }
+            // The first build's: its model ROOT's pose (~40 cm off the grenade), turned into grenadeSlotMiddle once and cleared
             public float[] grenadeSlot { get; set; }
             // Holding a grenade with the trigger instead of the grip (GrenadeHold / GrenadeSlot)
             public bool grenadeHoldWithTrigger { get; set; }
@@ -1144,10 +1147,30 @@ namespace TarkovVR.Source.Settings
             SaveSettings();
         }
 
-        // The grenade slot moved by hand (GrenadeSlot): the model's pose from the neck, body frame. Saved straight away.
-        public static bool GetGrenadeSlot(out Vector3 position, out Quaternion rotation)
+        // The grenade slot moved by hand (GrenadeSlot): the grenade's middle from the neck and its body's rotation, body frame. Saved
+        // straight away.
+        public static bool GetGrenadeSlot(out Vector3 middle, out Quaternion rotation)
         {
-            float[] data = settings != null ? settings.grenadeSlot : null;
+            return ReadPose(settings != null ? settings.grenadeSlotMiddle : null, out middle, out rotation);
+        }
+
+        public static void SetGrenadeSlot(Vector3 middle, Quaternion rotation)
+        {
+            rotation = Quaternion.Normalize(rotation);
+            settings.grenadeSlotMiddle = new[] { middle.x, middle.y, middle.z, rotation.x, rotation.y, rotation.z, rotation.w };
+            settings.grenadeSlot = null;
+            SaveSettings();
+        }
+
+        // The first build's placement (grenadeSlot): the pose of the model's root, which sits ~40 cm off the grenade. GrenadeSlot turns
+        // it into the middle-and-body pose once it has a model to measure.
+        public static bool GetOldGrenadeSlot(out Vector3 rootPosition, out Quaternion rootRotation)
+        {
+            return ReadPose(settings != null ? settings.grenadeSlot : null, out rootPosition, out rootRotation);
+        }
+
+        private static bool ReadPose(float[] data, out Vector3 position, out Quaternion rotation)
+        {
             if (data == null || data.Length != 7)
             {
                 position = Vector3.zero;
@@ -1157,13 +1180,6 @@ namespace TarkovVR.Source.Settings
             position = new Vector3(data[0], data[1], data[2]);
             rotation = new Quaternion(data[3], data[4], data[5], data[6]);
             return true;
-        }
-
-        public static void SetGrenadeSlot(Vector3 position, Quaternion rotation)
-        {
-            rotation = Quaternion.Normalize(rotation);
-            settings.grenadeSlot = new[] { position.x, position.y, position.z, rotation.x, rotation.y, rotation.z, rotation.w };
-            SaveSettings();
         }
 
         public static bool GetGrenadeHoldWithTrigger()
@@ -1184,6 +1200,7 @@ namespace TarkovVR.Source.Settings
             settings.gunSpotBack = null;
             settings.gunSpotHip = null;
             settings.grenadeSlot = null;
+            settings.grenadeSlotMiddle = null;
             SaveSettings();
             Plugin.MyLog.LogInfo("[GunSpots] placed gun spots reset to the defaults");
             // Back off without calling this again: a button, not a setting

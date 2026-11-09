@@ -65,6 +65,7 @@ namespace TarkovVR.Patches.Core.VR
 
             if (!player.IsYourPlayer)
                 return;
+            GrenadeHold.NoteSpawn(__instance);
 
             WeaponPatches.grenadeEquipped = true;
             WeaponPatches.pinPulled = false;
@@ -263,6 +264,10 @@ namespace TarkovVR.Patches.Core.VR
         {
             if (!__instance._player.IsYourPlayer)
                 return true;
+            // Its hide clip reaching its end after the put-away was skipped already (GrenadeSlot.SkipPutAway: this event, called
+            // early): the hands are the next item's by now - its holder isn't ours to turn, and the put-away mustn't finish twice
+            if (!ReferenceEquals(__instance._player.HandsController, __instance))
+                return false;
 
             VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
             InitVRPatches.rightPointerFinger.enabled = false;
