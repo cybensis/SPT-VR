@@ -272,6 +272,7 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 pendingDropPosition;
         private static Quaternion pendingDropRotation;
         private static Vector3 pendingDropVelocity;
+        private static Vector3? pendingDropAngularVelocity;
         private static float pendingDropDeadline;
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -567,6 +568,8 @@ namespace TarkovVR.Source.Weapons
             UpdatePalmZoneBlip();
             if (triggerPressed)
                 TryStartPalming();
+            // A new magazine in the hand pushed into an AK's catch knocks the gun's out (VRReloadController.KnockOut)
+            TickKnockOut();
             if (releasePressed && !HoldingGunMagazine && !HoldingSeatedMagazine && !TrySlideMagazinePartlyOut())
                 TryReleaseMagazine();
             // The gun hand on the handle leaves the off hand where it is: on the foregrip, holding the gun up
@@ -1964,12 +1967,15 @@ namespace TarkovVR.Source.Weapons
             return VRGlobals.player.InventoryController.CanThrow(magazine);
         }
 
-        private static void RunDrop(Magazine magazine, FirearmController firearmController, Vector3 position, Quaternion rotation, Vector3 velocity)
+        // angularVelocity: its spin as it leaves (a magazine knocked out, VRReloadController.KnockOut); null = a random tumble
+        private static void RunDrop(Magazine magazine, FirearmController firearmController, Vector3 position, Quaternion rotation, Vector3 velocity,
+            Vector3? angularVelocity = null)
         {
             pendingDropMagazine = magazine;
             pendingDropPosition = position;
             pendingDropRotation = rotation;
             pendingDropVelocity = velocity;
+            pendingDropAngularVelocity = angularVelocity;
             pendingDropDeadline = Time.time + 3f;
 
             ExpectOperation(ExpectedOperation.PullOut, firearmController);
@@ -2048,7 +2054,7 @@ namespace TarkovVR.Source.Weapons
             if (rigidBody != null)
             {
                 rigidBody.velocity = pendingDropVelocity;
-                rigidBody.angularVelocity = UnityEngine.Random.insideUnitSphere * dropAngularSpeed;
+                rigidBody.angularVelocity = pendingDropAngularVelocity ?? UnityEngine.Random.insideUnitSphere * dropAngularSpeed;
             }
             // Tarkov hides a thrown item for a moment so it doesn't pop in at the body; this one is where the hand let go.
             // (Its hide only covers the magazine body, so the cartridges showed on their own: "just the bullets".)
