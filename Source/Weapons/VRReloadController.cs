@@ -454,8 +454,9 @@ namespace TarkovVR.Source.Weapons
             // A press check: the gun hand off the grip onto the slide, the trigger drawing it back (VRReloadController.PressCheck)
             UpdatePressCheck(gunHandGripState);
 
-            bool handBusy = HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector
-                || HoldingHinge || HoldingBelt;
+            // (not the gun hand holding the gun by its charging handle: the off hand is free for the magazine then, ChestHang.HandleHeld)
+            bool handBusy = HoldingMagazine || (HoldingChargingHandle && !(HandleInGunHand && ChestHang.HandleHeld)) || HoldingSeatedMagazine || HoldingPalmedMagazine
+                || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector || HoldingHinge || HoldingBelt;
             // On a gun that loads through its open bolt, the pouch grip is a round, not a magazine: the off hand's, or the gun hand's
             // while the off hand holds the gun up
             if (!handBusy && gripPressed && (TryGrabShell(gunHand: false) || TryGrabRound(gunHand: false)))
@@ -486,8 +487,9 @@ namespace TarkovVR.Source.Weapons
                 // are the gun hand's; any other gun, either as before)
                 bool offHandBox = BeltBoxHandMay(firearmController, gunHand: false);
                 bool inGrabZone = offHandBox && InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
-                bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon) && BeltChargeHandMay(firearmController, gunHand: false);
-                bool inSideHandleZone = !supporting && !inHandleZone && InSideHandleZone(firearmController, weapon);
+                // (not the handle the gun hand holds, ChestHang.HandleHeld)
+                bool inHandleZone = !supporting && !HoldingChargingHandle && InChargingHandleZone(firearmController, weapon) && BeltChargeHandMay(firearmController, gunHand: false);
+                bool inSideHandleZone = !supporting && !HoldingChargingHandle && !inHandleZone && InSideHandleZone(firearmController, weapon);
                 // Not at the grenade on the chest (GrenadeSlot, a frame late): its grab takes that press
                 bool inPouchZone = !supporting && offHandBox && InChestPouchZone(palm) && !GrenadeSlot.OffHandAtSlot;
                 // A failure to eject: the case stuck in the ejection port, taken with the trigger like the handle (VRReloadController.Malfunctions)
@@ -587,8 +589,12 @@ namespace TarkovVR.Source.Weapons
 
         private static bool CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
         {
-            return CanWorkGun(out firearmController, out weapon, out magazineSlot) && !ChestHang.Detached;
+            return CanWorkGun(out firearmController, out weapon, out magazineSlot) && OffHandFreeOnGun;
         }
+
+        // The off hand free to work on the gun: the gun in the gun hand, or held by that hand on its charging handle (ChestHang.HandleHeld,
+        // an "Iraqi" reload: the magazine's swapped with the bolt held back). Not slung, not held up by the off hand itself.
+        private static bool OffHandFreeOnGun => !ChestHang.Detached || ChestHang.HandleHeld;
 
         private static bool CanWorkGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
         {
@@ -902,7 +908,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             if (!TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None || ChestHang.Detached)
+            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None || !OffHandFreeOnGun)
                 return;
             // No loose loot moves in the hideout (FIKA's item sync has no world there)
             if (Singleton<GameWorld>.Instance == null || Singleton<GameWorld>.Instance is HideoutGameWorld)
@@ -1998,7 +2004,7 @@ namespace TarkovVR.Source.Weapons
             if (!TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return false;
             if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None
-                || ChestHang.Detached || weapon.MalfState.State == Weapon.EMalfunctionState.Feed)
+                || !OffHandFreeOnGun || weapon.MalfState.State == Weapon.EMalfunctionState.Feed)
                 return false;
             Magazine magazine = weapon.GetCurrentMagazine();
             ContainerCollectionView.SlotView magazineView = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot);
@@ -2708,7 +2714,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
                 return;
-            if (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting)
+            if (OffHandFreeOnGun && !VRGlobals.vrPlayer.isSupporting)
                 PreGrabFor(firearmController, gunHand: false, out offHandPreGrabPose, out offHandPreGrabPoseIsRight, out offHandPreGrabWeight);
             if (ChestHang.SupportOnly && !ChestHang.HandInRegrabZone)
                 PreGrabFor(firearmController, gunHand: true, out gunHandPreGrabPose, out gunHandPreGrabPoseIsRight, out gunHandPreGrabWeight);

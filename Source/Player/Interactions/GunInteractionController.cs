@@ -551,6 +551,9 @@ public class GunInteractionController : MonoBehaviour
             return;
         if (TarkovVR.Source.Player.Interactions.ChestHang.SupportOnly && TarkovVR.Source.Player.Interactions.ChestHang.DriveSupportPose())
             return;
+        // Held by the gun hand on the charging handle alone (an "Iraqi" reload)
+        if (TarkovVR.Source.Player.Interactions.ChestHang.HandleHeld && TarkovVR.Source.Player.Interactions.ChestHang.DriveHandleHoldPose())
+            return;
 
         // A grenade with its pin out: turned so the hand keeps the turn it had (GrenadeHold.KeepHandTurn) - before the anchor below, which
         // then lands the turned grip on your hand

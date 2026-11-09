@@ -267,7 +267,8 @@ namespace TarkovVR.Source.Player.Interactions
         private bool DominantHandFree()
         {
             bool handFree = ChestHang.Detached || (VRGlobals.player != null && VRGlobals.player.HandsIsEmpty);
-            return handFree
+            // (not on the charging handle: off the grip, but holding the gun by it through a magazine swap, ChestHang.HandleHeld)
+            return handFree && !TarkovVR.Source.Weapons.VRReloadController.HandleInGunHand
                 && !TarkovVR.Patches.Core.Player.WeaponPatches.grenadeEquipped
                 && !rightHandState.inBackHolster && !rightHandState.inSidearmHolster
                 && !ChestHang.HandInRegrabZone

@@ -66,7 +66,14 @@ namespace TarkovVR.Source.Player.Interactions
 
         public static bool Hanging { get; private set; }
         public static bool SupportOnly { get; private set; }   // gun held by the support hand alone
-        public static bool Detached => Hanging || SupportOnly; // fire gate
+        // Held by the gun hand on the charging handle alone (his "Iraqi reload"): the handle pulled back with the off hand holding the gun
+        // up, then the off hand let go - the gun rides the gun hand's controller from there, the off hand free for the magazine. Ends on
+        // letting go of the handle (the bolt goes home, the gun to the sling - or the support hold if the off hand is back on the
+        // foregrip) or the off hand taking the foregrip again (the support hold, the handle still back). Right-handed holds only.
+        public static bool HandleHeld { get; private set; }
+        public static bool handleHoldReload = true;             // false = letting go of the foregrip with the handle back slings the gun, as before
+        public static bool handleHoldLog = true;                // a line per start / end of that hold (round 1)
+        public static bool Detached => Hanging || SupportOnly || HandleHeld; // fire gate
         public static bool HandInRegrabZone { get; private set; } // dominant palm within regrab reach of the detached gun (loot pointer yields to the regrab)
         public static bool OffHandAtGunGrip { get; private set; } // the off hand where a grip press takes the gun into it (the off-hand loot pointer and body grab yield)
         private static bool prevOffGrip;
@@ -99,6 +106,9 @@ namespace TarkovVR.Source.Player.Interactions
         private static Quaternion supportRelRot = Quaternion.identity;
         private static Vector3 supportGripLever;    // grab point -> WeaponRoot, in GUN space (the weight spring pivots about the grab)
         private static Quaternion supportSmoothedRot = Quaternion.identity;   // the spring's filtered gun rotation
+        // HandleHeld: the gun's pose rigid in the gun-hand controller's frame (rigid: a swinging gun would slide the held handle along its track)
+        private static Vector3 handleHoldRelPos;
+        private static Quaternion handleHoldRelRot = Quaternion.identity;
 
         // Called from HandsInteractionController.Update after ProcessInputStates (so this frame's
         // holster/radial gestures are already reflected in the ownership flag).
@@ -233,10 +243,16 @@ namespace TarkovVR.Source.Player.Interactions
                 RegrabZonePulse(near);
                 if (!supporting)
                 {
-                    // support hand let go too - both hands off -> straight to the sling (no flash of
-                    // the marker anchor in between)
-                    SupportOnly = false;
-                    BeginHang(fc);
+                    // The gun hand holding the charging handle back: the gun hangs from that hand now (HandleHeld), the off hand free
+                    if (CanHoldByHandle())
+                        BeginHandleHold(fc);
+                    else
+                    {
+                        // support hand let go too - both hands off -> straight to the sling (no flash of
+                        // the marker anchor in between)
+                        SupportOnly = false;
+                        BeginHang(fc);
+                    }
                 }
                 // (not a press on a belt gun's box: the gun hand takes the box, VRReloadController.GunHandAtBox, a frame old)
                 else if (pressed && near && !VRReloadController.HandleInGunHand && !VRReloadController.BoltInGunHand && !VRReloadController.GunHandAtBox)
@@ -248,6 +264,32 @@ namespace TarkovVR.Source.Player.Interactions
                     if (Handedness.GunInLeftHand)
                         VRPlayerManager.CacheGunInHand();   // the holder back in its clean pose, as off the sling
                     gripSeen = true;
+                }
+                prevGrip = grip;
+                return;
+            }
+
+            if (HandleHeld)
+            {
+                HandInRegrabZone = false;
+                if (!VRReloadController.HandleInGunHand)
+                {
+                    // Let go of the handle (the bolt's gone home): held up by the off hand if it's back on the foregrip, else nobody's
+                    HandleHeld = false;
+                    if (supporting)
+                        BeginSupportHold(fc);
+                    else
+                        BeginHang(fc);
+                    if (handleHoldLog)
+                        Plugin.MyLog.LogInfo($"[ChestHang] handle let go: the gun {(supporting ? "in the off hand on the foregrip" : "to the sling")}");
+                }
+                else if (supporting)
+                {
+                    // The off hand back on the foregrip, the handle still back: it holds the gun up again
+                    HandleHeld = false;
+                    BeginSupportHold(fc);
+                    if (handleHoldLog)
+                        Plugin.MyLog.LogInfo("[ChestHang] off hand back on the foregrip: the gun held up by it, the handle still back");
                 }
                 prevGrip = grip;
                 return;
@@ -518,6 +560,60 @@ namespace TarkovVR.Source.Player.Interactions
                 Pulse(0.35f, throughGun: true);
         }
 
+        // The support hold's off hand letting go with the gun hand on the charging handle: that hand carries the gun from here
+        private static bool CanHoldByHandle()
+        {
+            return handleHoldReload && VRReloadController.HandleInGunHand && !Handedness.GunInLeftHand
+                && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null;
+        }
+
+        // Rigid on the gun-hand controller at the pose the support hold left it in (the hand already holds the handle: "it keeps holding it")
+        private static void BeginHandleHold(EFT.Player.FirearmController fc)
+        {
+            Transform wr = fc.WeaponRoot;
+            Transform hand = VRGlobals.vrPlayer.RightHand.transform;
+            if (wr == null)
+            {
+                SupportOnly = false;
+                BeginHang(fc);
+                return;
+            }
+            Quaternion controller = GunHandControllerRot(hand);
+            handleHoldRelPos = Quaternion.Inverse(controller) * (wr.position - hand.position);
+            handleHoldRelRot = Quaternion.Inverse(controller) * wr.rotation;
+            SupportOnly = false;
+            HandleHeld = true;
+            if (hangHaptics)
+                Pulse(0.35f, throughGun: true);
+            if (handleHoldLog)
+                Plugin.MyLog.LogInfo($"[ChestHang] off hand let go with the handle back: {fc.Item.LocalizedShortName()} held by the handle");
+        }
+
+        public static bool DriveHandleHoldPose()
+        {
+            if (DetachedGunGone())
+            {
+                Reattach(restore: false);
+                return false;
+            }
+            if (!DetachedGunOnHolder())
+                return true;
+            var fc = VRGlobals.firearmController;
+            var handObject = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.RightHand : null;
+            if (fc == null || fc.WeaponRoot == null || VRGlobals.weaponHolder == null || handObject == null)
+                return true;
+            Transform hand = handObject.transform;
+            Quaternion controller = GunHandControllerRot(hand);
+            StampWeaponRoot(hand.position + controller * handleHoldRelPos, controller * handleHoldRelRot);
+            return true;
+        }
+
+        // The gun hand's live controller rotation in world space, as SupportControllerRot has the off hand's
+        private static Quaternion GunHandControllerRot(Transform hand)
+        {
+            return (hand.parent != null ? hand.parent.rotation : Quaternion.identity) * Handedness.GunHandPose.localRotation;
+        }
+
         // Shared detach work: free the dominant arm (the HandsIsEmpty pattern). NOTE the collision
         // Reset happens EARLIER, in the Begin* methods BEFORE SaveHolderOnce - the strip must precede
         // the save (the prone-sling corruption).
@@ -606,6 +702,7 @@ namespace TarkovVR.Source.Player.Interactions
             bool wasDetached = Detached;
             Hanging = false;
             SupportOnly = false;
+            HandleHeld = false;
             detachedGun = null;
             HandInRegrabZone = false;
             GiveGunHandMarkerBack();

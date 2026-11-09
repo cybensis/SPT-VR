@@ -745,14 +745,14 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (VRGlobals.firearmController == null || VRGlobals.firearmController != handleForFirearm)
                 return false;
-            // The off hand let go too, or the grip was taken back some other way
-            if (handleInGunHand && !ChestHang.SupportOnly)
+            // The grip taken back some other way; the off hand letting go too leaves the gun on this hand (ChestHang.HandleHeld)
+            if (handleInGunHand && !ChestHang.SupportOnly && !ChestHang.HandleHeld)
                 return false;
             // The gun went from one hand to the other: that arm isn't this hand's any more
             if (latchedOnRightArm != OnRightArm(handleInGunHand))
                 return false;
-            // Our own rechamber runs for a frame while the handle is back
-            if (!(handleForFirearm.CurrentOperation is FirearmController.Idling) && expectedOperation != ExpectedOperation.Rechamber)
+            // Our own operations run for a frame while the handle is back: the rechamber, a magazine out or in (an "Iraqi" reload)
+            if (!(handleForFirearm.CurrentOperation is FirearmController.Idling) && expectedOperation == ExpectedOperation.None)
                 return false;
             // The M3 switched to pump mode meanwhile
             if (ShotgunInPumpMode(handleForFirearm))

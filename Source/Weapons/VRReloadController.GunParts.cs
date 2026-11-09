@@ -714,7 +714,7 @@ namespace TarkovVR.Source.Weapons
             // Still in the gun (the insert may be finishing this frame)
             bool magazineIn = weapon != null && (weapon.GetCurrentMagazine() != null || expectedOperation == ExpectedOperation.Insert);
             bool valid = enabled && VRGlobals.inGame && !VRGlobals.menuOpen && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.LeftHand != null
-                && firearmController == VRGlobals.firearmController && seatedHoldWell != null && magazineIn && !ChestHang.Detached
+                && firearmController == VRGlobals.firearmController && seatedHoldWell != null && magazineIn && OffHandFreeOnGun
                 && handLatched;     // the latch drops when the gun goes from one hand to the other (UpdateHandLatch)
             if (!valid || gripReleased)
             {
