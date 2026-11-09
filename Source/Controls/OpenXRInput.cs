@@ -83,6 +83,8 @@ namespace TarkovVR.Source.Controls
             public Quaternion rawRotation = Quaternion.identity;
             public Vector3 rawVelocity;
             public Vector3 angularVelocity;
+            public Vector3 gripVelocity;    // the grip's own, before the spin term moves it to the raw point
+            public Vector3 gripToRawWorld;  // that lever, raw point minus grip, tracking space
         }
 
         private static readonly ControllerState[] controllers =
@@ -269,6 +271,8 @@ namespace TarkovVR.Source.Controls
         public static Quaternion GetRawRotation(int hand) => controllers[hand].rawRotation;
         public static Vector3 GetRawVelocity(int hand) => controllers[hand].rawVelocity;
         public static Vector3 GetAngularVelocity(int hand) => controllers[hand].angularVelocity;
+        public static Vector3 GetGripVelocity(int hand) => controllers[hand].gripVelocity;
+        public static Vector3 GetGripToRawLever(int hand) => controllers[hand].gripToRawWorld;
 
         // Runs from onBeforeRender. Left pose listeners first, then right, the order SteamVR fires them in.
         internal static void UpdatePosesAndFireListeners()
@@ -305,6 +309,8 @@ namespace TarkovVR.Source.Controls
                 controller.rawPosition += controller.rawRotation * rawPosePositionOffset;
 
             // The raw point is on the same rigid controller, so it also moves with the controller's spin
+            controller.gripVelocity = gripVelocity;
+            controller.gripToRawWorld = controller.rawPosition - gripPosition;
             controller.rawVelocity = gripVelocity + Vector3.Cross(controller.angularVelocity, controller.rawPosition - gripPosition);
         }
 

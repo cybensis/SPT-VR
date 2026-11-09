@@ -190,7 +190,13 @@ namespace TarkovVR.Patches.Core.VR
             if (!WeaponPatches.pinPulled)
                 return false;
 
-            Vector3 throwVelocity = ControllerVelocity.GetSteamVRVelocity(SteamVR_Input_Sources.RightHand);
+            // The hand's own measured motion (ThrowVelocity: OpenXR's rebuilt raw-point velocity bent throws sideways); the
+            // runtime's when there's no history yet or ThrowVelocity.enabled is off
+            Vector3 runtimeVelocity = ControllerVelocity.GetSteamVRVelocity(SteamVR_Input_Sources.RightHand);
+            bool measured = ThrowVelocity.TryMeasure(SteamVR_Input_Sources.RightHand, out Vector3 measuredVelocity, out Vector3 measuredSpin);
+            bool useMeasured = ThrowVelocity.enabled && measured;
+            Vector3 throwVelocity = useMeasured ? measuredVelocity : runtimeVelocity;
+            ThrowVelocity.LogThrow(SteamVR_Input_Sources.RightHand, runtimeVelocity, measuredVelocity, measuredSpin, useMeasured);
             Vector3 force;
             Vector3 throwPos = ControllerVelocity.GetSteamVRPosition(SteamVR_Input_Sources.RightHand);
             Quaternion throwRot = ControllerVelocity.GetSteamVRRotation(SteamVR_Input_Sources.RightHand);
