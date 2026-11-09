@@ -82,6 +82,9 @@ namespace TarkovVR.Source.Player.Interactions
         private static Quaternion inHandRotation = Quaternion.identity;
         private static Item handsBefore;
         private static bool gunHungBefore;
+        // What Tarkov draws once the grenade in hand is thrown: the item before it (PlayerOwner.PreviousItem as it came in), the one before
+        // the first through picker swaps
+        private static Item afterThrowItem;
 
         // The last grab: which grenade, and with which hand
         private static Item grabbedItem;
@@ -352,8 +355,14 @@ namespace TarkovVR.Source.Player.Interactions
             grabbedByHold = true;
             puttingAway = current;
             putAwayStarted = Time.time;
+            // Tarkov draws the item a grenade came in after once it's thrown (PlayerOwner.SetHandsController keeps PreviousItem for its
+            // after-use callback): after this swap that's the grenade swapped from (his report, [GrenadeDiag]: thrown, and the other one
+            // came into the hand by itself). The item before the first one instead.
+            EFT.PlayerOwner owner = VRGlobals.player.GetComponent<EFT.PlayerOwner>();
+            if (owner != null)
+                owner.PreviousItem = afterThrowItem;
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeSlot] {current.Item.LocalizedShortName()} swapped for {next.LocalizedShortName()} ({(left ? "left" : "right")} hand)");
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] {current.Item.LocalizedShortName()} swapped for {next.LocalizedShortName()} ({(left ? "left" : "right")} hand), after its throw: {afterThrowItem?.LocalizedShortName() ?? "empty hands"}{(owner == null ? " (NO PlayerOwner - Tarkov's own pick)" : "")}");
             VRGlobals.player.SetItemInHands(next, delegate { });
         }
 
@@ -369,8 +378,12 @@ namespace TarkovVR.Source.Player.Interactions
                 bool fromSlot = switchingTo != null && grenade.Item == switchingTo;
                 // (swapped in the hand: the gun that hung when the first came out still did)
                 if (!(fromSlot && switchFromHand))
+                {
                     hungGun = fromSlot ? (gunHungBefore ? handsBefore : null)
                         : ChestHang.Hanging && VRGlobals.firearmController != null ? VRGlobals.firearmController.Item : null;
+                    // Still the item before this one: Tarkov moves it on when the draw ends (the FastForward below)
+                    afterThrowItem = grenade._player.GetComponent<EFT.PlayerOwner>()?.PreviousItem;
+                }
                 if (!fromSlot)
                 {
                     // Not asked for by a grab or the picker (his report: one came by itself after a throw): who drew it
