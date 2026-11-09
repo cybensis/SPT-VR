@@ -791,8 +791,11 @@ namespace TarkovVR.Patches.Core.Player
 
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
         [HarmonyPrefix]
-        private static void CleanupHighlightMesh()
+        private static void CleanupHighlightMesh(EFT.Player.FirearmController __instance)
         {
+            // Our own weapon switch only: a bot drawing a gun took our weapon-part highlight off the camera
+            if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
+                return;
             // Clean up any existing highlight mesh before switching weapons
             if (VRGlobals.VRCam != null)
             {
@@ -1434,8 +1437,11 @@ namespace TarkovVR.Patches.Core.Player
         // Patch PlayerBridge.TotalWeight getter to include the weight of the currently held item
         [HarmonyPostfix]
         [HarmonyPatch(typeof(PhysicalBase.PlayerBridge), "TotalWeight", MethodType.Getter)]
-        private static void AddHeldItemWeight(ref float __result)
+        private static void AddHeldItemWeight(PhysicalBase.PlayerBridge __instance, ref float __result)
         {
+            // Every player's weight comes through here: only ours carries the item in our hand (bots and the other co-op players weighed it too)
+            if (__instance == null || __instance.iPlayer == null || !__instance.iPlayer.IsYourPlayer)
+                return;
             if (!VRSettings.GetHeldItemWeight())
                 return;
             if (VRGlobals.handsInteractionController == null)
@@ -1647,8 +1653,11 @@ namespace TarkovVR.Patches.Core.Player
 
         [HarmonyPatch(typeof(MedsController), "Spawn")]
         [HarmonyPrefix]
-        private static void CleanupHighlightMeshMeds()
+        private static void CleanupHighlightMeshMeds(MedsController __instance)
         {
+            // Our own meds only: a bot healing took our weapon-part highlight off the camera
+            if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
+                return;
             // Clean up any existing highlight mesh before switching weapons
             if (VRGlobals.VRCam != null)
             {
