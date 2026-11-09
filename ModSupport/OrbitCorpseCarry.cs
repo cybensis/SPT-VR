@@ -22,31 +22,34 @@ namespace TarkovVR.ModSupport.ORBIT
     //   - its killers' own-kill loot queue (Agent.OwnKillCorpseIds: ORBIT drops an id it no longer tracks - the killer gave up on it)
     //   - the squads that already looted it and the bots that judged it not worth it (CompletedPoiIds / ValueSkippedPoiIds)
     //   - a boss body Boss Rush squads look for (_rushCorpses, keyed by the waypoint object) and the squads' boss-loot memory of it
+    //
+    // NO field of an ORBIT type, here or in a closure (a lambda capturing an ORBIT-typed local makes one): Assembly.GetTypes() on
+    // SPT-VR.dll loads every type's fields, so without ORBIT installed it threw ReflectionTypeLoadException for any mod that scans
+    // assemblies (a tester's WTT-ClientCommonLib log: "Could not load type of field 'OrbitCorpseCarry:pulled'"). Held as object, cast
+    // where used; ORBIT types only in method signatures and bodies, which load when they run.
     internal sealed class OrbitCorpseCarry
     {
-        private Waypoint pulled;
+        private object pulled;                                          // Waypoint
         private int killerSquad = -1;
         private string rushRole;
-        private readonly List<Agent> ownKillAgents = new List<Agent>();
-        private readonly List<Squad> completedSquads = new List<Squad>();
-        private readonly List<Agent> valueSkippedAgents = new List<Agent>();
+        private readonly List<object> ownKillAgents = new List<object>();       // Agent
+        private readonly List<object> completedSquads = new List<object>();     // Squad
+        private readonly List<object> valueSkippedAgents = new List<object>();  // Agent
 
-        public int PulledId => pulled != null ? pulled.Id : -1;
+        private Waypoint Pulled => (Waypoint)pulled;
+
+        public int PulledId => pulled != null ? Pulled.Id : -1;
         public int KillerSquad => killerSquad;
 
         // Everything ORBIT knows about the corpse's waypoint, just before it's removed. Each part apart: one that fails (an ORBIT
-        // update renamed what it reads) loses only itself.
+        // update renamed what it reads) loses only itself - its own NoInlining method, compiled when it's called, inside the try.
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static OrbitCorpseCarry Capture(WaypointSystem waypoints, Waypoint waypoint, Action<string> warn)
         {
             var carry = new OrbitCorpseCarry { pulled = waypoint };
-            Guard(() =>
-            {
-                if (waypoints._corpseKillerSquadId != null && waypoints._corpseKillerSquadId.TryGetValue(waypoint.Id, out int squadId))
-                    carry.killerSquad = squadId;
-            }, "killer squad", warn);
-            Guard(() => carry.CaptureRush(waypoints), "boss rush body", warn);
-            Guard(() => carry.CaptureIds(), "loot queues", warn);
+            try { carry.CaptureKillerSquad(waypoints); } catch (Exception e) { Warn(warn, "killer squad", e); }
+            try { carry.CaptureRush(waypoints); } catch (Exception e) { Warn(warn, "boss rush body", e); }
+            try { carry.CaptureIds(); } catch (Exception e) { Warn(warn, "loot queues", e); }
             return carry;
         }
 
@@ -55,11 +58,30 @@ namespace TarkovVR.ModSupport.ORBIT
         public void Restore(WaypointSystem waypoints, Waypoint moved, Action<string> warn)
         {
             if (killerSquad >= 0)
-                Guard(() => waypoints.TagCorpseKillerSquad(moved.Id, killerSquad), "killer squad", warn);
+                try { RestoreKillerSquad(waypoints, moved); } catch (Exception e) { Warn(warn, "killer squad", e); }
             if (rushRole != null)
-                Guard(() => waypoints.RegisterRushCorpse(moved, rushRole), "boss rush body", warn);
-            Guard(() => RestoreIds(moved.Id), "loot queues", warn);
-            Guard(() => RestoreBossLoot(moved), "boss loot", warn);
+                try { RestoreRush(waypoints, moved); } catch (Exception e) { Warn(warn, "boss rush body", e); }
+            try { RestoreIds(moved.Id); } catch (Exception e) { Warn(warn, "loot queues", e); }
+            try { RestoreBossLoot(moved); } catch (Exception e) { Warn(warn, "boss loot", e); }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void CaptureKillerSquad(WaypointSystem waypoints)
+        {
+            if (waypoints._corpseKillerSquadId != null && waypoints._corpseKillerSquadId.TryGetValue(Pulled.Id, out int squadId))
+                killerSquad = squadId;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void RestoreKillerSquad(WaypointSystem waypoints, Waypoint moved)
+        {
+            waypoints.TagCorpseKillerSquad(moved.Id, killerSquad);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void RestoreRush(WaypointSystem waypoints, Waypoint moved)
+        {
+            waypoints.RegisterRushCorpse(moved, rushRole);
         }
 
         // Where the body can't be a loot waypoint: ORBIT doesn't register a corpse inside a minefield / border zone (it would lure
@@ -77,22 +99,25 @@ namespace TarkovVR.ModSupport.ORBIT
                 $"skipped by={valueSkippedAgents.Count}, boss={rushRole ?? "-"}";
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private void CaptureRush(WaypointSystem waypoints)
         {
-            if (waypoints._rushCorpses != null && waypoints._rushCorpses.TryGetValue(pulled, out string role))
+            Waypoint waypoint = Pulled;
+            if (waypoints._rushCorpses != null && waypoints._rushCorpses.TryGetValue(waypoint, out string role))
             {
                 rushRole = role;
                 // Not found by Boss Rush while it's being carried, like the waypoint itself
-                waypoints._rushCorpses.Remove(pulled);
+                waypoints._rushCorpses.Remove(waypoint);
             }
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private void CaptureIds()
         {
             OrbitManager manager = Comfort.Common.Singleton<OrbitManager>.Instance;
             if (manager == null)
                 return;
-            int id = pulled.Id;
+            int id = Pulled.Id;
             List<Agent> agents = manager.AgentData.Entities.Values;
             for (int i = 0; i < agents.Count; i++)
             {
@@ -110,29 +135,33 @@ namespace TarkovVR.ModSupport.ORBIT
                     completedSquads.Add(squads[i]);
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private void RestoreIds(int id)
         {
+            int pulledId = Pulled.Id;
             for (int i = 0; i < ownKillAgents.Count; i++)
             {
-                Agent agent = ownKillAgents[i];
+                Agent agent = (Agent)ownKillAgents[i];
                 if (agent?.Bot == null || agent.Bot.IsDead)
                     continue;
-                agent.OwnKillCorpseIds.Remove(pulled.Id);
+                agent.OwnKillCorpseIds.Remove(pulledId);
                 if (!agent.OwnKillCorpseIds.Contains(id))
                     agent.OwnKillCorpseIds.Add(id);
             }
             for (int i = 0; i < valueSkippedAgents.Count; i++)
-                valueSkippedAgents[i]?.ValueSkippedPoiIds.Add(id);
+                ((Agent)valueSkippedAgents[i])?.ValueSkippedPoiIds.Add(id);
             for (int i = 0; i < completedSquads.Count; i++)
-                completedSquads[i]?.CompletedPoiIds.Add(id);
+                ((Squad)completedSquads[i])?.CompletedPoiIds.Add(id);
         }
 
         // Squads that killed a boss remember its body (BossRushLoot): what pointed at the old waypoint points at the new one
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private void RestoreBossLoot(Waypoint moved)
         {
             OrbitManager manager = Comfort.Common.Singleton<OrbitManager>.Instance;
             if (manager == null)
                 return;
+            Waypoint pulled = Pulled;
             List<Squad> squads = manager.SquadData.Entities.Values;
             for (int s = 0; s < squads.Count; s++)
             {
@@ -159,11 +188,9 @@ namespace TarkovVR.ModSupport.ORBIT
             }
         }
 
-        // A lambda is its own method, compiled when it runs: a member an ORBIT update renamed throws here, inside the try
-        private static void Guard(Action part, string what, Action<string> warn)
+        private static void Warn(Action<string> warn, string what, Exception e)
         {
-            try { part(); }
-            catch (Exception e) { warn?.Invoke($"{what}: {e.GetType().Name}: {e.Message}"); }
+            warn?.Invoke($"{what}: {e.GetType().Name}: {e.Message}");
         }
     }
 }
