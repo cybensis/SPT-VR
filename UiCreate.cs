@@ -52,6 +52,27 @@ public class CircularSegmentUI : MonoBehaviour
 
     private int lastSelectedSegment = -1;
 
+    // The grenade picker (GrenadePicker): drawn like the quick slots, but its stick and its closing are the picker's - it reads back the
+    // segment the stick points at
+    public bool pickerMode;
+    public bool pickerOnLeftController;
+    public Vector2 pickerStick;
+    public int SelectedSegment => lastSelectedSegment;
+
+    public void CreatePickerUi(Sprite[] sprites)
+    {
+        pickerMode = true;
+        leftHand = true;    // the quick slots' icon layout
+        for (int i = transform.childCount - 1; i >= 0; i--)
+            Destroy(transform.GetChild(i).gameObject);
+        lastSelectedSegment = -1;
+        menuSprites = sprites;
+        numberOfSegments = sprites.Length;
+        menuSegments = new Image[numberOfSegments];
+        if (numberOfSegments > 0)
+            CreateSegments();
+    }
+
     //private void OnEnable() {
     //    if (leftHand)
     //        CreateQuickSlotUi();
@@ -140,7 +161,7 @@ public class CircularSegmentUI : MonoBehaviour
     // clears the same flag.
     private bool blockedLeftStick;
 
-    private bool OnLeftController => leftHand != VRSettings.GetLeftHandedMode();
+    private bool OnLeftController => pickerMode ? pickerOnLeftController : leftHand != VRSettings.GetLeftHandedMode();
 
     private void OnEnable() {
         blockedLeftStick = OnLeftController != VRSettings.GetSwapSticks();
@@ -164,11 +185,11 @@ public class CircularSegmentUI : MonoBehaviour
         // Nothing in it (no quick slots, or grenades only): it still closes with its grip, else it stayed open holding a stick
         if (numberOfSegments == 0)
         {
-            if (leftHand ? !secondaryGripState : !primaryGripState)
+            if (!pickerMode && (leftHand ? !secondaryGripState : !primaryGripState))
                 gameObject.active = false;
             return;
         }
-        Vector2 joystickInput = OnLeftController ? VRInput.RawLeftJoystick.axis : VRInput.RawRightJoystick.axis;
+        Vector2 joystickInput = pickerMode ? pickerStick : OnLeftController ? VRInput.RawLeftJoystick.axis : VRInput.RawRightJoystick.axis;
 
 
         if (lastSelectedSegment != -1)
@@ -190,6 +211,10 @@ public class CircularSegmentUI : MonoBehaviour
             menuSegments[selectedSegment].sprite = selectedMenuSprite;
             lastSelectedSegment = selectedSegment;
         }
+
+        // The picker commits and closes itself
+        if (pickerMode)
+            return;
 
         if (!leftHand && !primaryGripState)
         {

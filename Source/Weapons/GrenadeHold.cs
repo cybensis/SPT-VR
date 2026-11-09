@@ -134,6 +134,8 @@ namespace TarkovVR.Source.Weapons
             }
             if (UpdateSwap())
                 return;
+            // The holding hand's trigger: the quick-access grenades to swap to (the pin in, held, no hand on the ring)
+            GrenadePicker.Update(controller, canPick: holdDown && !armed && !armRequested && !ringLatched && !pinInHand);
             if (armRequested && !armed)
                 UpdateArming();
             UpdateRing();
@@ -202,6 +204,7 @@ namespace TarkovVR.Source.Weapons
 
         private static void End()
         {
+            GrenadePicker.Reset();
             if (controller != null)
             {
                 Unlatch();
@@ -696,6 +699,7 @@ namespace TarkovVR.Source.Weapons
                 End();
                 return;
             }
+            GrenadePicker.Place();
             if (pin == null)
                 return;
             Transform joint = pinInHand ? pinFinger : null;

@@ -75,6 +75,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         // A grab under way
         private static ThrowWeap switchingTo;
+        private static bool switchFromHand;     // a grenade in hand swapped for another (GrenadePicker): no stand-in at the hand, the hung gun kept
         private static float switchStarted;
         private static Hand switchHand;
         private static Vector3 inHandPosition;
@@ -113,7 +114,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool Busy => placing != null || switchingTo != null;
 
         // A grenade the left hand took is held left: ChestHang leaves the left-hand hold on while it's in the hands
-        public static bool KeepsLeftHand => grabbedLeft && GrabbedInHands;
+        public static bool KeepsLeftHand => grabbedLeft && (GrabbedInHands
+            || (switchFromHand && switchingTo != null && VRGlobals.player?.HandsController is EFT.Player.BaseGrenadeHandsController));
 
         private static bool GrabbedInHands => grabbedItem != null && VRGlobals.player != null
             && VRGlobals.player.HandsController is EFT.Player.BaseGrenadeHandsController grenade && grenade.Item == grabbedItem;
@@ -328,6 +330,31 @@ namespace TarkovVR.Source.Player.Interactions
         {
             switchingTo = null;
             switchHand = null;
+            switchFromHand = false;
+        }
+
+        // GrenadePicker: the grenade in hand swapped for another quick-access one, by the same hand and grip - Tarkov's switch, the held
+        // one's put-away (SkipPutAway) and the next one's draw (OnGrenadeSpawned) skipped. A put-back later still returns the hands to
+        // what they held before the first.
+        internal static void SwapHeldTo(EFT.Player.GrenadeHandsController current, ThrowWeap next)
+        {
+            if (current == null || next == null || VRGlobals.player == null || switchingTo != null)
+                return;
+            bool left = Handedness.GunInLeftHand;
+            switchingTo = next;
+            switchFromHand = true;
+            switchStarted = Time.time;
+            switchHand = left ? leftHand : rightHand;
+            if (takenFromSlot == current.Item)
+                takenFromSlot = next;
+            grabbedItem = next;
+            grabbedLeft = left;
+            grabbedByHold = true;
+            puttingAway = current;
+            putAwayStarted = Time.time;
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] {current.Item.LocalizedShortName()} swapped for {next.LocalizedShortName()} ({(left ? "left" : "right")} hand)");
+            VRGlobals.player.SetItemInHands(next, delegate { });
         }
 
         // GrenadeHandsController.Spawn (VRGrenadeController): the grenade a grab asked for, its draw just started. Skipped (its own
@@ -340,8 +367,10 @@ namespace TarkovVR.Source.Player.Interactions
                     return;
                 // Any grenade: was the gun hanging (ChestHang hasn't seen the switch yet - Tarkov sets the hands, then Spawn)
                 bool fromSlot = switchingTo != null && grenade.Item == switchingTo;
-                hungGun = fromSlot ? (gunHungBefore ? handsBefore : null)
-                    : ChestHang.Hanging && VRGlobals.firearmController != null ? VRGlobals.firearmController.Item : null;
+                // (swapped in the hand: the gun that hung when the first came out still did)
+                if (!(fromSlot && switchFromHand))
+                    hungGun = fromSlot ? (gunHungBefore ? handsBefore : null)
+                        : ChestHang.Hanging && VRGlobals.firearmController != null ? VRGlobals.firearmController.Item : null;
                 if (!fromSlot)
                     return;
                 if (grenade.CurrentOperation is EFT.Player.GrenadeHandsController.SpawnOperation spawn)
@@ -519,9 +548,10 @@ namespace TarkovVR.Source.Player.Interactions
         {
             try
             {
-                ThrowWeap shown = Allowed() ? (switchingTo ?? picked) : null;
+                bool standIn = switchingTo != null && !switchFromHand;
+                ThrowWeap shown = Allowed() ? (standIn ? switchingTo : picked) : null;
                 // In the hands already (not a switch's stand-in): Tarkov's own model there
-                if (shown != null && switchingTo == null && HandsItem() == shown)
+                if (shown != null && !standIn && HandsItem() == shown)
                     shown = null;
                 Look look = shown != null ? LookOf(shown) : null;
                 if (shownLook != null && shownLook != look && shownLook.root != null && shownLook.root.activeSelf)
@@ -533,7 +563,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (!look.root.activeSelf)
                     look.root.SetActive(true);
                 Transform root = look.root.transform;
-                if (switchingTo != null && switchHand != null)
+                if (standIn && switchHand != null)
                 {
                     ControllerPose(switchHand, out Vector3 handPosition, out Quaternion handRotation);
                     root.SetPositionAndRotation(handPosition + handRotation * inHandPosition, handRotation * inHandRotation);
