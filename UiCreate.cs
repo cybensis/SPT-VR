@@ -95,13 +95,15 @@ public class CircularSegmentUI : MonoBehaviour
             Destroy(transform.GetChild(i).gameObject);
         }
         Dictionary<EBoundItem, Item> quickSlots = VRGlobals.player.Inventory.FastAccess.BoundItems;
-        menuSegments = new Image[quickSlots.Count];
-        numberOfSegments = quickSlots.Count;
         List<Sprite> newMenuSprites = new List<Sprite>();
         quickSlotOrder = new List<EBoundItem>();
         iconsList = new List<ItemIcon>();
         foreach (KeyValuePair<EBoundItem, Item> kvp in quickSlots)
         {
+            // Grenades come off the chest slot (GrenadeSlot shows the quick-access one), held by the grip that took them; drawn from here
+            // they waited for a grip press first (his call: not in this menu)
+            if (kvp.Value is ThrowWeap)
+                continue;
             ItemIcon itemIcon = ItemViewFactory.LoadItemIcon(kvp.Value);
             if (itemIcon.Sprite != null)
             {
@@ -112,6 +114,9 @@ public class CircularSegmentUI : MonoBehaviour
 
         }
         this.menuSprites = newMenuSprites.ToArray();
+        // One segment per entry shown (a slot without an icon, or a grenade, has none)
+        numberOfSegments = this.menuSprites.Length;
+        menuSegments = new Image[numberOfSegments];
         if (this.menuSprites.Length > 0)
             CreateSegments();
         IInputHandler baseHandler;
@@ -153,11 +158,16 @@ public class CircularSegmentUI : MonoBehaviour
     }
     void Update()
     {
-        if (numberOfSegments == 0)
-            return;
         bool leftHandedMode = VRSettings.GetLeftHandedMode();
         bool secondaryGripState = leftHandedMode ? VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand) : VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand);
         bool primaryGripState = leftHandedMode ? VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand) : VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand);
+        // Nothing in it (no quick slots, or grenades only): it still closes with its grip, else it stayed open holding a stick
+        if (numberOfSegments == 0)
+        {
+            if (leftHand ? !secondaryGripState : !primaryGripState)
+                gameObject.active = false;
+            return;
+        }
         Vector2 joystickInput = OnLeftController ? VRInput.RawLeftJoystick.axis : VRInput.RawRightJoystick.axis;
 
 
