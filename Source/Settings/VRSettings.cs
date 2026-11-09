@@ -123,8 +123,6 @@ namespace TarkovVR.Source.Settings
             public float[] grenadeSlotMiddle { get; set; }
             // The first build's: its model ROOT's pose (~40 cm off the grenade), turned into grenadeSlotMiddle once and cleared
             public float[] grenadeSlot { get; set; }
-            // Holding a grenade with the trigger instead of the grip (GrenadeHold / GrenadeSlot)
-            public bool grenadeHoldWithTrigger { get; set; }
             public float armLength { get; set; }    // m, shoulder joint to wrist; 0 = never measured
             // B no longer runs Tarkov's reload on guns with detachable magazines: a press drops the magazine, held = the off hand can pull it out
             public bool manualReload { get; set; }
@@ -175,7 +173,6 @@ namespace TarkovVR.Source.Settings
                 disableCorpseContextMenu = true;
                 disableRunAnimation = true;
                 stepToSprint = false;
-                grenadeHoldWithTrigger = false;
                 disablePrismEffects = false;
                 disablePrismFog = true;               
                 shadowOpt = ShadowOpt.IncreaseLighting;
@@ -261,7 +258,6 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle disableCorpseContextMenuToggle;
         private static SettingToggle disableRunAnimationToggle;
         private static SettingToggle stepToSprintToggle;
-        private static SettingToggle grenadeHoldWithTriggerToggle;
         private static SettingToggle seatedModeToggle;
         private static SettingToggle useVRKeyboardToggle;
         private static SettingToggle heldItemWeightToggle;
@@ -660,12 +656,6 @@ namespace TarkovVR.Source.Settings
             stepToSprintToggle.Text.localizationKey = "Step Or Lean Forward To Sprint";
             stepToSprintToggle.Toggle.UpdateValue(settings.stepToSprint);
 
-            grenadeHoldWithTriggerToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            grenadeHoldWithTriggerToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            grenadeHoldWithTriggerToggle.Toggle._onValueChanged = SetGrenadeHoldWithTrigger;
-            grenadeHoldWithTriggerToggle.Text.localizationKey = "Hold Grenades With The Trigger (off: grip)";
-            grenadeHoldWithTriggerToggle.Toggle.UpdateValue(settings.grenadeHoldWithTrigger);
-            
 
             /*
             sharpenToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
@@ -1180,16 +1170,6 @@ namespace TarkovVR.Source.Settings
             position = new Vector3(data[0], data[1], data[2]);
             rotation = new Quaternion(data[3], data[4], data[5], data[6]);
             return true;
-        }
-
-        public static bool GetGrenadeHoldWithTrigger()
-        {
-            return settings != null && settings.grenadeHoldWithTrigger;
-        }
-
-        private static void SetGrenadeHoldWithTrigger(bool turnOn)
-        {
-            settings.grenadeHoldWithTrigger = turnOn;
         }
 
         private static void ResetGunSpots(bool turnOn)

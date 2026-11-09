@@ -162,8 +162,17 @@ namespace TarkovVR.Patches.Core.VR
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
         private static void CheckGrenadeAnimation(EFT.Player __instance)
         {
-            if (!__instance.IsYourPlayer || !throwInProgress || activeGrenadeController == null || activeGrenadeController._firearmsAnimator == null)
+            if (!__instance.IsYourPlayer || !throwInProgress)
                 return;
+            // Its grenade out of the hands before the clip got to the freeze below (the gun back 0.3-0.5 s after the throw): the throw's
+            // over. Left set, throwInProgress kept GrenadeHold's rushes off the next grenade - its draw and pin pull played out (his
+            // report: "every second grenade")
+            if (activeGrenadeController == null || activeGrenadeController._firearmsAnimator == null
+                || !ReferenceEquals(__instance.HandsController, activeGrenadeController))
+            {
+                EndThrow();
+                return;
+            }
 
             AnimatorStateInfoWrapper stateInfo = activeGrenadeController._firearmsAnimator.Animator.GetCurrentAnimatorStateInfo(1);
 
@@ -175,11 +184,9 @@ namespace TarkovVR.Patches.Core.VR
                 if (Time.time >= freezeStartTime + freezeDuration)
                 {
                     activeGrenadeController._firearmsAnimator.Animator.speed = 1f;
-                    activeGrenadeController.OnDropFinishedAction(); // Calls OnDropFinishedAction()
-                    throwInProgress = false;
-                    activeGrenadeController = null;
-                    isFrozen = false;
-                    lastNormalizedTime = 0f;
+                    BaseGrenadeHandsController thrown = activeGrenadeController;
+                    EndThrow();
+                    thrown.OnDropFinishedAction(); // Calls OnDropFinishedAction()
                 }
                 return;
             }
@@ -188,11 +195,40 @@ namespace TarkovVR.Patches.Core.VR
             {
                 activeGrenadeController._firearmsAnimator.Animator.Play(590329303, 1, 0f);
                 activeGrenadeController._firearmsAnimator.Animator.speed = 0f;
+                frozenAnimators = activeGrenadeController.ControllerGameObject != null
+                    ? activeGrenadeController.ControllerGameObject.GetComponentsInChildren<Animator>(true) : null;
                 freezeStartTime = Time.time;
                 isFrozen = true;
             }
 
             lastNormalizedTime = stateInfo.normalizedTime;
+        }
+
+        // The grenade's own animators while its clip is frozen: given their speed back if the throw ends before the freeze does (the
+        // hands object goes back to Tarkov's pool with them)
+        private static Animator[] frozenAnimators;
+
+        private static void EndThrow()
+        {
+            if (isFrozen && frozenAnimators != null)
+            {
+                foreach (Animator animator in frozenAnimators)
+                {
+                    if (animator != null && animator.speed == 0f)
+                        animator.speed = 1f;
+                }
+            }
+            frozenAnimators = null;
+            throwInProgress = false;
+            activeGrenadeController = null;
+            isFrozen = false;
+            lastNormalizedTime = 0f;
+        }
+
+        // GrenadeHold: is this grenade's own throw playing (its animator ours to freeze)
+        internal static bool Throwing(BaseGrenadeHandsController grenade)
+        {
+            return throwInProgress && grenade != null && ReferenceEquals(activeGrenadeController, grenade);
         }
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BaseGrenadeHandsController), "ThrowGrenadeInner")]
@@ -240,6 +276,8 @@ namespace TarkovVR.Patches.Core.VR
 
             // Starts animation around the point where hand is opening to throw
             __instance._firearmsAnimator.Animator.Play(590329303, 1, 0.40f);
+            // A fresh throw: nothing carried over from one that ended early (its freeze state, the clip time it last saw)
+            EndThrow();
             throwInProgress = true;
             activeGrenadeController = __instance;
 

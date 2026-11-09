@@ -16,7 +16,7 @@ using FirearmController = EFT.Player.FirearmController;
 namespace TarkovVR.Source.Player.Interactions
 {
     // The grenade on the chest (his grenade plan, round 2): the grenade Tarkov would throw next shown on the top left of the chest (in
-    // the body's frame like the guns' spots), taken by either hand with its hold button (VR tab: grip, or the trigger). Which one:
+    // the body's frame like the guns' spots), taken by either hand's grip (his call: no trigger option). Which one:
     // Tarkov's own pick for its throw key (PlayerInputTranslator.vmethod_1) - the quick-access panel's grenade (TopPriorityGrenade), else a
     // random reachable one, not the type thrown last. That pick is random when the key is pressed, so it's made here once, shown, and the
     // grab takes that very one (SetItemInHands, as the key does); a new one after it's gone.
@@ -28,16 +28,15 @@ namespace TarkovVR.Source.Player.Interactions
     // meanwhile. The left hand holds it the way it holds a gun (Handedness.GunInLeftHand: the right-handed hold mirrored,
     // RealLeftHandedPatches for the arms). In the hand, GrenadeHold; put back, its put-away is skipped too and the hands go back as they
     // were (a gun that hung on its spot hangs there again, its draw skipped).
-    // Moving the slot: the trigger held 1 s at it with the hand still (holding with the trigger: moving the hand away takes it instead), it
-    // rides the hand until the trigger opens, saved like a gun spot.
+    // Moving the slot: the trigger held 1 s at it, it rides the hand until the trigger opens, saved like a gun spot. In the hand, the
+    // other hand's grip at it takes it over (GrenadeHold.UpdateSwap; HoldIn here).
     public static class GrenadeSlot
     {
         public static bool enabled = true;
         public static Vector3 slotFromNeck = new Vector3(-0.12f, -0.20f, 0.14f);    // m, body frame (x right, y up, z forward): the grenade's middle, top left of the chest (his placement)
         public static Vector3 slotEuler = new Vector3(278.5f, 132.7f, 166f);        // the grenade body's turn there, body frame (his placement)
         public static float grabRadius = 0.08f;     // m any point of the hand (palm, knuckles, fingertips) to the grenade's middle
-        public static float holdSeconds = 1f;       // trigger held at the slot with the hand still: moving the slot
-        public static float stillRadius = 0.04f;    // m the hand may drift during that hold (trigger holding: farther = taken)
+        public static float holdSeconds = 1f;       // trigger held at the slot: moving the slot
         public static float switchTimeout = 3f;     // s before a grab whose switch never lands is given up
         public static float rehangSeconds = 3f;     // s a gun that hung before the grenade has, once it's back in the hands, to hang again
         public static float throwReturnTimeout = 8f;    // s after a throw Tarkov's draw of the gun that hung before still counts as its return
@@ -47,9 +46,6 @@ namespace TarkovVR.Source.Player.Interactions
         {
             public bool left;
             public bool gripDown, triggerDown;
-            public bool pending;            // holding with the trigger: pressed at the slot, not yet taken or moving it
-            public float pendingSince;
-            public Vector3 pendingAt;
             public float triggerHeldAtSlot; // seconds, for moving the slot
             public readonly List<Vector3> touchPoints = new List<Vector3>();
         }
@@ -88,6 +84,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         // The last grab: which grenade, and with which hand
         private static Item grabbedItem;
+        private static Item takenFromSlot;      // the one the slot handed over (its put-back goes to handsBefore)
         private static bool grabbedLeft;
         private static bool grabbedByHold;
 
@@ -113,7 +110,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool TookPress { get; private set; }
         // The off hand at the grenade (the chest pouch's magazine grab yields to it; read a frame late by VRReloadController)
         public static bool OffHandAtSlot { get; private set; }
-        public static bool Busy => placing != null || switchingTo != null || leftHand.pending || rightHand.pending;
+        public static bool Busy => placing != null || switchingTo != null;
 
         // A grenade the left hand took is held left: ChestHang leaves the left-hand hold on while it's in the hands
         public static bool KeepsLeftHand => grabbedLeft && GrabbedInHands;
@@ -136,6 +133,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (grabbedItem != null && !GrabbedInHands && !IsSwitching())
             {
                 grabbedItem = null;
+                takenFromSlot = null;
                 grabbedLeft = false;
                 grabbedByHold = false;
             }
@@ -163,60 +161,27 @@ namespace TarkovVR.Source.Player.Interactions
             foreach (Hand hand in new[] { leftHand, rightHand })
             {
                 bool gripPressed = ReadGrip(hand);
-                bool triggerPressed = ReadTrigger(hand);
+                ReadTrigger(hand);
                 bool atSlot = lookShown && ReachOf(hand) < 1f;
                 if (atSlot && !IsGunHand(hand))
                     OffHandAtSlot = true;
                 if (!atSlot || !HandFree(hand))
                 {
-                    hand.pending = false;
                     hand.triggerHeldAtSlot = 0f;
                     continue;
                 }
-                if (VRSettings.GetGrenadeHoldWithTrigger())
+                // The grip takes it; the trigger held at it moves the slot (as the guns' spots)
+                if (gripPressed)
                 {
-                    // The trigger holds it: pressed here, moving the hand away takes it, keeping it still moves the slot
-                    if (triggerPressed)
-                    {
-                        hand.pending = true;
-                        hand.pendingSince = Time.time;
-                        hand.pendingAt = ControllerPosition(hand);
-                    }
-                    if (!hand.pending)
-                        continue;
-                    if (!hand.triggerDown)
-                    {
-                        hand.pending = false;
-                        continue;
-                    }
-                    if (Vector3.Distance(ControllerPosition(hand), hand.pendingAt) > stillRadius)
-                    {
-                        hand.pending = false;
-                        Grab(hand);
-                        return;
-                    }
-                    if (Time.time - hand.pendingSince >= holdSeconds)
-                    {
-                        hand.pending = false;
-                        BeginPlacing(hand);
-                        return;
-                    }
+                    Grab(hand);
+                    return;
                 }
-                else
+                hand.triggerHeldAtSlot = hand.triggerDown ? hand.triggerHeldAtSlot + Time.deltaTime : 0f;
+                if (hand.triggerHeldAtSlot >= holdSeconds)
                 {
-                    // The grip holds it; the trigger held still at it moves the slot (as the guns' spots)
-                    if (gripPressed)
-                    {
-                        Grab(hand);
-                        return;
-                    }
-                    hand.triggerHeldAtSlot = hand.triggerDown ? hand.triggerHeldAtSlot + Time.deltaTime : 0f;
-                    if (hand.triggerHeldAtSlot >= holdSeconds)
-                    {
-                        hand.triggerHeldAtSlot = 0f;
-                        BeginPlacing(hand);
-                        return;
-                    }
+                    hand.triggerHeldAtSlot = 0f;
+                    BeginPlacing(hand);
+                    return;
                 }
             }
         }
@@ -230,7 +195,6 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void CancelInput()
         {
-            leftHand.pending = rightHand.pending = false;
             leftHand.triggerHeldAtSlot = rightHand.triggerHeldAtSlot = 0f;
             placing = null;
             placingLook = null;
@@ -307,6 +271,7 @@ namespace TarkovVR.Source.Player.Interactions
             switchStarted = Time.time;
             switchHand = hand;
             grabbedItem = picked;
+            takenFromSlot = picked;
             grabbedLeft = hand.left;
             grabbedByHold = true;
             Transform root = shownLook.root.transform;
@@ -393,6 +358,15 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
+        // GrenadeHold's hand swap: this grenade held by that hand's grip now (ChestHang keeps a left-hand hold on through KeepsLeftHand; letting
+        // go before the pin's out still puts it back), also a grenade drawn another way
+        public static void HoldIn(Item grenade, bool left)
+        {
+            grabbedItem = grenade;
+            grabbedLeft = left;
+            grabbedByHold = true;
+        }
+
         // GrenadeHold: is this grenade held by the button that took it (so letting that go puts it back)
         public static bool TakenByHold(Item item)
         {
@@ -404,7 +378,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static void ReturnHands(EFT.Player.GrenadeHandsController grenade)
         {
             // Taken here: what the hands held before. Drawn another way (the radial menu): Tarkov's own last weapon.
-            bool fromHere = grenade != null && grenade.Item == grabbedItem;
+            bool fromHere = grenade != null && grenade.Item == takenFromSlot;
             Item back = fromHere ? handsBefore : VRGlobals.player.LastEquippedWeaponOrKnifeItem;
             puttingAway = grenade;
             putAwayStarted = Time.time;
