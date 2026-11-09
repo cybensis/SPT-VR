@@ -17,6 +17,10 @@ namespace TarkovVR.Source.Player.VRManager
         public GameObject LeftHand = null;
         public GameObject RightHand = null;
         public LaserPointer pointer = null;
+        // The laser and the menu input (VRUIInteracter) on their own object, on the controller the "Laser Pointer In Left Hand" setting picks.
+        // They were on RightHand, which the raid rig reuses as its gun hand: putting the laser on the left meant moving that hand to the
+        // left controller (the retired mirrored left-handed mode). Placed with the offsets RightHand had for it.
+        public GameObject LaserHand = null;
         private float x = 42;
         private float y = 355;
         private float z = 0;
@@ -28,9 +32,11 @@ namespace TarkovVR.Source.Player.VRManager
         public void Awake()
         {
             SpawnHands();
-            if (RightHand) { 
+            if (RightHand) {
                 RightHand.transform.parent = VRGlobals.vrOffsetter.transform;
             }
+            if (LaserHand)
+                LaserHand.transform.parent = VRGlobals.vrOffsetter.transform;
             if (LeftHand)
                 LeftHand.transform.parent = VRGlobals.vrOffsetter.transform;
 
@@ -107,20 +113,23 @@ namespace TarkovVR.Source.Player.VRManager
             AddPoseListeners();
         }
 
+        // Each hand on its own controller; the laser on the one the setting picks
         private void AddPoseListeners()
         {
             RemovePoseListeners();
-
-            if (VRSettings.GetLeftHandedMode())
-            {
-                VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
-                VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
-            }
+            VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
+            VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            if (VRSettings.GetLaserInLeftHand())
+                VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLaserHand);
             else
-            {
-                VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-                VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
-            }
+                VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLaserHand);
+        }
+
+        // The setting toggled: the laser to that controller now (only while the menus are up; else at the next enable)
+        public void SetLaserHand(bool left)
+        {
+            if (isActiveAndEnabled)
+                AddPoseListeners();
         }
 
         private void RemovePoseListeners()
@@ -129,20 +138,8 @@ namespace TarkovVR.Source.Player.VRManager
             VRInput.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
             VRInput.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
             VRInput.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
-        }
-
-        public void LeftHandedMode() {
-            VRInput.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-            VRInput.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
-            VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
-            VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
-        }
-        public void RightHandedMode()
-        {
-            VRInput.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
-            VRInput.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
-            VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateRightHand);
-            VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLeftHand);
+            VRInput.RightHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLaserHand);
+            VRInput.LeftHandPose.RemoveOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateLaserHand);
         }
 
         //private void Update()
@@ -187,6 +184,20 @@ namespace TarkovVR.Source.Player.VRManager
 
             }
         }
+        // The laser, on its controller, as RightHand was placed for it. Kept beside the hands: they're moved under other parents on the way
+        // into and out of raids (MenuPatches), the laser follows.
+        private void UpdateLaserHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
+        {
+            if (!LaserHand)
+                return;
+            Transform handsParent = RightHand ? RightHand.transform.parent : null;
+            if (handsParent != null && LaserHand.transform.parent != handsParent)
+                LaserHand.transform.SetParent(handsParent, false);
+            LaserHand.transform.localPosition = fromAction.localPosition + new Vector3(0, -0.03f, 0);
+            LaserHand.transform.localRotation = fromAction.localRotation;
+            LaserHand.transform.Rotate(45, 10, 0);
+        }
+
         private void UpdateLeftHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
         {
             if (LeftHand)
@@ -209,10 +220,14 @@ namespace TarkovVR.Source.Player.VRManager
                     RightHand.AddComponent<SteamVR_Behaviour_Pose>();
                 //RightHand.AddComponent<SteamVR_Skeleton_Poser>();
                 RightHand.transform.parent = VRGlobals.camHolder.transform.parent;
-                MenuPatches.vrUiInteracter = RightHand.AddComponent<VRUIInteracter>();
-                pointer = RightHand.AddComponent<LaserPointer>();
+            }
+            if (!LaserHand)
+            {
+                LaserHand = new GameObject("LaserHand");
+                LaserHand.transform.parent = VRGlobals.camHolder.transform.parent;
+                MenuPatches.vrUiInteracter = LaserHand.AddComponent<VRUIInteracter>();
+                pointer = LaserHand.AddComponent<LaserPointer>();
                 pointer.color = Color.cyan;
-
             }
             if (!LeftHand)
             {

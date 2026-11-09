@@ -83,6 +83,14 @@ namespace TarkovVR.Source.Controls
         public static VRVector2 GunHandJoystick => LeftHanded ? VRInput.LeftJoystick : VRInput.RightJoystick;
         public static VRVector2 OffHandJoystick => LeftHanded ? VRInput.RightJoystick : VRInput.LeftJoystick;
 
+        // The laser and the menus: the controller the "Laser Pointer In Left Hand" setting picks (VRSettings.GetLaserInLeftHand), whichever
+        // hand holds the gun - its trigger drags, its lower button clicks, its upper button cancels, its stick scrolls (VRUIInteracter)
+        public static bool PointerHandIsLeft => VRSettings.GetLaserInLeftHand();
+        public static VRSingle PointerHandTrigger => PointerHandIsLeft ? VRInput.LeftTrigger : VRInput.RightTrigger;
+        public static VRVector2 PointerHandJoystick => PointerHandIsLeft ? VRInput.LeftJoystick : VRInput.RightJoystick;
+        public static VRBoolean PointerHandLowerButton => PointerHandIsLeft ? VRInput.ButtonX : VRInput.ButtonA;
+        public static VRBoolean PointerHandUpperButton => PointerHandIsLeft ? VRInput.ButtonY : VRInput.ButtonB;
+
         // Face buttons: lower = A / X, upper = B / Y (A and B are on the right controller, X and Y on the left)
         public static VRBoolean GunHandLowerButton => GunHandIsLeft ? VRInput.ButtonX : VRInput.ButtonA;
         public static VRBoolean GunHandUpperButton => GunHandIsLeft ? VRInput.ButtonY : VRInput.ButtonB;

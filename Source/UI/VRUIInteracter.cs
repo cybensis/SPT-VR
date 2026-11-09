@@ -35,7 +35,7 @@ namespace TarkovVR.Source.UI
             if (dragTriggerFrame != Time.frameCount)
             {
                 dragTriggerFrame = Time.frameCount;
-                float axis = Handedness.GunHandTrigger.axis;
+                float axis = Handedness.PointerHandTrigger.axis;
                 dragTriggerHeld = dragTriggerHeld ? axis > dragTriggerRelease : axis >= dragTriggerPress;
             }
             return dragTriggerHeld;
@@ -90,7 +90,7 @@ namespace TarkovVR.Source.UI
         //}
         public void Update()
         {
-            float primaryHandJoystickAxis = Handedness.GunHandJoystick.axis.x;
+            float primaryHandJoystickAxis = Handedness.PointerHandJoystick.axis.x;
 
             if (dragObject != null && Mathf.Abs(primaryHandJoystickAxis) > 0.7)
             {
@@ -177,7 +177,7 @@ namespace TarkovVR.Source.UI
 
         private void handleButtonClick(Vector2 hitPoint)
         {
-            VRBoolean actionButton = Handedness.GunHandLowerButton;
+            VRBoolean actionButton = Handedness.PointerHandLowerButton;
 
             bool isPointerClick = !hitObject.GetComponent<EmptyItemView>();
 
@@ -241,7 +241,7 @@ namespace TarkovVR.Source.UI
         }
         private void handleUIScrollwheel()
         {
-            float primaryHandJoystickAxis = Handedness.GunHandJoystick.axis.y;
+            float primaryHandJoystickAxis = Handedness.PointerHandJoystick.axis.y;
             if (Mathf.Abs(primaryHandJoystickAxis) > 0.4 && hitObject.GetComponentInParent<ScrollRectNoDrag>() != null)
             {
                 eventData.scrollDelta = new Vector2(0, primaryHandJoystickAxis / 1.5f);
@@ -265,7 +265,7 @@ namespace TarkovVR.Source.UI
             // not an object they selected then moved off from.
             if (DragTriggerHeld())
             {
-                VRBoolean cancelButton = Handedness.GunHandUpperButton;
+                VRBoolean cancelButton = Handedness.PointerHandUpperButton;
 
                 if (dragObject == null)
                 {
@@ -331,7 +331,7 @@ namespace TarkovVR.Source.UI
         private void HandleOffPanelDrag()
         {
             bool triggerHeld = DragTriggerHeld();
-            VRBoolean cancelButton = Handedness.GunHandUpperButton;
+            VRBoolean cancelButton = Handedness.PointerHandUpperButton;
 
             if (cancelButton.stateUp)
             {

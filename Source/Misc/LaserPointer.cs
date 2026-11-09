@@ -36,8 +36,7 @@ namespace TarkovVR.Source.Misc
         {
             if (pose == null)
                 pose = GetComponent<SteamVR_Behaviour_Pose>();
-            if (pose == null && !VRInput.UsingOpenXR)
-                Debug.LogError("No SteamVR_Behaviour_Pose component found on this object");
+            // None on the laser's own object (MenuVRManager.LaserHand: a pose listener places it): the click colour reads either controller
 
             if (interactWithUI == null && !VRInput.UsingOpenXR)
                 Debug.LogError("No ui interaction action has been set on this component.");

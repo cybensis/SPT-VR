@@ -473,7 +473,7 @@ namespace TarkovVR.Source.Settings
             leftHandedMode = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             leftHandedMode.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
             leftHandedMode.Toggle._onValueChanged = SetLeftHandedMode;
-            leftHandedMode.Text.localizationKey = "Left Handed Mode (VERY experimental) ";
+            leftHandedMode.Text.localizationKey = "Laser Pointer In Left Hand";
             leftHandedMode.Toggle.UpdateValue(settings.leftHandedMode);
 
             snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
@@ -1170,14 +1170,14 @@ namespace TarkovVR.Source.Settings
 
         public static float GetPrimaryHandVertOffset()
         {
-            if (settings.leftHandedMode)
+            if (GetLeftHandedMode())
                 return settings.leftHandVerticalAngle;
             else
                 return settings.rightHandVerticalAngle;
         }
         public static float GetSecondaryHandVertOffset()
         {
-            if (settings.leftHandedMode)
+            if (GetLeftHandedMode())
                 return settings.rightHandVerticalAngle;
             else
                 return settings.leftHandVerticalAngle;
@@ -1288,25 +1288,25 @@ namespace TarkovVR.Source.Settings
             return settings.enableSharpen;
         }
 
+        // The "Laser Pointer In Left Hand" toggle (stored as leftHandedMode, so a setting saved before keeps its value): the laser and the menu
+        // controls on the left controller (his ask 2026-11-08: "make the left hand toggle in the vr settings just change the laser/menu
+        // interactions to be on the left hand"). It used to be the mirrored left-handed mode - the arms and gun mirrored, the gun on the left
+        // controller, the sticks swapped; the gun goes into the left hand by the hand swap now (ChestHang), so that mode is retired.
         private static void SetLeftHandedMode(bool toggle)
         {
             settings.leftHandedMode = toggle;
-            if (toggle)
-            {
-                if (VRGlobals.vrPlayer)
-                    VRGlobals.vrPlayer.LeftHandedMode();
-                if (VRGlobals.menuVRManager)
-                    VRGlobals.menuVRManager.LeftHandedMode();
-            }
-            else {
-                if (VRGlobals.vrPlayer)
-                    VRGlobals.vrPlayer.RightHandedMode();
-                if (VRGlobals.menuVRManager)
-                    VRGlobals.menuVRManager.RightHandedMode();
-            }
+            if (VRGlobals.menuVRManager)
+                VRGlobals.menuVRManager.SetLaserHand(toggle);
         }
 
+        // The retired mirrored left-handed mode: off for good. Everything that read it (the arms' mirror, the gun hand's controller, the
+        // sticks, the holsters, the wrist panels) plays right-handed; the setting itself is the laser's hand (GetLaserInLeftHand).
         public static bool GetLeftHandedMode()
+        {
+            return false;
+        }
+
+        public static bool GetLaserInLeftHand()
         {
             return settings.leftHandedMode;
         }
