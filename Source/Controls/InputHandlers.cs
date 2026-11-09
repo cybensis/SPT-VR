@@ -434,6 +434,14 @@ namespace TarkovVR.Source.Controls
 
                 bool isAiming = VRGlobals.firearmController.IsAiming;
 
+                // Slung (ChestHang): the gun hangs on the chest, no aiming down its sights. Let go into the sling while aiming: out of it.
+                if (TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
+                {
+                    if (isAiming)
+                        ExitAimMode(ref command);
+                    return;
+                }
+
                 if (HasValidScope())
                 {
                     HandleScopeAiming(ref command, isAiming);
