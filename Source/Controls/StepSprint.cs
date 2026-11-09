@@ -32,6 +32,11 @@ namespace TarkovVR.Source.Controls
         public static float glitchSpeed = 3f;       // m/s faster than a body moves: a tracking jump or a recenter, history dropped
         public static float goGrace = 0.35f;        // s a step before the stick is pushed forward still starts the run
         public static float cooldown = 0.5f;        // s after a start / stop before another (the game's sprint state lags the command)
+        // A start also needs the head looking roughly the way you'd run (his ask: leaning out to look down off a ledge mustn't start a
+        // run). Stops don't care where you look.
+        public static float maxLookDown = 35f;      // deg below level
+        public static float maxLookUp = 45f;        // deg above level
+        public static float maxLookSideways = 60f;  // deg off the way the character faces
         public static float pulseAmplitude = 0.3f;  // the buzz once the game has started the run, both controllers; a stop gets half
         public static float pulseDuration = 0.06f;
         public static float pulseFrequency = 90f;
@@ -122,7 +127,7 @@ namespace TarkovVR.Source.Controls
                 blocked = backward ? "only back to where you stand" : "only back to where you stand (after a lean back)";
             else if (now < cooldownUntil)
                 blocked = "cooldown";
-            else if (!backward && !CanStart(out string why))
+            else if (!backward && !CanStart(headRot, forward, out string why))
                 blocked = why;
 
             int result = 0;
@@ -153,6 +158,13 @@ namespace TarkovVR.Source.Controls
             {
                 if (running)
                     startPendingUntil = -1f;
+                else if (stickForward && now <= startPendingUntil && !LookingForward(headRot, forward, out string lookWhy))
+                {
+                    // Looked away (down off the ledge) between the lean and the stick
+                    startPendingUntil = -1f;
+                    if (debugLog)
+                        Plugin.MyLog.LogInfo($"[StepSprint] start dropped: {lookWhy}");
+                }
                 else if (stickForward && now <= startPendingUntil)
                 {
                     result = 1;
@@ -201,7 +213,7 @@ namespace TarkovVR.Source.Controls
             }
         }
 
-        private static bool CanStart(out string why)
+        private static bool CanStart(Quaternion headRot, Vector3 forward, out string why)
         {
             why = null;
             EFT.Player player = VRGlobals.player;
@@ -209,6 +221,25 @@ namespace TarkovVR.Source.Controls
                 why = "prone";
             else if (player.HandsController is EFT.Player.FirearmController firearm && firearm.IsAiming)
                 why = "aiming";
+            else
+                LookingForward(headRot, forward, out why);
+            return why == null;
+        }
+
+        // The headset's look (raw tracking space, as `forward` is) within maxLookDown / maxLookUp of level and maxLookSideways of the run
+        private static bool LookingForward(Quaternion headRot, Vector3 forward, out string why)
+        {
+            why = null;
+            Vector3 look = headRot * Vector3.forward;
+            float pitch = Mathf.Asin(Mathf.Clamp(look.y, -1f, 1f)) * Mathf.Rad2Deg;   // + = up
+            Vector3 flatLook = new Vector3(look.x, 0f, look.z);
+            float sideways = flatLook.sqrMagnitude > 1e-4f ? Vector3.Angle(flatLook, forward) : 0f;
+            if (pitch < -maxLookDown)
+                why = $"looking down ({-pitch:0} deg, starts up to {maxLookDown:0})";
+            else if (pitch > maxLookUp)
+                why = $"looking up ({pitch:0} deg, starts up to {maxLookUp:0})";
+            else if (sideways > maxLookSideways)
+                why = $"looking to the side ({sideways:0} deg off the run, starts up to {maxLookSideways:0})";
             return why == null;
         }
 
