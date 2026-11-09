@@ -310,6 +310,8 @@ namespace TarkovVR.Source.Player.Interactions
             // radial gestures span many frames.
             if (VRGlobals.inGame && !VRGlobals.menuOpen && primaryHandGrip != null && VRGlobals.vrPlayer != null)
             {
+                // The grenade on the chest: before the guns on the body and the sling (a grab there takes the press from them)
+                GrenadeSlot.UpdateInput();
                 // Guns on the body: a grip at one takes it (before the sling's regrab, which yields that press)
                 BodyWeapons.UpdateInput(primaryHandGrip.state, primaryHandGrip.stateDown, rightHandState.inBackHolster, rightHandState.inSidearmHolster);
                 // The holster zones only own the grip where they still swap weapons themselves

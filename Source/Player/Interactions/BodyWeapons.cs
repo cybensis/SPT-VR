@@ -102,7 +102,8 @@ namespace TarkovVR.Source.Player.Interactions
             HandAtBodyGun = Active && NearestBodyGun(out _, out _, out _, out _);
             if (gripPressed && debugLog && Active)
                 LogGripPress();
-            if (gripPressed && HandAtBodyGun)
+            // Not a press the grenade on the chest took (GrenadeSlot, just before)
+            if (gripPressed && HandAtBodyGun && !GrenadeSlot.TookPress)
                 TryGrab();
         }
 

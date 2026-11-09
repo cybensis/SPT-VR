@@ -725,22 +725,32 @@ namespace TarkovVR.Source.Player.VRManager
         // back: the weapon collision nudges the holder every frame, the nudge changed the hold, the hold moved the gun into a new nudge
         // (headset: "spazzes out everywhere for a while, then randomly stabilizes").
         private static Quaternion gunInHandCached = Quaternion.identity;
-        private static EFT.Player.FirearmController gunInHandFor;
+        private static Transform gunInHandFor;
 
+        // The gun's - or a grenade's the left hand took off the chest (GrenadeSlot) - Weapon_root under weaponHolder (RealLeftHandedPatches)
         public static void CacheGunInHand()
         {
             gunInHandFor = null;
             gunInHandCached = Quaternion.identity;
-            Transform weaponRoot = VRGlobals.firearmController != null ? VRGlobals.firearmController.WeaponRoot : null;
+            Transform weaponRoot = RealLeftHandedPatches.HeldWeaponRoot();
             if (weaponRoot == null || VRGlobals.weaponHolder == null || weaponRoot.parent != VRGlobals.weaponHolder.transform)
                 return;
             gunInHandCached = VRGlobals.weaponHolder.transform.localRotation * weaponRoot.localRotation;
-            gunInHandFor = VRGlobals.firearmController;
+            gunInHandFor = weaponRoot;
+        }
+
+        // A holder position in the rig hand's frame, right-handed, where it goes for the left hand: the right-handed hold's offset
+        // mirrored in the controller's frame (PlaceRightHandForGun mirrors the rotation). R' * p' = C * MirrorX(offset * p), R' = C * hold'.
+        // The guns don't need it (the marker anchor places them); a grenade's holder offset is fixed (GrenadeHold).
+        public Vector3 MirroredHolderPosition(Vector3 rightHanded)
+        {
+            Quaternion offset = Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
+            return Quaternion.Inverse(MirroredGunHold(offset)) * MirrorX(offset * rightHanded);
         }
 
         private static Quaternion MirroredGunHold(Quaternion offset)
         {
-            if (gunInHandFor != VRGlobals.firearmController)
+            if (gunInHandFor == null || gunInHandFor != RealLeftHandedPatches.HeldWeaponRoot())
                 CacheGunInHand();
             Quaternion gunInHand = gunInHandCached;
             Matrix4x4 flip = Matrix4x4.Scale(new Vector3(-1f, 1f, 1f));

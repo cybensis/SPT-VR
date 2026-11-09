@@ -487,7 +487,8 @@ namespace TarkovVR.Source.Weapons
                 bool inGrabZone = offHandBox && InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
                 bool inHandleZone = !supporting && InChargingHandleZone(firearmController, weapon) && BeltChargeHandMay(firearmController, gunHand: false);
                 bool inSideHandleZone = !supporting && !inHandleZone && InSideHandleZone(firearmController, weapon);
-                bool inPouchZone = !supporting && offHandBox && InChestPouchZone(palm);
+                // Not at the grenade on the chest (GrenadeSlot, a frame late): its grab takes that press
+                bool inPouchZone = !supporting && offHandBox && InChestPouchZone(palm) && !GrenadeSlot.OffHandAtSlot;
                 // A failure to eject: the case stuck in the ejection port, taken with the trigger like the handle (VRReloadController.Malfunctions)
                 bool atJamPort = InJamPortZone(firearmController, weapon, gunHand: false);
                 bool atDeflector = !atJamPort && InDeflectorZone(firearmController, gunHand: false);
@@ -1572,7 +1573,10 @@ namespace TarkovVR.Source.Weapons
         // The latch on that arm, for RealLeftHandedPatches (the gun in the left hand): it leaves that arm's target alone
         internal static Transform ArmLatch(bool rightArm)
         {
-            return handLatched && handLatch != null && latchedOnRightArm == rightArm ? handLatch : null;
+            if (handLatched && handLatch != null && latchedOnRightArm == rightArm)
+                return handLatch;
+            // A finger in a grenade's ring (GrenadeHold)
+            return GrenadeHold.ArmLatch(rightArm);
         }
 
         private static void LatchHand(Transform holder, bool gunHand = false)
@@ -2416,6 +2420,13 @@ namespace TarkovVR.Source.Weapons
         {
             bool rightArm = OffHandOnRightArm;
             rightHandPose = rightArm;
+            // A finger in a grenade's ring, or its pin in the fingers (GrenadeHold): the clip's left hand on the ring, mirrored on the right arm
+            Vector3[] ringFingers = GrenadeHold.RingFingers;
+            if (ringFingers != null)
+            {
+                rightHandPose = false;
+                return ringFingers;
+            }
             // A gun whose charging handle clip hasn't been read yet: the magazine pull's thumb-and-index pinch is the closest grip
             // (the right hand: its fingers hooked over a T)
             if (HoldingChargingHandle && !HandleInGunHand)

@@ -1046,6 +1046,12 @@ namespace TarkovVR.Source.Controls
                         HandleTripwirePlacement(grenadeController);
                         return;
                     }
+                    // Held by its button, the ring pulled by the other hand (GrenadeHold); below = the old flow (trigger = pin, let go = throw)
+                    if (GrenadeHold.enabled)
+                    {
+                        GrenadeHold.UpdateCommand(grenadeController, ref command);
+                        return;
+                    }
                 }
 
                 float primaryTrigger = Handedness.GunHandTrigger.axis;

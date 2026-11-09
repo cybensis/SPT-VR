@@ -145,6 +145,17 @@ namespace TarkovVR.Patches.Core.VR
             VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
         }
 
+        // After the prefix above placed it: a grenade taken off the chest (GrenadeSlot) has its draw skipped, and goes into the left hand
+        // if the left took it
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GrenadeHandsController), "Spawn")]
+        private static void GrenadeFromChestSlot(GrenadeHandsController __instance)
+        {
+            if (__instance?._player == null || !__instance._player.IsYourPlayer)
+                return;
+            TarkovVR.Source.Player.Interactions.GrenadeSlot.OnGrenadeSpawned(__instance);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
         private static void CheckGrenadeAnimation(EFT.Player __instance)
@@ -190,16 +201,18 @@ namespace TarkovVR.Patches.Core.VR
             if (!WeaponPatches.pinPulled)
                 return false;
 
-            // The hand's own measured motion (ThrowVelocity: OpenXR's rebuilt raw-point velocity bent throws sideways); the
-            // runtime's when there's no history yet or ThrowVelocity.enabled is off
-            Vector3 runtimeVelocity = ControllerVelocity.GetSteamVRVelocity(SteamVR_Input_Sources.RightHand);
-            bool measured = ThrowVelocity.TryMeasure(SteamVR_Input_Sources.RightHand, out Vector3 measuredVelocity, out Vector3 measuredSpin);
+            // The hand holding it (the left with a grenade the left hand took off the chest: GrenadeSlot), its own measured motion
+            // (ThrowVelocity: OpenXR's rebuilt raw-point velocity bent throws sideways); the runtime's when there's no history yet or
+            // ThrowVelocity.enabled is off
+            SteamVR_Input_Sources throwingHand = Handedness.GunHandSource;
+            Vector3 runtimeVelocity = ControllerVelocity.GetSteamVRVelocity(throwingHand);
+            bool measured = ThrowVelocity.TryMeasure(throwingHand, out Vector3 measuredVelocity, out Vector3 measuredSpin);
             bool useMeasured = ThrowVelocity.enabled && measured;
             Vector3 throwVelocity = useMeasured ? measuredVelocity : runtimeVelocity;
-            ThrowVelocity.LogThrow(SteamVR_Input_Sources.RightHand, runtimeVelocity, measuredVelocity, measuredSpin, useMeasured);
+            ThrowVelocity.LogThrow(throwingHand, runtimeVelocity, measuredVelocity, measuredSpin, useMeasured);
             Vector3 force;
-            Vector3 throwPos = ControllerVelocity.GetSteamVRPosition(SteamVR_Input_Sources.RightHand);
-            Quaternion throwRot = ControllerVelocity.GetSteamVRRotation(SteamVR_Input_Sources.RightHand);
+            Vector3 throwPos = ControllerVelocity.GetSteamVRPosition(throwingHand);
+            Quaternion throwRot = ControllerVelocity.GetSteamVRRotation(throwingHand);
 
             // Starts animation around the point where hand is opening to throw
             __instance._firearmsAnimator.Animator.Play(590329303, 1, 0.40f);

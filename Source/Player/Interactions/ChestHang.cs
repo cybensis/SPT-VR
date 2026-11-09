@@ -149,15 +149,17 @@ namespace TarkovVR.Source.Player.Interactions
                 releaseTimer = 0f;
                 prevGrip = grip;
                 Reattach(restore: false);
-                // A new gun (or none) starts in the right hand
-                Handedness.SetGunInLeftHand(false);
+                // A new gun (or none) starts in the right hand; a grenade the left hand took off the chest stays in it (GrenadeSlot)
+                if (!GrenadeSlot.KeepsLeftHand)
+                    Handedness.SetGunInLeftHand(false);
             }
 
             if (!holdingFirearm)
             {
                 releaseTimer = 0f;
                 Reattach(restore: false);
-                Handedness.SetGunInLeftHand(false);
+                if (!GrenadeSlot.KeepsLeftHand)
+                    Handedness.SetGunInLeftHand(false);
                 return;
             }
             // Taken off the body (BodyWeapons): the grip that took it holds it, so opening the hand lets it go to its spot

@@ -199,7 +199,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             return VRGlobals.inGame && !VRGlobals.menuOpen && VRGlobals.vrPlayer != null && VRGlobals.player != null && VRGlobals.vrOffsetter != null
                 && VRGlobals.handsInteractionController != null && !VRGlobals.usingItem && !EatingInteractionController.ManualActive
-                && !WeaponPatches.grenadeEquipped && !BodyWeapons.Switching;
+                && !WeaponPatches.grenadeEquipped && !BodyWeapons.Switching && !GrenadeSlot.Busy;
         }
 
         private static bool HandFree(Hand hand)

@@ -118,6 +118,10 @@ namespace TarkovVR.Source.Settings
             public float[] gunSpotChest { get; set; }
             public float[] gunSpotBack { get; set; }
             public float[] gunSpotHip { get; set; }
+            // The grenade slot moved by hand (GrenadeSlot): its model's position x, y, z from the neck and rotation x, y, z, w, body frame
+            public float[] grenadeSlot { get; set; }
+            // Holding a grenade with the trigger instead of the grip (GrenadeHold / GrenadeSlot)
+            public bool grenadeHoldWithTrigger { get; set; }
             public float armLength { get; set; }    // m, shoulder joint to wrist; 0 = never measured
             // B no longer runs Tarkov's reload on guns with detachable magazines: a press drops the magazine, held = the off hand can pull it out
             public bool manualReload { get; set; }
@@ -168,6 +172,7 @@ namespace TarkovVR.Source.Settings
                 disableCorpseContextMenu = true;
                 disableRunAnimation = true;
                 stepToSprint = false;
+                grenadeHoldWithTrigger = false;
                 disablePrismEffects = false;
                 disablePrismFog = true;               
                 shadowOpt = ShadowOpt.IncreaseLighting;
@@ -253,6 +258,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle disableCorpseContextMenuToggle;
         private static SettingToggle disableRunAnimationToggle;
         private static SettingToggle stepToSprintToggle;
+        private static SettingToggle grenadeHoldWithTriggerToggle;
         private static SettingToggle seatedModeToggle;
         private static SettingToggle useVRKeyboardToggle;
         private static SettingToggle heldItemWeightToggle;
@@ -650,6 +656,12 @@ namespace TarkovVR.Source.Settings
             stepToSprintToggle.Toggle._onValueChanged = SetStepToSprint;
             stepToSprintToggle.Text.localizationKey = "Step Or Lean Forward To Sprint";
             stepToSprintToggle.Toggle.UpdateValue(settings.stepToSprint);
+
+            grenadeHoldWithTriggerToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            grenadeHoldWithTriggerToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            grenadeHoldWithTriggerToggle.Toggle._onValueChanged = SetGrenadeHoldWithTrigger;
+            grenadeHoldWithTriggerToggle.Text.localizationKey = "Hold Grenades With The Trigger (off: grip)";
+            grenadeHoldWithTriggerToggle.Toggle.UpdateValue(settings.grenadeHoldWithTrigger);
             
 
             /*
@@ -1132,6 +1144,38 @@ namespace TarkovVR.Source.Settings
             SaveSettings();
         }
 
+        // The grenade slot moved by hand (GrenadeSlot): the model's pose from the neck, body frame. Saved straight away.
+        public static bool GetGrenadeSlot(out Vector3 position, out Quaternion rotation)
+        {
+            float[] data = settings != null ? settings.grenadeSlot : null;
+            if (data == null || data.Length != 7)
+            {
+                position = Vector3.zero;
+                rotation = Quaternion.identity;
+                return false;
+            }
+            position = new Vector3(data[0], data[1], data[2]);
+            rotation = new Quaternion(data[3], data[4], data[5], data[6]);
+            return true;
+        }
+
+        public static void SetGrenadeSlot(Vector3 position, Quaternion rotation)
+        {
+            rotation = Quaternion.Normalize(rotation);
+            settings.grenadeSlot = new[] { position.x, position.y, position.z, rotation.x, rotation.y, rotation.z, rotation.w };
+            SaveSettings();
+        }
+
+        public static bool GetGrenadeHoldWithTrigger()
+        {
+            return settings != null && settings.grenadeHoldWithTrigger;
+        }
+
+        private static void SetGrenadeHoldWithTrigger(bool turnOn)
+        {
+            settings.grenadeHoldWithTrigger = turnOn;
+        }
+
         private static void ResetGunSpots(bool turnOn)
         {
             if (!turnOn)
@@ -1139,6 +1183,7 @@ namespace TarkovVR.Source.Settings
             settings.gunSpotChest = null;
             settings.gunSpotBack = null;
             settings.gunSpotHip = null;
+            settings.grenadeSlot = null;
             SaveSettings();
             Plugin.MyLog.LogInfo("[GunSpots] placed gun spots reset to the defaults");
             // Back off without calling this again: a button, not a setting

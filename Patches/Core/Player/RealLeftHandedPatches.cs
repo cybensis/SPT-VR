@@ -41,8 +41,16 @@ namespace TarkovVR.Patches.Core.Player
         private static bool freeLeftOn;
         private static Transform freeLeftTarget, leftTargetOriginal;
 
-        internal static bool Active => Handedness.GunInLeftHand && VRGlobals.vrPlayer != null && VRGlobals.firearmController != null
-            && VRGlobals.firearmController.WeaponRoot != null && !ChestHang.Detached;
+        // A gun, or a grenade the left hand took off the chest (GrenadeSlot): both held on the rig's gun hand, under weaponHolder
+        internal static bool Active => Handedness.GunInLeftHand && VRGlobals.vrPlayer != null && HeldWeaponRoot() != null && !ChestHang.Detached;
+
+        internal static Transform HeldWeaponRoot()
+        {
+            if (VRGlobals.firearmController != null && VRGlobals.firearmController.WeaponRoot != null)
+                return VRGlobals.firearmController.WeaponRoot;
+            return Source.Player.Interactions.GrenadeSlot.KeepsLeftHand && VRGlobals.player.HandsController is EFT.Player.AbstractHandsController held
+                ? held.WeaponRoot : null;
+        }
 
         // The gun in the left hand, let go by the left with the right on the foregrip: the right hand holds it alone (ChestHang.SupportOnly,
         // the gun riding the right controller). The right arm stays on the foregrip, the left is free on VRPlayerManager.LeftControllerHand.
@@ -245,7 +253,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             planePoint = Vector3.zero;
             planeNormal = Vector3.right;
-            Transform weaponRoot = VRGlobals.firearmController != null ? VRGlobals.firearmController.WeaponRoot : null;
+            Transform weaponRoot = HeldWeaponRoot();
             if (weaponRoot == null)
                 return false;
             if (swayFrameFor != weaponRoot)
