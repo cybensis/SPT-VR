@@ -329,6 +329,15 @@ namespace TarkovVR.Source.Controls
                 if (!VRGlobals.inGame)
                     return;
 
+                // Just out of a menu, B still backing out of it (MenuExitButtonWait): no reload, no drop, and a tap from before the menu
+                // doesn't fire one on its way out either
+                if (MenuExitButtonWait.Blocks)
+                {
+                    waitingForSecondTap = false;
+                    reloadTriggered = false;
+                    return;
+                }
+
                 // Tarkov's reload would act on the magazine the off hand is holding out of the gun
                 if (VRReloadController.HoldingGunMagazine)
                 {

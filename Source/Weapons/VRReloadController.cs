@@ -389,7 +389,9 @@ namespace TarkovVR.Source.Weapons
             bool gunHandTriggerReleased = !gunHandTriggerState && previousGunHandTriggerState;
             previousGunHandTriggerState = gunHandTriggerState;
 
-            // A click on the gun hand when the mag release goes down
+            // A click on the gun hand when the mag release goes down (not just out of a menu: MenuExitButtonWait, also ticked
+            // here so an in-raid menu is seen even if the input update skips a frame)
+            MenuExitButtonWait.Tick();
             bool releaseState = MagazineReleaseHeld();
             if (handsSwapped)
                 previousReleaseState = releaseState;
@@ -606,7 +608,8 @@ namespace TarkovVR.Source.Weapons
         // Holding B (Y left-handed) with manual reload on
         private static bool MagazineReleaseHeld()
         {
-            if (!ManualReloadActive())
+            // Just out of a menu, B (Escape there) may still be backing out of it
+            if (!ManualReloadActive() || MenuExitButtonWait.Blocks)
                 return false;
             if (EitherHandWorksCatch(VRGlobals.firearmController))
                 return GunHandReleaseButton.state || OffHandReleaseHeld();

@@ -108,6 +108,8 @@ namespace TarkovVR.Source.Controls
         public static void UpdateCommands(ref List<ECommand> commands)
         {
             float currentTime = UnityEngine.Time.time;
+            // Every frame, menus included: B's wait after a menu closes has to see the menu open
+            MenuExitButtonWait.Tick();
 
             if (VRGlobals.inGame && !VRGlobals.menuOpen)
             {
