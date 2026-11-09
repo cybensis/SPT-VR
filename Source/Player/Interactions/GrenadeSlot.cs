@@ -39,7 +39,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static float holdSeconds = 1f;       // trigger held at the slot with the hand still: moving the slot
         public static float stillRadius = 0.04f;    // m the hand may drift during that hold (trigger holding: farther = taken)
         public static float switchTimeout = 3f;     // s before a grab whose switch never lands is given up
-        public static float rehangSeconds = 3f;     // s a gun that hung before the grab has to come back and hang again
+        public static float rehangSeconds = 3f;     // s a gun that hung before the grenade has, once it's back in the hands, to hang again
+        public static float throwReturnTimeout = 8f;    // s after a throw Tarkov's draw of the gun that hung before still counts as its return
         public static bool debugLog = true;         // one line per grab / pick / placement (first round)
 
         private sealed class Hand
@@ -94,7 +95,11 @@ namespace TarkovVR.Source.Player.Interactions
         private static EFT.Player.GrenadeHandsController puttingAway;
         private static float putAwayStarted;
         private static Item returningGun;
+        private static bool returningHangs;
         private static float returnStarted;
+        private static float returnTimeout;
+        // The gun that hung on its spot when this grenade came into the hands (the grab saw it, or ChestHang still said so at its spawn)
+        private static Item hungGun;
 
         // Moving the slot
         private static Hand placing;
@@ -274,6 +279,9 @@ namespace TarkovVR.Source.Player.Interactions
         // GrenadeHold: one thrown, the next pick avoids its type (Tarkov's _prevGrenadeId)
         public static void NoteThrown(Item item)
         {
+            // The gun that hung before: Tarkov draws it after the throw, it goes back on its spot instead
+            if (hungGun != null && hungGun.Parent != null)
+                ExpectGunBack(hungGun, hangs: true, throwReturnTimeout);
             if (item != null)
                 lastThrownTemplate = item.TemplateId;
             if (item == picked)
@@ -363,7 +371,13 @@ namespace TarkovVR.Source.Player.Interactions
         {
             try
             {
-                if (grenade?._player == null || !grenade._player.IsYourPlayer || switchingTo == null || grenade.Item != switchingTo)
+                if (grenade?._player == null || !grenade._player.IsYourPlayer)
+                    return;
+                // Any grenade: was the gun hanging (ChestHang hasn't seen the switch yet - Tarkov sets the hands, then Spawn)
+                bool fromSlot = switchingTo != null && grenade.Item == switchingTo;
+                hungGun = fromSlot ? (gunHungBefore ? handsBefore : null)
+                    : ChestHang.Hanging && VRGlobals.firearmController != null ? VRGlobals.firearmController.Item : null;
+                if (!fromSlot)
                     return;
                 if (grenade.CurrentOperation is EFT.Player.GrenadeHandsController.SpawnOperation spawn)
                     spawn.FastForward();
@@ -396,10 +410,7 @@ namespace TarkovVR.Source.Player.Interactions
             putAwayStarted = Time.time;
             if (back != null && back.Parent != null && BodyWeapons.SlotOf(back, out EquipmentSlot slot))
             {
-                returningGun = back;
-                returnStarted = Time.time;
-                if (fromHere && gunHungBefore)
-                    ChestHang.HangOnArrival(rehangSeconds);
+                ExpectGunBack(back, back == hungGun, switchTimeout);
                 VRInputManager.ForceCommand(SelectCommand(slot));
             }
             else
@@ -407,7 +418,7 @@ namespace TarkovVR.Source.Player.Interactions
                 VRGlobals.player.SetEmptyHands(delegate { });
             }
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade?.Item?.LocalizedShortName()} back on the slot, hands back to {(back != null && back.Parent != null ? back.LocalizedShortName() : "empty")}{(fromHere && gunHungBefore ? " (hanging)" : "")}");
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade?.Item?.LocalizedShortName()} back on the slot, hands back to {(back != null && back.Parent != null ? back.LocalizedShortName() : "empty")}{(back != null && back == hungGun ? " (hanging)" : "")}");
             // grabbedItem stays until it's out of the hands (UpdateInput): a left-hand grenade stays left for its put-away
             grabbedByHold = false;
         }
@@ -439,14 +450,25 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // FirearmController.Spawn (BodyWeaponPatches.SkipDraw): the gun the hands go back to after a put-back, its draw skipped as it starts
+        // The gun coming back into the hands: after a put-back (the hands as they were), or Tarkov's own draw after a throw of the gun that
+        // hung before (his report: "after you throw a grenade it automatically unslings your current weapon")
+        private static void ExpectGunBack(Item gun, bool hangs, float timeout)
+        {
+            returningGun = gun;
+            returningHangs = hangs;
+            returnStarted = Time.time;
+            returnTimeout = timeout;
+        }
+
+        // FirearmController.Spawn (BodyWeaponPatches.SkipDraw): that gun, its draw skipped as it starts; one that hung goes back on its spot
+        // (ChestHang.HangOnArrival: hung once it's idle)
         internal static void OnGunDrawStarted(FirearmController firearmController)
         {
             try
             {
                 if (returningGun == null || firearmController?._player == null || !firearmController._player.IsYourPlayer)
                     return;
-                if (Time.time - returnStarted > switchTimeout)
+                if (Time.time - returnStarted > returnTimeout)
                 {
                     returningGun = null;
                     return;
@@ -454,8 +476,11 @@ namespace TarkovVR.Source.Player.Interactions
                 if (firearmController.Item != returningGun)
                     return;
                 returningGun = null;
-                if (BodyWeapons.SkipDrawNow(firearmController) && debugLog)
-                    Plugin.MyLog.LogInfo($"[GrenadeSlot] {firearmController.Item.LocalizedShortName()}'s draw skipped (+{Time.time - returnStarted:0.000} s)");
+                bool skipped = BodyWeapons.SkipDrawNow(firearmController);
+                if (returningHangs)
+                    ChestHang.HangOnArrival(rehangSeconds);
+                if (debugLog)
+                    Plugin.MyLog.LogInfo($"[GrenadeSlot] {firearmController.Item.LocalizedShortName()} back (+{Time.time - returnStarted:0.000} s): draw {(skipped ? "skipped" : "not playing")}{(returningHangs ? ", hung on its spot again" : "")}");
             }
             catch (System.Exception exception)
             {

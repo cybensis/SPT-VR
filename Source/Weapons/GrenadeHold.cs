@@ -15,8 +15,9 @@ namespace TarkovVR.Source.Weapons
     // it's armed and puts it back (to the chest slot, your hands as they were) before that.
     //  - A grenade with a ring (GrenadeRings: the game's own pin and ring bones, eleven of its twelve models): the OTHER hand's index finger
     //    hooks the ring on its trigger (the clip's hand pose on the ring: the arm's IK target latched there, its fingers in the ring), and
-    //    pulling it along the pin slides the pin out; out past pinFreeDistance it's armed, the pin stays in those fingers until that trigger
-    //    opens (then it's gone).
+    //    pulling it along the pin slides the pin out; out past pinFreeDistance it's armed, its ring stays on that index finger. Brought
+    //    back to the grenade (after being away from it) the hand latches on the pin's hole and pushing it in re-pins it: Tarkov's
+    //    PutGrenadeBack, its pin-back clip (his ask: "put the pin back in by bringing your off hand back to the grenade").
     //  - Without one (the RDG-2's caps): armed as soon as it's in the hand (his pick).
     // Armed = Tarkov's own pin pull (TryHighThrow -> HighThrowOperation, through its input path, which FIKA syncs), its clip played through
     // at animatorRushSpeed so the hand isn't pulled about by an animation of a pull that's done already; the throw = RepositionGrenadeThrow
@@ -31,6 +32,8 @@ namespace TarkovVR.Source.Weapons
         public static float animatorRushSpeed = 30f;        // Tarkov's pin-pull clip (1.33 s on every grenade) played through at this speed
         public static float animatorRushTime = 0.07f;       // s
         public static float drawRushTime = 0.05f;           // s of the same for the draw a slot grab skips (its clip still plays out)
+        public static float repinArmDistance = 0.08f;       // m the ring on the finger must first go from the grenade before bringing it back re-pins
+        public static float repinBackOut = 0.02f;           // m pulling back out while pushing the pin in: the finger leaves the grenade, the ring still on it
         public static bool debugLog = true;                 // one line per step (first round)
 
         private static GrenadeHandsController controller;
@@ -54,9 +57,14 @@ namespace TarkovVR.Source.Weapons
         private static Transform latchedArmTargetBefore;
         private static Vector3 controllerAtLatch;
         private static float pull;
-        private static bool pinInHand, pinHidden;
-        private static Vector3 pinInPalmPosition;
-        private static Quaternion pinInPalmRotation = Quaternion.identity;
+        // The pin out: its ring on the off hand's index finger (its middle joint) until the grenade's thrown or the pin's pushed back in
+        private static bool pinInHand;
+        private static Vector3 pinOnFingerPosition;
+        private static Quaternion pinOnFingerRotation = Quaternion.identity;
+        private static bool pushingIn;              // the ring's latch is pushing the pin back in (pull runs pinFreeDistance -> 0)
+        private static bool repinArmed;             // the ring has been away from the grenade since the pull (or the last push)
+        private static bool pinReseated;            // pushed back in: the pin held on its seat (the pin-back clip would carry it about)
+        private static bool holderTurnedArmed;      // PlaceArmed turned the holder (four models): turned back when the pin goes back in
         private static bool offTriggerDown;
         private static bool ringInReach;
         private static bool hooked;
@@ -68,9 +76,11 @@ namespace TarkovVR.Source.Weapons
         private static float begunAt;
         private static bool poseLogged;
 
-        // The off hand on the ring or holding the pin: its fingers (VRReloadController.OffHandPose) and its arm (ArmLatch) are ours
-        public static bool OffHandBusy => controller != null && (ringLatched || pinInHand);
-        internal static Vector3[] RingFingers => controller != null && (ringLatched || pinInHand) && ringData != null ? ringData.fingers : null;
+        // The off hand on the ring or gripping the pin: its fingers (VRReloadController.OffHandPose) and its arm (ArmLatch) are ours. The
+        // ring just hanging on the finger (trigger open) leaves the hand its own.
+        private static bool OffHandHoldsRing => controller != null && (ringLatched || (pinInHand && offTriggerDown));
+        public static bool OffHandBusy => OffHandHoldsRing;
+        internal static Vector3[] RingFingers => OffHandHoldsRing && ringData != null ? ringData.fingers : null;
         internal static Transform ArmLatch(bool rightArm) => controller != null && ringLatched && latch != null && latchedOnRightArm == rightArm ? latch : null;
         public static bool PinOut => controller != null && armed;
 
@@ -172,7 +182,8 @@ namespace TarkovVR.Source.Weapons
             heldSeen = holdDown = false;
             armRequested = armed = thrown = putBack = false;
             pull = 0f;
-            pinInHand = pinHidden = false;
+            pinInHand = false;
+            pushingIn = repinArmed = pinReseated = holderTurnedArmed = false;
             offTriggerDown = false;
             ringInReach = false;
         }
@@ -252,6 +263,7 @@ namespace TarkovVR.Source.Weapons
                 || model == "weapon_grenade_rgn.generated(Clone)" || model == "weapon_grenade_m18.generated(Clone)")
             {
                 holder.localRotation = Quaternion.Euler(30, 273, 116);
+                holderTurnedArmed = true;
                 position = new Vector3(0.05f, -0.43f, -0.15f);
             }
             PlaceHolder(position);
@@ -304,15 +316,10 @@ namespace TarkovVR.Source.Weapons
             if (ring == null || pin == null)
                 return;
 
+            // The ring on the finger: it stays there (trigger open or not) until the grenade's thrown or the pin's pushed back in
             if (pinInHand)
             {
-                // The trigger opens: the pin's gone
-                if (!down)
-                {
-                    pinInHand = false;
-                    pinHidden = true;
-                    pin.gameObject.SetActive(false);
-                }
+                UpdateRepin();
                 return;
             }
             if (armed || armRequested || !holdDown)
@@ -354,7 +361,71 @@ namespace TarkovVR.Source.Weapons
             return VRGlobals.vrPlayer != null && hands != null && hands.heldItem == null && !VRReloadController.OffHandHolds;
         }
 
-        private static void Latch()
+        // The pin out and its ring on the finger, the grenade armed in the other hand: the ring taken away from the grenade and brought
+        // back latches the hand on it where the pin came out (no button: the ring's on the finger already), and pushing it in along the
+        // pull seats the pin - Tarkov's own put-back then (PutGrenadeBack: its pin-back clip, the grenade idle and safe again).
+        // Pulling back out or off the line leaves the pin out, the ring still on the finger.
+        private static void UpdateRepin()
+        {
+            if (!armed || thrown || !holdDown)
+            {
+                if (ringLatched)
+                    Unlatch();
+                return;
+            }
+            Transform joint = HookJoint();
+            if (joint == null)
+                return;
+            if (!ringLatched)
+            {
+                float distance = Vector3.Distance(joint.position, RingHookPoint(pinFreeDistance));
+                if (distance > repinArmDistance)
+                    repinArmed = true;
+                if (repinArmed && distance < ringReachRadius && OffHandFree())
+                    Latch(pushing: true);
+                return;
+            }
+            Vector3 pullWorld = PullAxisWorld();
+            Vector3 moved = OffController() - controllerAtLatch;
+            float along = Vector3.Dot(moved, pullWorld);
+            float lateral = (moved - pullWorld * along).magnitude;
+            if (lateral > ringLateralEscape || along > repinBackOut)
+            {
+                if (debugLog)
+                    Plugin.MyLog.LogInfo($"[GrenadeHold] pin not pushed in ({(lateral > ringLateralEscape ? $"{lateral * 100f:0} cm off the line" : "pulled back out")}) at {pull * 100f:0.0} cm");
+                Unlatch();
+                repinArmed = false;
+                return;
+            }
+            pull = Mathf.Clamp(pinFreeDistance + along, 0f, pinFreeDistance);
+            PlaceLatch();
+            if (pull <= 0.001f)
+                Repin();
+        }
+
+        private static void Repin()
+        {
+            pushingIn = false;
+            pinInHand = false;
+            Unlatch();
+            pull = 0f;
+            repinArmed = false;
+            pinReseated = true;
+            armed = false;
+            armRequested = false;
+            pinRushEnds = -1f;
+            WeaponPatches.pinPulled = false;
+            if (holderTurnedArmed && VRGlobals.weaponHolder != null)
+                VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
+            holderTurnedArmed = false;
+            Haptic(Handedness.OffHandSource, 0.6f, 0.06f);
+            Haptic(Handedness.GunHandSource, 0.25f, 0.04f);
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[GrenadeHold] pin pushed back into {controller.Item.LocalizedShortName()}: safe again");
+            controller.PutGrenadeBack();
+        }
+
+        private static void Latch(bool pushing = false)
         {
             if (latch == null)
                 latch = new GameObject("VRGrenadeRingLatch").transform;
@@ -362,12 +433,13 @@ namespace TarkovVR.Source.Weapons
             latchedArm = VRGlobals.ikManager != null ? (latchedOnRightArm ? VRGlobals.ikManager.rightArmIk : VRGlobals.ikManager.leftArmIk) : null;
             latchedArmTargetBefore = latchedArm != null ? latchedArm.solver.target : null;
             controllerAtLatch = OffController();
-            pull = 0f;
+            pushingIn = pushing;
+            pull = pushing ? pinFreeDistance : 0f;
             ringLatched = true;
             PlaceLatch();
             Haptic(Handedness.OffHandSource, 0.4f, 0.04f);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] finger in the ring of {controller.Item.LocalizedShortName()} ({(latchedOnRightArm ? "right" : "left")} hand)");
+                Plugin.MyLog.LogInfo($"[GrenadeHold] {(pushing ? "pin back at the hole of" : "finger in the ring of")} {controller.Item.LocalizedShortName()} ({(latchedOnRightArm ? "right" : "left")} hand)");
         }
 
         // The arm's IK target on the ring where the clip's hand holds it, the ring where the pull has it; mirrored across the grenade for
@@ -375,7 +447,7 @@ namespace TarkovVR.Source.Weapons
         // the left directly, re-asserted every frame like the reload's latch (VRPlayerManager's edges set it back).
         private static void PlaceLatch()
         {
-            PinPose(out Vector3 pinPosition, out Quaternion pinRotation);
+            PinPose(pull, out Vector3 pinPosition, out Quaternion pinRotation);
             Vector3 ringPosition = pinPosition + pinRotation * ring.localPosition;
             Quaternion ringRotation = pinRotation * ring.localRotation;
             Vector3 position = ringPosition + ringRotation * ringData.latchPosition;
@@ -396,33 +468,48 @@ namespace TarkovVR.Source.Weapons
             if (ringLatched && !latchedOnRightArm && latchedArm != null && latchedArm.solver.target == latch)
                 latchedArm.solver.target = latchedArmTargetBefore != null ? latchedArmTargetBefore : VRGlobals.vrPlayer?.LeftHand?.transform;
             ringLatched = false;
+            pushingIn = false;
             if (!pinInHand)
                 pull = 0f;
         }
 
         private static void PinComesOut()
         {
-            PinPose(out Vector3 pinPosition, out Quaternion pinRotation);
-            Transform palm = OffPalm();
-            if (palm != null)
+            PinPose(pull, out Vector3 pinPosition, out Quaternion pinRotation);
+            Transform joint = HookJoint();
+            if (joint != null)
             {
-                pinInPalmPosition = palm.InverseTransformPoint(pinPosition);
-                pinInPalmRotation = Quaternion.Inverse(palm.rotation) * pinRotation;
+                pinOnFingerPosition = Quaternion.Inverse(joint.rotation) * (pinPosition - joint.position);
+                pinOnFingerRotation = Quaternion.Inverse(joint.rotation) * pinRotation;
                 pinInHand = true;
+                repinArmed = false;
+                pinReseated = false;
             }
-            // The hand off the ring's latch, the pin in its fingers from here
+            // The hand off the ring's latch, the ring on its index finger from here
             Unlatch();
             Haptic(Handedness.OffHandSource, 0.8f, 0.07f);
             Haptic(Handedness.GunHandSource, 0.3f, 0.04f);
             RequestArm("pin out");
         }
 
-        // Where the pin is now: at rest on the grenade, slid out along its pull
-        private static void PinPose(out Vector3 position, out Quaternion rotation)
+        // The pin on the grenade: at rest on its seat, slid out along its pull
+        private static void PinPose(float slid, out Vector3 position, out Quaternion rotation)
         {
             Transform parent = pin.parent;
             rotation = parent.rotation * pinRestLocalRotation;
-            position = parent.TransformPoint(pinRestLocalPosition) + PullAxisWorld() * pull;
+            position = parent.TransformPoint(pinRestLocalPosition) + PullAxisWorld() * slid;
+        }
+
+        // Where the finger hooks the ring with the pin slid that far out (mirrored onto the right hand like the latch)
+        private static Vector3 RingHookPoint(float slid)
+        {
+            PinPose(slid, out Vector3 pinPosition, out Quaternion pinRotation);
+            Vector3 ringPosition = pinPosition + pinRotation * ring.localPosition;
+            Quaternion ringRotation = pinRotation * ring.localRotation;
+            Vector3 hookPoint = ringPosition + ringRotation * ringData.hookPoint;
+            if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
+                hookPoint = RealLeftHandedPatches.ReflectPoint(hookPoint, planePoint, planeNormal);
+            return hookPoint;
         }
 
         private static Vector3 PullAxisWorld()
@@ -447,12 +534,19 @@ namespace TarkovVR.Source.Weapons
 
         private static Transform hookJointPalm, hookJoint;
 
-        // The off hand's index middle joint to where it hooks the ring (mirrored onto the right hand like the latch)
+        // The off hand's index middle joint to where it hooks the ring
         private static float HookDistance()
+        {
+            Transform joint = HookJoint();
+            return joint != null ? Vector3.Distance(joint.position, RingHookPoint(0f)) : float.MaxValue;
+        }
+
+        // The rendered off hand's index middle joint (the one through the ring)
+        private static Transform HookJoint()
         {
             Transform palm = OffPalm();
             if (palm == null)
-                return float.MaxValue;
+                return null;
             if (hookJointPalm != palm)
             {
                 hookJointPalm = palm;
@@ -467,12 +561,7 @@ namespace TarkovVR.Source.Weapons
                     }
                 }
             }
-            if (hookJoint == null)
-                return float.MaxValue;
-            Vector3 hookPoint = ring.TransformPoint(ringData.hookPoint);
-            if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
-                hookPoint = RealLeftHandedPatches.ReflectPoint(hookPoint, planePoint, planeNormal);
-            return Vector3.Distance(hookJoint.position, hookPoint);
+            return hookJoint;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -493,17 +582,23 @@ namespace TarkovVR.Source.Weapons
                 End();
                 return;
             }
-            if (pin == null || pinHidden)
+            if (pin == null)
                 return;
-            if (pinInHand)
+            if (ringLatched || (!pinInHand && pull > 0f))
             {
-                Transform palm = OffPalm();
-                if (palm != null)
-                    pin.SetPositionAndRotation(palm.TransformPoint(pinInPalmPosition), palm.rotation * pinInPalmRotation);
+                PinPose(pull, out Vector3 position, out Quaternion rotation);
+                pin.SetPositionAndRotation(position, rotation);
             }
-            else if (ringLatched || pull > 0f)
+            else if (pinInHand)
             {
-                PinPose(out Vector3 position, out Quaternion rotation);
+                Transform joint = HookJoint();
+                if (joint != null)
+                    pin.SetPositionAndRotation(joint.position + joint.rotation * pinOnFingerPosition, joint.rotation * pinOnFingerRotation);
+            }
+            else if (pinReseated)
+            {
+                // Pushed back in: on its seat through Tarkov's pin-back clip (its pin comes from the clip's own hand)
+                PinPose(0f, out Vector3 position, out Quaternion rotation);
                 pin.SetPositionAndRotation(position, rotation);
             }
         }
