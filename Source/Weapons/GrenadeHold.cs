@@ -452,10 +452,11 @@ namespace TarkovVR.Source.Weapons
             Quaternion ringRotation = pinRotation * ring.localRotation;
             Vector3 position = ringPosition + ringRotation * ringData.latchPosition;
             Quaternion rotation = ringRotation * ringData.latchRotation;
-            if (latchedOnRightArm && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal)
+            // Mirrored across the plane through the ring itself: the grenade isn't mirrored, its ring is where it is
+            if (latchedOnRightArm && RealLeftHandedPatches.GunPlane(out _, out Vector3 planeNormal)
                 && TarkovVR.Source.Player.Body.HandMirror.TryMirrorPalm(rotation, planeNormal, rightToLeft: false, out Quaternion mirrored))
             {
-                position = RealLeftHandedPatches.ReflectPoint(position, planePoint, planeNormal);
+                position = RealLeftHandedPatches.ReflectPoint(position, ringPosition, planeNormal);
                 rotation = mirrored;
             }
             latch.SetPositionAndRotation(position, rotation);
@@ -507,8 +508,8 @@ namespace TarkovVR.Source.Weapons
             Vector3 ringPosition = pinPosition + pinRotation * ring.localPosition;
             Quaternion ringRotation = pinRotation * ring.localRotation;
             Vector3 hookPoint = ringPosition + ringRotation * ringData.hookPoint;
-            if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
-                hookPoint = RealLeftHandedPatches.ReflectPoint(hookPoint, planePoint, planeNormal);
+            if (Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out _, out Vector3 planeNormal))
+                hookPoint = RealLeftHandedPatches.ReflectPoint(hookPoint, ringPosition, planeNormal);
             return hookPoint;
         }
 
@@ -584,16 +585,23 @@ namespace TarkovVR.Source.Weapons
             }
             if (pin == null)
                 return;
-            if (ringLatched || (!pinInHand && pull > 0f))
+            Transform joint = pinInHand ? HookJoint() : null;
+            if (ringLatched && pushingIn && joint != null)
+            {
+                // Pushed back in: from the finger onto its seat as the push goes (his report: the pin left the hand as it got close)
+                float seated = 1f - Mathf.Clamp01(pull / pinFreeDistance);
+                PinPose(pull, out Vector3 seatPosition, out Quaternion seatRotation);
+                pin.SetPositionAndRotation(Vector3.Lerp(joint.position + joint.rotation * pinOnFingerPosition, seatPosition, seated),
+                    Quaternion.Slerp(joint.rotation * pinOnFingerRotation, seatRotation, seated));
+            }
+            else if (ringLatched || (!pinInHand && pull > 0f))
             {
                 PinPose(pull, out Vector3 position, out Quaternion rotation);
                 pin.SetPositionAndRotation(position, rotation);
             }
-            else if (pinInHand)
+            else if (joint != null)
             {
-                Transform joint = HookJoint();
-                if (joint != null)
-                    pin.SetPositionAndRotation(joint.position + joint.rotation * pinOnFingerPosition, joint.rotation * pinOnFingerRotation);
+                pin.SetPositionAndRotation(joint.position + joint.rotation * pinOnFingerPosition, joint.rotation * pinOnFingerRotation);
             }
             else if (pinReseated)
             {

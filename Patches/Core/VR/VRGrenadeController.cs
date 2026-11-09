@@ -22,6 +22,7 @@ namespace TarkovVR.Patches.Core.VR
         
         public static bool throwInProgress = false;
         public static BaseGrenadeHandsController activeGrenadeController = null;
+        private static BaseGrenadeHandsController thrownBy;
         private static float lastNormalizedTime = 0f;
         private static float freezeStartTime = 0f;
         private static bool isFrozen = false;
@@ -201,19 +202,41 @@ namespace TarkovVR.Patches.Core.VR
                 return true;
             if (!WeaponPatches.pinPulled)
                 return false;
+            // Thrown already: the throw clip's own drop event calls this again (Throw), with the hand slowing down by then
+            if (ReferenceEquals(__instance, thrownBy))
+                return false;
+            thrownBy = __instance;
 
-            // The hand holding it (the left with a grenade the left hand took off the chest: GrenadeSlot), its own measured motion
-            // (ThrowVelocity: OpenXR's rebuilt raw-point velocity bent throws sideways); the runtime's when there's no history yet or
-            // ThrowVelocity.enabled is off
+            // The hand holding it (the left with a grenade the left hand took off the chest: GrenadeSlot). OpenXR: the palm's own velocity
+            // as the runtime reports it (ThrowVelocity.TryPalmVelocity) - the raw point's rebuilt one bent throws sideways, the measured
+            // one overshoots (predicted poses); else the runtime's, or the measured one with ThrowVelocity.enabled
             SteamVR_Input_Sources throwingHand = Handedness.GunHandSource;
             Vector3 runtimeVelocity = ControllerVelocity.GetSteamVRVelocity(throwingHand);
             bool measured = ThrowVelocity.TryMeasure(throwingHand, out Vector3 measuredVelocity, out Vector3 measuredSpin);
-            bool useMeasured = ThrowVelocity.enabled && measured;
-            Vector3 throwVelocity = useMeasured ? measuredVelocity : runtimeVelocity;
-            ThrowVelocity.LogThrow(throwingHand, runtimeVelocity, measuredVelocity, measuredSpin, useMeasured);
+            string used;
+            Vector3 throwVelocity;
+            if (ThrowVelocity.TryPalmVelocity(throwingHand, out Vector3 palmVelocity))
+            {
+                throwVelocity = palmVelocity;
+                used = "palm";
+            }
+            else if (ThrowVelocity.enabled && measured)
+            {
+                throwVelocity = measuredVelocity;
+                used = "measured";
+            }
+            else
+            {
+                throwVelocity = runtimeVelocity;
+                used = "runtime";
+            }
+            ThrowVelocity.LogThrow(throwingHand, runtimeVelocity, measuredVelocity, measuredSpin, used, __instance._player.Velocity);
             Vector3 force;
             Vector3 throwPos = ControllerVelocity.GetSteamVRPosition(throwingHand);
             Quaternion throwRot = ControllerVelocity.GetSteamVRRotation(throwingHand);
+            // Released where the grenade is in the hand (Tarkov's own spot, pulled in off a wall between it and the body), not at the
+            // controller's tracking point ~13 cm from it
+            bool fromHand = ThrowVelocity.releaseFromHand && __instance._grenadeTransform != null;
 
             // Starts animation around the point where hand is opening to throw
             __instance._firearmsAnimator.Animator.Play(590329303, 1, 0.40f);
@@ -246,8 +269,8 @@ namespace TarkovVR.Patches.Core.VR
 
             __instance.ThrowGrenade(
                 timeSinceSafetyLevelRemoved,
-                VRGlobals.vrOffsetter.transform.TransformPoint(throwPos),
-                VRGlobals.vrOffsetter.transform.rotation * throwRot,
+                fromHand ? __instance.FindThrowPosition() : VRGlobals.vrOffsetter.transform.TransformPoint(throwPos),
+                fromHand ? __instance._grenadeTransform.rotation : VRGlobals.vrOffsetter.transform.rotation * throwRot,
                 force,
                 lowThrow
             );

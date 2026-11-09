@@ -12,7 +12,13 @@ namespace TarkovVR.Source.Controls
     // throw sideways. Measuring the point's own motion needs neither. One log line per throw compares the two (and the spin itself).
     public static class ThrowVelocity
     {
-        public static bool enabled = true;          // false = the runtime's velocity, as before
+        // OpenXR: the palm's (grip pose's) velocity as the runtime reports it - its IMU-backed own, no spin term (the raw point's rebuilt
+        // one bent throws sideways) and no prediction overshoot (the measured one below: his log had it 1.5-2x the runtime's and up to
+        // 60 deg off, toward the arc's centre - the predicted poses run ahead of an accelerating hand). The grenade's in the palm.
+        public static bool usePalmVelocity = true;
+        public static float palmScale = 1.25f;      // the palm moves slower than the controller's top (the raw point the throws used, ~1.25x in his log): kept to that strength
+        public static bool releaseFromHand = true;  // the thrown grenade starts where it is in the hand, not at the controller's tracking point
+        public static bool enabled = false;         // the measured velocity (pose slope) when the palm's isn't used; false = the runtime's
         public static float window = 0.05f;         // s of samples fitted (about 4-5 frames): short, so a late curve of the arm doesn't lag in
         public static bool throwLog = true;         // one line per throw: measured vs the runtime's, the angle between, the spin check
 
@@ -114,7 +120,17 @@ namespace TarkovVR.Source.Controls
         }
 
         // The throw's line in the log: what the runtime said, what the tracking showed, and with OpenXR what the spin term added
-        public static void LogThrow(SteamVR_Input_Sources source, Vector3 runtimeVelocity, Vector3 measuredVelocity, Vector3 measuredSpin, bool usedMeasured)
+        // The palm's velocity, tracking space, scaled by palmScale (OpenXR only)
+        public static bool TryPalmVelocity(SteamVR_Input_Sources source, out Vector3 velocity)
+        {
+            velocity = Vector3.zero;
+            if (!usePalmVelocity || !VRInput.UsingOpenXR)
+                return false;
+            velocity = OpenXRInput.GetGripVelocity(source == SteamVR_Input_Sources.LeftHand ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND) * palmScale;
+            return true;
+        }
+
+        public static void LogThrow(SteamVR_Input_Sources source, Vector3 runtimeVelocity, Vector3 measuredVelocity, Vector3 measuredSpin, string used, Vector3 bodyVelocity)
         {
             if (!throwLog)
                 return;
@@ -129,7 +145,7 @@ namespace TarkovVR.Source.Controls
                 spin = $", grip {Format(grip)} (spin term adds {Format(runtimeVelocity - grip)}, lever {lever.magnitude * 100f:F0} cm, " +
                     $"measured vs grip {AngleBetween(measuredVelocity, grip):F0} deg)";
             }
-            Plugin.MyLog.LogInfo($"[Throw] {(source == SteamVR_Input_Sources.LeftHand ? "left" : "right")}: used {(usedMeasured ? "measured" : "runtime")}; measured {Format(measuredVelocity)}, " +
+            Plugin.MyLog.LogInfo($"[Throw] {(source == SteamVR_Input_Sources.LeftHand ? "left" : "right")}: used {used}; walking {Format(bodyVelocity)} (world); measured {Format(measuredVelocity)}, " +
                 $"runtime {Format(runtimeVelocity)}, {AngleBetween(measuredVelocity, runtimeVelocity):F0} deg apart{spin}; spin runtime {runtimeSpin.magnitude:F1} rad/s vs " +
                 $"measured {measuredSpin.magnitude:F1} rad/s, axes {AngleBetween(runtimeSpin, measuredSpin):F0} deg apart");
         }

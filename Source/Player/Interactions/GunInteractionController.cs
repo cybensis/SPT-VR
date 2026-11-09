@@ -556,7 +556,13 @@ public class GunInteractionController : MonoBehaviour
         // VRGunController keeps the gun where it was in your hand instead of following that marker
         if (!VRGunController.TryHoldGunInHand(VRGlobals.weaponHolder.transform))
         {
-            Vector3 differenceBetweenHands = VRGlobals.player._markers[1].transform.position - VRGlobals.weaponHolder.transform.position;
+            Vector3 anchor = VRGlobals.player._markers[1].transform.position;
+            // A grenade in the left hand: the left hand holds it where the right grip mirrors to across the grenade's own centre plane
+            // (RealLeftHandedPatches.GunPlane), so that mirrored grip is what lands on the controller. A gun's grip sits on its centre
+            // plane (the mirror is about where the grip is); a grenade's is 11-12 cm off it.
+            if (WeaponPatches.grenadeEquipped && Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
+                anchor = RealLeftHandedPatches.ReflectPoint(anchor, planePoint, planeNormal);
+            Vector3 differenceBetweenHands = anchor - VRGlobals.weaponHolder.transform.position;
             differenceBetweenHands = (cachedRightHandPositioner.InverseTransformDirection(differenceBetweenHands) * -1);
             VRGlobals.weaponHolder.transform.localPosition = differenceBetweenHands + CalculateRightHandPosOffset();
             if (!VRGunController.IsTarkovAnimatingTheGun())

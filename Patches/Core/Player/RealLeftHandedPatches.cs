@@ -46,10 +46,12 @@ namespace TarkovVR.Patches.Core.Player
 
         internal static Transform HeldWeaponRoot()
         {
+            // The grenade first: firearmController still names the last gun (a slung one included) while a grenade is in the hands
+            if (Source.Player.Interactions.GrenadeSlot.KeepsLeftHand && VRGlobals.player?.HandsController is EFT.Player.BaseGrenadeHandsController grenade)
+                return grenade.WeaponRoot;
             if (VRGlobals.firearmController != null && VRGlobals.firearmController.WeaponRoot != null)
                 return VRGlobals.firearmController.WeaponRoot;
-            return Source.Player.Interactions.GrenadeSlot.KeepsLeftHand && VRGlobals.player.HandsController is EFT.Player.AbstractHandsController held
-                ? held.WeaponRoot : null;
+            return null;
         }
 
         // The gun in the left hand, let go by the left with the right on the foregrip: the right hand holds it alone (ChestHang.SupportOnly,
@@ -263,6 +265,41 @@ namespace TarkovVR.Patches.Core.Player
             }
             planeNormal = swayFrame.right;
             planePoint = swayFrame.position;
+            // A grenade: through the grenade itself. Its Weapon_root_anim isn't on it (Tarkov's idle hold, offline from its clips: the
+            // right grip 11-12 cm off that plane, the grenade 2-3.5 cm), which put the mirrored left hand ~6 cm off the grenade (his
+            // report: "not placed properly in the left hand, it's close though")
+            if (GrenadeCentre(weaponRoot, out Vector3 centre))
+                planePoint = centre;
+            return true;
+        }
+
+        private static Transform grenadeCentreFor;
+        private static Renderer grenadeBody;
+
+        // The middle of the held grenade's body (its biggest mesh: the ring and lever would pull a bounds of all of them off it)
+        internal static bool GrenadeCentre(Transform weaponRoot, out Vector3 centre)
+        {
+            centre = Vector3.zero;
+            if (!(VRGlobals.player?.HandsController is EFT.Player.BaseGrenadeHandsController grenade) || grenade.WeaponRoot != weaponRoot
+                || grenade._grenadeTransform == null)
+                return false;
+            if (grenadeCentreFor != grenade._grenadeTransform)
+            {
+                grenadeCentreFor = grenade._grenadeTransform;
+                grenadeBody = null;
+                float biggest = 0f;
+                foreach (Renderer renderer in grenade._grenadeTransform.GetComponentsInChildren<Renderer>(true))
+                {
+                    Vector3 size = renderer.bounds.size;
+                    float volume = size.x * size.y * size.z;
+                    if (volume > biggest)
+                    {
+                        biggest = volume;
+                        grenadeBody = renderer;
+                    }
+                }
+            }
+            centre = grenadeBody != null ? grenadeBody.bounds.center : grenade._grenadeTransform.position;
             return true;
         }
 
