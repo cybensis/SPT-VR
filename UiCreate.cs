@@ -176,9 +176,16 @@ public class CircularSegmentUI : MonoBehaviour
             VRGlobals.blockLeftJoystick = false;
         else
             VRGlobals.blockRightJoystick = false;
+        // The stick that picked in it reads centred for everything else until it's let go (his ask: the push that picked carried on as a
+        // crouch or a move). Only a menu that was up: they're also made and switched off at a raid's start.
+        if (shown)
+            VRInput.HoldStickUntilLetGo(OnLeftController ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND);
+        shown = false;
     }
+    private bool shown;
     void Update()
     {
+        shown = true;
         bool leftHandedMode = VRSettings.GetLeftHandedMode();
         bool secondaryGripState = leftHandedMode ? VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand) : VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand);
         bool primaryGripState = leftHandedMode ? VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand) : VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand);

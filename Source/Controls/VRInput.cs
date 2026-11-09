@@ -27,8 +27,37 @@ namespace TarkovVR.Source.Controls
         public static readonly VRSingle RightTrigger = new VRSingle(() => SteamVR_Actions._default.RightTrigger, OpenXRInput.RIGHT_HAND);
         public static readonly VRSingle LeftTrigger = new VRSingle(() => SteamVR_Actions._default.LeftTrigger, OpenXRInput.LEFT_HAND);
 
-        private static readonly VRVector2 rightJoystick = new VRVector2(() => SteamVR_Actions._default.RightJoystick, OpenXRInput.RIGHT_HAND);
-        private static readonly VRVector2 leftJoystick = new VRVector2(() => SteamVR_Actions._default.LeftJoystick, OpenXRInput.LEFT_HAND);
+        // Moving, turning, crouch/jump, zoom: held still after a radial menu until let go (HoldStickUntilLetGo). The Raw* ones the menus
+        // read aren't.
+        private static readonly VRVector2 rightJoystick = new VRVector2(() => SteamVR_Actions._default.RightJoystick, OpenXRInput.RIGHT_HAND, heldAfterMenus: true);
+        private static readonly VRVector2 leftJoystick = new VRVector2(() => SteamVR_Actions._default.LeftJoystick, OpenXRInput.LEFT_HAND, heldAfterMenus: true);
+        private static readonly VRVector2 rawRightJoystick = new VRVector2(() => SteamVR_Actions._default.RightJoystick, OpenXRInput.RIGHT_HAND);
+        private static readonly VRVector2 rawLeftJoystick = new VRVector2(() => SteamVR_Actions._default.LeftJoystick, OpenXRInput.LEFT_HAND);
+
+        // A radial menu just picked with this controller's stick (CircularSegmentUI closing): everything else reads that stick as centred
+        // until it's let go - else the pick's push carried on as a move or a crouch (his report: a grenade picked by pushing the stick
+        // down, "as soon as the grenade is selected and the radial menu goes away, my character starts crouching")
+        public static float menuStickLetGoRadius = 0.2f;    // how far from the centre counts as let go
+        private static readonly bool[] stickHeld = new bool[2];
+
+        public static void HoldStickUntilLetGo(int hand)
+        {
+            if (hand == OpenXRInput.LEFT_HAND || hand == OpenXRInput.RIGHT_HAND)
+                stickHeld[hand] = true;
+        }
+
+        internal static bool StickHeldAfterMenu(int hand) => stickHeld[hand];
+
+        // This controller's stick at `actual`: still held after a menu (read as centred)? Let go = released for good.
+        internal static bool StickStillHeld(int hand, Vector2 actual)
+        {
+            if (!stickHeld[hand])
+                return false;
+            if (actual.magnitude >= menuStickLetGoRadius)
+                return true;
+            stickHeld[hand] = false;
+            return false;
+        }
 
         // The "Swap Sticks" setting (VRSettings.GetSwapSticks, his ask for left-handed players): the stick everything calls the right one is
         // the left controller's, and back - turning, jump / crouch and its click, the scope dial, the weapon-part menu's scroll; moving,
@@ -39,8 +68,8 @@ namespace TarkovVR.Source.Controls
         public static VRVector2 LeftJoystick => SticksSwapped ? rightJoystick : leftJoystick;
         public static VRBoolean ClickRightJoystick => SticksSwapped ? clickLeftJoystick : clickRightJoystick;
         public static VRBoolean ClickLeftJoystick => SticksSwapped ? clickRightJoystick : clickLeftJoystick;
-        public static VRVector2 RawRightJoystick => rightJoystick;
-        public static VRVector2 RawLeftJoystick => leftJoystick;
+        public static VRVector2 RawRightJoystick => rawRightJoystick;
+        public static VRVector2 RawLeftJoystick => rawLeftJoystick;
 
         public static readonly VRPose RightHandPose = new VRPose(() => SteamVR_Actions._default.RightHandPose, OpenXRInput.RIGHT_HAND);
         public static readonly VRPose LeftHandPose = new VRPose(() => SteamVR_Actions._default.LeftHandPose, OpenXRInput.LEFT_HAND);
@@ -142,23 +171,32 @@ namespace TarkovVR.Source.Controls
         private readonly Func<SteamVR_Action_Vector2> getSteamAction;
         private SteamVR_Action_Vector2 steamAction;
         private readonly int hand;
+        private readonly bool heldAfterMenus;
 
-        internal VRVector2(Func<SteamVR_Action_Vector2> getSteamAction, int hand)
+        internal VRVector2(Func<SteamVR_Action_Vector2> getSteamAction, int hand, bool heldAfterMenus = false)
         {
             this.getSteamAction = getSteamAction;
             this.hand = hand;
+            this.heldAfterMenus = heldAfterMenus;
         }
 
         private SteamVR_Action_Vector2 SteamAction => steamAction ?? (steamAction = getSteamAction());
 
-        public Vector2 axis => VRInput.UsingOpenXR ? OpenXRInput.GetStick(hand) : SteamAction.axis;
+        private Vector2 Actual => VRInput.UsingOpenXR ? OpenXRInput.GetStick(hand) : SteamAction.axis;
+
+        public Vector2 axis => Held() ? Vector2.zero : Actual;
 
         public Vector2 GetAxis(SteamVR_Input_Sources inputSource)
         {
+            if (Held())
+                return Vector2.zero;
             if (VRInput.UsingOpenXR)
-                return OpenXRInput.IsSourceForHand(inputSource, hand) ? axis : Vector2.zero;
+                return OpenXRInput.IsSourceForHand(inputSource, hand) ? Actual : Vector2.zero;
             return SteamAction.GetAxis(inputSource);
         }
+
+        // Off this controller's own stick, whatever source was asked for (another hand's source reads zero, which isn't a let-go)
+        private bool Held() => heldAfterMenus && VRInput.StickHeldAfterMenu(hand) && VRInput.StickStillHeld(hand, Actual);
     }
 
     public class VRPose
