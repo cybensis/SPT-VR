@@ -688,6 +688,11 @@ namespace TarkovVR.Patches.Core.Player
         // VR control. Higher = more edge-proof but a touch more lag into a jump; lower = snappier but can
         // let a brief edge flicker through. 0 = disable the air path entirely (sprint-only).
         public static float airborneFreefallTime = 0.20f;
+        // A jump counts as airborne from its first frame. EFT's JumpPlayerState starts in PushingFromTheGround: still on the ground for
+        // its lift delay (JUMP_DELAY_BY_SPEED, longer the faster you go) with the jump animation already playing, and FreefallTime only
+        // counts once you're off the ground - so the hands were the animation's for the lift delay + airborneFreefallTime. Only a fall
+        // without a jump (off a ledge, a stair flicker) still waits airborneFreefallTime. False = the timer alone, as before.
+        public static bool airborneFromJumpStart = true;
 
         // Freeze the right arm at its pre-sprint grip pose during a run-anim-disabled sprint.
         // While a gun is held the right-arm IK (_limbs[1] == rightArmIk) is OFF, so the right arm - elbow
@@ -828,7 +833,8 @@ namespace TarkovVR.Patches.Core.Player
                 return false;
 
             bool trulyInAir = airborneFreefallTime > 0f &&
-                              __instance.MovementContext.FreefallTime > airborneFreefallTime;
+                              (__instance.MovementContext.FreefallTime > airborneFreefallTime ||
+                               (airborneFromJumpStart && __instance.MovementContext.CurrentState is JumpPlayerState));
 
             bool disableAnim = (__instance.IsSprintEnabled && VRGlobals.player.MovementContext._poseLevel != 0 && VRSettings.GetDisableRunAnim()) || trulyInAir;
 
