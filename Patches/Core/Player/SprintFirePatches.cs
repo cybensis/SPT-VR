@@ -1,5 +1,6 @@
 using EFT;
 using HarmonyLib;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 
 namespace TarkovVR.Patches.Core.Player
@@ -10,6 +11,8 @@ namespace TarkovVR.Patches.Core.Player
     // Your player only: the pull goes through with Sprint read as a fine state (every other unsuitable state still refuses it), and
     // an automatic burst carries on when a sprint starts. The gun's sprint pose is already off in VR (IKPatches: the hands animator's
     // sprint layer at weight 0), so it fires from where you hold it.
+    // Only with the sprint animation off (VR tab "Disable Run Animation", VRSettings.GetDisableRunAnim): with it on the arms play the
+    // run, and firing stays blocked as in Tarkov (his call).
     [HarmonyPatch]
     public static class SprintFirePatches
     {
@@ -19,12 +22,14 @@ namespace TarkovVR.Patches.Core.Player
         private static bool pullingNow;
         private static float nextLogTime;
 
+        private static bool Allowed => enabled && VRSettings.GetDisableRunAnim();
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController.Idling), "SetTriggerPressed")]
         private static void PullThroughSprint(EFT.Player.FirearmController.Idling __instance, bool pressed)
         {
             EFT.Player player = __instance?.Controller?._player;
-            pullingNow = enabled && pressed && player != null && player.IsYourPlayer && player.IsSprintEnabled;
+            pullingNow = Allowed && pressed && player != null && player.IsYourPlayer && player.IsSprintEnabled;
             if (pullingNow)
                 Log("trigger pulled while sprinting: let through");
         }
@@ -57,7 +62,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "SprintStateChangedEvent")]
         private static void KeepBurstIntoSprint(EFT.Player.FirearmController __instance, bool value, bool __state)
         {
-            if (!enabled || !value || !__state || __instance?._player == null || !__instance._player.IsYourPlayer)
+            if (!Allowed || !value || !__state || __instance?._player == null || !__instance._player.IsYourPlayer)
                 return;
             if (!(__instance.CurrentOperation is EFT.Player.FirearmController.AutomaticFireOperation) || __instance.IsTriggerPressed)
                 return;
