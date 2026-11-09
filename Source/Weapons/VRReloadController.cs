@@ -77,6 +77,13 @@ namespace TarkovVR.Source.Weapons
         public static bool debugZones = false;             // spheres: grab zone (blue), chest pouch (yellow), mag well seat radius (green)
         public static bool debugLog = false;
         private static void LogAction(string message) { if (debugLog) Plugin.MyLog.LogInfo(message); }
+        // Co-op as a FIKA client (ModSupport/FikaHostWait): a move runs in this game only when the host answers, any time later.
+        // Hosting (or single player) none of these apply.
+        public static bool forceAtOperationStart = true;    // Tarkov's operation is finished inside its own start (else at our next tick, as hosting)
+        public static float hostWaitLimit = 10f;            // s a move may wait on the host's answer before it's given up (2 s otherwise)
+        public static bool coopLog = true;                  // one line per move: sent, landed after N ms, finished / given up / Tarkov started another
+        private static void CoopLog(string message) { if (coopLog) Plugin.MyLog.LogInfo("[VRReload] co-op: " + message); }
+        private static bool CoopClient => ModSupport.InstalledMods.FIKAInstalled && ModSupport.FIKA.FikaHostWait.IsClient();
         public static bool pickUpGroundMagazines = true;    // a loose magazine that fits, picked up in the off hand, is held for the reload
 
         private enum HeldMagazineSource { None, FromGun, FromPouch, FromGround }
@@ -243,6 +250,8 @@ namespace TarkovVR.Source.Weapons
         private static FirearmController expectedForFirearm;
         private static float expectedOperationDeadline;
         private static int expectedOperationStartFrame;
+        private static float expectedOperationSentTime;
+        private static bool forcingAtStart;                 // TryForceExpectedOperation called from the operation's own start (co-op)
 
         // A magazine picked up off the ground: the ground item stays in the world, hidden, while our model of it is held
         private static LootItem groundMagazine;
@@ -1884,7 +1893,8 @@ namespace TarkovVR.Source.Weapons
             CommitHold();
 
             ExpectOperation(ExpectedOperation.Insert, firearmController);
-            inventoryController.TryRunNetworkTransaction(moveResult);
+            float sentAt = Time.realtimeSinceStartup;
+            inventoryController.TryRunNetworkTransaction(moveResult, result => OnMoveAnswered("magazine into the gun", sentAt, result.Succeed, result.Error));
             TryForceExpectedOperation();
 
             if (debugLog)
@@ -1923,7 +1933,12 @@ namespace TarkovVR.Source.Weapons
         private static void RunMoveToRig(Magazine magazine, FirearmController firearmController, OperationResult<MoveResult> moveResult)
         {
             ExpectOperation(ExpectedOperation.PullOut, firearmController);
-            VRGlobals.player.InventoryController.TryRunNetworkTransaction(moveResult);
+            // Co-op: the move lands when the host answers, and the magazine shouldn't hang in the hand until then. Out of sight now
+            // (the gun's own stays hidden); a refused move shows the gun's again, as before.
+            if (CoopClient && pendingProp != null && pendingPropItem == magazine)
+                pendingProp.SetActive(false);
+            float sentAt = Time.realtimeSinceStartup;
+            VRGlobals.player.InventoryController.TryRunNetworkTransaction(moveResult, result => OnMoveAnswered("magazine into the rig", sentAt, result.Succeed, result.Error));
             TryForceExpectedOperation();
 
             if (debugLog)
@@ -1951,7 +1966,8 @@ namespace TarkovVR.Source.Weapons
             pendingDropDeadline = Time.time + 3f;
 
             ExpectOperation(ExpectedOperation.PullOut, firearmController);
-            VRGlobals.player.InventoryController.ThrowItem(magazine, false, null);
+            float sentAt = Time.realtimeSinceStartup;
+            VRGlobals.player.InventoryController.ThrowItem(magazine, false, result => OnMoveAnswered("magazine dropped", sentAt, result.Succeed, result.Error));
             TryForceExpectedOperation();
 
             if (debugLog)
@@ -2041,6 +2057,9 @@ namespace TarkovVR.Source.Weapons
             expectedForFirearm = firearmController;
             expectedOperationDeadline = Time.time + 2f;
             expectedOperationStartFrame = Time.frameCount;
+            expectedOperationSentTime = Time.realtimeSinceStartup;
+            if (CoopClient)
+                CoopLog($"{operation} sent ({firearmController.Item.LocalizedShortName()})");
         }
 
         private static void TryForceExpectedOperation()
@@ -2048,6 +2067,8 @@ namespace TarkovVR.Source.Weapons
             FirearmController firearmController = VRGlobals.firearmController;
             if (firearmController == null || firearmController != expectedForFirearm)
             {
+                if (CoopClient)
+                    CoopLog($"stopped waiting for {expectedOperation}: the gun in hand changed before it landed");
                 ClearPending();
                 expectedOperation = ExpectedOperation.None;
                 return;
@@ -2093,9 +2114,10 @@ namespace TarkovVR.Source.Weapons
                     firearmController.FirearmsAnimator.Animator.Play(firearmController.FirearmsAnimator.FullIdleStateName, 1, 0.1f);
                     FinishForcedOperation(firearmController);
                 }
-                else if (Time.time > expectedOperationDeadline)
+                else if (Time.time > expectedOperationDeadline && !StillWaitingOnHost())
                 {
-                    Plugin.MyLog.LogWarning($"[VRReload] expected {expectedOperation} never started (current: {operation?.GetType().Name ?? "none"})");
+                    string coopState = CoopClient ? $", {MillisecondsSinceSent()} ms after it was sent, host still hadn't answered: {ModSupport.FIKA.FikaHostWait.WaitingForHost(VRGlobals.player)}" : "";
+                    Plugin.MyLog.LogWarning($"[VRReload] expected {expectedOperation} never started (current: {operation?.GetType().Name ?? "none"}{coopState})");
                     ClearPending();
                     expectedOperation = ExpectedOperation.None;
                 }
@@ -2137,7 +2159,65 @@ namespace TarkovVR.Source.Weapons
                 idling.OnIdleStartEvent();
             if (debugLog)
                 LogAction($"[VRReload] finished {expectedOperation} after {Time.frameCount - expectedOperationStartFrame} frames");
+            if (CoopClient)
+                CoopLog($"{expectedOperation} landed {MillisecondsSinceSent()} ms ({Time.frameCount - expectedOperationStartFrame} frames) after it was sent, " +
+                    $"finished {(forcingAtStart ? "as it started" : "at our next update")}");
             expectedOperation = ExpectedOperation.None;
+        }
+
+        // Co-op: a move only runs here once the host answers. The 2 s give-up was for moves that never start at all; one the host
+        // still hasn't answered gets up to hostWaitLimit.
+        private static bool StillWaitingOnHost()
+        {
+            return CoopClient && Time.time < expectedOperationDeadline - 2f + hostWaitLimit
+                && ModSupport.FIKA.FikaHostWait.WaitingForHost(VRGlobals.player);
+        }
+
+        private static int MillisecondsSinceSent()
+        {
+            return Mathf.RoundToInt((Time.realtimeSinceStartup - expectedOperationSentTime) * 1000f);
+        }
+
+        // Every Tarkov PullOutMag / InsertMag / Rechamber start (VRMagazinePatches). Co-op as a client: ours lands whenever the host's
+        // answer arrives, so it's finished right here, before a frame of its animation; and one of the player's that we didn't start is
+        // named (its animation plays).
+        public static void OnOperationStarted(FirearmController.FirearmOperation operation)
+        {
+            if (operation == null || operation.Controller == null || operation.Controller != VRGlobals.firearmController || !CoopClient)
+                return;
+            bool expected = operation.Controller == expectedForFirearm
+                && ((expectedOperation == ExpectedOperation.PullOut && operation is FirearmController.PullOutMagOperation)
+                    || (expectedOperation == ExpectedOperation.Insert && operation is FirearmController.InsertMagOperation)
+                    || (expectedOperation == ExpectedOperation.Rechamber && operation is FirearmController.RechamberOperation));
+            if (!expected)
+            {
+                Plugin.MyLog.LogWarning($"[VRReload] co-op: Tarkov started {operation.GetType().Name} we weren't waiting for (waiting for: {expectedOperation}, " +
+                    $"{(expectedOperation == ExpectedOperation.None ? "nothing" : MillisecondsSinceSent() + " ms after it was sent")}): its animation plays");
+                return;
+            }
+            if (!forceAtOperationStart)
+                return;
+            forcingAtStart = true;
+            try
+            {
+                TryForceExpectedOperation();
+            }
+            finally
+            {
+                forcingAtStart = false;
+            }
+        }
+
+        // The answer to one of our moves: hosting, as it lands; co-op, once the host's copy of you has done it too
+        private static void OnMoveAnswered(string what, float sentAt, bool succeeded, string error)
+        {
+            if (!CoopClient)
+                return;
+            int milliseconds = Mathf.RoundToInt((Time.realtimeSinceStartup - sentAt) * 1000f);
+            if (succeeded)
+                CoopLog($"{what}: the host confirmed it {milliseconds} ms after it was sent");
+            else
+                Plugin.MyLog.LogWarning($"[VRReload] co-op: {what} refused {milliseconds} ms after it was sent: {error ?? "no reason given"}");
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

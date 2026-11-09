@@ -161,8 +161,8 @@ namespace SptVrFikaSync
             }
             remote.drawing = true;
 
-            if ((packet.Flags & VRReloadPacket.ManualReload) != 0 && skipTarkovReloadAnimations)
-                SkipTarkovReload(firearmController, remote);
+            if (skipTarkovReloadAnimations)
+                SkipTarkovReload(firearmController, remote, (packet.Flags & VRReloadPacket.ManualReload) != 0);
             DrawAnimator(firearmController, remote, packet);
             DrawEvents(observed, firearmController, remote, packet);
             DrawParts(weaponRoot, remote, packet);
@@ -188,9 +188,11 @@ namespace SptVrFikaSync
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Tarkov's operations the VR player's moves start here, finished at once (VRReloadController.TryForceExpectedOperation's skips)
-
-        private static void SkipTarkovReload(FirearmController firearmController, Remote remote)
+        // Tarkov's operations the VR player's moves start here, finished at once (VRReloadController.TryForceExpectedOperation's skips).
+        // A VR player's magazines are always by hand, Manual Reload or not (Tarkov's B reload is a different operation, not touched
+        // here); the charging handle's rechamber is by hand only with Manual Reload on. Skipped only with that on, this copy played the
+        // whole clip for a player with it off, and the host's "done" to their game waited for its end (FIKA blocks their trigger till then).
+        private static void SkipTarkovReload(FirearmController firearmController, Remote remote, bool manualReload)
         {
             FirearmController.FirearmOperation operation = firearmController.CurrentOperation;
             if (operation is FirearmController.PullOutMagOperation)
@@ -211,7 +213,7 @@ namespace SptVrFikaSync
                 PlayIdle(firearmController);
                 FinishSkipped(firearmController, remote, "magazine in");
             }
-            else if (operation is FirearmController.RechamberOperation)
+            else if (manualReload && operation is FirearmController.RechamberOperation)
             {
                 firearmController.FastForwardCurrentState();
                 PlayIdle(firearmController);

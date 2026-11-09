@@ -10,7 +10,9 @@ namespace SptVrFikaSync
     // a 2.1.0 peer's copy of them just stays jammed.
     // 2.1.2: a tube shotgun's shells loaded by hand are accepted on the VR player's copy (BoltRoundSync). No new packets; on a host
     // with an older module the shells stay in the VR player's pouch.
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.1.2")]
+    // 2.1.3: a VR player's by-hand magazine moves skip Tarkov's animation on their copy with Manual Reload off too (ReloadSyncApply.
+    // SkipTarkovReload). No new packets; an older host plays the clip, and FIKA holds that player's trigger until it ends.
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.1.3")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module. When present we relocate a
     // dragged corpse's loot waypoint here (the VR mod can't — it doesn't run on a headless). Soft so this
