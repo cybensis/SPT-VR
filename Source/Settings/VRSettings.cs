@@ -97,6 +97,7 @@ namespace TarkovVR.Source.Settings
             public bool disableMouseInput { get; set; }
             public bool disableCorpseContextMenu { get; set; }
             public bool disableRunAnimation { get; set; }
+            public bool stepToSprint { get; set; }
             public bool disablePrismEffects { get; set; }
             public bool disablePrismFog { get; set; }
             public ShadowOpt shadowOpt { get; set; }
@@ -166,6 +167,7 @@ namespace TarkovVR.Source.Settings
                 disableMouseInput = true;
                 disableCorpseContextMenu = true;
                 disableRunAnimation = true;
+                stepToSprint = false;
                 disablePrismEffects = false;
                 disablePrismFog = true;               
                 shadowOpt = ShadowOpt.IncreaseLighting;
@@ -250,6 +252,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle disableMouseInput;
         private static SettingToggle disableCorpseContextMenuToggle;
         private static SettingToggle disableRunAnimationToggle;
+        private static SettingToggle stepToSprintToggle;
         private static SettingToggle seatedModeToggle;
         private static SettingToggle useVRKeyboardToggle;
         private static SettingToggle heldItemWeightToggle;
@@ -641,6 +644,12 @@ namespace TarkovVR.Source.Settings
             disableRunAnimationToggle.Toggle._onValueChanged = SetDisableRunAnim;
             disableRunAnimationToggle.Text.localizationKey = "Disable Run Animation";
             disableRunAnimationToggle.Toggle.UpdateValue(settings.disableRunAnimation);
+
+            stepToSprintToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            stepToSprintToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            stepToSprintToggle.Toggle._onValueChanged = SetStepToSprint;
+            stepToSprintToggle.Text.localizationKey = "Step Or Lean Forward To Sprint";
+            stepToSprintToggle.Toggle.UpdateValue(settings.stepToSprint);
             
 
             /*
@@ -1453,6 +1462,17 @@ namespace TarkovVR.Source.Settings
         private static void SetDisableRunAnim(bool turnOn)
         {
             settings.disableRunAnimation = turnOn;
+        }
+
+        // A quick step or lean forward starts the run, back ends it (StepSprint)
+        public static bool GetStepToSprint()
+        {
+            return settings != null && settings.stepToSprint;
+        }
+
+        private static void SetStepToSprint(bool turnOn)
+        {
+            settings.stepToSprint = turnOn;
         }
         public static bool GetDisablePrismEffects()
         {

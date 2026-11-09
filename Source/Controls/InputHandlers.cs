@@ -279,6 +279,10 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
+                // Step Or Lean To Sprint: measured every frame, acted on below when neither the click nor the stick decides
+                bool stickForward = !VRGlobals.blockLeftJoystick && VRInput.LeftJoystick.axis.y >= VRSettings.GetLeftStickSensitivity();
+                int step = StepSprint.Update(VRGlobals.player != null && VRGlobals.player.IsSprintEnabled, stickForward);
+
                 if (VRInput.ClickLeftJoystick.GetStateDown(SteamVR_Input_Sources.Any))
                 {
                     if (!isSprinting)
@@ -292,6 +296,18 @@ namespace TarkovVR.Source.Controls
                     VRGlobals.vrPlayer.crouchHeightDiff = 0;
                 }
                 else if (isSprinting && VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.Any).y < VRSettings.GetLeftStickSensitivity())
+                {
+                    command = ECommand.EndSprinting;
+                    isSprinting = false;
+                }
+                else if (step > 0)
+                {
+                    // Only sent while the game isn't running (StepSprint): ToggleSprinting on a run would end it
+                    command = ECommand.ToggleSprinting;
+                    isSprinting = true;
+                    VRGlobals.vrPlayer.crouchHeightDiff = 0;
+                }
+                else if (step < 0)
                 {
                     command = ECommand.EndSprinting;
                     isSprinting = false;
