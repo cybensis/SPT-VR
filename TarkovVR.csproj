@@ -107,7 +107,7 @@
       <HintPath>libs\Managed\SteamVR_Actions.dll</HintPath>
     </Reference>
     <Reference Include="Tyfon.WeaponCustomizer">
-      <HintPath>libs backup\ModSupport\Tyfon.WeaponCustomizer.dll</HintPath>
+      <HintPath>libs\ModSupport\Tyfon.WeaponCustomizer.dll</HintPath>
     </Reference>
     <Reference Include="Unity.Postprocessing.Runtime">
       <HintPath>libs\Managed\Unity.Postprocessing.Runtime.dll</HintPath>

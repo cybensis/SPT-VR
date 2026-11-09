@@ -105,41 +105,8 @@ namespace TarkovVR.ModSupport.DynamicMaps
             return false;
         }
 
-        // Fixes texture resolutions used by Dynamic maps to not eat VRAM
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(TextureUtils), "LoadTexture2DFromPath")]
-        private static bool FixTextureResolution(string absolutePath, ref Texture2D __result)
-        {
-            if (!File.Exists(absolutePath))
-            {
-                __result = null;
-                return false;
-            }
-
-            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            tex.LoadImage(File.ReadAllBytes(absolutePath));
-
-            // Downscale to half, rounded to multiple of 4 for compression
-            int newWidth = ((tex.width / 2) + 3) & ~3;
-            int newHeight = ((tex.height / 2) + 3) & ~3;
-
-            RenderTexture rt = RenderTexture.GetTemporary(newWidth, newHeight, 0, RenderTextureFormat.ARGB32);
-            Graphics.Blit(tex, rt);
-
-            Texture2D result = new Texture2D(newWidth, newHeight, TextureFormat.RGBA32, false);
-            RenderTexture prev = RenderTexture.active;
-            RenderTexture.active = rt;
-            result.ReadPixels(new Rect(0, 0, newWidth, newHeight), 0, 0);
-            RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(rt);
-            UnityEngine.Object.Destroy(tex);
-
-            result.Compress(false);
-            result.Apply(false, true);
-
-            __result = result;
-            return false;
-        }
+        // (The map-texture downscale is gone: since DynamicMaps 1.1.0 the map layers are SVGs tessellated into meshes
+        // (SvgUtils.LoadSvgFromPath), so LoadTexture2DFromPath only loads the small marker icons - halving those just blurred them.)
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(ModdedMapScreen), "ReadConfig")]
@@ -170,7 +137,8 @@ namespace TarkovVR.ModSupport.DynamicMaps
             // DynamicMaps patch above has added it. (Was C# dynamic = the runtime binder on every frame the map was open.)
             MapView mapView = (MapView)_mapViewRef;
 
-            bool triggerHeld = VRInput.RightTrigger.axis > 0.5f;
+            // The laser's hand ("Laser Pointer In Left Hand"): its trigger drags, its own stick zooms
+            bool triggerHeld = Handedness.PointerHandTrigger.axis > 0.5f;
             if (triggerHeld)
             {
                 Vector3 currentPos = interacter.uiPointerPos;
@@ -181,7 +149,7 @@ namespace TarkovVR.ModSupport.DynamicMaps
                     Vector3 localDelta = rt.parent.InverseTransformVector(worldDelta);
                     mapView.ShiftMap(new Vector2(localDelta.x, localDelta.y), 0, false);
 
-                    Vector2 rightStick = VRInput.RightJoystick.axis;
+                    Vector2 rightStick = Handedness.PointerHandJoystick.axis;
                     if (Mathf.Abs(rightStick.y) > 0.1f)
                     {
                         Vector3 localPoint = rt.InverseTransformPoint(currentPos);
