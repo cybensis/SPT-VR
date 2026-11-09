@@ -70,8 +70,9 @@ namespace TarkovVR.Source.Controls
             private void UpdateVive(ref ECommand command)
             {
                 // Physical click state (binary, no sweet-spot on Vive)
-                bool clickHeld = VRInput.ClickRightJoystick.GetState(SteamVR_Input_Sources.RightHand);
-                bool clickDown = VRInput.ClickRightJoystick.GetStateDown(SteamVR_Input_Sources.RightHand);
+                // Source-less: with Swap Sticks this is the left controller's click (VRInput)
+                bool clickHeld = VRInput.ClickRightJoystick.state;
+                bool clickDown = VRInput.ClickRightJoystick.stateDown;
 
                 // Touch position — used only as a guard to separate "jump/vault" from "crouch"
                 float fingerY = VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;

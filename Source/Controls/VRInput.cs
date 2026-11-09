@@ -18,17 +18,29 @@ namespace TarkovVR.Source.Controls
         public static readonly VRBoolean ButtonB = new VRBoolean(() => SteamVR_Actions._default.ButtonB, OpenXRInput.RIGHT_HAND, OpenXRInput.Button.Secondary);
         public static readonly VRBoolean ButtonX = new VRBoolean(() => SteamVR_Actions._default.ButtonX, OpenXRInput.LEFT_HAND, OpenXRInput.Button.Primary);
         public static readonly VRBoolean ButtonY = new VRBoolean(() => SteamVR_Actions._default.ButtonY, OpenXRInput.LEFT_HAND, OpenXRInput.Button.Secondary);
-        public static readonly VRBoolean ClickRightJoystick = new VRBoolean(() => SteamVR_Actions._default.ClickRightJoystick, OpenXRInput.RIGHT_HAND, OpenXRInput.Button.StickClick);
+        private static readonly VRBoolean clickRightJoystick = new VRBoolean(() => SteamVR_Actions._default.ClickRightJoystick, OpenXRInput.RIGHT_HAND, OpenXRInput.Button.StickClick);
         // The Index bindings also map touching the left trackpad to this
-        public static readonly VRBoolean ClickLeftJoystick = new VRBoolean(() => SteamVR_Actions._default.ClickLeftJoystick, OpenXRInput.LEFT_HAND, OpenXRInput.Button.StickClickOrTrackpadTouch);
+        private static readonly VRBoolean clickLeftJoystick = new VRBoolean(() => SteamVR_Actions._default.ClickLeftJoystick, OpenXRInput.LEFT_HAND, OpenXRInput.Button.StickClickOrTrackpadTouch);
         // Not bound to anything in the Index / Touch bindings
         public static readonly VRBoolean Start = new VRBoolean(() => SteamVR_Actions._default.Start, OpenXRInput.LEFT_HAND, OpenXRInput.Button.None);
 
         public static readonly VRSingle RightTrigger = new VRSingle(() => SteamVR_Actions._default.RightTrigger, OpenXRInput.RIGHT_HAND);
         public static readonly VRSingle LeftTrigger = new VRSingle(() => SteamVR_Actions._default.LeftTrigger, OpenXRInput.LEFT_HAND);
 
-        public static readonly VRVector2 RightJoystick = new VRVector2(() => SteamVR_Actions._default.RightJoystick, OpenXRInput.RIGHT_HAND);
-        public static readonly VRVector2 LeftJoystick = new VRVector2(() => SteamVR_Actions._default.LeftJoystick, OpenXRInput.LEFT_HAND);
+        private static readonly VRVector2 rightJoystick = new VRVector2(() => SteamVR_Actions._default.RightJoystick, OpenXRInput.RIGHT_HAND);
+        private static readonly VRVector2 leftJoystick = new VRVector2(() => SteamVR_Actions._default.LeftJoystick, OpenXRInput.LEFT_HAND);
+
+        // The "Swap Sticks" setting (VRSettings.GetSwapSticks, his ask for left-handed players): the stick everything calls the right one is
+        // the left controller's, and back - turning, jump / crouch and its click, the scope dial, the weapon-part menu's scroll; moving,
+        // sprint's click. Done here so every feature follows it. Asked for with a hand (GetState(RightHand)) they'd read the other hand's
+        // action, so callers use the source-less reads. The Raw* ones stay on their controller (the menus scroll with the laser's hand).
+        private static bool SticksSwapped => TarkovVR.Source.Settings.VRSettings.GetSwapSticks();
+        public static VRVector2 RightJoystick => SticksSwapped ? leftJoystick : rightJoystick;
+        public static VRVector2 LeftJoystick => SticksSwapped ? rightJoystick : leftJoystick;
+        public static VRBoolean ClickRightJoystick => SticksSwapped ? clickLeftJoystick : clickRightJoystick;
+        public static VRBoolean ClickLeftJoystick => SticksSwapped ? clickRightJoystick : clickLeftJoystick;
+        public static VRVector2 RawRightJoystick => rightJoystick;
+        public static VRVector2 RawLeftJoystick => leftJoystick;
 
         public static readonly VRPose RightHandPose = new VRPose(() => SteamVR_Actions._default.RightHandPose, OpenXRInput.RIGHT_HAND);
         public static readonly VRPose LeftHandPose = new VRPose(() => SteamVR_Actions._default.LeftHandPose, OpenXRInput.LEFT_HAND);

@@ -130,37 +130,26 @@ public class CircularSegmentUI : MonoBehaviour
 
     }
 
-    private void OnEnable() { 
-        if (leftHand)
-        {
-            if (VRSettings.GetLeftHandedMode())
-                VRGlobals.blockRightJoystick = true;
-            else
-                VRGlobals.blockLeftJoystick = true;
-        }
-        else {
-            if (VRSettings.GetLeftHandedMode())
-                VRGlobals.blockLeftJoystick = true;
-            else
-                VRGlobals.blockRightJoystick = true;
-        }
+    // The menu is picked with the stick of the controller it sits on, and that stick's other use is held off while it's open: with
+    // Swap Sticks the right controller's stick is the one moving you (VRInput), so that one is blocked. Kept from the open so the close
+    // clears the same flag.
+    private bool blockedLeftStick;
+
+    private bool OnLeftController => leftHand != VRSettings.GetLeftHandedMode();
+
+    private void OnEnable() {
+        blockedLeftStick = OnLeftController != VRSettings.GetSwapSticks();
+        if (blockedLeftStick)
+            VRGlobals.blockLeftJoystick = true;
+        else
+            VRGlobals.blockRightJoystick = true;
     }
     private void OnDisable()
     {
-        if (leftHand)
-        {
-            if (VRSettings.GetLeftHandedMode())
-                VRGlobals.blockRightJoystick = false;
-            else
-                VRGlobals.blockLeftJoystick = false;
-        }
+        if (blockedLeftStick)
+            VRGlobals.blockLeftJoystick = false;
         else
-        {
-            if (VRSettings.GetLeftHandedMode())
-                VRGlobals.blockLeftJoystick = false;
-            else
-                VRGlobals.blockRightJoystick = false;
-        }
+            VRGlobals.blockRightJoystick = false;
     }
     void Update()
     {
@@ -169,10 +158,7 @@ public class CircularSegmentUI : MonoBehaviour
         bool leftHandedMode = VRSettings.GetLeftHandedMode();
         bool secondaryGripState = leftHandedMode ? VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand) : VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand);
         bool primaryGripState = leftHandedMode ? VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand) : VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand);
-        Vector2 joystickInput = leftHandedMode ? VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand) : VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand);
-
-        if (leftHand)
-            joystickInput = leftHandedMode ? VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.RightHand) : VRInput.LeftJoystick.GetAxis(SteamVR_Input_Sources.LeftHand);
+        Vector2 joystickInput = OnLeftController ? VRInput.RawLeftJoystick.axis : VRInput.RawRightJoystick.axis;
 
 
         if (lastSelectedSegment != -1)

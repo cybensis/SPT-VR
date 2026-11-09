@@ -69,6 +69,7 @@ namespace TarkovVR.Source.Settings
             public bool snapToGun { get; set; }
             public bool supportGunHoldToggle { get; set; }
             public bool leftHandedMode { get; set; }
+            public bool swapSticks { get; set; }
             public bool seatedMode { get; set; }
             public float smoothingSensitivity { get; set; }
             public float scopeSmoothingSensitivity { get; set; }
@@ -136,6 +137,7 @@ namespace TarkovVR.Source.Settings
                 scopeAimSmoothing = true;
                 seatedMode = false;
                 leftHandedMode = false;
+                swapSticks = false;
                 snapToGun = true;
                 supportGunHoldToggle = false;
                 smoothingSensitivity = 1;
@@ -197,6 +199,7 @@ namespace TarkovVR.Source.Settings
         private static SettingDropDown snapTurnAmountDropDown;
         // Weapon handling settings
         private static SettingToggle leftHandedMode;
+        private static SettingToggle swapSticksToggle;
         private static SettingToggle aimSmoothingToggle;
         private static SettingToggle snapToGunToggle;
         private static SettingToggle supportGunHoldToggle;
@@ -475,6 +478,12 @@ namespace TarkovVR.Source.Settings
             leftHandedMode.Toggle._onValueChanged = SetLeftHandedMode;
             leftHandedMode.Text.localizationKey = "Laser Pointer In Left Hand";
             leftHandedMode.Toggle.UpdateValue(settings.leftHandedMode);
+
+            swapSticksToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            swapSticksToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            swapSticksToggle.Toggle._onValueChanged = SetSwapSticks;
+            swapSticksToggle.Text.localizationKey = "Swap Sticks (move with the right, turn with the left)";
+            swapSticksToggle.Toggle.UpdateValue(settings.swapSticks);
 
             snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             snapToGunToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
@@ -1309,6 +1318,17 @@ namespace TarkovVR.Source.Settings
         public static bool GetLaserInLeftHand()
         {
             return settings.leftHandedMode;
+        }
+
+        // Everything on the right stick on the left one and back (VRInput): for left-handed play, apart from the laser's hand
+        private static void SetSwapSticks(bool toggle)
+        {
+            settings.swapSticks = toggle;
+        }
+
+        public static bool GetSwapSticks()
+        {
+            return settings != null && settings.swapSticks;
         }
 
         public static bool GetHideArms()
