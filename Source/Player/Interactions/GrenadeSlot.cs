@@ -372,7 +372,12 @@ namespace TarkovVR.Source.Player.Interactions
                     hungGun = fromSlot ? (gunHungBefore ? handsBefore : null)
                         : ChestHang.Hanging && VRGlobals.firearmController != null ? VRGlobals.firearmController.Item : null;
                 if (!fromSlot)
+                {
+                    // Not asked for by a grab or the picker (his report: one came by itself after a throw): who drew it
+                    if (debugLog)
+                        Plugin.MyLog.LogInfo($"[GrenadeDiag] {grenade.Item?.LocalizedShortName()} drawn without a grab (process {grenade._player.ProcessStatus}, next {grenade._player.ScheduledProcess?.GetType().Name ?? "none"}): {TarkovVR.Patches.Core.VR.VRGrenadeController.ShortStack()}");
                     return;
+                }
                 if (grenade.CurrentOperation is EFT.Player.GrenadeHandsController.SpawnOperation spawn)
                     spawn.FastForward();
                 GrenadeHold.Rush(grenade, GrenadeHold.drawRushTime);

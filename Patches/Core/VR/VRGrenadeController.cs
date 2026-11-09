@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using static EFT.Player;
@@ -319,6 +320,34 @@ namespace TarkovVR.Patches.Core.VR
             return false;
         }
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Diagnostics (GrenadeSlot.debugLog): his report - a grenade picked off the trigger radial, thrown, and another grenade came into the
+        // hand by itself. Tarkov parks a hands change asked of a grenade it can't drop yet until the grenade is used (Drop ->
+        // SetOnUsedCallback, a throw's HideGrenade -> _onControllerDestroy): which change, asked by whom.
+
+        // The calls that led here, the game's and ours (no Harmony / System frames), newest first
+        internal static string ShortStack()
+        {
+            System.Diagnostics.StackFrame[] frames = new System.Diagnostics.StackTrace(2, false).GetFrames();
+            if (frames == null)
+                return "(no stack)";
+            StringBuilder line = new StringBuilder();
+            int kept = 0;
+            foreach (System.Diagnostics.StackFrame frame in frames)
+            {
+                System.Reflection.MethodBase method = frame.GetMethod();
+                string space = method?.DeclaringType?.Namespace ?? "";
+                if (method == null || space.StartsWith("System") || space.StartsWith("HarmonyLib") || space.StartsWith("MonoMod"))
+                    continue;
+                if (kept++ > 0)
+                    line.Append(" < ");
+                line.Append(method.DeclaringType != null ? method.DeclaringType.Name + "." : "").Append(method.Name);
+                if (kept >= 18)
+                    break;
+            }
+            return line.ToString();
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BaseGrenadeHandsController), "IEventsConsumerOnWeapOut")]
         private static bool DisableGrenadeStuffAfterCancel(BaseGrenadeHandsController __instance)
@@ -336,6 +365,54 @@ namespace TarkovVR.Patches.Core.VR
             WeaponPatches.pinPulled = false;
 
             return true;
+        }
+    }
+
+    // Diagnostics (GrenadeSlot.debugLog), see the comment above ShortStack: a hands change asked of one of your grenades - for which item,
+    // in which state, by whom; and Tarkov parking it until the grenade's used. Own class: the overloads are resolved by type here, and a
+    // miss skips these two (Prepare) instead of failing VRGrenadeController's patches.
+    [HarmonyPatch]
+    internal static class GrenadeHandsDiagnostics
+    {
+        private static MethodBase dropMethod, onUsedMethod;
+
+        private static bool Prepare()
+        {
+            dropMethod = AccessTools.Method(typeof(BaseGrenadeHandsController), "Drop",
+                new[] { typeof(float), typeof(Action), typeof(bool), typeof(EFT.InventoryLogic.Item) });
+            onUsedMethod = typeof(GrenadeHandsController).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                .FirstOrDefault(method => method.Name == "SetOnUsedCallback" && method.GetParameters().Length == 1
+                    && method.GetParameters()[0].ParameterType.IsGenericType
+                    && method.GetParameters()[0].ParameterType.GetGenericArguments()[0].Name == "IGrenadeController");
+            if (dropMethod == null || onUsedMethod == null)
+                Plugin.MyLog.LogWarning($"[GrenadeDiag] hooks not found (Drop {dropMethod != null}, SetOnUsedCallback {onUsedMethod != null}) - no hands-change lines");
+            return dropMethod != null && onUsedMethod != null;
+        }
+
+        private static IEnumerable<MethodBase> TargetMethods()
+        {
+            yield return dropMethod;
+            yield return onUsedMethod;
+        }
+
+        private static void Prefix(object __instance, object[] __args, MethodBase __originalMethod)
+        {
+            if (!TarkovVR.Source.Player.Interactions.GrenadeSlot.debugLog || !(__instance is BaseGrenadeHandsController grenade)
+                || grenade._player == null || !grenade._player.IsYourPlayer)
+                return;
+            if (__originalMethod == dropMethod)
+            {
+                EFT.InventoryLogic.Item next = __args != null && __args.Length > 3 ? __args[3] as EFT.InventoryLogic.Item : null;
+                bool canRemove = false;
+                try { canRemove = grenade.CanRemove(); } catch { }
+                Plugin.MyLog.LogInfo($"[GrenadeDiag] {grenade.Item?.LocalizedShortName()} asked to leave the hands for {next?.LocalizedShortName() ?? "nothing named"}"
+                    + $" (operation {grenade.CurrentGrenadeOperation?.GetType().Name}, {(canRemove ? "drops now" : "PARKED until it's used")}, process {grenade._player.ProcessStatus}): {VRGrenadeController.ShortStack()}");
+            }
+            else
+            {
+                bool clearing = __args == null || __args.Length == 0 || __args[0] == null;
+                Plugin.MyLog.LogInfo($"[GrenadeDiag] {grenade.Item?.LocalizedShortName()}: after-use callback {(clearing ? "cleared" : "set")}: {VRGrenadeController.ShortStack()}");
+            }
         }
     }
 }

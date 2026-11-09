@@ -1240,7 +1240,16 @@ namespace TarkovVR.Source.Player.VRManager
 
                 leftHandInAnimation = false;
             }
-            if (leftHandGunIK)
+            // A grenade is never two-handed (the other hand on it pulls the ring or takes it over, GrenadeHold): its left-hand marker
+            // took the hand that had just handed it over, grip still closed, as a foregrip - the hand's turn frozen at the other
+            // controller's (his report: "my hand flips upside down" until that grip let go)
+            if (WeaponPatches.grenadeEquipped)
+            {
+                if (isSupporting || isEnteringTwoHandedMode)
+                    ForceUnlockHand();
+                PlaceOffHand(fromAction);
+            }
+            else if (leftHandGunIK)
             {
                 Vector3 supportGripPoint = SupportGripPoint();
                 bool withinDistance = Vector3.Distance(LeftHand.transform.position, supportGripPoint) < 0.1f;
