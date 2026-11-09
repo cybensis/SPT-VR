@@ -560,10 +560,14 @@ public class GunInteractionController : MonoBehaviour
             // A grenade in the left hand: the left hand holds it where the right grip mirrors to across the grenade's own centre plane
             // (RealLeftHandedPatches.GunPlane), so that mirrored grip is what lands on the controller. A gun's grip sits on its centre
             // plane (the mirror is about where the grip is); a grenade's is 11-12 cm off it.
-            if (WeaponPatches.grenadeEquipped && Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
+            // Mirrored whole (GrenadeHold.mirrorInLeftHand: the positioner scaled -1 on x) the grip marker IS the left grip: anchored as it
+            // is, through the positioner's scale (InverseTransformVector) so the holder's local position goes the mirrored way.
+            bool mirroredGrenade = GrenadeHold.MirroredInLeftHand;
+            if (!mirroredGrenade && WeaponPatches.grenadeEquipped && Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
                 anchor = RealLeftHandedPatches.ReflectPoint(anchor, planePoint, planeNormal);
             Vector3 differenceBetweenHands = anchor - VRGlobals.weaponHolder.transform.position;
-            differenceBetweenHands = (cachedRightHandPositioner.InverseTransformDirection(differenceBetweenHands) * -1);
+            differenceBetweenHands = (mirroredGrenade ? cachedRightHandPositioner.InverseTransformVector(differenceBetweenHands)
+                : cachedRightHandPositioner.InverseTransformDirection(differenceBetweenHands)) * -1;
             VRGlobals.weaponHolder.transform.localPosition = differenceBetweenHands + CalculateRightHandPosOffset();
             if (!VRGunController.IsTarkovAnimatingTheGun())
                 VRGunController.RememberGunPosition(VRGlobals.weaponHolder.transform);

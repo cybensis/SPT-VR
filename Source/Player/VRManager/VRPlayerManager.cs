@@ -716,7 +716,12 @@ namespace TarkovVR.Source.Player.VRManager
             // the gun a real gun: hand rotation = F * (offset * gunInHand) * F * gunInHand^-1. (Reflecting the offset alone, headset
             // round 2, only works if the gun's x lines up with the hand frame's: it didn't - the pistol pointed off to the side.)
             bool real = Handedness.GunInLeftHand;
-            RightHand.transform.localRotation = fromAction.localRotation * (real ? MirroredGunHold(offset) : offset);
+            // A grenade mirrored whole in the left hand (GrenadeHold.mirrorInLeftHand: its positioner scaled -1 on x): the right hold's
+            // own offset mirrored through the controller's x, the scale mirrors the rest
+            if (real && GrenadeHold.MirroredInLeftHand)
+                RightHand.transform.localRotation = fromAction.localRotation * new Quaternion(offset.x, -offset.y, -offset.z, offset.w);
+            else
+                RightHand.transform.localRotation = fromAction.localRotation * (real ? MirroredGunHold(offset) : offset);
             RightHand.transform.localPosition = (fromAction.localPosition + (real ? MirrorX(mainHandPosOffset) : mainHandPosOffset)) - fromAction.localRotation * Vector3.forward * controllerLength;
         }
 

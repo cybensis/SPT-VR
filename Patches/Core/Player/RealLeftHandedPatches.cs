@@ -129,6 +129,14 @@ namespace TarkovVR.Patches.Core.Player
                 if (freeLeft == null)
                     return;
             }
+            else if (Source.Weapons.GrenadeHold.TryMirrorNormal(out Vector3 mirrorNormal))
+            {
+                // A grenade mirrored whole (its positioner scaled -1 on x): the grip marker is on the left grip already; its rotation
+                // Unity reports without the scale's sign, so the palm is mirrored through the positioner's x
+                if (!HandMirror.TryMirrorPalm(gripRotation, mirrorNormal, rightToLeft: true, out leftRotation))
+                    return;
+                leftPosition = gripPosition;
+            }
             else
             {
                 if (!HandMirror.TryMirrorPalm(gripRotation, planeNormal, rightToLeft: true, out leftRotation))
