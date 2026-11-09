@@ -40,6 +40,10 @@ namespace TarkovVR.Source.Weapons
         // false = the old way: the hand mirrored across the grenade's centre plane, the grenade as it is.
         public static bool mirrorInLeftHand = true;
         public static float swapRadius = 0.08f;             // m any point of the other hand to the grenade's middle: its grip there takes the grenade over
+        // The pin out (and while it goes back in): the hand keeps the turn it had in your hand when the pull began. The hand rides
+        // Tarkov's grip marker, and the armed clip turns that marker (his report: "after pulling the pin your hand sorta tilts a bit").
+        // false = the hand follows the clip, and four models get the old fixed turn (PlaceArmed).
+        public static bool keepHandTurn = true;
         public static bool debugLog = true;                 // one line per step (first round)
 
         private static GrenadeHandsController controller;
@@ -74,6 +78,11 @@ namespace TarkovVR.Source.Weapons
         private static bool repinArmed;             // the ring has been away from the grenade since the pull (or the last push)
         private static bool pinReseated;            // pushed back in: the pin held on its seat (the pin-back clip would carry it about)
         private static bool holderTurnedArmed;      // PlaceArmed turned the holder (four models): turned back when the pin goes back in
+        // keepHandTurn: the holder's turn as the grenade came in, and the grip marker's turn under it the last frame it rested
+        private static Quaternion holderRest = Quaternion.identity;
+        private static Quaternion markerAtRest = Quaternion.identity;
+        private static bool markerAtRestSeen;
+        private static float keptTurnMax;           // the most the armed hold turned the marker away from its rest (the throw's log line)
         private static bool offTriggerDown;
         private static bool ringInReach;
         private static bool hooked;
@@ -173,6 +182,9 @@ namespace TarkovVR.Source.Weapons
             {
                 Plugin.MyLog.LogInfo($"[GrenadeHold] {grenade.Item.LocalizedShortName()}: no ring to pull (model {grenade.HandsHierarchy?.name}, pin-like bones: {GrenadeRings.PinLikeNames(grenade.WeaponRoot)}) - ready when held");
             }
+            // As its spawn set it (VRGrenadeController.HandleGrenade): what an armed hold's turn is measured off
+            holderRest = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform.localRotation : Quaternion.identity;
+            markerAtRestSeen = false;
             // In the left hand (taken from the slot with it): the whole hold mirrored on the left controller, or the hold alone
             SetMirror(Handedness.GunInLeftHand);
             offGripDown = Handedness.OffHandGrip.state;
@@ -237,6 +249,7 @@ namespace TarkovVR.Source.Weapons
             pinInHand = false;
             pinFinger = null;
             pushingIn = repinArmed = pinReseated = holderTurnedArmed = false;
+            markerAtRestSeen = false;
             offTriggerDown = false;
             ringInReach = false;
         }
@@ -343,8 +356,9 @@ namespace TarkovVR.Source.Weapons
             Transform holder = VRGlobals.weaponHolder.transform;
             Vector3 position = new Vector3(-0.1f, -0.43f, -0.25f);
             string model = controller.HandsHierarchy != null ? controller.HandsHierarchy.name : "";
-            if (model == "weapon_grenade_m7920.generated(Clone)" || model == "weapon_grenade_rgo.generated(Clone)"
-                || model == "weapon_grenade_rgn.generated(Clone)" || model == "weapon_grenade_m18.generated(Clone)")
+            // The old flow's fixed turn for four models - KeepHandTurn keeps every model's hand instead
+            if (!keepHandTurn && (model == "weapon_grenade_m7920.generated(Clone)" || model == "weapon_grenade_rgo.generated(Clone)"
+                || model == "weapon_grenade_rgn.generated(Clone)" || model == "weapon_grenade_m18.generated(Clone)"))
             {
                 holder.localRotation = Quaternion.Euler(30, 273, 116);
                 holderTurnedArmed = true;
@@ -353,6 +367,51 @@ namespace TarkovVR.Source.Weapons
             PlaceHolder(position);
             if (WeaponPatches.currentGunInteractController != null)
                 WeaponPatches.currentGunInteractController.framesAfterEnabled = 0;
+        }
+
+        // GunInteractionController.UpdateWeaponPosition, before the anchor lands the grip marker on the hand: resting, the hand follows
+        // Tarkov's hold as it always has and its grip marker's turn is noted; from the pull until the grenade rests again (pin back in,
+        // its clip played) the holder turns so the marker keeps that turn - the hand on it with it. Under the holder only (the mirrored
+        // positioner's -1 scale is above it), the press check's way (VRReloadController.ApplyPressCheckGunTurn).
+        internal static void KeepHandTurn(Transform holder)
+        {
+            if (!keepHandTurn || controller == null || thrown || holder == null || VRGlobals.player == null
+                || VRGlobals.player._markers == null || VRGlobals.player._markers.Length < 2)
+                return;
+            if (!MarkerUnderHolder(VRGlobals.player._markers[1], holder, out Quaternion markerNow))
+                return;
+            bool resting = !armRequested && !armed && !pinInHand && controller.CurrentGrenadeOperation is GrenadeHandsController.Idling;
+            if (resting)
+            {
+                markerAtRest = markerNow;
+                markerAtRestSeen = true;
+                keptTurnMax = 0f;
+                holder.localRotation = holderRest;
+                return;
+            }
+            if (!markerAtRestSeen)
+                return;
+            holder.localRotation = holderRest * markerAtRest * Quaternion.Inverse(markerNow);
+            keptTurnMax = Mathf.Max(keptTurnMax, Quaternion.Angle(markerAtRest, markerNow));
+        }
+
+        // The marker's turn in the holder's frame, off the local turns between them (no scale in that chain)
+        private static bool MarkerUnderHolder(Transform marker, Transform holder, out Quaternion rotation)
+        {
+            rotation = Quaternion.identity;
+            if (marker == null)
+                return false;
+            Quaternion chain = marker.localRotation;
+            for (Transform parent = marker.parent; parent != null; parent = parent.parent)
+            {
+                if (parent == holder)
+                {
+                    rotation = chain;
+                    return true;
+                }
+                chain = parent.localRotation * chain;
+            }
+            return false;
         }
 
         // The holder where the right-handed hold has it, mirrored for the left hand (VRPlayerManager.MirroredHolderPosition; the hold's
@@ -376,7 +435,9 @@ namespace TarkovVR.Source.Weapons
             thrown = true;
             GrenadeSlot.NoteThrown(controller.Item);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] thrown from the {(Handedness.GunInLeftHand ? "left" : "right")} hand");
+                Plugin.MyLog.LogInfo($"[GrenadeHold] thrown from the {(Handedness.GunInLeftHand ? "left" : "right")} hand"
+                    + (keepHandTurn ? (markerAtRestSeen ? $" (its hand kept its turn: the armed hold turned the grip up to {keptTurnMax:0} deg)" : " (no resting turn seen to keep)") : "")
+                    + (TarkovVR.Patches.Core.VR.VRGrenadeController.finishAtRelease ? ", over at the release" : ", the throw clip after it"));
             controller.ThrowGrenadeInner(null, 0f, 1f, Vector3.zero, 1f, false, true);
         }
 

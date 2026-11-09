@@ -248,9 +248,13 @@ namespace TarkovVR.Source.Player.Interactions
         // GrenadeHold: one thrown, the next pick avoids its type (Tarkov's _prevGrenadeId)
         public static void NoteThrown(Item item)
         {
-            // The gun that hung before: Tarkov draws it after the throw, it goes back on its spot instead
-            if (hungGun != null && hungGun.Parent != null)
-                ExpectGunBack(hungGun, hangs: true, throwReturnTimeout);
+            // What Tarkov draws after the throw (the item before the grenade): its draw skipped, as after a put-back - straight into the
+            // hand, or back on its spot if it hung
+            Item back = afterThrowItem ?? hungGun;
+            if (back != null && back.Parent != null)
+                ExpectGunBack(back, hangs: back == hungGun, throwReturnTimeout);
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] {item?.LocalizedShortName()} thrown: {(back != null && back.Parent != null ? $"{back.LocalizedShortName()} back next, its draw skipped{(back == hungGun ? ", hung on its spot" : ", in the hand")}" : "empty hands next")}");
             if (item != null)
                 lastThrownTemplate = item.TemplateId;
             if (item == picked)

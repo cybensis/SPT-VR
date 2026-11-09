@@ -28,6 +28,12 @@ namespace TarkovVR.Patches.Core.VR
         private static bool isFrozen = false;
         private static readonly float freezeDuration = 0.5f; // Or use Random.Range(2f, 3f) when setting
 
+        // The throw as you make it (his ask: "make the actual throw be more proper"): the grenade leaves your hand at the release and its
+        // use ends that same frame - what Tarkov's throw clip did at its end (its FireEnd -> OnDropFinishedAction: the hands go back to
+        // what they held before), without the clip. false = the old way: the clip played on from 40 % after the release and the hands
+        // came back at its end, 0.3-0.5 s later (a freeze at its start if it wrapped first).
+        public static bool finishAtRelease = true;
+
         public static float tripwireHoldDuration = 0.4f;        // long-hold time (s) on the face button to toggle plant mode
         public static float tripwireRayForwardOffset = 0.3f;    // ray start nudge ahead of the controller (matches native beacon code)
 
@@ -173,6 +179,15 @@ namespace TarkovVR.Patches.Core.VR
                 EndThrow();
                 return;
             }
+            // Thrown this frame (the release, in the input update): its use over now, here rather than inside the release - ending it
+            // swaps the hands' controller, which the rest of the release (the holder, emptyHands) mustn't then touch
+            if (finishAtRelease)
+            {
+                BaseGrenadeHandsController thrownNow = activeGrenadeController;
+                EndThrow();
+                thrownNow.OnDropFinishedAction();
+                return;
+            }
 
             AnimatorStateInfoWrapper stateInfo = activeGrenadeController._firearmsAnimator.Animator.GetCurrentAnimatorStateInfo(1);
 
@@ -274,8 +289,9 @@ namespace TarkovVR.Patches.Core.VR
             // controller's tracking point ~13 cm from it
             bool fromHand = ThrowVelocity.releaseFromHand && __instance._grenadeTransform != null;
 
-            // Starts animation around the point where hand is opening to throw
-            __instance._firearmsAnimator.Animator.Play(590329303, 1, 0.40f);
+            // The old way: the throw clip from around where the hand opens (finishAtRelease ends the throw without it)
+            if (!finishAtRelease)
+                __instance._firearmsAnimator.Animator.Play(590329303, 1, 0.40f);
             // A fresh throw: nothing carried over from one that ended early (its freeze state, the clip time it last saw)
             EndThrow();
             throwInProgress = true;

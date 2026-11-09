@@ -552,6 +552,11 @@ public class GunInteractionController : MonoBehaviour
         if (TarkovVR.Source.Player.Interactions.ChestHang.SupportOnly && TarkovVR.Source.Player.Interactions.ChestHang.DriveSupportPose())
             return;
 
+        // A grenade with its pin out: turned so the hand keeps the turn it had (GrenadeHold.KeepHandTurn) - before the anchor below, which
+        // then lands the turned grip on your hand
+        if (WeaponPatches.grenadeEquipped)
+            GrenadeHold.KeepHandTurn(VRGlobals.weaponHolder.transform);
+
         // _markers[1] is weapon_R_IK_marker, a bone on the gun that reloads and malfunctions animate - while one plays,
         // VRGunController keeps the gun where it was in your hand instead of following that marker
         if (!VRGunController.TryHoldGunInHand(VRGlobals.weaponHolder.transform))
