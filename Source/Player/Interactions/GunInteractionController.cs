@@ -136,7 +136,11 @@ public class GunInteractionController : MonoBehaviour
             // gun - re-assert the freed arm instead of the gun-held reset. Menus/interactions disable
             // + re-enable this component, and the unconditional reset here welded the freed hand back
             // onto the slung gun ("hand auto-reattaches while slinged and can't take it off").
-            if (TarkovVR.Source.Player.Interactions.ChestHang.Detached)
+            // Only while that gun is still the one in the hands: a grenade drawn with the gun slung enables its own controller here before
+            // ChestHang has seen the switch (Tarkov sets HandsController, then Spawn), and freeing the arm left the hand on the controller,
+            // off the grenade, its whole hold ("arm IK True" in his log; the first grenade of a raid, its gun starting on the sling)
+            if (TarkovVR.Source.Player.Interactions.ChestHang.Detached && VRGlobals.player != null
+                && VRGlobals.player.HandsController is EFT.Player.FirearmController)
             {
                 TarkovVR.Source.Player.Interactions.ChestHang.KeepGunHandFree();
             }
