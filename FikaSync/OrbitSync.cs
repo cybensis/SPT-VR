@@ -6,6 +6,7 @@ using EFT.Interactive;
 using Orbit.Core;
 using Orbit.Navigation;
 using Orbit.Systems;
+using TarkovVR.ModSupport.ORBIT;
 using UnityEngine;
 
 namespace SptVrFikaSync
@@ -28,9 +29,9 @@ namespace SptVrFikaSync
         public static bool Available;
 
         // Corpses whose ORBIT waypoint we've pulled for the duration of a drag. Key present = "re-add on
-        // settle"; value = the kill-credit squad to restore (or -1). Dictionary<Corpse,int> names no ORBIT
-        // type, so it's safe as a static field even when ORBIT isn't loaded.
-        private static readonly Dictionary<Corpse, int> _held = new Dictionary<Corpse, int>();
+        // settle"; value = what ORBIT knew about it (OrbitCorpseCarry, linked from ModSupport/ - the same code
+        // SPT-VR.dll runs), held as object so the static field names no ORBIT type when ORBIT isn't loaded.
+        private static readonly Dictionary<Corpse, object> _held = new Dictionary<Corpse, object>();
 
         // Corpse-typed signatures only (EFT) → these JIT safely without ORBIT; the ORBIT work is isolated.
         public static void OnGrab(Corpse corpse)
@@ -57,13 +58,10 @@ namespace SptVrFikaSync
                 Waypoint wp = FindCorpseWaypoint(ws, corpse);
                 if (wp == null) return; // ORBIT wasn't tracking it (already looted / not registered)
 
-                int killer = -1;
-                if (ws._corpseKillerSquadId != null && ws._corpseKillerSquadId.TryGetValue(wp.Id, out int sq))
-                    killer = sq;
-
+                OrbitCorpseCarry carry = OrbitCorpseCarry.Capture(ws, wp, Warn);
                 ws.RemoveWaypoint(wp.Id);
-                _held[corpse] = killer;
-                FikaSyncPlugin.Log.LogInfo($"[OrbitSync] pulled corpse waypoint {wp.Id} on grab ({corpse.PlayerProfileID}) — unlootable while dragged");
+                _held[corpse] = carry;
+                FikaSyncPlugin.Log.LogInfo($"[OrbitSync] pulled corpse waypoint {wp.Id} on grab ({corpse.PlayerProfileID}) — unlootable while dragged; {carry.Summary()}");
             }
             catch (Exception e) { FikaSyncPlugin.Log.LogWarning($"[OrbitSync] pull failed: {e.Message}"); }
         }
@@ -73,11 +71,17 @@ namespace SptVrFikaSync
         {
             try
             {
-                if (!_held.TryGetValue(corpse, out int killer)) return; // wasn't pulled → don't fabricate one
+                if (!_held.TryGetValue(corpse, out object held) || !(held is OrbitCorpseCarry carry)) return; // wasn't pulled → don't fabricate one
                 _held.Remove(corpse);
 
                 WaypointSystem ws = Singleton<OrbitManager>.Instance?.WaypointSystem;
                 if (ws == null) return;
+
+                if (OrbitCorpseCarry.InDangerZone(restPos))
+                {
+                    FikaSyncPlugin.Log.LogInfo($"[OrbitSync] corpse dragged into a minefield / border zone: no loot waypoint ({corpse.PlayerProfileID})");
+                    return;
+                }
 
                 // Identical to ORBIT's own corpse registration (Corpse category, corpse.name, radius 3*3,
                 // empty door/cover) — only the position + fresh id differ.
@@ -87,12 +91,16 @@ namespace SptVrFikaSync
 
                 if (ws.AddRuntimeWaypoint(moved))
                 {
-                    if (killer >= 0)
-                        ws.TagCorpseKillerSquad(moved.Id, killer);
-                    FikaSyncPlugin.Log.LogInfo($"[OrbitSync] re-added corpse waypoint {moved.Id} at settle {restPos} ({corpse.PlayerProfileID})");
+                    carry.Restore(ws, moved, Warn);
+                    FikaSyncPlugin.Log.LogInfo($"[OrbitSync] re-added corpse waypoint {carry.PulledId} -> {moved.Id} at settle {restPos} ({corpse.PlayerProfileID}; {carry.Summary()})");
                 }
             }
             catch (Exception e) { FikaSyncPlugin.Log.LogWarning($"[OrbitSync] re-add failed: {e.Message}"); }
+        }
+
+        private static void Warn(string message)
+        {
+            FikaSyncPlugin.Log.LogWarning($"[OrbitSync] carrying a corpse's ORBIT state: {message}");
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

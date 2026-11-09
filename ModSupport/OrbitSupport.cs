@@ -14,7 +14,9 @@ namespace TarkovVR.ModSupport.ORBIT
 {
     internal static class OrbitSupport
     {
-        private static readonly Dictionary<Corpse, int> _heldCorpses = new Dictionary<Corpse, int>();
+        // Corpses whose waypoint is pulled while dragged -> what ORBIT knew about it (OrbitCorpseCarry, held as object: a typed
+        // static field would load ORBIT's types on a load without ORBIT)
+        private static readonly Dictionary<Corpse, object> _heldCorpses = new Dictionary<Corpse, object>();
 
         public static void OnCorpseGrabbed(Corpse corpse)
         {
@@ -70,15 +72,13 @@ namespace TarkovVR.ModSupport.ORBIT
                     return;
                 }
 
-                // Preserve the kill-credit squad tag before RemoveWaypoint drops it
-                int killerSquad = -1;
-                if (ws._corpseKillerSquadId != null && ws._corpseKillerSquadId.TryGetValue(wp.Id, out int sq))
-                    killerSquad = sq;
-
+                // What ORBIT keeps about it besides the waypoint (kill credit, own-kill queues, boss body...), before
+                // RemoveWaypoint drops the id-keyed parts
+                OrbitCorpseCarry carry = OrbitCorpseCarry.Capture(ws, wp, Warn);
                 ws.RemoveWaypoint(wp.Id);
-                _heldCorpses[corpse] = killerSquad;
+                _heldCorpses[corpse] = carry;
                 if (Plugin.debugBodyDragLoot)
-                    Plugin.MyLog.LogInfo($"[OrbitSupport] pulled corpse waypoint {wp.Id} on grab (unlootable while dragged, killerSquad={killerSquad})");
+                    Plugin.MyLog.LogInfo($"[OrbitSupport] pulled corpse waypoint {wp.Id} on grab (unlootable while dragged; {carry.Summary()})");
             }
             catch (Exception e)
             {
@@ -93,12 +93,19 @@ namespace TarkovVR.ModSupport.ORBIT
             {
                 // Only re-add if we pulled it on grab — i.e. ORBIT WAS tracking it. Avoids fabricating a loot
                 // waypoint for a corpse ORBIT never knew about.
-                if (!_heldCorpses.TryGetValue(corpse, out int killerSquad))
+                if (!_heldCorpses.TryGetValue(corpse, out object held) || !(held is OrbitCorpseCarry carry))
                     return;
                 _heldCorpses.Remove(corpse);
 
                 WaypointSystem ws = Singleton<OrbitManager>.Instance?.WaypointSystem;
                 if (ws == null) return;
+
+                if (OrbitCorpseCarry.InDangerZone(newPos))
+                {
+                    if (Plugin.debugBodyDragLoot)
+                        Plugin.MyLog.LogInfo($"[OrbitSupport] corpse dragged into a minefield / border zone: no loot waypoint (ORBIT's own rule)");
+                    return;
+                }
 
                 // Rebuild a corpse waypoint identical to ORBIT's own registration (CorpseRegistrationPatch:
                 // Corpse category, corpse.name, radiusSqr 3*3, empty door/cover lists) — only the position
@@ -109,10 +116,9 @@ namespace TarkovVR.ModSupport.ORBIT
 
                 if (ws.AddRuntimeWaypoint(moved))
                 {
-                    if (killerSquad >= 0)
-                        ws.TagCorpseKillerSquad(moved.Id, killerSquad);
+                    carry.Restore(ws, moved, Warn);
                     if (Plugin.debugBodyDragLoot)
-                        Plugin.MyLog.LogInfo($"[OrbitSupport] re-added corpse waypoint {moved.Id} at settle {newPos} (killerSquad={killerSquad})");
+                        Plugin.MyLog.LogInfo($"[OrbitSupport] re-added corpse waypoint {carry.PulledId} -> {moved.Id} at settle {newPos} ({carry.Summary()})");
                 }
                 else if (Plugin.debugBodyDragLoot)
                 {
@@ -125,7 +131,12 @@ namespace TarkovVR.ModSupport.ORBIT
             }
         }
 
-        // Find the corpse's current loot waypoint (its Target is this corpse). One grid scan per settle —
+        private static void Warn(string message)
+        {
+            Plugin.MyLog.LogWarning($"[OrbitSupport] carrying a corpse's ORBIT state: {message}");
+        }
+
+        // Find the corpse's current loot waypoint (its Target is this corpse).One grid scan per settle —
         // dragging is a rare user action, so it isn't worth a cross-raid cache.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static Waypoint FindCorpseWaypoint(WaypointSystem ws, Corpse corpse)

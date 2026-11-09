@@ -76,4 +76,9 @@
     </Reference>
   </ItemGroup>
 
+  <!-- What a dragged corpse carries from its old ORBIT waypoint to the new one: one copy, shared with SPT-VR.dll -->
+  <ItemGroup>
+    <Compile Include="..\ModSupport\OrbitCorpseCarry.cs" Link="OrbitCorpseCarry.cs" />
+  </ItemGroup>
+
 </Project>
