@@ -3,6 +3,7 @@ using EFT;
 using EFT.InventoryLogic;
 using RootMotion.FinalIK;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Misc;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -371,7 +372,7 @@ namespace TarkovVR.Source.Weapons
                     Bounds bounds = meshFilter.sharedMesh.bounds;
                     for (int corner = 0; corner < 8; corner++)
                     {
-                        Vector3 local = bounds.center + Vector3.Scale(bounds.extents, new Vector3((corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1));
+                        Vector3 local = BoundsCorners.Corner(bounds, corner);
                         Vector3 inBox = box.InverseTransformPoint(meshFilter.transform.TransformPoint(local));
                         if (!any)
                             beltBoxBounds = new Bounds(inBox, Vector3.zero);
@@ -637,21 +638,22 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // Its meshes' far side from the hinge line, in its own closed frame (DeflectorFreeEnd's rule, with this hinge's axis)
-        private static Vector3 HingeFreeEnd(Transform bone, Vector3 axis, Quaternion open)
+        // A hinged part's far side from its hinge line, in its own closed frame: the middle of its meshes, pushed out across the
+        // hinge to their furthest corner
+        private static Vector3 HingeFreeEnd(Transform bone, Vector3 axis, Quaternion open, bool includeHiddenMeshes = false)
         {
             Quaternion toClosed = Quaternion.Inverse(open);
             Vector3 centerSum = Vector3.zero;
             int corners = 0;
             float furthest = 0f;
-            foreach (MeshFilter meshFilter in bone.GetComponentsInChildren<MeshFilter>(false))
+            foreach (MeshFilter meshFilter in bone.GetComponentsInChildren<MeshFilter>(includeHiddenMeshes))
             {
                 if (meshFilter.sharedMesh == null)
                     continue;
                 Bounds bounds = meshFilter.sharedMesh.bounds;
                 for (int corner = 0; corner < 8; corner++)
                 {
-                    Vector3 local = bounds.center + Vector3.Scale(bounds.extents, new Vector3((corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1));
+                    Vector3 local = BoundsCorners.Corner(bounds, corner);
                     Vector3 inBone = toClosed * bone.InverseTransformPoint(meshFilter.transform.TransformPoint(local));
                     centerSum += inBone;
                     corners++;

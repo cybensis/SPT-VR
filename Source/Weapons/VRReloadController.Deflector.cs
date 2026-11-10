@@ -130,7 +130,7 @@ namespace TarkovVR.Source.Weapons
                 deflectorClosedLocalRotation = deflectorBone.localRotation;
                 deflectorClosedPoses[deflectorBone] = deflectorClosedLocalRotation;
             }
-            deflectorFreeEndLocal = DeflectorFreeEnd(deflectorBone, Quaternion.Inverse(deflectorClosedLocalRotation) * deflectorBone.localRotation);
+            deflectorFreeEndLocal = HingeFreeEnd(deflectorBone, deflectorHingeAxis.normalized, Quaternion.Inverse(deflectorClosedLocalRotation) * deflectorBone.localRotation, includeHiddenMeshes: true);
             if (deflectorGrab == null)
                 deflectorGrab = new GameObject("VRDeflectorGrab").transform;
             deflectorGrab.SetParent(deflectorBone, worldPositionStays: false);
@@ -141,34 +141,6 @@ namespace TarkovVR.Source.Weapons
             return true;
         }
 
-        // Its meshes' far side from the hinge, in its own (closed) frame: the middle of its meshes, pushed out across the hinge to their furthest corner
-        private static Vector3 DeflectorFreeEnd(Transform bone, Quaternion open)
-        {
-            Vector3 axis = deflectorHingeAxis.normalized;
-            Quaternion toClosed = Quaternion.Inverse(open);
-            Vector3 centerSum = Vector3.zero;
-            int corners = 0;
-            float furthest = 0f;
-            foreach (MeshFilter meshFilter in bone.GetComponentsInChildren<MeshFilter>(true))
-            {
-                if (meshFilter.sharedMesh == null)
-                    continue;
-                Bounds bounds = meshFilter.sharedMesh.bounds;
-                for (int corner = 0; corner < 8; corner++)
-                {
-                    Vector3 local = bounds.center + Vector3.Scale(bounds.extents, new Vector3((corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1, (corner & 4) == 0 ? -1 : 1));
-                    Vector3 inBone = toClosed * bone.InverseTransformPoint(meshFilter.transform.TransformPoint(local));
-                    centerSum += inBone;
-                    corners++;
-                    furthest = Mathf.Max(furthest, Vector3.ProjectOnPlane(inBone, axis).magnitude);
-                }
-            }
-            if (corners == 0)
-                return Vector3.zero;
-            Vector3 center = centerSum / corners;
-            Vector3 across = Vector3.ProjectOnPlane(center, axis);
-            return across.sqrMagnitude > 1e-8f ? center - across + across.normalized * furthest : center;
-        }
 
         private static void SetDeflectorAngle(FirearmController firearmController, float angle)
         {

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using EFT.InventoryLogic;
+using TarkovVR.Source.Misc;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 using Valve.VR;
@@ -309,7 +310,7 @@ namespace TarkovVR.Source.Player.VRManager
                 Transform rendererTransform = renderer.transform;
                 for (int corner = 0; corner < 8; corner++)
                 {
-                    Vector3 local = bounds.center + Vector3.Scale(bounds.extents, CornerSigns[corner]);
+                    Vector3 local = BoundsCorners.Corner(bounds, corner);
                     float behindGrip = Vector3.Dot(rendererTransform.TransformPoint(local) - gripPosition, back);
                     if (behindGrip > rearMost)
                         rearMost = behindGrip;
@@ -332,11 +333,6 @@ namespace TarkovVR.Source.Player.VRManager
             }
         }
 
-        private static readonly Vector3[] CornerSigns =
-        {
-            new Vector3(-1, -1, -1), new Vector3(-1, -1, 1), new Vector3(-1, 1, -1), new Vector3(-1, 1, 1),
-            new Vector3(1, -1, -1),  new Vector3(1, -1, 1),  new Vector3(1, 1, -1),  new Vector3(1, 1, 1)
-        };
 
         //--- Debug spheres ------------------------------------------------------------------------------------------------------------
         private static GameObject zoneSphere;
@@ -363,23 +359,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         private static void SetSphere(ref GameObject sphere, Vector3 position, float radius, Color color)
         {
-            if (sphere == null)
-            {
-                sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                sphere.name = "ShoulderStockViz";
-                Object.Destroy(sphere.GetComponent<Collider>());
-                Renderer sphereRenderer = sphere.GetComponent<Renderer>();
-                sphereRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                sphereRenderer.receiveShadows = false;
-                Shader shader = Shader.Find("Sprites/Default");
-                if (shader == null)
-                    shader = Shader.Find("Standard");
-                sphereRenderer.material = new Material(shader);
-            }
-            sphere.SetActive(true);
-            sphere.transform.position = position;
-            sphere.transform.localScale = Vector3.one * (radius * 2f);
-            sphere.GetComponent<Renderer>().material.color = color;
+            DebugShapes.Sphere(ref sphere, "ShoulderStockViz", true, position, radius, color);
         }
 
         //--- Head pose + haptics ------------------------------------------------------------------------------------------------------

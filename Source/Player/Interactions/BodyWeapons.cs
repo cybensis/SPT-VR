@@ -4,6 +4,7 @@ using EFT.InputSystem;
 using EFT.InventoryLogic;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Misc;
 
 using TarkovVR.Source.Weapons;
 using UnityEngine;
@@ -214,8 +215,7 @@ namespace TarkovVR.Source.Player.Interactions
                 Bounds bounds = meshFilter.sharedMesh.bounds;
                 for (int corner = 0; corner < 8; corner++)
                 {
-                    Vector3 sign = new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f);
-                    Vector3 inRoot = weaponRoot.InverseTransformPoint(meshFilter.transform.TransformPoint(bounds.center + Vector3.Scale(bounds.extents, sign)));
+                    Vector3 inRoot = weaponRoot.InverseTransformPoint(meshFilter.transform.TransformPoint(BoundsCorners.Corner(bounds, corner)));
                     low = Vector3.Min(low, inRoot);
                     high = Vector3.Max(high, inRoot);
                 }

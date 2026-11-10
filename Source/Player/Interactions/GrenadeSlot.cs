@@ -7,6 +7,7 @@ using EFT.InputSystem;
 using EFT.InventoryLogic;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Misc;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
@@ -774,8 +775,7 @@ namespace TarkovVR.Source.Player.Interactions
                     Bounds bounds = mesh.bounds;
                     for (int corner = 0; corner < 8; corner++)
                     {
-                        Vector3 offset = new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, (corner & 4) == 0 ? -1f : 1f);
-                        Vector3 point = bounds.center + Vector3.Scale(bounds.extents, offset);
+                        Vector3 point = BoundsCorners.Corner(bounds, corner);
                         point = partTransform.localPosition + partTransform.localRotation * Vector3.Scale(partTransform.localScale, point);
                         min = Vector3.Min(min, point);
                         max = Vector3.Max(max, point);

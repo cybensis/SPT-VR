@@ -3176,51 +3176,12 @@ namespace TarkovVR.Source.Weapons
 
         private static void SetCapsuleZoneViz(ref GameObject capsule, Vector3 start, Vector3 end, float radius, Color color)
         {
-            if (capsule == null)
-            {
-                capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                capsule.name = "VRMagazineZone";
-                UnityEngine.Object.Destroy(capsule.GetComponent<Collider>());
-                Renderer capsuleRenderer = capsule.GetComponent<Renderer>();
-                capsuleRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                capsuleRenderer.receiveShadows = false;
-                capsuleRenderer.material = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Standard"));
-            }
-            capsule.SetActive(true);
-            Vector3 segment = end - start;
-            capsule.transform.position = (start + end) * 0.5f;
-            if (segment.sqrMagnitude > 1e-8f)
-                capsule.transform.rotation = Quaternion.FromToRotation(Vector3.up, segment);
-            // Unity's capsule is 1 wide and 2 tall
-            capsule.transform.localScale = new Vector3(radius * 2f, (segment.magnitude + radius * 2f) * 0.5f, radius * 2f);
-            capsule.GetComponent<Renderer>().material.color = color;
+            DebugShapes.Capsule(ref capsule, "VRMagazineZone", start, end, radius, color);
         }
 
         private static void SetZoneViz(ref GameObject sphere, bool show, Vector3 position, float radius, Color color)
         {
-            if (!show)
-            {
-                if (sphere != null)
-                    sphere.SetActive(false);
-                return;
-            }
-            if (sphere == null)
-            {
-                sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                sphere.name = "VRMagazineZone";
-                UnityEngine.Object.Destroy(sphere.GetComponent<Collider>());
-                Renderer sphereRenderer = sphere.GetComponent<Renderer>();
-                sphereRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                sphereRenderer.receiveShadows = false;
-                Shader shader = Shader.Find("Sprites/Default");
-                if (shader == null)
-                    shader = Shader.Find("Standard");
-                sphereRenderer.material = new Material(shader);
-            }
-            sphere.SetActive(true);
-            sphere.transform.position = position;
-            sphere.transform.localScale = Vector3.one * (radius * 2f);
-            sphere.GetComponent<Renderer>().material.color = color;
+            DebugShapes.Sphere(ref sphere, "VRMagazineZone", show, position, radius, color);
         }
     }
 }
