@@ -81,7 +81,6 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion pressCheckLeftInRigRotation = Quaternion.identity;
         private static Vector3 pressCheckSidewaysInFrame;   // the main turn's axis (fingers from the gun's forward toward its up)
         private static Vector3 pressCheckBackInFrame;       // the gun's length, toward the back (the wrist roll's axis)
-        private static Vector3 pressCheckUpInFrame;         // the gun's up (the sights' side): the fingers' tilt back with the slide
         private static Quaternion pressCheckFrameInGun = Quaternion.identity;   // the frame in WeaponRoot's, at the start
         private static Vector3 pressCheckGunMarkerStartPosition;    // the gun marker against the frame at the start: its own animation since
         private static Quaternion pressCheckGunMarkerStartRotation = Quaternion.identity;   // carries onto ours
@@ -286,7 +285,6 @@ namespace TarkovVR.Source.Weapons
             // WeaponRoot: -up toward the muzzle, +forward the sights' side
             pressCheckSidewaysInFrame = frameInverse * Vector3.Cross(-gun.up, gun.forward);
             pressCheckBackInFrame = frameInverse * gun.up;
-            pressCheckUpInFrame = frameInverse * gun.forward;
             pressCheckFrameInGun = Quaternion.Inverse(gun.rotation) * frame.rotation;
             pressCheckGunMarkerStartPosition = gunMarker.localPosition;
             pressCheckGunMarkerStartRotation = gunMarker.localRotation;

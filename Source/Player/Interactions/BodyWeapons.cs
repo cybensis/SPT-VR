@@ -112,7 +112,6 @@ namespace TarkovVR.Source.Player.Interactions
         // Never the one in hands (the hanging one is ChestHang's regrab).
         private static bool NearestBodyGun(out Item takenItem, out GameObject takenModel, out EquipmentSlot takenSlot, out float nearest)
         {
-            Vector3 hand = VRGlobals.vrPlayer.RightHand.transform.position;
             Item inHands = HandsItem();
             nearest = grabRadius;
             takenItem = null;

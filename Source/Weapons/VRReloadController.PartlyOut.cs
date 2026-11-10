@@ -21,7 +21,6 @@ namespace TarkovVR.Source.Weapons
         public static float belowWellRadius = 0.08f;        // m
 
         private static FirearmController partlyOutFor;
-        private static Slot partlyOutSlot;
         private static Transform partlyOutView;
         private static Vector3 partlyOutRestLocalPosition;
         private static Vector3 partlyOutAxisInParent;
@@ -82,7 +81,6 @@ namespace TarkovVR.Source.Weapons
                 return false;
 
             partlyOutFor = firearmController;
-            partlyOutSlot = magazineSlot;
             partlyOutView = magazineView.ItemView;
             partlyOutRestLocalPosition = partlyOutView.localPosition;
             LoadRecordedGrips();
@@ -135,7 +133,6 @@ namespace TarkovVR.Source.Weapons
             if (partlyOutView != null)
                 partlyOutView.localPosition = partlyOutRestLocalPosition;
             partlyOutFor = null;
-            partlyOutSlot = null;
             partlyOutView = null;
         }
 

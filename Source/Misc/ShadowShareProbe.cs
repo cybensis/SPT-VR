@@ -22,7 +22,6 @@ namespace TarkovVR.Source.Misc
         public static int shiftSearch = 6;             // texels searched each way for a shifted cascade
         public static int blockSize = 128;             // texels compared per cascade for the shift search
 
-        private static ShadowShareProbe instance;
         private static bool running;
 
         // the frame being captured
@@ -39,7 +38,6 @@ namespace TarkovVR.Source.Misc
         private static readonly StringBuilder sequence = new StringBuilder();
         private static Matrix4x4 leftCulling;
 
-        private void Awake() { instance = this; }
 
         private void Update()
         {

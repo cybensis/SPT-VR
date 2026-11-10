@@ -321,7 +321,6 @@ namespace TarkovVR.Source.Weapons
         private static int shellLoaded;                     // that move: 0 not back yet, 1 done, -1 refused
         private static bool shellIntoChamber;
         private static Vector3 shellInRigPosition;          // the shell in the controller hand's frame as it went on the path
-        private static Quaternion shellInRigRotation;
         private static Vector3 shellStartPosition;          // and where it was then, in the weapon frame
         private static Quaternion shellStartRotation;
         private static Transform shellHandHolder;           // the latched hand's target, on the path (under the weapon frame)
@@ -486,7 +485,6 @@ namespace TarkovVR.Source.Weapons
             Transform rig = HandRig(roundInGunHand);
             Transform prop = heldRoundProp.transform;
             shellInRigPosition = Quaternion.Inverse(rig.rotation) * (prop.position - rig.position);
-            shellInRigRotation = Quaternion.Inverse(rig.rotation) * prop.rotation;
             shellStartPosition = IntoFrame(frame, prop.position);
             shellStartRotation = Quaternion.Inverse(frame.rotation) * prop.rotation;
             prop.SetParent(frame, worldPositionStays: true);

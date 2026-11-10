@@ -776,11 +776,9 @@ namespace TarkovVR.Source.Player.Interactions
 
             // cloth layer with a fallback chain, in case a sound-group name doesn't exist in the bundle
             AudioClip cloth = gui.GetItemClip("gear_generic", EInventorySoundType.pickup);
-            string clothSrc = "gear_generic";
             if (cloth == null)
             {
                 cloth = gui.GetItemClip("generic", EInventorySoundType.pickup);
-                clothSrc = "generic";
             }
             var item = fc.Item;
             AudioClip gun = item != null ? gui.GetItemClip(item.ItemSound, EInventorySoundType.pickup) : null;

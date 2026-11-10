@@ -229,7 +229,7 @@ namespace TarkovVR.Source.Weapons
         private static bool offHandPoseShownValid, gunHandPoseShownValid;
         // The pre-grab shape this tick (UpdatePreGrab): a pose for each hand and how far toward it
         private static Vector3[] offHandPreGrabPose, gunHandPreGrabPose;
-        private static bool offHandPreGrabPoseIsRight, gunHandPreGrabPoseIsRight;
+        private static bool offHandPreGrabPoseIsRight;
         private static float offHandPreGrabWeight, gunHandPreGrabWeight;
         private static float gunHandFingerWeight;
         private static Vector3[] gunHandFingerPoseShown;
@@ -1138,7 +1138,6 @@ namespace TarkovVR.Source.Weapons
             // Caught: the magazine's top near the track (up to just past its top), turned roughly the seated way. One that rocks in
             // hooks at its full tilt.
             Vector3 axis = heldRockIn != null ? HookAxisWorld() : RailAxisWorld();
-            Vector3 seatedPosition = magazineWell.TransformPoint(seatedLocalPosition);
             Vector3 topOffset = propTransform.TransformPoint(propWellPointLocal) - magazineWell.position;
             float alongTrack = Vector3.Dot(topOffset, axis);
             float offTrack = (topOffset - axis * alongTrack).magnitude;
@@ -2722,7 +2721,7 @@ namespace TarkovVR.Source.Weapons
             if (OffHandFreeOnGun && !VRGlobals.vrPlayer.isSupporting)
                 PreGrabFor(firearmController, gunHand: false, out offHandPreGrabPose, out offHandPreGrabPoseIsRight, out offHandPreGrabWeight);
             if (ChestHang.SupportOnly && !ChestHang.HandInRegrabZone)
-                PreGrabFor(firearmController, gunHand: true, out gunHandPreGrabPose, out gunHandPreGrabPoseIsRight, out gunHandPreGrabWeight);
+                PreGrabFor(firearmController, gunHand: true, out gunHandPreGrabPose, out _, out gunHandPreGrabWeight);
         }
 
         private static void PreGrabFor(FirearmController firearmController, bool gunHand, out Vector3[] pose, out bool poseIsRight, out float weight)
@@ -2973,11 +2972,6 @@ namespace TarkovVR.Source.Weapons
         // The gun's own reload sounds, by the names its animation fires (WeaponRecon): Button, MagOut, MagSbrosnik (the dump
         // pouch), MagPullOut (a new magazine from the pouch), MagIn. The gun's sound player resolves "Snd" + name; a gun
         // without that sound stays silent.
-        private static void PlayGunSound(FirearmController firearmController, string soundName)
-        {
-            PlayGunSound(firearmController, soundName, SoundHand.OffHand);
-        }
-
         private static void PlayGunSound(FirearmController firearmController, string soundName, SoundHand hand)
         {
             BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
