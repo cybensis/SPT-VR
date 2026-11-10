@@ -9,6 +9,7 @@ using TarkovVR.Source.Controls;
 using UnityEngine;
 using Valve.VR;
 using EFT;
+using TarkovVR.ModSupport;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Weapons;
 using TarkovVR.Patches.Core.Player;
@@ -186,7 +187,7 @@ namespace TarkovVR.Patches.Core.VR
             {
                 // Co-op as a client: once the host has answered (the throw, and the grenade's draw before it, run at full length on its
                 // copy of you) - ending it sends Tarkov's next hands change, which the host refuses while it's still busy
-                if (VRReloadController.HostStillAnswering && Time.time - releasedAt < TarkovVR.Source.Player.Interactions.GrenadeSlot.hostWaitLimit)
+                if (CoopHost.HoldsBack(releasedAt))
                     return;
                 BaseGrenadeHandsController thrownNow = activeGrenadeController;
                 EndThrow();

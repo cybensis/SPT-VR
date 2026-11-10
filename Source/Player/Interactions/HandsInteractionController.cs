@@ -248,8 +248,8 @@ namespace TarkovVR.Source.Player.Interactions
         {
             yield return new WaitForSeconds(stowReleaseDelay);
             // Co-op as a client: not while the host still runs a move of yours (a draw we skipped, say) - sent then, it's refused
-            float hostWaitUntil = Time.time + GrenadeSlot.hostWaitLimit;
-            while (TarkovVR.Source.Weapons.VRReloadController.HostStillAnswering && Time.time < hostWaitUntil)
+            float hostWaitSince = Time.time;
+            while (CoopHost.HoldsBack(hostWaitSince))
                 yield return null;
 
             if (item == null || item.Item == null)

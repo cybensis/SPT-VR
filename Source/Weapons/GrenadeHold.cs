@@ -1,6 +1,7 @@
 using EFT;
 using EFT.InputSystem;
 using RootMotion.FinalIK;
+using TarkovVR.ModSupport;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
@@ -305,18 +306,18 @@ namespace TarkovVR.Source.Weapons
             armRequestedAt = Time.time;
             armCommandSent = false;
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] arming ({why}){(VRReloadController.HostStillAnswering ? ": waiting for the host to answer the take first" : "")}");
+                Plugin.MyLog.LogInfo($"[GrenadeHold] arming ({why}){(CoopHost.StillAnswering ? ": waiting for the host to answer the take first" : "")}");
             SendArmCommandWhenHostReady();
         }
 
         // Tarkov's pin pull - co-op as a client, once the host has answered the move before it (the take: its copy of you still runs the
         // draw we skipped). Sent sooner, the pin pull and the throw's discard after it would reach a copy that isn't holding the grenade
-        // yet (FIKA's own throw gate waits on the same answer: FikaClientGrenadeController.CanThrow). Goes anyway after hostWaitLimit.
+        // yet (FIKA's own throw gate waits on the same answer: FikaClientGrenadeController.CanThrow). Goes anyway after CoopHost.waitLimit.
         private static void SendArmCommandWhenHostReady()
         {
             if (armCommandSent)
                 return;
-            if (VRReloadController.HostStillAnswering && Time.time - armRequestedAt < GrenadeSlot.hostWaitLimit)
+            if (CoopHost.HoldsBack(armRequestedAt))
                 return;
             armCommandSent = true;
             armCommandAt = Time.time;

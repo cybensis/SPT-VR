@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using EFT;
 using EFT.InputSystem;
 using EFT.InventoryLogic;
+using TarkovVR.ModSupport;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
@@ -319,7 +320,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (VRReloadController.HoldingMagazine) return "holding a magazine";
             if (VRReloadController.HoldingChargingHandle) return "holding the charging handle";
             // Co-op as a client: a hands change sent before the host answered the last move is refused, and the hands stay broken
-            if (VRReloadController.HostStillAnswering) return "co-op: the host hasn't answered your last move yet";
+            if (CoopHost.StillAnswering) return "co-op: the host hasn't answered your last move yet";
             object hands = VRGlobals.player.HandsController;
             if (hands is FirearmController firearmController)
             {

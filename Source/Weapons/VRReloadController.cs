@@ -83,12 +83,7 @@ namespace TarkovVR.Source.Weapons
         public static float hostWaitLimit = 10f;            // s a move may wait on the host's answer before it's given up (2 s otherwise)
         public static bool coopLog = true;                  // one line per move: sent, landed after N ms, finished / given up / Tarkov started another
         private static void CoopLog(string message) { if (coopLog) Plugin.MyLog.LogInfo("[VRReload] co-op: " + message); }
-        private static bool CoopClient => ModSupport.InstalledMods.FIKAInstalled && ModSupport.FIKA.FikaHostWait.IsClient();
-        // Co-op as a client: a move of yours still waiting for the host's answer (FikaPlayer.WaitingForCallback - FIKA itself holds the
-        // trigger, reloads and throws on it). The host runs each move on its copy of you at full length (a draw we skip only here); a
-        // hands change sent before its answer is refused ("Default Inventory is currently being modified") and leaves the hands broken
-        // (his raid: a grenade put back half a second after it was taken - nothing could be picked up after). Our hands changes wait on it.
-        internal static bool HostStillAnswering => CoopClient && ModSupport.FIKA.FikaHostWait.WaitingForHost(VRGlobals.player);
+        private static bool CoopClient => ModSupport.CoopHost.IsClient;
         public static bool pickUpGroundMagazines = true;    // a loose magazine that fits, picked up in the off hand, is held for the reload
 
         private enum HeldMagazineSource { None, FromGun, FromPouch, FromGround }

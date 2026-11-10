@@ -5,6 +5,7 @@ using EFT;
 using EFT.AssetsManager;
 using EFT.InputSystem;
 using EFT.InventoryLogic;
+using TarkovVR.ModSupport;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
@@ -301,7 +302,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static string WhyNotSwitch(Hand hand)
         {
             if (WeaponPatches.grenadeEquipped) return "a grenade in hand already";
-            if (VRReloadController.HostStillAnswering) return "co-op: the host hasn't answered your last move yet";
+            if (CoopHost.StillAnswering) return "co-op: the host hasn't answered your last move yet";
             if (VRReloadController.HoldingMagazine || VRReloadController.HoldingChargingHandle) return "the reload has a hand";
             if (VRGlobals.player.InventoryController.IsChangingWeapon) return "switching weapons";
             object hands = VRGlobals.player.HandsController;
@@ -351,7 +352,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (current == null || next == null || VRGlobals.player == null || switchingTo != null)
                 return;
             // Co-op as a client: not before the host has answered the last move (a hands change sent sooner is refused)
-            if (VRReloadController.HostStillAnswering)
+            if (CoopHost.StillAnswering)
             {
                 if (debugLog)
                     Plugin.MyLog.LogInfo($"[GrenadeSlot] {current.Item.LocalizedShortName()} not swapped: the host hasn't answered your last move yet");
@@ -434,16 +435,15 @@ namespace TarkovVR.Source.Player.Interactions
             return grabbedByHold && item != null && item == grabbedItem;
         }
 
-        // Co-op as a client: a put-back held until the host has answered the move before it (VRReloadController.HostStillAnswering)
+        // Co-op as a client: a put-back held until the host has answered the move before it (CoopHost)
         private static EFT.Player.GrenadeHandsController pendingReturn;
         private static float pendingReturnSince;
-        public static float hostWaitLimit = 5f;     // s a hands change waits on the host's answer before it goes anyway
 
         // GrenadeHold, let go before the pin was out: the hands back as they were - once the host has answered the grenade's own move
         // (co-op as a client: sent before, the host refused it and the hands stayed broken, his raid log)
         public static void ReturnHands(EFT.Player.GrenadeHandsController grenade)
         {
-            if (VRReloadController.HostStillAnswering)
+            if (CoopHost.StillAnswering)
             {
                 if (pendingReturn != grenade)
                 {
@@ -457,7 +457,7 @@ namespace TarkovVR.Source.Player.Interactions
             ReturnHandsNow(grenade);
         }
 
-        // Every frame: a held put-back goes once the host has answered (or after hostWaitLimit), or never if the grenade left another way
+        // Every frame: a held put-back goes once the host has answered (or after CoopHost.waitLimit), or never if the grenade left another way
         private static void UpdatePendingReturn()
         {
             if (pendingReturn == null)
@@ -467,13 +467,13 @@ namespace TarkovVR.Source.Player.Interactions
                 pendingReturn = null;
                 return;
             }
-            bool timedOut = Time.time - pendingReturnSince > hostWaitLimit;
-            if (VRReloadController.HostStillAnswering && !timedOut)
+            bool timedOut = Time.time - pendingReturnSince > CoopHost.waitLimit;
+            if (CoopHost.StillAnswering && !timedOut)
                 return;
             EFT.Player.GrenadeHandsController grenade = pendingReturn;
             pendingReturn = null;
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeSlot] put-back {(timedOut ? $"going anyway: no answer from the host in {hostWaitLimit:0} s" : $"going: the host answered after {Time.time - pendingReturnSince:0.00} s")}");
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] put-back {(timedOut ? $"going anyway: no answer from the host in {CoopHost.waitLimit:0} s" : $"going: the host answered after {Time.time - pendingReturnSince:0.00} s")}");
             ReturnHandsNow(grenade);
         }
 
