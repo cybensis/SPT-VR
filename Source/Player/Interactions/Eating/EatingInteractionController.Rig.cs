@@ -51,11 +51,11 @@ namespace TarkovVR.Source.Player.Interactions
             if (VRGlobals.ikManager.leftArmIk != null) { VRGlobals.ikManager.leftArmIk.solver.target = null; VRGlobals.ikManager.leftArmIk.enabled = false; }
         }
 
-        private static void SetArmIk(LimbIK ik, Transform target)
+        private static void SetArmIk(LimbIK armIk, Transform target)
         {
-            if (ik == null || target == null) return;
-            if (ik.solver.target != target) ik.solver.target = target;
-            if (!ik.enabled) ik.enabled = true;
+            if (armIk == null || target == null) return;
+            if (armIk.solver.target != target) armIk.solver.target = target;
+            if (!armIk.enabled) armIk.enabled = true;
         }
 
         // Pin the rig root (camRoot) to the body anchor (the meds object, kept on the ribcage),
@@ -97,10 +97,10 @@ namespace TarkovVR.Source.Player.Interactions
             if (r != null) r.OnPostUpdate -= PinRightAfterIk;
         }
 
-        private static void PinBoneToTarget(LimbIK ik, Transform target)
+        private static void PinBoneToTarget(LimbIK armIk, Transform target)
         {
-            if (ik == null || target == null) return;
-            Transform bone = ik.solver?.bone3?.transform;
+            if (armIk == null || target == null) return;
+            Transform bone = armIk.solver?.bone3?.transform;
             if (bone == null) return;
             bone.position = target.position;
             bone.rotation = target.rotation;
@@ -113,8 +113,8 @@ namespace TarkovVR.Source.Player.Interactions
         // Resolve a hand role to its transform. RightHand is ALWAYS the dominant hand and
         // LeftHand the off hand (the SteamVR pose listeners swap in left-handed mode), so no
         // handedness branch is needed here.
-        private static Transform HandT(Hand h) => h == Hand.Dominant ? RightHand() : LeftHand();
-        private static Hand Other(Hand h) => h == Hand.Dominant ? Hand.Off : Hand.Dominant;
+        private static Transform HandT(Hand hand) => hand == Hand.Dominant ? RightHand() : LeftHand();
+        private static Hand Other(Hand hand) => hand == Hand.Dominant ? Hand.Off : Hand.Dominant;
 
         //--- Palm collision points ---------------------------------------------------
         // The palm point every probe/anchor now uses (palmCollisionPoints): the fingertip-
@@ -144,9 +144,9 @@ namespace TarkovVR.Source.Player.Interactions
         // Same filtering as ResolveFingerAnchor: the wrist subtree IS the hand, minus our
         // own Eat* holders; leaves farther than hand distance from the wrist are attach/
         // marker dummies, not fingers — kept out or the centroid lands off the hand.
-        private static void ResolvePalmLeaves(LimbIK ik, out Transform wrist, out Transform[] leaves)
+        private static void ResolvePalmLeaves(LimbIK armIk, out Transform wrist, out Transform[] leaves)
         {
-            wrist = ik?.solver?.bone3?.transform;
+            wrist = armIk?.solver?.bone3?.transform;
             leaves = null;
             if (wrist == null) return;
             Vector3 wristPos = wrist.position;
@@ -170,12 +170,12 @@ namespace TarkovVR.Source.Player.Interactions
 
         // A hand's palm offset in its RIG transform's local frame. Zero (= the old origin
         // behavior) when the feature is off; the static fallback if the skeleton is missing.
-        private static Vector3 PalmOffsetLocal(Hand h)
+        private static Vector3 PalmOffsetLocal(Hand hand)
         {
             if (!palmCollisionPoints) return Vector3.zero;
             if (!palmAnchorsResolved) ResolvePalmAnchors();
-            Transform wrist = h == Hand.Dominant ? palmWristDom : palmWristOff;
-            Transform[] leaves = h == Hand.Dominant ? palmLeavesDom : palmLeavesOff;
+            Transform wrist = hand == Hand.Dominant ? palmWristDom : palmWristOff;
+            Transform[] leaves = hand == Hand.Dominant ? palmLeavesDom : palmLeavesOff;
             if (wrist == null || leaves == null) return palmFallbackLocal;
             Vector3 sum = Vector3.zero; int n = 0;
             for (int i = 0; i < leaves.Length; i++)
@@ -188,7 +188,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The world point a hand reaches WITH. Call only with a live hand (HandT != null).
-        private static Vector3 ProbePoint(Hand h) => HandT(h).TransformPoint(PalmOffsetLocal(h));
+        private static Vector3 ProbePoint(Hand hand) => HandT(hand).TransformPoint(PalmOffsetLocal(hand));
 
         // A reach gesture fires when the acting hand's PALM probe is within <radius> of the
         // anchor hand's PALM + local offset. Offset zero => the holding palm itself (where
@@ -326,7 +326,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Create/position one debug sphere. scale = diameter (the spheres are unit-sized).
         // Color is re-applied every call (the lit state changes frame to frame).
-        private static void SetZoneViz(ref GameObject go, string name, bool show, Vector3 pos, float radius, Color c)
+        private static void SetZoneViz(ref GameObject go, string name, bool show, Vector3 position, float radius, Color color)
         {
             if (!show) { if (go != null) go.SetActive(false); return; }
             if (go == null)
@@ -334,19 +334,19 @@ namespace TarkovVR.Source.Player.Interactions
                 go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 go.name = name;
                 UnityEngine.Object.Destroy(go.GetComponent<Collider>()); // visual only — no physics
-                Renderer r = go.GetComponent<Renderer>();
-                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                r.receiveShadows = false;
+                Renderer partRenderer = go.GetComponent<Renderer>();
+                partRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                partRenderer.receiveShadows = false;
                 // A shader that supports alpha; Sprites/Default ships with every Unity build.
                 Shader sh = Shader.Find("Sprites/Default");
                 if (sh == null) sh = Shader.Find("Legacy Shaders/Transparent/Diffuse");
                 if (sh == null) sh = Shader.Find("Standard");
-                r.material = new Material(sh) { color = c };
+                partRenderer.material = new Material(sh) { color = color };
             }
             go.SetActive(true);
-            go.transform.position = pos;
+            go.transform.position = position;
             go.transform.localScale = Vector3.one * (radius * 2f);
-            go.GetComponent<Renderer>().material.color = c;
+            go.GetComponent<Renderer>().material.color = color;
         }
 
         private static void DestroyZoneViz()
@@ -434,7 +434,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (soundPlayer == null || string.IsNullOrEmpty(name)) return;
             playingManualSound = true;
             try { soundPlayer.SoundEventHandler(name); }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] PlaySound('{name}') error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] PlaySound('{name}') error: {exception}"); }
             finally { playingManualSound = false; }
         }
 
@@ -496,9 +496,9 @@ namespace TarkovVR.Source.Player.Interactions
                 sp.PlayClipInternal(clip, rolloff, volume, priority, stereo: true);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogWarning($"[ManualEat] PlayClipHeadLocked failed ({ex.Message}) — falling back to vanilla PlayClip.");
+                Plugin.MyLog.LogWarning($"[ManualEat] PlayClipHeadLocked failed ({exception.Message}) — falling back to vanilla PlayClip.");
                 return false;
             }
         }
@@ -524,7 +524,7 @@ namespace TarkovVR.Source.Player.Interactions
                     openerIsLeft ? 1f : holderGain, openerIsLeft ? holderGain : 1f,
                     openerIsLeft ? 1f : holderPitch, openerIsLeft ? holderPitch : 1f);
             }
-            catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] OnEatAudio: {ex.Message}"); }
+            catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] OnEatAudio: {exception.Message}"); }
         }
     }
 }

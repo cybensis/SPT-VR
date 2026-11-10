@@ -112,9 +112,9 @@ namespace TarkovVR.Patches.Core.Player
                 && EatingInteractionController.IsOwnEatSound(__instance))
             {
                 try { TarkovVR.ModSupport.FIKA.VRArmSync.SendEatSound(soundName); }
-                catch (System.Exception e)
+                catch (System.Exception exception)
                 {
-                    if (!_loggedSoundFwdErr) { _loggedSoundFwdErr = true; Plugin.MyLog.LogError($"[ManualEat] eat-sound forward failed: {e}"); }
+                    if (!_loggedSoundFwdErr) { _loggedSoundFwdErr = true; Plugin.MyLog.LogError($"[ManualEat] eat-sound forward failed: {exception}"); }
                 }
             }
             return allow;

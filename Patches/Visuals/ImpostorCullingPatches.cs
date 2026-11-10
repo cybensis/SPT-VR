@@ -42,20 +42,20 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(ImpostorsMainCameraContext), "UpdateFrustum")]
         private static bool WidenImpostorCullFrustum(ImpostorsMainCameraContext __instance)
         {
-            Camera cam = __instance.Camera;
-            if (cam == null)
+            Camera camera = __instance.Camera;
+            if (camera == null)
                 return true;
 
             // Widen the PROJECTION (before combining with the view) so the cull frustum covers both
             // eyes. Widening must happen on the projection, not the combined VP matrix, or the rotation
             // baked into VP would skew the result. Nobody overrides cam.cullingMatrix here, so
             // projectionMatrix * worldToCameraMatrix matches what vanilla would have used.
-            Matrix4x4 proj = cam.projectionMatrix;
+            Matrix4x4 proj = camera.projectionMatrix;
             proj.m00 *= impostorCullHorizontalWiden;   // smaller m00 => larger horizontal FOV
             if (impostorCullVerticalWiden != 1.0f)
                 proj.m11 *= impostorCullVerticalWiden;
 
-            Matrix4x4 viewProj = proj * cam.worldToCameraMatrix;
+            Matrix4x4 viewProj = proj * camera.worldToCameraMatrix;
             GeometryUtility.CalculateFrustumPlanes(viewProj, __instance._planes);
 
             // Pack the 6 planes into the Vector4 array the culling compute shader reads (_Frustum),

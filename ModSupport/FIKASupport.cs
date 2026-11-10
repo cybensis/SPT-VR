@@ -199,17 +199,17 @@ namespace TarkovVR.ModSupport.FIKA
                                 && packetCopy.Velocity.sqrMagnitude < 1e-6f
                                 && packetCopy.AngularVelocity.sqrMagnitude < 1e-6f;
 
-            var hic = VRGlobals.handsInteractionController;
-            if (hic != null && ReferenceEquals(hic.heldItem, __instance))
+            var hands = VRGlobals.handsInteractionController;
+            if (hands != null && ReferenceEquals(hands.heldItem, __instance))
             {
                 // We're holding it locally AND a held broadcast for it just arrived — another
                 // player has grabbed the same item. Newest grab wins: if we grabbed it more than
                 // stealGraceTime ago we yield (hand authority to them and fall through to apply
                 // their pose); the more-recent grabber keeps it. Otherwise we keep it.
                 bool yield = incomingHeld
-                             && Time.time - hic.heldItemGrabTime > stealGraceTime;
+                             && Time.time - hands.heldItemGrabTime > stealGraceTime;
                 if (yield)
-                    hic.RelinquishHeldItem();
+                    hands.RelinquishHeldItem();
                 else
                     return false; // keep authority — our own code drives it
             }
@@ -237,15 +237,15 @@ namespace TarkovVR.ModSupport.FIKA
 
             // Don't let a leftover local rigidbody (from when WE last dropped/held it) fall between
             // the remote holder's pose updates and fight them; restore gravity on motion/drop/Done.
-            Rigidbody rb = __instance.RigidBody;
-            if (rb != null && !rb.isKinematic)
+            Rigidbody body = __instance.RigidBody;
+            if (body != null && !body.isKinematic)
             {
-                rb.useGravity = !incomingHeld;
+                body.useGravity = !incomingHeld;
                 // For a held item the smoother (below) drives the transform and FIKA's own
                 // velocity-zeroing is skipped (we return false), so zero it here to stop any
                 // leftover velocity drifting the body between the smoother's per-frame writes.
                 if (incomingHeld)
-                    rb.velocity = Vector3.zero;
+                    body.velocity = Vector3.zero;
             }
 
             // SMOOTHING: drive a HELD item through a per-frame interpolator (same exp smoothing as

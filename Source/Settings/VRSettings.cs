@@ -291,11 +291,11 @@ namespace TarkovVR.Source.Settings
         // Linearly remaps a value from one range to another. Used by the sliders to DISPLAY a clean,
         // friendly number (e.g. 0..10 or -1..1) decoupled from the messy underlying value range -
         // the stored setting keeps its real units; only the label is scaled.
-        private static float Remap(float v, float fromMin, float fromMax, float toMin, float toMax)
+        private static float Remap(float value, float fromMin, float fromMax, float toMin, float toMax)
         {
             if (Mathf.Approximately(fromMax, fromMin))
                 return toMin;
-            float t = Mathf.Clamp01((v - fromMin) / (fromMax - fromMin));
+            float t = Mathf.Clamp01((value - fromMin) / (fromMax - fromMin));
             return Mathf.Lerp(toMin, toMax, t);
         }
 

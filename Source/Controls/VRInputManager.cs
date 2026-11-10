@@ -111,10 +111,10 @@ namespace TarkovVR.Source.Controls
 
             if (VRGlobals.inGame && !VRGlobals.menuOpen)
             {
-                foreach (var kvp in inputHandlers)
+                foreach (var entry in inputHandlers)
                 {
                     ECommand command = 0;
-                    IInputHandler handler = kvp.Value;
+                    IInputHandler handler = entry.Value;
                     handler.UpdateCommand(ref command);
 
                     if (command != 0)
@@ -133,10 +133,10 @@ namespace TarkovVR.Source.Controls
             }
             else
             {
-                foreach (var kvp in menuInputHandlers)
+                foreach (var entry in menuInputHandlers)
                 {
                     ECommand command = 0;
-                    IInputHandler handler = kvp.Value;
+                    IInputHandler handler = entry.Value;
                     handler.UpdateCommand(ref command);
 
                     if (command != 0)

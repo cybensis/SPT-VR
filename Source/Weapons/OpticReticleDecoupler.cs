@@ -67,8 +67,8 @@ namespace TarkovVR.Source.Weapons
 
             // Re-draw the reticle at FULL res on top (vanilla low-res draw is suppressed in WeaponPatches).
             // Material + scale read live from the current sight so scope swaps stay correct.
-            Renderer r = retrice != null ? retrice.Renderer : null;
-            if (r != null && r.gameObject.activeInHierarchy)
+            Renderer partRenderer = retrice != null ? retrice.Renderer : null;
+            if (partRenderer != null && partRenderer.gameObject.activeInHierarchy)
             {
                 Material mat = null;
                 float scale = 0.1f;
@@ -85,7 +85,7 @@ namespace TarkovVR.Source.Weapons
                     cmd.SetViewProjectionMatrices(cam.worldToCameraMatrix, cam.projectionMatrix);
                     cmd.SetGlobalFloat(SCALE, scale);
                     cmd.SetGlobalMatrix(NONJITTERED, GL.GetGPUProjectionMatrix(cam.nonJitteredProjectionMatrix, true));
-                    cmd.DrawRenderer(r, mat, 0, 0);
+                    cmd.DrawRenderer(partRenderer, mat, 0, 0);
                 }
             }
         }

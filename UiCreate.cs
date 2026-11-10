@@ -116,18 +116,18 @@ public class CircularSegmentUI : MonoBehaviour
         List<Sprite> newMenuSprites = new List<Sprite>();
         quickSlotOrder = new List<EBoundItem>();
         iconsList = new List<ItemIcon>();
-        foreach (KeyValuePair<EBoundItem, Item> kvp in quickSlots)
+        foreach (KeyValuePair<EBoundItem, Item> entry in quickSlots)
         {
             // Grenades come off the chest slot (GrenadeSlot shows the quick-access one), held by the grip that took them; drawn from here
             // they waited for a grip press first (his call: not in this menu)
-            if (kvp.Value is ThrowWeap)
+            if (entry.Value is ThrowWeap)
                 continue;
-            ItemIcon itemIcon = ItemViewFactory.LoadItemIcon(kvp.Value);
+            ItemIcon itemIcon = ItemViewFactory.LoadItemIcon(entry.Value);
             if (itemIcon.Sprite != null)
             {
                 iconsList.Add(itemIcon);    
                 newMenuSprites.Add(itemIcon.Sprite);
-                quickSlotOrder.Add(kvp.Key);
+                quickSlotOrder.Add(entry.Key);
             }
 
         }

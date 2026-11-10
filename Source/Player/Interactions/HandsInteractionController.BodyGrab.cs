@@ -525,19 +525,19 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             for (int i = 0; i < bones.Length; i++)
             {
-                Rigidbody rb = bones[i] != null ? bones[i].Rigidbody : null;
-                if (rb == null || rb == grabbedBodyRb)
+                Rigidbody body = bones[i] != null ? bones[i].Rigidbody : null;
+                if (body == null || body == grabbedBodyRb)
                     continue;
                 // Always assert dynamic + gravity (not only when re-thawing a kinematic bone) so a
                 // dragged body's limbs hang/droop under gravity instead of floating rigidly.
-                if (rb.isKinematic)
-                    rb.isKinematic = false;
-                rb.useGravity = true;
-                rb.detectCollisions = true;
-                if (rb.IsSleeping())
-                    rb.WakeUp();
-                rb.maxDepenetrationVelocity = bodyDragDepenetrationVelocity;
-                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                if (body.isKinematic)
+                    body.isKinematic = false;
+                body.useGravity = true;
+                body.detectCollisions = true;
+                if (body.IsSleeping())
+                    body.WakeUp();
+                body.maxDepenetrationVelocity = bodyDragDepenetrationVelocity;
+                body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             }
         }
 
@@ -550,9 +550,9 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             for (int i = 0; i < bones.Length; i++)
             {
-                Rigidbody rb = bones[i] != null ? bones[i].Rigidbody : null;
-                if (rb != null)
-                    rb.maxDepenetrationVelocity = bodyDragRestDepenetrationVelocity;
+                Rigidbody body = bones[i] != null ? bones[i].Rigidbody : null;
+                if (body != null)
+                    body.maxDepenetrationVelocity = bodyDragRestDepenetrationVelocity;
             }
         }
 
@@ -622,7 +622,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             RigidbodySpawner[] bones = ragdoll != null ? ragdoll._rigidbodySpawners : null;
             Transform bone = (bones != null && bones.Length > 0 && bones[0] != null) ? bones[0].transform : null;
-            Rigidbody rb = (bones != null && bones.Length > 0 && bones[0] != null) ? bones[0].Rigidbody : null;
+            Rigidbody body = (bones != null && bones.Length > 0 && bones[0] != null) ? bones[0].Rigidbody : null;
             if (bone == null)
             {
                 Plugin.MyLog.LogWarning("[DownedRelease] no bone to track");
@@ -630,7 +630,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             for (int f = 0; f < 25; f++)
             {
-                bool kin = rb != null && rb.isKinematic;
+                bool kin = body != null && body.isKinematic;
                 Vector3 w = bone.position;
                 Vector3 l = bone.localPosition;
                 Vector3 root = playerRoot != null ? playerRoot.position : Vector3.zero;
@@ -663,7 +663,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (releasedBodies.Count == 0)
                 return;
             int settlingBefore = releasedBodies.Count;
-            float dt = Time.fixedDeltaTime;
+            float deltaTime = Time.fixedDeltaTime;
             float landedSqr = bodyLandedSpeed * bodyLandedSpeed;
 
             for (int i = releasedBodies.Count - 1; i >= 0; i--)
@@ -703,7 +703,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
 
                 if (maxSpeedSqr < landedSqr)
-                    body.restTimer += dt;
+                    body.restTimer += deltaTime;
                 else
                     body.restTimer = 0f;
 
@@ -741,13 +741,13 @@ namespace TarkovVR.Source.Player.Interactions
         {
             for (int b = 0; b < bones.Length; b++)
             {
-                Rigidbody rb = bones[b] != null ? bones[b].Rigidbody : null;
-                if (rb == null)
+                Rigidbody body = bones[b] != null ? bones[b].Rigidbody : null;
+                if (body == null)
                     continue;
-                PhysicsExtensions.UpdateController.UnsupportRigidbody(rb);
-                rb.maxDepenetrationVelocity = bodyDragRestDepenetrationVelocity;
-                rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
-                rb.isKinematic = true;
+                PhysicsExtensions.UpdateController.UnsupportRigidbody(body);
+                body.maxDepenetrationVelocity = bodyDragRestDepenetrationVelocity;
+                body.collisionDetectionMode = CollisionDetectionMode.Discrete;
+                body.isKinematic = true;
             }
             if (ragdoll != null)
                 ragdoll._checkCorpseIsStill = RagdollAlwaysFreeze;
@@ -764,14 +764,14 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             for (int i = 0; i < bones.Length; i++)
             {
-                Rigidbody rb = bones[i] != null ? bones[i].Rigidbody : null;
-                if (rb == null)
+                Rigidbody body = bones[i] != null ? bones[i].Rigidbody : null;
+                if (body == null)
                     continue;
-                if (rb.isKinematic)
-                    rb.isKinematic = false;
-                rb.useGravity = true;
-                rb.detectCollisions = true;
-                rb.WakeUp();
+                if (body.isKinematic)
+                    body.isKinematic = false;
+                body.useGravity = true;
+                body.detectCollisions = true;
+                body.WakeUp();
             }
         }
 
@@ -817,11 +817,11 @@ namespace TarkovVR.Source.Player.Interactions
             GameWorld gameWorld = Singleton<GameWorld>.Instance;
             if (gameWorld == null || gameWorld.ObservedPlayersCorpses == null)
                 return false;
-            foreach (var kv in gameWorld.ObservedPlayersCorpses)
+            foreach (var entry in gameWorld.ObservedPlayersCorpses)
             {
-                if (ReferenceEquals(kv.Value, corpse))
+                if (ReferenceEquals(entry.Value, corpse))
                 {
-                    netId = kv.Key;
+                    netId = entry.Key;
                     return true;
                 }
             }

@@ -125,7 +125,7 @@ namespace TarkovVR.Source.Misc
             float idle = 0f;
             while (true)
             {
-                float amp = 0f;
+                float amplitude = 0f;
                 bool live = tap != null && trackedBs != null && expectedClipName != null
                     && trackedBs.PlayBackState == BetterSource.EPlayBackState.Playing
                     && trackedBs._lastPlayingClipName == expectedClipName;
@@ -149,7 +149,7 @@ namespace TarkovVR.Source.Misc
                         float level = Mathf.Clamp01(rms / peak);
                         float onset = Mathf.Max(0f, level - steadyLevel);
                         steadyLevel = Mathf.Lerp(steadyLevel, level, onsetFollow);
-                        amp = Mathf.Clamp01(sustainGain * level + onsetBoost * onset) * strength * clipStrength;
+                        amplitude = Mathf.Clamp01(sustainGain * level + onsetBoost * onset) * strength * clipStrength;
                         // The raw audio ZCR runs hundreds of Hz..kHz — LOG-map it into the
                         // LRA band so textures differentiate (a thuddy glug lands low, a
                         // crinkle lands high; linear clamping pegged everything at max).
@@ -158,12 +158,12 @@ namespace TarkovVR.Source.Misc
                         freq = Mathf.Lerp(freq, Mathf.Lerp(minFreq, maxFreq, n), freqSmoothing);
                     }
                 }
-                if (amp >= minAmp)
+                if (amplitude >= minAmp)
                 {
                     // Held 1.5x the window so it bridges to the next one: reads as a continuous buzz, not ticks. Through the
                     // mixer, so it plays alongside the knocks instead of cutting them off.
-                    if (leftGain > 0f) HapticMixer.Stream(SteamVR_Input_Sources.LeftHand, amp * leftGain, freq * leftPitch, windowSec * 1.5f);
-                    if (rightGain > 0f) HapticMixer.Stream(SteamVR_Input_Sources.RightHand, amp * rightGain, freq * rightPitch, windowSec * 1.5f);
+                    if (leftGain > 0f) HapticMixer.Stream(SteamVR_Input_Sources.LeftHand, amplitude * leftGain, freq * leftPitch, windowSec * 1.5f);
+                    if (rightGain > 0f) HapticMixer.Stream(SteamVR_Input_Sources.RightHand, amplitude * rightGain, freq * rightPitch, windowSec * 1.5f);
                 }
                 yield return wait;
             }
@@ -186,8 +186,8 @@ namespace TarkovVR.Source.Misc
                 for (int i = 0; i < frames; i++)
                 {
                     float v = 0f;
-                    int idx = i * channels;
-                    for (int c = 0; c < channels; c++) v += data[idx + c];
+                    int index = i * channels;
+                    for (int c = 0; c < channels; c++) v += data[index + c];
                     v /= channels;
                     sum += v * v;
                     if ((v > 0f && prev <= 0f) || (v < 0f && prev >= 0f)) crossings++;

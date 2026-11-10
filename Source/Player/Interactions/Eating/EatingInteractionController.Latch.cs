@@ -16,10 +16,10 @@ namespace TarkovVR.Source.Player.Interactions
         // pin glues the rendered wrist to it (Left/RightPinTarget), so the hand stays
         // locked on the item no matter where your physical hand pulls — the pull only
         // drives the scrub. The acting RIG target keeps controller-tracking throughout.
-        private static void LatchHandToItem(Hand h, Transform acting, Transform anchor)
+        private static void LatchHandToItem(Hand hand, Transform acting, Transform anchor)
         {
-            CaptureLatchStart(h, acting);
-            latchedHandIsDominant = h == Hand.Dominant;
+            CaptureLatchStart(hand, acting);
+            latchedHandIsDominant = hand == Hand.Dominant;
             if (pullLatch == null) pullLatch = new GameObject("EatPullLatch");
             pullLatch.transform.SetParent(anchor, false);
             pullLatch.transform.position = acting.position;
@@ -207,17 +207,17 @@ namespace TarkovVR.Source.Player.Interactions
             // Rotation first — the fingertip offset below rotates with the hand. Anchor =
             // the ridden bone's rotation (riding) or the grab pose riding the item (frozen),
             // plus the clamped controller wiggle; pullRotationFree = fully controller-driven.
-            Quaternion rot;
+            Quaternion rotation;
             if (pullRotationFree)
             {
                 Transform act = latchedHandIsDominant ? RightHand() : LeftHand();
-                rot = act != null ? act.rotation : pullLatch.transform.rotation;
+                rotation = act != null ? act.rotation : pullLatch.transform.rotation;
             }
             else if (riding)
-                rot = (contactWiggle ? Quaternion.identity : WiggleDelta()) * (holdingTarget.rotation * (Quaternion.Inverse(holdingWrist.rotation) * openGripT.rotation) * propGrabLocalRot);
+                rotation = (contactWiggle ? Quaternion.identity : WiggleDelta()) * (holdingTarget.rotation * (Quaternion.Inverse(holdingWrist.rotation) * openGripT.rotation) * propGrabLocalRot);
             else
-                rot = (contactWiggle ? Quaternion.identity : WiggleDelta()) * (holdingTarget != null ? holdingTarget.rotation * latchGrabLocalRot : pullLatch.transform.rotation);
-            pullLatch.transform.rotation = rot;
+                rotation = (contactWiggle ? Quaternion.identity : WiggleDelta()) * (holdingTarget != null ? holdingTarget.rotation * latchGrabLocalRot : pullLatch.transform.rotation);
+            pullLatch.transform.rotation = rotation;
             // Frozen where it grabbed: written every frame here, since ShapeLatch moves the latch off it
             if (reloadStyleLatch && !riding)
                 pullLatch.transform.localPosition = latchFrozenLocalPosition;
@@ -230,7 +230,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // The latch is the WRIST pin target: back the wrist off the grip point by
                 // the fingertip's offset so the FINGERTIP (not the palm) lands on it.
                 pullLatch.transform.position = gripWorld
-                    - (pullSnapToGrip ? rot * FingerOffsetInWristFrame() : Vector3.zero);
+                    - (pullSnapToGrip ? rotation * FingerOffsetInWristFrame() : Vector3.zero);
             }
             bool grabWiggle = contactWiggle && !pullRotationFree;
             ShapeLatch(grabWiggle, grabWiggle ? FingerOffsetInWristFrame() : Vector3.zero);
@@ -327,27 +327,27 @@ namespace TarkovVR.Source.Player.Interactions
         // Sample the packed open-hand path (stride 8: t, pos, quat) at normalizedTime t,
         // clamped to the endpoints; between keys position lerps and rotation slerps (keys
         // are sign-aligned at capture, so Slerp takes the short way).
-        private static void SampleHandPath(float[] p, float t, out Vector3 pos, out Quaternion rot)
+        private static void SampleHandPath(float[] p, float t, out Vector3 position, out Quaternion rotation)
         {
             const int S = 8;
             int n = p.Length / S;
             int hi = 0;
             while (hi < n && p[hi * S] < t) hi++;
-            if (hi <= 0) { ReadPathKey(p, 0, out pos, out rot); return; }
-            if (hi >= n) { ReadPathKey(p, n - 1, out pos, out rot); return; }
+            if (hi <= 0) { ReadPathKey(p, 0, out position, out rotation); return; }
+            if (hi >= n) { ReadPathKey(p, n - 1, out position, out rotation); return; }
             ReadPathKey(p, hi - 1, out Vector3 p0, out Quaternion q0);
             ReadPathKey(p, hi, out Vector3 p1, out Quaternion q1);
             float t0 = p[(hi - 1) * S], t1 = p[hi * S];
             float w = t1 > t0 ? Mathf.Clamp01((t - t0) / (t1 - t0)) : 1f;
-            pos = Vector3.Lerp(p0, p1, w);
-            rot = Quaternion.Slerp(q0, q1, w);
+            position = Vector3.Lerp(p0, p1, w);
+            rotation = Quaternion.Slerp(q0, q1, w);
         }
 
-        private static void ReadPathKey(float[] p, int i, out Vector3 pos, out Quaternion rot)
+        private static void ReadPathKey(float[] p, int i, out Vector3 position, out Quaternion rotation)
         {
             int o = i * 8;
-            pos = new Vector3(p[o + 1], p[o + 2], p[o + 3]);
-            rot = new Quaternion(p[o + 4], p[o + 5], p[o + 6], p[o + 7]);
+            position = new Vector3(p[o + 1], p[o + 2], p[o + 3]);
+            rotation = new Quaternion(p[o + 4], p[o + 5], p[o + 6], p[o + 7]);
         }
 
         // No OpenGrip configured: rank every bone under the held item by how far it moved
@@ -364,9 +364,9 @@ namespace TarkovVR.Source.Player.Interactions
                 ranked.Add(((baseT.InverseTransformPoint(t.position) - moverStartLocal[i]).magnitude, t.name));
             }
             ranked.Sort((a, b) => b.d.CompareTo(a.d));
-            var sb = new StringBuilder("[ManualEat] open movers (paste the lid bone into OpenGrip(...)): ");
-            for (int i = 0; i < Mathf.Min(3, ranked.Count); i++) sb.Append($"'{ranked[i].name}' ({ranked[i].d * 100f:F1}cm)  ");
-            Plugin.MyLog.LogInfo(sb.ToString());
+            var builder = new StringBuilder("[ManualEat] open movers (paste the lid bone into OpenGrip(...)): ");
+            for (int i = 0; i < Mathf.Min(3, ranked.Count); i++) builder.Append($"'{ranked[i].name}' ({ranked[i].d * 100f:F1}cm)  ");
+            Plugin.MyLog.LogInfo(builder.ToString());
             moverBones = null; moverStartLocal = null;
         }
 
@@ -448,9 +448,9 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 palmLocal = anchor.InverseTransformPoint(acting.TransformPoint(reachPalmLocal));
             float depth = Mathf.Clamp(Vector3.Dot(palmLocal - reachEntryPalmLocal, reachAxisLocal), 0f, reachDepthDistance);
             Vector3 railPalmWorld = anchor.TransformPoint(reachEntryPalmLocal + reachAxisLocal * depth);
-            Quaternion rot = acting.rotation;
-            pullLatch.transform.rotation = rot;
-            pullLatch.transform.position = railPalmWorld - rot * reachPalmLocal;
+            Quaternion rotation = acting.rotation;
+            pullLatch.transform.rotation = rotation;
+            pullLatch.transform.position = railPalmWorld - rotation * reachPalmLocal;
             ShapeLatch(false, Vector3.zero); // the rail's rotation is the controller's already: only the ease
         }
     }

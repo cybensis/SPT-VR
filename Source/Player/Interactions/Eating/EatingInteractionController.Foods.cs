@@ -308,31 +308,31 @@ namespace TarkovVR.Source.Player.Interactions
             PullStart(HandPath(OpenGrip(CanSpoon("5734773724597737fd047c14", "saira_root", null, null, bites: 2,
                 canPos: V(-0.125f, -0.056f, 0.02f), canRot: V(358.3f, 326.2f, 73.1f), eatSound: "Drink"), "saira_key"), CondMilkOpenPath), 0.21f),
             PullStart(HandPath(Bottle("62a09f32621468534a797acb", // Pevko Beer
-                pos: V(-0.113f, -0.065f, 0.064f), rot: V(6.8f, 349.4f, 278.3f),
+                position: V(-0.113f, -0.065f, 0.064f), rotation: V(6.8f, 349.4f, 278.3f),
                 capPos: V(-0.109f, -0.036f, -0.049f), capRot: V(280.1f, 87.5f, 39.1f)), BeerOpenPath), 0.35f),
             PullStart(HandPath(OpenGrip(Bottle("60098b1705871270cd5352a1", cap: false, // Emergency water ration
-                pos: V(-0.09f, -0.092f, -0.005f), rot: V(14.6f, 44.2f, 56.9f)), "ration3"), RationOpenPath), 0.27f),
+                position: V(-0.09f, -0.092f, -0.005f), rotation: V(14.6f, 44.2f, 56.9f)), "ration3"), RationOpenPath), 0.27f),
             PullStart(HandPath(Bottle("5d40407c86f774318526545a", // Vodka
-                pos: V(-0.114f, -0.064f, 0.062f), rot: V(7.6f, 349.2f, 278f),
+                position: V(-0.114f, -0.064f, 0.062f), rotation: V(7.6f, 349.2f, 278f),
                 capPos: V(-0.111f, -0.04f, -0.043f), capRot: V(280f, 85.4f, 60.4f)), VodkaOpenPath), 0.3f),
             PullStart(HandPath(Bottle("5d403f9186f7743cac3f229b", // Whiskey
-                pos: V(-0.098f, -0.058f, 0.017f), rot: V(341.6f, 347.4f, 287.6f),
+                position: V(-0.098f, -0.058f, 0.017f), rotation: V(341.6f, 347.4f, 287.6f),
                 capPos: V(-0.111f, -0.04f, -0.044f), capRot: V(279.6f, 85.1f, 71.6f)), WhiskeyOpenPath), 0.44f),
             PullStart(HandPath(Bottle("5e8f3423fd7471236e6e3b64", // Kvas (same plastic-bottle shape as the water bottle)
-                pos: V(-0.128f, -0.051f, -0.03f), rot: V(13.2f, 353.2f, 248.1f),
+                position: V(-0.128f, -0.051f, -0.03f), rotation: V(13.2f, 353.2f, 248.1f),
                 capPos: V(-0.121f, -0.042f, -0.052f), capRot: V(283.4f, 36.7f, 169.3f)), KvasOpenPath), 0.29f),
             OpenWith(PullStart(HandPath(Drink("5c0fa877d174af02a012e1cf", "fb_root", null, // Aquamari filter bottle
                 drinkPos: V(-0.073f, -0.059f, -0.091f), drinkRot: V(358.7f, 335.1f, 338.7f),
                 holdInOffHand: true), AquamariOpenPath), 0.33f),
                 OpenGestureKind.Tilt),
             PullStart(HandPath(OpenGrip(Bottle("5d1b376e86f774252519444e", hingedCap: "hinge", // Moonshine
-                pos: V(-0.116f, -0.065f, 0.062f), rot: V(7.6f, 349.6f, 278.2f)), "cap"), MoonshineOpenPath), 0.27f),
+                position: V(-0.116f, -0.065f, 0.062f), rotation: V(7.6f, 349.6f, 278.2f)), "cap"), MoonshineOpenPath), 0.27f),
             PullStart(HandPath(Zones(Bottle("5d1b33a686f7742523398398", // Superwater
-                pos: V(-0.021f, -0.175f, 0.067f), rot: V(300.7f, 264f, 89.6f),
+                position: V(-0.021f, -0.175f, 0.067f), rotation: V(300.7f, 264f, 89.6f),
                 capPos: V(-0.118f, -0.048f, -0.006f), capRot: V(276.7f, 118.7f, 315.4f)), 
                 openOffset: V(0f, 0f, 0.1f), takeOffset: V(0f, 0f, 0.1f)), SuperwaterOpenPath), 0.31f),
             PullStart(HandPath(Bottle("5448fee04bdc2dbc018b4567", // Water bottle (60/60 — drinks down partially)
-                pos: V(-0.128f, -0.051f, -0.031f), rot: V(13.3f, 353f, 248f),
+                position: V(-0.128f, -0.051f, -0.031f), rotation: V(13.3f, 353f, 248f),
                 capPos: V(-0.121f, -0.043f, -0.053f), capRot: V(283.4f, 35.5f, 162.8f)), WaterBottleOpenPath), 0.29f),         
             OpenWith(SoundTimes(PullStart(HandPath(Drink("5bc9b156d4351e00367fbce9", "mayo_root", "mayo_cap",
                 drinkPos: V(-0.109f, -0.055f, 0.026f), drinkRot: V(358.6f, 199.1f, 301.5f),
@@ -361,8 +361,8 @@ namespace TarkovVR.Source.Player.Interactions
         // whose size/shape needs its own grip passes pos/rot here; a drink the vanilla
         // animation holds in the LEFT hand passes holdInOffHand: true (cap hand flips too).
         private static FoodDef SodaCan(string id,
-            Vector3? pos = null, Vector3? rot = null, bool holdInOffHand = false, float drinkSeconds = 0f)
-            => OpenWith(PullEnd(PullStart(HandPath(Drink(id, "tc_root", null, pos, rot, holdInOffHand: holdInOffHand, drinkSeconds: drinkSeconds), SodaOpenPath), 0.16f), 0.4f),
+            Vector3? position = null, Vector3? rotation = null, bool holdInOffHand = false, float drinkSeconds = 0f)
+            => OpenWith(PullEnd(PullStart(HandPath(Drink(id, "tc_root", null, position, rotation, holdInOffHand: holdInOffHand, drinkSeconds: drinkSeconds), SodaOpenPath), 0.16f), 0.4f),
                 OpenGestureKind.Tilt); // tab tips open by TILTING the hand (like aquamari) — keeps the
                                        // gradual HandPath replay; the Trigger kind swept the scrub in a
                                        // frame and teleported the latched hand (user preferred the path)
@@ -370,9 +370,9 @@ namespace TarkovVR.Source.Player.Interactions
         // TetraPak carton: held in the RIGHT hand, no cap (you tear the corner). Grip
         // default = milk's measured tetrapak_root in the R palm (shared across cartons).
         private static FoodDef TetraPak(string id,
-            Vector3? pos = null, Vector3? rot = null, bool holdInOffHand = false, float drinkSeconds = 0f)
+            Vector3? position = null, Vector3? rotation = null, bool holdInOffHand = false, float drinkSeconds = 0f)
             => PullStart(HandPath(Zones(Drink(id, "tetrapak_root", null,
-                pos ?? V(-0.102f, -0.071f, 0.058f), rot ?? V(78.6f, 280.7f, 351.4f),
+                position ?? V(-0.102f, -0.071f, 0.058f), rotation ?? V(78.6f, 280.7f, 351.4f),
                 holdInOffHand: holdInOffHand, drinkSeconds: drinkSeconds),
                 openOffset: V(0f, 0f, -0.05f), takeOffset: V(0f, 0f, -0.05f))
                 , TetraPakOpenPath), 0.08f);
@@ -381,9 +381,9 @@ namespace TarkovVR.Source.Player.Interactions
         // (juice_cap, nested under juice_root) unscrews to the LEFT hand. Grip defaults =
         // the three juices' measured grips (all within ~1mm of each other).
         private static FoodDef JuiceBottle(string id,
-            Vector3? pos = null, Vector3? rot = null, Vector3? capPos = null, Vector3? capRot = null)
+            Vector3? position = null, Vector3? rotation = null, Vector3? capPos = null, Vector3? capRot = null)
             => PullStart(HandPath(OpenWith(Zones(Drink(id, "juice_root", "juice_cap",
-                pos ?? V(-0.099f, -0.061f, 0.094f), rot ?? V(358.6f, 199.2f, 301.3f),
+                position ?? V(-0.099f, -0.061f, 0.094f), rotation ?? V(358.6f, 199.2f, 301.3f),
                 capPos ?? V(-0.131f, -0.044f, 0.031f), capRot ?? V(281.5f, 280.8f, 15.8f),
                 holdInOffHand: false), openOffset: V(0f, 0f, -0.05f), takeOffset: V(0f, 0f, -0.05f)), OpenGestureKind.Tilt), // screw cap: tilt the hand open
                 JuiceOpenPath), 0.09f);
@@ -394,17 +394,17 @@ namespace TarkovVR.Source.Player.Interactions
         // group (e.g. moonshine's "hinge") that stays welded to the bottle instead of
         // detaching — it rides the holding hand and animates open in place (overrides `cap`).
         private static FoodDef Bottle(string id, bool cap = true, string hingedCap = null,
-            Vector3? pos = null, Vector3? rot = null, Vector3? capPos = null, Vector3? capRot = null,
+            Vector3? position = null, Vector3? rotation = null, Vector3? capPos = null, Vector3? capRot = null,
             bool holdInOffHand = true, float drinkSeconds = 0f)
         {
-            FoodDef d = Zones(Drink(id, "mod_item", hingedCap ?? (cap ? "cap" : null),
-                pos, rot, capPos, capRot, holdInOffHand, drinkSeconds), 
+            FoodDef foodDef = Zones(Drink(id, "mod_item", hingedCap ?? (cap ? "cap" : null),
+                position, rotation, capPos, capRot, holdInOffHand, drinkSeconds), 
                 openOffset: V(0f, 0f, 0.05f), takeOffset: V(0f, 0f, 0.05f));
-            if (hingedCap != null) d.capHinged = true;
+            if (hingedCap != null) foodDef.capHinged = true;
             // Any cap — screw or hinged flip-top — opens by TILTING the hand; a capless
             // bottle (the ration pouch) stays a pull.
-            d.openGesture = hingedCap != null || cap ? OpenGestureKind.Tilt : OpenGestureKind.Pull;
-            return d;
+            foodDef.openGesture = hingedCap != null || cap ? OpenGestureKind.Tilt : OpenGestureKind.Pull;
+            return foodDef;
         }
 
         private static Vector3 V(float x, float y, float z) => new Vector3(x, y, z);
@@ -786,68 +786,68 @@ namespace TarkovVR.Source.Player.Interactions
         // there's nothing to ride and freeze-at-grab is correct; soda cans / hotrod /
         // aquamari also measured 0 (no animated opener in the scrub range). Don't add
         // OpenGrip to those.
-        private static FoodDef OpenGrip(FoodDef d, string bone) { d.openGripName = bone; return d; }
+        private static FoodDef OpenGrip(FoodDef foodDef, string bone) { foodDef.openGripName = bone; return foodDef; }
 
         // Baked open-hand path (see FoodDef.openHandPath): paste the recon's [HANDPATH]
         // output. Chains like Zones/OpenGrip; takes precedence over OpenGrip when both set.
-        private static FoodDef HandPath(FoodDef d, params float[] packed) { d.openHandPath = packed != null && packed.Length >= 8 ? packed : null; return d; }
+        private static FoodDef HandPath(FoodDef foodDef, params float[] packed) { foodDef.openHandPath = packed != null && packed.Length >= 8 ? packed : null; return foodDef; }
 
         // Baked reach-hand path (see FoodDef.reachHandPath, ReachBag only): paste the
         // recon's ReachPath(...) output. Chains like HandPath; null/short = the rail.
-        private static FoodDef ReachPath(FoodDef d, params float[] packed) { d.reachHandPath = packed != null && packed.Length >= 8 ? packed : null; return d; }
+        private static FoodDef ReachPath(FoodDef foodDef, params float[] packed) { foodDef.reachHandPath = packed != null && packed.Length >= 8 ? packed : null; return foodDef; }
 
         // Per-food pull start time (see FoodDef.pullStartTime). Chains like the others:
         // PullStart(HandPath(...), 0.21f). Tune live via the pullStartTime static, then
         // bake — DumpFoodDef round-trips it.
-        private static FoodDef PullStart(FoodDef d, float t) { d.pullStartTime = t; return d; }
+        private static FoodDef PullStart(FoodDef foodDef, float t) { foodDef.pullStartTime = t; return foodDef; }
 
         // Per-food pull END time (see FoodDef.pullEndTime): where the hand UNLOCKS from the
         // pull; whatever is left of the open clip (e.g. the tushonka spoon grab) auto-plays
         // from there to openReadyTime. Chains: PullEnd(PullStart(...), 0.6f). Tune live via
         // the pullEndTime static; DumpFoodDef round-trips it.
-        private static FoodDef PullEnd(FoodDef d, float t) { d.pullEndTime = t; return d; }
+        private static FoodDef PullEnd(FoodDef foodDef, float t) { foodDef.pullEndTime = t; return foodDef; }
 
         // Per-food physical open gesture (see OpenGestureKind). Chains like the others:
         // OpenWith(Drink(...), OpenGestureKind.Tilt). The drink presets bake the common
         // mapping (capped/hinged Bottle, JuiceBottle, SodaCan = Tilt); use this for
         // one-offs (aquamari's flip sport-cap, hotrod's can tab).
-        private static FoodDef OpenWith(FoodDef d, OpenGestureKind g) { d.openGesture = g; return d; }
+        private static FoodDef OpenWith(FoodDef foodDef, OpenGestureKind kind) { foodDef.openGesture = kind; return foodDef; }
 
         // Eat-by-time chain: the food is consumed by HOLDING it at the mouth for the item's
         // use-time (the drink model — live drain, pause by lowering) instead of counting
         // bites. Chains like the others: Timed(Wrapper(...)). Tarka + noodles; Snack bakes it.
         // Optional loop = the chew-loop state for NON-standard graphs (FoodDef.eatLoopState;
         // 0 keeps STATE_USE) — noodles passes its own take/split/eat state.
-        private static FoodDef Timed(FoodDef d, int loop = 0) { d.eatByTime = true; if (loop != 0) d.eatLoopState = loop; return d; }
+        private static FoodDef Timed(FoodDef foodDef, int loop = 0) { foodDef.eatByTime = true; if (loop != 0) foodDef.eatLoopState = loop; return foodDef; }
 
         // Per-food open-state override (see FoodDef.openState). Chains like the others:
         // OpenState(Wrapper(...), 492683391). Emitted by DumpFoodDef when set — losing it
         // on a paste-over would silently break the open scrub again.
-        private static FoodDef OpenState(FoodDef d, int hash) { d.openState = hash; return d; }
+        private static FoodDef OpenState(FoodDef foodDef, int hash) { foodDef.openState = hash; return foodDef; }
 
         // One-shot open animation (see FoodDef.openPlayState): play `state` for real at open
         // completion (up to `maxTime`) to show an open visual the scrub can't — noodles' rip.
         // Chains: OpenPlay(Wrapper(...), 2073176132, 0.34f). Emitted by DumpFoodDef.
-        private static FoodDef OpenPlay(FoodDef d, int state, float maxTime = 1f) { d.openPlayState = state; d.openPlayMaxTime = maxTime; return d; }
+        private static FoodDef OpenPlay(FoodDef foodDef, int state, float maxTime = 1f) { foodDef.openPlayState = state; foodDef.openPlayMaxTime = maxTime; return foodDef; }
 
         // Segmented-bites chain for non-Snack foods (see FoodDef.segmentedBites): the held
         // item sheds a renderer per audible bite while held at the mouth, fraction-synced
         // (the sausage model — flip segmentHideFromEnd live if it eats from the wrong end).
         // NOT emitted by DumpFoodDef — keep it in the Defs line by hand. Noodles.
-        private static FoodDef Segmented(FoodDef d) { d.segmentedBites = true; return d; }
+        private static FoodDef Segmented(FoodDef foodDef) { foodDef.segmentedBites = true; return foodDef; }
 
         // Per-food authored open-sound times (see FoodDef.openSoundTimes — recon [SOUND]
         // gives them). Chains: SoundTimes(Bag(...), 0.18f, 0.42f). NOT emitted by
         // DumpFoodDef — keep it in the Defs line by hand.
-        private static FoodDef SoundTimes(FoodDef d, params float[] times) { d.openSoundTimes = times != null && times.Length > 0 ? times : null; return d; }
+        private static FoodDef SoundTimes(FoodDef foodDef, params float[] times) { foodDef.openSoundTimes = times != null && times.Length > 0 ? times : null; return foodDef; }
 
         // Recon bridge: the held-item root bone name / the open-state hash for a known food
         // (the frame + time axis the [HANDPATH] capture must use). Null/0 = no def.
         public static string LookupRootName(string templateId) => FindDef(templateId)?.rootName;
         public static int LookupOpenStateHash(string templateId)
         {
-            FoodDef d = FindDef(templateId);
-            return d == null ? 0 : BuildStyle(d).openStateHash;
+            FoodDef foodDef = FindDef(templateId);
+            return foodDef == null ? 0 : BuildStyle(foodDef).openStateHash;
         }
         // ReachBag only: the arms state the reach scrub seeks in (= the time axis a
         // ReachPath capture must sample on). 0 = not a ReachBag def, no reach capture.
@@ -857,18 +857,18 @@ namespace TarkovVR.Source.Player.Interactions
         // Move an off-palm item's reach points (bottle cap up high, spout at the mouth). Chains
         // onto any factory: Zones(CanHand(...), eatOffset: V(0f, 0.1f, 0f)). Leaves grips alone.
         // Offsets are anchor-local (open/take = holding hand; eat = eating hand vs head).
-        private static FoodDef Zones(FoodDef d,
+        private static FoodDef Zones(FoodDef foodDef,
             Vector3? openOffset = null, float? openRadius = null,
             Vector3? takeOffset = null, float? takeRadius = null,
             Vector3? eatOffset = null, float? eatRadius = null)
         {
-            if (openOffset.HasValue) d.openZoneOffset = openOffset.Value;
-            if (openRadius.HasValue) d.openZoneRadius = openRadius.Value;
-            if (takeOffset.HasValue) d.takeZoneOffset = takeOffset.Value;
-            if (takeRadius.HasValue) d.takeZoneRadius = takeRadius.Value;
-            if (eatOffset.HasValue) d.eatZoneOffset = eatOffset.Value;
-            if (eatRadius.HasValue) d.eatZoneRadius = eatRadius.Value;
-            return d;
+            if (openOffset.HasValue) foodDef.openZoneOffset = openOffset.Value;
+            if (openRadius.HasValue) foodDef.openZoneRadius = openRadius.Value;
+            if (takeOffset.HasValue) foodDef.takeZoneOffset = takeOffset.Value;
+            if (takeRadius.HasValue) foodDef.takeZoneRadius = takeRadius.Value;
+            if (eatOffset.HasValue) foodDef.eatZoneOffset = eatOffset.Value;
+            if (eatRadius.HasValue) foodDef.eatZoneRadius = eatRadius.Value;
+            return foodDef;
         }
 
         // ===== Authoring helper ==================================================
@@ -985,11 +985,11 @@ namespace TarkovVR.Source.Player.Interactions
         private static string WrapPath(string core, string wrapper, float[] p)
         {
             if (p == null) return core;
-            var sb = new StringBuilder($"{wrapper}({core}");
+            var builder = new StringBuilder($"{wrapper}({core}");
             for (int i = 0; i + 8 <= p.Length; i += 8)
-                sb.Append($",\n                {p[i]:0.###}f, {p[i + 1]:0.###}f, {p[i + 2]:0.###}f, {p[i + 3]:0.###}f, {p[i + 4]:0.####}f, {p[i + 5]:0.####}f, {p[i + 6]:0.####}f, {p[i + 7]:0.####}f");
-            sb.Append(")");
-            return sb.ToString();
+                builder.Append($",\n                {p[i]:0.###}f, {p[i + 1]:0.###}f, {p[i + 2]:0.###}f, {p[i + 3]:0.###}f, {p[i + 4]:0.####}f, {p[i + 5]:0.####}f, {p[i + 6]:0.####}f, {p[i + 7]:0.####}f");
+            builder.Append(")");
+            return builder.ToString();
         }
 
         private static string VStr(Vector3 v) => $"V({v.x:0.###}f, {v.y:0.###}f, {v.z:0.###}f)";
@@ -1005,20 +1005,20 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static string ZoneArgs()
         {
-            var sb = new StringBuilder();
-            if (openZoneOffset != Vector3.zero) sb.Append($", openOffset: {VStr(openZoneOffset)}");
-            if (openDistance != DefaultOpenZoneRadius) sb.Append($", openRadius: {FStr(openDistance)}");
-            if (takeZoneOffset != Vector3.zero) sb.Append($", takeOffset: {VStr(takeZoneOffset)}");
-            if (scoopDistance != DefaultTakeZoneRadius) sb.Append($", takeRadius: {FStr(scoopDistance)}");
-            if (eatZoneOffset != Vector3.zero) sb.Append($", eatOffset: {VStr(eatZoneOffset)}");
-            if (eatDistance != DefaultEatZoneRadius) sb.Append($", eatRadius: {FStr(eatDistance)}");
-            return sb.ToString();
+            var builder = new StringBuilder();
+            if (openZoneOffset != Vector3.zero) builder.Append($", openOffset: {VStr(openZoneOffset)}");
+            if (openDistance != DefaultOpenZoneRadius) builder.Append($", openRadius: {FStr(openDistance)}");
+            if (takeZoneOffset != Vector3.zero) builder.Append($", takeOffset: {VStr(takeZoneOffset)}");
+            if (scoopDistance != DefaultTakeZoneRadius) builder.Append($", takeRadius: {FStr(scoopDistance)}");
+            if (eatZoneOffset != Vector3.zero) builder.Append($", eatOffset: {VStr(eatZoneOffset)}");
+            if (eatDistance != DefaultEatZoneRadius) builder.Append($", eatRadius: {FStr(eatDistance)}");
+            return builder.ToString();
         }
 
         private static FoodDef FindDef(string templateId)
         {
             if (string.IsNullOrEmpty(templateId)) return null;
-            foreach (FoodDef d in Defs) if (d.templateId == templateId) return d;
+            foreach (FoodDef foodDef in Defs) if (foodDef.templateId == templateId) return foodDef;
             return null;
         }
     }

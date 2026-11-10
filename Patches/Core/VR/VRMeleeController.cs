@@ -35,8 +35,8 @@ namespace TarkovVR.Patches.Core.VR
                 return;
             if (other.collider == null)
                 return;
-            BallisticCollider bc = other.collider.GetComponent<BallisticCollider>();
-            if (bc == null || bc is BodyPartCollider)
+            BallisticCollider ballisticCollider = other.collider.GetComponent<BallisticCollider>();
+            if (ballisticCollider == null || ballisticCollider is BodyPartCollider)
                 return; // surface only -- players/AI sync via the normal damage path
 
             // Mirror method_6's own point fix-up (uses the collider position if the hit point is ~0).
@@ -45,7 +45,7 @@ namespace TarkovVR.Patches.Core.VR
                 ? __instance.Knife.Template.KnifeHitSlashDam
                 : __instance.Knife.Template.KnifeHitStabDam;
             if (debugMeleeSend)
-                Plugin.MyLog.LogWarning($"[FikaSync] melee SEND surface hit: {other.collider.name} mat={bc.TypeOfMaterial} point={point} n={other.normal} dmg={dmg}");
+                Plugin.MyLog.LogWarning($"[FikaSync] melee SEND surface hit: {other.collider.name} mat={ballisticCollider.TypeOfMaterial} point={point} n={other.normal} dmg={dmg}");
             FikaSendMeleeHit(point, other.normal, __instance.GlobalSwingDirection, dmg);
         }
 

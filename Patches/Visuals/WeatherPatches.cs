@@ -54,7 +54,7 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(PrismEffects), "SetFogShaderValues")]
         private static bool FixFogForVR(PrismEffects __instance, Material fogMaterial)
         {
-            Camera cam = __instance.GetPrismCamera();
+            Camera camera = __instance.GetPrismCamera();
 
             fogMaterial.SetFloat("_FogHeight", __instance.fogHeight);
             fogMaterial.SetFloat("_FogIntensity", 1f);
@@ -64,7 +64,7 @@ namespace TarkovVR.Patches.Visuals
             fogMaterial.SetColor("_FogEndColor", __instance.fogEndColor);
             fogMaterial.SetFloat("_FogBlurSkybox", 0.9999999f);
             Matrix4x4 worldMatrix = Matrix4x4.TRS(
-                cam.transform.position,
+                camera.transform.position,
                 Quaternion.identity,
                 Vector3.one
             );
@@ -113,10 +113,10 @@ namespace TarkovVR.Patches.Visuals
         */
         private static void InitializeCameras()
         {
-            foreach (var cam in Camera.allCameras)
+            foreach (var camera in Camera.allCameras)
             {
-                if (cam.name == "FPS Camera")
-                    fpsCam = cam;
+                if (camera.name == "FPS Camera")
+                    fpsCam = camera;
             }
         }
     }

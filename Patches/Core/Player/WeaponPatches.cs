@@ -549,9 +549,9 @@ namespace TarkovVR.Patches.Core.Player
                 __instance._scale = reticle.Scale * 0.1f;
                 return false;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"[UpdateTransform] Failed: {ex.Message}\n{ex.StackTrace}");
+                Plugin.MyLog.LogError($"[UpdateTransform] Failed: {exception.Message}\n{exception.StackTrace}");
                 return true;
             }
         }
@@ -665,10 +665,10 @@ namespace TarkovVR.Patches.Core.Player
                     if (!foundOptic)
                         __instance.ChangeAimingMode(startingAimIndex);
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    Plugin.MyLog.LogError($"MoveWeaponToIKHands: Error while changing aiming mode - {ex.Message}");
-                    Plugin.MyLog.LogError($"Stack trace: {ex.StackTrace}");
+                    Plugin.MyLog.LogError($"MoveWeaponToIKHands: Error while changing aiming mode - {exception.Message}");
+                    Plugin.MyLog.LogError($"Stack trace: {exception.StackTrace}");
                 }
             }
 
@@ -1092,10 +1092,10 @@ namespace TarkovVR.Patches.Core.Player
                     if (!foundOptic)
                         __instance.ChangeAimingMode(startingAimIndex);
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    Plugin.MyLog.LogError($"MoveWeaponToIKHands: Error while changing aiming mode - {ex.Message}");
-                    Plugin.MyLog.LogError($"Stack trace: {ex.StackTrace}");
+                    Plugin.MyLog.LogError($"MoveWeaponToIKHands: Error while changing aiming mode - {exception.Message}");
+                    Plugin.MyLog.LogError($"Stack trace: {exception.StackTrace}");
                 }
             }
             VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");          
@@ -1753,9 +1753,9 @@ namespace TarkovVR.Patches.Core.Player
                     previousLeftHandMarker = VRGlobals.player._markers[0];
                 }
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"Error in MedsControllerSpawnPatch: {ex.Message}");
+                Plugin.MyLog.LogError($"Error in MedsControllerSpawnPatch: {exception.Message}");
             }
             //Plugin.MyLog.LogError($"[SpawnMedsController] Spawning meds controller for {player} with item {item}");
         }      

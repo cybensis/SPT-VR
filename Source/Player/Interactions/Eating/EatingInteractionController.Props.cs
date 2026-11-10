@@ -240,11 +240,11 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        private static GameObject NewHolder(string name, Transform parent, Vector3 pos, Vector3 rot)
+        private static GameObject NewHolder(string name, Transform parent, Vector3 position, Vector3 rot)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = pos;
+            go.transform.localPosition = position;
             go.transform.localRotation = Quaternion.Euler(rot);
             return go;
         }
@@ -367,7 +367,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (crackerHolder != null) UnityEngine.Object.Destroy(crackerHolder);
                 if (capHolder != null) UnityEngine.Object.Destroy(capHolder);
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] RestoreProps error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] RestoreProps error: {exception}"); }
             baseHolder = spoonHolder = foodHolder = foodHolder2 = crackerHolder = capHolder = null;
             reparented = false;
         }
@@ -384,8 +384,8 @@ namespace TarkovVR.Source.Player.Interactions
             int want = Mathf.Min(Mathf.CeilToInt(progress * segR.Length), segR.Length);
             for (int i = 0; i < segR.Length; i++)
             {
-                int idx = segmentHideFromEnd ? segR.Length - 1 - i : i;
-                SetRenderer(segR[idx], i >= want); // the first `want` from the hide-end are gone
+                int index = segmentHideFromEnd ? segR.Length - 1 - i : i;
+                SetRenderer(segR[index], i >= want); // the first `want` from the hide-end are gone
             }
         }
 
@@ -413,7 +413,7 @@ namespace TarkovVR.Source.Player.Interactions
                 coverDetached = true;
                 LogStep("[ManualEat] Wrapper (cover) detached to the left hand.");
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] DetachWrapper error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] DetachWrapper error: {exception}"); }
         }
 
         // Drink: the open gesture pops the cap off the container onto a holder in the FREE
@@ -431,7 +431,7 @@ namespace TarkovVR.Source.Player.Interactions
                 capDetached = true;
                 LogStep("[ManualEat] Cap popped to the free hand.");
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] DetachCap error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] DetachCap error: {exception}"); }
         }
 
         // Drink: glue the cap back onto the container at its captured rest offset (the recap
@@ -447,7 +447,7 @@ namespace TarkovVR.Source.Player.Interactions
                 capDetached = false;
                 LogStep("[ManualEat] Cap back on.");
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] ReattachCap error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] ReattachCap error: {exception}"); }
         }
 
         // Pour the hold-crackers into the LEFT hand: move them onto a left-hand holder in
@@ -482,19 +482,19 @@ namespace TarkovVR.Source.Player.Interactions
             SetRenderer(foodR, true);
         }
 
-        private static void SetRenderer(Renderer r, bool on) { if (r != null) r.enabled = on; }
+        private static void SetRenderer(Renderer partRenderer, bool on) { if (partRenderer != null) partRenderer.enabled = on; }
 
-        private static void Save(Transform t, out Transform parent, out Vector3 pos, out Quaternion rot)
+        private static void Save(Transform t, out Transform parent, out Vector3 position, out Quaternion rotation)
         {
-            parent = t.parent; pos = t.localPosition; rot = t.localRotation;
+            parent = t.parent; position = t.localPosition; rotation = t.localRotation;
         }
 
-        private static void Restore(Transform t, Transform parent, Vector3 pos, Quaternion rot)
+        private static void Restore(Transform t, Transform parent, Vector3 position, Quaternion rotation)
         {
             if (t == null) return;
             t.SetParent(parent, false);
-            t.localPosition = pos;
-            t.localRotation = rot;
+            t.localPosition = position;
+            t.localRotation = rotation;
         }
 
         private static Transform FindDeep(Transform root, string name)

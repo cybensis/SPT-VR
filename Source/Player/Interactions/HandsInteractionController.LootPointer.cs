@@ -417,16 +417,16 @@ namespace TarkovVR.Source.Player.Interactions
             float bestPB = pointBlankRange;
             for (int i = 0; i < lootCandidates.Count; i++)
             {
-                LootCand c = lootCandidates[i];
-                if (c.inside && c.dist < bestInside)
+                LootCand candidate = lootCandidates[i];
+                if (candidate.inside && candidate.dist < bestInside)
                 {
-                    bestInside = c.dist;
-                    insideClosest = c.item;
+                    bestInside = candidate.dist;
+                    insideClosest = candidate.item;
                 }
-                else if (c.dist <= bestPB)
+                else if (candidate.dist <= bestPB)
                 {
-                    bestPB = c.dist;
-                    closestPointBlank = c.item;
+                    bestPB = candidate.dist;
+                    closestPointBlank = candidate.item;
                 }
             }
             if (insideClosest != null)
@@ -447,12 +447,12 @@ namespace TarkovVR.Source.Player.Interactions
             float best = float.MaxValue;
             for (int i = 0; i < lootCandidates.Count; i++)
             {
-                LootCand c = lootCandidates[i];
-                float score = c.ang + c.dist * centerDistWeight;
+                LootCand candidate = lootCandidates[i];
+                float score = candidate.ang + candidate.dist * centerDistWeight;
                 if (score < best)
                 {
                     best = score;
-                    main = c.item;
+                    main = candidate.item;
                 }
             }
             return main;
@@ -478,24 +478,24 @@ namespace TarkovVR.Source.Player.Interactions
         // feed one shared dot set (an item pointed by both hands keeps the larger size).
         private void SweepDots()
         {
-            foreach (KeyValuePair<LootItem, DotState> kv in lootDots)
-                kv.Value.active = false;
+            foreach (KeyValuePair<LootItem, DotState> entry in lootDots)
+                entry.Value.active = false;
         }
 
         private void ContributeDots(LootItem main)
         {
             for (int i = 0; i < lootCandidates.Count; i++)
             {
-                LootCand c = lootCandidates[i];
-                if (!lootDots.TryGetValue(c.item, out DotState ds))
+                LootCand candidate = lootCandidates[i];
+                if (!lootDots.TryGetValue(candidate.item, out DotState ds))
                 {
                     ds = new DotState { go = CreateDot(), scale = 0f };
-                    lootDots[c.item] = ds;
+                    lootDots[candidate.item] = ds;
                 }
-                float target = c.item == main ? dotMaxSize : dotMinSize;
+                float target = candidate.item == main ? dotMaxSize : dotMinSize;
                 ds.target = ds.active ? Mathf.Max(ds.target, target) : target;
                 ds.active = true;
-                ds.pos = c.dotPos;
+                ds.pos = candidate.dotPos;
             }
         }
 
@@ -504,13 +504,13 @@ namespace TarkovVR.Source.Player.Interactions
             // Frame-rate-independent ease toward the target size; cull faded-out / dead dots.
             float k = 1f - Mathf.Exp(-dotGrowSpeed * Time.deltaTime);
             lootDotRemove.Clear();
-            foreach (KeyValuePair<LootItem, DotState> kv in lootDots)
+            foreach (KeyValuePair<LootItem, DotState> entry in lootDots)
             {
-                DotState ds = kv.Value;
-                if (kv.Key == null || ds.go == null)
+                DotState ds = entry.Value;
+                if (entry.Key == null || ds.go == null)
                 {
                     if (ds.go != null) Destroy(ds.go);
-                    lootDotRemove.Add(kv.Key);
+                    lootDotRemove.Add(entry.Key);
                     continue;
                 }
 
@@ -519,7 +519,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (!ds.active && ds.scale < 0.0006f)
                 {
                     Destroy(ds.go);
-                    lootDotRemove.Add(kv.Key);
+                    lootDotRemove.Add(entry.Key);
                     continue;
                 }
 
@@ -540,7 +540,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // A collider-less, shadow-less primitive with the always-on-top marker material.
-        private static GameObject CreateMarker(PrimitiveType type, Color c)
+        private static GameObject CreateMarker(PrimitiveType type, Color color)
         {
             GameObject go = GameObject.CreatePrimitive(type);
             go.name = "VRLootGizmo";
@@ -549,23 +549,23 @@ namespace TarkovVR.Source.Player.Interactions
             // Internal-Colored multiplies vertex color by _Color, so paint the mesh white (the
             // primitive meshes have no color channel) or the marker renders black. mf.mesh
             // returns a unique instance, so this doesn't touch the shared primitive mesh.
-            MeshFilter mf = go.GetComponent<MeshFilter>();
-            if (mf != null && mf.mesh != null)
+            MeshFilter meshFilter = go.GetComponent<MeshFilter>();
+            if (meshFilter != null && meshFilter.mesh != null)
             {
-                Mesh mesh = mf.mesh;
+                Mesh mesh = meshFilter.mesh;
                 var cols = new Color[mesh.vertexCount];
                 for (int i = 0; i < cols.Length; i++) cols[i] = Color.white;
                 mesh.colors = cols;
             }
 
-            Renderer r = go.GetComponent<Renderer>();
-            r.shadowCastingMode = ShadowCastingMode.Off;
-            r.receiveShadows = false;
-            r.material = MakeMarkerMaterial(c);
+            Renderer partRenderer = go.GetComponent<Renderer>();
+            partRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            partRenderer.receiveShadows = false;
+            partRenderer.material = MakeMarkerMaterial(color);
             return go;
         }
 
-        private static Material MakeMarkerMaterial(Color c)
+        private static Material MakeMarkerMaterial(Color color)
         {
             // "Hidden/Internal-Colored" is an engine built-in that actually honors _ZTest
             // (Sprites/Default silently ignores it), so ZTest Always = render ON TOP of all
@@ -574,7 +574,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (sh != null)
             {
                 Material m = new Material(sh) { hideFlags = HideFlags.HideAndDontSave };
-                m.SetColor("_Color", c);
+                m.SetColor("_Color", color);
                 m.SetInt("_ZTest", (int)CompareFunction.Always);
                 m.SetInt("_ZWrite", 0);
                 m.SetInt("_Cull", (int)CullMode.Off);
@@ -584,7 +584,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return m;
             }
             Shader s2 = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
-            return new Material(s2) { color = c };
+            return new Material(s2) { color = color };
         }
 
         // True while the off-hand is within foregripBlockDistance of the foregrip trigger, so
@@ -714,9 +714,9 @@ namespace TarkovVR.Source.Player.Interactions
             lastMains[1] = null;
             if (lootDots.Count == 0)
                 return;
-            foreach (KeyValuePair<LootItem, DotState> kv in lootDots)
-                if (kv.Value != null && kv.Value.go != null)
-                    Destroy(kv.Value.go);
+            foreach (KeyValuePair<LootItem, DotState> entry in lootDots)
+                if (entry.Value != null && entry.Value.go != null)
+                    Destroy(entry.Value.go);
             lootDots.Clear();
         }
 
@@ -738,12 +738,12 @@ namespace TarkovVR.Source.Player.Interactions
             coneOriginViz.transform.position = palm;
             coneOriginViz.transform.localScale = Vector3.one * 0.02f;
 
-            Vector3 dir = aim.sqrMagnitude > 1e-6f ? aim : Vector3.forward;
-            coneDirViz.transform.position = palm + dir * (coneRange * 0.5f);
-            coneDirViz.transform.rotation = Quaternion.LookRotation(dir);
+            Vector3 direction = aim.sqrMagnitude > 1e-6f ? aim : Vector3.forward;
+            coneDirViz.transform.position = palm + direction * (coneRange * 0.5f);
+            coneDirViz.transform.rotation = Quaternion.LookRotation(direction);
             coneDirViz.transform.localScale = new Vector3(0.004f, 0.004f, coneRange);
 
-            coneEndViz.transform.position = palm + dir * coneRange;
+            coneEndViz.transform.position = palm + direction * coneRange;
             coneEndViz.transform.localScale = Vector3.one * 0.03f;
         }
 
@@ -955,14 +955,14 @@ namespace TarkovVR.Source.Player.Interactions
             if (handWeightBlend < 0.01f)
                 return; // fully back to the animated pose — stop touching the bones
 
-            for (int f = 0; f < leftFingerJoints.Length; f++)
+            for (int fingerIndex = 0; fingerIndex < leftFingerJoints.Length; fingerIndex++)
             {
-                Transform[] joints = leftFingerJoints[f];
-                float fingerSpread = (leftFingerSpread != null && f < leftFingerSpread.Length)
-                    ? leftFingerSpread[f] * fingerSpreadDeg : 0f;
+                Transform[] joints = leftFingerJoints[fingerIndex];
+                float fingerSpread = (leftFingerSpread != null && fingerIndex < leftFingerSpread.Length)
+                    ? leftFingerSpread[fingerIndex] * fingerSpreadDeg : 0f;
                 // The thumb is flattened like the fingers but gets its OWN flex (it over-curls
                 // toward the palm with the fingers' value).
-                float flexBase = PerFingerFlex(f);
+                float flexBase = PerFingerFlex(fingerIndex);
                 for (int j = 0; j < joints.Length && j < 3; j++) // base, middle AND tip
                 {
                     if (joints[j] == null) continue;
@@ -995,22 +995,22 @@ namespace TarkovVR.Source.Player.Interactions
         private void CaptureRestPose()
         {
             var list = new List<Vector3>();
-            var sb = new System.Text.StringBuilder();
-            sb.Append("[LootPointer] restPoseEuler = new Vector3[] {\n");
-            for (int f = 0; f < leftFingerJoints.Length; f++)
+            var builder = new System.Text.StringBuilder();
+            builder.Append("[LootPointer] restPoseEuler = new Vector3[] {\n");
+            for (int fingerIndex = 0; fingerIndex < leftFingerJoints.Length; fingerIndex++)
             {
-                Transform[] joints = leftFingerJoints[f];
-                bool isThumb = leftFingerIsThumb != null && f < leftFingerIsThumb.Length && leftFingerIsThumb[f];
+                Transform[] joints = leftFingerJoints[fingerIndex];
+                bool isThumb = leftFingerIsThumb != null && fingerIndex < leftFingerIsThumb.Length && leftFingerIsThumb[fingerIndex];
                 for (int j = 0; j < joints.Length && j < 3; j++)
                 {
                     Vector3 e = joints[j] != null ? joints[j].localEulerAngles : Vector3.zero;
                     list.Add(e);
-                    sb.Append($"    new Vector3({e.x:F2}f, {e.y:F2}f, {e.z:F2}f), // {(isThumb ? "thumb" : ("finger" + f))} joint{j}\n");
+                    builder.Append($"    new Vector3({e.x:F2}f, {e.y:F2}f, {e.z:F2}f), // {(isThumb ? "thumb" : ("finger" + fingerIndex))} joint{j}\n");
                 }
             }
-            sb.Append("};");
+            builder.Append("};");
             restPoseEuler = list.ToArray();
-            Plugin.MyLog.LogInfo(sb.ToString());
+            Plugin.MyLog.LogInfo(builder.ToString());
         }
 
         // Live per-joint editing: changing poseEditJoint LOADS that joint's current Euler so you
@@ -1038,15 +1038,15 @@ namespace TarkovVR.Source.Player.Interactions
         private void LogRestPose()
         {
             if (restPoseEuler == null) { Plugin.MyLog.LogInfo("[LootPointer] restPoseEuler is null."); return; }
-            var sb = new System.Text.StringBuilder();
-            sb.Append("[LootPointer] restPoseEuler = new Vector3[] {\n");
+            var builder = new System.Text.StringBuilder();
+            builder.Append("[LootPointer] restPoseEuler = new Vector3[] {\n");
             for (int i = 0; i < restPoseEuler.Length; i++)
             {
                 Vector3 e = restPoseEuler[i];
-                sb.Append($"    new Vector3({e.x:F2}f, {e.y:F2}f, {e.z:F2}f), // index {i}\n");
+                builder.Append($"    new Vector3({e.x:F2}f, {e.y:F2}f, {e.z:F2}f), // index {i}\n");
             }
-            sb.Append("};");
-            Plugin.MyLog.LogInfo(sb.ToString());
+            builder.Append("};");
+            Plugin.MyLog.LogInfo(builder.ToString());
         }
 
         // Per-finger flex delta (finger index f; 0 = thumb), eased between the idle and
@@ -1056,10 +1056,10 @@ namespace TarkovVR.Source.Player.Interactions
             return fingerFlexDeg != null && fingerIndex < fingerFlexDeg.Length ? fingerFlexDeg[fingerIndex] : 0f;
         }
 
-        private float PerFingerFlex(int f)
+        private float PerFingerFlex(int fingerIndex)
         {
-            float idle = (fingerFlexDeg != null && f < fingerFlexDeg.Length) ? fingerFlexDeg[f] : 0f;
-            float ready = (fingerReadyFlexDeg != null && f < fingerReadyFlexDeg.Length) ? fingerReadyFlexDeg[f] : idle;
+            float idle = (fingerFlexDeg != null && fingerIndex < fingerFlexDeg.Length) ? fingerFlexDeg[fingerIndex] : 0f;
+            float ready = (fingerReadyFlexDeg != null && fingerIndex < fingerReadyFlexDeg.Length) ? fingerReadyFlexDeg[fingerIndex] : idle;
             return Mathf.Lerp(idle, ready, flexProgress);
         }
 
@@ -1072,20 +1072,20 @@ namespace TarkovVR.Source.Player.Interactions
         // (off on the mirrored pose: it IS the look); the loot-dot "ready" curl (its move from idle) shows either way.
         private void ReplayRestPose(Vector3[] basePose, bool staticDeltas)
         {
-            int idx = 0;
-            for (int f = 0; f < leftFingerJoints.Length; f++)
+            int index = 0;
+            for (int fingerIndex = 0; fingerIndex < leftFingerJoints.Length; fingerIndex++)
             {
-                Transform[] joints = leftFingerJoints[f];
-                float fingerSpread = staticDeltas && leftFingerSpread != null && f < leftFingerSpread.Length
-                    ? leftFingerSpread[f] * fingerSpreadDeg : 0f;
-                float flexBase = staticDeltas ? PerFingerFlex(f) : PerFingerFlex(f) - IdleFlex(f);
-                for (int j = 0; j < joints.Length && j < 3; j++, idx++)
+                Transform[] joints = leftFingerJoints[fingerIndex];
+                float fingerSpread = staticDeltas && leftFingerSpread != null && fingerIndex < leftFingerSpread.Length
+                    ? leftFingerSpread[fingerIndex] * fingerSpreadDeg : 0f;
+                float flexBase = staticDeltas ? PerFingerFlex(fingerIndex) : PerFingerFlex(fingerIndex) - IdleFlex(fingerIndex);
+                for (int j = 0; j < joints.Length && j < 3; j++, index++)
                 {
-                    if (joints[j] == null || idx >= basePose.Length) continue;
+                    if (joints[j] == null || index >= basePose.Length) continue;
                     Quaternion animated = RecoverAnimated(joints[j]);
                     float flex = flexBase * Mathf.Pow(midJointScale, j) * flexSign;
                     float sp = (j == 0) ? fingerSpread : 0f;
-                    Quaternion target = Quaternion.Euler(basePose[idx])
+                    Quaternion target = Quaternion.Euler(basePose[index])
                         * Quaternion.AngleAxis(flex, Vector3.forward)
                         * Quaternion.AngleAxis(sp, spreadAxis);
                     Quaternion outRot = Quaternion.Slerp(animated, target, handWeightBlend);

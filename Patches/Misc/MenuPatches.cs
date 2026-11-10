@@ -758,9 +758,9 @@ namespace TarkovVR.Patches.Misc
             }
             itemUiContext.InitSpecificationPanel(__instance._itemSpecificationPanel, __instance._itemContext, contextInteractions);
             __instance.UpdateTag();
-            System.Random rnd = new System.Random();
+            System.Random random = new System.Random();
             __instance.transform.position = new Vector3(0f, -999.9333f, 1f);
-            __instance.transform.localPosition = new Vector3(rnd.Next(-200, 201), rnd.Next(-200, 201), 0f);
+            __instance.transform.localPosition = new Vector3(random.Next(-200, 201), random.Next(-200, 201), 0f);
             __instance._itemContext.OnCloseDependentWindow += __instance.Close;
             //CorrectPosition();
             __instance.WaitOneFrame(delegate
@@ -1029,9 +1029,9 @@ namespace TarkovVR.Patches.Misc
             __instance.WaitOneFrame(delegate
             {
                 //CorrectPosition();
-                System.Random rnd = new System.Random();
+                System.Random random = new System.Random();
                 __instance.transform.position = new Vector3(0f, -999.9333f, 1f);
-                __instance.transform.localPosition = new Vector3(rnd.Next(-200, 201), rnd.Next(-200, 201), 0f);
+                __instance.transform.localPosition = new Vector3(random.Next(-200, 201), random.Next(-200, 201), 0f);
             });
             __result = __instance.WindowContext;
             return false;
@@ -1316,14 +1316,14 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(EditBuildScreen), nameof(EditBuildScreen.Show), new Type[] { typeof(EditBuildScreenController) })]
         private static void PositionWeaponPreviewEditBuild(EditBuildScreen __instance)
         {
-            WeaponPreview wp = __instance._weaponPreview;
-            Transform parent = wp.Rotator?.parent;
-            if (wp != null && parent != null)
+            WeaponPreview weaponPreview = __instance._weaponPreview;
+            Transform parent = weaponPreview.Rotator?.parent;
+            if (weaponPreview != null && parent != null)
             {
-                Vector3 delta = wp.transform.position - parent.position;
+                Vector3 delta = weaponPreview.transform.position - parent.position;
 
-                parent.position = wp.transform.position;
-                parent.rotation = wp.transform.rotation;
+                parent.position = weaponPreview.transform.position;
+                parent.rotation = weaponPreview.transform.rotation;
                 parent.localScale = Vector3.one * 1.5f;
 
                 if (Camera.main != null)
@@ -1335,14 +1335,14 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(WeaponModdingScreen), nameof(WeaponModdingScreen.Show), new Type[] { typeof(WeaponModdingScreenController) })]
         private static void PositionWeaponPreviewModding(WeaponModdingScreen __instance)
         {
-            WeaponPreview wp = __instance._weaponPreview;
-            Transform parent = wp.Rotator?.parent;
-            if (wp != null && parent != null)
+            WeaponPreview weaponPreview = __instance._weaponPreview;
+            Transform parent = weaponPreview.Rotator?.parent;
+            if (weaponPreview != null && parent != null)
             {
-                Vector3 delta = wp.transform.position - parent.position;
+                Vector3 delta = weaponPreview.transform.position - parent.position;
 
-                parent.position = wp.transform.position;
-                parent.rotation = wp.transform.rotation;
+                parent.position = weaponPreview.transform.position;
+                parent.rotation = weaponPreview.transform.rotation;
                 parent.localScale = Vector3.one * 1.5f;
 
                 if (Camera.main != null)
@@ -1363,19 +1363,19 @@ namespace TarkovVR.Patches.Misc
             DragTrigger dt = __instance.GetComponent<DragTrigger>();
             if (dt == null) return;
 
-            WeaponPreview wp = __instance._weaponPreview;
-            if (wp == null) return;
+            WeaponPreview weaponPreview = __instance._weaponPreview;
+            if (weaponPreview == null) return;
 
             Vector3 lastPos = Vector3.zero;
-            dt.onBeginDrag += (e) => { lastPos = vrUiInteracter.uiPointerPos; };
-            dt.onDrag += (e) =>
+            dt.onBeginDrag += (eventData) => { lastPos = vrUiInteracter.uiPointerPos; };
+            dt.onDrag += (eventData) =>
             {
                 Vector3 current = vrUiInteracter.uiPointerPos;
                 Vector3 lastLocal = VRGlobals.preloaderUi.transform.InverseTransformPoint(lastPos);
                 Vector3 currentLocal = VRGlobals.preloaderUi.transform.InverseTransformPoint(current);
                 float yRot = (lastLocal.y - currentLocal.y) * -1;
                 float xRot = (lastLocal.x - currentLocal.x) * -1;
-                wp.Rotate(xRot, yRot, 0f, 0f);
+                weaponPreview.Rotate(xRot, yRot, 0f, 0f);
                 lastPos = current;
             };
         }

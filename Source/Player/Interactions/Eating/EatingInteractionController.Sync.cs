@@ -47,21 +47,21 @@ namespace TarkovVR.Source.Player.Interactions
             // food's eat can live on any of them; debugEatSync logs them so a missing one is visible.
             try
             {
-                var fa = controller?.FirearmsAnimator;
-                if (fa != null)
+                var firearmsAnimator = controller?.FirearmsAnimator;
+                if (firearmsAnimator != null)
                 {
-                    int layerCount = Mathf.Min(fa._animatorLayersCount, 8);
+                    int layerCount = Mathf.Min(firearmsAnimator._animatorLayersCount, 8);
                     for (int i = 0; i < layerCount; i++)
                     {
-                        var si = fa.Animator.GetCurrentAnimatorStateInfo(i);
+                        var si = firearmsAnimator.Animator.GetCurrentAnimatorStateInfo(i);
                         syncAnimHashes.Add(si.fullPathHash);
                         syncAnimTimes.Add(si.normalizedTime);
                     }
                     if (debugEatSync && Time.frameCount % 60 == 0)
                     {
-                        var sb = new System.Text.StringBuilder("[ManualEat] food anim layers: ");
-                        for (int i = 0; i < layerCount; i++) sb.Append($"L{i}={syncAnimHashes[i]}@{syncAnimTimes[i]:F2} ");
-                        Plugin.MyLog.LogInfo(sb.ToString());
+                        var builder = new System.Text.StringBuilder("[ManualEat] food anim layers: ");
+                        for (int i = 0; i < layerCount; i++) builder.Append($"L{i}={syncAnimHashes[i]}@{syncAnimTimes[i]:F2} ");
+                        Plugin.MyLog.LogInfo(builder.ToString());
                     }
                 }
             }

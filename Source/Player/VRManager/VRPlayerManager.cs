@@ -1041,8 +1041,8 @@ namespace TarkovVR.Source.Player.VRManager
 
                 if (smoothingFactor != 50)
                 {
-                    Vector3 pos = rawRightHand.transform.position - (inertiaVelocity / inertiaDamping);
-                    rawRightHand.transform.position = Vector3.Slerp(pos, RightHand.transform.position, smoothingFactor * Time.deltaTime);
+                    Vector3 position = rawRightHand.transform.position - (inertiaVelocity / inertiaDamping);
+                    rawRightHand.transform.position = Vector3.Slerp(position, RightHand.transform.position, smoothingFactor * Time.deltaTime);
                 }
                 else
                 {

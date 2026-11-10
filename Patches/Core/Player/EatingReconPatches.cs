@@ -128,7 +128,7 @@ namespace TarkovVR.Patches.Core.Player
                 BuildGripTracks(instance);
                 SetupHandPathCapture(instance);
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[FoodRecon] OnSpawn error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] OnSpawn error: {exception}"); }
         }
 
         // Guess the archetype + prop names from the tree and print a paste-ready factory
@@ -179,7 +179,7 @@ namespace TarkovVR.Patches.Core.Player
 
                 Plugin.MyLog.LogInfo("[FoodRecon] Suggested Defs entry (paste, then tune holders + DumpFoodDef):\n            " + line);
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[FoodRecon] SuggestEntry error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] SuggestEntry error: {exception}"); }
         }
 
         // --- Auto grip-candidate discovery ---------------------------------------
@@ -221,7 +221,7 @@ namespace TarkovVR.Patches.Core.Player
                 }
                 Plugin.MyLog.LogInfo($"[FoodRecon][GRIP] auto-tracking {props.Count} props vs both palms: {names}");
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[FoodRecon] BuildGripTracks error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] BuildGripTracks error: {exception}"); }
         }
 
         private static void CollectGripCandidates(Transform t, List<Transform> into)
@@ -340,11 +340,11 @@ namespace TarkovVR.Patches.Core.Player
             // State transitions (arms layer 1 — the eat state machine).
             try
             {
-                var st = player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                if (st.fullPathHash != lastState)
+                var stateInfo = player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+                if (stateInfo.fullPathHash != lastState)
                 {
-                    lastState = st.fullPathHash;
-                    Plugin.MyLog.LogInfo($"[FoodRecon][STATE] -> {st.fullPathHash} (t={st.normalizedTime:F2})");
+                    lastState = stateInfo.fullPathHash;
+                    Plugin.MyLog.LogInfo($"[FoodRecon][STATE] -> {stateInfo.fullPathHash} (t={stateInfo.normalizedTime:F2})");
                 }
             }
             catch { }
@@ -382,7 +382,7 @@ namespace TarkovVR.Patches.Core.Player
                 pathPalmR = FindDeep(root, "Base HumanRPalm");
                 if (pathRoot == null || (pathPalmL == null && pathPalmR == null)) pathRoot = null;
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[FoodRecon] SetupHandPathCapture error: {ex}"); pathRoot = null; }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] SetupHandPathCapture error: {exception}"); pathRoot = null; }
         }
 
         // Sample both palms vs the item root while the arms are in the open state. Gated to
@@ -394,11 +394,11 @@ namespace TarkovVR.Patches.Core.Player
             if (pathRoot == null || EatingInteractionController.ManualActive) return;
             try
             {
-                var st = player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                if (st.fullPathHash == pathOpenHash)
-                    SamplePathFrame(st.normalizedTime, pathTimes, pathPosL, pathRotL, pathPosR, pathRotR);
-                else if (pathReachHash != 0 && st.fullPathHash == pathReachHash)
-                    SamplePathFrame(st.normalizedTime, reachTimes, reachPosL, reachRotL, reachPosR, reachRotR);
+                var stateInfo = player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+                if (stateInfo.fullPathHash == pathOpenHash)
+                    SamplePathFrame(stateInfo.normalizedTime, pathTimes, pathPosL, pathRotL, pathPosR, pathRotR);
+                else if (pathReachHash != 0 && stateInfo.fullPathHash == pathReachHash)
+                    SamplePathFrame(stateInfo.normalizedTime, reachTimes, reachPosL, reachRotL, reachPosR, reachRotR);
             }
             catch { }
         }
@@ -415,10 +415,10 @@ namespace TarkovVR.Patches.Core.Player
             rotR.Add(pathPalmR != null ? Quaternion.Inverse(pathRoot.rotation) * pathPalmR.rotation : Quaternion.identity);
         }
 
-        private static float PathTravel(List<Vector3> pos, int start)
+        private static float PathTravel(List<Vector3> positions, int start)
         {
             float d = 0f;
-            for (int i = start + 1; i < pos.Count; i++) d += (pos[i] - pos[i - 1]).magnitude;
+            for (int i = start + 1; i < positions.Count; i++) d += (positions[i] - positions[i - 1]).magnitude;
             return d;
         }
 
@@ -431,7 +431,7 @@ namespace TarkovVR.Patches.Core.Player
                 if (pathReachHash != 0) // ReachBag: the STATE_USE reach segment too
                     EmitPath("ReachPath", "reach-hand (STATE_USE)", reachTimes, reachPosL, reachRotL, reachPosR, reachRotR);
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[FoodRecon] ReportHandPath error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] ReportHandPath error: {exception}"); }
             finally
             {
                 pathRoot = pathPalmL = pathPalmR = null;
@@ -454,11 +454,11 @@ namespace TarkovVR.Patches.Core.Player
             }
             float travL = PathTravel(posL, 0), travR = PathTravel(posR, 0);
             bool useR = travR >= travL;
-            List<Vector3> pos = useR ? posR : posL;
-            List<Quaternion> rot = useR ? rotR : rotL;
+            List<Vector3> positions = useR ? posR : posL;
+            List<Quaternion> rotation = useR ? rotR : rotL;
 
             int start = 0;
-            while (start < times.Count && pos[start].magnitude > handPathMaxDist) start++;
+            while (start < times.Count && positions[start].magnitude > handPathMaxDist) start++;
             if (times.Count - start < 5)
             {
                 Plugin.MyLog.LogWarning($"[FoodRecon][HANDPATH] the {what} palm never came within {handPathMaxDist}m of the item root — no path (raise handPathMaxDist?).");
@@ -468,11 +468,11 @@ namespace TarkovVR.Patches.Core.Player
             // Resample to evenly spaced keys over the kept t-range; quats sign-aligned
             // key-to-key so the replay's Slerp takes the short way.
             int keys = Mathf.Max(2, handPathKeys);
-            var sb = new StringBuilder();
-            sb.AppendLine($"[FoodRecon][HANDPATH] {what} path: {(useR ? "R" : "L")} palm vs '{pathRoot.name}', "
+            var builder = new StringBuilder();
+            builder.AppendLine($"[FoodRecon][HANDPATH] {what} path: {(useR ? "R" : "L")} palm vs '{pathRoot.name}', "
                         + $"{keys} keys, t {times[start]:0.###}->{times[times.Count - 1]:0.###} "
                         + $"(travel L {travL:0.##}m / R {travR:0.##}m) — wrap the food's def line:");
-            sb.Append($"            {wrapper}(<def>");
+            builder.Append($"            {wrapper}(<def>");
             Quaternion prevQ = Quaternion.identity; bool havePrev = false;
             for (int k = 0; k < keys; k++)
             {
@@ -480,21 +480,21 @@ namespace TarkovVR.Patches.Core.Player
                 int hi = start;
                 while (hi < times.Count && times[hi] < t) hi++;
                 Vector3 sp; Quaternion sq;
-                if (hi <= start) { sp = pos[start]; sq = rot[start]; }
-                else if (hi >= times.Count) { sp = pos[times.Count - 1]; sq = rot[times.Count - 1]; }
+                if (hi <= start) { sp = positions[start]; sq = rotation[start]; }
+                else if (hi >= times.Count) { sp = positions[times.Count - 1]; sq = rotation[times.Count - 1]; }
                 else
                 {
                     float t0 = times[hi - 1], t1 = times[hi];
                     float w = t1 > t0 ? (t - t0) / (t1 - t0) : 1f;
-                    sp = Vector3.Lerp(pos[hi - 1], pos[hi], w);
-                    sq = Quaternion.Slerp(rot[hi - 1], rot[hi], w);
+                    sp = Vector3.Lerp(positions[hi - 1], positions[hi], w);
+                    sq = Quaternion.Slerp(rotation[hi - 1], rotation[hi], w);
                 }
                 if (havePrev && Quaternion.Dot(sq, prevQ) < 0f) sq = new Quaternion(-sq.x, -sq.y, -sq.z, -sq.w);
                 prevQ = sq; havePrev = true;
-                sb.Append($",\n                {t:0.###}f, {sp.x:0.###}f, {sp.y:0.###}f, {sp.z:0.###}f, {sq.x:0.####}f, {sq.y:0.####}f, {sq.z:0.####}f, {sq.w:0.####}f");
+                builder.Append($",\n                {t:0.###}f, {sp.x:0.###}f, {sp.y:0.###}f, {sp.z:0.###}f, {sq.x:0.####}f, {sq.y:0.####}f, {sq.z:0.####}f, {sq.w:0.####}f");
             }
-            sb.Append("),");
-            Plugin.MyLog.LogInfo(sb.ToString());
+            builder.Append("),");
+            Plugin.MyLog.LogInfo(builder.ToString());
         }
 
         // Logs the manual pair's raw palm->prop pose (throttled) — kept for spot-checking.
@@ -506,7 +506,7 @@ namespace TarkovVR.Patches.Core.Player
                 Vector3 r = (Quaternion.Inverse(manualPalm.rotation) * manualProp.rotation).eulerAngles;
                 Plugin.MyLog.LogInfo($"[FoodRecon][GRIP] {gripPropName} in {gripPalmName}: pos=({p.x:F4},{p.y:F4},{p.z:F4}) rot=({r.x:F2},{r.y:F2},{r.z:F2})");
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[FoodRecon] LogGrip error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] LogGrip error: {exception}"); }
         }
 
         // Per-frame, per pair: track the longest run where the grip barely moves (the prop
@@ -516,40 +516,40 @@ namespace TarkovVR.Patches.Core.Player
         {
             for (int i = 0; i < gripTracks.Count; i++)
             {
-                GripTrack g = gripTracks[i];
+                GripTrack track = gripTracks[i];
                 try
                 {
-                    if (g.prop == null || g.palm == null) continue;
-                    Vector3 p = g.palm.InverseTransformPoint(g.prop.position);
-                    Quaternion q = Quaternion.Inverse(g.palm.rotation) * g.prop.rotation;
-                    if (p.magnitude > gripStableMaxDist) { g.runCount = 0; g.haveLast = false; continue; }
+                    if (track.prop == null || track.palm == null) continue;
+                    Vector3 p = track.palm.InverseTransformPoint(track.prop.position);
+                    Quaternion q = Quaternion.Inverse(track.palm.rotation) * track.prop.rotation;
+                    if (p.magnitude > gripStableMaxDist) { track.runCount = 0; track.haveLast = false; continue; }
 
-                    if (g.haveLast &&
-                        (p - g.lastPos).magnitude <= gripStablePosTol &&
-                        Quaternion.Angle(q, g.lastRot) <= gripStableAngTol)
+                    if (track.haveLast &&
+                        (p - track.lastPos).magnitude <= gripStablePosTol &&
+                        Quaternion.Angle(q, track.lastRot) <= gripStableAngTol)
                     {
-                        g.runCount++;
-                        g.runPosSum += p;
+                        track.runCount++;
+                        track.runPosSum += p;
                         Vector4 v = new Vector4(q.x, q.y, q.z, q.w);
-                        Vector4 first = new Vector4(g.runFirstRot.x, g.runFirstRot.y, g.runFirstRot.z, g.runFirstRot.w);
+                        Vector4 first = new Vector4(track.runFirstRot.x, track.runFirstRot.y, track.runFirstRot.z, track.runFirstRot.w);
                         if (Vector4.Dot(v, first) < 0f) v = -v; // sign-align for quaternion averaging
-                        g.runRotSum += v;
+                        track.runRotSum += v;
                     }
                     else
                     {
-                        g.runCount = 1;
-                        g.runPosSum = p;
-                        g.runFirstRot = q;
-                        g.runRotSum = new Vector4(q.x, q.y, q.z, q.w);
+                        track.runCount = 1;
+                        track.runPosSum = p;
+                        track.runFirstRot = q;
+                        track.runRotSum = new Vector4(q.x, q.y, q.z, q.w);
                     }
-                    g.lastPos = p; g.lastRot = q; g.haveLast = true;
+                    track.lastPos = p; track.lastRot = q; track.haveLast = true;
 
-                    if (g.runCount > g.bestCount)
+                    if (track.runCount > track.bestCount)
                     {
-                        g.bestCount = g.runCount;
-                        g.bestPos = g.runPosSum / g.runCount;
-                        Vector4 s = g.runRotSum; s.Normalize();
-                        g.bestRot = new Quaternion(s.x, s.y, s.z, s.w).eulerAngles;
+                        track.bestCount = track.runCount;
+                        track.bestPos = track.runPosSum / track.runCount;
+                        Vector4 s = track.runRotSum; s.Normalize();
+                        track.bestRot = new Quaternion(s.x, s.y, s.z, s.w).eulerAngles;
                     }
                 }
                 catch { }
@@ -568,8 +568,8 @@ namespace TarkovVR.Patches.Core.Player
             try
             {
                 var ok = new List<GripTrack>();
-                foreach (GripTrack g in gripTracks)
-                    if (g.bestCount >= gripStableMinRun) ok.Add(g);
+                foreach (GripTrack track in gripTracks)
+                    if (track.bestCount >= gripStableMinRun) ok.Add(track);
                 ok.Sort((a, b) => b.bestCount.CompareTo(a.bestCount));
 
                 var qualified = new HashSet<string>();
@@ -578,19 +578,19 @@ namespace TarkovVR.Patches.Core.Player
                 foreach (GripTrack g in gripTracks)
                     if (!qualified.Contains(g.propName) && !missed.Contains(g.propName)) missed.Add(g.propName);
 
-                var sb = new StringBuilder();
-                sb.AppendLine("[FoodRecon][GRIP-AVG] ===== stable in-hand grips (longest still runs, both palms) =====");
+                var builder = new StringBuilder();
+                builder.AppendLine("[FoodRecon][GRIP-AVG] ===== stable in-hand grips (longest still runs, both palms) =====");
                 foreach (GripTrack g in ok)
-                    sb.AppendLine($"[FoodRecon][GRIP-AVG] {g.propName,-24} in {g.palmLabel} ({g.bestCount,4}f):  " +
+                    builder.AppendLine($"[FoodRecon][GRIP-AVG] {g.propName,-24} in {g.palmLabel} ({g.bestCount,4}f):  " +
                                   $"pos: V({g.bestPos.x:0.###}f, {g.bestPos.y:0.###}f, {g.bestPos.z:0.###}f)  " +
                                   $"rot: V({g.bestRot.x:0.#}f, {g.bestRot.y:0.#}f, {g.bestRot.z:0.#}f)");
                 if (ok.Count == 0)
-                    sb.AppendLine($"[FoodRecon][GRIP-AVG] nothing held still within {gripStableMaxDist}m of a palm — raise gripStableMaxDist to force values.");
+                    builder.AppendLine($"[FoodRecon][GRIP-AVG] nothing held still within {gripStableMaxDist}m of a palm — raise gripStableMaxDist to force values.");
                 if (missed.Count > 0)
-                    sb.AppendLine($"[FoodRecon][GRIP-AVG] no stable run: {string.Join(", ", missed.ToArray())} (SkinnedMeshRenderer phantom or never held — see [TREE]).");
-                Plugin.MyLog.LogInfo(sb.ToString());
+                    builder.AppendLine($"[FoodRecon][GRIP-AVG] no stable run: {string.Join(", ", missed.ToArray())} (SkinnedMeshRenderer phantom or never held — see [TREE]).");
+                Plugin.MyLog.LogInfo(builder.ToString());
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[FoodRecon] ReportStableGrips error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] ReportStableGrips error: {exception}"); }
             gripTracks.Clear();
         }
 
@@ -612,28 +612,28 @@ namespace TarkovVR.Patches.Core.Player
             try
             {
                 if (instance._controllerObject == null) return;
-                var sb = new StringBuilder();
-                sb.AppendLine($"[FoodRecon][TREE] under {instance._controllerObject.name}:");
-                DumpNode(instance._controllerObject.transform, 0, sb);
-                Plugin.MyLog.LogInfo(sb.ToString());
+                var builder = new StringBuilder();
+                builder.AppendLine($"[FoodRecon][TREE] under {instance._controllerObject.name}:");
+                DumpNode(instance._controllerObject.transform, 0, builder);
+                Plugin.MyLog.LogInfo(builder.ToString());
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[FoodRecon] DumpTree error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[FoodRecon] DumpTree error: {exception}"); }
         }
 
-        private static void DumpNode(Transform t, int depth, StringBuilder sb)
+        private static void DumpNode(Transform t, int depth, StringBuilder builder)
         {
             string indent = new string(' ', depth * 2);
             string extra = "";
-            Renderer r = t.GetComponent<Renderer>();
-            if (r != null)
+            Renderer partRenderer = t.GetComponent<Renderer>();
+            if (partRenderer != null)
             {
                 string mesh = "?";
-                if (r is SkinnedMeshRenderer smr) mesh = smr.sharedMesh != null ? smr.sharedMesh.name : "null";
-                else { MeshFilter mf = t.GetComponent<MeshFilter>(); mesh = mf != null && mf.sharedMesh != null ? mf.sharedMesh.name : "null"; }
-                extra = $"   <{r.GetType().Name} en={(r.enabled ? 1 : 0)} act={(r.gameObject.activeInHierarchy ? 1 : 0)} mesh='{mesh}'>";
+                if (partRenderer is SkinnedMeshRenderer smr) mesh = smr.sharedMesh != null ? smr.sharedMesh.name : "null";
+                else { MeshFilter meshFilter = t.GetComponent<MeshFilter>(); mesh = meshFilter != null && meshFilter.sharedMesh != null ? meshFilter.sharedMesh.name : "null"; }
+                extra = $"   <{partRenderer.GetType().Name} en={(partRenderer.enabled ? 1 : 0)} act={(partRenderer.gameObject.activeInHierarchy ? 1 : 0)} mesh='{mesh}'>";
             }
-            sb.AppendLine($"{indent}{t.name}{extra}");
-            for (int i = 0; i < t.childCount; i++) DumpNode(t.GetChild(i), depth + 1, sb);
+            builder.AppendLine($"{indent}{t.name}{extra}");
+            for (int i = 0; i < t.childCount; i++) DumpNode(t.GetChild(i), depth + 1, builder);
         }
 
         private static Transform FindDeep(Transform root, string name)

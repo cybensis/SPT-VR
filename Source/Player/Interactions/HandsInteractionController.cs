@@ -471,10 +471,10 @@ namespace TarkovVR.Source.Player.Interactions
         private void CleanupCache()
         {
             var keysToRemove = new List<Collider>();
-            foreach (var kvp in interactableCache)
+            foreach (var entry in interactableCache)
             {
-                if (kvp.Key == null)
-                    keysToRemove.Add(kvp.Key);
+                if (entry.Key == null)
+                    keysToRemove.Add(entry.Key);
             }
 
             foreach (var key in keysToRemove)
@@ -1048,9 +1048,9 @@ namespace TarkovVR.Source.Player.Interactions
                     if (Physics.ComputePenetration(
                         heldItem._boundCollider, result, rotation,
                         other, other.transform.position, other.transform.rotation,
-                        out Vector3 dir, out float dist))
+                        out Vector3 direction, out float dist))
                     {
-                        totalPush += dir * dist;
+                        totalPush += direction * dist;
                         penetrated = true;
                     }
                 }
@@ -1264,12 +1264,12 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 try
                 {
-                    Rigidbody rb = dropped.GetComponent<Rigidbody>();
-                    if (rb != null)
+                    Rigidbody body = dropped.GetComponent<Rigidbody>();
+                    if (body != null)
                     {
-                        rb.isKinematic = false;
-                        rb.useGravity = true;
-                        rb.detectCollisions = true;
+                        body.isKinematic = false;
+                        body.useGravity = true;
+                        body.detectCollisions = true;
                     }
                     dropped.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
                     // heldItem stays set THROUGH DropObject so its method_3 doesn't start the
@@ -1330,11 +1330,11 @@ namespace TarkovVR.Source.Player.Interactions
                     // Non-kinematic so the new owner's ApplyNetPacket (which sets velocity) is
                     // valid; gravity off so it can't fall out from under their hand while they
                     // broadcast a HELD pose (FIKASupport re-enables gravity on motion/drop/Done).
-                    Rigidbody rb = given.GetComponent<Rigidbody>();
-                    if (rb != null)
+                    Rigidbody body = given.GetComponent<Rigidbody>();
+                    if (body != null)
                     {
-                        rb.isKinematic = false;
-                        rb.useGravity = false;
+                        body.isKinematic = false;
+                        body.useGravity = false;
                     }
                     given.transform.SetParent(cachedOriginalParent, worldPositionStays: true);
                 }

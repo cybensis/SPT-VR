@@ -162,9 +162,9 @@ namespace TarkovVR.ModSupport.FIKA
                 if (isFirearm && local.IsSprintEnabled)
                     return;
                 lastSendTime = Time.time;
-                Transform wr = hc.WeaponRoot;
-                Vector3 wPos = chest.InverseTransformPoint(wr.position);
-                Quaternion wRot = Quaternion.Inverse(chest.rotation) * wr.rotation;
+                Transform weaponRoot = hc.WeaponRoot;
+                Vector3 wPos = chest.InverseTransformPoint(weaponRoot.position);
+                Quaternion wRot = Quaternion.Inverse(chest.rotation) * weaponRoot.rotation;
                 bool leftOnGrip = isFirearm && rig.isSupporting;
                 Vector3 lPos = Vector3.zero; Quaternion lRot = Quaternion.identity;
                 if (rig.LeftHand != null)

@@ -38,14 +38,14 @@ namespace TarkovVR.ModSupport.WeaponCustomizer
             if (!_modScreenAtStart.TryGetValue(__instance, out Vector2 modScreen)) return;
             if (!_pressHitAtStart.TryGetValue(__instance, out Vector3 pressHit)) return;
 
-            Camera cam = __instance._viewporter?.TargetCamera;
-            if (cam == null || MenuPatches.vrUiInteracter == null) return;
+            Camera camera = __instance._viewporter?.TargetCamera;
+            if (camera == null || MenuPatches.vrUiInteracter == null) return;
 
             Vector3 currentHit = MenuPatches.vrUiInteracter.uiPointerPos;
             Vector3 scaledHit = pressHit + (currentHit - pressHit) * VR_DRAG_SENSITIVITY;
 
-            Vector2 pressScreen = cam.WorldToScreenPoint(pressHit);
-            Vector2 scaledScreen = cam.WorldToScreenPoint(scaledHit);
+            Vector2 pressScreen = camera.WorldToScreenPoint(pressHit);
+            Vector2 scaledScreen = camera.WorldToScreenPoint(scaledHit);
 
             eventData.position = modScreen + (scaledScreen - pressScreen);
         }

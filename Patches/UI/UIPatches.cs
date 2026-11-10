@@ -400,9 +400,9 @@ namespace TarkovVR.Patches.UI
                     manager.positionTransitUi = false;
                 }
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"Error in SetTransmitInteractionMenuActive: {ex.Message}");
+                Plugin.MyLog.LogError($"Error in SetTransmitInteractionMenuActive: {exception.Message}");
             }
         }
 
@@ -749,8 +749,8 @@ namespace TarkovVR.Patches.UI
             
             else if (interactableObject is LootItem lootItem)
             {
-                var hic = VRGlobals.handsInteractionController;
-                bool isHeld = hic != null && lootItem != null && hic.heldItem == lootItem;
+                var hands = VRGlobals.handsInteractionController;
+                bool isHeld = hands != null && lootItem != null && hands.heldItem == lootItem;
                 if (lootItem.Item == null)
                 {
                     interactableObject = null;
@@ -764,7 +764,7 @@ namespace TarkovVR.Patches.UI
                     if (!isHeld && VRSettings.GetDisableCorpseContextMenu())
                         interactableObject = null;
                 }
-                else if (!isHeld && (HandsInteractionController.suppressWorldLootMenu || (hic != null && hic.heldItem != null)))
+                else if (!isHeld && (HandsInteractionController.suppressWorldLootMenu || (hands != null && hands.heldItem != null)))
                 {
                     interactableObject = null;
                 }
@@ -868,8 +868,8 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(InteractionContextHelper), "smethod_10")]
         private static bool RerouteHeldItemTake(Item rootItem)
         {
-            var hic = VRGlobals.handsInteractionController;
-            if (hic != null && hic.TryStowHeldItem(rootItem))
+            var hands = VRGlobals.handsInteractionController;
+            if (hands != null && hands.TryStowHeldItem(rootItem))
                 return false; // we own this Take now — skip the native animation + transaction
             return true;
         }
@@ -1390,12 +1390,12 @@ namespace TarkovVR.Patches.UI
                 return false;
             }
 
-            var hic = VRGlobals.handsInteractionController;
-            if (hic == null || hic.heldItem == null)
+            var hands = VRGlobals.handsInteractionController;
+            if (hands == null || hands.heldItem == null)
                 return true; // not holding — normal interaction menu behavior
 
             // Holding an item: allow EFT context menu only for the item you are holding, block it for everything else (doors, containers, corpses, etc)
-            if (player != null && player.InteractableObject is LootItem looked && looked == hic.heldItem)
+            if (player != null && player.InteractableObject is LootItem looked && looked == hands.heldItem)
                 return true;
 
             player?.GetComponent<GamePlayerOwner>()?.ClearInteractionState();

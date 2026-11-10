@@ -276,13 +276,13 @@ namespace TarkovVR.Patches.Visuals
             {
                 __instance._resampledColorTargetHDR[i] = GetFromPoolOrCreate(
                     width, height, 0, format, $"SSAAPropagator{i}HDR",
-                    rt => {
-                        rt.enableRandomWrite = true;
-                        rt.filterMode = VRGlobals.upscalingMultiplier > 1.0f ? FilterMode.Point : FilterMode.Bilinear;
-                        rt.wrapMode = TextureWrapMode.Clamp;
-                        rt.useMipMap = false;
-                        rt.autoGenerateMips = false;
-                        rt.anisoLevel = 0;
+                    renderTexture => {
+                        renderTexture.enableRandomWrite = true;
+                        renderTexture.filterMode = VRGlobals.upscalingMultiplier > 1.0f ? FilterMode.Point : FilterMode.Bilinear;
+                        renderTexture.wrapMode = TextureWrapMode.Clamp;
+                        renderTexture.useMipMap = false;
+                        renderTexture.autoGenerateMips = false;
+                        renderTexture.anisoLevel = 0;
                     }
                 );
             }
@@ -310,17 +310,17 @@ namespace TarkovVR.Patches.Visuals
 
             __instance._resampledColorTargetLDR[0] = GetFromPoolOrCreate(
                 width, height, 0, format, "SSAAPropagator0LDR",
-                rt => rt.filterMode = FilterMode.Bilinear
+                renderTexture => renderTexture.filterMode = FilterMode.Bilinear
             );
 
             __instance._resampledColorTargetLDR[1] = GetFromPoolOrCreate(
                 width, height, 0, format, "SSAAPropagator1LDR",
-                rt => rt.filterMode = FilterMode.Bilinear
+                renderTexture => renderTexture.filterMode = FilterMode.Bilinear
             );
 
             __instance._resampledColorTargetLDR[2] = GetFromPoolOrCreate(
                 width, height, 0, RenderTextureFormat.R8, "Stub",
-                rt => rt.filterMode = FilterMode.Point
+                renderTexture => renderTexture.filterMode = FilterMode.Point
             );
         }
 
@@ -345,7 +345,7 @@ namespace TarkovVR.Patches.Visuals
 
             __instance._resampledDepthTarget = GetFromPoolOrCreate(
                 width, height, 24, RenderTextureFormat.Depth, "SSAAPropagatorDepth",
-                rt => rt.filterMode = FilterMode.Point
+                renderTexture => renderTexture.filterMode = FilterMode.Point
             );
         }
 
@@ -355,11 +355,11 @@ namespace TarkovVR.Patches.Visuals
 
             if (_renderTargetPool.TryGetValue(key, out var pool) && pool.Count > 0)
             {
-                var rt = pool.Dequeue();
-                if (rt != null && rt.IsCreated())
+                var renderTexture = pool.Dequeue();
+                if (renderTexture != null && renderTexture.IsCreated())
                 {
-                    rt.name = name;
-                    return rt;
+                    renderTexture.name = name;
+                    return renderTexture;
                 }
             }
             var newRT = new RenderTexture(width, height, depth, format)
@@ -389,11 +389,11 @@ namespace TarkovVR.Patches.Visuals
             {
                 while (pool.Count > 0)
                 {
-                    var rt = pool.Dequeue();
-                    if (rt != null)
+                    var renderTexture = pool.Dequeue();
+                    if (renderTexture != null)
                     {
-                        rt.Release();
-                        RuntimeUtilities.SafeDestroy(rt);
+                        renderTexture.Release();
+                        RuntimeUtilities.SafeDestroy(renderTexture);
                     }
                 }
             }
@@ -402,44 +402,44 @@ namespace TarkovVR.Patches.Visuals
 
         private static void RenderOpticalEffects(SSAAPropagator __instance)
         {
-            var cmd = __instance._cmdBuf;
-            cmd.BeginSample("OutputOptic");
+            var commandBuffer = __instance._cmdBuf;
+            commandBuffer.BeginSample("OutputOptic");
 
-            cmd.EnableShaderKeyword(SSAAPropagator.KWRD_TAA);
-            cmd.EnableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
+            commandBuffer.EnableShaderKeyword(SSAAPropagator.KWRD_TAA);
+            commandBuffer.EnableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
 
-            cmd.SetGlobalMatrix(
+            commandBuffer.SetGlobalMatrix(
                 SSAAPropagator.ID_NONJITTEREDPROJ,
                 GL.GetGPUProjectionMatrix(__instance._camera.nonJitteredProjectionMatrix, true)
             );
 
-            cmd.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
-            cmd.ClearRenderTarget(true, false, Color.black);
+            commandBuffer.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
+            commandBuffer.ClearRenderTarget(true, false, Color.black);
 
             if (__instance._opticLensRenderer == null && __instance._collimatorRenderer != null)
             {
-                cmd.DrawRenderer(__instance._collimatorRenderer, __instance._collimatorMaterial);
+                commandBuffer.DrawRenderer(__instance._collimatorRenderer, __instance._collimatorMaterial);
             }
 
             if (__instance._opticLensRenderer != null)
             {
                 RenderSightComponents(__instance);
-                cmd.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
-                cmd.DrawRenderer(__instance._opticLensRenderer, __instance._opticLensMaterial);
+                commandBuffer.SetRenderTarget(__instance._resampledColorTargetHDR[0], __instance._resampledDepthTarget);
+                commandBuffer.DrawRenderer(__instance._opticLensRenderer, __instance._opticLensMaterial);
             }
 
-            cmd.DisableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
-            cmd.DisableShaderKeyword(SSAAPropagator.KWRD_TAA);
-            cmd.EndSample("OutputOptic");
+            commandBuffer.DisableShaderKeyword(SSAAPropagator.KWRD_NON_JITTERED);
+            commandBuffer.DisableShaderKeyword(SSAAPropagator.KWRD_TAA);
+            commandBuffer.EndSample("OutputOptic");
         }
 
         private static void RenderSightComponents(SSAAPropagator __instance)
         {
             if (__instance._sightNonLensRenderers == null || __instance._sightNonLensRenderers.Length == 0) return;
 
-            var cmd = __instance._cmdBuf;
-            cmd.BeginSample("DEPTH_PREPASS");
-            cmd.SetRenderTarget(__instance._resampledColorTargetLDR[2], __instance._resampledDepthTarget);
+            var commandBuffer = __instance._cmdBuf;
+            commandBuffer.BeginSample("DEPTH_PREPASS");
+            commandBuffer.SetRenderTarget(__instance._resampledColorTargetLDR[2], __instance._resampledDepthTarget);
 
             // Batch renderer validation
             var validSightRenderers = new List<(Renderer renderer, Material material)>(__instance._sightNonLensRenderers.Length);
@@ -465,26 +465,26 @@ namespace TarkovVR.Patches.Visuals
             // Render sight components
             if (validSightRenderers.Count > 0)
             {
-                cmd.BeginSample("SIGHT_DEPTH");
+                commandBuffer.BeginSample("SIGHT_DEPTH");
                 foreach (var (renderer, material) in validSightRenderers)
                 {
-                    cmd.DrawRenderer(renderer, material);
+                    commandBuffer.DrawRenderer(renderer, material);
                 }
-                cmd.EndSample("SIGHT_DEPTH");
+                commandBuffer.EndSample("SIGHT_DEPTH");
             }
 
             // Render weapon components
             if (validWeaponRenderers.Count > 0)
             {
-                cmd.BeginSample("WEAPON_DEPTH");
+                commandBuffer.BeginSample("WEAPON_DEPTH");
                 foreach (var (renderer, material) in validWeaponRenderers)
                 {
-                    cmd.DrawRenderer(renderer, material);
+                    commandBuffer.DrawRenderer(renderer, material);
                 }
-                cmd.EndSample("WEAPON_DEPTH");
+                commandBuffer.EndSample("WEAPON_DEPTH");
             }
 
-            cmd.EndSample("DEPTH_PREPASS");
+            commandBuffer.EndSample("DEPTH_PREPASS");
         }
 
         private static bool IsRendererValid(Renderer renderer, Material material)
@@ -544,9 +544,9 @@ namespace TarkovVR.Patches.Visuals
 
                 fxaaBundle.Unload(false); // Shader remains in memory
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"Error loading FXAA shader: {ex.Message}");
+                Plugin.MyLog.LogError($"Error loading FXAA shader: {exception.Message}");
             }
         }
 

@@ -29,17 +29,17 @@ namespace TarkovVR.Patches.Visuals
             __instance._ambientOcclusion.enabled = false;
             VRGlobals.ssaoMode = ssaoMode;
             AmplifyGTAO gtaoManager;
-            Camera cam = __instance.Camera;
-            if (cam.GetComponent<AmplifyGTAO>() != null)
-                gtaoManager = cam.GetComponent<AmplifyGTAO>();
+            Camera camera = __instance.Camera;
+            if (camera.GetComponent<AmplifyGTAO>() != null)
+                gtaoManager = camera.GetComponent<AmplifyGTAO>();
             else
-                gtaoManager = cam.gameObject.AddComponent<AmplifyGTAO>();
+                gtaoManager = camera.gameObject.AddComponent<AmplifyGTAO>();
 
             if (gtaoManager != null)
             {
                 gtaoManager.SetAOSettings(ssaoMode);
 
-                AmplifyOcclusionEffect gtaoEffect = cam.GetComponent<AmplifyOcclusionEffect>();
+                AmplifyOcclusionEffect gtaoEffect = camera.GetComponent<AmplifyOcclusionEffect>();
                 if (ssaoMode != ESSAOMode.Off)
                     gtaoEffect.enabled = true;
                 else

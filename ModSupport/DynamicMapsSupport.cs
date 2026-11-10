@@ -57,18 +57,18 @@ namespace TarkovVR.ModSupport.DynamicMaps
         [HarmonyPatch(typeof(MapLabel), "Create")]
         private static void FixMapLabelScale(MapLabel __result)
         {
-            var rt = __result.GetComponent<RectTransform>();
-            var s = rt.localScale;
-            rt.localScale = new Vector3(s.x, s.y, 1f);
+            var rectTransform = __result.GetComponent<RectTransform>();
+            var s = rectTransform.localScale;
+            rectTransform.localScale = new Vector3(s.x, s.y, 1f);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MapMarker), "Create", new Type[] { typeof(GameObject), typeof(MapMarkerDef), typeof(Vector2), typeof(float), typeof(float) })]
         private static void FixMarkerLabelScale(MapMarker __result)
         {
-            var rt = __result.GetComponent<RectTransform>();
-            var s = rt.localScale;
-            rt.localScale = new Vector3(s.x, s.y, 1f);
+            var rectTransform = __result.GetComponent<RectTransform>();
+            var s = rectTransform.localScale;
+            rectTransform.localScale = new Vector3(s.x, s.y, 1f);
         }
 
         // Updates the cursor position text to show the correct position of the VR pointer on the map, instead of the mouse cursor position which is not used in VR
@@ -127,14 +127,14 @@ namespace TarkovVR.ModSupport.DynamicMaps
                 if (_isDragging)
                 {
                     Vector3 worldDelta = currentPos - _lastPointerPos;
-                    RectTransform rt = _mapViewRef.transform as RectTransform;
-                    Vector3 localDelta = rt.parent.InverseTransformVector(worldDelta);
+                    RectTransform rectTransform = _mapViewRef.transform as RectTransform;
+                    Vector3 localDelta = rectTransform.parent.InverseTransformVector(worldDelta);
                     mapView.ShiftMap(new Vector2(localDelta.x, localDelta.y), 0, false);
 
                     Vector2 rightStick = Handedness.PointerHandJoystick.axis;
                     if (Mathf.Abs(rightStick.y) > 0.1f)
                     {
-                        Vector3 localPoint = rt.InverseTransformPoint(currentPos);
+                        Vector3 localPoint = rectTransform.InverseTransformPoint(currentPos);
                         Vector2 mouseRelative = new Vector2(localPoint.x, localPoint.y);
                         float zoomDelta = rightStick.y * (float)mapView.ZoomCurrent * _zoomSpeed * Time.deltaTime;
                         mapView.IncrementalZoomInto(zoomDelta, mouseRelative, 0f);

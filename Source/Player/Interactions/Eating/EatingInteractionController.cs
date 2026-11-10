@@ -52,45 +52,45 @@ namespace TarkovVR.Source.Player.Interactions
                 if (!VRSettings.GetManualEating()) return;
                 if (!(instance.Item is FoodDrink)) return;
 
-                FoodDef d = FindDef(instance.Item?.TemplateId);
-                if (d == null) return; // no manual sequence -> vanilla
+                FoodDef foodDef = FindDef(instance.Item?.TemplateId);
+                if (foodDef == null) return; // no manual sequence -> vanilla
 
                 active = true;
                 controller = instance;
-                def = d;
-                openReadyTime = d.openReadyTime; // load per-food timings (still A/B-able live)
-                putAwayStartTime = d.putAwayStartTime;
-                pullStartTime = d.pullStartTime;
-                pullEndTime = d.pullEndTime;
-                deterministicGesturePose = d.deterministicGesture;
-                takePoseTime = d.takePoseTime;
-                bitePoseTime = d.bitePoseTime;
-                reachStartTime = d.reachStartTime; // ReachBag reach segment (harmless otherwise)
-                reachDeepTime = d.reachDeepTime;
-                eatLoopState = d.eatLoopState;     // timed-eat/gulp loop state (0 = STATE_USE)
-                openPlayState = d.openPlayState;   // one-shot open animation (0 = none; noodles' rip)
-                openPlayMaxTime = d.openPlayMaxTime;
+                def = foodDef;
+                openReadyTime = foodDef.openReadyTime; // load per-food timings (still A/B-able live)
+                putAwayStartTime = foodDef.putAwayStartTime;
+                pullStartTime = foodDef.pullStartTime;
+                pullEndTime = foodDef.pullEndTime;
+                deterministicGesturePose = foodDef.deterministicGesture;
+                takePoseTime = foodDef.takePoseTime;
+                bitePoseTime = foodDef.bitePoseTime;
+                reachStartTime = foodDef.reachStartTime; // ReachBag reach segment (harmless otherwise)
+                reachDeepTime = foodDef.reachDeepTime;
+                eatLoopState = foodDef.eatLoopState;     // timed-eat/gulp loop state (0 = STATE_USE)
+                openPlayState = foodDef.openPlayState;   // one-shot open animation (0 = none; noodles' rip)
+                openPlayMaxTime = foodDef.openPlayMaxTime;
                 takePoseState = STATE_USE_HASH;  // segments are shared; reset in case A/B'd
                 bitePoseState = STATE_EAT_HASH;
                 // Interaction-zone reach points (radii into the existing distance statics,
                 // offsets into the new ones) — same A/B-able-live seeding as the timings above.
-                openDistance = d.openZoneRadius; scoopDistance = d.takeZoneRadius; eatDistance = d.eatZoneRadius;
-                openZoneOffset = d.openZoneOffset; takeZoneOffset = d.takeZoneOffset; eatZoneOffset = d.eatZoneOffset;
-                style = BuildStyle(d); // per-archetype gesture descriptor
-                phase = d.skipOpen ? Phase.Ready : Phase.Closed; // skipOpen = straight to "bring to mouth"
+                openDistance = foodDef.openZoneRadius; scoopDistance = foodDef.takeZoneRadius; eatDistance = foodDef.eatZoneRadius;
+                openZoneOffset = foodDef.openZoneOffset; takeZoneOffset = foodDef.takeZoneOffset; eatZoneOffset = foodDef.eatZoneOffset;
+                style = BuildStyle(foodDef); // per-archetype gesture descriptor
+                phase = foodDef.skipOpen ? Phase.Ready : Phase.Closed; // skipOpen = straight to "bring to mouth"
                 biteCount = 0;
                 spawnAnimSpeed = animationSpeed <= 0f ? 1f : animationSpeed;
                 ReadDrinkState(instance.Item); // resource left + full-item use-time (drinks/partials)
 
-                LogStep($"[ManualEat] Armed manual sequence for {d.templateId} "
-                    + $"(openGrip={(string.IsNullOrEmpty(d.openGripName) ? "none" : d.openGripName)}, "
-                    + $"handPath={(d.openHandPath != null ? d.openHandPath.Length / 8 + " keys" : "none")}, "
-                    + $"reachPath={(d.reachHandPath != null ? d.reachHandPath.Length / 8 + " keys" : "none")}, "
+                LogStep($"[ManualEat] Armed manual sequence for {foodDef.templateId} "
+                    + $"(openGrip={(string.IsNullOrEmpty(foodDef.openGripName) ? "none" : foodDef.openGripName)}, "
+                    + $"handPath={(foodDef.openHandPath != null ? foodDef.openHandPath.Length / 8 + " keys" : "none")}, "
+                    + $"reachPath={(foodDef.reachHandPath != null ? foodDef.reachHandPath.Length / 8 + " keys" : "none")}, "
                     + $"openState={style.openStateHash}).");
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"[ManualEat] OnSpawnPre error: {ex}");
+                Plugin.MyLog.LogError($"[ManualEat] OnSpawnPre error: {exception}");
                 Reset();
             }
         }
@@ -116,7 +116,7 @@ namespace TarkovVR.Source.Player.Interactions
                 if (drinkUseTime <= 0f && item?.Template is FoodDrinkTemplate template)
                     drinkUseTime = template.UseTime;
             }
-            catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] ReadDrinkState: {ex.Message}"); }
+            catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] ReadDrinkState: {exception.Message}"); }
             if (drinkUseTime <= 0f) drinkUseTime = 5f; // template missing/odd — sane fallback
             if (def.kind == FoodKind.Drink)
                 LogStep(drinkFdc != null
@@ -212,9 +212,9 @@ namespace TarkovVR.Source.Player.Interactions
 
                 LogStep($"[ManualEat] Props reparented to hands (kind={def.kind}).");
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"[ManualEat] OnSpawnPost error: {ex}");
+                Plugin.MyLog.LogError($"[ManualEat] OnSpawnPost error: {exception}");
                 End();
             }
         }
@@ -235,7 +235,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 controller?.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] BailToVanilla: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] BailToVanilla: {exception}"); }
             Reset();
             return false;
         }
@@ -409,7 +409,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 else Plugin.MyLog.LogWarning("[ManualEat] DiscardFood: discard not allowed.");
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] DiscardFood error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] DiscardFood error: {exception}"); }
         }
 
         // Final bite / drink done / cancel: apply the consumed fraction's nutrition, tell the
@@ -446,8 +446,8 @@ namespace TarkovVR.Source.Player.Interactions
             LogStep($"[ManualEat] Finish (cancel={cancel}, fraction={fraction:F2}): method_5 + SetActiveParam(false) -> play END.");
             try
             {
-                var fa = controller.FirearmsAnimator;
-                fa?.SetNextLimb(false);
+                var firearmsAnimator = controller.FirearmsAnimator;
+                firearmsAnimator?.SetNextLimb(false);
 
                 if (cancelToFinish)
                 {
@@ -478,14 +478,14 @@ namespace TarkovVR.Source.Player.Interactions
                     // SetActiveParam(false) is REQUIRED — it flips the controller out of
                     // the mid-use state into the cancellable/put-away state. Without it the
                     // controller stays frozen and the fire-cancel has nothing to act on.
-                    fa?.SetActiveParam(false, false);
-                    fa?.SetAnimationSpeed(spawnAnimSpeed);
+                    firearmsAnimator?.SetActiveParam(false, false);
+                    firearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
                     // Jump the arms animator straight to STATE_END so the hands go down
                     // immediately instead of playing the rest of STATE_EAT (the auto bite).
                     if (skipLastBiteAnim)
                     {
                         try { controller._player.ArmsAnimatorCommon.Play(STATE_END_HASH, 1, putAwayStartTime); }
-                        catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] skip-bite Play failed: {ex.Message}"); }
+                        catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] skip-bite Play failed: {exception.Message}"); }
                     }
                     // Auto-fire the trigger/fire cancel (press then release on consecutive
                     // input frames) — puts the food away and draws the weapon fast.
@@ -502,11 +502,11 @@ namespace TarkovVR.Source.Player.Interactions
                 else
                 {
                     pendingOp.GoNextBodyPart();   // nutrition (persists in background)
-                    fa?.SetActiveParam(false, false); // use done -> animator goes to END/put-away
-                    fa?.SetAnimationSpeed(spawnAnimSpeed);
+                    firearmsAnimator?.SetActiveParam(false, false); // use done -> animator goes to END/put-away
+                    firearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
                 }
             }
-            catch (Exception ex) { Plugin.MyLog.LogError($"[ManualEat] Finish error: {ex}"); }
+            catch (Exception exception) { Plugin.MyLog.LogError($"[ManualEat] Finish error: {exception}"); }
         }
 
         // Apply the consumed fraction's energy/hydration immediately (the fire-cancel aborts
@@ -551,9 +551,9 @@ namespace TarkovVR.Source.Player.Interactions
                     LogStep($"[ManualEat] Nutrition for {fraction:P0} of the item ({fdc.HpPercent:F1}/{fdc.MaxResource:F0} left).");
                 return fdc.HpPercent <= 0.0001f;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"[ManualEat] ApplyConsumedNutrition error: {ex}");
+                Plugin.MyLog.LogError($"[ManualEat] ApplyConsumedNutrition error: {exception}");
                 // Resource state unknown — don't discard a bottle that may still have water.
                 try { return fdc == null || fdc.HpPercent <= 0.0001f; } catch { return false; }
             }

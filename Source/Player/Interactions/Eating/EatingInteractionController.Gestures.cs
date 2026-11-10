@@ -15,20 +15,20 @@ namespace TarkovVR.Source.Player.Interactions
         // once. The genuinely-unique routines (DetachWrapperToLeftHand / ShakeOutCrackers /
         // TakeFoodToLeftHand / EnterUseState / DetectShake) are kept as-is and just called from
         // the hooks. To add a TYPE: a new case here + its prop setup / late-zero tails.
-        private static EatStyle BuildStyle(FoodDef d)
+        private static EatStyle BuildStyle(FoodDef foodDef)
         {
-            EatStyle s = BuildStyleCore(d);
+            EatStyle s = BuildStyleCore(foodDef);
             // Per-food open-state override (OpenState(...)): the archetype defaults assume
             // the SHARED state hashes, but some rigs run their own graph — noodles has no
             // STATE_USE at all, so the Wrapper default scrubbed a state that doesn't exist
             // (Play() is a silent no-op → the wrapper never ripped).
-            if (d.openState != 0) s.openStateHash = d.openState;
+            if (foodDef.openState != 0) s.openStateHash = foodDef.openState;
             return s;
         }
 
-        private static EatStyle BuildStyleCore(FoodDef d)
+        private static EatStyle BuildStyleCore(FoodDef foodDef)
         {
-            switch (d.kind)
+            switch (foodDef.kind)
             {
                 // Chocolate bar: held in the RIGHT hand, the LEFT (off) hand peels the wrapper,
                 // then bite straight to the mouth — NO take step. The whole clip is STATE_USE.
@@ -42,7 +42,7 @@ namespace TarkovVR.Source.Player.Interactions
                         eatHand = Hand.Dominant,
                         takeHand = Hand.Off,
                         hasTakeStep = false,
-                        timedSip = d.eatByTime,
+                        timedSip = foodDef.eatByTime,
                         takeKind = TakeKind.None,
                         openStateHash = STATE_USE_HASH,
                         logsGesturePose = false,
@@ -53,7 +53,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // use-time down while held. Capped bottles recap to stop early.
                 case FoodKind.Drink:
                 {
-                    Hand hold = d.holdInOffHand ? Hand.Off : Hand.Dominant;
+                    Hand hold = foodDef.holdInOffHand ? Hand.Off : Hand.Dominant;
                     return new EatStyle
                     {
                         label = "drink",
@@ -197,8 +197,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
             else
             {
-                var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                bool past = st.fullPathHash != s.openStateHash || st.normalizedTime >= openReadyTime;
+                var stateInfo = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+                bool past = stateInfo.fullPathHash != s.openStateHash || stateInfo.normalizedTime >= openReadyTime;
                 if (past)
                 {
                     playingOpen = false;
@@ -224,7 +224,7 @@ namespace TarkovVR.Source.Player.Interactions
                 playingOpenAnim = true;
                 openAnimDeadline = Time.time + 2f; // give-up fallback (wrong/short state)
                 try { controller._player.ArmsAnimatorCommon.Play(openPlayState, 1, 0f); }
-                catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] open-anim Play({openPlayState}) failed: {ex.Message}"); }
+                catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] open-anim Play({openPlayState}) failed: {exception.Message}"); }
                 controller.FirearmsAnimator?.SetAnimationSpeed(spawnAnimSpeed);
                 PulseHand(s.openHand == Hand.Dominant);
                 LogStep($"[ManualEat] Playing open animation ({openPlayState}) to {openPlayMaxTime:F2}...");
@@ -255,8 +255,8 @@ namespace TarkovVR.Source.Player.Interactions
             bool past;
             try
             {
-                var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                past = st.fullPathHash != openPlayState || st.normalizedTime >= openPlayMaxTime;
+                var stateInfo = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+                past = stateInfo.fullPathHash != openPlayState || stateInfo.normalizedTime >= openPlayMaxTime;
             }
             catch { past = true; }
             if (!past && Time.time < openAnimDeadline) return;
@@ -301,8 +301,8 @@ namespace TarkovVR.Source.Player.Interactions
             float prevAxis = dominant ? prevTriggerAxis : prevOffTriggerAxis;
             if (dominant) prevTriggerAxis = axis; else prevOffTriggerAxis = axis;
 
-            OpenGestureKind g = def != null ? def.openGesture : OpenGestureKind.Pull;
-            float triggerSpan = g == OpenGestureKind.Trigger ? 1f : Mathf.Clamp01(triggerOpenPortion);
+            OpenGestureKind kind = def != null ? def.openGesture : OpenGestureKind.Pull;
+            float triggerSpan = kind == OpenGestureKind.Trigger ? 1f : Mathf.Clamp01(triggerOpenPortion);
 
             if (!pullingOpen)
             {
@@ -318,9 +318,9 @@ namespace TarkovVR.Source.Player.Interactions
                     float t0 = 0f;
                     try
                     {
-                        var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                        if (st.fullPathHash == s.openStateHash)
-                            t0 = Mathf.Clamp(st.normalizedTime, 0f, PullEndResolved() - 0.01f);
+                        var stateInfo = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+                        if (stateInfo.fullPathHash == s.openStateHash)
+                            t0 = Mathf.Clamp(stateInfo.normalizedTime, 0f, PullEndResolved() - 0.01f);
                     }
                     catch { }
                     pullAnimStart = t0;
@@ -333,7 +333,7 @@ namespace TarkovVR.Source.Player.Interactions
                 LatchHandToItem(s.openHand, acting, anchor);
                 ScrubOpen(s);
                 PulseHand(dominant);
-                LogStep($"[ManualEat] Open grab ({s.label}, {g}) at {pullProgress:P0}.");
+                LogStep($"[ManualEat] Open grab ({s.label}, {kind}) at {pullProgress:P0}.");
                 return;
             }
 
@@ -367,7 +367,7 @@ namespace TarkovVR.Source.Player.Interactions
                 FirePullMilestoneSounds();
                 if (axis >= pullFullPressAxis)
                 {
-                    if (g == OpenGestureKind.Trigger) { pullAwaitRelease = true; return; }
+                    if (kind == OpenGestureKind.Trigger) { pullAwaitRelease = true; return; }
                     pullSqueezeDone = true;
                     pullGrabProgress = pullProgress; // the physical phase's floor
                     // Physical measures are RELATIVE to the holding hand (palm position in
@@ -383,8 +383,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             // PHYSICAL: pull travel / tilt since the full press -> progress.
-            float measure = MeasureOpenGesture(g, acting, anchor);
-            float scale = g == OpenGestureKind.Tilt ? openTiltDegrees : openPullDistance;
+            float measure = MeasureOpenGesture(kind, acting, anchor);
+            float scale = kind == OpenGestureKind.Tilt ? openTiltDegrees : openPullDistance;
             pullProgress = Mathf.Clamp01(pullGrabProgress + Mathf.Max(0f, measure) / Mathf.Max(0.01f, scale));
             ScrubOpen(s);
             FirePullMilestoneSounds();
@@ -395,9 +395,9 @@ namespace TarkovVR.Source.Player.Interactions
         // (Pull = metres of palm travel, Tilt = degrees). All anchor-relative. (A signed
         // CCW-twist measure for screw caps was removed — wrist roll read too inconsistently;
         // tilting the hand serves the same purpose.)
-        private static float MeasureOpenGesture(OpenGestureKind g, Transform acting, Transform anchor)
+        private static float MeasureOpenGesture(OpenGestureKind kind, Transform acting, Transform anchor)
         {
-            if (g == OpenGestureKind.Pull)
+            if (kind == OpenGestureKind.Pull)
                 // Magnitude (not a fixed axis) so any pull direction works for any container
                 // orientation; moving back toward the grab rolls it back down.
                 return (anchor.InverseTransformPoint(acting.TransformPoint(pullPalmLocal)) - pullGrabLocal).magnitude;
@@ -437,7 +437,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static void ScrubOpen(EatStyle s)
         {
             try { controller._player.ArmsAnimatorCommon.Play(s.openStateHash, 1, CurrentScrubTime()); }
-            catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] pull scrub Play failed: {ex.Message}"); }
+            catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] pull scrub Play failed: {exception.Message}"); }
         }
 
         // The open-state normalizedTime the current pull progress maps to (shared by the
@@ -562,7 +562,7 @@ namespace TarkovVR.Source.Player.Interactions
             // (start may be > deep — see the FoodDef note on the inverted first guess).
             reachProgress = Mathf.Clamp01(depth / Mathf.Max(0.01f, reachDepthDistance));
             try { controller._player.ArmsAnimatorCommon.Play(STATE_USE_HASH, 1, Mathf.Lerp(reachStartTime, reachDeepTime, reachProgress)); }
-            catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] reach scrub Play failed: {ex.Message}"); }
+            catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] reach scrub Play failed: {exception.Message}"); }
 
             // Trigger while deep = grab: the cracker appears in the reaching hand (the
             // holder hangs off that wrist, which is pinned to the latch — it rides the
@@ -762,7 +762,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static void StopDrinkSound()
         {
             try { if (cutDrinkSoundOnLower) soundPlayer?._clipsSource?.Stop(); }
-            catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] StopDrinkSound: {ex.Message}"); }
+            catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] StopDrinkSound: {exception.Message}"); }
             TarkovVR.Source.Misc.AudioHaptics.Stop(); // the hand buzz cuts with the audio
         }
 
@@ -777,17 +777,17 @@ namespace TarkovVR.Source.Player.Interactions
             try
             {
                 int loop = eatLoopState != 0 ? eatLoopState : STATE_USE_HASH;
-                var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
-                bool inDrink = st.fullPathHash == loop || st.fullPathHash == STATE_USE_HASH || st.fullPathHash == STATE_EAT_HASH;
+                var stateInfo = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
+                bool inDrink = stateInfo.fullPathHash == loop || stateInfo.fullPathHash == STATE_USE_HASH || stateInfo.fullPathHash == STATE_EAT_HASH;
                 // Throttled: a WRONG loop hash (sausage's is a guess) never enters the
                 // state, and an unthrottled retry would hammer Play every frame.
-                if ((!inDrink || st.normalizedTime >= 1f) && Time.time >= nextLoopPlay)
+                if ((!inDrink || stateInfo.normalizedTime >= 1f) && Time.time >= nextLoopPlay)
                 {
                     nextLoopPlay = Time.time + 0.25f;
                     controller._player.ArmsAnimatorCommon.Play(loop, 1, 0f);
                 }
             }
-            catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] drink loop Play failed: {ex.Message}"); }
+            catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] drink loop Play failed: {exception.Message}"); }
         }
 
         // Move the arms animator from STATE_OPEN into STATE_USE (the "use" phase). The brief
@@ -804,7 +804,7 @@ namespace TarkovVR.Source.Player.Interactions
             // cancel-from-OPEN bug.
             int use = eatLoopState != 0 ? eatLoopState : STATE_USE_HASH;
             try { controller._player.ArmsAnimatorCommon.Play(use, 1, 0f); }
-            catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] EnterUseState failed: {ex.Message}"); }
+            catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] EnterUseState failed: {exception.Message}"); }
             playUntil = Time.time + 0.15f;
         }
 
@@ -815,8 +815,8 @@ namespace TarkovVR.Source.Player.Interactions
             shakeReversals = 0;
             shakeWindowEnd = 0f;
             shakePrevVel = Vector3.zero;
-            Transform rh = RightHand(); Transform head = GetHead();
-            shakePrevPos = (rh != null && head != null) ? head.InverseTransformPoint(rh.position) : Vector3.zero;
+            Transform rightHand = RightHand(); Transform head = GetHead();
+            shakePrevPos = (rightHand != null && head != null) ? head.InverseTransformPoint(rightHand.position) : Vector3.zero;
         }
 
         // Detect a shake: the bag (right hand) wiggling near the left hand. Velocity is
@@ -825,13 +825,13 @@ namespace TarkovVR.Source.Player.Interactions
         // seconds = a shake.
         private static bool DetectShake()
         {
-            Transform rh = RightHand(); Transform head = GetHead();
-            float dt = Time.deltaTime;
-            if (rh == null || head == null || dt <= 0f) return false;
+            Transform rightHand = RightHand(); Transform head = GetHead();
+            float deltaTime = Time.deltaTime;
+            if (rightHand == null || head == null || deltaTime <= 0f) return false;
 
             Vector3 bagPalm = ProbePoint(Hand.Dominant); // the bag rides the dominant palm
             Vector3 cur = head.InverseTransformPoint(bagPalm);
-            Vector3 vel = (cur - shakePrevPos) / dt;
+            Vector3 vel = (cur - shakePrevPos) / deltaTime;
             shakePrevPos = cur;
 
             bool near = LeftHand() != null && Vector3.Distance(bagPalm, ProbePoint(Hand.Off)) < shakeNearDistance;
@@ -860,7 +860,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (deterministicGesturePose)
             {
                 try { controller._player.ArmsAnimatorCommon.Play(stateHash, 1, startTime); }
-                catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] gesture Play({stateHash}) failed: {ex.Message}"); }
+                catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] gesture Play({stateHash}) failed: {exception.Message}"); }
             }
             playUntil = Time.time + bitePlayTime;
         }
@@ -868,7 +868,7 @@ namespace TarkovVR.Source.Player.Interactions
         // Current arms layer-1 state hash + normalizedTime, for the gesture-pose log.
         private static string CurStateStr()
         {
-            try { var st = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1); return $"state={st.fullPathHash} t={st.normalizedTime:F3}"; }
+            try { var stateInfo = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1); return $"state={stateInfo.fullPathHash} t={stateInfo.normalizedTime:F3}"; }
             catch { return "state=?"; }
         }
     }
