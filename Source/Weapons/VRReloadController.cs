@@ -2888,7 +2888,7 @@ namespace TarkovVR.Source.Weapons
         private static bool MagazineOnRightArm => magazineInGunHand ? OnRightArm(true) : OffHandOnRightArm;
         private static Transform MagazineHandRig => magazineInGunHand ? HandRig(true) : VRGlobals.vrPlayer.LeftHand.transform;
         private static Vector3 MagazineHandPalm() => magazineInGunHand ? HandPalm(true) : OffHandPalm();
-        private static Vector3 MagazineHandVelocity() => magazineInGunHand ? HandWorldVelocity(true) : OffHandWorldVelocity();
+        private static Vector3 MagazineHandVelocity() => HandWorldVelocity(magazineInGunHand);
         private static SoundHand MagazineHand => magazineInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
         private static SoundHand MagazineHandAlone => magazineInGunHand ? SoundHand.GunHandAlone : SoundHand.OffHandAlone;
 
@@ -2900,10 +2900,10 @@ namespace TarkovVR.Source.Weapons
             return leftHand.position + leftHand.forward * GunInteractionController.interactProbeForward;
         }
 
-        private static Vector3 OffHandWorldVelocity()
+        private static Vector3 HandWorldVelocity(bool gunHand)
         {
             // Controller velocity is tracking-space only; add the body's so a magazine dropped while walking carries on
-            Vector3 trackingVelocity = ControllerVelocity.GetSteamVRVelocity(OffHandSource());
+            Vector3 trackingVelocity = ControllerVelocity.GetSteamVRVelocity(gunHand ? Handedness.GunHandSource : OffHandSource());
             Vector3 handVelocity = VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform.TransformDirection(trackingVelocity) : trackingVelocity;
             return handVelocity + VRGlobals.player.Velocity;
         }

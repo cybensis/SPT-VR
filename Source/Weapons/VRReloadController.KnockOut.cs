@@ -85,7 +85,7 @@ namespace TarkovVR.Source.Weapons
                     return;
                 }
                 Vector3 forward = -firearmController.WeaponRoot.up;
-                float push = Vector3.Dot(OffHandWorldVelocity() - gunVelocity, forward);
+                float push = Vector3.Dot(HandWorldVelocity(gunHand: false) - gunVelocity, forward);
                 if (push < knockSpeed)
                 {
                     knockTouching = true;

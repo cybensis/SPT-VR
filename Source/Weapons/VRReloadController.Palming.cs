@@ -198,7 +198,7 @@ namespace TarkovVR.Source.Weapons
                     Vector3 handPosition = oldProp.transform.position;
                     Quaternion handRotation = oldProp.transform.rotation;
                     CommitHold();
-                    RunDrop(oldMagazine, firearmController, handPosition, handRotation, OffHandWorldVelocity());
+                    RunDrop(oldMagazine, firearmController, handPosition, handRotation, HandWorldVelocity(gunHand: false));
                     PlayFirstGunSound(firearmController, SoundHand.OffHand.Seating, MAG_OUT_SOUNDS);
                 }
                 else
@@ -359,7 +359,7 @@ namespace TarkovVR.Source.Weapons
                 pendingDropMagazine = magazine;
                 pendingDropPosition = palmedProp.transform.position;
                 pendingDropRotation = palmedProp.transform.rotation;
-                pendingDropVelocity = OffHandWorldVelocity();
+                pendingDropVelocity = HandWorldVelocity(gunHand: false);
                 pendingDropDeadline = Time.time + 3f;
                 VRGlobals.player.InventoryController.ThrowItem(magazine, false, null);
             }

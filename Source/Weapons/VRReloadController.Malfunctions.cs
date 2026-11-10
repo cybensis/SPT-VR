@@ -289,14 +289,6 @@ namespace TarkovVR.Source.Weapons
 
         private static SoundHand JamCaseHand => jamCaseInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
 
-        private static Vector3 HandWorldVelocity(bool gunHand)
-        {
-            if (!gunHand)
-                return OffHandWorldVelocity();
-            Vector3 trackingVelocity = ControllerVelocity.GetSteamVRVelocity(Handedness.GunHandSource);
-            Vector3 handVelocity = VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform.TransformDirection(trackingVelocity) : trackingVelocity;
-            return handVelocity + VRGlobals.player.Velocity;
-        }
 
         private static void TakeJamCase(FirearmController firearmController, bool gunHand)
         {
@@ -362,20 +354,7 @@ namespace TarkovVR.Source.Weapons
         // side the length, the other two averaged across. No active mesh: the whole model's measure.
         private static void MeasureShownCase(GameObject prop)
         {
-            MeshFilter biggest = null;
-            float biggestVolume = 0f;
-            foreach (MeshFilter meshFilter in prop.GetComponentsInChildren<MeshFilter>(false))
-            {
-                if (meshFilter.sharedMesh == null)
-                    continue;
-                Vector3 size = meshFilter.sharedMesh.bounds.size;
-                float volume = size.x * size.y * size.z;
-                if (biggest == null || volume > biggestVolume)
-                {
-                    biggest = meshFilter;
-                    biggestVolume = volume;
-                }
-            }
+            MeshFilter biggest = BiggestMesh(prop, includeHidden: false);
             if (biggest == null)
             {
                 MeasureLongAxis(prop, out jamCaseShownAxis, out jamCaseShownCenter, out float length);

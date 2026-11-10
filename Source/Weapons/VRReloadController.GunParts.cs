@@ -349,29 +349,16 @@ namespace TarkovVR.Source.Weapons
         private static Transform[] GunHandIndexFinger(out Transform armTop)
         {
             armTop = null;
-            if (Handedness.GunInLeftHand)
+            Transform[] indexFinger = GunHandFinger(2);
+            if (indexFinger == null)
                 return null;
-            Transform palm = VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null && VRGlobals.ikManager.rightArmIk.solver != null
-                && VRGlobals.ikManager.rightArmIk.solver.bone3 != null ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null;
-            if (palm == null)
-                return null;
-            Transform knuckle = null;
-            for (int index = 0; index < palm.childCount; index++)
-            {
-                if (palm.GetChild(index).name.IndexOf("Digit2", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    knuckle = palm.GetChild(index);
-                    break;
-                }
-            }
-            if (knuckle == null || knuckle.childCount == 0 || knuckle.GetChild(0).childCount == 0)
-                return null;
-            armTop = palm;
+            // up from the palm (the knuckle's parent)
+            armTop = indexFinger[0].parent;
             while (armTop != null && armTop.name.IndexOf("Collarbone", StringComparison.OrdinalIgnoreCase) < 0)
                 armTop = armTop.parent;
             if (armTop == null)
                 return null;
-            return new[] { knuckle, knuckle.GetChild(0), knuckle.GetChild(0).GetChild(0) };
+            return indexFinger;
         }
 
         private static Transform MagazineWellBone(FirearmController firearmController, Slot magazineSlot)

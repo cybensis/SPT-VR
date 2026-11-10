@@ -375,15 +375,12 @@ namespace TarkovVR.Source.Weapons
             MeasureLongAxis(prop, out roundAxisInProp, out roundCenterInProp, out roundLength);
         }
 
-        // Also the stuck case of a failure to eject (VRReloadController.Malfunctions)
-        private static void MeasureLongAxis(GameObject prop, out Vector3 axisInProp, out Vector3 centerInProp, out float length)
+        // The biggest mesh under a model, by its box's volume
+        private static MeshFilter BiggestMesh(GameObject prop, bool includeHidden)
         {
-            axisInProp = Vector3.forward;
-            centerInProp = Vector3.zero;
-            length = 0.06f;
             MeshFilter biggest = null;
             float biggestVolume = 0f;
-            foreach (MeshFilter meshFilter in prop.GetComponentsInChildren<MeshFilter>(true))
+            foreach (MeshFilter meshFilter in prop.GetComponentsInChildren<MeshFilter>(includeHidden))
             {
                 if (meshFilter.sharedMesh == null)
                     continue;
@@ -395,6 +392,16 @@ namespace TarkovVR.Source.Weapons
                     biggestVolume = volume;
                 }
             }
+            return biggest;
+        }
+
+        // Also the stuck case of a failure to eject (VRReloadController.Malfunctions)
+        private static void MeasureLongAxis(GameObject prop, out Vector3 axisInProp, out Vector3 centerInProp, out float length)
+        {
+            axisInProp = Vector3.forward;
+            centerInProp = Vector3.zero;
+            length = 0.06f;
+            MeshFilter biggest = BiggestMesh(prop, includeHidden: true);
             if (biggest == null)
                 return;
             Bounds bounds = biggest.sharedMesh.bounds;
