@@ -63,6 +63,10 @@ namespace TarkovVR.Source.Player.VRManager
 
 
         public bool isSupporting = false;
+        // The off hand holds the gun up (ChestHang: who's left holding it when the gun hand lets go). In the hold mode the grip is the
+        // hold: an open hand left on the foregrip keeps isSupporting until it's 10 cm off, but holds nothing up. In the other mode the
+        // hand stays on without the grip and a press takes it off, so supporting is holding.
+        public bool OffHandHoldsGun => isSupporting && (handLock || !VRSettings.GetSupportGunHoldToggle());
         //private bool secondaryGripHeld = false;
         public bool wasSupporting = false;
         public Transform interactionUi;
