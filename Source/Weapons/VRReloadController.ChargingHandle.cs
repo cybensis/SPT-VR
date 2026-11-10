@@ -54,6 +54,10 @@ namespace TarkovVR.Source.Weapons
         }
 
         private static bool handleInGunHand;                // which hand took it; only meaningful while holding it
+        // The gun hand on the handle by a pin of its own, not the shared hand latch (PinGunHandOnHandle)
+        private static Transform handleHandPin;
+        private static RootMotion.FinalIK.LimbIK handleHandArm;
+        private static bool handleHandPinned;
         private static FirearmController handleForFirearm;
         private static Transform handleBone;                // the mod_charge slot bone
         private static Transform handleView;                // the handle model, a direct child of that bone
@@ -748,8 +752,8 @@ namespace TarkovVR.Source.Weapons
             // The grip taken back some other way; the off hand letting go too leaves the gun on this hand (ChestHang.HandleHeld)
             if (handleInGunHand && !ChestHang.SupportOnly && !ChestHang.HandleHeld)
                 return false;
-            // The gun went from one hand to the other: that arm isn't this hand's any more
-            if (latchedOnRightArm != OnRightArm(handleInGunHand))
+            // The gun went from one hand to the other: that arm isn't this hand's any more (pinned: the latch is the other hand's to use)
+            if (!handleHandPinned && latchedOnRightArm != OnRightArm(handleInGunHand))
                 return false;
             // Our own operations run for a frame while the handle is back: the rechamber, a magazine out or in (an "Iraqi" reload)
             if (!(handleForFirearm.CurrentOperation is FirearmController.Idling) && expectedOperation == ExpectedOperation.None)
@@ -764,11 +768,14 @@ namespace TarkovVR.Source.Weapons
         private static void UpdateChargingHandle(bool triggerReleased)
         {
             Vector3 axis = handleBone.TransformDirection(handleAxisInSlot).normalized;
-            Vector3 handDelta = LatchedHandRig.position - handleBone.TransformPoint(handAtHandleGrabInSlot);
+            // The hand holding it: pinned, the latch may be the other hand's by now
+            Transform handRig = handleHandPinned ? HandRig(handleInGunHand) : LatchedHandRig;
+            bool handOnRightArm = handleHandPinned ? OnRightArm(handleInGunHand) : latchedOnRightArm;
+            Vector3 handDelta = handRig.position - handleBone.TransformPoint(handAtHandleGrabInSlot);
             float handAlongTrack = Vector3.Dot(handDelta, axis);
 
             // Only the left hand reaches under the gun to a handle on the bolt (the right one is on that side)
-            float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !latchedOnRightArm ? underGunPullGain : 1f;
+            float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !handOnRightArm ? underGunPullGain : 1f;
             // A hard slide holds it until it breaks free (VRReloadController.Malfunctions)
             handlePull = StuckPull(handleForFirearm, Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel), HandleSoundHand);
             handleView.position = handleBone.TransformPoint(handleRestLocalPosition) + axis * handlePull;
@@ -831,10 +838,52 @@ namespace TarkovVR.Source.Weapons
             chamberShownEmpty = true;
         }
 
+        // The gun hand off the shared hand latch onto a pin of its own on the handle, where the latch has it (ChestHang.HandleHeld, an
+        // "Iraqi" reload): the off hand's magazine catching the track takes that latch - one latch for both hands moved the gun hand's arm
+        // onto the magazine and failed the handle hold (headset: "as soon as I smack the mag out, my hand flips and gets stuck in place
+        // and the gun disappears"). The pin rides the handle model like the latch did; the hand off it when the handle's let go.
+        internal static void PinGunHandOnHandle()
+        {
+            if (handleHandPinned || !HandleInGunHand || !handLatched || handLatchReleasing || !latchedHandIsGunHand || handLatch == null || handleView == null)
+                return;
+            RootMotion.FinalIK.LimbIK armIk = ArmIk(latchedOnRightArm);
+            if (armIk == null)
+                return;
+            if (handleHandPin == null)
+                handleHandPin = new GameObject("VRReloadHandleHandPin").transform;
+            handleHandPin.SetParent(handleView, worldPositionStays: false);
+            handleHandPin.SetPositionAndRotation(handLatch.position, handLatch.rotation);
+            armIk.solver.target = handleHandPin;
+            handleHandArm = armIk;
+            handleHandPinned = true;
+            // The shared latch free for the other hand, as it is (the arm already aims at the pin)
+            handLatch.SetParent(null, worldPositionStays: true);
+            handLatched = false;
+            handLatchReleasing = false;
+            handLatchSnapping = false;
+            if (debugLog || ChestHang.handleHoldLog)
+                Plugin.MyLog.LogInfo("[VRReload] gun hand pinned on the handle: the hand latch free for the off hand");
+        }
+
+        private static void UnpinGunHand()
+        {
+            if (!handleHandPinned)
+                return;
+            handleHandPinned = false;
+            if (handleHandArm != null && handleHandArm.solver.target == handleHandPin)
+                handleHandArm.solver.target = HandRig(gunHand: true);
+            handleHandArm = null;
+            if (handleHandPin != null)
+                handleHandPin.SetParent(null, worldPositionStays: false);
+        }
+
         private static void LetGoOfChargingHandle(bool snapForward)
         {
-            // The hand first, where it is, so it doesn't snap forward with the handle
-            ReleaseHandLatch();
+            // The hand first, where it is, so it doesn't snap forward with the handle (pinned: its own pin, the latch is the other hand's)
+            if (handleHandPinned)
+                UnpinGunHand();
+            else
+                ReleaseHandLatch();
             EndChamberView();
             bool staysInNotch = EndHandleNotch();
             EndHandleMovedParts();

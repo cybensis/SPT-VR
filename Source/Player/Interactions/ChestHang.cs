@@ -583,6 +583,8 @@ namespace TarkovVR.Source.Player.Interactions
             handleHoldRelRot = Quaternion.Inverse(controller) * wr.rotation;
             SupportOnly = false;
             HandleHeld = true;
+            // The gun hand off the shared hand latch onto a pin on the handle: the off hand's magazine needs that latch on the track
+            VRReloadController.PinGunHandOnHandle();
             if (hangHaptics)
                 Pulse(0.35f, throughGun: true);
             if (handleHoldLog)
