@@ -51,8 +51,8 @@ namespace TarkovVR.Source.Player.Interactions
                 var fa = controller?.FirearmsAnimator;
                 if (fa != null)
                 {
-                    int n = Mathf.Min(fa._animatorLayersCount, 8);
-                    for (int i = 0; i < n; i++)
+                    int layerCount = Mathf.Min(fa._animatorLayersCount, 8);
+                    for (int i = 0; i < layerCount; i++)
                     {
                         var si = fa.Animator.GetCurrentAnimatorStateInfo(i);
                         syncAnimHashes.Add(si.fullPathHash);
@@ -61,7 +61,7 @@ namespace TarkovVR.Source.Player.Interactions
                     if (debugEatSync && Time.frameCount % 60 == 0)
                     {
                         var sb = new System.Text.StringBuilder("[ManualEat] food anim layers: ");
-                        for (int i = 0; i < n; i++) sb.Append($"L{i}={syncAnimHashes[i]}@{syncAnimTimes[i]:F2} ");
+                        for (int i = 0; i < layerCount; i++) sb.Append($"L{i}={syncAnimHashes[i]}@{syncAnimTimes[i]:F2} ");
                         Plugin.MyLog.LogInfo(sb.ToString());
                     }
                 }

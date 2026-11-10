@@ -370,14 +370,14 @@ public class GunInteractionController : MonoBehaviour
             VRReloadController.HoldingMagazine || VRReloadController.HoldingChargingHandle || VRReloadController.OffHandAtChargingHandle ||
             VRReloadController.HoldingSeatedMagazine || TarkovVR.Source.Player.Interactions.GunSpots.Busy)
             return -1;
-        GameObject lh = VRGlobals.vrPlayer.LeftHand;
-        if (lh == null)
+        GameObject leftHandObject = VRGlobals.vrPlayer.LeftHand;
+        if (leftHandObject == null)
             return -1;
-        Vector3 probe = lh.transform.position + lh.transform.forward * interactProbeForward;
-        int idx = FindClosestTransform(probe);
-        if (idx < 0 || interactables[idx] == null)
+        Vector3 probe = leftHandObject.transform.position + leftHandObject.transform.forward * interactProbeForward;
+        int closestIndex = FindClosestTransform(probe);
+        if (closestIndex < 0 || interactables[closestIndex] == null)
             return -1;
-        return (interactables[idx].position - probe).sqrMagnitude <= interactReachRadius * interactReachRadius ? idx : -1;
+        return (interactables[closestIndex].position - probe).sqrMagnitude <= interactReachRadius * interactReachRadius ? closestIndex : -1;
     }
 
     private void SelectPart(int index, int actionIndex)

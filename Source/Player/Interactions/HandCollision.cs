@@ -72,51 +72,51 @@ namespace TarkovVR.Source.Player.Interactions
             left.inContact = false;
         }
 
-        private static void ClampHand(HandState s, Transform hand, bool clamp, bool physRight)
+        private static void ClampHand(HandState state, Transform hand, bool clamp, bool physRight)
         {
             if (hand == null)
             {
-                s.hasLast = false;
-                s.enacted = false;
+                state.hasLast = false;
+                state.enacted = false;
                 return;
             }
 
             // Strip last frame's enactment - unless the pose callback (or an equip path) already rewrote
             // the transform, in which case the fresh value IS the raw pose.
-            if (s.enacted)
+            if (state.enacted)
             {
-                s.enacted = false;
-                if ((hand.localPosition - s.lastEnactLocal).sqrMagnitude < 1e-10f)
-                    hand.localPosition = s.preEnactLocal;
+                state.enacted = false;
+                if ((hand.localPosition - state.lastEnactLocal).sqrMagnitude < 1e-10f)
+                    hand.localPosition = state.preEnactLocal;
             }
             if (!clamp)
             {
-                s.hasLast = false;
-                s.inContact = false;
+                state.hasLast = false;
+                state.inContact = false;
                 return;
             }
 
             Vector3 desired = hand.position;
-            if (!s.hasLast || (desired - s.lastResolved).sqrMagnitude > teleportReset * teleportReset)
+            if (!state.hasLast || (desired - state.lastResolved).sqrMagnitude > teleportReset * teleportReset)
             {
-                s.lastResolved = desired;
-                s.hasLast = true;
+                state.lastResolved = desired;
+                state.hasLast = true;
             }
 
             // Collide-and-slide from the last resolved position toward where the controller wants to be.
-            Vector3 resolved = s.lastResolved;
+            Vector3 resolved = state.lastResolved;
             Vector3 move = desired - resolved;
             Vector3 intended = move;
             bool hitAny = false;
             float approach = 0f;
-            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
+            float deltaTime = Mathf.Max(Time.deltaTime, 1e-4f);
             for (int iter = 0; iter < 3; iter++)
             {
                 float dist = move.magnitude;
                 if (dist < 1e-5f)
                     break;
-                Vector3 dir = move / dist;
-                if (!SweepSphere(resolved, dir, dist, out RaycastHit hit, out bool startBlocked))
+                Vector3 direction = move / dist;
+                if (!SweepSphere(resolved, direction, dist, out RaycastHit hit, out bool startBlocked))
                 {
                     // A cast that STARTS in contact reports "free" - only allow the move if it escapes
                     // the overlap (silently skipping zero-distance hits = pressure push-through).
@@ -126,51 +126,51 @@ namespace TarkovVR.Source.Player.Interactions
                     break;
                 }
                 hitAny = true;
-                approach = Mathf.Max(approach, Vector3.Dot(dir, -hit.normal) * dist / dt);
+                approach = Mathf.Max(approach, Vector3.Dot(direction, -hit.normal) * dist / deltaTime);
                 // Shrunk cast (0.8 r) stopping 0.2 r short: the cast sphere never starts a frame
                 // overlapping a collider (start-overlapped colliders are silently omitted by casts).
                 float safe = Mathf.Max(0f, hit.distance - handRadius * 0.2f);
-                resolved += dir * safe;
-                move = Vector3.ProjectOnPlane(move - dir * safe, hit.normal);
+                resolved += direction * safe;
+                move = Vector3.ProjectOnPlane(move - direction * safe, hit.normal);
                 if (Vector3.Dot(move, intended) <= 0f)
                     break;                                 // slide reversing against the intent = wrapping an edge
             }
-            s.lastResolved = resolved;
+            state.lastResolved = resolved;
 
             Vector3 offset = resolved - desired;
             if (offset.sqrMagnitude > 1e-10f)
             {
-                s.preEnactLocal = hand.localPosition;
+                state.preEnactLocal = hand.localPosition;
                 hand.position = resolved;
-                s.lastEnactLocal = hand.localPosition;
-                s.enacted = true;
+                state.lastEnactLocal = hand.localPosition;
+                state.enacted = true;
             }
 
             // One light tick on first contact (edge + re-arm), nothing while pressing.
             bool contactNow = hitAny && offset.sqrMagnitude > 1e-8f;
-            if (!contactNow && s.inContact)
-                s.contactEndStamp = Time.time;
-            if (contactNow && !s.inContact && contactHaptics && Time.time - s.contactEndStamp > 0.2f)
+            if (!contactNow && state.inContact)
+                state.contactEndStamp = Time.time;
+            if (contactNow && !state.inContact && contactHaptics && Time.time - state.contactEndStamp > 0.2f)
             {
-                float amp = Mathf.Clamp01(approach / 3f) * hapticStrength;
-                if (amp > 0.05f)
+                float amplitude = Mathf.Clamp01(approach / 3f) * hapticStrength;
+                if (amplitude > 0.05f)
                     TarkovVR.Source.Misc.HapticMixer.PlayPulse(physRight ? SteamVR_Input_Sources.RightHand : SteamVR_Input_Sources.LeftHand,
-                        amp, 0.05f, 90f);
+                        amplitude, 0.05f, 90f);
             }
-            s.inContact = contactNow;
+            state.inContact = contactNow;
         }
 
         // Same world/filter rules as the gun's barrel cast: solid-world mask (+ glass), trigger hits only
         // on the glass layer, own body ignored. startBlocked = the cast began already in contact.
-        private static bool SweepSphere(Vector3 origin, Vector3 dir, float dist, out RaycastHit best,
+        private static bool SweepSphere(Vector3 origin, Vector3 direction, float dist, out RaycastHit best,
             out bool startBlocked)
         {
             best = default;
             startBlocked = false;
             float bestDist = float.MaxValue;
-            int n = Physics.SphereCastNonAlloc(origin, handRadius * 0.8f, dir, castHits, dist,
+            int hitCount = Physics.SphereCastNonAlloc(origin, handRadius * 0.8f, direction, castHits, dist,
                 WeaponCollision.GetOcclusionMask(), QueryTriggerInteraction.Collide);
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < hitCount; i++)
             {
                 RaycastHit hit = castHits[i];
                 if (hit.collider.isTrigger && hit.collider.gameObject.layer != WeaponCollision.GlassLayer)
@@ -195,11 +195,11 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static readonly Collider[] overlapBuf = new Collider[8];
 
-        private static bool OverlappingWorld(Vector3 pos, float radius)
+        private static bool OverlappingWorld(Vector3 position, float radius)
         {
-            int n = Physics.OverlapSphereNonAlloc(pos, radius, overlapBuf,
+            int overlapCount = Physics.OverlapSphereNonAlloc(position, radius, overlapBuf,
                 WeaponCollision.GetOcclusionMask(), QueryTriggerInteraction.Ignore);
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < overlapCount; i++)
             {
                 if (overlapBuf[i].transform.IsChildOf(VRGlobals.player.Transform.Original))
                     continue;

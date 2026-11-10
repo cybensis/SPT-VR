@@ -113,7 +113,7 @@ namespace TarkovVR.Source.Misc
                 nativeOk = GpuProbe_Init(deviceProbeRT.GetNativeTexturePtr()) == 1;
                 if (!nativeOk) Plugin.MyLog.LogWarning("[StereoCost] GPU timing helper failed to start - CPU clocks only");
             }
-            catch (Exception e) { Plugin.MyLog.LogWarning("[StereoCost] GPU timing helper unavailable: " + e.Message); nativeOk = false; }
+            catch (Exception exception) { Plugin.MyLog.LogWarning("[StereoCost] GPU timing helper unavailable: " + exception.Message); nativeOk = false; }
             return nativeOk;
         }
 
@@ -242,34 +242,34 @@ namespace TarkovVR.Source.Misc
         // The headset camera: VRCam in a raid, the stereo Camera.main in the hideout and the menus (VRCam is unset there)
         private static Camera HeadsetCamera()
         {
-            Camera cam = VRGlobals.VRCam;
-            if (cam != null && cam.isActiveAndEnabled && cam.stereoEnabled) return cam;
-            cam = Camera.main;
-            return cam != null && cam.isActiveAndEnabled && cam.stereoEnabled ? cam : null;
+            Camera camera = VRGlobals.VRCam;
+            if (camera != null && camera.isActiveAndEnabled && camera.stereoEnabled) return camera;
+            camera = Camera.main;
+            return camera != null && camera.isActiveAndEnabled && camera.stereoEnabled ? camera : null;
         }
 
         // Also callable from UnityExplorer.
         public static void RunNow()
         {
             if (running) { Plugin.MyLog.LogWarning("[StereoCost] already running"); return; }
-            Camera cam = HeadsetCamera();
-            if (cam == null) { Plugin.MyLog.LogWarning("[StereoCost] no headset camera rendering both eyes - start it in a raid or the hideout"); return; }
+            Camera camera = HeadsetCamera();
+            if (camera == null) { Plugin.MyLog.LogWarning("[StereoCost] no headset camera rendering both eyes - start it in a raid or the hideout"); return; }
             if (instance == null) return;
-            instance.StartCoroutine(Run(cam));
+            instance.StartCoroutine(Run(camera));
         }
 
-        private static IEnumerator Run(Camera cam)
+        private static IEnumerator Run(Camera camera)
         {
             running = true;
-            probeCam = cam;
+            probeCam = camera;
             samples = new Samples[ModeCount];
             for (int m = 0; m < ModeCount; m++) samples[m] = new Samples();
-            StereoTargetEyeMask original = cam.stereoTargetEye;
+            StereoTargetEyeMask original = camera.stereoTargetEye;
             ShadowQuality originalShadows = QualitySettings.shadows;
-            bool originalOcclusion = cam.useOcclusionCulling;
+            bool originalOcclusion = camera.useOcclusionCulling;
             bool gpu = TryNative();
             eventPtr = gpu ? GpuProbe_GetRenderEventFunc() : Marshal.GetFunctionPointerForDelegate(managedEvent);
-            Attach(cam);
+            Attach(camera);
             var plan = new List<Mode>();
             for (int c = 0; c < cycles; c++)
             {
@@ -278,7 +278,7 @@ namespace TarkovVR.Source.Misc
                 if (occlusionStep) plan.Add(Mode.Occlusion);
             }
             if (scriptSegment && mainBreakdown) plan.Add(Mode.Scripts);
-            Plugin.MyLog.LogWarning($"[StereoCost] start on '{cam.name}': {cycles} x (both eyes, left eye only{(shadowStep ? ", both eyes with shadows off" : "")}"
+            Plugin.MyLog.LogWarning($"[StereoCost] start on '{camera.name}': {cycles} x (both eyes, left eye only{(shadowStep ? ", both eyes with shadows off" : "")}"
                                     + $"{(occlusionStep ? ", both eyes with occlusion culling on" : "")}; {segmentSeconds}s each)"
                                     + $"{(plan.Contains(Mode.Scripts) ? " + one both-eyes segment with every script timed (a freeze of a few seconds going in and out)" : "")}, "
                                     + $"{settleSeconds}s settle after each switch, GPU timing {(gpu ? "ON" : "OFF")}, sun lights watched: {lightAttached.Count / lightEvents.Length}, "
@@ -290,16 +290,16 @@ namespace TarkovVR.Source.Misc
                 foreach (Mode step in plan)
                 {
                     mode = step;
-                    if (cam == null || !cam.isActiveAndEnabled) break;
-                    cam.stereoTargetEye = mode == Mode.LeftOnly ? StereoTargetEyeMask.Left : StereoTargetEyeMask.Both;
+                    if (camera == null || !camera.isActiveAndEnabled) break;
+                    camera.stereoTargetEye = mode == Mode.LeftOnly ? StereoTargetEyeMask.Left : StereoTargetEyeMask.Both;
                     QualitySettings.shadows = mode == Mode.NoShadows ? ShadowQuality.Disable : originalShadows;
                     TarkovVR.Patches.Visuals.Rendering.vrOcclusionCulling = mode == Mode.Occlusion;   // the per-eye reset there keeps it
-                    cam.useOcclusionCulling = mode == Mode.Occlusion || originalOcclusion;
+                    camera.useOcclusionCulling = mode == Mode.Occlusion || originalOcclusion;
                     if (mode == Mode.Scripts) PatchAllScripts();   // the freeze lands in the settle window
                     sampling = false;
                     prevSampled = false;
                     float t0 = Time.realtimeSinceStartup;
-                    while (Time.realtimeSinceStartup - t0 < settleSeconds + segmentSeconds && cam != null && cam.isActiveAndEnabled)
+                    while (Time.realtimeSinceStartup - t0 < settleSeconds + segmentSeconds && camera != null && camera.isActiveAndEnabled)
                     {
                         yield return endOfFrame;
                         long tEnd = Stopwatch.GetTimestamp();
@@ -317,12 +317,12 @@ namespace TarkovVR.Source.Misc
             }
             finally
             {
-                if (cam != null) cam.stereoTargetEye = original;   // always hand both eyes back
+                if (camera != null) camera.stereoTargetEye = original;   // always hand both eyes back
                 QualitySettings.shadows = originalShadows;         // and the shadows
                 TarkovVR.Patches.Visuals.Rendering.vrOcclusionCulling = false;
-                if (cam != null) cam.useOcclusionCulling = originalOcclusion;
+                if (camera != null) camera.useOcclusionCulling = originalOcclusion;
                 UnpatchAllScripts();
-                Detach(cam);
+                Detach(camera);
                 sampling = false;
                 running = false;
             }
@@ -344,34 +344,34 @@ namespace TarkovVR.Source.Misc
             s.xrFrames += watch[(int)OpenXRFrameWatch.Stat.Frames];
         }
 
-        private static void Attach(Camera cam)
+        private static void Attach(Camera camera)
         {
             ringRead = ringWrite; managedOpen = false; fCount = 0;
             tscPerMs = nativeOk ? GpuProbe_TscPerMs() : 0;
-            Cleanup(cam);   // before our markers go on: clears anything an earlier broken run left on the camera
+            Cleanup(camera);   // before our markers go on: clears anything an earlier broken run left on the camera
             if (nativeOk) GL.IssuePluginEvent(eventPtr, EvDiscard);   // the last run's unread frames
             while (nativeOk && GpuProbe_PopFrame(fIds, fCpu, fGpu, fBusy, fIds.Length) >= 0) { }
-            foreach (var (evt, id) in cameraEvents)
+            foreach (var (cameraEvent, id) in cameraEvents)
             {
-                var cb = new CommandBuffer { name = "SPT-VR StereoCostProbe " + evt };
-                cb.IssuePluginEvent(eventPtr, id);
-                cam.AddCommandBuffer(evt, cb);
-                camAttached.Add((evt, cb));
+                var commandBuffer = new CommandBuffer { name = "SPT-VR StereoCostProbe " + cameraEvent };
+                commandBuffer.IssuePluginEvent(eventPtr, id);
+                camera.AddCommandBuffer(cameraEvent, commandBuffer);
+                camAttached.Add((cameraEvent, commandBuffer));
             }
             foreach (Light l in UnityEngine.Object.FindObjectsOfType<Light>())
             {
                 if (l == null || l.type != LightType.Directional || l.shadows == LightShadows.None) continue;
-                foreach (var (evt, id) in lightEvents)
+                foreach (var (lightEvent, id) in lightEvents)
                 {
-                    var cb = new CommandBuffer { name = "SPT-VR StereoCostProbe " + evt };
-                    cb.IssuePluginEvent(eventPtr, id);
-                    l.AddCommandBuffer(evt, cb);
-                    lightAttached.Add((l, evt, cb));
+                    var commandBuffer = new CommandBuffer { name = "SPT-VR StereoCostProbe " + lightEvent };
+                    commandBuffer.IssuePluginEvent(eventPtr, id);
+                    l.AddCommandBuffer(lightEvent, commandBuffer);
+                    lightAttached.Add((l, lightEvent, commandBuffer));
                 }
             }
             ParserReset();
-            BreakdownAttach(cam);
-            MainThreadAttach(cam);   // wraps the camera callbacks already there, before ours go on
+            BreakdownAttach(camera);
+            MainThreadAttach(camera);   // wraps the camera callbacks already there, before ours go on
             LoopAttach();
             Camera.onPreCull += OnPreCull;
             Camera.onPreRender += OnPreRender;
@@ -381,7 +381,7 @@ namespace TarkovVR.Source.Misc
             tPrevEnd = tPrevUpdateStart = 0; prevSampled = false;
         }
 
-        private static void Detach(Camera cam)
+        private static void Detach(Camera camera)
         {
             Camera.onPreCull -= OnPreCull;
             Camera.onPreRender -= OnPreRender;
@@ -389,9 +389,9 @@ namespace TarkovVR.Source.Misc
             Application.onBeforeRender -= OnBeforeRender;
             LoopDetach();
             MainThreadDetach();
-            BreakdownDetach(cam);
-            foreach (var (evt, cb) in camAttached) { if (cam != null) cam.RemoveCommandBuffer(evt, cb); cb.Release(); }
-            foreach (var (l, evt, cb) in lightAttached) { if (l != null) l.RemoveCommandBuffer(evt, cb); cb.Release(); }
+            BreakdownDetach(camera);
+            foreach (var (cameraEvent, commandBuffer) in camAttached) { if (camera != null) camera.RemoveCommandBuffer(cameraEvent, commandBuffer); commandBuffer.Release(); }
+            foreach (var (l, lightEvent, cb) in lightAttached) { if (l != null) l.RemoveCommandBuffer(lightEvent, cb); cb.Release(); }
             camAttached.Clear(); lightAttached.Clear();
         }
 
@@ -660,17 +660,17 @@ namespace TarkovVR.Source.Misc
             return a.Length % 2 == 1 ? a[a.Length / 2] : 0.5f * (a[a.Length / 2 - 1] + a[a.Length / 2]);
         }
         // Columns: both eyes, left only, both - left, shadows off, both - shadows off, occlusion culling on, both - occlusion on
-        private static void Row(StringBuilder sb, string label, Func<Samples, List<float>> pick)
+        private static void Row(StringBuilder builder, string label, Func<Samples, List<float>> pick)
         {
             List<float> both = pick(samples[0]), left = pick(samples[1]), noShadows = pick(samples[2]), occlusion = pick(samples[3]);
             float b = Median(both), l = Median(left), n = Median(noShadows), o = Median(occlusion);
-            sb.AppendLine($"[StereoCost]   {label,-46} {Fmt(b)} {Fmt(l)} {Delta(b, l)}  {Fmt(n)} {Delta(b, n)}  {Fmt(o)} {Delta(b, o)}   "
+            builder.AppendLine($"[StereoCost]   {label,-46} {Fmt(b)} {Fmt(l)} {Delta(b, l)}  {Fmt(n)} {Delta(b, n)}  {Fmt(o)} {Delta(b, o)}   "
                 + $"(n {both.Count}/{left.Count}/{noShadows.Count}/{occlusion.Count})");
         }
-        private static void Value(StringBuilder sb, string label, Func<Samples, double> pick)
+        private static void Value(StringBuilder builder, string label, Func<Samples, double> pick)
         {
             double b = pick(samples[0]), l = pick(samples[1]), n = pick(samples[2]), o = pick(samples[3]);
-            sb.AppendLine($"[StereoCost]   {label,-46} {Fmt((float)b)} {Fmt((float)l)} {Delta(b, l)}  {Fmt((float)n)} {Delta(b, n)}  {Fmt((float)o)} {Delta(b, o)}");
+            builder.AppendLine($"[StereoCost]   {label,-46} {Fmt((float)b)} {Fmt((float)l)} {Delta(b, l)}  {Fmt((float)n)} {Delta(b, n)}  {Fmt((float)o)} {Delta(b, o)}");
         }
         private static string Delta(double a, double b) => double.IsNaN(a) || double.IsNaN(b) ? "      -" : (a - b).ToString("+0.00;-0.00").PadLeft(7);
         private static string Fmt(float v) => float.IsNaN(v) ? "     -" : v.ToString("0.00").PadLeft(6);
@@ -685,11 +685,11 @@ namespace TarkovVR.Source.Misc
             {
                 CVRSystem sys = OpenVR.System;
                 if (sys == null) return "[StereoCost]   headset hidden area: SteamVR not available";
-                var sb = new StringBuilder("[StereoCost]   headset hidden area (never seen through the lenses):");
+                var builder = new StringBuilder("[StereoCost]   headset hidden area (never seen through the lenses):");
                 foreach (EVREye eye in new[] { EVREye.Eye_Left, EVREye.Eye_Right })
                 {
                     HiddenAreaMesh_t m = sys.GetHiddenAreaMesh(eye, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard);
-                    if (m.pVertexData == IntPtr.Zero || m.unTriangleCount == 0) { sb.Append($" {eye} none;"); continue; }
+                    if (m.pVertexData == IntPtr.Zero || m.unTriangleCount == 0) { builder.Append($" {eye} none;"); continue; }
                     var v = new float[m.unTriangleCount * 6];
                     Marshal.Copy(m.pVertexData, v, 0, v.Length);
                     double area = 0;
@@ -698,11 +698,11 @@ namespace TarkovVR.Source.Misc
                         int o = t * 6;
                         area += Math.Abs((v[o + 2] - v[o]) * (v[o + 5] - v[o + 1]) - (v[o + 4] - v[o]) * (v[o + 3] - v[o + 1])) * 0.5;
                     }
-                    sb.Append($" {eye} {area * 100:0.0}% ({m.unTriangleCount} triangles);");
+                    builder.Append($" {eye} {area * 100:0.0}% ({m.unTriangleCount} triangles);");
                 }
-                return sb.ToString();
+                return builder.ToString();
             }
-            catch (Exception e) { return "[StereoCost]   headset hidden area: unavailable (" + e.Message + ")"; }
+            catch (Exception exception) { return "[StereoCost]   headset hidden area: unavailable (" + exception.Message + ")"; }
         }
 
         private static string ThreadName(int id, int renderThreadId)
@@ -716,84 +716,84 @@ namespace TarkovVR.Source.Misc
         private static void Report(bool gpu)
         {
             var b = samples[0]; var l = samples[1]; var n = samples[2]; var o = samples[3];
-            var sb = new StringBuilder();
-            sb.AppendLine("[StereoCost] ===== result (medians, ms) =====     both   left both-left  no-shad both-noshad  occl-on both-occl");
-            Row(sb, "frame interval (Unity)", s => s.frameInterval);
+            var builder = new StringBuilder();
+            builder.AppendLine("[StereoCost] ===== result (medians, ms) =====     both   left both-left  no-shad both-noshad  occl-on both-occl");
+            Row(builder, "frame interval (Unity)", s => s.frameInterval);
             if (!OpenXRBootstrap.Active)
             {
-                Row(sb, "frame interval (SteamVR client)", s => s.vrInterval);
-                Row(sb, "GPU before submit (SteamVR)", s => s.vrGpu);
+                Row(builder, "frame interval (SteamVR client)", s => s.vrInterval);
+                Row(builder, "GPU before submit (SteamVR)", s => s.vrGpu);
             }
-            sb.AppendLine("[StereoCost]   --- MAIN THREAD (wall = clock; busy = the thread's own CPU, waits left out) ---");
-            Row(sb, "frame (Update -> next Update), wall", s => s.mainFrameWall);
-            Row(sb, "frame (Update -> next Update), BUSY", s => s.mainFrameBusy);
-            Row(sb, "early Update -> end of frame, wall", s => s.mainUpdateToEnd);
-            Row(sb, "early Update -> end of frame, BUSY", s => s.mainUpdateToEndBusy);
-            Row(sb, "end of frame -> next Update, wall", s => s.mainBetweenWall);
-            Row(sb, "end of frame -> next Update, BUSY", s => s.mainBetweenBusy);
-            Row(sb, "VR camera: first cull -> last eye done, wall", s => s.mainRenderAll);
-            Row(sb, "VR camera: first cull -> last eye done, BUSY", s => s.mainRenderAllBusy);
-            Row(sb, "L eye cull (pre-cull -> pre-render), wall", s => s.mainEyeCullWall[0]);
-            Row(sb, "L eye cull, BUSY", s => s.mainEyeCullBusy[0]);
-            Row(sb, "L eye pass (pre-render -> post-render), wall", s => s.mainEye[0]);
-            Row(sb, "L eye pass, BUSY", s => s.mainEyeBusy[0]);
-            Row(sb, "R eye cull (pre-cull -> pre-render), wall", s => s.mainEyeCullWall[1]);
-            Row(sb, "R eye cull, BUSY", s => s.mainEyeCullBusy[1]);
-            Row(sb, "R eye pass (pre-render -> post-render), wall", s => s.mainEye[1]);
-            Row(sb, "R eye pass, BUSY", s => s.mainEyeBusy[1]);
+            builder.AppendLine("[StereoCost]   --- MAIN THREAD (wall = clock; busy = the thread's own CPU, waits left out) ---");
+            Row(builder, "frame (Update -> next Update), wall", s => s.mainFrameWall);
+            Row(builder, "frame (Update -> next Update), BUSY", s => s.mainFrameBusy);
+            Row(builder, "early Update -> end of frame, wall", s => s.mainUpdateToEnd);
+            Row(builder, "early Update -> end of frame, BUSY", s => s.mainUpdateToEndBusy);
+            Row(builder, "end of frame -> next Update, wall", s => s.mainBetweenWall);
+            Row(builder, "end of frame -> next Update, BUSY", s => s.mainBetweenBusy);
+            Row(builder, "VR camera: first cull -> last eye done, wall", s => s.mainRenderAll);
+            Row(builder, "VR camera: first cull -> last eye done, BUSY", s => s.mainRenderAllBusy);
+            Row(builder, "L eye cull (pre-cull -> pre-render), wall", s => s.mainEyeCullWall[0]);
+            Row(builder, "L eye cull, BUSY", s => s.mainEyeCullBusy[0]);
+            Row(builder, "L eye pass (pre-render -> post-render), wall", s => s.mainEye[0]);
+            Row(builder, "L eye pass, BUSY", s => s.mainEyeBusy[0]);
+            Row(builder, "R eye cull (pre-cull -> pre-render), wall", s => s.mainEyeCullWall[1]);
+            Row(builder, "R eye cull, BUSY", s => s.mainEyeCullBusy[1]);
+            Row(builder, "R eye pass (pre-render -> post-render), wall", s => s.mainEye[1]);
+            Row(builder, "R eye pass, BUSY", s => s.mainEyeBusy[1]);
             if (OpenXRFrameWatch.Loaded)
             {
                 int[] threads = OpenXRFrameWatch.Threads();
                 int renderThreadId = nativeOk ? GpuProbe_RenderThreadId() : 0;
-                sb.AppendLine($"[StereoCost]   --- OPENXR frame calls (xrWaitFrame on the {ThreadName(threads[0], renderThreadId)}, xrBeginFrame on the {ThreadName(threads[1], renderThreadId)}, "
+                builder.AppendLine($"[StereoCost]   --- OPENXR frame calls (xrWaitFrame on the {ThreadName(threads[0], renderThreadId)}, xrBeginFrame on the {ThreadName(threads[1], renderThreadId)}, "
                     + $"xrEndFrame on the {ThreadName(threads[2], renderThreadId)}) ---");
-                Value(sb, "xrWaitFrame wait a frame (mean)", s => s.xrWaitFrames > 0 ? s.xrWaitMs / s.xrWaitFrames : double.NaN);
-                Value(sb, "xrWaitFrame longest wait", s => s.xrWaitMax);
-                Value(sb, "xrBeginFrame a frame (mean)", s => s.xrFrames > 0 ? s.xrBeginMs / s.xrFrames : double.NaN);
-                Value(sb, "xrEndFrame a frame (mean)", s => s.xrFrames > 0 ? s.xrEndMs / s.xrFrames : double.NaN);
+                Value(builder, "xrWaitFrame wait a frame (mean)", s => s.xrWaitFrames > 0 ? s.xrWaitMs / s.xrWaitFrames : double.NaN);
+                Value(builder, "xrWaitFrame longest wait", s => s.xrWaitMax);
+                Value(builder, "xrBeginFrame a frame (mean)", s => s.xrFrames > 0 ? s.xrBeginMs / s.xrFrames : double.NaN);
+                Value(builder, "xrEndFrame a frame (mean)", s => s.xrFrames > 0 ? s.xrEndMs / s.xrFrames : double.NaN);
             }
             string[] sourceNames = { "--- RENDER THREAD wall (CPU clock, includes waiting for the main thread's commands) ---", "--- GPU (timestamps) ---",
                                      "--- RENDER THREAD BUSY (its own CPU work, waits left out) ---" };
             foreach (int src in new[] { SrcWall, SrcBusy, SrcGpu })
             {
-                sb.AppendLine("[StereoCost]   " + sourceNames[src]);
+                builder.AppendLine("[StereoCost]   " + sourceNames[src]);
                 for (int r = 0; r < rowNames.Length; r++)
-                    if (b.rows[src, r].Count + l.rows[src, r].Count + n.rows[src, r].Count + o.rows[src, r].Count > 0) Row(sb, rowNames[r], s => s.rows[src, r]);
+                    if (b.rows[src, r].Count + l.rows[src, r].Count + n.rows[src, r].Count + o.rows[src, r].Count > 0) Row(builder, rowNames[r], s => s.rows[src, r]);
             }
             // Which one holds the frame: the busiest of main thread, render thread and GPU, both eyes
             float mainBusy = Median(b.mainFrameBusy), renderBusy = Median(b.rows[SrcBusy, 0]), gpuFrame = Median(b.rows[SrcGpu, 0]), frame = Median(b.frameInterval);
-            sb.AppendLine($"[StereoCost]   >>> both eyes, frame {Fmt(frame)} ms: main thread busy {Fmt(mainBusy)}, render thread busy {Fmt(renderBusy)}, GPU {Fmt(gpuFrame)} "
+            builder.AppendLine($"[StereoCost]   >>> both eyes, frame {Fmt(frame)} ms: main thread busy {Fmt(mainBusy)}, render thread busy {Fmt(renderBusy)}, GPU {Fmt(gpuFrame)} "
                 + $"-> the frame is held by the {Busiest(mainBusy, renderBusy, gpuFrame)} (left only: main {Fmt(Median(l.mainFrameBusy))}, render {Fmt(Median(l.rows[SrcBusy, 0]))}, GPU {Fmt(Median(l.rows[SrcGpu, 0]))})");
             if (n.frames > 0)
-                sb.AppendLine($"[StereoCost]   >>> shadows off, both eyes: frame {Fmt(Median(n.frameInterval))} ms, main thread busy {Fmt(Median(n.mainFrameBusy))}, "
+                builder.AppendLine($"[StereoCost]   >>> shadows off, both eyes: frame {Fmt(Median(n.frameInterval))} ms, main thread busy {Fmt(Median(n.mainFrameBusy))}, "
                     + $"render thread busy {Fmt(Median(n.rows[SrcBusy, 0]))}, GPU {Fmt(Median(n.rows[SrcGpu, 0]))} = shadows cost the main thread "
                     + $"{Delta(mainBusy, Median(n.mainFrameBusy)).Trim()}, the render thread {Delta(renderBusy, Median(n.rows[SrcBusy, 0])).Trim()}, the GPU {Delta(gpuFrame, Median(n.rows[SrcGpu, 0])).Trim()} ms a frame");
             if (o.frames > 0)
-                sb.AppendLine($"[StereoCost]   >>> occlusion culling on, both eyes: frame {Fmt(Median(o.frameInterval))} ms, main thread busy {Fmt(Median(o.mainFrameBusy))}, "
+                builder.AppendLine($"[StereoCost]   >>> occlusion culling on, both eyes: frame {Fmt(Median(o.frameInterval))} ms, main thread busy {Fmt(Median(o.mainFrameBusy))}, "
                     + $"render thread busy {Fmt(Median(o.rows[SrcBusy, 0]))}, GPU {Fmt(Median(o.rows[SrcGpu, 0]))} = leaving it off costs the main thread "
                     + $"{Delta(mainBusy, Median(o.mainFrameBusy)).Trim()}, the render thread {Delta(renderBusy, Median(o.rows[SrcBusy, 0])).Trim()}, the GPU {Delta(gpuFrame, Median(o.rows[SrcGpu, 0])).Trim()} ms a frame");
-            sb.AppendLine($"[StereoCost]   frames both/left/no-shadows/occlusion: {b.frames}/{l.frames}/{n.frames}/{o.frames}; render-thread frames {b.rtFrames}/{l.rtFrames}/{n.rtFrames}/{o.rtFrames}; "
+            builder.AppendLine($"[StereoCost]   frames both/left/no-shadows/occlusion: {b.frames}/{l.frames}/{n.frames}/{o.frames}; render-thread frames {b.rtFrames}/{l.rtFrames}/{n.rtFrames}/{o.rtFrames}; "
                 + $"with GPU times {b.gpuFrames}/{l.gpuFrames}/{n.gpuFrames}/{o.gpuFrames}; with busy times {b.busyFrames}/{l.busyFrames}/{n.busyFrames}/{o.busyFrames} (TSC {tscPerMs / 1000:0.###} MHz)");
             if (gpu)
             {
                 var st = new int[6];
                 GpuProbe_Stats(st, st.Length);
-                sb.AppendLine($"[StereoCost]   GPU timer: ok {st[3]}, CPU only {st[4]} (not back after 16 frames {st[0]}, read failed {st[2]}, " +
+                builder.AppendLine($"[StereoCost]   GPU timer: ok {st[3]}, CPU only {st[4]} (not back after 16 frames {st[0]}, read failed {st[2]}, " +
                               $"bad readings {st[5]}); driver 'disjoint' flag on {st[1]} frames (kept when readings sane); clock {GpuProbe_Frequency() / 1e6:0.###} MHz");
             }
-            sb.AppendLine($"[StereoCost]   eye passes per frame both/left/no-shadows: {Per(b.rtEyePasses, b.rtFrames)}/{Per(l.rtEyePasses, l.rtFrames)}/{Per(n.rtEyePasses, n.rtFrames)}; " +
+            builder.AppendLine($"[StereoCost]   eye passes per frame both/left/no-shadows: {Per(b.rtEyePasses, b.rtFrames)}/{Per(l.rtEyePasses, l.rtFrames)}/{Per(n.rtEyePasses, n.rtFrames)}; " +
                           $"sun shadow maps per frame: {Per(b.shadowMaps, b.rtFrames)}/{Per(l.shadowMaps, l.rtFrames)}/{Per(n.shadowMaps, n.rtFrames)}; " +
                           $"screen-space shadow masks per frame: {Per(b.shadowMasks, b.rtFrames)}/{Per(l.shadowMasks, l.rtFrames)}/{Per(n.shadowMasks, n.rtFrames)}; " +
                           $"sun shadow maps of other cameras per frame: {Per(b.otherShadowMaps, b.rtFrames)}/{Per(l.otherShadowMaps, l.rtFrames)}/{Per(n.otherShadowMaps, n.rtFrames)}");
-            sb.AppendLine($"[StereoCost]   VR camera onPreCull per frame both/left/no-shadows: {Per(b.preCullCalls, b.frames)}/{Per(l.preCullCalls, l.frames)}/{Per(n.preCullCalls, n.frames)}");
-            sb.AppendLine("[StereoCost]   " + ShadowLightCount());
-            sb.AppendLine(HiddenAreaLine());
-            ReportBreakdown(sb, b);
-            ReportMainThread(sb, b);
-            ReportLoop(sb);
-            ReportScripts(sb);
-            sb.Append("[StereoCost] ===== end =====");
-            Plugin.MyLog.LogWarning(sb.ToString());
+            builder.AppendLine($"[StereoCost]   VR camera onPreCull per frame both/left/no-shadows: {Per(b.preCullCalls, b.frames)}/{Per(l.preCullCalls, l.frames)}/{Per(n.preCullCalls, n.frames)}");
+            builder.AppendLine("[StereoCost]   " + ShadowLightCount());
+            builder.AppendLine(HiddenAreaLine());
+            ReportBreakdown(builder, b);
+            ReportMainThread(builder, b);
+            ReportLoop(builder);
+            ReportScripts(builder);
+            builder.Append("[StereoCost] ===== end =====");
+            Plugin.MyLog.LogWarning(builder.ToString());
         }
 
         private static string Busiest(float main, float render, float gpu)

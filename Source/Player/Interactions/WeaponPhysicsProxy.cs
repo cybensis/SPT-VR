@@ -83,17 +83,17 @@ namespace TarkovVR.Source.Player.Interactions
 
         public static WeaponPhysicsProxy Create(int worldMask)
         {
-            GameObject go = new GameObject("WeaponPhysicsProxy");
-            var p = go.AddComponent<WeaponPhysicsProxy>();
-            p.worldMask = worldMask;
+            GameObject proxyObject = new GameObject("WeaponPhysicsProxy");
+            var proxy = proxyObject.AddComponent<WeaponPhysicsProxy>();
+            proxy.worldMask = worldMask;
 
-            p.rb = go.AddComponent<Rigidbody>();
-            p.rb.useGravity = false;
-            p.rb.drag = 0f;
-            p.rb.angularDrag = 0f;
-            p.rb.mass = 1f;
-            p.rb.interpolation = RigidbodyInterpolation.None;
-            p.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            proxy.rb = proxyObject.AddComponent<Rigidbody>();
+            proxy.rb.useGravity = false;
+            proxy.rb.drag = 0f;
+            proxy.rb.angularDrag = 0f;
+            proxy.rb.mass = 1f;
+            proxy.rb.interpolation = RigidbodyInterpolation.None;
+            proxy.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
             // Frictionless (Minimum combine -> every contact is frictionless regardless of the wall's
             // material) so the gun SLIDES / PIVOTS along a surface instead of gripping it ("stuck pointing
@@ -106,20 +106,20 @@ namespace TarkovVR.Source.Player.Interactions
                 frictionCombine = PhysicMaterialCombine.Minimum,
                 bounceCombine = PhysicMaterialCombine.Minimum,
             };
-            p.bodyCol = go.AddComponent<CapsuleCollider>();
-            p.bodyCol.direction = 1;   // local Y = the barrel axis
-            p.bodyCol.material = slick;
-            p.barrelCol = go.AddComponent<CapsuleCollider>();
-            p.barrelCol.direction = 1;
-            p.barrelCol.material = slick;
+            proxy.bodyCol = proxyObject.AddComponent<CapsuleCollider>();
+            proxy.bodyCol.direction = 1;   // local Y = the barrel axis
+            proxy.bodyCol.material = slick;
+            proxy.barrelCol = proxyObject.AddComponent<CapsuleCollider>();
+            proxy.barrelCol.direction = 1;
+            proxy.barrelCol.material = slick;
 
-            p.sandbox = SceneManager.CreateScene("SPTVR_WeaponPhysics",
+            proxy.sandbox = SceneManager.CreateScene("SPTVR_WeaponPhysics",
                 new CreateSceneParameters(LocalPhysicsMode.Physics3D));
-            SceneManager.MoveGameObjectToScene(go, p.sandbox);
-            p.sandboxPhysics = p.sandbox.GetPhysicsScene();
+            SceneManager.MoveGameObjectToScene(proxyObject, proxy.sandbox);
+            proxy.sandboxPhysics = proxy.sandbox.GetPhysicsScene();
 
-            p.SetActive(false);
-            return p;
+            proxy.SetActive(false);
+            return proxy;
         }
 
         public void Configure(float weaponLn, float bodyR, float barrelR)
@@ -205,10 +205,10 @@ namespace TarkovVR.Source.Player.Interactions
             // rotation tunnelling a thin wall) only runs when something is actually nearby to collide with.
             // "reach" spans the gun grip->muzzle capsule PLUS this frame's travel + a margin, so we drop into
             // physics mode BEFORE the muzzle can reach a wall = no clip-through on the onset frame.
-            float len = Mathf.Max(builtLen, 0f);
-            Vector3 muzzle = rb.position + rb.rotation * new Vector3(0f, -len, 0f);
+            float length = Mathf.Max(builtLen, 0f);
+            Vector3 muzzle = rb.position + rb.rotation * new Vector3(0f, -length, 0f);
             float muzzleTravel = (targetPos - rb.position).magnitude
-                               + Quaternion.Angle(rb.rotation, targetRot) * Mathf.Deg2Rad * len;
+                               + Quaternion.Angle(rb.rotation, targetRot) * Mathf.Deg2Rad * length;
             float reachRadius = contactLeadMargin + Mathf.Max(builtBodyR, builtBarrelR) + muzzleTravel;
             int found = Physics.OverlapCapsuleNonAlloc(rb.position, muzzle, reachRadius, proximityBuf,
                                                       worldMask, QueryTriggerInteraction.Collide);
@@ -227,22 +227,22 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            Vector3 v = (targetPos - rb.position) / dt * driveGain;
-            float vs = v.magnitude;
-            if (vs > maxSpeed)
-                v *= maxSpeed / vs;
-            rb.velocity = v;
+            Vector3 driveVelocity = (targetPos - rb.position) / dt * driveGain;
+            float driveSpeed = driveVelocity.magnitude;
+            if (driveSpeed > maxSpeed)
+                driveVelocity *= maxSpeed / driveSpeed;
+            rb.velocity = driveVelocity;
 
-            Quaternion dq = targetRot * Quaternion.Inverse(rb.rotation);
-            dq.ToAngleAxis(out float ang, out Vector3 axis);
-            if (ang > 180f)
-                ang -= 360f;
-            if (Mathf.Abs(ang) > 1e-3f && axis.sqrMagnitude > 1e-8f && !float.IsInfinity(axis.x))
+            Quaternion rotationDelta = targetRot * Quaternion.Inverse(rb.rotation);
+            rotationDelta.ToAngleAxis(out float angle, out Vector3 axis);
+            if (angle > 180f)
+                angle -= 360f;
+            if (Mathf.Abs(angle) > 1e-3f && axis.sqrMagnitude > 1e-8f && !float.IsInfinity(axis.x))
             {
-                Vector3 w = axis.normalized * (ang * Mathf.Deg2Rad / dt) * driveGain;
-                float ws = w.magnitude, wmax = maxAngSpeed * Mathf.Deg2Rad;
-                if (ws > wmax)
-                    w *= wmax / ws;
+                Vector3 w = axis.normalized * (angle * Mathf.Deg2Rad / dt) * driveGain;
+                float angularSpeed = w.magnitude, wmax = maxAngSpeed * Mathf.Deg2Rad;
+                if (angularSpeed > wmax)
+                    w *= wmax / angularSpeed;
                 rb.angularVelocity = w;
             }
             else
@@ -255,9 +255,9 @@ namespace TarkovVR.Source.Player.Interactions
             // static copies. Velocity set once above; contact response carries between substeps.
             float muzzleSpeed = rb.velocity.magnitude + rb.angularVelocity.magnitude * builtLen;
             int steps = Mathf.Clamp(Mathf.CeilToInt(muzzleSpeed * dt / substepMuzzleDist), 1, maxSimSubsteps);
-            float sub = dt / steps;
+            float substep = dt / steps;
             for (int i = 0; i < steps; i++)
-                sandboxPhysics.Simulate(sub);
+                sandboxPhysics.Simulate(substep);
         }
 
         // Cook every world collider within queryRegion (a generous box around the gun) into the sandbox.
@@ -272,24 +272,24 @@ namespace TarkovVR.Source.Player.Interactions
             lastQueryCenter = rb.position;
             nextQueryTime = Time.time + colliderRefreshInterval;
 
-            int n = Physics.OverlapBoxNonAlloc(rb.position, Vector3.one * queryRegion, overlapBuf,
+            int overlapCount = Physics.OverlapBoxNonAlloc(rb.position, Vector3.one * queryRegion, overlapBuf,
                 Quaternion.identity, worldMask, QueryTriggerInteraction.Collide);
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < overlapCount; i++)
             {
-                Collider src = overlapBuf[i];
-                if (src == null)
+                Collider source = overlapBuf[i];
+                if (source == null)
                     continue;
-                int id = src.GetInstanceID();
-                if (ignoredColliders.Contains(id) || IsOwnCollider(src))
+                int id = source.GetInstanceID();
+                if (ignoredColliders.Contains(id) || IsOwnCollider(source))
                     continue;
                 if (colliderCopies.TryGetValue(id, out GameObject existing))
                 {
                     if (existing != null)
-                        existing.transform.SetPositionAndRotation(src.transform.position, src.transform.rotation);
+                        existing.transform.SetPositionAndRotation(source.transform.position, source.transform.rotation);
                 }
                 else
                 {
-                    GameObject copy = CopyCollider(src);
+                    GameObject copy = CopyCollider(source);
                     if (copy != null)
                         colliderCopies[id] = copy;
                 }
@@ -297,19 +297,19 @@ namespace TarkovVR.Source.Player.Interactions
 
             staleKeys.Clear();
             float retSqr = retainDistance * retainDistance;
-            foreach (var kv in colliderCopies)
+            foreach (var entry in colliderCopies)
             {
-                GameObject g = kv.Value;
-                if (g == null)
+                GameObject copyObject = entry.Value;
+                if (copyObject == null)
                 {
-                    staleKeys.Add(kv.Key);
+                    staleKeys.Add(entry.Key);
                     continue;
                 }
-                Collider c = g.GetComponent<Collider>();
-                float dSqr = c != null ? c.bounds.SqrDistance(rb.position)
-                                       : (g.transform.position - rb.position).sqrMagnitude;
+                Collider copyCollider = copyObject.GetComponent<Collider>();
+                float dSqr = copyCollider != null ? copyCollider.bounds.SqrDistance(rb.position)
+                                       : (copyObject.transform.position - rb.position).sqrMagnitude;
                 if (dSqr > retSqr)
-                    staleKeys.Add(kv.Key);
+                    staleKeys.Add(entry.Key);
             }
             for (int i = 0; i < staleKeys.Count; i++)
             {
@@ -321,51 +321,51 @@ namespace TarkovVR.Source.Player.Interactions
 
         // A static clone of a world collider inside the sandbox (same shape/mesh/pose/scale, same layer as
         // the proxy so they collide). Carries the source collider for feedback (glass break / surface sound).
-        private GameObject CopyCollider(Collider src)
+        private GameObject CopyCollider(Collider source)
         {
-            GameObject go = new GameObject("wc_copy") { layer = gameObject.layer };
-            SceneManager.MoveGameObjectToScene(go, sandbox);
-            Transform t = src.transform;
-            go.transform.SetPositionAndRotation(t.position, t.rotation);
-            go.transform.localScale = t.lossyScale;
+            GameObject copy = new GameObject("wc_copy") { layer = gameObject.layer };
+            SceneManager.MoveGameObjectToScene(copy, sandbox);
+            Transform sourceTransform = source.transform;
+            copy.transform.SetPositionAndRotation(sourceTransform.position, sourceTransform.rotation);
+            copy.transform.localScale = sourceTransform.lossyScale;
 
             bool made = false;
-            switch (src)
+            switch (source)
             {
-                case MeshCollider mc when mc.sharedMesh != null:
-                    var nmc = go.AddComponent<MeshCollider>();
-                    nmc.sharedMesh = mc.sharedMesh;
-                    nmc.convex = false;
+                case MeshCollider meshCollider when meshCollider.sharedMesh != null:
+                    var meshCopy = copy.AddComponent<MeshCollider>();
+                    meshCopy.sharedMesh = meshCollider.sharedMesh;
+                    meshCopy.convex = false;
                     made = true;
                     break;
-                case BoxCollider bc:
-                    var nbc = go.AddComponent<BoxCollider>();
-                    nbc.center = bc.center; nbc.size = bc.size;
+                case BoxCollider boxCollider:
+                    var boxCopy = copy.AddComponent<BoxCollider>();
+                    boxCopy.center = boxCollider.center; boxCopy.size = boxCollider.size;
                     made = true;
                     break;
-                case SphereCollider sc:
-                    var nsc = go.AddComponent<SphereCollider>();
-                    nsc.center = sc.center; nsc.radius = sc.radius;
+                case SphereCollider sphereCollider:
+                    var sphereCopy = copy.AddComponent<SphereCollider>();
+                    sphereCopy.center = sphereCollider.center; sphereCopy.radius = sphereCollider.radius;
                     made = true;
                     break;
-                case CapsuleCollider cc:
-                    var ncc = go.AddComponent<CapsuleCollider>();
-                    ncc.center = cc.center; ncc.radius = cc.radius; ncc.height = cc.height; ncc.direction = cc.direction;
+                case CapsuleCollider capsuleCollider:
+                    var capsuleCopy = copy.AddComponent<CapsuleCollider>();
+                    capsuleCopy.center = capsuleCollider.center; capsuleCopy.radius = capsuleCollider.radius; capsuleCopy.height = capsuleCollider.height; capsuleCopy.direction = capsuleCollider.direction;
                     made = true;
                     break;
-                case TerrainCollider tc when tc.terrainData != null:
-                    var ntc = go.AddComponent<TerrainCollider>();
-                    ntc.terrainData = tc.terrainData;
+                case TerrainCollider terrainCollider when terrainCollider.terrainData != null:
+                    var terrainCopy = copy.AddComponent<TerrainCollider>();
+                    terrainCopy.terrainData = terrainCollider.terrainData;
                     made = true;
                     break;
             }
             if (!made)
             {
-                Destroy(go);
+                Destroy(copy);
                 return null;
             }
-            go.AddComponent<ProxyColliderSource>().source = src;
-            return go;
+            copy.AddComponent<ProxyColliderSource>().source = source;
+            return copy;
         }
 
         // Drop a world collider from the sandbox and never re-copy it (broken glass): the real pane's
@@ -375,15 +375,15 @@ namespace TarkovVR.Source.Player.Interactions
         public void ForgetCollider(int instanceId)
         {
             ignoredColliders.Add(instanceId);
-            if (colliderCopies.TryGetValue(instanceId, out GameObject go))
+            if (colliderCopies.TryGetValue(instanceId, out GameObject copy))
             {
                 colliderCopies.Remove(instanceId);
-                if (go != null)
+                if (copy != null)
                 {
-                    Collider c = go.GetComponent<Collider>();
-                    if (c != null)
-                        c.enabled = false;   // immediate: stop colliding this frame too (Destroy is deferred to end of frame)
-                    Destroy(go);
+                    Collider copyCollider = copy.GetComponent<Collider>();
+                    if (copyCollider != null)
+                        copyCollider.enabled = false;   // immediate: stop colliding this frame too (Destroy is deferred to end of frame)
+                    Destroy(copy);
                 }
             }
         }
@@ -393,10 +393,10 @@ namespace TarkovVR.Source.Player.Interactions
             if (!active || c.contactCount == 0)
                 return;
             lastContactTime = Time.time;
-            ContactPoint cp = c.GetContact(0);
-            Collider src = cp.otherCollider != null ? cp.otherCollider.GetComponent<ProxyColliderSource>()?.source : null;
-            if (src != null)
-                WeaponCollision.OnProxyContact(src, cp.point, cp.normal, c.relativeVelocity.magnitude);
+            ContactPoint contact = c.GetContact(0);
+            Collider source = contact.otherCollider != null ? contact.otherCollider.GetComponent<ProxyColliderSource>()?.source : null;
+            if (source != null)
+                WeaponCollision.OnProxyContact(source, contact.point, contact.normal, c.relativeVelocity.magnitude);
         }
 
         private void OnCollisionStay(Collision c)

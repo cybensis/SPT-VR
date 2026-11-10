@@ -523,28 +523,28 @@ namespace TarkovVR.Source.Graphics
             return new Vector2(vertex.x, flipVertical ? 1f - vertex.y : vertex.y);
         }
 
-        private static void FillTriangle(bool[] hidden, Vector2 a, Vector2 b, Vector2 c)
+        private static void FillTriangle(bool[] hidden, Vector2 cornerA, Vector2 cornerB, Vector2 cornerC)
         {
-            int columnLow = Mathf.Clamp((int)(Mathf.Min(a.x, Mathf.Min(b.x, c.x)) * LensMaskSize), 0, LensMaskSize - 1);
-            int columnHigh = Mathf.Clamp((int)(Mathf.Max(a.x, Mathf.Max(b.x, c.x)) * LensMaskSize), 0, LensMaskSize - 1);
-            int rowLow = Mathf.Clamp((int)(Mathf.Min(a.y, Mathf.Min(b.y, c.y)) * LensMaskSize), 0, LensMaskSize - 1);
-            int rowHigh = Mathf.Clamp((int)(Mathf.Max(a.y, Mathf.Max(b.y, c.y)) * LensMaskSize), 0, LensMaskSize - 1);
+            int columnLow = Mathf.Clamp((int)(Mathf.Min(cornerA.x, Mathf.Min(cornerB.x, cornerC.x)) * LensMaskSize), 0, LensMaskSize - 1);
+            int columnHigh = Mathf.Clamp((int)(Mathf.Max(cornerA.x, Mathf.Max(cornerB.x, cornerC.x)) * LensMaskSize), 0, LensMaskSize - 1);
+            int rowLow = Mathf.Clamp((int)(Mathf.Min(cornerA.y, Mathf.Min(cornerB.y, cornerC.y)) * LensMaskSize), 0, LensMaskSize - 1);
+            int rowHigh = Mathf.Clamp((int)(Mathf.Max(cornerA.y, Mathf.Max(cornerB.y, cornerC.y)) * LensMaskSize), 0, LensMaskSize - 1);
             for (int row = rowLow; row <= rowHigh; row++)
             {
                 for (int column = columnLow; column <= columnHigh; column++)
                 {
                     Vector2 cell = new Vector2((column + 0.5f) / LensMaskSize, (row + 0.5f) / LensMaskSize);
-                    if (InTriangle(cell, a, b, c))
+                    if (InTriangle(cell, cornerA, cornerB, cornerC))
                         hidden[row * LensMaskSize + column] = true;
                 }
             }
         }
 
-        private static bool InTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
+        private static bool InTriangle(Vector2 point, Vector2 cornerA, Vector2 cornerB, Vector2 cornerC)
         {
-            float side1 = Cross(b - a, point - a);
-            float side2 = Cross(c - b, point - b);
-            float side3 = Cross(a - c, point - c);
+            float side1 = Cross(cornerB - cornerA, point - cornerA);
+            float side2 = Cross(cornerC - cornerB, point - cornerB);
+            float side3 = Cross(cornerA - cornerC, point - cornerC);
             bool anyNegative = side1 < 0f || side2 < 0f || side3 < 0f;
             bool anyPositive = side1 > 0f || side2 > 0f || side3 > 0f;
             return !(anyNegative && anyPositive);

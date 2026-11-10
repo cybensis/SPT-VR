@@ -96,20 +96,20 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(LootItem), "OnCollisionEnter")]
         private static void VoiceOnImpact(LootItem __instance, Collision collision)
         {
-            if (__instance is ObservedLootItem obs && obs._isNetworkGame)
+            if (__instance is ObservedLootItem observedItem && observedItem._isNetworkGame)
                 return;
 
             float impact = collision.relativeVelocity.magnitude;
             if (impact < minImpactSpeed)
                 return;
 
-            Vector3 pos = (collision.contacts.Length > 0) ? collision.contacts[0].point : __instance.transform.position;
+            Vector3 position = (collision.contacts.Length > 0) ? collision.contacts[0].point : __instance.transform.position;
             BaseBallistic ballistic = collision.collider ? collision.collider.GetComponent<BaseBallistic>() : null;
             BaseBallistic.ESurfaceSound surface = (ballistic != null)
-                ? ballistic.GetSurfaceSound(pos)
+                ? ballistic.GetSurfaceSound(position)
                 : BaseBallistic.ESurfaceSound.Concrete;
 
-            Voice(__instance, pos, surface, impact);
+            Voice(__instance, position, surface, impact);
         }
 
         // OBSERVER side in co-op: ObservedLootItem.ApplyNetPacket calls this on the networked settle (the
@@ -118,13 +118,13 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(LootItem), "PlayDropSound")]
         private static void VoiceOnNetworkedSettle(LootItem __instance)
         {
-            if (!(__instance is ObservedLootItem obs) || !obs._isNetworkGame)
+            if (!(__instance is ObservedLootItem observedItem) || !observedItem._isNetworkGame)
                 return;
 
-            Vector3 pos = __instance.transform.position;
-            __instance.CheckSurfaceImmediately(pos);            // vanilla downward surface raycast -> sets _currentSurface
+            Vector3 position = __instance.transform.position;
+            __instance.CheckSurfaceImmediately(position);            // vanilla downward surface raycast -> sets _currentSurface
             float speed = peakNetSpeed.TryGetValue(__instance, out StrongBox<float> peak) ? peak.Value : velSpeedSoft;
-            Voice(__instance, pos, __instance._currentSurface, speed);
+            Voice(__instance, position, __instance._currentSurface, speed);
         }
 
         // OBSERVER side: remember the fastest velocity the synced item reaches in flight, so the settle can
@@ -133,13 +133,13 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(ObservedLootItem), "ApplyNetPacket")]
         private static void TrackNetSpeed(ObservedLootItem __instance)
         {
-            Rigidbody rb = __instance._rigidBody;
-            if (rb == null)
+            Rigidbody body = __instance._rigidBody;
+            if (body == null)
                 return;
             StrongBox<float> peak = peakNetSpeed.GetOrCreateValue(__instance);
-            float v = rb.velocity.magnitude;
-            if (v > peak.Value)
-                peak.Value = v;
+            float speed = body.velocity.magnitude;
+            if (speed > peak.Value)
+                peak.Value = speed;
         }
 
         private static void Voice(LootItem instance, Vector3 pos, BaseBallistic.ESurfaceSound surface, float impact)
@@ -199,8 +199,8 @@ namespace TarkovVR.Patches.Misc
         // Volume scales with the item's CURRENT weight (incl. contents) and a little with impact speed.
         private static void PlaySurfaceBank(Item item, BaseBallistic.ESurfaceSound surface, Vector3 pos, float impact)
         {
-            BetterAudio ba = Singleton<BetterAudio>.Instance;
-            if (ba == null)
+            BetterAudio betterAudio = Singleton<BetterAudio>.Instance;
+            if (betterAudio == null)
                 return;
 
             // TotalWeight is the CURRENT weight incl. contents (loaded mag, filled rig/backpack, ammo stack)
@@ -209,7 +209,7 @@ namespace TarkovVR.Patches.Misc
             if (weight < surfaceMinWeight)
                 return; // too light to thud -- only the material foley (if any) plays
 
-            var bank = ResolveSurfaceBank(ba, surface, weight);
+            var bank = ResolveSurfaceBank(betterAudio, surface, weight);
             if (bank == null)
                 return;
 
@@ -219,7 +219,7 @@ namespace TarkovVR.Patches.Misc
                 * VelocityMult(impact, surfaceVelInfluence);
 
             float distance = CameraManager.Instance.Distance(pos);
-            ba.PlayAtPoint(pos, bank, distance, volume, -1f, EnvironmentType.Outdoor, EOcclusionTest.OneShotPropagation);
+            betterAudio.PlayAtPoint(pos, bank, distance, volume, -1f, EnvironmentType.Outdoor, EOcclusionTest.OneShotPropagation);
         }
 
         // FootstepBanks: the player's per-surface SurfaceSet thud (pure surface, no gun). GunBanks: the gun

@@ -134,22 +134,22 @@ namespace TarkovVR.Patches.Upscalers
             _camera.nonJitteredProjectionMatrix = _camera.projectionMatrix;
 
             // Game units (GetJitterPerspectiveOffsetsUV): pixels -> NDC on the actual rect-scaled viewport.
-            int vw = _camera.pixelWidth;
-            int vh = _camera.pixelHeight;
+            int viewWidth = _camera.pixelWidth;
+            int viewHeight = _camera.pixelHeight;
             if (!_loggedViewport)
             {
                 // pixelWidth must be the render viewport (eyeTex*scale) — if it tracks the mirror
                 // window instead, the applied jitter magnitude is wrong and edges wobble sign-independently.
                 _loggedViewport = true;
-                int ew = (int)(XRSettings.eyeTextureWidth * VRGlobals.upscalingMultiplier);
-                int eh = (int)(XRSettings.eyeTextureHeight * VRGlobals.upscalingMultiplier);
-                if (Mathf.Abs(vw - ew) > 2 || Mathf.Abs(vh - eh) > 2)
-                    Plugin.MyLog.LogWarning($"[VRJitter] game-jitter viewport {vw}x{vh} vs eye texture x scale {ew}x{eh}: jitter magnitude wrong");
+                int eyeWidth = (int)(XRSettings.eyeTextureWidth * VRGlobals.upscalingMultiplier);
+                int eyeHeight = (int)(XRSettings.eyeTextureHeight * VRGlobals.upscalingMultiplier);
+                if (Mathf.Abs(viewWidth - eyeWidth) > 2 || Mathf.Abs(viewHeight - eyeHeight) > 2)
+                    Plugin.MyLog.LogWarning($"[VRJitter] game-jitter viewport {viewWidth}x{viewHeight} vs eye texture x scale {eyeWidth}x{eyeHeight}: jitter magnitude wrong");
             }
-            LastScaledWidth = vw;
-            LastScaledHeight = vh;
+            LastScaledWidth = viewWidth;
+            LastScaledHeight = viewHeight;
             Shader.SetGlobalVector(JITTER_OFFSETS_ID,
-                new Vector4(CurrentJitter.x / (0.5f * vw), CurrentJitter.y / (0.5f * vh), 0f, 0f));
+                new Vector4(CurrentJitter.x / (0.5f * viewWidth), CurrentJitter.y / (0.5f * viewHeight), 0f, 0f));
             _wroteJitterGlobal = true;
         }
 
@@ -175,14 +175,14 @@ namespace TarkovVR.Patches.Upscalers
         // (and CurrentJitter) stays identical.
         private static Matrix4x4 JitterFrustum(Matrix4x4 orig, Vector2 jitter, int screenW, int screenH)
         {
-            FrustumPlanes fp = orig.decomposeProjection;
-            float w = Mathf.Abs(fp.left) + Mathf.Abs(fp.right);
-            float h = Mathf.Abs(fp.top) + Mathf.Abs(fp.bottom);
-            fp.left   += jitter.x * w / screenW;
-            fp.right  += jitter.x * w / screenW;
-            fp.top    += jitter.y * h / screenH;
-            fp.bottom += jitter.y * h / screenH;
-            return Matrix4x4.Frustum(fp);
+            FrustumPlanes frustum = orig.decomposeProjection;
+            float w = Mathf.Abs(frustum.left) + Mathf.Abs(frustum.right);
+            float height = Mathf.Abs(frustum.top) + Mathf.Abs(frustum.bottom);
+            frustum.left   += jitter.x * w / screenW;
+            frustum.right  += jitter.x * w / screenW;
+            frustum.top    += jitter.y * height / screenH;
+            frustum.bottom += jitter.y * height / screenH;
+            return Matrix4x4.Frustum(frustum);
         }
 
     }

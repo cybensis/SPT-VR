@@ -77,10 +77,10 @@ namespace TarkovVR.Source.Player.Body
 
         static float ReadEulerTwist(Transform wrist)
         {
-            float t = wrist.localEulerAngles.x;
-            if (t > 180f)
-                t -= 360f;
-            return t;
+            float twist = wrist.localEulerAngles.x;
+            if (twist > 180f)
+                twist -= 360f;
+            return twist;
         }
 
         // oneSidedClamp: the outward-only floor from the euler days. Keep it for the euler path, but the

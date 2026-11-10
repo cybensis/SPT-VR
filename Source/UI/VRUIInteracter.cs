@@ -362,18 +362,18 @@ namespace TarkovVR.Source.UI
         private Vector3 ProjectAimOntoPanel()
         {
             Vector3 origin = transform.position;
-            Vector3 dir = transform.forward;
+            Vector3 direction = transform.forward;
             if (lastUiHitNormal != Vector3.zero)
             {
-                float denom = Vector3.Dot(dir, lastUiHitNormal);
+                float denom = Vector3.Dot(direction, lastUiHitNormal);
                 if (Mathf.Abs(denom) >= 1e-5f)
                 {
                     float t = Vector3.Dot(lastUiHitPoint - origin, lastUiHitNormal) / denom;
                     if (t > 0f)
-                        return origin + dir * t;
+                        return origin + direction * t;
                 }
             }
-            return dragStartPanelPoint + dir * 9999f; // "way off" — always exceeds dropDistance
+            return dragStartPanelPoint + direction * 9999f; // "way off" — always exceeds dropDistance
         }
 
         // Drop the currently-dragged inventory item onto the ground via the EXACT same path as
@@ -411,9 +411,9 @@ namespace TarkovVR.Source.UI
                 if (interactions != null && interactions.IsInteractionAvailable(EItemInfoButton.Discard).Succeed)
                     interactions.ExecuteInteraction(EItemInfoButton.Discard);
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"[VRDrop] drop-to-ground failed: {ex}");
+                Plugin.MyLog.LogError($"[VRDrop] drop-to-ground failed: {exception}");
             }
         }
         private GameObject RaycastFindHit(RaycastHit hit, ref PointerEventData eventData)

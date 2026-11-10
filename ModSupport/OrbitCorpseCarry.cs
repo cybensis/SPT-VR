@@ -47,9 +47,9 @@ namespace TarkovVR.ModSupport.ORBIT
         public static OrbitCorpseCarry Capture(WaypointSystem waypoints, Waypoint waypoint, Action<string> warn)
         {
             var carry = new OrbitCorpseCarry { pulled = waypoint };
-            try { carry.CaptureKillerSquad(waypoints); } catch (Exception e) { Warn(warn, "killer squad", e); }
-            try { carry.CaptureRush(waypoints); } catch (Exception e) { Warn(warn, "boss rush body", e); }
-            try { carry.CaptureIds(); } catch (Exception e) { Warn(warn, "loot queues", e); }
+            try { carry.CaptureKillerSquad(waypoints); } catch (Exception exception) { Warn(warn, "killer squad", exception); }
+            try { carry.CaptureRush(waypoints); } catch (Exception exception) { Warn(warn, "boss rush body", exception); }
+            try { carry.CaptureIds(); } catch (Exception exception) { Warn(warn, "loot queues", exception); }
             return carry;
         }
 
@@ -58,11 +58,11 @@ namespace TarkovVR.ModSupport.ORBIT
         public void Restore(WaypointSystem waypoints, Waypoint moved, Action<string> warn)
         {
             if (killerSquad >= 0)
-                try { RestoreKillerSquad(waypoints, moved); } catch (Exception e) { Warn(warn, "killer squad", e); }
+                try { RestoreKillerSquad(waypoints, moved); } catch (Exception exception) { Warn(warn, "killer squad", exception); }
             if (rushRole != null)
-                try { RestoreRush(waypoints, moved); } catch (Exception e) { Warn(warn, "boss rush body", e); }
-            try { RestoreIds(moved.Id); } catch (Exception e) { Warn(warn, "loot queues", e); }
-            try { RestoreBossLoot(moved); } catch (Exception e) { Warn(warn, "boss loot", e); }
+                try { RestoreRush(waypoints, moved); } catch (Exception exception) { Warn(warn, "boss rush body", exception); }
+            try { RestoreIds(moved.Id); } catch (Exception exception) { Warn(warn, "loot queues", exception); }
+            try { RestoreBossLoot(moved); } catch (Exception exception) { Warn(warn, "boss loot", exception); }
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
@@ -163,9 +163,9 @@ namespace TarkovVR.ModSupport.ORBIT
                 return;
             Waypoint pulled = Pulled;
             List<Squad> squads = manager.SquadData.Entities.Values;
-            for (int s = 0; s < squads.Count; s++)
+            for (int squadIndex = 0; squadIndex < squads.Count; squadIndex++)
             {
-                BossRushLoot loot = squads[s]?.BossLoot;
+                BossRushLoot loot = squads[squadIndex]?.BossLoot;
                 if (loot == null)
                     continue;
                 foreach (string role in new List<string>(loot._kills.Keys))
@@ -188,9 +188,9 @@ namespace TarkovVR.ModSupport.ORBIT
             }
         }
 
-        private static void Warn(Action<string> warn, string what, Exception e)
+        private static void Warn(Action<string> warn, string what, Exception exception)
         {
-            warn?.Invoke($"{what}: {e.GetType().Name}: {e.Message}");
+            warn?.Invoke($"{what}: {exception.GetType().Name}: {exception.Message}");
         }
     }
 }

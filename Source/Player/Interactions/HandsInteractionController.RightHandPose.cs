@@ -99,16 +99,16 @@ namespace TarkovVR.Source.Player.Interactions
                 else if (rightRestPoseEuler != null && rightRestPoseEuler.Length > 0)
                 {
                     // A captured right bake replays exactly (same mechanism as the left hand).
-                    int idx = 0;
-                    for (int f = 0; f < rightFingerJoints.Length; f++)
+                    int poseIndex = 0;
+                    for (int fingerIndex = 0; fingerIndex < rightFingerJoints.Length; fingerIndex++)
                     {
-                        Transform[] joints = rightFingerJoints[f];
-                        for (int j = 0; j < joints.Length && j < 3; j++, idx++)
+                        Transform[] joints = rightFingerJoints[fingerIndex];
+                        for (int j = 0; j < joints.Length && j < 3; j++, poseIndex++)
                         {
-                            if (joints[j] == null || idx >= rightRestPoseEuler.Length)
+                            if (joints[j] == null || poseIndex >= rightRestPoseEuler.Length)
                                 continue;
                             Quaternion animated = RecoverAnimated(joints[j]);
-                            Quaternion outRot = Quaternion.Slerp(animated, Quaternion.Euler(rightRestPoseEuler[idx]), rightHandWeightBlend);
+                            Quaternion outRot = Quaternion.Slerp(animated, Quaternion.Euler(rightRestPoseEuler[poseIndex]), rightHandWeightBlend);
                             joints[j].localRotation = outRot;
                             fingerBaseRot[joints[j]] = animated;
                             fingerOutRot[joints[j]] = outRot;
@@ -120,10 +120,10 @@ namespace TarkovVR.Source.Player.Interactions
                     // No bake yet: PROCEDURAL flatten - strip the animated grip curl in the right
                     // rig's OWN frame (swing-twist, ApplyFlatFlex) and apply the idle flex.
                     // Rig-native, so it can't hyperextend the way transplanted left values did.
-                    for (int f = 0; f < rightFingerJoints.Length; f++)
+                    for (int fingerIndex = 0; fingerIndex < rightFingerJoints.Length; fingerIndex++)
                     {
-                        Transform[] joints = rightFingerJoints[f];
-                        float flexBase = RightFlex(f);
+                        Transform[] joints = rightFingerJoints[fingerIndex];
+                        float flexBase = RightFlex(fingerIndex);
                         for (int j = 0; j < joints.Length && j < 3; j++)
                         {
                             if (joints[j] == null)
@@ -153,14 +153,14 @@ namespace TarkovVR.Source.Player.Interactions
 
         // The left's idle flex values, remapped by THUMB DETECTION rather than child order (the left
         // arrays assume index 0 = thumb; the right palm's child order may differ).
-        private float RightFlex(int f)
+        private float RightFlex(int fingerIndex)
         {
-            bool isThumb = rightFingerIsThumb != null && f < rightFingerIsThumb.Length && rightFingerIsThumb[f];
+            bool isThumb = rightFingerIsThumb != null && fingerIndex < rightFingerIsThumb.Length && rightFingerIsThumb[fingerIndex];
             if (isThumb)
                 return fingerFlexDeg != null && fingerFlexDeg.Length > 0 ? fingerFlexDeg[0] : 0f;
             // ordinal among the non-thumb fingers -> flex array entries 1..4
             int k = 1;
-            for (int i = 0; i < f && i < rightFingerIsThumb.Length; i++)
+            for (int i = 0; i < fingerIndex && i < rightFingerIsThumb.Length; i++)
                 if (!rightFingerIsThumb[i])
                     k++;
             return fingerFlexDeg != null && k < fingerFlexDeg.Length ? fingerFlexDeg[k] : 0f;
@@ -224,21 +224,21 @@ namespace TarkovVR.Source.Player.Interactions
         private void CaptureRightRestPose()
         {
             var list = new List<Vector3>();
-            var sb = new System.Text.StringBuilder();
-            sb.Append("[RightHandPose] rightRestPoseEuler = new Vector3[] {\n");
-            for (int f = 0; f < rightFingerJoints.Length; f++)
+            var builder = new System.Text.StringBuilder();
+            builder.Append("[RightHandPose] rightRestPoseEuler = new Vector3[] {\n");
+            for (int fingerIndex = 0; fingerIndex < rightFingerJoints.Length; fingerIndex++)
             {
-                Transform[] joints = rightFingerJoints[f];
+                Transform[] joints = rightFingerJoints[fingerIndex];
                 for (int j = 0; j < joints.Length && j < 3; j++)
                 {
-                    Vector3 e = joints[j] != null ? joints[j].localEulerAngles : Vector3.zero;
-                    list.Add(e);
-                    sb.Append($"    new Vector3({e.x:F2}f, {e.y:F2}f, {e.z:F2}f), // finger{f} joint{j}\n");
+                    Vector3 euler = joints[j] != null ? joints[j].localEulerAngles : Vector3.zero;
+                    list.Add(euler);
+                    builder.Append($"    new Vector3({euler.x:F2}f, {euler.y:F2}f, {euler.z:F2}f), // finger{fingerIndex} joint{j}\n");
                 }
             }
-            sb.Append("};");
+            builder.Append("};");
             rightRestPoseEuler = list.ToArray();
-            Plugin.MyLog.LogInfo(sb.ToString());
+            Plugin.MyLog.LogInfo(builder.ToString());
         }
 
         private void LogRightRestPose()
@@ -248,15 +248,15 @@ namespace TarkovVR.Source.Player.Interactions
                 Plugin.MyLog.LogInfo("[RightHandPose] rightRestPoseEuler is null.");
                 return;
             }
-            var sb = new System.Text.StringBuilder();
-            sb.Append("[RightHandPose] rightRestPoseEuler = new Vector3[] {\n");
+            var builder = new System.Text.StringBuilder();
+            builder.Append("[RightHandPose] rightRestPoseEuler = new Vector3[] {\n");
             for (int i = 0; i < rightRestPoseEuler.Length; i++)
             {
-                Vector3 e = rightRestPoseEuler[i];
-                sb.Append($"    new Vector3({e.x:F2}f, {e.y:F2}f, {e.z:F2}f), // index {i}\n");
+                Vector3 euler = rightRestPoseEuler[i];
+                builder.Append($"    new Vector3({euler.x:F2}f, {euler.y:F2}f, {euler.z:F2}f), // index {i}\n");
             }
-            sb.Append("};");
-            Plugin.MyLog.LogInfo(sb.ToString());
+            builder.Append("};");
+            Plugin.MyLog.LogInfo(builder.ToString());
         }
     }
 }

@@ -52,7 +52,7 @@ namespace TarkovVR.Source.Misc
         }
 
         //------------------------------------------------------------------------------------------------------------
-        private static void MainThreadAttach(Camera cam)
+        private static void MainThreadAttach(Camera camera)
         {
             mainItems.Clear(); mainMethodItem.Clear(); wrappedCallbacks.Clear(); mainPatchFailures = 0;
             if (!mainBreakdown) return;
@@ -61,8 +61,8 @@ namespace TarkovVR.Source.Misc
             var prefix = new HarmonyMethod(AccessTools.Method(typeof(StereoCostProbe), nameof(MainPrefix))) { priority = Priority.First };
             var postfix = new HarmonyMethod(AccessTools.Method(typeof(StereoCostProbe), nameof(MainPostfix))) { priority = Priority.Last };
             var types = new HashSet<Type>();
-            foreach (MonoBehaviour mb in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
-                if (mb != null && mb.isActiveAndEnabled) types.Add(mb.GetType());
+            foreach (MonoBehaviour behaviour in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
+                if (behaviour != null && behaviour.isActiveAndEnabled) types.Add(behaviour.GetType());
             foreach (Type type in types)
             {
                 if (type.Assembly == typeof(StereoCostProbe).Assembly && type.Name.StartsWith("StereoCostProbe", StringComparison.Ordinal)) continue;
@@ -74,10 +74,10 @@ namespace TarkovVR.Source.Misc
                     int k = NewMainItem($"{method.DeclaringType.Name}.{method.Name} ({method.DeclaringType.Assembly.GetName().Name})", onCamera);
                     mainMethodItem[method] = k;
                     try { mainHarmony.Patch(method, prefix, postfix); }
-                    catch (Exception e)
+                    catch (Exception exception)
                     {
                         mainMethodItem.Remove(method);
-                        if (mainPatchFailures++ < 5) Plugin.MyLog.LogWarning($"[StereoCost] could not time {method.DeclaringType?.Name}.{method.Name} on the main thread: {e.Message}");
+                        if (mainPatchFailures++ < 5) Plugin.MyLog.LogWarning($"[StereoCost] could not time {method.DeclaringType?.Name}.{method.Name} on the main thread: {exception.Message}");
                     }
                 }
             }
@@ -87,7 +87,7 @@ namespace TarkovVR.Source.Misc
         {
             UnwrapCameraCallbacks();
             try { mainHarmony?.UnpatchSelf(); }
-            catch (Exception e) { Plugin.MyLog.LogError("[StereoCost] main-thread unpatch failed: " + e); }
+            catch (Exception exception) { Plugin.MyLog.LogError("[StereoCost] main-thread unpatch failed: " + exception); }
             mainHarmony = null;
         }
 
@@ -166,13 +166,13 @@ namespace TarkovVR.Source.Misc
         private static void MainFrameCommit(Samples s, int eyePasses) { }
 
         //------------------------------------------------------------------------------------------------------------
-        private static void ReportMainThread(StringBuilder sb, Samples s)
+        private static void ReportMainThread(StringBuilder builder, Samples s)
         {
             if (!mainBreakdown || mainItems.Count == 0 || s.frames == 0) return;
             double frames = s.frames;
             const int both = 0;
-            sb.AppendLine($"[StereoCost] ===== MAIN THREAD per eye, both eyes: mean ms per frame (wall), {mainItems.Count} items timed, {mainPatchFailures} could not be patched =====");
-            sb.AppendLine("[StereoCost]   item                                                              L      R  other | calls a frame L / R / other");
+            builder.AppendLine($"[StereoCost] ===== MAIN THREAD per eye, both eyes: mean ms per frame (wall), {mainItems.Count} items timed, {mainPatchFailures} could not be patched =====");
+            builder.AppendLine("[StereoCost]   item                                                              L      R  other | calls a frame L / R / other");
             var order = new List<int>();
             for (int k = 0; k < mainItems.Count; k++) order.Add(k);
             order.Sort((a, b) => (mainItems[b].ms[both, 1] + mainItems[b].ms[both, 2] + mainItems[b].ms[both, 0]).CompareTo(mainItems[a].ms[both, 1] + mainItems[a].ms[both, 2] + mainItems[a].ms[both, 0]));
@@ -185,13 +185,13 @@ namespace TarkovVR.Source.Misc
                 double left = item.ms[both, 1] / frames, right = item.ms[both, 2] / frames, other = item.ms[both, 0] / frames;
                 total[0] += other; total[1] += left; total[2] += right;
                 if (left + right + other < mainMinMs) { if (item.calls[both, 0] + item.calls[both, 1] + item.calls[both, 2] > 0) { small++; smallMs += left + right + other; } continue; }
-                sb.AppendLine($"[StereoCost]     {Trim(item.name, 62),-62} {F(left)} {F(right)} {F(other)} | {item.calls[both, 1] / frames:0.0} / {item.calls[both, 2] / frames:0.0} / {item.calls[both, 0] / frames:0.0}");
+                builder.AppendLine($"[StereoCost]     {Trim(item.name, 62),-62} {F(left)} {F(right)} {F(other)} | {item.calls[both, 1] / frames:0.0} / {item.calls[both, 2] / frames:0.0} / {item.calls[both, 0] / frames:0.0}");
             }
-            if (small > 0) sb.AppendLine($"[StereoCost]     {small} more under {mainMinMs} ms (together {smallMs:0.000})");
-            sb.AppendLine($"[StereoCost]   {"timed script work",-64} {F(total[1])} {F(total[2])} {F(total[0])}");
+            if (small > 0) builder.AppendLine($"[StereoCost]     {small} more under {mainMinMs} ms (together {smallMs:0.000})");
+            builder.AppendLine($"[StereoCost]   {"timed script work",-64} {F(total[1])} {F(total[2])} {F(total[0])}");
             double eyeLeft = Median(s.mainEyeCullWall[0]) + Median(s.mainEye[0]), eyeRight = Median(s.mainEyeCullWall[1]) + Median(s.mainEye[1]);
-            sb.AppendLine($"[StereoCost]   {"eye on the main thread (cull + pass, wall medians)",-64} {F(eyeLeft)} {F(eyeRight)}");
-            sb.AppendLine($"[StereoCost]   {"-> Unity's own per-eye work (eye minus timed scripts)",-64} {F(eyeLeft - total[1])} {F(eyeRight - total[2])}");
+            builder.AppendLine($"[StereoCost]   {"eye on the main thread (cull + pass, wall medians)",-64} {F(eyeLeft)} {F(eyeRight)}");
+            builder.AppendLine($"[StereoCost]   {"-> Unity's own per-eye work (eye minus timed scripts)",-64} {F(eyeLeft - total[1])} {F(eyeRight - total[2])}");
         }
     }
 }

@@ -76,31 +76,31 @@ namespace TarkovVR.Source.Player.VRManager
             lastStepTime = Time.time;
             dt = Mathf.Clamp(dt, 1e-4f, 0.033f);
 
-            Quaternion err = target * Quaternion.Inverse(current);
-            if (err.w < 0f)                           // shortest arc
-                err = new Quaternion(-err.x, -err.y, -err.z, -err.w);
+            Quaternion error = target * Quaternion.Inverse(current);
+            if (error.w < 0f)                           // shortest arc
+                error = new Quaternion(-error.x, -error.y, -error.z, -error.w);
 
             // decompose err = swing * twist, twist about the barrel axis
-            Vector3 p = Vector3.Project(new Vector3(err.x, err.y, err.z), barrelDir);
-            Quaternion twist = new Quaternion(p.x, p.y, p.z, err.w);
-            float tm = Mathf.Sqrt(twist.x * twist.x + twist.y * twist.y + twist.z * twist.z + twist.w * twist.w);
-            twist = tm > 1e-6f ? new Quaternion(twist.x / tm, twist.y / tm, twist.z / tm, twist.w / tm)
+            Vector3 projected = Vector3.Project(new Vector3(error.x, error.y, error.z), barrelDir);
+            Quaternion twist = new Quaternion(projected.x, projected.y, projected.z, error.w);
+            float twistMagnitude = Mathf.Sqrt(twist.x * twist.x + twist.y * twist.y + twist.z * twist.z + twist.w * twist.w);
+            twist = twistMagnitude > 1e-6f ? new Quaternion(twist.x / twistMagnitude, twist.y / twistMagnitude, twist.z / twistMagnitude, twist.w / twistMagnitude)
                                : Quaternion.identity;
-            Quaternion swing = err * Quaternion.Inverse(twist);
+            Quaternion swing = error * Quaternion.Inverse(twist);
 
             // twist: light first-order catch-up
             current = Quaternion.Slerp(Quaternion.identity, twist, Mathf.Min(1f, twistRate * dt)) * current;
 
             // swing: spring-damper, stiffness from the gun's ergo weight
-            swing.ToAngleAxis(out float ang, out Vector3 axis);
-            if (ang > 180f)
-                ang -= 360f;
-            Vector3 e = Mathf.Abs(ang) > 1e-4f && !float.IsInfinity(axis.x)
-                ? axis.normalized * (ang * Mathf.Deg2Rad) : Vector3.zero;
+            swing.ToAngleAxis(out float angle, out Vector3 axis);
+            if (angle > 180f)
+                angle -= 360f;
+            Vector3 swingError = Mathf.Abs(angle) > 1e-4f && !float.IsInfinity(axis.x)
+                ? axis.normalized * (angle * Mathf.Deg2Rad) : Vector3.zero;
             float k = springBase / Mathf.Max(ergoWeight, 1f) * (twoHanded ? supportStiffness : 1f);
             k *= ShoulderStock.SpringMult;   // a seated stock braces the gun (tighter spring)
-            float c = 2f * dampingRatio * Mathf.Sqrt(k);
-            Vector3 accel = k * e - c * swingVel;
+            float damping = 2f * dampingRatio * Mathf.Sqrt(k);
+            Vector3 accel = k * swingError - damping * swingVel;
 
             // Jumping: the body's vertical acceleration on the gun, against its weight torque (1 g's worth: what holds the one-handed droop)
             UpdateBody();
@@ -133,9 +133,9 @@ namespace TarkovVR.Source.Player.VRManager
             }
 
             swingVel += accel * dt;                   // semi-implicit Euler - stable at these stiffnesses
-            float sv = swingVel.magnitude;
-            if (sv > maxSwingVel)
-                swingVel *= maxSwingVel / sv;
+            float swingSpeed = swingVel.magnitude;
+            if (swingSpeed > maxSwingVel)
+                swingVel *= maxSwingVel / swingSpeed;
             float stepDeg = swingVel.magnitude * dt * Mathf.Rad2Deg;
             if (stepDeg > 1e-4f)
                 current = Quaternion.AngleAxis(stepDeg, swingVel.normalized) * current;

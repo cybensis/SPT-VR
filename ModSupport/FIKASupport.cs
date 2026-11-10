@@ -214,10 +214,10 @@ namespace TarkovVR.ModSupport.FIKA
         {
             // Copy to a local so the Harmony analyzer doesn't mistake the struct-field reads
             // for writes to a by-value patch parameter.
-            LootSyncPacket p = packet;
-            bool incomingHeld = !p.Done
-                                && p.Velocity.sqrMagnitude < 1e-6f
-                                && p.AngularVelocity.sqrMagnitude < 1e-6f;
+            LootSyncPacket packetCopy = packet;
+            bool incomingHeld = !packetCopy.Done
+                                && packetCopy.Velocity.sqrMagnitude < 1e-6f
+                                && packetCopy.AngularVelocity.sqrMagnitude < 1e-6f;
 
             var hic = VRGlobals.handsInteractionController;
             if (hic != null && ReferenceEquals(hic.heldItem, __instance))
@@ -275,7 +275,7 @@ namespace TarkovVR.ModSupport.FIKA
             {
                 LootSyncSmoother sm = __instance.GetComponent<LootSyncSmoother>()
                                       ?? __instance.gameObject.AddComponent<LootSyncSmoother>();
-                sm.SetTarget(p.Position, p.Rotation);
+                sm.SetTarget(packetCopy.Position, packetCopy.Rotation);
                 return false; // the smoother lerps the transform; skip FIKA's hard SetPositionAndRotation
             }
 

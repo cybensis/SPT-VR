@@ -51,11 +51,11 @@ namespace TarkovVR.Source.Graphics
         private static readonly int CameraMvId = Shader.PropertyToID("_CameraMotionVectorsTexture");
         private static string lastLog;
 
-        private static void LogOnce(string msg)
+        private static void LogOnce(string message)
         {
-            if (msg == lastLog) return;
-            lastLog = msg;
-            Plugin.MyLog.LogWarning(msg);
+            if (message == lastLog) return;
+            lastLog = message;
+            Plugin.MyLog.LogWarning(message);
         }
 
         // Before one eye's FSR. With an external command buffer the cleaning is recorded into it (FSR appends after);
@@ -83,31 +83,31 @@ namespace TarkovVR.Source.Graphics
                 return;
             }
 
-            CommandBuffer cmd = external;
-            if (cmd == null)
+            CommandBuffer commandBuffer = external;
+            if (commandBuffer == null)
             {
                 if (ownCb == null) ownCb = new CommandBuffer { name = "SPT-VR FSR mask clean" };
                 ownCb.Clear();
-                cmd = ownCb;
+                commandBuffer = ownCb;
             }
             if (passThrough)
             {
                 // Test: plain copies through Unity's own blit (as FSR4 Bridge does), no masking.
-                cmd.Blit(depthTex, depthCopy);
-                cmd.Blit(mvTex, mvCopy);
+                commandBuffer.Blit(depthTex, depthCopy);
+                commandBuffer.Blit(mvTex, mvCopy);
             }
             else
             {
                 // Inputs as explicit globals: the blit's own _MainTex binding did not reach the shader's Texture2D, so the
                 // copies read the camera's colour image (readback check 2026-10-19).
-                cmd.SetGlobalTexture(MaskDepthId, depthTex);
-                cmd.SetGlobalTexture(SrcId, depthTex);
-                cmd.Blit(depthTex, depthCopy, mat, 0);
-                cmd.SetGlobalTexture(SrcId, mvTex);
-                cmd.Blit(mvTex, mvCopy, mat, 1);
+                commandBuffer.SetGlobalTexture(MaskDepthId, depthTex);
+                commandBuffer.SetGlobalTexture(SrcId, depthTex);
+                commandBuffer.Blit(depthTex, depthCopy, mat, 0);
+                commandBuffer.SetGlobalTexture(SrcId, mvTex);
+                commandBuffer.Blit(mvTex, mvCopy, mat, 1);
             }
             if (diagPending)
-                RecordCheck(cmd, depthTex, mvTex, width, height);
+                RecordCheck(commandBuffer, depthTex, mvTex, width, height);
             if (external == null)
                 UnityEngine.Graphics.ExecuteCommandBuffer(ownCb);
             active = true;
@@ -128,22 +128,22 @@ namespace TarkovVR.Source.Graphics
             Plugin.MyLog.LogWarning("[VR FSR] mask clean check queued for the next FSR2/3 frame (needs the cleaner on + the mask on)");
         }
 
-        private static void RecordCheck(CommandBuffer cmd, Texture depthTex, Texture mvTex, int w, int h)
+        private static void RecordCheck(CommandBuffer commandBuffer, Texture depthTex, Texture mvTex, int width, int height)
         {
             diagPending = false;
-            Ensure(ref diagDepth, w, h, RenderTextureFormat.RFloat, "SPT-VR FSR check depth");
-            Ensure(ref diagMv, w, h, RenderTextureFormat.RGHalf, "SPT-VR FSR check motion");
-            cmd.Blit(depthTex, diagDepth);
-            cmd.Blit(mvTex, diagMv);
-            rbW = w; rbH = h; rbParts = 4;
+            Ensure(ref diagDepth, width, height, RenderTextureFormat.RFloat, "SPT-VR FSR check depth");
+            Ensure(ref diagMv, width, height, RenderTextureFormat.RGHalf, "SPT-VR FSR check motion");
+            commandBuffer.Blit(depthTex, diagDepth);
+            commandBuffer.Blit(mvTex, diagMv);
+            rbW = width; rbH = height; rbParts = 4;
             rbOrigDepth = rbCopyDepth = rbOrigMv = rbCopyMv = null;
-            cmd.RequestAsyncReadback(diagDepth, 0, TextureFormat.RFloat, r => { rbOrigDepth = Read(r); Part(); });
-            cmd.RequestAsyncReadback(depthCopy, 0, TextureFormat.RFloat, r => { rbCopyDepth = Read(r); Part(); });
-            cmd.RequestAsyncReadback(diagMv, 0, TextureFormat.RGFloat, r => { rbOrigMv = Read(r); Part(); });
-            cmd.RequestAsyncReadback(mvCopy, 0, TextureFormat.RGFloat, r => { rbCopyMv = Read(r); Part(); });
+            commandBuffer.RequestAsyncReadback(diagDepth, 0, TextureFormat.RFloat, request => { rbOrigDepth = Read(request); Part(); });
+            commandBuffer.RequestAsyncReadback(depthCopy, 0, TextureFormat.RFloat, r => { rbCopyDepth = Read(r); Part(); });
+            commandBuffer.RequestAsyncReadback(diagMv, 0, TextureFormat.RGFloat, r => { rbOrigMv = Read(r); Part(); });
+            commandBuffer.RequestAsyncReadback(mvCopy, 0, TextureFormat.RGFloat, r => { rbCopyMv = Read(r); Part(); });
         }
 
-        private static float[] Read(AsyncGPUReadbackRequest r) => r.hasError ? null : r.GetData<float>().ToArray();
+        private static float[] Read(AsyncGPUReadbackRequest request) => request.hasError ? null : request.GetData<float>().ToArray();
 
         private static void Part()
         {
@@ -153,30 +153,30 @@ namespace TarkovVR.Source.Graphics
                 Plugin.MyLog.LogWarning("[VR FSR] mask clean check: a readback failed");
                 return;
             }
-            int n = rbW * rbH, ok = 0, wrong = 0, flipOk = 0, masked = 0, maskWrong = 0, firstWrong = -1;
+            int pixelCount = rbW * rbH, ok = 0, wrong = 0, flipOk = 0, masked = 0, maskWrong = 0, firstWrong = -1;
             float oMin = float.MaxValue, oMax = float.MinValue, cMin = float.MaxValue, cMax = float.MinValue;
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < pixelCount; i++)
             {
-                float o = rbOrigDepth[i], c = rbCopyDepth[i];
-                oMin = Mathf.Min(oMin, o); oMax = Mathf.Max(oMax, o); cMin = Mathf.Min(cMin, c); cMax = Mathf.Max(cMax, c);
+                float original = rbOrigDepth[i], copy = rbCopyDepth[i];
+                oMin = Mathf.Min(oMin, original); oMax = Mathf.Max(oMax, original); cMin = Mathf.Min(cMin, copy); cMax = Mathf.Max(cMax, copy);
                 int x = i % rbW, y = i / rbW;
                 if (Mathf.Abs(rbCopyDepth[i] - rbOrigDepth[(rbH - 1 - y) * rbW + x]) < 1e-6f) flipOk++;
-                if (!passThrough && o >= 0.5f) { masked++; if (c != 0f) maskWrong++; continue; }
-                if (Mathf.Abs(c - o) < 1e-6f) ok++; else { wrong++; if (firstWrong < 0) firstWrong = i; }
+                if (!passThrough && original >= 0.5f) { masked++; if (copy != 0f) maskWrong++; continue; }
+                if (Mathf.Abs(copy - original) < 1e-6f) ok++; else { wrong++; if (firstWrong < 0) firstWrong = i; }
             }
             int mOk = 0, mWrong = 0, mMasked = 0, mFirstWrong = -1;
             float mMax = 0f, cmMax = 0f;
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < pixelCount; i++)
             {
-                float ox = rbOrigMv[2 * i], oy = rbOrigMv[2 * i + 1], cx = rbCopyMv[2 * i], cy = rbCopyMv[2 * i + 1];
-                mMax = Mathf.Max(mMax, Mathf.Abs(ox) + Mathf.Abs(oy)); cmMax = Mathf.Max(cmMax, Mathf.Abs(cx) + Mathf.Abs(cy));
+                float originalX = rbOrigMv[2 * i], originalY = rbOrigMv[2 * i + 1], copyX = rbCopyMv[2 * i], copyY = rbCopyMv[2 * i + 1];
+                mMax = Mathf.Max(mMax, Mathf.Abs(originalX) + Mathf.Abs(originalY)); cmMax = Mathf.Max(cmMax, Mathf.Abs(copyX) + Mathf.Abs(copyY));
                 if (!passThrough && rbOrigDepth[i] >= 0.5f) { mMasked++; continue; }
-                if (Mathf.Abs(cx - ox) < 1e-3f && Mathf.Abs(cy - oy) < 1e-3f) mOk++; else { mWrong++; if (mFirstWrong < 0) mFirstWrong = i; }
+                if (Mathf.Abs(copyX - originalX) < 1e-3f && Mathf.Abs(copyY - originalY) < 1e-3f) mOk++; else { mWrong++; if (mFirstWrong < 0) mFirstWrong = i; }
             }
-            string fw = firstWrong < 0 ? "" : $", first wrong at ({firstWrong % rbW},{firstWrong / rbW}) orig {rbOrigDepth[firstWrong]:0.#####} copy {rbCopyDepth[firstWrong]:0.#####}";
-            string mfw = mFirstWrong < 0 ? "" : $", first wrong at ({mFirstWrong % rbW},{mFirstWrong / rbW}) orig ({rbOrigMv[2 * mFirstWrong]:0.#####},{rbOrigMv[2 * mFirstWrong + 1]:0.#####}) copy ({rbCopyMv[2 * mFirstWrong]:0.#####},{rbCopyMv[2 * mFirstWrong + 1]:0.#####})";
+            string firstWrongText = firstWrong < 0 ? "" : $", first wrong at ({firstWrong % rbW},{firstWrong / rbW}) orig {rbOrigDepth[firstWrong]:0.#####} copy {rbCopyDepth[firstWrong]:0.#####}";
+            string motionFirstWrongText = mFirstWrong < 0 ? "" : $", first wrong at ({mFirstWrong % rbW},{mFirstWrong / rbW}) orig ({rbOrigMv[2 * mFirstWrong]:0.#####},{rbOrigMv[2 * mFirstWrong + 1]:0.#####}) copy ({rbCopyMv[2 * mFirstWrong]:0.#####},{rbCopyMv[2 * mFirstWrong + 1]:0.#####})";
             Plugin.MyLog.LogWarning($"[VR FSR] mask clean check {rbW}x{rbH} {(passThrough ? "(pass-through)" : "")}: DEPTH same {ok}, different {wrong}, masked {masked} (not cleared {maskWrong}), matches upside-down {flipOk}; " +
-                                    $"orig {oMin:0.#####}..{oMax:0.#####}, copy {cMin:0.#####}..{cMax:0.#####}{fw} | MOTION same {mOk}, different {mWrong}, masked {mMasked}; largest orig {mMax:0.#####}, copy {cmMax:0.#####}{mfw}");
+                                    $"orig {oMin:0.#####}..{oMax:0.#####}, copy {cMin:0.#####}..{cMax:0.#####}{firstWrongText} | MOTION same {mOk}, different {mWrong}, masked {mMasked}; largest orig {mMax:0.#####}, copy {cmMax:0.#####}{motionFirstWrongText}");
         }
 
         public static void End() { active = false; }
@@ -192,13 +192,13 @@ namespace TarkovVR.Source.Graphics
             return new RenderTargetIdentifier(type);
         }
 
-        private static void Ensure(ref RenderTexture rt, int w, int h, RenderTextureFormat format, string name)
+        private static void Ensure(ref RenderTexture texture, int width, int height, RenderTextureFormat format, string name)
         {
-            if (rt != null && rt.width == w && rt.height == h) return;
-            if (rt != null) { rt.Release(); UnityEngine.Object.Destroy(rt); }
-            rt = new RenderTexture(w, h, 0, format, RenderTextureReadWrite.Linear)
+            if (texture != null && texture.width == width && texture.height == height) return;
+            if (texture != null) { texture.Release(); UnityEngine.Object.Destroy(texture); }
+            texture = new RenderTexture(width, height, 0, format, RenderTextureReadWrite.Linear)
             { name = name, filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-            rt.Create();
+            texture.Create();
         }
 
         private static bool EnsureMaterial()
@@ -228,9 +228,9 @@ namespace TarkovVR.Source.Graphics
                 Plugin.MyLog.LogInfo("[VR FSR] hidden-area mask cleaned out of the FSR2/3 inputs");
                 return true;
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogWarning("[VR FSR] fsrmask bundle failed to load: " + e.Message);
+                Plugin.MyLog.LogWarning("[VR FSR] fsrmask bundle failed to load: " + exception.Message);
                 return false;
             }
         }

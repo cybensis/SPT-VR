@@ -49,8 +49,8 @@ namespace TarkovVR.Patches.Core.VR
                 Transform hand = VRGlobals.vrPlayer.RightHand.transform;
                 return new Ray(hand.position + hand.forward * tripwireRayForwardOffset, hand.forward);
             }
-            Transform cam = VRGlobals.VRCam.transform;
-            return new Ray(cam.position + cam.forward * tripwireRayForwardOffset, cam.forward);
+            Transform cameraTransform = VRGlobals.VRCam.transform;
+            return new Ray(cameraTransform.position + cameraTransform.forward * tripwireRayForwardOffset, cameraTransform.forward);
         }
 
         // The first post is seeded by Player.InitFirstTripwirePoint(), which natively passes the head-bone

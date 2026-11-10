@@ -1268,9 +1268,9 @@ namespace TarkovVR.Patches.Core.Player
                     mboit_Scattering_1.ScatterDensityMultiplier = mboit_Scattering_0.ScatterDensityMultiplier;
                     mboit_Scattering_1.SlicesDistributionExponent = mboit_Scattering_0.SlicesDistributionExponent;
                     mboit_Scattering_1.SOFT_SCALE = mboit_Scattering_0.SOFT_SCALE;
-                    float num = Mathf.Min(Mathf.Max(__instance.opticSightFov, 1f), 11f);
-                    num = (num - 1f) / 10f;
-                    float num2 = 1f + num * __instance.OpticScatterReductionStrength;
+                    float clampedFov = Mathf.Min(Mathf.Max(__instance.opticSightFov, 1f), 11f);
+                    clampedFov = (clampedFov - 1f) / 10f;
+                    float num2 = 1f + clampedFov * __instance.OpticScatterReductionStrength;
                     mboit_Scattering_1.ScatterDensityPower = mboit_Scattering_0.ScatterDensityPower * num2;
                     mboit_Scattering_1.ScatterGreyscale = mboit_Scattering_0.ScatterGreyscale;
                     mboit_Scattering_1.HeightFalloffFactor = mboit_Scattering_0.HeightFalloffFactor;

@@ -80,13 +80,13 @@ namespace TarkovVR.Source.Controls
             for (int back = 0; back < history.count; back++)
             {
                 int index = (newest - back + CAPACITY) % CAPACITY;
-                float t = history.times[index] - newestTime;
-                if (-t > window && used >= 3)
+                float time = history.times[index] - newestTime;
+                if (-time > window && used >= 3)
                     break;
-                Vector3 p = history.positions[index];
-                float t2 = t * t;
-                s0 += 1f; s1 += t; s2 += t2; s3 += t2 * t; s4 += t2 * t2;
-                p0 += p; p1 += p * t; p2 += p * t2;
+                Vector3 position = history.positions[index];
+                float timeSquared = time * time;
+                s0 += 1f; s1 += time; s2 += timeSquared; s3 += timeSquared * time; s4 += timeSquared * timeSquared;
+                p0 += position; p1 += position * time; p2 += position * timeSquared;
                 used++;
                 oldest = index;
             }
@@ -150,9 +150,9 @@ namespace TarkovVR.Source.Controls
                 $"measured {measuredSpin.magnitude:F1} rad/s, axes {AngleBetween(runtimeSpin, measuredSpin):F0} deg apart");
         }
 
-        private static float AngleBetween(Vector3 a, Vector3 b)
+        private static float AngleBetween(Vector3 a, Vector3 to)
         {
-            return a.sqrMagnitude < 1e-6f || b.sqrMagnitude < 1e-6f ? 0f : Vector3.Angle(a, b);
+            return a.sqrMagnitude < 1e-6f || to.sqrMagnitude < 1e-6f ? 0f : Vector3.Angle(a, to);
         }
 
         private static string Format(Vector3 velocity)

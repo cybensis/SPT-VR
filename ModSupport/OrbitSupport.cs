@@ -32,8 +32,8 @@ namespace TarkovVR.ModSupport.ORBIT
             Vector3 pelvis;
             try
             {
-                Transform t = corpse.TrackableTransform != null ? corpse.TrackableTransform : corpse.transform;
-                pelvis = t.position;
+                Transform bodyTransform = corpse.TrackableTransform != null ? corpse.TrackableTransform : corpse.transform;
+                pelvis = bodyTransform.position;
             }
             catch { return; }
 
@@ -58,12 +58,12 @@ namespace TarkovVR.ModSupport.ORBIT
         {
             try
             {
-                WaypointSystem ws = Singleton<OrbitManager>.Instance?.WaypointSystem;
-                if (ws == null) return; // no raid / not host (clients have no OrbitManager)
+                WaypointSystem waypointSystem = Singleton<OrbitManager>.Instance?.WaypointSystem;
+                if (waypointSystem == null) return; // no raid / not host (clients have no OrbitManager)
                 if (_heldCorpses.ContainsKey(corpse)) return; // already pulled (re-grab / double event)
 
-                Waypoint wp = FindCorpseWaypoint(ws, corpse);
-                if (wp == null)
+                Waypoint waypoint = FindCorpseWaypoint(waypointSystem, corpse);
+                if (waypoint == null)
                 {
                     // ORBIT wasn't tracking this body (already looted / not registered) — nothing to protect.
                     if (Plugin.debugBodyDragLoot)
@@ -73,15 +73,15 @@ namespace TarkovVR.ModSupport.ORBIT
 
                 // What ORBIT keeps about it besides the waypoint (kill credit, own-kill queues, boss body...), before
                 // RemoveWaypoint drops the id-keyed parts
-                OrbitCorpseCarry carry = OrbitCorpseCarry.Capture(ws, wp, Warn);
-                ws.RemoveWaypoint(wp.Id);
+                OrbitCorpseCarry carry = OrbitCorpseCarry.Capture(waypointSystem, waypoint, Warn);
+                waypointSystem.RemoveWaypoint(waypoint.Id);
                 _heldCorpses[corpse] = carry;
                 if (Plugin.debugBodyDragLoot)
-                    Plugin.MyLog.LogInfo($"[OrbitSupport] pulled corpse waypoint {wp.Id} on grab (unlootable while dragged; {carry.Summary()})");
+                    Plugin.MyLog.LogInfo($"[OrbitSupport] pulled corpse waypoint {waypoint.Id} on grab (unlootable while dragged; {carry.Summary()})");
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogWarning($"[OrbitSupport] pull failed: {e.Message}");
+                Plugin.MyLog.LogWarning($"[OrbitSupport] pull failed: {exception.Message}");
             }
         }
 
@@ -96,8 +96,8 @@ namespace TarkovVR.ModSupport.ORBIT
                     return;
                 _heldCorpses.Remove(corpse);
 
-                WaypointSystem ws = Singleton<OrbitManager>.Instance?.WaypointSystem;
-                if (ws == null) return;
+                WaypointSystem waypointSystem = Singleton<OrbitManager>.Instance?.WaypointSystem;
+                if (waypointSystem == null) return;
 
                 if (OrbitCorpseCarry.InDangerZone(newPos))
                 {
@@ -110,12 +110,12 @@ namespace TarkovVR.ModSupport.ORBIT
                 // Corpse category, corpse.name, radiusSqr 3*3, empty door/cover lists) — only the position
                 // and the fresh id differ.
                 Waypoint moved = new Waypoint(
-                    ws.NewRuntimeWaypointId(), WaypointCategory.Corpse, corpse.name, newPos,
+                    waypointSystem.NewRuntimeWaypointId(), WaypointCategory.Corpse, corpse.name, newPos,
                     3f * 3f, new List<Door>(), new List<CoverPoint>(), corpse);
 
-                if (ws.AddRuntimeWaypoint(moved))
+                if (waypointSystem.AddRuntimeWaypoint(moved))
                 {
-                    carry.Restore(ws, moved, Warn);
+                    carry.Restore(waypointSystem, moved, Warn);
                     if (Plugin.debugBodyDragLoot)
                         Plugin.MyLog.LogInfo($"[OrbitSupport] re-added corpse waypoint {carry.PulledId} -> {moved.Id} at settle {newPos} ({carry.Summary()})");
                 }
@@ -124,9 +124,9 @@ namespace TarkovVR.ModSupport.ORBIT
                     Plugin.MyLog.LogWarning($"[OrbitSupport] AddRuntimeWaypoint rejected settle pos {newPos} (outside grid) — body left untracked");
                 }
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogWarning($"[OrbitSupport] re-add failed: {e.Message}");
+                Plugin.MyLog.LogWarning($"[OrbitSupport] re-add failed: {exception.Message}");
             }
         }
 
@@ -138,23 +138,23 @@ namespace TarkovVR.ModSupport.ORBIT
         // Find the corpse's current loot waypoint (its Target is this corpse).One grid scan per settle —
         // dragging is a rare user action, so it isn't worth a cross-raid cache.
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static Waypoint FindCorpseWaypoint(WaypointSystem ws, Corpse corpse)
+        private static Waypoint FindCorpseWaypoint(WaypointSystem waypointSystem, Corpse corpse)
         {
-            Cell[,] cells = ws.Cells;
+            Cell[,] cells = waypointSystem.Cells;
             if (cells == null) return null;
-            int w = cells.GetLength(0);
-            int h = cells.GetLength(1);
-            for (int x = 0; x < w; x++)
+            int width = cells.GetLength(0);
+            int height = cells.GetLength(1);
+            for (int x = 0; x < width; x++)
             {
-                for (int y = 0; y < h; y++)
+                for (int y = 0; y < height; y++)
                 {
                     List<Waypoint> list = cells[x, y].Waypoints;
                     if (list == null) continue;
                     for (int i = 0; i < list.Count; i++)
                     {
-                        Waypoint wp = list[i];
-                        if (wp != null && ReferenceEquals(wp.Target, corpse))
-                            return wp;
+                        Waypoint waypoint = list[i];
+                        if (waypoint != null && ReferenceEquals(waypoint.Target, corpse))
+                            return waypoint;
                     }
                 }
             }
@@ -169,8 +169,8 @@ namespace TarkovVR.ModSupport.ORBIT
                 if (string.IsNullOrEmpty(profileId))
                     return;
                 IBotGame botGame = Singleton<IBotGame>.Instance;
-                DeadBodiesController dbc = botGame?.BotsController?.BotSpawner?._deadBodiesController;
-                List<DeadBody> bodies = dbc?.Bodies;
+                DeadBodiesController deadBodiesController = botGame?.BotsController?.BotSpawner?._deadBodiesController;
+                List<DeadBody> bodies = deadBodiesController?.Bodies;
                 if (bodies == null)
                     return;
                 for (int i = 0; i < bodies.Count; i++)
@@ -186,10 +186,10 @@ namespace TarkovVR.ModSupport.ORBIT
                     break;
                 }
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
                 if (Plugin.debugBodyDragLoot)
-                    Plugin.MyLog.LogWarning($"[OrbitSupport] vanilla DeadBody refresh failed: {e.Message}");
+                    Plugin.MyLog.LogWarning($"[OrbitSupport] vanilla DeadBody refresh failed: {exception.Message}");
             }
         }
     }

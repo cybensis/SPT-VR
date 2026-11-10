@@ -83,14 +83,14 @@ namespace TarkovVR.Source.Misc
                 PlayerLoop.SetPlayerLoop(root);
                 loopInstalled = true;
             }
-            catch (Exception e) { Plugin.MyLog.LogWarning("[StereoCost] player-loop timing unavailable: " + e.Message); }
+            catch (Exception exception) { Plugin.MyLog.LogWarning("[StereoCost] player-loop timing unavailable: " + exception.Message); }
         }
 
         private static void LoopDetach()
         {
             if (!loopInstalled) return;
             try { PlayerLoop.SetPlayerLoop(originalLoop); }
-            catch (Exception e) { Plugin.MyLog.LogError("[StereoCost] could not put the player loop back: " + e); }
+            catch (Exception exception) { Plugin.MyLog.LogError("[StereoCost] could not put the player loop back: " + exception); }
             loopInstalled = false;
             openStep = -1;
         }
@@ -115,34 +115,34 @@ namespace TarkovVR.Source.Misc
         }
 
         //------------------------------------------------------------------------------------------------------------
-        private static void OtherCameraMain(Camera cam, bool end)
+        private static void OtherCameraMain(Camera camera, bool end)
         {
-            if (!loopBreakdown || cam == null) return;
+            if (!loopBreakdown || camera == null) return;
             long t = Stopwatch.GetTimestamp();
             ulong c = MainCycles();
-            if (!otherCameras.TryGetValue(cam, out OtherCamera oc))
+            if (!otherCameras.TryGetValue(camera, out OtherCamera otherCamera))
             {
                 if (end) return;
-                oc = new OtherCamera { name = CameraLabel(cam) };
-                otherCameras[cam] = oc;
+                otherCamera = new OtherCamera { name = CameraLabel(camera) };
+                otherCameras[camera] = otherCamera;
             }
-            if (!end) { oc.openT = t; oc.openC = c; return; }
-            if (oc.openT == 0) return;
+            if (!end) { otherCamera.openT = t; otherCamera.openC = c; return; }
+            if (otherCamera.openT == 0) return;
             if (sampling)
             {
-                oc.wall[(int)mode] += (t - oc.openT) * tickMs;
-                if (tscPerMs > 0 && c >= oc.openC && oc.openC != 0) oc.busy[(int)mode] += (c - oc.openC) / tscPerMs;
-                oc.passes[(int)mode]++;
+                otherCamera.wall[(int)mode] += (t - otherCamera.openT) * tickMs;
+                if (tscPerMs > 0 && c >= otherCamera.openC && otherCamera.openC != 0) otherCamera.busy[(int)mode] += (c - otherCamera.openC) / tscPerMs;
+                otherCamera.passes[(int)mode]++;
             }
-            oc.openT = 0;
+            otherCamera.openT = 0;
         }
 
         // The camera's name and the object it hangs under (which screen / system it belongs to)
-        private static string CameraLabel(Camera cam)
+        private static string CameraLabel(Camera camera)
         {
-            Transform parent = cam.transform.parent;
+            Transform parent = camera.transform.parent;
             string under = parent == null ? "" : parent.parent == null ? $" (under {parent.name})" : $" (under {parent.parent.name}/{parent.name})";
-            return cam.name + under + (cam.targetTexture != null ? $" -> {cam.targetTexture.width}x{cam.targetTexture.height}" : "");
+            return camera.name + under + (camera.targetTexture != null ? $" -> {camera.targetTexture.width}x{camera.targetTexture.height}" : "");
         }
 
         //------------------------------------------------------------------------------------------------------------
@@ -155,8 +155,8 @@ namespace TarkovVR.Source.Misc
             var prefix = new HarmonyMethod(AccessTools.Method(typeof(StereoCostProbe), nameof(MainPrefix))) { priority = Priority.First };
             var postfix = new HarmonyMethod(AccessTools.Method(typeof(StereoCostProbe), nameof(MainPostfix))) { priority = Priority.Last };
             var types = new HashSet<Type>();
-            foreach (MonoBehaviour mb in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
-                if (mb != null && mb.isActiveAndEnabled) types.Add(mb.GetType());
+            foreach (MonoBehaviour behaviour in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
+                if (behaviour != null && behaviour.isActiveAndEnabled) types.Add(behaviour.GetType());
             foreach (Type type in types)
             {
                 if (type.Assembly == typeof(StereoCostProbe).Assembly && type.Name.StartsWith("StereoCostProbe", StringComparison.Ordinal)) continue;
@@ -169,10 +169,10 @@ namespace TarkovVR.Source.Misc
                     mainItems[k].script = true;
                     mainMethodItem[method] = k;
                     try { scriptHarmony.Patch(method, prefix, postfix); scriptMethods++; }
-                    catch (Exception e)
+                    catch (Exception exception)
                     {
                         mainMethodItem.Remove(method);
-                        if (scriptPatchFailures++ < 5) Plugin.MyLog.LogWarning($"[StereoCost] could not time {method.DeclaringType?.Name}.{method.Name}: {e.Message}");
+                        if (scriptPatchFailures++ < 5) Plugin.MyLog.LogWarning($"[StereoCost] could not time {method.DeclaringType?.Name}.{method.Name}: {exception.Message}");
                     }
                 }
             }
@@ -182,20 +182,20 @@ namespace TarkovVR.Source.Misc
         private static void UnpatchAllScripts()
         {
             try { scriptHarmony?.UnpatchSelf(); }
-            catch (Exception e) { Plugin.MyLog.LogError("[StereoCost] script unpatch failed: " + e); }
+            catch (Exception exception) { Plugin.MyLog.LogError("[StereoCost] script unpatch failed: " + exception); }
             scriptHarmony = null;
         }
 
         //------------------------------------------------------------------------------------------------------------
         private static readonly Mode[] loopModes = { Mode.Both, Mode.LeftOnly, Mode.NoShadows, Mode.Occlusion };
 
-        private static void ReportLoop(StringBuilder sb)
+        private static void ReportLoop(StringBuilder builder)
         {
             if (!loopBreakdown) return;
             if (loopSteps.Count > 0)
             {
-                sb.AppendLine($"[StereoCost] ===== MAIN THREAD step by step (Unity's player loop, {loopSteps.Count} steps): mean ms a frame, wall / BUSY =====");
-                sb.AppendLine("[StereoCost]   step                                                     both wall  busy |  left wall  busy | no-shad wall  busy | occl-on wall busy");
+                builder.AppendLine($"[StereoCost] ===== MAIN THREAD step by step (Unity's player loop, {loopSteps.Count} steps): mean ms a frame, wall / BUSY =====");
+                builder.AppendLine("[StereoCost]   step                                                     both wall  busy |  left wall  busy | no-shad wall  busy | occl-on wall busy");
                 var order = new List<int>();
                 for (int k = 0; k < loopSteps.Count; k++) order.Add(k);
                 order.Sort((a, b) => loopSteps[b].wall[0].CompareTo(loopSteps[a].wall[0]));
@@ -217,40 +217,40 @@ namespace TarkovVR.Source.Misc
                         foreach (Mode m in loopModes) { smallWall[(int)m] += PerFrame(st.wall[(int)m], m); smallBusy[(int)m] += PerFrame(st.busy[(int)m], m); }
                         continue;
                     }
-                    sb.AppendLine($"[StereoCost]     {Trim(st.name, 52),-52} {ModeColumns(st.wall, st.busy)}");
+                    builder.AppendLine($"[StereoCost]     {Trim(st.name, 52),-52} {ModeColumns(st.wall, st.busy)}");
                 }
-                if (small > 0) sb.AppendLine($"[StereoCost]     {$"{small} more under {loopMinMs} ms",-52} {ModeColumns(smallWall, smallBusy, true)}");
-                sb.AppendLine($"[StereoCost]   {"all steps (= the frame)",-54} {ModeColumns(totalWall, totalBusy, true)}");
+                if (small > 0) builder.AppendLine($"[StereoCost]     {$"{small} more under {loopMinMs} ms",-52} {ModeColumns(smallWall, smallBusy, true)}");
+                builder.AppendLine($"[StereoCost]   {"all steps (= the frame)",-54} {ModeColumns(totalWall, totalBusy, true)}");
             }
             if (otherCameras.Count > 0)
             {
-                sb.AppendLine("[StereoCost] ===== MAIN THREAD, cameras other than the headset's (pre-cull -> post-render): mean ms a frame, wall / BUSY =====");
-                sb.AppendLine("[StereoCost]   camera                                                   both wall  busy |  left wall  busy | no-shad wall  busy | occl-on wall busy | passes a frame");
+                builder.AppendLine("[StereoCost] ===== MAIN THREAD, cameras other than the headset's (pre-cull -> post-render): mean ms a frame, wall / BUSY =====");
+                builder.AppendLine("[StereoCost]   camera                                                   both wall  busy |  left wall  busy | no-shad wall  busy | occl-on wall busy | passes a frame");
                 var cams = new List<OtherCamera>(otherCameras.Values);
                 cams.Sort((a, b) => b.wall[0].CompareTo(a.wall[0]));
                 double[] totalWall = new double[ModeCount], totalBusy = new double[ModeCount];
-                foreach (OtherCamera oc in cams)
+                foreach (OtherCamera otherCamera in cams)
                 {
-                    foreach (Mode m in loopModes) { totalWall[(int)m] += PerFrame(oc.wall[(int)m], m); totalBusy[(int)m] += PerFrame(oc.busy[(int)m], m); }
-                    if (PerFrame(oc.wall[0], Mode.Both) < 0.005 && PerFrame(oc.wall[1], Mode.LeftOnly) < 0.005) continue;
-                    sb.AppendLine($"[StereoCost]     {Trim(oc.name, 52),-52} {ModeColumns(oc.wall, oc.busy)} | {PerFrame(oc.passes[0], Mode.Both):0.0}");
+                    foreach (Mode m in loopModes) { totalWall[(int)m] += PerFrame(otherCamera.wall[(int)m], m); totalBusy[(int)m] += PerFrame(otherCamera.busy[(int)m], m); }
+                    if (PerFrame(otherCamera.wall[0], Mode.Both) < 0.005 && PerFrame(otherCamera.wall[1], Mode.LeftOnly) < 0.005) continue;
+                    builder.AppendLine($"[StereoCost]     {Trim(otherCamera.name, 52),-52} {ModeColumns(otherCamera.wall, otherCamera.busy)} | {PerFrame(otherCamera.passes[0], Mode.Both):0.0}");
                 }
-                sb.AppendLine($"[StereoCost]   {"all other cameras",-54} {ModeColumns(totalWall, totalBusy, true)}");
+                builder.AppendLine($"[StereoCost]   {"all other cameras",-54} {ModeColumns(totalWall, totalBusy, true)}");
             }
         }
 
         // Per-frame means for the three compared modes: "wall busy | wall busy | wall busy"
         private static string ModeColumns(double[] wall, double[] busy, bool perFrameAlready = false)
         {
-            var sb = new StringBuilder();
+            var builder = new StringBuilder();
             foreach (Mode m in loopModes)
             {
                 double w = perFrameAlready ? wall[(int)m] : PerFrame(wall[(int)m], m);
                 double b = perFrameAlready ? busy[(int)m] : PerFrame(busy[(int)m], m);
-                if (sb.Length > 0) sb.Append(" | ");
-                sb.Append($"{F(w)} {F(b)}");
+                if (builder.Length > 0) builder.Append(" | ");
+                builder.Append($"{F(w)} {F(b)}");
             }
-            return sb.ToString();
+            return builder.ToString();
         }
 
         private static double PerFrame(double sum, Mode m)
@@ -259,15 +259,15 @@ namespace TarkovVR.Source.Misc
             return frames > 0 ? sum / frames : double.NaN;
         }
 
-        private static void ReportScripts(StringBuilder sb)
+        private static void ReportScripts(StringBuilder builder)
         {
             if (scriptHarmony == null && scriptMethods == 0) return;
             Samples s = samples[(int)Mode.Scripts];
-            if (s.frames == 0) { sb.AppendLine("[StereoCost] ===== scripts segment: no frames sampled ====="); return; }
+            if (s.frames == 0) { builder.AppendLine("[StereoCost] ===== scripts segment: no frames sampled ====="); return; }
             int seg = (int)Mode.Scripts;
-            sb.AppendLine($"[StereoCost] ===== MAIN THREAD scripts (own segment, both eyes, {s.frames} frames): every live Update / LateUpdate / FixedUpdate, "
+            builder.AppendLine($"[StereoCost] ===== MAIN THREAD scripts (own segment, both eyes, {s.frames} frames): every live Update / LateUpdate / FixedUpdate, "
                 + $"{scriptMethods} methods timed, {scriptPatchFailures} could not be, patching took {scriptPatchSeconds:0.0} s; mean ms a frame (wall) =====");
-            sb.AppendLine($"[StereoCost]   (this segment's frame: main busy {Fmt(Median(s.mainFrameBusy))} vs {Fmt(Median(samples[0].mainFrameBusy))} untimed = the timing's own cost)");
+            builder.AppendLine($"[StereoCost]   (this segment's frame: main busy {Fmt(Median(s.mainFrameBusy))} vs {Fmt(Median(samples[0].mainFrameBusy))} untimed = the timing's own cost)");
             var order = new List<int>();
             for (int k = 0; k < mainItems.Count; k++) if (mainItems[k].script) order.Add(k);
             order.Sort((a, b) => Total(mainItems[b], seg).CompareTo(Total(mainItems[a], seg)));
@@ -279,13 +279,13 @@ namespace TarkovVR.Source.Misc
                 total += ms; totalCalls += calls;
                 if (shown < scriptRows && ms >= mainMinMs)
                 {
-                    sb.AppendLine($"[StereoCost]     {Trim(mainItems[k].name, 70),-70} {F(ms)} | calls a frame {calls / (double)s.frames:0.0}");
+                    builder.AppendLine($"[StereoCost]     {Trim(mainItems[k].name, 70),-70} {F(ms)} | calls a frame {calls / (double)s.frames:0.0}");
                     shown++;
                 }
                 else if (calls > 0) { rest += ms; restCalls += calls; restN++; }
             }
-            sb.AppendLine($"[StereoCost]     {$"{restN} more",-70} {F(rest)} | calls a frame {restCalls / (double)s.frames:0.0}");
-            sb.AppendLine($"[StereoCost]   {"all timed scripts",-72} {F(total)} | calls a frame {totalCalls / (double)s.frames:0.0}");
+            builder.AppendLine($"[StereoCost]     {$"{restN} more",-70} {F(rest)} | calls a frame {restCalls / (double)s.frames:0.0}");
+            builder.AppendLine($"[StereoCost]   {"all timed scripts",-72} {F(total)} | calls a frame {totalCalls / (double)s.frames:0.0}");
         }
 
         private static double Total(MainItem item, int seg) => item.ms[seg, 0] + item.ms[seg, 1] + item.ms[seg, 2];

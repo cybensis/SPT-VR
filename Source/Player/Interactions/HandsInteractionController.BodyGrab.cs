@@ -609,7 +609,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             else if (grabbedRagdoll != null)
             {
-                grabbedRagdoll._checkCorpseIsStill = (allAsleep, t) => allAsleep;
+                grabbedRagdoll._checkCorpseIsStill = (allAsleep, timePassed) => allAsleep;
             }
 
             if (grabbedIsDownedPlayer && debugDownedRelease)
@@ -862,8 +862,8 @@ namespace TarkovVR.Source.Player.Interactions
         // body back into the caller and reintroducing the inline reference. Same isolation pattern as
         // VRArmSync.Tick(); see memory note fika-softdep-no-typed-fields.
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static MonoBehaviour FikaFindRevive(Collider col, out CorpseRagdoll ragdoll)
-            => FikaVrSync.FindReviveInteractable(col, out ragdoll);
+        private static MonoBehaviour FikaFindRevive(Collider bodyCollider, out CorpseRagdoll ragdoll)
+            => FikaVrSync.FindReviveInteractable(bodyCollider, out ragdoll);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static int FikaResolveDownedNetId(GameObject bodyRoot)

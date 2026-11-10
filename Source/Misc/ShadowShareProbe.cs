@@ -48,10 +48,10 @@ namespace TarkovVR.Source.Misc
 
         private static Camera HeadsetCamera()
         {
-            Camera cam = VRGlobals.VRCam;
-            if (cam != null && cam.isActiveAndEnabled && cam.stereoEnabled) return cam;
-            cam = Camera.main;
-            return cam != null && cam.isActiveAndEnabled && cam.stereoEnabled ? cam : null;
+            Camera camera = VRGlobals.VRCam;
+            if (camera != null && camera.isActiveAndEnabled && camera.stereoEnabled) return camera;
+            camera = Camera.main;
+            return camera != null && camera.isActiveAndEnabled && camera.stereoEnabled ? camera : null;
         }
 
         private static Light Sun()
@@ -222,7 +222,7 @@ namespace TarkovVR.Source.Misc
         private static string Compare(string label, NativeArray<float> left, NativeArray<float> right)
         {
             int size = captureSize, half = size / 2;
-            var sb = new StringBuilder();
+            var builder = new StringBuilder();
             long written = 0, notWritten = 0, different = 0, leftWritten = 0, rightWritten = 0;
             double maxDiff = 0;
             for (int i = 0; i < left.Length; i++)
@@ -236,13 +236,13 @@ namespace TarkovVR.Source.Misc
                 if (d > sameDepth) different++;
                 if (d > maxDiff) maxDiff = d;
             }
-            sb.AppendLine($"[ShadowShare]   {label}: maps written: left {leftWritten * 100.0 / left.Length:0.#}%, right {rightWritten * 100.0 / left.Length:0.#}%");
+            builder.AppendLine($"[ShadowShare]   {label}: maps written: left {leftWritten * 100.0 / left.Length:0.#}%, right {rightWritten * 100.0 / left.Length:0.#}%");
             if (leftWritten == 0 || rightWritten == 0)
             {
-                sb.AppendLine($"[ShadowShare]   {label}: {(leftWritten == 0 && rightWritten == 0 ? "neither eye's map was copied" : "only one eye's map was copied")} - nothing to compare");
-                return sb.ToString();
+                builder.AppendLine($"[ShadowShare]   {label}: {(leftWritten == 0 && rightWritten == 0 ? "neither eye's map was copied" : "only one eye's map was copied")} - nothing to compare");
+                return builder.ToString();
             }
-            sb.AppendLine($"[ShadowShare]   {label}: {(different == 0 ? "IDENTICAL" : "different")} - "
+            builder.AppendLine($"[ShadowShare]   {label}: {(different == 0 ? "IDENTICAL" : "different")} - "
                 + $"{different * 100.0 / Math.Max(1, written):0.000}% of {written} texels differ, largest raw-depth difference {maxDiff:0.000000}"
                 + (notWritten > 0 ? $", {notWritten} texels not written" : ""));
             // Each quarter of the map (the cascades sit 2 x 2): how far the right eye's is shifted against the left's
@@ -270,11 +270,11 @@ namespace TarkovVR.Source.Misc
                         if (mean < best) { best = mean; bestX = dx; bestY = dy; }
                     }
                 if (best == double.MaxValue)
-                    sb.AppendLine($"[ShadowShare]     {names[quarter],-12}: not written in both");
+                    builder.AppendLine($"[ShadowShare]     {names[quarter],-12}: not written in both");
                 else
-                    sb.AppendLine($"[ShadowShare]     {names[quarter],-12}: mean difference unshifted {atZero:0.0000000}, best match shifted ({bestX},{bestY}) texels of {size} at {best:0.0000000}");
+                    builder.AppendLine($"[ShadowShare]     {names[quarter],-12}: mean difference unshifted {atZero:0.0000000}, best match shifted ({bestX},{bestY}) texels of {size} at {best:0.0000000}");
             }
-            return sb.ToString();
+            return builder.ToString();
         }
     }
 }

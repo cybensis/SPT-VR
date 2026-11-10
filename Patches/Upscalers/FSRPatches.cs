@@ -398,14 +398,14 @@ namespace TarkovVR.Patches.Upscalers
             var implicitOp = AccessTools.Method(typeof(RenderTargetIdentifier), "op_Implicit", new[] { typeof(BuiltinRenderTextureType) });
             var remap = AccessTools.Method(typeof(FsrMaskClean), nameof(FsrMaskClean.Remap));
             int swapped = 0;
-            foreach (var ins in instructions)
+            foreach (var instruction in instructions)
             {
-                if (implicitOp != null && ins.Calls(implicitOp))
+                if (implicitOp != null && instruction.Calls(implicitOp))
                 {
-                    ins.operand = remap;
+                    instruction.operand = remap;
                     swapped++;
                 }
-                yield return ins;
+                yield return instruction;
             }
             if (swapped != 5)
                 Plugin.MyLog.LogWarning($"[VR FSR] FSR2 input remap: {swapped} built-in texture uses found (expected 5)");

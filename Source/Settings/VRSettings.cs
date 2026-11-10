@@ -769,7 +769,7 @@ namespace TarkovVR.Source.Settings
             cullDistanceSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             cullDistanceSlider.Text.localizationKey = "Per-Layer Cull Distance (FPS Hit):";
             MakeSliderSmooth(cullDistanceSlider, 0.5f, 3f, () => settings.cullDistance,
-                (v) => settings.cullDistance = v, (v) => v.ToString("0.00"));
+                (value) => settings.cullDistance = value, (v) => v.ToString("0.00"));
 
             emptySpacingSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
             emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());

@@ -64,8 +64,8 @@ namespace TarkovVR.Source.Player.Interactions
         // "Base HumanLDigit21" -> "Digit21" (the same on both hands)
         private static string DigitOf(string boneName)
         {
-            int at = boneName.IndexOf("Digit", System.StringComparison.Ordinal);
-            return at >= 0 ? boneName.Substring(at) : boneName;
+            int digitStart = boneName.IndexOf("Digit", System.StringComparison.Ordinal);
+            return digitStart >= 0 ? boneName.Substring(digitStart) : boneName;
         }
     }
 }

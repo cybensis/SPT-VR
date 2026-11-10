@@ -53,9 +53,9 @@ namespace TarkovVR
             {
                 VRRuntimeFiles.Prepare();
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Logger.LogError($"[VR files] preparing the VR files failed: {ex}");
+                Logger.LogError($"[VR files] preparing the VR files failed: {exception}");
             }
 
             // Unity read the old manifests at engine start: starting VR against them could pair two copies of a plugin
@@ -116,9 +116,9 @@ namespace TarkovVR
             {
                 return OpenXRBootstrap.Initialize();
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                MyLog.LogError($"[OpenXR] Couldn't load Unity's OpenXR plugin: {ex.GetType().Name}: {ex.Message}");
+                MyLog.LogError($"[OpenXR] Couldn't load Unity's OpenXR plugin: {exception.GetType().Name}: {exception.Message}");
                 return false;
             }
         }
@@ -183,9 +183,9 @@ namespace TarkovVR
                 Plugin.MyLog.LogInfo("[VR] Initialization completed successfully.");
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"[VR Initialization Error] {ex.Message}");
+                Plugin.MyLog.LogError($"[VR Initialization Error] {exception.Message}");
                 return false;
             }
         }
@@ -265,9 +265,9 @@ namespace TarkovVR
 
                 Plugin.MyLog.LogInfo($"[Controller Detection] Final vrControllerType='{VRGlobals.vrControllerType ?? "null"}'");
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"[Controller Detection Error] {ex.Message}");
+                Plugin.MyLog.LogError($"[Controller Detection Error] {exception.Message}");
             }
         }
 
@@ -301,9 +301,9 @@ namespace TarkovVR
                 // Force SteamVR Input update to ensure controllers are recognized
                 SteamVR_Input.Update();
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError($"[ActionSet Initialization Error] {ex.Message}");
+                Plugin.MyLog.LogError($"[ActionSet Initialization Error] {exception.Message}");
             }
         }
 
@@ -331,9 +331,9 @@ namespace TarkovVR
                 {
                     BindFikaSyncHooks();
                 }
-                catch (Exception e)
+                catch (Exception exception)
                 {
-                    MyLog.LogError($"SPT-VR-FikaSync.dll missing or failed to bind ({e.Message}). Install it next to SPT-VR.dll for co-op sync.");
+                    MyLog.LogError($"SPT-VR-FikaSync.dll missing or failed to bind ({exception.Message}). Install it next to SPT-VR.dll for co-op sync.");
                 }
             }
             InstalledMods.DynamicMapsInstalled = ApplyModSupport("com.mpstark.dynamicmaps", "DynamicMaps", "TarkovVR.ModSupport.DynamicMaps");
@@ -352,9 +352,9 @@ namespace TarkovVR
                         InstalledMods.FuckThisCullingInstalled = true;
                         MyLog.LogInfo($"FuckThisCulling {cullingVersion} found: stereo support applied (the eyes take turns in its visibility test).");
                     }
-                    catch (Exception e)
+                    catch (Exception exception)
                     {
-                        MyLog.LogError($"FuckThisCulling {cullingVersion}: stereo support failed to apply, objects only the right eye sees may be hidden: {e}");
+                        MyLog.LogError($"FuckThisCulling {cullingVersion}: stereo support failed to apply, objects only the right eye sees may be hidden: {exception}");
                     }
                 }
                 else
@@ -378,9 +378,9 @@ namespace TarkovVR
                 ApplyPatches(patchNamespace);
                 MyLog.LogInfo($"{modName} {modInfo.Metadata.Version} found: VR support applied.");
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                MyLog.LogError($"{modName} {modInfo.Metadata.Version}: VR support failed to apply (another version of it?): {e}");
+                MyLog.LogError($"{modName} {modInfo.Metadata.Version}: VR support failed to apply (another version of it?): {exception}");
             }
             return true;
         }

@@ -206,13 +206,13 @@ namespace TarkovVR.Source.Weapons
             Vector3 hinge = magazineWell.TransformDirection(heldRockIn.axis).normalized;
             float turned = heldRockIn.angle * (railPosition - railPositionAtStart) / railLength;
             Vector3 heldPoint = Quaternion.AngleAxis(turned, hinge) * magazineWell.TransformVector(rockLeverStartInWell);
-            Vector3 off = RockLeverNow() - heldPoint;
+            Vector3 offset = RockLeverNow() - heldPoint;
             Vector3 outward = heldPoint.normalized;
-            float alongOutward = Vector3.Dot(off, outward);
+            float alongOutward = Vector3.Dot(offset, outward);
             // A belt box coming off: pulling it away from the hinge is taking it out, not coming off it (as pushing it toward the hinge
             // going in isn't)
             bool along = alongOutward < 0f || (railPullingOut && heldRockIn.pivot != Vector3.zero);
-            return (along ? off - outward * alongOutward : off).magnitude;
+            return (along ? offset - outward * alongOutward : offset).magnitude;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

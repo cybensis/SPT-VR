@@ -79,18 +79,18 @@ namespace TarkovVR.Patches.Visuals
         {
             if (!perEyeGrassMotion || cam == null || cam != VRGlobals.VRCam)
                 return;
-            Matrix4x4 vp;
+            Matrix4x4 viewProjection;
             if (cam.stereoEnabled)
             {
                 var eye = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left;
-                vp = GL.GetGPUProjectionMatrix(cam.GetStereoNonJitteredProjectionMatrix(eye), true) * cam.GetStereoViewMatrix(eye);
+                viewProjection = GL.GetGPUProjectionMatrix(cam.GetStereoNonJitteredProjectionMatrix(eye), true) * cam.GetStereoViewMatrix(eye);
             }
             else
             {
-                vp = GL.GetGPUProjectionMatrix(cam.nonJitteredProjectionMatrix, true) * cam.worldToCameraMatrix;
+                viewProjection = GL.GetGPUProjectionMatrix(cam.nonJitteredProjectionMatrix, true) * cam.worldToCameraMatrix;
             }
-            Shader.SetGlobalMatrix(NonJitteredVP, vp);
-            Shader.SetGlobalMatrix(PreviousVP, vp);
+            Shader.SetGlobalMatrix(NonJitteredVP, viewProjection);
+            Shader.SetGlobalMatrix(PreviousVP, viewProjection);
         }
 
         // This is where GPU Instancing handles culling, it does not work properly in multipass, it only takes left eye into account.

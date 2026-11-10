@@ -55,9 +55,9 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (!fingerTracking)
                 return false;
-            var sk = HandSkeleton(dominant);
-            return sk != null && sk.active
-                && (int)sk.skeletalTrackingLevel >= (int)EVRSkeletalTrackingLevel.VRSkeletalTracking_Partial;
+            var skeleton = HandSkeleton(dominant);
+            return skeleton != null && skeleton.active
+                && (int)skeleton.skeletalTrackingLevel >= (int)EVRSkeletalTrackingLevel.VRSkeletalTracking_Partial;
         }
 
         // Curl the fingers from their BAKED open pose (basePose, packed 3-per-finger in fingerJoints
@@ -68,32 +68,32 @@ namespace TarkovVR.Source.Player.Interactions
         // this frame (caller falls back to the static baked pose).
         private bool ApplySkeletalCurls(bool dominant, Transform[][] fingerJoints, bool[] isThumb, Vector3[] basePose, float sign, float weight, bool leftDeltas)
         {
-            var sk = HandSkeleton(dominant);
-            float[] curls = sk != null ? sk.fingerCurls : null;
+            var skeleton = HandSkeleton(dominant);
+            float[] curls = skeleton != null ? skeleton.fingerCurls : null;
             if (curls == null || curls.Length < 5 || fingerJoints == null || basePose == null)
                 return false;
 
-            int idx = 0;
-            for (int f = 0; f < fingerJoints.Length; f++)
+            int packedIndex = 0;
+            for (int fingerIndex = 0; fingerIndex < fingerJoints.Length; fingerIndex++)
             {
-                Transform[] joints = fingerJoints[f];
-                bool thumb = isThumb != null && f < isThumb.Length && isThumb[f];
+                Transform[] joints = fingerJoints[fingerIndex];
+                bool thumb = isThumb != null && fingerIndex < isThumb.Length && isThumb[fingerIndex];
                 float gain = thumb ? thumbCurlToDeg : curlToDeg;
                 float rest = thumb ? thumbCurlRestLevel : curlRestLevel;
                 // recentred: resting curl = the authored pose exactly; clamp the open side
-                float bendBase = Mathf.Max((curls[CurlIndex(isThumb, f)] - rest) * gain, -maxExtendDeg);
-                float flexBase = leftDeltas ? PerFingerFlex(f) : 0f;
-                float spread = leftDeltas && leftFingerSpread != null && f < leftFingerSpread.Length
-                    ? leftFingerSpread[f] * fingerSpreadDeg : 0f;
-                for (int j = 0; j < joints.Length && j < 3; j++, idx++)
+                float bendBase = Mathf.Max((curls[CurlIndex(isThumb, fingerIndex)] - rest) * gain, -maxExtendDeg);
+                float flexBase = leftDeltas ? PerFingerFlex(fingerIndex) : 0f;
+                float spread = leftDeltas && leftFingerSpread != null && fingerIndex < leftFingerSpread.Length
+                    ? leftFingerSpread[fingerIndex] * fingerSpreadDeg : 0f;
+                for (int j = 0; j < joints.Length && j < 3; j++, packedIndex++)
                 {
-                    if (joints[j] == null || idx >= basePose.Length)
+                    if (joints[j] == null || packedIndex >= basePose.Length)
                         continue;
                     // The curl uses its own (gentler) taper so the TIPS close into the fist; the left's
                     // idle-flex delta keeps midJointScale to match ReplayRestPose's look exactly.
                     float bend = bendBase * Mathf.Pow(curlJointScale, j) * sign
                                + (leftDeltas ? flexBase * Mathf.Pow(midJointScale, j) * flexSign : 0f);
-                    Quaternion target = Quaternion.Euler(basePose[idx])
+                    Quaternion target = Quaternion.Euler(basePose[packedIndex])
                         * Quaternion.AngleAxis(bend, curlAxis)
                         * Quaternion.AngleAxis(j == 0 ? spread : 0f, spreadAxis);
                     Quaternion animated = RecoverAnimated(joints[j]);
@@ -107,7 +107,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (fingerTrackingDebug && Time.time >= nextFingerTrackLog)
             {
                 nextFingerTrackLog = Time.time + 1f;
-                Plugin.MyLog.LogInfo($"[FingerTracking] {(dominant ? "dom" : "off")} level={sk.skeletalTrackingLevel} curls=[{curls[0]:0.00},{curls[1]:0.00},{curls[2]:0.00},{curls[3]:0.00},{curls[4]:0.00}]");
+                Plugin.MyLog.LogInfo($"[FingerTracking] {(dominant ? "dom" : "off")} level={skeleton.skeletalTrackingLevel} curls=[{curls[0]:0.00},{curls[1]:0.00},{curls[2]:0.00},{curls[3]:0.00},{curls[4]:0.00}]");
             }
             return true;
         }
@@ -130,26 +130,26 @@ namespace TarkovVR.Source.Player.Interactions
                 PackFingerEulers(rightFingerJoints, syncRightFingerEuler);
         }
 
-        private static void PackFingerEulers(Transform[][] fingers, Vector3[] dst)
+        private static void PackFingerEulers(Transform[][] fingers, Vector3[] destination)
         {
-            int idx = 0;
-            for (int f = 0; f < fingers.Length && idx < dst.Length; f++)
+            int packedIndex = 0;
+            for (int fingerIndex = 0; fingerIndex < fingers.Length && packedIndex < destination.Length; fingerIndex++)
             {
-                Transform[] joints = fingers[f];
-                for (int j = 0; j < joints.Length && j < 3 && idx < dst.Length; j++, idx++)
-                    dst[idx] = joints[j] != null ? joints[j].localEulerAngles : Vector3.zero;
+                Transform[] joints = fingers[fingerIndex];
+                for (int j = 0; j < joints.Length && j < 3 && packedIndex < destination.Length; j++, packedIndex++)
+                    destination[packedIndex] = joints[j] != null ? joints[j].localEulerAngles : Vector3.zero;
             }
-            for (; idx < dst.Length; idx++)
-                dst[idx] = Vector3.zero;
+            for (; packedIndex < destination.Length; packedIndex++)
+                destination[packedIndex] = Vector3.zero;
         }
 
         // Map a finger slot to the SteamVR curl index order [thumb, index, middle, ring, pinky].
-        private static int CurlIndex(bool[] isThumb, int f)
+        private static int CurlIndex(bool[] isThumb, int fingerIndex)
         {
-            if (isThumb != null && f < isThumb.Length && isThumb[f])
+            if (isThumb != null && fingerIndex < isThumb.Length && isThumb[fingerIndex])
                 return 0;
             int k = 1;
-            for (int i = 0; i < f && isThumb != null && i < isThumb.Length; i++)
+            for (int i = 0; i < fingerIndex && isThumb != null && i < isThumb.Length; i++)
                 if (!isThumb[i])
                     k++;
             return Mathf.Clamp(k, 0, 4);

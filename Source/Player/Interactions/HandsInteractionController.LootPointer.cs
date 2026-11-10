@@ -685,11 +685,11 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 Vector3 sum = Vector3.zero;
                 int n = 0;
-                for (int f = 0; f < fingers.Length; f++)
+                for (int fingerIndex = 0; fingerIndex < fingers.Length; fingerIndex++)
                 {
-                    if (thumbs != null && f < thumbs.Length && thumbs[f])
+                    if (thumbs != null && fingerIndex < thumbs.Length && thumbs[fingerIndex])
                         continue;
-                    Transform[] joints = fingers[f];
+                    Transform[] joints = fingers[fingerIndex];
                     if (joints != null && joints.Length > 0 && joints[0] != null)
                     {
                         sum += joints[0].position;
@@ -706,8 +706,8 @@ namespace TarkovVR.Source.Player.Interactions
             if (palmBone != null) return palmBone.TransformPoint(conePalmLocalOffset);
             Transform cone = coneAims[dominant ? 1 : 0];
             if (cone != null) return cone.position;
-            GameObject h = dominant ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand;
-            return h != null ? h.transform.position : Vector3.zero;
+            GameObject handObject = dominant ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand;
+            return handObject != null ? handObject.transform.position : Vector3.zero;
         }
 
         private void ClearDots()
@@ -1054,9 +1054,9 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Per-finger flex delta (finger index f; 0 = thumb), eased between the idle and
         // "dot in view" arrays by flexProgress. Out-of-range fingers get 0.
-        private float IdleFlex(int f)
+        private float IdleFlex(int fingerIndex)
         {
-            return fingerFlexDeg != null && f < fingerFlexDeg.Length ? fingerFlexDeg[f] : 0f;
+            return fingerFlexDeg != null && fingerIndex < fingerFlexDeg.Length ? fingerFlexDeg[fingerIndex] : 0f;
         }
 
         private float PerFingerFlex(int f)

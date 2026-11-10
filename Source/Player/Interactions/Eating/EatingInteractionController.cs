@@ -116,8 +116,8 @@ namespace TarkovVR.Source.Player.Interactions
                 drinkFdc = item?.GetItemComponent<EFT.InventoryLogic.FoodDrinkComponent>();
                 if (drinkFdc != null && drinkFdc.MaxResource > 0f)
                     drinkRemainingFrac = Mathf.Clamp01(drinkFdc.HpPercent / drinkFdc.MaxResource);
-                if (drinkUseTime <= 0f && item?.Template is FoodDrinkTemplate t)
-                    drinkUseTime = t.UseTime;
+                if (drinkUseTime <= 0f && item?.Template is FoodDrinkTemplate template)
+                    drinkUseTime = template.UseTime;
             }
             catch (Exception ex) { Plugin.MyLog.LogWarning($"[ManualEat] ReadDrinkState: {ex.Message}"); }
             if (drinkUseTime <= 0f) drinkUseTime = 5f; // template missing/odd — sane fallback

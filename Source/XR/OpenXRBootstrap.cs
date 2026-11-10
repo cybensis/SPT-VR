@@ -63,9 +63,9 @@ namespace TarkovVR.Source.XR
                 LogRuntimeInfo();
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogError("[OpenXR] Initialization failed: " + ex);
+                Plugin.MyLog.LogError("[OpenXR] Initialization failed: " + exception);
                 StopHalfStarted(managerSettings);
                 return false;
             }
@@ -81,9 +81,9 @@ namespace TarkovVR.Source.XR
                 managerSettings.StopSubsystems();
                 managerSettings.DeinitializeLoader();
             }
-            catch (Exception ex)
+            catch (Exception exception)
             {
-                Plugin.MyLog.LogWarning("[OpenXR] Stopping the half-started loader failed: " + ex.Message);
+                Plugin.MyLog.LogWarning("[OpenXR] Stopping the half-started loader failed: " + exception.Message);
             }
         }
 

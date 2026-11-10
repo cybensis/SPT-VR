@@ -261,12 +261,12 @@ namespace TarkovVR.Patches.Core.Player
             if (!analogMovementDirection || VRGlobals.menuOpen || !VRGlobals.inGame)
                 return;
 
-            MovementContext mc = __instance.MovementContext;
-            if (mc == null || mc._player == null || !mc._player.IsYourPlayer)
+            MovementContext movementContext = __instance.MovementContext;
+            if (movementContext == null || movementContext._player == null || !movementContext._player.IsYourPlayer)
                 return;
 
             // Only the normal upright locomotion state moves via the 8-way directional clips; everything else stays vanilla.
-            if (!(__instance is MovePlayerState) || !mc.IsGrounded)
+            if (!(__instance is MovePlayerState) || !movementContext.IsGrounded)
                 return;
 
             Vector3 horizontal = new Vector3(motion.x, 0f, motion.z);
@@ -275,7 +275,7 @@ namespace TarkovVR.Patches.Core.Player
                 return;
 
             // Smoothed analog stick heading in world space (body-relative MovementDirection -> world via PlayerTransform).
-            Vector3 heading = mc.AbsoluteMovementDirection;
+            Vector3 heading = movementContext.AbsoluteMovementDirection;
             heading.y = 0f;
             if (heading.sqrMagnitude < 1e-6f)
                 return;
@@ -283,7 +283,7 @@ namespace TarkovVR.Patches.Core.Player
 
             // Sprint is forward-only in vanilla; clamp the steer to a cone around the sprint's own forward heading
             // (the un-redirected root motion direction == body forward while sprinting) so you can't run sideways.
-            if (mc.IsSprintEnabled)
+            if (movementContext.IsSprintEnabled)
             {
                 Vector3 forward = horizontal / planarMag; // root-motion heading (≈ body forward during sprint)
                 heading = Vector3.RotateTowards(forward, heading, analogSprintMaxAngle * Mathf.Deg2Rad, 0f);

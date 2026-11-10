@@ -992,8 +992,8 @@ namespace TarkovVR.Source.Controls
                     && WeaponPatches.currentGunInteractController != null
                     && WeaponPatches.currentGunInteractController.lastHitCompIndex != -1)
                 {
-                    float t = Handedness.OffHandTrigger.axis;
-                    bool down = t > 0.5f;
+                    float triggerAxis = Handedness.OffHandTrigger.axis;
+                    bool down = triggerAxis > 0.5f;
                     offTriggerPress = down && !offTriggerWasDown;
                     offTriggerRelease = !down && offTriggerWasDown;
                     offTriggerWasDown = down;

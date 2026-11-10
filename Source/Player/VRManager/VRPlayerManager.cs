@@ -462,8 +462,8 @@ namespace TarkovVR.Source.Player.VRManager
         // WeaponWeightFeel's swing/twist split.
         private Vector3 BarrelDir()
         {
-            Transform wr = VRGlobals.firearmController ? VRGlobals.firearmController.WeaponRoot : null;
-            return wr != null ? -wr.up : rawRightHand.transform.forward;
+            Transform weaponRoot = VRGlobals.firearmController ? VRGlobals.firearmController.WeaponRoot : null;
+            return weaponRoot != null ? -weaponRoot.up : rawRightHand.transform.forward;
         }
 
         private void ApplyInertia(Transform handTransform, Transform targetHandTransform, Vector3 currentVelocity)

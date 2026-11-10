@@ -691,23 +691,23 @@ namespace TarkovVR.Source.Player.Interactions
                     continue;
                 if (!interactableCache.ContainsKey(collider))
                     interactableCache[collider] = new CachedInteractable(collider.gameObject);
-                var ci = interactableCache[collider];
-                if (ci.Type == InteractableType.None)
+                var cached = interactableCache[collider];
+                if (cached.Type == InteractableType.None)
                     continue;
                 rightHandState.inInteractiveCollider = true;
-                switch (ci.Type)
+                switch (cached.Type)
                 {
                     case InteractableType.LootItem:
-                        rightHandState.lootItem = ci.Component as LootItem;
+                        rightHandState.lootItem = cached.Component as LootItem;
                         break;
                     case InteractableType.LootableContainer:
-                        rightHandState.lootableContainer = ci.Component as LootableContainer;
+                        rightHandState.lootableContainer = cached.Component as LootableContainer;
                         break;
                     case InteractableType.Door:
-                        rightHandState.door = ci.Component as Door;
+                        rightHandState.door = cached.Component as Door;
                         break;
                     case InteractableType.Corpse:
-                        rightHandState.corpse = ci.Component as Corpse;
+                        rightHandState.corpse = cached.Component as Corpse;
                         break;
                 }
                 if (!previousState.inInteractiveCollider)
@@ -752,11 +752,11 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 bool wasTap = (Time.time - rightCorpseTapTime) <= bodyTapMaxTime
                               && (hand.position - rightCorpseTapPos).sqrMagnitude <= bodyTapMaxMove * bodyTapMaxMove;
-                Corpse c = rightCorpseTapCorpse;
+                Corpse corpse = rightCorpseTapCorpse;
                 rightCorpseTapArmed = false;
                 rightCorpseTapCorpse = null;
                 if (wasTap)
-                    OpenCorpseLoot(c);
+                    OpenCorpseLoot(corpse);
             }
             else if (rightCorpseTapArmed && !primaryHandGrip.state)
             {
@@ -1480,8 +1480,8 @@ namespace TarkovVR.Source.Player.Interactions
         {
             try
             {
-                FoodDrinkComponent fdc = item?.GetItemComponent<FoodDrinkComponent>();
-                return fdc != null && fdc.HpPercent <= 0f;
+                FoodDrinkComponent foodDrink = item?.GetItemComponent<FoodDrinkComponent>();
+                return foodDrink != null && foodDrink.HpPercent <= 0f;
             }
             catch { return false; }
         }

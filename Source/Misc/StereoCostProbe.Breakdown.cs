@@ -52,7 +52,7 @@ namespace TarkovVR.Source.Misc
         // Buffers are identified by their NATIVE pointer: Camera.GetCommandBuffers hands back fresh managed wrappers on
         // every call, so reference identity never matches (that bug stacked thousands of markers on the camera).
         private static readonly FieldInfo bufferPtrField = typeof(CommandBuffer).GetField("m_Ptr", BindingFlags.Instance | BindingFlags.NonPublic);
-        private static IntPtr Ptr(CommandBuffer cb) => cb == null || bufferPtrField == null ? IntPtr.Zero : (IntPtr)bufferPtrField.GetValue(cb);
+        private static IntPtr Ptr(CommandBuffer commandBuffer) => commandBuffer == null || bufferPtrField == null ? IntPtr.Zero : (IntPtr)bufferPtrField.GetValue(commandBuffer);
         private static readonly HashSet<IntPtr> ownBuffers = new HashSet<IntPtr>();
         private static readonly Dictionary<(IntPtr, CameraEvent), int> bufferItem = new Dictionary<(IntPtr, CameraEvent), int>();
         private static readonly Dictionary<CameraEvent, List<IntPtr>> layout = new Dictionary<CameraEvent, List<IntPtr>>();
@@ -85,51 +85,51 @@ namespace TarkovVR.Source.Misc
         }
 
         //------------------------------------------------------------------------------------------------------------
-        private static void BreakdownAttach(Camera cam)
+        private static void BreakdownAttach(Camera camera)
         {
             items.Clear(); ownBuffers.Clear(); bufferItem.Clear(); layout.Clear(); layoutLength.Clear();
             effectItem.Clear(); scriptItem.Clear(); cameraItem.Clear(); patchFailures = 0;
             arrangeBroken = bufferPtrField == null;
             if (arrangeBroken) Plugin.MyLog.LogWarning("[StereoCost] CommandBuffer.m_Ptr not found - no per-buffer breakdown, block rows only");
-            foreach (var (_, cb) in camAttached) ownBuffers.Add(Ptr(cb));
+            foreach (var (_, commandBuffer) in camAttached) ownBuffers.Add(Ptr(commandBuffer));
             eyeStartCb = new CommandBuffer { name = "SPT-VR StereoCostProbe eye start" };
             eyeStartCb.IssuePluginEvent(eventPtr, EvEyeStart);
             ownBuffers.Add(Ptr(eyeStartCb));
-            Arrange(cam);
+            Arrange(camera);
             if (!breakdown) return;
             harmony = new Harmony("com.matsix.sptvr.stereocostprobe");
-            PatchEffects(cam);
+            PatchEffects(camera);
             PatchScripts();
         }
 
-        private static void BreakdownDetach(Camera cam)
+        private static void BreakdownDetach(Camera camera)
         {
-            Cleanup(cam);
+            Cleanup(camera);
             foreach (Item it in items) { it.startCb?.Release(); it.endCb?.Release(); }
             eyeStartCb?.Release();
             try { harmony?.UnpatchSelf(); }
-            catch (Exception e) { Plugin.MyLog.LogError("[StereoCost] unpatch failed: " + e); }
+            catch (Exception exception) { Plugin.MyLog.LogError("[StereoCost] unpatch failed: " + exception); }
             harmony = null;
         }
 
-        private static bool IsProbeBuffer(CommandBuffer cb) =>
-            ownBuffers.Contains(Ptr(cb)) || (cb.name != null && cb.name.StartsWith("SPT-VR StereoCostProbe", StringComparison.Ordinal));
+        private static bool IsProbeBuffer(CommandBuffer commandBuffer) =>
+            ownBuffers.Contains(Ptr(commandBuffer)) || (commandBuffer.name != null && commandBuffer.name.StartsWith("SPT-VR StereoCostProbe", StringComparison.Ordinal));
 
         // Strips every probe buffer off the camera (ours, and by name any left by an earlier broken run); foreign
         // buffers stay as they are, in their order.
-        private static void Cleanup(Camera cam)
+        private static void Cleanup(Camera camera)
         {
-            if (cam == null) return;
+            if (camera == null) return;
             int removed = 0;
-            foreach (CameraEvent evt in allEvents)
+            foreach (CameraEvent cameraEvent in allEvents)
             {
-                CommandBuffer[] cur = cam.GetCommandBuffers(evt);
+                CommandBuffer[] cur = camera.GetCommandBuffers(cameraEvent);
                 var keep = new List<CommandBuffer>();
-                foreach (CommandBuffer cb in cur)
-                    if (IsProbeBuffer(cb)) removed++; else keep.Add(cb);
+                foreach (CommandBuffer commandBuffer in cur)
+                    if (IsProbeBuffer(commandBuffer)) removed++; else keep.Add(commandBuffer);
                 if (keep.Count == cur.Length) continue;
-                foreach (CommandBuffer cb in cur) cam.RemoveCommandBuffer(evt, cb);
-                foreach (CommandBuffer cb in keep) cam.AddCommandBuffer(evt, cb);
+                foreach (CommandBuffer cb in cur) camera.RemoveCommandBuffer(cameraEvent, cb);
+                foreach (CommandBuffer cb in keep) camera.AddCommandBuffer(cameraEvent, cb);
             }
             if (removed > 0) Plugin.MyLog.LogWarning($"[StereoCost] removed {removed} probe buffers from the camera");
         }
@@ -137,43 +137,43 @@ namespace TarkovVR.Source.Misc
         // Eye-start marker first at BeforeGBuffer; with the breakdown on, a marker pair round every foreign buffer;
         // our block markers last at their event. Foreign buffers keep their relative order. Every rebuild is checked:
         // a wrong count strips the probe off the camera and stops arranging for the rest of the run.
-        private static void Arrange(Camera cam)
+        private static void Arrange(Camera camera)
         {
             if (arrangeBroken) return;
-            foreach (CameraEvent evt in allEvents)
+            foreach (CameraEvent cameraEvent in allEvents)
             {
-                if (!breakdown && evt != CameraEvent.BeforeGBuffer) continue;   // block markers are already last
-                CommandBuffer[] cur = cam.GetCommandBuffers(evt);
+                if (!breakdown && cameraEvent != CameraEvent.BeforeGBuffer) continue;   // block markers are already last
+                CommandBuffer[] cur = camera.GetCommandBuffers(cameraEvent);
                 if (cur.Length == 0) continue;
-                if (cur.Length > MaxBuffersPerEvent) { Abort(cam, $"{cur.Length} buffers at {evt}"); return; }
+                if (cur.Length > MaxBuffersPerEvent) { Abort(camera, $"{cur.Length} buffers at {cameraEvent}"); return; }
                 var foreign = new List<CommandBuffer>();
                 var foreignPtr = new List<IntPtr>();
-                foreach (CommandBuffer cb in cur)
-                    if (!IsProbeBuffer(cb)) { foreign.Add(cb); foreignPtr.Add(Ptr(cb)); }
-                if (layout.TryGetValue(evt, out var prev) && SameOrder(prev, foreignPtr) && layoutLength[evt] == cur.Length) continue;
-                foreach (CommandBuffer cb in cur) cam.RemoveCommandBuffer(evt, cb);
+                foreach (CommandBuffer commandBuffer in cur)
+                    if (!IsProbeBuffer(commandBuffer)) { foreign.Add(commandBuffer); foreignPtr.Add(Ptr(commandBuffer)); }
+                if (layout.TryGetValue(cameraEvent, out var prev) && SameOrder(prev, foreignPtr) && layoutLength[cameraEvent] == cur.Length) continue;
+                foreach (CommandBuffer cb in cur) camera.RemoveCommandBuffer(cameraEvent, cb);
                 int n = 0;
-                if (evt == CameraEvent.BeforeGBuffer) { cam.AddCommandBuffer(evt, eyeStartCb); n++; }
+                if (cameraEvent == CameraEvent.BeforeGBuffer) { camera.AddCommandBuffer(cameraEvent, eyeStartCb); n++; }
                 foreach (CommandBuffer f in foreign)
                 {
-                    int k = breakdown ? BufferItem(f, evt) : -1;
-                    if (k >= 0) { cam.AddCommandBuffer(evt, items[k].startCb); n++; }
-                    cam.AddCommandBuffer(evt, f); n++;
-                    if (k >= 0) { cam.AddCommandBuffer(evt, items[k].endCb); n++; }
+                    int k = breakdown ? BufferItem(f, cameraEvent) : -1;
+                    if (k >= 0) { camera.AddCommandBuffer(cameraEvent, items[k].startCb); n++; }
+                    camera.AddCommandBuffer(cameraEvent, f); n++;
+                    if (k >= 0) { camera.AddCommandBuffer(cameraEvent, items[k].endCb); n++; }
                 }
-                foreach (var (e, cb) in camAttached) if (e == evt) { cam.AddCommandBuffer(evt, cb); n++; }
-                int check = cam.GetCommandBuffers(evt).Length;
-                if (check != n) { Abort(cam, $"{evt}: {check} buffers after arranging, expected {n}"); return; }
-                layout[evt] = foreignPtr;
-                layoutLength[evt] = n;
+                foreach (var (e, cb) in camAttached) if (e == cameraEvent) { camera.AddCommandBuffer(cameraEvent, cb); n++; }
+                int check = camera.GetCommandBuffers(cameraEvent).Length;
+                if (check != n) { Abort(camera, $"{cameraEvent}: {check} buffers after arranging, expected {n}"); return; }
+                layout[cameraEvent] = foreignPtr;
+                layoutLength[cameraEvent] = n;
             }
         }
 
-        private static void Abort(Camera cam, string why)
+        private static void Abort(Camera camera, string why)
         {
             arrangeBroken = true;
             Plugin.MyLog.LogError($"[StereoCost] breakdown stopped ({why}) - probe markers removed, the block rows of this run are not usable");
-            Cleanup(cam);
+            Cleanup(camera);
         }
 
         private static bool SameOrder(List<IntPtr> a, List<IntPtr> b)
@@ -183,12 +183,12 @@ namespace TarkovVR.Source.Misc
             return true;
         }
 
-        private static int BufferItem(CommandBuffer f, CameraEvent evt)
+        private static int BufferItem(CommandBuffer f, CameraEvent cameraEvent)
         {
             IntPtr p = Ptr(f);
-            if (bufferItem.TryGetValue((p, evt), out int k)) return k;
+            if (bufferItem.TryGetValue((p, cameraEvent), out int k)) return k;
             string name = string.IsNullOrEmpty(f.name) ? "(unnamed)" : f.name;
-            k = NewItem($"{evt} | {name}", ItemKind.Buffer);
+            k = NewItem($"{cameraEvent} | {name}", ItemKind.Buffer);
             if (k < 0) return -1;
             var s = new CommandBuffer { name = "SPT-VR StereoCostProbe item" };
             s.IssuePluginEvent(eventPtr, StartId(k));
@@ -196,24 +196,24 @@ namespace TarkovVR.Source.Misc
             e.IssuePluginEvent(eventPtr, StartId(k) + 1);
             items[k].startCb = s; items[k].endCb = e;
             ownBuffers.Add(Ptr(s)); ownBuffers.Add(Ptr(e));
-            bufferItem[(p, evt)] = k;
+            bufferItem[(p, cameraEvent)] = k;
             return k;
         }
 
         //------------------------------------------------------------------------------------------------------------
-        private static void PatchEffects(Camera cam)
+        private static void PatchEffects(Camera camera)
         {
             var prefix = new HarmonyMethod(AccessTools.Method(typeof(StereoCostProbe), nameof(EffectPrefix))) { priority = Priority.First };
             var postfix = new HarmonyMethod(AccessTools.Method(typeof(StereoCostProbe), nameof(EffectPostfix))) { priority = Priority.Last };
             var patched = new HashSet<MethodBase>();
-            foreach (MonoBehaviour mb in cam.GetComponents<MonoBehaviour>())
+            foreach (MonoBehaviour behaviour in camera.GetComponents<MonoBehaviour>())
             {
-                if (mb == null) continue;
-                MethodInfo m = FindMessage(mb.GetType(), "OnRenderImage", typeof(RenderTexture), typeof(RenderTexture));
+                if (behaviour == null) continue;
+                MethodInfo m = FindMessage(behaviour.GetType(), "OnRenderImage", typeof(RenderTexture), typeof(RenderTexture));
                 if (m == null) continue;
-                int k = NewItem("[effect] " + mb.GetType().Name, ItemKind.Effect);
+                int k = NewItem("[effect] " + behaviour.GetType().Name, ItemKind.Effect);
                 if (k < 0) break;
-                effectItem[mb] = k;
+                effectItem[behaviour] = k;
                 if (patched.Add(m)) TryPatch(m, prefix, postfix);
             }
         }
@@ -221,8 +221,8 @@ namespace TarkovVR.Source.Misc
         private static void PatchScripts()
         {
             var live = new HashSet<Type>();
-            foreach (MonoBehaviour mb in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
-                if (mb != null && mb.isActiveAndEnabled) live.Add(mb.GetType());
+            foreach (MonoBehaviour behaviour in UnityEngine.Object.FindObjectsOfType<MonoBehaviour>())
+                if (behaviour != null && behaviour.isActiveAndEnabled) live.Add(behaviour.GetType());
             var targets = new List<MethodInfo>();
             foreach (Type t in live)
             {
@@ -271,9 +271,9 @@ namespace TarkovVR.Source.Misc
         private static void TryPatch(MethodInfo m, HarmonyMethod prefix, HarmonyMethod postfix)
         {
             try { harmony.Patch(m, prefix, postfix); }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                if (patchFailures++ < 5) Plugin.MyLog.LogWarning($"[StereoCost] could not time {m.DeclaringType?.Name}.{m.Name}: {e.Message}");
+                if (patchFailures++ < 5) Plugin.MyLog.LogWarning($"[StereoCost] could not time {m.DeclaringType?.Name}.{m.Name}: {exception.Message}");
             }
         }
 
@@ -295,15 +295,15 @@ namespace TarkovVR.Source.Misc
         }
 
         // Other cameras, from the probe's Camera.onPreCull / onPostRender.
-        private static void OtherCameraMark(Camera cam, bool end)
+        private static void OtherCameraMark(Camera camera, bool end)
         {
-            if (!breakdown || cam == null) return;
-            if (!cameraItem.TryGetValue(cam, out int k))
+            if (!breakdown || camera == null) return;
+            if (!cameraItem.TryGetValue(camera, out int k))
             {
                 if (end) return;
-                k = NewItem("[camera] " + cam.name, ItemKind.Camera);
+                k = NewItem("[camera] " + camera.name, ItemKind.Camera);
                 if (k < 0) return;
-                cameraItem[cam] = k;
+                cameraItem[camera] = k;
             }
             GL.IssuePluginEvent(eventPtr, StartId(k) + (end ? 1 : 0));
         }
@@ -379,7 +379,7 @@ namespace TarkovVR.Source.Misc
                 // once a frame: an eye-less span after the first eye counts as "after the eyes" in left-only frames
                 double[] fspan = { rs, tAll[src, 0, EvEyeStart] - rs, eyes == 2 ? tAll[src, 1, EvEyeStart] - tAll[src, 0, EvAfterEverything] : 0, fe - tAll[src, eyes - 1, EvAfterEverything] };
                 if (eyes < 2) { fBlockItems[src, 0, 3] += fBlockItems[src, 0, 2]; fBlockItems[src, 0, 2] = 0; }
-                for (int blk = 0; blk < 4; blk++) AddBlock(sums, src, 0, blk, fspan[blk]);
+                for (int block = 0; block < 4; block++) AddBlock(sums, src, 0, block, fspan[block]);
                 for (int e = 0; e < eyes; e++)
                 {
                     double[] span =
@@ -390,35 +390,35 @@ namespace TarkovVR.Source.Misc
                         tAll[src, e, EvAfterAlpha] - tAll[src, e, EvBeforeAlpha], tAll[src, e, EvBeforeFx] - tAll[src, e, EvAfterAlpha],
                         tAll[src, e, EvAfterFx] - tAll[src, e, EvBeforeFx], tAll[src, e, EvAfterEverything] - tAll[src, e, EvAfterFx],
                     };
-                    for (int blk = 0; blk < Blocks; blk++) AddBlock(sums, src, e + 1, blk, span[blk]);
+                    for (int block = 0; block < Blocks; block++) AddBlock(sums, src, e + 1, block, span[block]);
                 }
             }
         }
-        private static void AddBlock(ItemSums sums, int src, int bucket, int blk, double span)
+        private static void AddBlock(ItemSums sums, int src, int bucket, int block, double span)
         {
             if (double.IsNaN(span) || double.IsInfinity(span)) return;
-            sums.blockSpan[src, bucket, blk] += span;
-            sums.blockItems[src, bucket, blk] += fBlockItems[src, bucket, blk];
+            sums.blockSpan[src, bucket, block] += span;
+            sums.blockItems[src, bucket, block] += fBlockItems[src, bucket, block];
         }
 
         //------------------------------------------------------------------------------------------------------------
-        private static void ReportBreakdown(StringBuilder sb, Samples s)
+        private static void ReportBreakdown(StringBuilder builder, Samples s)
         {
             if (!breakdown || items.Count == 0 || s.rtFrames == 0) return;
             var sums = s.itemSums;
             double nC = s.rtFrames, nG = Math.Max(1, s.gpuFrames), nB = Math.Max(1, s.busyFrames);
-            sb.AppendLine($"[StereoCost] ===== breakdown, both eyes: mean ms per frame, {items.Count} items timed, {patchFailures} could not be patched =====");
-            sb.AppendLine("[StereoCost]   (rt = render thread wall clock; busy = its own CPU work in that span)");
-            sb.AppendLine("[StereoCost]   PER EYE                                                          GPU L  GPU R |  rt L   rt R | busy L busy R | ran%");
-            for (int blk = 0; blk < Blocks; blk++)
+            builder.AppendLine($"[StereoCost] ===== breakdown, both eyes: mean ms per frame, {items.Count} items timed, {patchFailures} could not be patched =====");
+            builder.AppendLine("[StereoCost]   (rt = render thread wall clock; busy = its own CPU work in that span)");
+            builder.AppendLine("[StereoCost]   PER EYE                                                          GPU L  GPU R |  rt L   rt R | busy L busy R | ran%");
+            for (int block = 0; block < Blocks; block++)
             {
-                double bl = sums.blockSpan[1, 1, blk] / nG, br = sums.blockSpan[1, 2, blk] / nG;
-                double cl = sums.blockSpan[0, 1, blk] / nC, cr = sums.blockSpan[0, 2, blk] / nC;
-                double ul = sums.blockSpan[2, 1, blk] / nB, ur = sums.blockSpan[2, 2, blk] / nB;
-                sb.AppendLine($"[StereoCost]   {eyeBlockNames[blk],-64} {F(bl)} {F(br)} | {F(cl)} {F(cr)} | {F(ul)} {F(ur)} |");
+                double bl = sums.blockSpan[1, 1, block] / nG, br = sums.blockSpan[1, 2, block] / nG;
+                double cl = sums.blockSpan[0, 1, block] / nC, cr = sums.blockSpan[0, 2, block] / nC;
+                double ul = sums.blockSpan[2, 1, block] / nB, ur = sums.blockSpan[2, 2, block] / nB;
+                builder.AppendLine($"[StereoCost]   {eyeBlockNames[block],-64} {F(bl)} {F(br)} | {F(cl)} {F(cr)} | {F(ul)} {F(ur)} |");
                 var list = new List<int>();
                 for (int k = 0; k < items.Count; k++)
-                    if (items[k].block[1] == blk || (items[k].block[1] < 0 && items[k].block[2] == blk)) list.Add(k);
+                    if (items[k].block[1] == block || (items[k].block[1] < 0 && items[k].block[2] == block)) list.Add(k);
                 list.Sort((a, b) => (sums.item[1, 1, b] + sums.item[1, 2, b]).CompareTo(sums.item[1, 1, a] + sums.item[1, 2, a]));
                 int small = 0; double smallG = 0, smallC = 0;
                 foreach (int k in list)
@@ -427,22 +427,22 @@ namespace TarkovVR.Source.Misc
                     double ul2 = sums.item[2, 1, k] / nB, ur2 = sums.item[2, 2, k] / nB;
                     if (Math.Max(gl, gr) < breakdownMinMs && Math.Max(rl, rr) < breakdownMinMs) { small++; smallG += gl + gr; smallC += rl + rr; continue; }
                     string ran = (100.0 * Math.Max(sums.ran[1, k], sums.ran[2, k]) / s.rtFrames).ToString("0");
-                    sb.AppendLine($"[StereoCost]     {Trim(items[k].name, 62),-62} {F(gl)} {F(gr)} | {F(rl)} {F(rr)} | {F(ul2)} {F(ur2)} | {ran,4}");
+                    builder.AppendLine($"[StereoCost]     {Trim(items[k].name, 62),-62} {F(gl)} {F(gr)} | {F(rl)} {F(rr)} | {F(ul2)} {F(ur2)} | {ran,4}");
                 }
-                if (small > 0) sb.AppendLine($"[StereoCost]     {small} more under {breakdownMinMs} ms (both eyes together: GPU {smallG:0.000}, rt {smallC:0.000})");
-                double restL = bl - sums.blockItems[1, 1, blk] / nG, restR = br - sums.blockItems[1, 2, blk] / nG;
-                double restCL = cl - sums.blockItems[0, 1, blk] / nC, restCR = cr - sums.blockItems[0, 2, blk] / nC;
-                double restUL = ul - sums.blockItems[2, 1, blk] / nB, restUR = ur - sums.blockItems[2, 2, blk] / nB;
+                if (small > 0) builder.AppendLine($"[StereoCost]     {small} more under {breakdownMinMs} ms (both eyes together: GPU {smallG:0.000}, rt {smallC:0.000})");
+                double restL = bl - sums.blockItems[1, 1, block] / nG, restR = br - sums.blockItems[1, 2, block] / nG;
+                double restCL = cl - sums.blockItems[0, 1, block] / nC, restCR = cr - sums.blockItems[0, 2, block] / nC;
+                double restUL = ul - sums.blockItems[2, 1, block] / nB, restUR = ur - sums.blockItems[2, 2, block] / nB;
                 if (list.Count > 0 || Math.Abs(restL) >= 0.005)
-                    sb.AppendLine($"[StereoCost]     {"(rest: Unity's own work + unbracketed)",-62} {F(restL)} {F(restR)} | {F(restCL)} {F(restCR)} | {F(restUL)} {F(restUR)} |");
+                    builder.AppendLine($"[StereoCost]     {"(rest: Unity's own work + unbracketed)",-62} {F(restL)} {F(restR)} | {F(restCL)} {F(restCR)} | {F(restUL)} {F(restUR)} |");
             }
-            sb.AppendLine("[StereoCost]   ONCE A FRAME                                                       GPU        |   rt          |  busy         | ran%");
-            for (int blk = 0; blk < 4; blk++)
+            builder.AppendLine("[StereoCost]   ONCE A FRAME                                                       GPU        |   rt          |  busy         | ran%");
+            for (int block = 0; block < 4; block++)
             {
-                double bg = sums.blockSpan[1, 0, blk] / nG, bc = sums.blockSpan[0, 0, blk] / nC, bu = sums.blockSpan[2, 0, blk] / nB;
-                sb.AppendLine($"[StereoCost]   {frameBlockNames[blk],-64} {F(bg)}        | {F(bc)}        | {F(bu)}        |");
+                double bg = sums.blockSpan[1, 0, block] / nG, bc = sums.blockSpan[0, 0, block] / nC, bu = sums.blockSpan[2, 0, block] / nB;
+                builder.AppendLine($"[StereoCost]   {frameBlockNames[block],-64} {F(bg)}        | {F(bc)}        | {F(bu)}        |");
                 var list = new List<int>();
-                for (int k = 0; k < items.Count; k++) if (items[k].block[0] == blk) list.Add(k);
+                for (int k = 0; k < items.Count; k++) if (items[k].block[0] == block) list.Add(k);
                 list.Sort((a, b) => sums.item[1, 0, b].CompareTo(sums.item[1, 0, a]));
                 int small = 0; double smallG = 0, smallC = 0;
                 foreach (int k in list)
@@ -450,12 +450,12 @@ namespace TarkovVR.Source.Misc
                     double g = sums.item[1, 0, k] / nG, c = sums.item[0, 0, k] / nC, u = sums.item[2, 0, k] / nB;
                     if (g < breakdownMinMs && c < breakdownMinMs) { small++; smallG += g; smallC += c; continue; }
                     string ran = (100.0 * sums.ran[0, k] / s.rtFrames).ToString("0");
-                    sb.AppendLine($"[StereoCost]     {Trim(items[k].name, 62),-62} {F(g)}        | {F(c)}        | {F(u)}        | {ran,4}");
+                    builder.AppendLine($"[StereoCost]     {Trim(items[k].name, 62),-62} {F(g)}        | {F(c)}        | {F(u)}        | {ran,4}");
                 }
-                if (small > 0) sb.AppendLine($"[StereoCost]     {small} more under {breakdownMinMs} ms (together: GPU {smallG:0.000}, rt {smallC:0.000})");
-                double rest = bg - sums.blockItems[1, 0, blk] / nG, restC = bc - sums.blockItems[0, 0, blk] / nC, restU = bu - sums.blockItems[2, 0, blk] / nB;
+                if (small > 0) builder.AppendLine($"[StereoCost]     {small} more under {breakdownMinMs} ms (together: GPU {smallG:0.000}, rt {smallC:0.000})");
+                double rest = bg - sums.blockItems[1, 0, block] / nG, restC = bc - sums.blockItems[0, 0, block] / nC, restU = bu - sums.blockItems[2, 0, block] / nB;
                 if (list.Count > 0 || Math.Abs(rest) >= 0.005)
-                    sb.AppendLine($"[StereoCost]     {"(rest)",-62} {F(rest)}        | {F(restC)}        | {F(restU)}        |");
+                    builder.AppendLine($"[StereoCost]     {"(rest)",-62} {F(rest)}        | {F(restC)}        | {F(restU)}        |");
             }
         }
         private static string F(double v) => double.IsNaN(v) ? "     -" : v.ToString("0.000").PadLeft(6);

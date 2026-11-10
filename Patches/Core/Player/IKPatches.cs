@@ -444,21 +444,21 @@ namespace TarkovVR.Patches.Core.Player
             // This frame's hand target: solver.target wins inside solver.Update (empty hands/foregrip);
             // otherwise method_20 just wrote IKPosition from the weapon markers.
             Vector3 hand = arm.solver.target != null ? arm.solver.target.position : arm.solver.IKPosition;
-            Vector3 d = hand - shoulder;
-            float dMag = d.magnitude;
+            Vector3 shoulderToHand = hand - shoulder;
+            float dMag = shoulderToHand.magnitude;
             if (dMag < 0.05f)
                 return; // degenerate reach; last frame's normal stays in the solver
-            d /= dMag;
+            shoulderToHand /= dMag;
 
             // Rest direction + the wrist-roll deflection (already outward-clamped/sprint-frozen upstream).
             Vector3 rest = restDir.normalized;
             rest.x += twistDeltaX * elbowTwistGain;
             Vector3 e = Quaternion.Euler(0f, yaw, 0f) * rest.normalized;
-            e -= d * Vector3.Dot(e, d);      // project onto the elbow circle's plane
+            e -= shoulderToHand * Vector3.Dot(e, shoulderToHand);      // project onto the elbow circle's plane
             if (e.sqrMagnitude < 1e-4f)      // hand along the rest direction = the old flip pose
             {
                 if (!dirInit) return;
-                e = lastDir - d * Vector3.Dot(lastDir, d); // hold the previous elbow direction through it
+                e = lastDir - shoulderToHand * Vector3.Dot(lastDir, shoulderToHand); // hold the previous elbow direction through it
                 if (e.sqrMagnitude < 1e-6f) return;
             }
             e.Normalize();
@@ -466,13 +466,13 @@ namespace TarkovVR.Patches.Core.Player
             if (dirInit && elbowDirSmoothTime > 0f)
             {
                 e = Vector3.Slerp(lastDir, e, Time.deltaTime / elbowDirSmoothTime);
-                e = (e - d * Vector3.Dot(e, d)).normalized; // re-seat on the circle after smoothing
+                e = (e - shoulderToHand * Vector3.Dot(e, shoulderToHand)).normalized; // re-seat on the circle after smoothing
             }
             lastDir = e;
             dirInit = true;
 
             // The solve bends bone2 along Cross(handDir, bendNormal), so this puts the elbow exactly at +e.
-            arm.solver.bendNormal = Vector3.Cross(e, d);
+            arm.solver.bendNormal = Vector3.Cross(e, shoulderToHand);
         }
 
         // --- Deterministic forearm/wrist twist (owns the twist chain like DriveElbow owns the pole) ---
@@ -578,10 +578,10 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!ForearmFrame(arm, out Transform f1, out Transform f2, out Transform wrist, out _, out Quaternion F))
                 return false;
-            Quaternion inv = Quaternion.Inverse(F);
-            off1 = inv * f1.rotation;
-            off2 = f2 != null ? inv * f2.rotation : Quaternion.identity;
-            off3 = inv * wrist.rotation;
+            Quaternion inverseFrame = Quaternion.Inverse(F);
+            off1 = inverseFrame * f1.rotation;
+            off2 = f2 != null ? inverseFrame * f2.rotation : Quaternion.identity;
+            off3 = inverseFrame * wrist.rotation;
             return true;
         }
 
@@ -613,18 +613,18 @@ namespace TarkovVR.Patches.Core.Player
                 return;
 
             // The wrist's roll beyond its bind pose, measured around the forearm axis (swing-twist).
-            float tau = TwistAngle(wrist.rotation * Quaternion.Inverse(F * off3), axis);
-            tau = Mathf.Clamp(tau + trimDeg, -wristTwistClampDeg, wristTwistClampDeg);
-            tauOut = tau;
+            float twist = TwistAngle(wrist.rotation * Quaternion.Inverse(F * off3), axis);
+            twist = Mathf.Clamp(twist + trimDeg, -wristTwistClampDeg, wristTwistClampDeg);
+            tauOut = twist;
 
             // Re-pose the twist bones: hinge-locked base frame + their share of the wrist roll. Writing
             // f1 moves its children, so the IK-solved wrist orientation is saved and re-asserted.
             Quaternion wristRot = wrist.rotation;
-            Quaternion target1 = Quaternion.AngleAxis(tau * wristTwistW1, axis) * F * off1;
+            Quaternion target1 = Quaternion.AngleAxis(twist * wristTwistW1, axis) * F * off1;
             f1.rotation = w >= 1f ? target1 : Quaternion.Slerp(f1.rotation, target1, w);
             if (f2 != null)
             {
-                Quaternion target2 = Quaternion.AngleAxis(tau * wristTwistW2, axis) * F * off2;
+                Quaternion target2 = Quaternion.AngleAxis(twist * wristTwistW2, axis) * F * off2;
                 f2.rotation = w >= 1f ? target2 : Quaternion.Slerp(f2.rotation, target2, w);
             }
             wrist.rotation = wristRot;
@@ -634,10 +634,10 @@ namespace TarkovVR.Patches.Core.Player
         private static float TwistAngle(Quaternion q, Vector3 axis)
         {
             float proj = q.x * axis.x + q.y * axis.y + q.z * axis.z;
-            float mag = Mathf.Sqrt(proj * proj + q.w * q.w);
-            if (mag < 1e-6f)
+            float magnitude = Mathf.Sqrt(proj * proj + q.w * q.w);
+            if (magnitude < 1e-6f)
                 return 0f;
-            float w = q.w / mag, s = proj / mag;
+            float w = q.w / magnitude, s = proj / magnitude;
             if (w < 0f) { w = -w; s = -s; }   // canonical hemisphere
             return 2f * Mathf.Atan2(s, w) * Mathf.Rad2Deg;
         }

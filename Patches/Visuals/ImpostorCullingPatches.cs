@@ -63,9 +63,9 @@ namespace TarkovVR.Patches.Visuals
             // exactly like the original method_15.
             for (int i = 0; i < 6; i++)
             {
-                Plane p = __instance._planes[i];
-                Vector3 n = p.normal;
-                __instance._frustum[i] = new Vector4(n.x, n.y, n.z, p.distance);
+                Plane plane = __instance._planes[i];
+                Vector3 n = plane.normal;
+                __instance._frustum[i] = new Vector4(n.x, n.y, n.z, plane.distance);
             }
             return false;
         }

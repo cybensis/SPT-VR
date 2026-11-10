@@ -117,14 +117,14 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            var fc = VRGlobals.firearmController;
-            Transform weaponRoot = fc.WeaponRoot;
+            var firearmController = VRGlobals.firearmController;
+            Transform weaponRoot = firearmController.WeaponRoot;
             if (weaponRoot == null || VRGlobals.player.MovementContext?.StationaryWeapon != null)
             {
                 Reset();
                 return;
             }
-            float weaponLn = MuzzleLength(fc, weaponRoot);
+            float weaponLn = MuzzleLength(firearmController, weaponRoot);
             if (weaponLn <= 0.05f || !EnsureProxy())
             {
                 Reset();
@@ -175,15 +175,15 @@ namespace TarkovVR.Source.Player.Interactions
         private static void EnactHolderPose(Vector3 curPos, Quaternion curRot, Vector3 tgtPos, Quaternion tgtRot)
         {
             Transform holder = VRGlobals.weaponHolder.transform;
-            Quaternion R = tgtRot * Quaternion.Inverse(curRot);
-            bool wantRot = Quaternion.Angle(R, Quaternion.identity) > 0.01f;
+            Quaternion turn = tgtRot * Quaternion.Inverse(curRot);
+            bool wantRot = Quaternion.Angle(turn, Quaternion.identity) > 0.01f;
             bool wantPos = (tgtPos - curPos).sqrMagnitude > 1e-10f;
             if (!wantRot && !wantPos)
                 return;
             preEnactLocalPos = holder.localPosition;
             preEnactLocalRot = holder.localRotation;
             Vector3 offset = holder.position - curPos;
-            holder.SetPositionAndRotation(tgtPos + R * offset, R * holder.rotation);
+            holder.SetPositionAndRotation(tgtPos + turn * offset, turn * holder.rotation);
             lastEnactLocalPos = holder.localPosition;
             lastEnactLocalRot = holder.localRotation;
             enacted = true;
@@ -225,31 +225,31 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        private static float MuzzleLength(EFT.Player.FirearmController fc, Transform weaponRoot)
+        private static float MuzzleLength(EFT.Player.FirearmController firearmController, Transform weaponRoot)
         {
-            if (!ReferenceEquals(muzzleTipOwner, fc) || muzzleTip == null || Time.time > muzzleTipRefresh)
+            if (!ReferenceEquals(muzzleTipOwner, firearmController) || muzzleTip == null || Time.time > muzzleTipRefresh)
             {
-                muzzleTipOwner = fc;
+                muzzleTipOwner = firearmController;
                 muzzleTipRefresh = Time.time + 1f;
-                muzzleTip = fc.CurrentFireport?.Original;
+                muzzleTip = firearmController.CurrentFireport?.Original;
                 float best = muzzleTip != null ? Vector3.Distance(weaponRoot.position, muzzleTip.position) : 0f;
-                GameObject[] muzzles = fc.Firearms?.MuzzleTransforms();
+                GameObject[] muzzles = firearmController.Firearms?.MuzzleTransforms();
                 if (muzzles != null)
                 {
-                    foreach (GameObject go in muzzles)
+                    foreach (GameObject muzzle in muzzles)
                     {
-                        if (go == null)
+                        if (muzzle == null)
                             continue;
-                        float d = Vector3.Distance(weaponRoot.position, go.transform.position);
-                        if (d > best)
+                        float distance = Vector3.Distance(weaponRoot.position, muzzle.transform.position);
+                        if (distance > best)
                         {
-                            best = d;
-                            muzzleTip = go.transform;
+                            best = distance;
+                            muzzleTip = muzzle.transform;
                         }
                     }
                 }
             }
-            return muzzleTip != null ? Vector3.Distance(weaponRoot.position, muzzleTip.position) : fc.WeaponLn;
+            return muzzleTip != null ? Vector3.Distance(weaponRoot.position, muzzleTip.position) : firearmController.WeaponLn;
         }
 
         internal static int GlassLayer => glassLayer;
@@ -259,10 +259,10 @@ namespace TarkovVR.Source.Player.Interactions
             if (occlusionMask == 0 || maskIncludesGlass != collideWithGlass)
             {
                 // Same layers EFT's own weapon overlap uses; fallback = the mod's usual solid-world mask.
-                LayerMask m = EFTHardSettings.Instance != null
+                LayerMask mask = EFTHardSettings.Instance != null
                     ? EFTHardSettings.Instance.WEAPON_OCCLUSION_LAYERS
                     : (LayerMask)LayerMask.GetMask("Default", "Terrain", "HighPolyCollider");
-                occlusionMask = m.value != 0 ? m.value : LayerMask.GetMask("Default", "Terrain", "HighPolyCollider");
+                occlusionMask = mask.value != 0 ? mask.value : LayerMask.GetMask("Default", "Terrain", "HighPolyCollider");
                 glassLayer = LayerMask.NameToLayer("TransparentCollider");
                 maskIncludesGlass = collideWithGlass;
                 if (collideWithGlass && glassLayer >= 0)
@@ -292,9 +292,9 @@ namespace TarkovVR.Source.Player.Interactions
                 ? -VRGlobals.firearmController.WeaponRoot.up : -normal;
             if (haptics)
             {
-                float amp = Mathf.Clamp01(approach / 2.5f) * impactHapticStrength;
-                if (amp > 0.05f)
-                    Pulse(0.08f, 85f, amp);
+                float amplitude = Mathf.Clamp01(approach / 2.5f) * impactHapticStrength;
+                if (amplitude > 0.05f)
+                    Pulse(0.08f, 85f, amplitude);
             }
             if (impactSound && approach > impactSoundMinSpeed &&
                 Time.time - lastImpactSoundStamp > impactSoundRetrigger)
@@ -309,14 +309,14 @@ namespace TarkovVR.Source.Player.Interactions
         // The gun's own surface-aware drop bank (the same banks vanilla plays when a weapon hits the
         // ground), played at the contact point; surface resolved off the hit collider's BaseBallistic
         // exactly like LootDropSoundPatches.
-        private static void PlayImpactSound(Collider col, Vector3 point, float approach)
+        private static void PlayImpactSound(Collider hitCollider, Vector3 point, float approach)
         {
-            BetterAudio ba = Singleton<BetterAudio>.Instance;
-            if (ba == null || ba.ItemDropSounds == null)
+            BetterAudio betterAudio = Singleton<BetterAudio>.Instance;
+            if (betterAudio == null || betterAudio.ItemDropSounds == null)
                 return;
 
             BaseBallistic.ESurfaceSound surface = BaseBallistic.ESurfaceSound.Concrete;
-            BaseBallistic ballistic = col.GetComponent<BaseBallistic>();
+            BaseBallistic ballistic = hitCollider.GetComponent<BaseBallistic>();
             if (ballistic != null)
                 surface = ballistic.GetSurfaceSound(point);
 
@@ -325,47 +325,47 @@ namespace TarkovVR.Source.Player.Interactions
             if (weapon != null && weapon.DropSoundType != EItemDropSoundType.None)
                 type = weapon.DropSoundType;
 
-            SoundBank bank = ba.ItemDropSounds.GetSoundBank(surface, type);
+            SoundBank bank = betterAudio.ItemDropSounds.GetSoundBank(surface, type);
             if (bank == null)
                 return;
 
             // Louder the harder you hit; gentle grazes stay quiet.
             float volume = impactSoundVolume * Mathf.Lerp(0.35f, 1f, Mathf.InverseLerp(0.5f, 3.5f, approach));
             float distance = CameraManager.Instance.Distance(point);
-            ba.PlayAtPoint(point, bank, distance, volume, -1f, EnvironmentType.Outdoor, EOcclusionTest.OneShotPropagation);
+            betterAudio.PlayAtPoint(point, bank, distance, volume, -1f, EnvironmentType.Outdoor, EOcclusionTest.OneShotPropagation);
         }
 
         // Whack a window with the gun -> shatter it, exactly like a VR melee surface hit: a melee
         // DamageInfoStruct through GameWorld.HackShot (glass-break handler + knife-hit effects). Mirrors
         // FikaSync/MeleeHitApply; observers replay the same melee-hit packet, so co-op needs no new
         // netcode. GLASS ONLY: a gun bump must not chip walls or leave knife decals.
-        private static void TryBreakGlass(Collider col, Vector3 point, Vector3 normal, Vector3 barrelDir)
+        private static void TryBreakGlass(Collider hitCollider, Vector3 point, Vector3 normal, Vector3 barrelDir)
         {
-            BallisticCollider bc = col.GetComponent<BallisticCollider>();
-            if (bc == null || bc is BodyPartCollider ||
-                bc.TypeOfMaterial.ToString().IndexOf("Glass", System.StringComparison.OrdinalIgnoreCase) < 0)
+            BallisticCollider ballisticCollider = hitCollider.GetComponent<BallisticCollider>();
+            if (ballisticCollider == null || ballisticCollider is BodyPartCollider ||
+                ballisticCollider.TypeOfMaterial.ToString().IndexOf("Glass", System.StringComparison.OrdinalIgnoreCase) < 0)
                 return;
-            GameWorld gw = Singleton<GameWorld>.Instance;
-            if (gw == null)
+            GameWorld gameWorld = Singleton<GameWorld>.Instance;
+            if (gameWorld == null)
                 return;
 
-            DamageInfo di = default;
-            di.DamageType = EDamageType.Melee;
-            di.Damage = glassBreakDamage;
-            di.ArmorDamage = 1f;
-            di.HitPoint = point;
-            di.HitNormal = normal;
-            di.Direction = barrelDir;
-            di.HitCollider = col;
-            di.HittedBallisticCollider = bc;
-            di.IsForwardHit = true;
-            if (gw.MainPlayer != null)
-                di.Player = gw.GetEverExistedBridgeByProfileID(gw.MainPlayer.ProfileId);
-            gw.HackShot(di);
+            DamageInfo damageInfo = default;
+            damageInfo.DamageType = EDamageType.Melee;
+            damageInfo.Damage = glassBreakDamage;
+            damageInfo.ArmorDamage = 1f;
+            damageInfo.HitPoint = point;
+            damageInfo.HitNormal = normal;
+            damageInfo.Direction = barrelDir;
+            damageInfo.HitCollider = hitCollider;
+            damageInfo.HittedBallisticCollider = ballisticCollider;
+            damageInfo.IsForwardHit = true;
+            if (gameWorld.MainPlayer != null)
+                damageInfo.Player = gameWorld.GetEverExistedBridgeByProfileID(gameWorld.MainPlayer.ProfileId);
+            gameWorld.HackShot(damageInfo);
 
             // The real pane's collider is now gone - drop the sandbox copy so the gun stops colliding with
             // the phantom window (else it stays "there" until you walk >retainDistance away and back).
-            proxy?.ForgetCollider(col.GetInstanceID());
+            proxy?.ForgetCollider(hitCollider.GetInstanceID());
 
             if (InstalledMods.FIKAInstalled)
                 FikaSendGunSurfaceHit(point, normal, barrelDir, glassBreakDamage);
@@ -378,9 +378,9 @@ namespace TarkovVR.Source.Player.Interactions
             => FikaVrSync.SendMeleeHit(point, normal, direction, damage);
 
         // The gun hitting something: every hand on the gun feels it (GunHaptics)
-        private static void Pulse(float duration, float freq, float amp)
+        private static void Pulse(float duration, float freq, float amplitude)
         {
-            TarkovVR.Source.Weapons.GunHaptics.Pulse(null, TarkovVR.Source.Weapons.GunHaptics.Feel.Mechanism, amp, duration, freq);
+            TarkovVR.Source.Weapons.GunHaptics.Pulse(null, TarkovVR.Source.Weapons.GunHaptics.Feel.Mechanism, amplitude, duration, freq);
         }
     }
 }

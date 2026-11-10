@@ -273,8 +273,8 @@ namespace TarkovVR.Source.Player.Interactions
         private static float DistanceToSegment(Vector3 point, Vector3 start, Vector3 end)
         {
             Vector3 along = end - start;
-            float t = along.sqrMagnitude > 1e-8f ? Mathf.Clamp01(Vector3.Dot(point - start, along) / along.sqrMagnitude) : 0f;
-            return Vector3.Distance(point, start + along * t);
+            float fraction = along.sqrMagnitude > 1e-8f ? Mathf.Clamp01(Vector3.Dot(point - start, along) / along.sqrMagnitude) : 0f;
+            return Vector3.Distance(point, start + along * fraction);
         }
 
         private static void TryGrab()

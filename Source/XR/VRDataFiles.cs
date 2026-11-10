@@ -37,9 +37,9 @@ namespace TarkovVR.Source.XR
                         info($"[VR files] {relative} added to the game's data folder");
                     }
                 }
-                catch (Exception ex)
+                catch (Exception exception)
                 {
-                    error($"[VR files] couldn't add {relative} to the game's data folder: {ex.Message}");
+                    error($"[VR files] couldn't add {relative} to the game's data folder: {exception.Message}");
                 }
             }
             return manifestChanged;
