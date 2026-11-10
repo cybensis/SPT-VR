@@ -58,6 +58,8 @@ namespace TarkovVR.Source.Weapons
         private static bool holdDown;
         private static bool armRequested, armed, thrown, putBack;
         private static float armRequestedAt;
+        private static bool armCommandSent;         // Tarkov's pin pull asked for (co-op as a client: once the host has answered the take)
+        private static float armCommandAt;
         private static float pinRushEnds = -1f;
         private static float rushUntil = -1f;
         private static GrenadeHandsController rushing;
@@ -245,6 +247,7 @@ namespace TarkovVR.Source.Weapons
             ringData = null;
             heldSeen = holdDown = false;
             armRequested = armed = thrown = putBack = false;
+            armCommandSent = false;
             pull = 0f;
             pinInHand = false;
             pinFinger = null;
@@ -302,19 +305,39 @@ namespace TarkovVR.Source.Weapons
         {
             armRequested = true;
             armRequestedAt = Time.time;
-            VRInputManager.ForceCommand(ECommand.TryHighThrow);
+            armCommandSent = false;
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] arming ({why})");
+                Plugin.MyLog.LogInfo($"[GrenadeHold] arming ({why}){(VRReloadController.HostStillAnswering ? ": waiting for the host to answer the take first" : "")}");
+            SendArmCommandWhenHostReady();
+        }
+
+        // Tarkov's pin pull - co-op as a client, once the host has answered the move before it (the take: its copy of you still runs the
+        // draw we skipped). Sent sooner, the pin pull and the throw's discard after it would reach a copy that isn't holding the grenade
+        // yet (FIKA's own throw gate waits on the same answer: FikaClientGrenadeController.CanThrow). Goes anyway after hostWaitLimit.
+        private static void SendArmCommandWhenHostReady()
+        {
+            if (armCommandSent)
+                return;
+            if (VRReloadController.HostStillAnswering && Time.time - armRequestedAt < GrenadeSlot.hostWaitLimit)
+                return;
+            armCommandSent = true;
+            armCommandAt = Time.time;
+            VRInputManager.ForceCommand(ECommand.TryHighThrow);
         }
 
         private static void UpdateArming()
         {
+            if (!armCommandSent)
+            {
+                SendArmCommandWhenHostReady();
+                return;
+            }
             if (!controller.WaitingForHighThrow)
             {
-                if (Time.time - armRequestedAt > 1.5f)
+                if (Time.time - armCommandAt > 1.5f)
                 {
                     Plugin.MyLog.LogWarning($"[GrenadeHold] Tarkov didn't start the pin pull (operation {controller.CurrentOperation?.GetType().Name}), asking again");
-                    armRequestedAt = Time.time;
+                    armCommandAt = Time.time;
                     VRInputManager.ForceCommand(ECommand.TryHighThrow);
                 }
                 return;

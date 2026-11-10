@@ -245,6 +245,10 @@ namespace TarkovVR.Source.Player.Interactions
         private IEnumerator StowAfterRelease(LootItem item, IPlayer lastOwner)
         {
             yield return new WaitForSeconds(stowReleaseDelay);
+            // Co-op as a client: not while the host still runs a move of yours (a draw we skipped, say) - sent then, it's refused
+            float hostWaitUntil = Time.time + GrenadeSlot.hostWaitLimit;
+            while (TarkovVR.Source.Weapons.VRReloadController.HostStillAnswering && Time.time < hostWaitUntil)
+                yield return null;
 
             if (item == null || item.Item == null)
                 yield break;

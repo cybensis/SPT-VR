@@ -368,6 +368,11 @@ namespace TarkovVR.Source.Player.Interactions
                 yield return null;
             // buffer so the switch transaction is fully settled before we discard
             yield return new WaitForSeconds(0.5f);
+            // Co-op as a client: and the host has answered it - its copy of you runs the put-away and the draw at full length, and a
+            // move sent before is refused ("Default Inventory is currently being modified")
+            float hostWaitUntil = Time.time + TarkovVR.Source.Player.Interactions.GrenadeSlot.hostWaitLimit;
+            while (TarkovVR.Source.Weapons.VRReloadController.HostStillAnswering && Time.time < hostWaitUntil)
+                yield return null;
             if (HasParent(item)) DiscardFood(item);
             else Plugin.MyLog.LogWarning("[ManualEat] food not in a container — skipped discard.");
         }
