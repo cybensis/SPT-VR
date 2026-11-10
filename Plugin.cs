@@ -2,16 +2,13 @@
 using BepInEx.Logging;
 using HarmonyLib;
 using System;
-using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using TarkovVR.ModSupport;
-using TarkovVR.Patches.Visuals;
 using Unity.XR.OpenVR;
 using UnityEngine;
 using UnityEngine.XR.Management;
 using Valve.VR;
-using static TarkovVR.Patches.Visuals.VisualPatches;
 using UnityEngine.XR;
 using System.Text;
 using TarkovVR.Source.Settings;

@@ -1,9 +1,7 @@
 using System.Collections.Generic;
 using EFT.InventoryLogic;
-using EFT.UI;
 using EFT.UI.DragAndDrop;
 using TarkovVR.Source.Controls;
-using TarkovVR.Source.Settings;
 using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions

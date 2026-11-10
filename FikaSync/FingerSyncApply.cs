@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using EFT;
 using Fika.Core.Main.Players;
 using HarmonyLib;
 using UnityEngine;

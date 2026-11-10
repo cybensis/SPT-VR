@@ -1,4 +1,3 @@
-using EFT;
 using HarmonyLib;
 using RootMotion.FinalIK;
 using TarkovVR.Source.Controls;

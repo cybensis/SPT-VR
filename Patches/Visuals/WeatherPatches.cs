@@ -1,4 +1,3 @@
-using Comfort.Common;
 using EFT;
 using EFT.EnvironmentEffect;
 using EFT.Rendering.Clouds;

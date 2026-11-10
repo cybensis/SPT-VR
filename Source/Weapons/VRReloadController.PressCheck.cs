@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using EFT;
 using EFT.InventoryLogic;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;

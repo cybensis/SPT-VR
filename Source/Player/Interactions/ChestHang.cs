@@ -8,7 +8,6 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
-using Valve.VR;
 using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions

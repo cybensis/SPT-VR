@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Comfort.Common;
-using EFT;
 using EFT.Interactive;
 using Orbit.Core;
 using Orbit.Navigation;

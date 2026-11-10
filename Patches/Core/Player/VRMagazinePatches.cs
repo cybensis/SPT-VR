@@ -1,5 +1,4 @@
 using Comfort.Common;
-using Diz.LanguageExtensions;
 using EFT;
 using EFT.Interactive;
 using EFT.InventoryLogic;

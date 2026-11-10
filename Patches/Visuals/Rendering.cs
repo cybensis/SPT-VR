@@ -1,7 +1,6 @@
 ﻿using Comfort.Common;
 using EFT.Settings;
 using EFT.Settings.Graphics;
-using EFT.UI;
 using EFT.UI.Settings;
 using EFT.Visual;
 using HarmonyLib;

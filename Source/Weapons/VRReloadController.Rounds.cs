@@ -4,11 +4,8 @@ using EFT;
 using EFT.InventoryLogic;
 using EFT.InventoryLogic.Operations;
 using TarkovVR.Patches.Core.VR;
-using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
-using TarkovVR.Source.Settings;
 using UnityEngine;
-using Valve.VR;
 using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons

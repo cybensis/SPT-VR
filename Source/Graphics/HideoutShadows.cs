@@ -1,4 +1,3 @@
-using EFT;
 using TarkovVR.Source.Settings;
 using UnityEngine;
 

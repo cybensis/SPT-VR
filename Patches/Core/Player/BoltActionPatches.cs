@@ -1,5 +1,4 @@
 using Comfort.Common;
-using Diz.LanguageExtensions;
 using HarmonyLib;
 using TarkovVR.Source.Weapons;
 

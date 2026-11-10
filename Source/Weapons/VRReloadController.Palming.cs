@@ -1,9 +1,7 @@
 using System.Collections.Generic;
 using Diz.LanguageExtensions;
 using EFT;
-using EFT.AssetsManager;
 using EFT.InventoryLogic;
-using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
 

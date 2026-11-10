@@ -1,4 +1,3 @@
-using EFT;
 using TarkovVR.Source.Misc;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;

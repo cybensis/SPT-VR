@@ -1,6 +1,5 @@
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
-using TarkovVR.Source.Settings;
 using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions

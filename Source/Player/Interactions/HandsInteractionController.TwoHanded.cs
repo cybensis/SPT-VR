@@ -2,7 +2,6 @@ using RootMotion.FinalIK;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
-using Valve.VR;
 
 namespace TarkovVR.Source.Player.Interactions
 {

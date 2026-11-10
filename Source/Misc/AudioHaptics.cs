@@ -1,7 +1,6 @@
 using System.Collections;
 using UnityEngine;
 using Valve.VR;
-using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Misc
 {

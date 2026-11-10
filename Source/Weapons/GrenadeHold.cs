@@ -1,11 +1,9 @@
 using EFT;
 using EFT.InputSystem;
-using EFT.InventoryLogic;
 using RootMotion.FinalIK;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Player.Interactions;
-using TarkovVR.Source.Settings;
 using UnityEngine;
 using GrenadeHandsController = EFT.Player.GrenadeHandsController;
 

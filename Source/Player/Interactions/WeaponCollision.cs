@@ -7,9 +7,7 @@ using SptVrFikaSync;
 using System.Runtime.CompilerServices;
 using TarkovVR.ModSupport;
 using TarkovVR.Patches.Core.Player;
-using TarkovVR.Source.Settings;
 using UnityEngine;
-using Valve.VR;
 using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.Interactions
