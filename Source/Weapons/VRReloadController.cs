@@ -2673,8 +2673,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
 
-            LimbIK rightArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null;
-            Transform palm = rightArmIk != null && rightArmIk.solver != null && rightArmIk.solver.bone3 != null ? rightArmIk.solver.bone3.transform : null;
+            Transform palm = ArmPalm(rightArm: true);
             if (palm == null)
                 return;
             if (gunHandFingerBones == null || gunHandPalm != palm)

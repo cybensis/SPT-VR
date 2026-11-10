@@ -912,6 +912,37 @@ namespace TarkovVR.Source.Player.VRManager
             Plugin.MyLog.LogInfo(line);
         }
 
+        // How much the aim is smoothed this frame (smoothingFactor, 50 = none): the scope's hold-breath steadying first, else the
+        // gun's weight (weightFeel: its rotation goes through the WeaponWeightFeel spring, the factor still drives the position),
+        // else the Smooth Weapon Aim setting.
+        private void ChooseAimSmoothing(out bool weightFeel)
+        {
+            weightFeel = false;
+            if (InputHandlers.BreathingHandler.isHoldingBreath && VRSettings.SmoothScopeAim())
+            {
+                if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
+                    smoothingFactor = VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10);
+                else
+                    smoothingFactor = 0.1f * (VRSettings.GetScopeSensitivity() * 10);
+            }
+            else if (VRGlobals.firearmController && VRSettings.GetWeaponWeightOn())
+            {
+                float weight = VRGlobals.firearmController.ErgonomicWeight;
+                float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
+                float elasticBoost = 1f + (Mathf.Sqrt(angleError) * 0.2f);
+                smoothingFactor = Mathf.Clamp((40f / weight) * elasticBoost, 3f, 65f);
+                weightFeel = true;
+            }
+            else if (VRSettings.SmoothWeaponAim())
+            {
+                smoothingFactor = VRSettings.GetSmoothingSensitivity();
+            }
+            else
+            {
+                smoothingFactor = 50;
+            }
+        }
+
         private void UpdateRightHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
         {
             if (!RightHand)
@@ -997,32 +1028,7 @@ namespace TarkovVR.Source.Player.VRManager
                 RightHand.transform.rotation = combinedRotation;
                 RightHand.transform.localRotation *= rightHandRotationOffset;
 
-                bool weightFeel = false;
-                if (InputHandlers.BreathingHandler.isHoldingBreath && VRSettings.SmoothScopeAim())
-                {
-                    if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
-                        smoothingFactor = VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10);
-                    else
-                        smoothingFactor = 0.1f * (VRSettings.GetScopeSensitivity() * 10);
-                }
-                else if (VRSettings.GetWeaponWeightOn())
-                {
-                    // Rotation gets the WeaponWeightFeel spring below; smoothingFactor keeps driving the
-                    // POSITION Slerp exactly as shipped.
-                    float weight = VRGlobals.firearmController.ErgonomicWeight;
-                    float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
-                    float elasticBoost = 1f + (Mathf.Sqrt(angleError) * 0.2f);
-                    smoothingFactor = Mathf.Clamp((40f / weight) * elasticBoost, 3f, 65f);
-                    weightFeel = true;
-                }
-                else if (VRSettings.SmoothWeaponAim())
-                {
-                    smoothingFactor = VRSettings.GetSmoothingSensitivity();
-                }
-                else
-                {
-                    smoothingFactor = 50;
-                }
+                ChooseAimSmoothing(out bool weightFeel);
 
                 if (weightFeel)
                 {
@@ -1088,32 +1094,7 @@ namespace TarkovVR.Source.Player.VRManager
 
                 PlaceRightHandForGun(fromAction);
 
-                bool weightFeel = false;
-                if (InputHandlers.BreathingHandler.isHoldingBreath && VRSettings.SmoothScopeAim())
-                {
-                    if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
-                        smoothingFactor = VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10);
-                    else
-                        smoothingFactor = 0.1f * (VRSettings.GetScopeSensitivity() * 10);
-                }
-                else if (VRGlobals.firearmController && VRSettings.GetWeaponWeightOn())
-                {
-                    // Rotation gets the WeaponWeightFeel spring below; smoothingFactor keeps driving the
-                    // POSITION Slerp exactly as shipped.
-                    float weight = VRGlobals.firearmController.ErgonomicWeight;
-                    float angleError = Quaternion.Angle(rawRightHand.transform.rotation, RightHand.transform.rotation);
-                    float elasticBoost = 1f + (Mathf.Sqrt(angleError) * 0.2f);
-                    smoothingFactor = Mathf.Clamp((40f / weight) * elasticBoost, 3f, 65f);
-                    weightFeel = true;
-                }
-                else if (VRSettings.SmoothWeaponAim())
-                {
-                    smoothingFactor = VRSettings.GetSmoothingSensitivity();
-                }
-                else
-                {
-                    smoothingFactor = 50;
-                }
+                ChooseAimSmoothing(out bool weightFeel);
 
                 if (weightFeel)
                 {

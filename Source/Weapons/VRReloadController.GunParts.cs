@@ -328,8 +328,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (Handedness.GunInLeftHand)
                 return null;
-            Transform palm =VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null && VRGlobals.ikManager.rightArmIk.solver != null
-                && VRGlobals.ikManager.rightArmIk.solver.bone3 != null ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null;
+            Transform palm = ArmPalm(rightArm: true);
             if (palm == null)
                 return null;
             for (int index = 0; index < palm.childCount; index++)
