@@ -80,6 +80,9 @@ namespace TarkovVR.Source.Player.VRManager
         public static bool allowCrouchWithSingleAction = true;
         // The open interaction menu needs the right stick to navigate. blockCrouch and ScrollHandler both gate on this.
         public bool interactMenuOwnsStick => interactMenuOpen && !(allowCrouchWithSingleAction && interactMenuActionCount <= 1);
+        // The gun hand's stick is zooming the scope looked through (set each frame in UpdateRightHand; one frame of slack for order)
+        private int scopeZoomStickFrame = -10;
+        public bool ScopeZoomOwnsStick => Time.frameCount - scopeZoomStickFrame <= 1;
         public static int LEFT_HAND_ANIMATOR_HASH = UnityEngine.Animator.StringToHash("ReloadFloat");
         private Transform ammoFireModeUi;
         private bool isAmmoCount = false;
@@ -309,10 +312,10 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.blockLeftJoystick = (radialMenu && radialMenu.active) || (UIPatches.quickSlotUi && UIPatches.quickSlotUi.gameObject.active) || interactMenuOpen && cachedCurrentGunController && cachedCurrentGunController.GetComponent<MonoBehaviour>() && hasHighlightingMesh;                            
             }
 
-            // The right stick's jump/crouch/prone are blocked only while the interaction menu owns the stick (more than one option).
+            // The right stick's jump/crouch/prone are blocked while the interaction menu or the scope zoom owns the stick.
             // crouchHeightDiff != 0: no jump while crouched.
-            blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick || crouchHeightDiff != 0;
-            blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick;
+            blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick || ScopeZoomOwnsStick || crouchHeightDiff != 0;
+            blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick || ScopeZoomOwnsStick;
             if (cachedAmmoFireModeUi != ammoFireModeUi)
                 cachedAmmoFireModeUi = ammoFireModeUi;
 
@@ -897,17 +900,13 @@ namespace TarkovVR.Source.Player.VRManager
             if (VRGlobals.firearmController && isSupporting && !isWeapPistol)
             {
 
-                // Joystick scope zoom rides breath-hold (off trigger while aiming), not the grip: the grip is always down while holding
-                // the gun (the sling's grip-hold model), so as a modifier it would take the stick on every two-handed aim.
-                // Or the gun hand squeezing its grip (Index force): a deliberate act apart from holding the gun.
-                bool squeezingGrip = primaryGripState.TryGetSqueeze(out bool squeezed) && squeezed;
-                if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && (InputHandlers.BreathingHandler.isHoldingBreath || squeezingGrip))
+                // Looking through a scope that zooms: the turning stick's up / down zooms it, nothing held (the grip is always down while
+                // holding the gun, so it can't be the modifier). Jump / crouch / prone pause meanwhile (ScopeZoomOwnsStick); turning
+                // still works, it already ignores a stick pushed up or down.
+                if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && VRGlobals.vrOpticController.CanZoomNow)
                 {
                     VRGlobals.vrOpticController.handleJoystickZoomDial();
-                    if (VRSettings.GetLeftHandedMode())
-                        VRGlobals.blockLeftJoystick = true;
-                    else
-                        VRGlobals.blockRightJoystick = true;
+                    scopeZoomStickFrame = Time.frameCount;
                 }
                 else
                 {

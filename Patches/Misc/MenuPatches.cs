@@ -591,24 +591,20 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
         
-        // In menus the grips act as modifier keys (quick-move to stash, quick-sell, ...)
+        // In menus the hand that isn't pointing holds Ctrl (trigger) and Alt (lower face button): MenuModifiers
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Input), nameof(Input.GetKey), typeof(KeyCode))]
         private static bool GetKeyPrefix(KeyCode key, ref bool __result)
         {
             if (VRGlobals.menuOpen || VRGlobals.inGame == false)
             {
-                // Right grip = Control
-                if ((key == KeyCode.LeftControl || key == KeyCode.RightControl) &&
-                    VRInput.RightGrip.state)
+                if ((key == KeyCode.LeftControl || key == KeyCode.RightControl) && MenuModifiers.CtrlHeld)
                 {
                     __result = true;
                     return false;
                 }
 
-                // Left grip = Alt  
-                if ((key == KeyCode.LeftAlt || key == KeyCode.RightAlt) &&
-                    VRInput.LeftGrip.state)
+                if ((key == KeyCode.LeftAlt || key == KeyCode.RightAlt) && MenuModifiers.AltHeld)
                 {
                     __result = true;
                     return false;

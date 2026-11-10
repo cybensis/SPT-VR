@@ -1080,7 +1080,7 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(GridView), "AcceptItem")]
         private static bool FixAcceptItem(GridView __instance, DragItemContext itemContext, ItemContext targetItemContext, ref Task __result)
         {
-            bool flag = Handedness.GunHandGrip.state;
+            bool flag = MenuModifiers.CtrlHeld;
 
             __result = AcceptItemModified(__instance, itemContext, targetItemContext, flag);
 
@@ -1233,7 +1233,7 @@ namespace TarkovVR.Patches.UI
             {
                 return false;
             }
-            bool partialTransferOnly = Handedness.GunHandGrip.state;
+            bool partialTransferOnly = MenuModifiers.CtrlHeld;
             if (item.CheckAction(gClass).Failed)
             {
                 return false;

@@ -983,10 +983,12 @@ namespace TarkovVR.Source.Controls
         {
             public void UpdateCommand(ref ECommand command)
             {
+                MenuModifiers.Tick();
                 bool inventoryButtonUp = Handedness.OffHandLowerButton.GetStateUp(SteamVR_Input_Sources.Any);
                 float secondaryHandTriggerAmount = Handedness.OffHandTrigger.axis;
 
-                if (inventoryButtonUp && secondaryHandTriggerAmount < 0.1f)
+                // Not after a click made with it held as Alt (MenuModifiers): that press was the modifier
+                if (inventoryButtonUp && secondaryHandTriggerAmount < 0.1f && !MenuModifiers.ReleaseWasModifier(Handedness.OffHandLowerButton))
                     command = ECommand.ToggleInventory;
             }
         }

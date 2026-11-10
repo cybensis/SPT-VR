@@ -22,7 +22,7 @@ namespace TarkovVR.Source.Controls
         // Index: a grab is a squeeze, as in the mod's SteamVR bindings (force 0.4); the wrap alone reads every touch of the handle as a grab.
         // Still let go by the wrap (gripReleaseThreshold), so a gun stays held without squeezing the whole time.
         public static float gripForcePressThreshold = 0.4f;
-        public static float gripForceLetUpThreshold = 0.25f; // squeezing (the scope zoom's modifier) ends under this
+        public static float gripForceLetUpThreshold = 0.25f; // a squeeze ends under this force
         public static float gripReleaseThreshold = 0.5f;    // wrap under which a held grip lets go (too low waits for a nearly open hand)
         // Index: a hand opening lets go at once, before the wrap gets under gripReleaseThreshold: the wrap falling gripFastOpenDrop
         // within gripFastOpenWindow, not squeezing, under gripFastOpenCeiling. A hand relaxing on the handle falls slowly and keeps holding.
@@ -177,14 +177,6 @@ namespace TarkovVR.Source.Controls
         {
             SampleButtonsOncePerFrame();
             return controllers[hand].triggerValue;
-        }
-
-        // False = the controller can't tell (no force sensor in its handle)
-        public static bool TryGetGripSqueeze(int hand, out bool squeezing)
-        {
-            SampleButtonsOncePerFrame();
-            squeezing = controllers[hand].squeezing;
-            return controllers[hand].hasGripForce;
         }
 
         // False = the controller can't tell (no touch sensor on its trigger)

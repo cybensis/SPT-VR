@@ -110,14 +110,6 @@ namespace TarkovVR.Source.Controls
             return SteamAction.GetState(inputSource);
         }
 
-        // A grip squeezed, not just held (the held state lasts until the hand opens). False = can't tell: no force sensor, or SteamVR,
-        // whose grip action is the held state.
-        public bool TryGetSqueeze(out bool squeezing)
-        {
-            squeezing = false;
-            return button == OpenXRInput.Button.Grip && VRInput.UsingOpenXR && OpenXRInput.TryGetGripSqueeze(hand, out squeezing);
-        }
-
         public bool GetStateDown(SteamVR_Input_Sources inputSource)
         {
             if (VRInput.UsingOpenXR)

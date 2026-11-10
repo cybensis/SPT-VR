@@ -212,11 +212,28 @@ namespace TarkovVR.Source.Weapons
             SetScopeSensitivity();
         }
 
+        // The sight being aimed through is an optic that can change magnification (a variable ring or zoom steps). scopeCamera stays
+        // set after a scope was last used, so the aimed sight is checked too (irons / a red dot on a scoped gun). Not the HHS-1,
+        // which the stick doesn't zoom.
+        internal bool CanZoomNow
+        {
+            get
+            {
+                if (!scopeCamera || !(isSmoothZoom || isAdjustable))
+                    return false;
+                var currentScope = VRGlobals.player != null ? VRGlobals.player.ProceduralWeaponAnimation?.CurrentScope : null;
+                if (currentScope == null || !currentScope.IsOptic)
+                    return false;
+                return VRGlobals.scopes == null || !VRGlobals.scopes.Any(s => s != null && s.parent != null && s.parent.name.Contains("scope_all_eotech_hhs_1"));
+            }
+        }
+
         public void handleJoystickZoomDial()
         {
             if (!scopeCamera) return;
 
-            float input = Handedness.GunHandJoystick.axis.y;
+            // The turning stick: its up / down is free while in the scope (jump / crouch pause), the moving stick's never is
+            float input = VRInput.RightJoystick.axis.y;
 
             if (VRGlobals.scopes.Any(s => s != null && s.parent != null
                                            && s.parent.name.Contains("scope_all_eotech_hhs_1")))

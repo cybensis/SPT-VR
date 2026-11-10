@@ -182,6 +182,7 @@ namespace TarkovVR.Source.UI
             // Track button down and send OnPointerDown event
             if (actionButton.stateDown)
             {
+                MenuModifiers.NoteClick();
                 pressedObject = hitObject;
                 eventData.button = PointerEventData.InputButton.Left;
                 ExecuteEvents.Execute(hitObject, eventData, ExecuteEvents.pointerDownHandler);
