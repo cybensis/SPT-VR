@@ -271,7 +271,7 @@ namespace TarkovVR.Source.Player.VRManager
         {
             VRInput.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
             VRInput.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
-
+            HeldGunDetail.ReleaseAll();
         }
         
         public void OnEnable()
@@ -286,6 +286,8 @@ namespace TarkovVR.Source.Player.VRManager
         public Quaternion handsRotation;
         protected virtual void Update()
         {
+            // Before the VRCam bail: it's null at times in the hideout, and the held gun still needs its detail kept
+            HeldGunDetail.Tick();
             //if (Camera.main == null)
             if (VRGlobals.VRCam == null)
                 return;
