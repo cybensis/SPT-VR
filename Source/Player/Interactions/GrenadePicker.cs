@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Which grenade you hold (his ask, with grenades out of the quick-slot radial): the trigger of the hand holding a grenade, held, opens
+    // Which grenade you hold (grenades are not in the quick-slot radial): the trigger of the hand holding a grenade, held, opens
     // a radial of the other grenades in your quick access; that controller's stick points at one, letting go of the trigger swaps to it
     // (GrenadeSlot.SwapHeldTo: Tarkov's switch, its put-away and draw skipped, the same hand holding it). Only with the pin in.
     public static class GrenadePicker

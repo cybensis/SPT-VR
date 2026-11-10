@@ -123,7 +123,7 @@ namespace TarkovVR.Source.Weapons
             if (scopeXform != null && VRGlobals.vrPlayer?.LeftHand != null)
             {
                 // The off hand's own pose action: LeftHandPose asked for the right controller reads identity (the gun in the left
-                // hand / left-handed mode: the zoom then only followed the scope turning with the gun)
+                // hand / left-handed mode)
                 Quaternion localHandRot = Handedness.OffHandPose.GetLocalRotation(zoomSource);
                 Quaternion worldHandRot = VRGlobals.vrPlayer.LeftHand.transform.rotation;
                 trackingToWorldSpaceMatrix = worldHandRot * Quaternion.Inverse(localHandRot);
@@ -315,8 +315,7 @@ namespace TarkovVR.Source.Weapons
             if (VRGlobals.handsInteractionController == null
                 || VRGlobals.handsInteractionController.heldItem != null) return;
 
-            // Track the player's real wrist twist directly instead of the smoothed FOV value,
-            // so the grip hand turns with the hand 1:1 rather than lagging the zoom curve.
+            // The real wrist twist, not the smoothed FOV value: the grip hand turns 1:1 with the hand instead of lagging the zoom curve
             float rotation = physicalDialTwist * dialHandFollowScale;
 
             // Decaying kick from detent escape — brief overshoot in motion direction
@@ -342,7 +341,7 @@ namespace TarkovVR.Source.Weapons
             PlaceRightHandOnDial(scopeXform, leftHand.position, leftHand.rotation);
         }
 
-        // The gun in the left hand: the RIGHT hand grips the dial, its arm aimed at the left hand's dial pose mirrored across the gun's
+        // The gun in the left hand: the right hand grips the dial, its arm aimed at the left hand's dial pose mirrored across the gun's
         // centre plane (RealLeftHandedPatches takes it as that arm's target while it's set; the rig's LeftHand, which the left arm
         // follows, is the right controller's then). The mirror turns the hand the other way about axes in that plane: if the right
         // hand on the dial turns against the wrist, flip rightHandDialTwistSign.
@@ -396,9 +395,9 @@ namespace TarkovVR.Source.Weapons
 
         // --- Internal helpers ---
 
-        // Base Tarkov persists scope zoom on SightComponent.ScopeZoomValue (an item component that
-        // survives weapon swaps / item use). ScopeZoomHandler.Init() reads it back on re-equip.
-        // We drive zoom by writing float_1 directly, which bypasses that write, so mirror it here.
+        // Tarkov persists scope zoom on SightComponent.ScopeZoomValue (an item component that survives weapon swaps / item
+        // use); ScopeZoomHandler.Init() reads it back on re-equip. Writing the handler's fields directly bypasses that
+        // write, so mirror it here.
         private void PersistZoomValue(float fov)
         {
             if (baseZoomHandler != null && baseZoomHandler._sightComponent != null)

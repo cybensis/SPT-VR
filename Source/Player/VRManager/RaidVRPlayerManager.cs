@@ -53,8 +53,8 @@ namespace TarkovVR.Source.Player.VRManager
                 }
                 else if (raycastHit && interactionUi.gameObject.active)
                 {
-                    // Keep the menu centred on the loot item as it MOVES (e.g. while held) — the
-                    // raycast only fires PlaceUiInteracter on change, so re-derive the centre here.
+                    // Keep the menu centred on the loot item as it moves (e.g. while held): the raycast only fires
+                    // PlaceUiInteracter on change.
                     if (interactLootItem != null && interactLootItem._boundCollider != null)
                     {
                         Vector3 c = interactLootItem._boundCollider.bounds.center;
@@ -130,9 +130,8 @@ namespace TarkovVR.Source.Player.VRManager
                 Vector3 offsetDirection = (rayOrigin - hit.point).normalized;
                 interactUiPos = hit.point + offsetDirection * dirMultiplier; // Adjust the offset distance as needed
 
-                // Loose loot items: anchor the menu to the CENTRE of the item (its bound collider's
-                // centre) so it always pops in the middle of the item, not on whichever face the
-                // gaze ray happened to hit. Remembered so Update keeps it on the item as it MOVES.
+                // Loose loot items: anchor the menu to the item's bound-collider centre, not the face the gaze ray hit.
+                // Remembered so Update keeps it on the item as it moves.
                 LootItem lootItem = hit.collider.GetComponentInParent<LootItem>();
                 interactLootItem = (lootItem != null && lootItem._boundCollider != null) ? lootItem : null;
                 if (interactLootItem != null)

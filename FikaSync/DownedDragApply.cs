@@ -7,30 +7,17 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // Receiver / renderer for a DOWNED (revive-state) teammate being dragged. Mirrors BodyDragApply, but
-    // a downed teammate is NOT a Corpse — it's a still-live FikaPlayer keyed by NetId. So a packet is
-    // applied two completely different ways depending on who receives it:
-    //
-    //   (1) The DOWNED player's OWN client (NetId == my player): teleport MYSELF to RootPos. This is what
-    //       actually relocates the teammate — their authoritative position lives only on their client, so
-    //       nothing the dragger does locally can move it. Done on the reliable release marker (the final
-    //       safe spot) by default, or every packet if downedRelocateContinuous. Guarded to fire only while
-    //       genuinely downed (IsAlive == false in FIKA's downed state) so a stray/late packet can't yank a
-    //       revived player.
-    //
-    //   (2) Any OTHER client (an observer of the downed teammate): drive their copy of the revive-ragdoll
-    //       bones to the synced world pose so they SEE the drag — same all-bones, smoothed, settle-on-
-    //       release model as BodyDragApply. The ragdoll lives on FIKA's internal ReviveInteractable
-    //       component (private _ragdoll), reached by reflection; if that can't be resolved the observer
-    //       visual is skipped but (1) still works.
-    //
-    // In a 2-player raid there's no third observer, so (1) alone fully delivers "drag to safety": the
-    // dragger sees it via their own local drag, the downed teammate is relocated, and the revive lands at
-    // the safe spot. (2) is the visual for 3+ player raids.
-    //
-    // Handlers are wrapped in try/catch upstream (a throw would drop the rest of FIKA's datagram), and the
-    // Unity/reflection calls here are guarded too. RenderSmoothing runs per FRAME (LateUpdate); the settle
-    // manager runs per physics step (FixedUpdate) — both pumped from FikaSyncPlugin.
+    // Receiver / renderer for a downed (revive-state) teammate being dragged. Mirrors BodyDragApply, but a downed
+    // teammate is not a Corpse: it's a still-live FikaPlayer keyed by NetId. A packet is applied two ways:
+    //   (1) The downed player's own client (NetId == my player) relocates itself to RootPos: their authoritative
+    //       position lives only on their client. From the release marker's spot (applied at revive), or every packet
+    //       if downedRelocateContinuous. Only while downed (IsAlive == false in FIKA's downed state), so a late packet
+    //       can't move a revived player.
+    //   (2) Any other client drives its copy of the revive-ragdoll bones to the synced world pose (all bones, smoothed,
+    //       as BodyDragApply). The ragdoll lives on FIKA's ReviveInteractable (_ragdoll); if it can't be resolved the
+    //       visual is skipped but (1) still works. Only matters in raids of 3+ players.
+    // Handlers are wrapped in try/catch upstream (a throw would drop the rest of FIKA's datagram). RenderSmoothing runs
+    // per frame (LateUpdate), pumped from FikaSyncPlugin.
     internal static class DownedDragApply
     {
         private static readonly Func<bool, float, bool> NeverFreeze = (a, t) => false;
@@ -49,10 +36,9 @@ namespace SptVrFikaSync
         }
         private static readonly Dictionary<int, Remote> dragging = new Dictionary<int, Remote>();
 
-        // The drop spot to relocate the LOCAL downed player to — applied at REVIVE, not on release. (See
-        // OnLocalRevived. Teleporting the root while downed drags the decoupled ragdoll bones past the
-        // drop spot on observers; the animator re-poses the bones from the root at revive anyway, so
-        // teleporting then is clean.)
+        // The drop spot to relocate the local downed player to, applied at revive (OnLocalRevived), not on release:
+        // teleporting the root while downed drags the decoupled ragdoll bones past the drop spot on observers. At
+        // revive the animator re-poses the bones from the root anyway.
         private static bool _hasPendingRevivePos;
         private static Vector3 _pendingRevivePos;
 
@@ -62,8 +48,7 @@ namespace SptVrFikaSync
             _hasPendingRevivePos = false;
         }
 
-        // Called from the revive patch when the LOCAL player is revived: apply the deferred drop-spot
-        // relocation now (root + animator re-pose happen together, so no decoupled-bone overshoot).
+        // Called from the revive patch when the local player is revived: apply the deferred drop-spot relocation
         public static void OnLocalRevived(FikaPlayer player)
         {
             if (!_hasPendingRevivePos || player == null)
@@ -90,15 +75,14 @@ namespace SptVrFikaSync
                     return;
                 if (FikaVrSync.downedRelocateContinuous)
                 {
-                    // A/B path: teleport immediately (every packet). This reproduces the observer overshoot
-                    // (root moves while bones are decoupled) — kept only for testing.
+                    // A/B path: teleport on every packet. Overshoots on observers (the root moves while the bones
+                    // are decoupled); for testing only.
                     player.Teleport(p.RootPos);
                 }
                 else if (p.Released)
                 {
-                    // Default: DON'T teleport now. Remember the drop spot and apply it at revive
-                    // (FikaPlayer_ToggleDowned_RevivePatch -> OnLocalRevived), when the animator re-poses the
-                    // ragdoll from the root anyway, so the body lands cleanly with no decoupled-bone overshoot.
+                    // Default: remember the drop spot and apply it at revive
+                    // (FikaPlayer_ToggleDowned_RevivePatch -> OnLocalRevived)
                     _hasPendingRevivePos = true;
                     _pendingRevivePos = p.RootPos;
                 }
@@ -111,9 +95,8 @@ namespace SptVrFikaSync
                 if (dragging.TryGetValue(p.NetId, out Remote rr))
                 {
                     dragging.Remove(p.NetId);
-                    // Freeze in place at the last synced pose — mirrors the dragger, who freezes the body
-                    // kinematic on release (a downed ragdoll is never auto-settled by EFT, so letting it go
-                    // dynamic would snap it off the drop spot). Stays where dropped == the relocate spot.
+                    // Freeze at the last synced pose, as the dragger does on release: EFT never auto-settles a
+                    // downed ragdoll, so letting it go dynamic would move it off the drop spot (= the relocate spot)
                     Freeze(rr.ragdoll, rr.bones);
                 }
                 return;
@@ -188,8 +171,7 @@ namespace SptVrFikaSync
                     (dead ?? (dead = new List<int>())).Add(kv.Key);
                     continue;
                 }
-                // Safety net: no packet for too long (dragger dropped mid-drag, no Released arrived) ->
-                // release locally so the body falls instead of staying frozen.
+                // No packet for too long (dragger dropped mid-drag, no Released arrived) -> stop driving it
                 if (Time.time - d.lastPacketTime > FikaVrSync.bodyDragStaleTimeout)
                 {
                     (dead ?? (dead = new List<int>())).Add(kv.Key);
@@ -213,8 +195,7 @@ namespace SptVrFikaSync
 
         // Stamp each bone's world transform from the synced pose. The skinned mesh samples bone transforms
         // at render time, so setting them in LateUpdate shows the dragged pose; bones are kinematic
-        // (FreezeKinematic) so physics doesn't also move them. World poses, so bone order within the
-        // hierarchy doesn't matter for the final frame.
+        // (FreezeKinematic) so physics doesn't also move them. World poses, so bone order doesn't matter.
         private static void ApplyPose(RigidbodySpawner[] bones, Vector3[] pos, Quaternion[] rot)
         {
             int n = Mathf.Min(bones.Length, pos.Length);
@@ -227,7 +208,7 @@ namespace SptVrFikaSync
             }
         }
 
-        // Freeze all bones kinematic so our transform stamps stick. UNSUPPORT first (EFT's GClass745 sets
+        // Freeze all bones kinematic so our transform stamps stick. Unsupport first (EFT's GClass745 sets
         // velocity on supported bodies each step -> "velocity of kinematic body not supported" spam),
         // mirroring RagdollClass.method_1 / the local owner's BeginBodyGrab.
         private static void FreezeKinematic(RigidbodySpawner[] bones)
@@ -243,9 +224,8 @@ namespace SptVrFikaSync
             }
         }
 
-        // Freeze the body kinematic in place at its current pose (mirrors RagdollClass.method_1) + restore
-        // Func_0 so any still-spinning settle coroutine exits cleanly. This is what keeps a released downed
-        // teammate exactly where dropped (the dragger does the same locally).
+        // Freeze the body kinematic at its current pose (mirrors RagdollClass.method_1) + restore Func_0 so any
+        // still-running settle coroutine exits. Keeps a released downed teammate where dropped, as the dragger does.
         private static void Freeze(CorpseRagdoll ragdoll, RigidbodySpawner[] bones)
         {
             for (int b = 0; b < bones.Length; b++)

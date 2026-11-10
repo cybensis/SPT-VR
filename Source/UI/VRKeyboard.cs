@@ -54,7 +54,7 @@ namespace TarkovVR.Source.UI
 
                 Vector3 visualCenter = (fourCornersArray[0] + fourCornersArray[2]) * 0.5f;
 
-                // Only resize when not resized yet, basically only do it once
+                // Resize only when the collider doesn't match the rect yet (in practice once)
                 if (Mathf.Abs(boxCollider.size.x - width) > 0.1f || Mathf.Abs(boxCollider.size.y - height) > 0.1f)
                 {
                     boxCollider.size = new Vector3(width, height, 0.001f);
@@ -174,8 +174,7 @@ namespace TarkovVR.Source.UI
                 kbRect.localScale = Vector3.one;
                 kbRect.localRotation = Quaternion.Euler(30, 0, 0);
 
-                // Lots of random stuff to try and position keyboard correctly
-                // The canvas size seems to be 2560 but the ui itself is like 1920? not sure
+                // The canvas seems to be 2560 wide while the UI itself is about 1920
                 kbRect.anchorMin = Vector2.zero;
                 kbRect.anchorMax = Vector2.zero;
 
@@ -185,7 +184,7 @@ namespace TarkovVR.Source.UI
             }
             else
             {
-                // if no ui found, it creates floating keyboard. looks ugly tho, hope it doesn't happen
+                // Fallback without the common UI: a floating keyboard in front of the head
                 Transform head = Camera.main.transform;
                 Vector3 flatForward = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
                 keyboardRoot.transform.position = head.position + (flatForward * 0.5f) + (Vector3.down * 0.4f);
@@ -227,7 +226,7 @@ namespace TarkovVR.Source.UI
 
             switch (key.type)
             {
-                // Adjusted to just simulate keypresses, this is less error prone.
+                // Keys go in as simulated key events (less error prone than editing the text directly)
                 case VRKeyboardKey.KeyType.Character:
                     string charToAdd = isShifted ? key.shiftCharacter : key.character;
                     foreach (char c in charToAdd)

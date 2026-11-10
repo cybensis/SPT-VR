@@ -19,9 +19,8 @@ namespace TarkovVR.Source.UI
 
         private float rayDistance = 100f;
 
-        // The trigger holding an item drag: one state for this pointer and the item views (FixDragAndDropButton). They used to read
-        // 0.5 and 0.7, so a light press in between began the drag here and ended it there, every frame (headset: flickers between
-        // grabbing and not). The gap between press and release keeps a trigger resting at one value from flickering it too.
+        // The trigger holding an item drag: one shared state for this pointer and the item views (FixDragAndDropButton), so the
+        // two can't disagree on a light press. The press/release gap keeps a trigger resting at one value from flickering it.
         public static float dragTriggerPress = 0.5f;
         public static float dragTriggerRelease = 0.3f;
         private static bool dragTriggerHeld;
@@ -38,21 +37,15 @@ namespace TarkovVR.Source.UI
             return dragTriggerHeld;
         }
 
-        // Drag an item off the inventory panel and release to drop it on the ground. RAID ONLY
-        // (gated on RaidVRPlayerManager in DropDraggedItemToGround) — there is no world to drop into
-        // in the hideout/stash/loadout, and those use HideoutVRPlayerManager / no local Player, so
-        // the gesture is a no-op there. Live-tunable for A/B; promote to a VR-settings toggle later.
+        // Drag an item off the inventory panel and release to drop it on the ground. Raid only (gated on RaidVRPlayerManager
+        // in DropDraggedItemToGround): the hideout/stash/loadout have no world to drop into.
         public static bool enableDragToDrop = true;
 
-        // A release over dead space only counts as a drop once the aim has been dragged this far
-        // (world metres) from the item's origin slot — measured on the inventory panel's plane. A
-        // release closer than this just cancels, so a fumbled near-miss move doesn't drop the item.
-        // Releasing over an actual grid/slot is always a move regardless of distance, so this gate
-        // only governs dead-space/off-panel releases. The panel is ~1.5 m wide in world space
-        // (canvas * 0.0006 scale), so ~0.2 m ≈ "clearly dragged off the grid". Tune in-headset.
+        // A release over dead space only drops once the aim has been dragged this far (world m, on the panel's plane) from the
+        // item's origin slot; closer = cancel. A release over a grid/slot is always a move. The panel is ~1.5 m wide in world
+        // space (canvas * 0.0006 scale).
         public static float dropDistance = 0.5f;
-        // Where the drag started (origin slot) + the last point/normal the ray touched the panel,
-        // used to measure how far the aim has been dragged for the drop gate.
+        // Where the drag started (origin slot) + the last point/normal the ray touched the panel, for the drop gate.
         private Vector3 dragStartPanelPoint;
         private Vector3 lastUiHitPoint;
         private Vector3 lastUiHitNormal;
@@ -113,8 +106,7 @@ namespace TarkovVR.Source.UI
                 //if (hitObject)
                 //    Plugin.MyLog.LogWarning("HIT:    " + hit.collider + "    |   LAST HIT:    " + hitObject.name);
                 eventData.worldPosition = hit.point;
-                // Remember the panel surface the ray is on, so the off-panel drop gate can measure
-                // how far the aim later slides past it.
+                // The panel surface the ray is on, for the off-panel drop gate.
                 lastUiHitPoint = hit.point;
                 lastUiHitNormal = hit.normal;
 
@@ -135,10 +127,8 @@ namespace TarkovVR.Source.UI
                     handleDragging(hit.point);
 
             }
-            // Ray has left every UI collider while a drag is in progress: the user has pulled the
-            // item off the inventory panel into open space. Keep the drag alive while the trigger is
-            // held; releasing here drops the item to the ground (raid only). Without this branch an
-            // off-panel release does nothing because the whole drag pipeline lives under `if (isHit)`.
+            // The ray has left every UI collider mid-drag (item pulled off the panel): the drag stays alive while the trigger
+            // is held, a release drops the item to the ground (raid only). The rest of the drag pipeline only runs on a hit.
             else if (enableDragToDrop && dragObject != null)
             {
                 HandleOffPanelDrag();
@@ -322,9 +312,8 @@ namespace TarkovVR.Source.UI
             dragObject = null;
         }
 
-        // Mid-drag, but the pointer ray has left the inventory panel entirely (pointing off into the
-        // world). Nothing valid is under the aim, so this is the same as a dead-space release: B/Y
-        // cancels; releasing the trigger drops the item if it's been dragged far enough from origin.
+        // Mid-drag with the ray off the panel: like a dead-space release. B/Y cancels; releasing the trigger drops the item
+        // if it's been dragged far enough from its origin.
         private void HandleOffPanelDrag()
         {
             bool triggerHeld = DragTriggerHeld();
@@ -344,18 +333,15 @@ namespace TarkovVR.Source.UI
                 CancelDrag();
         }
 
-        // Distance (world metres) from where the drag started (the item's origin slot) to the current
-        // aim, projected onto the panel plane. Same metric on-panel and off, so the drop gate behaves
-        // consistently across the panel edge.
+        // Distance (world m) from the drag's origin slot to the current aim, projected onto the panel plane. Same metric
+        // on-panel and off.
         private float DragAimDistanceFromStart()
         {
             return Vector3.Distance(ProjectAimOntoPanel(), dragStartPanelPoint);
         }
 
-        // Intersect the hand ray with the inventory panel's plane (through the last on-panel hit
-        // point, using its surface normal). On-panel this returns ~the current aim point; off-panel
-        // it's the extrapolated point on the panel plane. Degenerate cases (ray parallel to / behind
-        // the panel, or the panel was never touched) return a far-away point so the release drops.
+        // The hand ray intersected with the panel's plane (through the last on-panel hit, along its normal). Degenerate
+        // cases (ray parallel to / behind the panel, panel never touched) return a far point, so the release drops.
         private Vector3 ProjectAimOntoPanel()
         {
             Vector3 origin = transform.position;
@@ -373,12 +359,9 @@ namespace TarkovVR.Source.UI
             return dragStartPanelPoint + direction * 9999f; // "way off" — always exceeds dropDistance
         }
 
-        // Drop the currently-dragged inventory item onto the ground via the EXACT same path as
-        // right-click -> Discard: the item's context-menu Discard interaction. In raid that throws
-        // the item to the floor as a lootable world item (and FIKA-syncs); it also respects discard
-        // limits, so quest/locked items can't be dropped (IsInteractionAvailable is false -> no-op).
-        // (The earlier InteractionsHandlerClass.Discard call was the wrong, lower-level op — it
-        // removed the item from inventory WITHOUT spawning it in the world, i.e. "it disappeared".)
+        // Drops the dragged item on the ground through the context menu's Discard interaction (= right-click -> Discard): it
+        // spawns a lootable world item, FIKA-syncs, and respects discard limits (quest/locked items: unavailable, no-op).
+        // InteractionsHandlerClass.Discard is the wrong op here: it removes the item without spawning it in the world.
         private void DropDraggedItemToGround()
         {
             GameObject dragged = dragObject;
@@ -394,8 +377,7 @@ namespace TarkovVR.Source.UI
             ExecuteEvents.Execute(dragged, eventData, ExecuteEvents.endDragHandler);
             dragObject = null;
 
-            // RAID ONLY. Hideout/stash/loadout use HideoutVRPlayerManager or have no local Player —
-            // never discard there. This is the single gate that keeps the gesture out of the hideout.
+            // Raid only: the hideout/stash/loadout use HideoutVRPlayerManager or have no local Player. The one gate for this.
             if (!(VRGlobals.vrPlayer is RaidVRPlayerManager))
                 return;
             if (itemView == null || itemView.Item == null)

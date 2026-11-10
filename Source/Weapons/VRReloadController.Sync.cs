@@ -9,13 +9,12 @@ using FirearmController = EFT.Player.FirearmController;
 namespace TarkovVR.Source.Weapons
 {
     // Co-op: what the manual reload shows, for other players' copies of you (the FIKA sync module's ReloadSyncApply draws it there).
-    // Built every send while a firearm is in hands (VRArmSync.Tick, with the weapon pose), FIKA-agnostic (Unity / Tarkov types only:
-    // this JITs without FIKA):
-    //  - the two rendered wrists (the arm IK's hand bones, so a hand latched on a handle, bolt or magazine is where you see it), and
-    //    which arms other players should drive to them instead of welding onto the gun's markers
+    // Built every send while a firearm is in hands (VRArmSync.Tick, with the weapon pose), from Unity / Tarkov types only, so this
+    // JITs without FIKA:
+    //  - the two rendered wrists (the arm IK's hand bones) and which arms other players drive to them instead of welding onto the
+    //    gun's markers
     //  - the props in the hands (magazines, a round), by item id
-    //  - every part of the gun this moves or hides (bolt, handle, carrier, side handle, release, chamber round, a partly-out magazine,
-    //    the gun's magazine model hidden while it's in the hand), by its path under the gun's root, as its local pose and shown state
+    //  - every part of the gun this moves or hides, by its path under the gun's root, as its local pose and shown state
     //  - the bolt catch and the bolt-open layer this drives by hand
     //  - counters for one-off events: a spent case thrown out by the bolt, the chambered round shown as the bolt closes
     // Wrists and props are in the gun's frame (Weapon_root), so on the other side they ride the observed gun as it's placed.

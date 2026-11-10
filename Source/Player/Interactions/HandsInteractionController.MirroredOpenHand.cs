@@ -5,10 +5,10 @@ using UnityEngine;
 namespace TarkovVR.Source.Player.Interactions
 {
     // The free left hand's open pose = the right hand's baked open pose (rightRestPoseEuler), mirrored (HandMirror: each joint's turn
-    // from its bind pose reflected through the body's centre plane). His pick 2026-11-06 after the left-handed stage 2 test ("same pose
-    // on both hands"). Replaces the left bake (restPoseEuler) and its fixed idle flex / spread deltas, which were tuned for that bake;
-    // the loot-dot "ready" curl stays on top, and Index finger tracking curls from it. Recomputed every frame (15 joints, cheap), so a
-    // live edit of the right bake shows on both hands. false = the left bake as before.
+    // from its bind pose reflected through the body's centre plane), so both hands show the same pose. Replaces the left bake
+    // (restPoseEuler) and its fixed idle flex / spread deltas, which were tuned for that bake; the loot-dot "ready" curl stays on top,
+    // and Index finger tracking curls from it. Recomputed every frame (15 joints), so a live edit of the right bake shows on both
+    // hands. false = the left bake.
     internal partial class HandsInteractionController
     {
         public static bool mirrorOpenHand = true;

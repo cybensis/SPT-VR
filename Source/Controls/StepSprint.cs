@@ -6,18 +6,13 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Controls
 {
-    // "Step Or Lean To Sprint" (VRSettings.GetStepToSprint, his design): a quick step or lean forward starts the run while the move
-    // stick is pushed forward (or is pushed within goGrace after), a quick step or lean back ends it. Easing off the stick still ends
-    // it and the stick click still toggles it (InputHandlers.SprintInputHandler).
-    //
-    // Measured on the NECK point under the raw headset pose (HeadTracking.RawHmdPose + neckLocalOffset): the headset swings ~10 cm
-    // round the neck when you look around or nod, the neck only moves when the body does. Raw tracking space, so the sticks'
-    // moving and turning never show up in it. Forward = the way the character faces (the way it runs), taken into tracking space
-    // through the rig.
-    //
-    // "Where you stand" (settled) follows the neck slowly. A start has to end ahead of it and a stop behind it: coming back upright
-    // after the lean that started the run is a quick move back, but only back to where you stood, so it doesn't stop the run (and
-    // straightening after a lean back doesn't start it again). Held a while, a lean becomes where you stand.
+    // "Step Or Lean To Sprint" (VRSettings.GetStepToSprint): a quick step or lean forward starts the run while the move stick is
+    // pushed forward (or is pushed within goGrace after), a quick step or lean back ends it. Easing off the stick still ends it and
+    // the stick click still toggles it (InputHandlers.SprintInputHandler).
+    // Measured on the neck point under the raw headset pose (HeadTracking.RawHmdPose + neckLocalOffset): the headset swings ~10 cm
+    // round the neck when you look around or nod. Raw tracking space, so stick movement and turning never show up in it.
+    // "Where you stand" (settled) follows the neck slowly; a start has to end ahead of it and a stop behind it, so coming back
+    // upright after a lean doesn't undo it. Held a while, a lean becomes where you stand.
     public static class StepSprint
     {
         public static bool enabled = true;          // dev kill-switch; the menu toggle is VRSettings.GetStepToSprint
@@ -31,15 +26,15 @@ namespace TarkovVR.Source.Controls
         public static float glitchSpeed = 3f;       // m/s faster than a body moves: a tracking jump or a recenter, history dropped
         public static float goGrace = 0.35f;        // s a step before the stick is pushed forward still starts the run
         public static float cooldown = 0.5f;        // s after a start / stop before another (the game's sprint state lags the command)
-        // A start also needs the head looking roughly the way you'd run (his ask: leaning out to look down off a ledge mustn't start a
-        // run). Stops don't care where you look.
+        // A start also needs the head looking roughly the way you'd run (leaning out to look down off a ledge mustn't start a run).
+        // Stops don't care where you look.
         public static float maxLookDown = 35f;      // deg below level
         public static float maxLookUp = 45f;        // deg above level
         public static float maxLookSideways = 60f;  // deg off the way the character faces
         public static float pulseAmplitude = 0.3f;  // the buzz once the game has started the run, both controllers; a stop gets half
         public static float pulseDuration = 0.06f;
         public static float pulseFrequency = 90f;
-        public static bool debugLog = true;         // a line per start / stop and per near miss while walking or running (round 1 tuning)
+        public static bool debugLog = true;         // a line per start / stop and per near miss while walking or running
 
         private const int Capacity = 256;
         private static readonly float[] sampleTime = new float[Capacity];

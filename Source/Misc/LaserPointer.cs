@@ -6,7 +6,7 @@ using TarkovVR.Source.Controls;
 namespace TarkovVR.Source.Misc
 {
     // Original code from https://github.com/ValveSoftware/steamvr_unity_plugin/blob/master/Assets/SteamVR/Extras/SteamVR_LaserPointer.cs
-    // I've only modified this slightly to change it so it doesn't get blocked by unwanted layers
+    // Modified so the ray only hits interactableLayers and isn't blocked by other layers
     public class LaserPointer : MonoBehaviour
     {
         public SteamVR_Behaviour_Pose pose;
@@ -26,7 +26,7 @@ namespace TarkovVR.Source.Misc
         public event PointerEventHandler PointerIn;
         public event PointerEventHandler PointerOut;
         public event PointerEventHandler PointerClick;
-        public int interactableLayers = 5;  // Add this field
+        public int interactableLayers = 5;  // the one layer the ray hits
         Transform previousContact = null;
         private MeshRenderer pointerRenderer;
 

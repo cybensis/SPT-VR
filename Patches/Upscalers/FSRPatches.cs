@@ -21,11 +21,8 @@ namespace TarkovVR.Patches.Upscalers
         [HarmonyPatch(typeof(SSAAImpl), "TryRenderFSR3", new Type[] { typeof(RenderTexture), typeof(RenderTexture), typeof(CommandBuffer) })]
         private static bool FixFSR3Render(SSAAImpl __instance, RenderTexture source, RenderTexture destination, CommandBuffer externalCommandBuffer, ref bool __result, bool __runOriginal)
         {
-            // FSR4 is handled by the standalone FSR4 Bridge mod (com.matsix.fsr4bridge), which patches
-            // this same method at higher priority. If it already drove the upscale this frame it
-            // returned false, so __runOriginal is false here — bail and let its result stand. When
-            // FSR4 Bridge isn't installed / didn't handle it, __runOriginal is true and we run the
-            // in-engine stereo FSR3 wrapper as before.
+            // The FSR4 Bridge mod (com.matsix.fsr4bridge) patches this method at higher priority. If it drove the
+            // upscale this frame, __runOriginal is false: let its result stand. Otherwise run the stereo FSR3 wrapper.
             if (!__runOriginal)
                 return false;
 
@@ -503,7 +500,6 @@ namespace TarkovVR.Patches.Upscalers
 
         public void OnDestroy()
         {
-            // Clean up both wrappers
             foreach (var wrapper in _wrappers)
             {
                 wrapper.OnDestroy();
@@ -515,7 +511,7 @@ namespace TarkovVR.Patches.Upscalers
     {
         private const int NUM_EYES = 2;
 
-        // One FSR3Wrapper instance per eye
+        // One FSR2Wrapper instance per eye
         private FSR2Wrapper[] _wrappers = new FSR2Wrapper[NUM_EYES];
 
         public StereoFSR2Wrapper(
@@ -529,7 +525,7 @@ namespace TarkovVR.Patches.Upscalers
             ComputeShader RCASShader,
             Material CopyDLSSSourcesMat)
         {
-            // Create separate FSR3 instances for each eye
+            // Create separate FSR2 instances for each eye
             for (int i = 0; i < NUM_EYES; i++)
             {
                 _wrappers[i] = new FSR2Wrapper(
@@ -555,10 +551,9 @@ namespace TarkovVR.Patches.Upscalers
             bool opticOrCollimator,
             CommandBuffer externalCommandBuffer)
         {
-            // Detect which eye is rendering
             int eyeIndex = (int)cam.stereoActiveEye % NUM_EYES;
 
-            // Use the appropriate eye's FSR3 wrapper (the game's FSR2Wrapper reads the cleaned inputs via FSR2MaskCleanInputs)
+            // The game's FSR2Wrapper reads the cleaned inputs via FSR2MaskCleanInputs
             FsrMaskClean.Begin(externalCommandBuffer, source != null ? source.width : 0, source != null ? source.height : 0);
             try
             {

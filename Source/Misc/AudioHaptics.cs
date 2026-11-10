@@ -4,24 +4,17 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Misc
 {
-    // Audio -> controller haptics, LIVE: a read-only OnAudioFilterRead tap on the
-    // AudioSource that's actually playing the eating sound publishes per-buffer RMS +
-    // zero-crossing rate from the AUDIO THREAD; a main-thread pump converts those into
-    // controller haptics (one level per ~20ms window, to each hand that feels it, through HapticMixer) so you
-    // feel exactly what you hear — the lid roll's ratchet, each gulp, the holster thump,
-    // and the gun's reload sounds (VRReloadController.OnGunClipPlayed).
+    // Audio -> controller haptics, live: a read-only OnAudioFilterRead tap on the AudioSource playing the sound publishes
+    // per-buffer RMS + zero-crossing rate from the audio thread; a main-thread pump turns those into haptics (one level per
+    // ~20ms window, to each hand that feels it, through HapticMixer). Used for eating sounds and the gun's reload sounds
+    // (VRReloadController.OnGunClipPlayed).
     //
-    // WHY a live tap: a clip-sampling envelope (AudioClip.GetData) was tried first and
-    // is a DEAD END — EFT's foley is compressed/streaming (not DecompressOnLoad), GetData
-    // is invalid there, and the synthetic fallback made every sound the same generic
-    // rumble (user-confirmed "doesn't feel good"). The filter tap hears the DECODED
-    // stream, so the clip's compression doesn't matter.
+    // AudioClip.GetData envelopes don't work: EFT's foley is compressed/streaming (not DecompressOnLoad), so GetData is
+    // invalid. The filter tap hears the decoded stream, so compression doesn't matter.
     //
-    // Pooled-source safety: BetterAudio sources are pooled and reused. The pump renders
-    // ONLY while the tracked BetterSource reports Playing AND its _lastPlayingClipName is
-    // the clip we were told about (BetterSource.Play always sets both; OnStop nulls the
-    // clip) — a source re-grabbed for someone else's audio goes silent immediately. The
-    // tap component itself is disabled whenever it isn't ours.
+    // Pooled-source safety: BetterAudio sources are pooled and reused. The pump renders only while the tracked BetterSource
+    // reports Playing and its _lastPlayingClipName is our clip (BetterSource.Play sets both; OnStop nulls the clip), so a
+    // source re-grabbed for someone else's audio goes silent immediately.
     public static class AudioHaptics
     {
         public static bool enabled = true;
@@ -29,11 +22,11 @@ namespace TarkovVR.Source.Misc
         public static float windowSec = 0.02f;     // one haptic pulse per window
         public static float minAmp = 0.04f;        // skip windows quieter than this
         public static float minFreq = 60f;         // LRA band the audio frequency maps into
-        public static float maxFreq = 200f;        // was 300: a sustained full-strength buzz up there is what made the controller audibly hum
+        public static float maxFreq = 200f;        // higher: a sustained full-strength buzz makes the controller audibly hum
         public static float peakDecay = 0.995f;    // auto-gain: running peak decay per window
         public static float freqSmoothing = 0.35f; // per-window lerp toward the measured texture
         // Onsets over sustain: a click / ratchet / slam lands as a short sharp hit, the steady part after it falls back. Crisper,
-        // and the controller hums less (the hum is the sustained part). sustainGain 1 + onsetBoost 0 = the old flat envelope.
+        // and the controller hums less (the hum is the sustained part). sustainGain 1 + onsetBoost 0 = a flat envelope.
         public static float sustainGain = 0.55f;   // a sound's steady part comes through at this much...
         public static float onsetBoost = 1.6f;     // ...and its sudden rises this much harder
         public static float onsetFollow = 0.3f;    // per window, how fast the steady level catches up with the sound (0.3 = ~60 ms)
@@ -47,11 +40,9 @@ namespace TarkovVR.Source.Misc
         private static float clipIdleStop = 1f;      // the caller's idleStopSec
         private static Coroutine pump;
 
-        // Called (main thread) whenever a clip is audibly played for us — re-points the
-        // tap at the source actually used (the pool re-issues sources between clips),
-        // picks the hand(s) to render on, and makes sure the pump is running.
-        // idleStop < 0 = idleStopSec; it must end before the clip's owner hands the source
-        // back to the pool (see DestroyTap).
+        // Main thread, whenever a clip is audibly played for us: re-points the tap at the source actually used (the pool
+        // re-issues sources between clips), picks the hand(s), starts the pump.
+        // idleStop < 0 = idleStopSec; it must end before the clip's owner hands the source back to the pool (see DestroyTap).
         public static void OnClipPlayed(BetterSource bs, AudioClip clip, float leftHandGain, float rightHandGain, float leftHandPitch = 1f, float rightHandPitch = 1f,
             float scale = 1f, float idleStop = -1f)
         {
@@ -83,14 +74,10 @@ namespace TarkovVR.Source.Misc
             trackedBs = null; expectedClipName = null;
         }
 
-        // DESTROY the tap rather than disable it. An OnAudioFilterRead script inserts a
-        // custom DSP filter on the AudioSource's GameObject, and BetterAudio sources are
-        // POOLED: release/re-borrow toggles source1.enabled off/on under the attached
-        // filter, after which the source can report Playing while producing pure silence
-        // (observed 2026-06-12: moonshine's open streamed haptics onto the source, the
-        // source pool-cycled during the long pull, and every gulp after came out playing-
-        // but-inaudible with all volume/mute/active flags clean). Removing the component
-        // restores the vanilla DSP chain; OnClipPlayed re-adds it fresh per clip.
+        // Destroy the tap rather than disable it. An OnAudioFilterRead script inserts a custom DSP filter on the
+        // AudioSource's GameObject, and on a pooled source release/re-borrow toggles source1.enabled under the filter,
+        // after which the source can report Playing while producing silence (all volume/mute/active flags clean).
+        // Removing the component restores the vanilla DSP chain; OnClipPlayed re-adds it fresh per clip.
         private static void DestroyTap()
         {
             if (tap != null)
@@ -110,9 +97,8 @@ namespace TarkovVR.Source.Misc
             return t == null ? "none" : (t.enabled ? "ENABLED" : "disabled");
         }
 
-        // After this long with nothing of ours playing, the pump shuts itself down and
-        // DESTROYS the tap (see DestroyTap — a lingering filter on a pooled source breaks
-        // its audio after a pool cycle). OnClipPlayed restarts everything on the next clip.
+        // After this long with nothing of ours playing, the pump shuts down and destroys the tap (see DestroyTap).
+        // OnClipPlayed restarts everything on the next clip.
         public static float idleStopSec = 1f;
 
         private static IEnumerator Pump()
@@ -150,9 +136,8 @@ namespace TarkovVR.Source.Misc
                         float onset = Mathf.Max(0f, level - steadyLevel);
                         steadyLevel = Mathf.Lerp(steadyLevel, level, onsetFollow);
                         amplitude = Mathf.Clamp01(sustainGain * level + onsetBoost * onset) * strength * clipStrength;
-                        // The raw audio ZCR runs hundreds of Hz..kHz — LOG-map it into the
-                        // LRA band so textures differentiate (a thuddy glug lands low, a
-                        // crinkle lands high; linear clamping pegged everything at max).
+                        // The raw audio ZCR runs hundreds of Hz..kHz: log-map it into the LRA band so textures
+                        // differentiate (linear clamping pegs everything at max).
                         float z = Mathf.Clamp(tap.ZcrHz, 50f, 8000f);
                         float n = Mathf.Log(z / 50f) / Mathf.Log(8000f / 50f);
                         freq = Mathf.Lerp(freq, Mathf.Lerp(minFreq, maxFreq, n), freqSmoothing);
@@ -169,8 +154,7 @@ namespace TarkovVR.Source.Misc
             }
         }
 
-        // The audio-thread side. OnAudioFilterRead: math ONLY, read-only on the buffer,
-        // no Unity API, no allocations — it runs inside the audio pipeline.
+        // The audio-thread side. OnAudioFilterRead: math only, read-only on the buffer, no Unity API, no allocations.
         private class HapticAudioTap : MonoBehaviour
         {
             public volatile float Rms;

@@ -13,42 +13,24 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Physical grab-and-drag for dead bodies (ragdolls).
+    // Physical grab-and-drag for dead bodies (ragdolls): off-hand palm on a body part + grip. Hold = drag, quick tap = open
+    // the corpse loot grid. No pointer / white dot.
     //
-    // A dead body is an EFT `Corpse` whose ragdoll is a set of `RigidbodySpawner` bone
-    // rigidbodies. Once a corpse settles, EFT freezes every bone KINEMATIC (a static pose), and
-    // after it also leaves the camera view EFT tears the rigidbodies down (corpses are built
-    // keepRigidbody:false). We reactivate a settled/torn-down ragdoll the same way the game does
-    // on a hit — `corpse.Ragdoll.Start()` — then drive the grabbed bone.
+    // A dead body is an EFT `Corpse` whose ragdoll is a set of `RigidbodySpawner` bone rigidbodies. Once it settles, EFT
+    // freezes every bone kinematic, and after it leaves the camera view tears the rigidbodies down (keepRigidbody:false).
+    // `corpse.Ragdoll.Start()` reactivates it, as the game does on a hit. The touched bone becomes a kinematic, hand-driven
+    // anchor; the rest of the ragdoll follows through its joints.
     //
-    // Unlike loose loot, there's NO white dot / pointer: you grab a body ONLY by physically
-    // putting your (off) hand on a body part and pressing grip. The bone you're touching becomes
-    // a kinematic, hand-driven anchor; the rest of the ragdoll follows through its joints, so you
-    // can drag the whole body around. Releasing grip lets physics resume (with a throw if you
-    // flick).
-    //
-    // Tap-vs-hold: a quick grip TAP on a body still opens the corpse loot grid (the old
-    // grip-on-corpse behavior), so looting isn't lost — HOLD to drag, TAP to loot.
-    //
-    // FIKA downed/revive teammates are draggable too (so you can pull a downed teammate to safety
-    // before reviving). They aren't Corpses — FIKA makes a downed teammate a still-live ObservedPlayer
-    // wearing a ragdoll on the Deadbody layer with a (Fika-internal) ReviveInteractable component that
-    // holds the RagdollClass. Detection (TryFindBodyBone) handles either owner; the same bone-pin drive
-    // / release / settle machinery works for both since both are the same RagdollClass + bone rigidbodies.
-    // (Co-op sync is currently corpse-only, so a downed teammate's drag is local to the dragger — see
-    // enableDownedPlayerDrag.)
-    //
-    // All knobs are live-tunable statics so the feel can be A/B'd in the headset.
+    // FIKA downed teammates are draggable too: a live ObservedPlayer wearing a ragdoll on the Deadbody layer, with a Fika
+    // ReviveInteractable component that holds the RagdollClass. Same drive / release / settle code for both.
     internal partial class HandsInteractionController
     {
         //--- Tunables ----------------------------------------------------------------
 
-        // How close the palm must be to a body part's collider to grab it (m). ~0.18 matches the
-        // loot/eat reach radii.
+        // How close the palm must be to a body part's collider to grab it (m)
         public static float bodyGrabRadius = 0.18f;
 
-        // Release throw: the bone keeps the controller's velocity (scaled) when you let go, so a
-        // flick tosses the body. Clamped so it can't launch across the map.
+        // Release throw: the bone keeps the controller's velocity (scaled, clamped to bodyMaxThrowSpeed m/s)
         public static float bodyThrowVelocityScale = 1.0f;
         public static float bodyMaxThrowSpeed = 8f;
 
@@ -57,81 +39,55 @@ namespace TarkovVR.Source.Player.Interactions
 
         public static bool debugBodyGrab = false;
 
-        // Diagnostic: on releasing a DOWNED teammate, log for ~25 frames what moves — the bone's WORLD
-        // position vs its LOCAL position (relative to its parent) vs the player root's position. If world
-        // moves while local stays constant, the PARENT/root is being moved (the bones just ride it); if
-        // local moves, the bone itself is being driven (physics or a direct write). Pinpoints the jump.
+        // Diagnostic: on releasing a downed teammate, log for ~25 frames the bone's world position, its local position and
+        // the player root. World moves with local constant = the parent/root is being moved; local moves = the bone is driven.
         public static bool debugDownedRelease = false;
 
-        // Collision: while dragging, let the ragdoll bones escape geometry faster so the body snags/catches on terrain less,
-        // and use continuous detection so a fast drag doesn't tunnel/hook on edges. Restored to
-        // bodyDragRestDepenetrationVelocity on release (the low value tames ragdoll explosions
-        // when the body is later shot). Too high can make a deeply-clipped body pop — keep it moderate.
+        // maxDepenetrationVelocity of the ragdoll bones while dragged (higher = snags on terrain less; too high pops a
+        // deeply clipped body) and at rest (low = no ragdoll explosion when the body is shot later)
         public static float bodyDragDepenetrationVelocity = 5f;
         public static float bodyDragRestDepenetrationVelocity = 1f;
 
-        // Weighted drag (req: "more of a drag than a pickup"). false = the original 1:1 snap, so
-        // the body goes exactly where your hand goes (easy to lift/carry). true = the anchor
-        // chases your hand at a CAPPED speed (feels heavy/laggy) and RESISTS being lifted, so the
-        // body drags along the ground instead of being hoisted. It's a shaped kinematic drive,
-        // not true mass — but it reads as a heavy drag. Tune live in the headset.
+        // Weighted drag: the anchor chases the hand at a capped speed and resists being lifted, so the body drags along
+        // the ground. A shaped kinematic drive, not true mass.
         public static float bodyDragMaxSpeed = 1.5f; // m/s the anchor can chase the hand (lower = heavier)
         public static float bodyLiftFactor = 0.15f;  // upward-follow scale (0 = can't lift at all, 1 = free)
-        // Weighted-mode rotation: the body rotates toward your hand at up to this many deg/s, so you
-        // can twist the held part by rotating your wrist (capped for the heavy feel; raise toward
-        // ~1000 for near-instant, lower for heavier). Gated by bodyDriveRotation; the non-weighted
-        // path follows hand rotation rigidly (1:1).
+        // deg/s the held part can rotate toward the hand (lower = heavier)
         public static float bodyDragMaxAngularSpeed = 240f;
 
-        // Movement slowdown while dragging a body — "the weight bears you down." A flat multiplier:
-        // every corpse weighs the same (the heavy feel is faked by the weighted-chase drive above, and
-        // EFT ragdoll masses are identical across bodies), so there's nothing to scale per-body.
-        // bodyDragSpeedMultiplier = locomotion speed while dragging (0.5 = half speed). Sprint already
-        // drops the body, so this only shapes walk/run. Tune live in the headset.
+        // Locomotion speed multiplier while dragging a body. Flat: EFT ragdoll masses are identical across bodies.
+        // Sprint already drops the body, so this only shapes walk/run.
         public static bool bodyDragSlowsMovement = true;
         public static float bodyDragSpeedMultiplier = 0.001f;
 
-        // Live output: current locomotion speed multiplier (1 = not dragging / no slowdown). Set on
-        // grab, reset to 1 on release. MovementPatches.GetBodyRotation multiplies SetCharacterMovementSpeed by it.
+        // Live output: current locomotion speed multiplier (1 = not dragging). MovementPatches.GetBodyRotation multiplies
+        // SetCharacterMovementSpeed by it.
         public static float bodyDragMoveSpeedMultiplier = 1f;
 
-        // Release settle (your model): when you let go, the body STAYS in active physics — kept
-        // awake every step so it can't freeze mid-air — until it lands AND has been at rest for
-        // bodyFreezeDelay seconds, THEN it's frozen kinematic (stops simulating). This replaces
-        // EFT's own unpredictable ~15s settle freeze (which caused both "freezes when I let go" and
-        // "physics stays active forever"). bodyLandedSpeed = max bone speed (m/s) counted as "at
-        // rest"; bodyFreezeMaxTime = hard fallback so a body that never fully rests (jitter on
-        // uneven ground) still freezes. false = old behavior (reactivate once on release).
+        // Release settle: a let-go body stays in active physics, kept awake, until every bone has been under
+        // bodyLandedSpeed (m/s) for bodyFreezeDelay seconds; then it is frozen kinematic. bodyFreezeMaxTime (s) is the
+        // fallback for a body that never fully rests. Replaces EFT's own ~15s settle freeze.
         public static float bodyLandedSpeed = 0.3f;
         public static float bodyFreezeDelay = 3f;
         public static float bodyFreezeMaxTime = 20f;
 
-        // FIKA co-op: broadcast the dragged body's ragdoll pose so other players see it move
-        // (like the loose-loot sync). bodySyncInterval ~0.05 = 20/s. No-op solo / without FIKA.
+        // FIKA: seconds between broadcasts of the dragged body's ragdoll pose (0.05 = 20/s)
         public static float bodySyncInterval = 0.05f;
 
-        // The dead player's NetId (GameWorld.ObservedPlayersCorpses key) of the corpse WE are
-        // dragging, or -1. Read by FIKASupport to tag our outgoing packets and to ignore echoes
-        // for a body we're already driving locally.
+        // NetId (GameWorld.ObservedPlayersCorpses key) of the corpse we are dragging, or -1. FIKASupport tags our outgoing
+        // packets with it and ignores echoes for a body we drive locally.
         public static int localDraggedCorpseNetId = -1;
 
-        // The DOWNED teammate's NetId (CoopHandler.Players key) we're dragging, or -1. Separate from
-        // the corpse path because a downed teammate is a live player, not in ObservedPlayersCorpses —
-        // we sync it via FikaVrSync.SendDownedDrag (which relocates them + drives observer ragdolls).
+        // NetId (CoopHandler.Players key) of the downed teammate we are dragging, or -1. A downed teammate is a live
+        // player, not in ObservedPlayersCorpses: synced via FikaVrSync.SendDownedDrag.
         public static int localDraggedDownedNetId = -1;
 
-        // Time.time of our most recent body grab — read by FIKASupport's steal arbitration so the
-        // newest grabber wins a contested corpse (whoever has dragged it longer yields). Same idea
-        // as heldItemGrabTime for loose loot.
+        // Time.time of our latest body grab. FIKASupport's steal arbitration: the newest grabber wins a contested corpse.
         public static float bodyGrabTime;
 
-        // Gates for the ragdoll's settle predicate (RagdollClass.Func_0 = (allAsleep, timePassed) ->
-        // shouldFreeze). EFT's settle coroutine freezes a corpse (-> kinematic, the "static pose") the
-        // first time this returns true. While we hold a body we point Func_0 at NeverFreeze so the game
-        // can't freeze it out from under us (this is the clean fix for the whole "freezes mid-drag /
-        // freezes on release / stays active forever" family of bugs — no per-frame fighting needed).
-        // When WE freeze a settled body we point it at AlwaysFreeze so the coroutine exits cleanly
-        // instead of looping forever.
+        // The ragdoll's settle predicate (RagdollClass.Func_0 = (allAsleep, timePassed) -> shouldFreeze): EFT's settle
+        // coroutine freezes the corpse kinematic the first time it returns true. NeverFreeze while we hold or settle a
+        // body; AlwaysFreeze once we freeze it ourselves, so the coroutine exits.
         private static readonly System.Func<bool, float, bool> RagdollNeverFreeze = (a, t) => false;
         private static readonly System.Func<bool, float, bool> RagdollAlwaysFreeze = (a, t) => true;
 
@@ -140,17 +96,10 @@ namespace TarkovVR.Source.Player.Interactions
         private Rigidbody grabbedBodyRb;
         private Corpse grabbedCorpse;
         private CorpseRagdoll grabbedRagdoll;
-        // The FIKA downed/revive teammate we're dragging (their ReviveInteractable component), if this
-        // is a downed player rather than a vanilla corpse. grabbedCorpse is null in that case; the
-        // ragdoll comes from this component (its _ragdoll). Watched so we release the body if they get
-        // revived mid-drag (FIKA destroys the component on revive -> Unity == null).
-        // Typed as MonoBehaviour (NOT ReviveInteractable) on purpose: ReviveInteractable is a Fika.Core
-        // type, and a FIELD of that type forces Fika.Core to load the moment this (always-loaded)
-        // controller's type loads — which crashes the entire mod when FIKA isn't installed
-        // (BadImageFormatException: the field type can't resolve). So no Fika.Core type may appear in a
-        // field/signature of this class. All Fika-typed access lives behind the FikaSync bridge
-        // (FikaVrSync.FindReviveInteractable, gated on InstalledMods.FIKAInstalled); here we only use
-        // MonoBehaviour members (.gameObject / .transform / Unity-null), so the base type is enough.
+        // The dragged downed teammate's ReviveInteractable component (grabbedCorpse is null then). FIKA destroys it on
+        // revive, which is how the drag notices and lets go.
+        // Typed MonoBehaviour on purpose: a field or signature of a Fika.Core type makes this class fail to load without
+        // FIKA (BadImageFormatException). Fika-typed access goes through the FikaSync bridge.
         private MonoBehaviour grabbedReviveInteractable;
         private bool grabbedIsDownedPlayer;
         private Transform grabBodyHand;
@@ -158,8 +107,8 @@ namespace TarkovVR.Source.Player.Interactions
         private Quaternion grabBodyRotOffset;
         private float lastBodySyncTime;
 
-        // Armed on grip-down over a body (even if no grabbable bone — the bound collider still
-        // identifies the corpse for tap-to-loot). Cleared on grip-up.
+        // Armed on grip-down over a body, even with no grabbable bone (the bound collider still identifies the corpse for
+        // tap-to-loot). Cleared on grip-up.
         private bool bodyInteractionArmed;
         private Corpse bodyInteractionCorpse;
         private float bodyInteractionStartTime;
@@ -167,9 +116,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private readonly Collider[] bodyOverlap = new Collider[16];
 
-        // Bodies we've let go of that are still falling/settling — kept in active physics until
-        // landed + timer, then frozen (see UpdateReleasedBodies). One entry per dragged-then-
-        // released ragdoll.
+        // Bodies we let go of that are still falling/settling: kept in active physics, then frozen (UpdateReleasedBodies)
         private sealed class ReleasedBody
         {
             public CorpseRagdoll ragdoll;
@@ -180,12 +127,11 @@ namespace TarkovVR.Source.Player.Interactions
         }
         private readonly List<ReleasedBody> releasedBodies = new List<ReleasedBody>();
 
-        // "Bodies float down slowly" (held, and after you let go). EFT's settle coroutine (CorpseRagdoll.WorkingCycle) runs every
-        // frame and calls TryPutToSleep on each bone: one slow for a moment (kinetic energy under EFTHardSettings.CorpseEnergyToSleep,
-        // 0.05) is marked MustBeSleeping and from then on Sleep()'d EVERY frame - and PhysX zeroes a body's velocity when it's put to
-        // sleep. Our per-step WakeUp kept the bones moving but their speed was gone, so a lifted body sank ~g*dt a frame. HollywoodFX
-        // (installed in June) sets CorpseEnergyToSleep to -1, so nothing was ever marked; without it this came back.
-        // The bones of every body we hold or are letting settle skip that call (BodyDragPatches); the rest of the coroutine still runs.
+        // EFT's settle coroutine (CorpseRagdoll.WorkingCycle) calls TryPutToSleep on each bone every frame: a bone whose
+        // kinetic energy drops under EFTHardSettings.CorpseEnergyToSleep (0.05) is marked MustBeSleeping and Sleep()'d every
+        // frame after, and PhysX zeroes a body's velocity on sleep - so a held or falling body sinks ~g*dt a frame.
+        // The bones of every body we hold or are letting settle skip that call (BodyDragPatches). HollywoodFX sets
+        // CorpseEnergyToSleep to -1, which hides the problem while it's installed.
         public static bool keepHeldBodiesAwake = true;
         internal static readonly HashSet<PlayerRigidbodySleepHierarchy> bonesKeptAwake = new HashSet<PlayerRigidbodySleepHierarchy>();
 
@@ -277,12 +223,9 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Detection ---------------------------------------------------------------
-        // Finds the nearest grabbable ragdoll bone to the palm. The owning body can be either a
-        // vanilla dead Corpse OR a FIKA downed/revive teammate (a live ObservedPlayer wearing a
-        // ragdoll + ReviveInteractable on the Deadbody layer). Reports the owner (corpse, or the
-        // revive component + its RagdollClass) even when the hand is on a non-bone collider (the
-        // body's bound collider), so tap-to-loot/arming still work. bone may be null (owner found,
-        // no bone); ragdoll is the RagdollClass to drive when bone is non-null.
+        // Finds the ragdoll bone nearest the palm, on a Corpse or a FIKA downed teammate. The owner (corpse, or the revive
+        // component) is reported even when the hand is only on the body's bound collider, so tap-to-loot still works:
+        // bone may be null then. ragdoll is the RagdollClass to drive when bone is non-null.
         private bool TryFindBodyBone(Vector3 palm, out RigidbodySpawner bone, out Corpse corpse,
             out CorpseRagdoll ragdoll, out MonoBehaviour reviveInteractable)
         {
@@ -298,12 +241,8 @@ namespace TarkovVR.Source.Player.Interactions
                 Collider col = bodyOverlap[i];
                 if (col == null) continue;
 
-                // Who owns this Deadbody collider? A vanilla Corpse, or a FIKA downed teammate. The
-                // downed/revive owner is a Fika.Core type, so it's resolved through the FikaSync bridge
-                // (FindReviveInteractable hands it back as a MonoBehaviour + its EFT RagdollClass) — gated
-                // on FIKA being present so it's a clean no-op solo AND the main assembly never has to name
-                // a Fika.Core type (which would break loading without FIKA — see the grabbedReviveInteractable
-                // note above).
+                // Owner of this Deadbody collider: a Corpse, or a FIKA downed teammate (a Fika.Core type, so resolved through
+                // the FikaSync bridge as a MonoBehaviour + its RagdollClass)
                 Corpse c = col.GetComponentInParent<Corpse>();
                 MonoBehaviour revive = null;
                 CorpseRagdoll reviveRagdoll = null;
@@ -344,9 +283,8 @@ namespace TarkovVR.Source.Player.Interactions
             grabbedIsDownedPlayer = corpse == null && reviveInteractable != null;
             grabbedBodyRb = bone.Rigidbody;
 
-            // Reactivate a settled (frozen-kinematic) or torn-down ragdoll the same way the game
-            // does when a corpse is shot (EFT's GoreController calls Ragdoll.Start()). Start()
-            // (re)creates the bone rigidbodies + joints and makes them dynamic again.
+            // Reactivate a settled or torn-down ragdoll as the game does when a corpse is shot (GoreController):
+            // Ragdoll.Start() recreates the bone rigidbodies + joints and makes them dynamic.
             if (grabbedRagdoll != null && (grabbedBodyRb == null || grabbedBodyRb.isKinematic))
             {
                 try { grabbedRagdoll.Start(); } catch { /* ragdoll may be mid-teardown */ }
@@ -361,45 +299,33 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // Keep this body's ragdoll from ever being torn down. EFT constructs corpses with
-            // keepRigidbody=false, so once a corpse has settled AND left the camera view its
-            // settle coroutine destroys the joints+rigidbodies (one per frame) — which mid-drag
-            // killed the drag and made the re-grab fight the in-progress teardown. Setting
-            // keepRigidbody (Ragdoll.Bool_0) = true skips that teardown branch entirely, so a body
-            // you've grabbed stays draggable regardless of view/time. Left true on release (a
-            // dragged body keeping its rigidbodies is desirable + costs ~nothing once it sleeps).
+            // EFT builds corpses with keepRigidbody (Ragdoll.Bool_0) = false: once settled and out of the camera view, the
+            // settle coroutine destroys the joints + rigidbodies, which would kill the drag. true skips that teardown; left
+            // true on release.
             if (grabbedRagdoll != null)
                 grabbedRagdoll._keepRigidbody = true;
 
-            // Stop EFT's settle coroutine from freezing this body while we hold it. The coroutine only
-            // freezes when Func_0(...) returns true; NeverFreeze keeps the body a live ragdoll for as
-            // long as we hold it, so we no longer have to fight a freeze every frame. (Restored to a
-            // terminating predicate when the release-settle manager finally freezes it.)
+            // EFT's settle coroutine can't freeze the body while this predicate returns false
             if (grabbedRagdoll != null)
                 grabbedRagdoll._checkCorpseIsStill = RagdollNeverFreeze;
 
-            // Weigh the player down: slow locomotion while a body is held.
             bodyDragMoveSpeedMultiplier = bodyDragSlowsMovement ? bodyDragSpeedMultiplier : 1f;
 
-            // If we're re-grabbing a body that was still settling from a previous release, stop
-            // managing it (we drive it again now).
+            // Re-grabbing a body that was still settling: we drive it again now
             RemoveReleasedBody(grabbedRagdoll);
 
             ThawRagdoll(); // make sure the rest of the body is dynamic + awake so it follows
 
-            // Pin the grabbed bone to the hand: kinematic = an infinite-mass anchor the joints
-            // pull the rest of the body toward. EFT registers every ragdoll bone with its custom
-            // physics-support system (GClass745 -> SyncTransformsClass), which sets the body's
-            // velocity each step — doing that on a KINEMATIC body spams "Setting velocity of a
-            // kinematic body is not supported". The game's own freeze (RagdollClass.method_1)
-            // always UNsupports first, so mirror that before going kinematic.
+            // Pin the grabbed bone to the hand: kinematic = an infinite-mass anchor the joints pull the body toward.
+            // EFT registers every ragdoll bone with its physics-support system (GClass745 -> SyncTransformsClass), which
+            // sets the body's velocity each step; on a kinematic body that spams "Setting velocity of a kinematic body is
+            // not supported". Unsupport first, as the game's own freeze (RagdollClass.method_1) does.
             PhysicsExtensions.UpdateController.UnsupportRigidbody(grabbedBodyRb);
             grabbedBodyRb.isKinematic = true;
             grabbedBodyRb.useGravity = false;
             grabbedBodyRb.detectCollisions = true;
             grabbedBodyRb.maxDepenetrationVelocity = bodyDragDepenetrationVelocity;
-            // ContinuousSpeculative is the one continuous mode valid on a kinematic body — it
-            // lets the dragged anchor sweep against geometry instead of catching/tunneling.
+            // ContinuousSpeculative is the one continuous mode valid on a kinematic body
             grabbedBodyRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
             grabBodyHand = hand;
@@ -409,10 +335,10 @@ namespace TarkovVR.Source.Player.Interactions
             isDraggingBody = true;
             RefreshBonesKeptAwake();
 
-            // FIKA: resolve the network id so the drag can be broadcast (no-op solo). Two paths:
-            //   - vanilla corpse: keyed by GameWorld.ObservedPlayersCorpses (the existing body-drag sync).
-            //   - downed teammate: keyed by the live player's NetId (CoopHandler) — relocates them so a
-            //     revive lands at the dragged-to spot + drives observer ragdolls (FikaVrSync.SendDownedDrag).
+            // FIKA: resolve the network id the drag is broadcast under.
+            //   - corpse: its GameWorld.ObservedPlayersCorpses key.
+            //   - downed teammate: the live player's NetId (CoopHandler); the sync relocates them so a revive lands at
+            //     the dragged-to spot, and drives observer ragdolls (FikaVrSync.SendDownedDrag).
             localDraggedCorpseNetId = -1;
             localDraggedDownedNetId = -1;
             lastBodySyncTime = 0f;
@@ -426,19 +352,17 @@ namespace TarkovVR.Source.Player.Interactions
                 else if (corpse != null && TryGetCorpseNetId(corpse, out int corpseNetId))
                 {
                     localDraggedCorpseNetId = corpseNetId;
-                    // We drive this corpse now, not the remote sync — drop any remote-drag bookkeeping
-                    // so a later hand-off back to us re-enters the remote pin cleanly.
+                    // We drive this corpse now: drop the remote-drag bookkeeping so a later hand-off re-enters the
+                    // remote pin cleanly
                     FikaClearRemoteDraggedCorpse(corpseNetId);
                 }
             }
 
-            // Pull this body's loot waypoint for the duration of the drag so bots can't loot it while it's in
-            // transit (re-added at the resting spot on settle). Corpses only — a downed teammate isn't loot.
-            // LOCAL path (SP / when this machine runs ORBIT, e.g. a VR host): act directly.
+            // Pull the corpse's loot waypoint for the drag so bots can't loot it in transit (re-added where it settles).
+            // Local: this machine runs ORBIT (single player, or a VR host).
             if (!grabbedIsDownedPlayer && grabbedCorpse != null)
                 OrbitSupport.OnCorpseGrabbed(grabbedCorpse);
-            // CO-OP path: in a dedicated/headless setup the bots + ORBIT run on the HOST, which doesn't run
-            // this VR mod — signal it so it pulls the waypoint there. No-op solo / on the host itself.
+            // Co-op: the bots + ORBIT run on the host, which may not run this mod; tell it to pull the waypoint there
             if (!grabbedIsDownedPlayer && grabbedCorpse != null && InstalledMods.FIKAInstalled)
                 FikaSendCorpseLootGrab(grabbedCorpse.PlayerProfileID);
 
@@ -450,15 +374,13 @@ namespace TarkovVR.Source.Player.Interactions
         // Driven in FixedUpdate so the kinematic anchor moves with proper joint solving.
         private void FixedUpdate()
         {
-            // Settle bodies we've let go of (keep them active until landed + timer, then freeze).
-            // Runs regardless of whether we're currently dragging.
+            // Let-go bodies settle whether or not we are dragging
             UpdateReleasedBodies();
 
             if (!isDraggingBody)
                 return;
-            // Release if the body went invalid, or (downed teammate) if they got revived mid-drag:
-            // FIKA destroys the ReviveInteractable on revive and re-enables the player's animators,
-            // which would fight our kinematic anchor — let go cleanly instead.
+            // Let go if the body went invalid, or a downed teammate was revived mid-drag: FIKA destroys the
+            // ReviveInteractable and re-enables the player's animators, which would fight the kinematic anchor
             if (grabbedBodyRb == null || grabBodyHand == null || !VRGlobals.inGame
                 || (grabbedIsDownedPlayer && grabbedReviveInteractable == null))
             {
@@ -466,22 +388,15 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // Keep the rest of the ragdoll dynamic + awake every step so it follows the drag
-            // (bones auto-sleep or get re-frozen by the corpse's settle timer otherwise).
             ThawRagdoll();
 
-            // Keep the GRABBED bone awake too. It's kinematic and driven by MovePosition; if PhysX
-            // sleeps it (e.g. you hold your hand still a moment), MovePosition stops taking effect
-            // and that one bone "freezes" until re-grabbed. ThawRagdoll skips the grabbed bone, so
-            // wake it here. (This was the "the bone I was grabbing freezes" bug.) Unconditional —
-            // WakeUp is a cheap no-op when already awake, and IsSleeping() is unreliable on a
-            // kinematic body.
+            // The held bone is kinematic: once PhysX sleeps it, MovePosition stops moving it. ThawRagdoll skips it, so
+            // wake it every step (IsSleeping is unreliable on kinematic bodies).
             grabbedBodyRb.WakeUp();
 
             Vector3 target = grabBodyHand.TransformPoint(grabBodyPosOffset);
 
-            // Heavy drag: chase the hand at a capped speed and resist upward lift, so the
-            // body drags along the ground rather than being hoisted.
+            // Heavy drag: chase the hand at a capped speed and resist upward lift
             Vector3 cur = grabbedBodyRb.position;
             Vector3 delta = target - cur;
             if (delta.y > 0f)
@@ -492,10 +407,8 @@ namespace TarkovVR.Source.Player.Interactions
             grabbedBodyRb.MoveRotation(Quaternion.RotateTowards(
                 grabbedBodyRb.rotation, targetRot, bodyDragMaxAngularSpeed * Time.fixedDeltaTime));
 
-            // FIKA: broadcast the FULL ragdoll pose (every bone) so other players see the exact same
-            // ragdoll (throttled). Syncing all bones — rather than one pinned bone + local physics —
-            // avoids the dangling bones diverging/stretching on the observer's screen. A grab is either a
-            // corpse OR a downed teammate, so only one of these fires.
+            // FIKA: broadcast the pose of every bone (throttled). One pinned bone + local physics on the observer lets
+            // the dangling bones diverge and stretch. A grab is a corpse or a downed teammate, never both.
             if (InstalledMods.FIKAInstalled && Time.time - lastBodySyncTime >= bodySyncInterval)
             {
                 if (localDraggedCorpseNetId >= 0)
@@ -511,13 +424,11 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Keep every bone of the grabbed ragdoll dynamic AND awake (except the hand-driven one)
-        // so the joints transmit the drag through the whole body, every physics step.
-        //   - The corpse's settle timer can re-freeze bones KINEMATIC mid-drag -> un-kinematic.
-        //   - Bones that go still for a moment AUTO-SLEEP; PhysX won't reliably wake a sleeping
-        //     bone just because the kinematic bone it's jointed to is MovePosition'd, so it lags
-        //     behind and the mesh stretches between your hand and the asleep bones. Force them
-        //     awake each step (this was the "freeze + stretch after a few seconds" bug).
+        // Every physics step: keep every bone of the grabbed ragdoll (except the hand-driven one) dynamic and awake, so
+        // the joints carry the drag through the whole body.
+        //   - The corpse's settle timer can re-freeze bones kinematic mid-drag.
+        //   - PhysX won't reliably wake a sleeping bone when the kinematic bone it's jointed to is MovePosition'd: it
+        //     lags behind and the mesh stretches.
         private void ThawRagdoll()
         {
             RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll._rigidbodySpawners : null;
@@ -528,8 +439,7 @@ namespace TarkovVR.Source.Player.Interactions
                 Rigidbody body = bones[i] != null ? bones[i].Rigidbody : null;
                 if (body == null || body == grabbedBodyRb)
                     continue;
-                // Always assert dynamic + gravity (not only when re-thawing a kinematic bone) so a
-                // dragged body's limbs hang/droop under gravity instead of floating rigidly.
+                // Gravity asserted every step, not only when thawing: the limbs must hang, not float rigidly
                 if (body.isKinematic)
                     body.isKinematic = false;
                 body.useGravity = true;
@@ -541,8 +451,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Restore the bones' (raised) depenetration velocity to the settled value on release, so a
-        // later interaction (e.g. shooting the corpse)
+        // On release: the bones' raised depenetration velocity back to the settled value
         private void RestoreRagdollCollision()
         {
             RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll._rigidbodySpawners : null;
@@ -564,9 +473,8 @@ namespace TarkovVR.Source.Player.Interactions
                 grabbedBodyRb.useGravity = true;
                 grabbedBodyRb.detectCollisions = true;
 
-                // Throw: carry the controller's release velocity (scaled + clamped) into the bone — a
-                // corpse you can flick to toss. NOT for a downed teammate: you're PLACING them, and their
-                // body is frozen kinematic in place below (so any velocity here would be ignored anyway).
+                // Throw: the controller's release velocity (scaled + clamped) goes into the bone. Not for a downed
+                // teammate: they are placed, not thrown.
                 if (!grabbedIsDownedPlayer)
                 {
                     Vector3 v = ControllerVelocity.GetSteamVRVelocity(secondaryInputSource) * bodyThrowVelocityScale;
@@ -574,22 +482,17 @@ namespace TarkovVR.Source.Player.Interactions
                         grabbedBodyRb.velocity = Vector3.ClampMagnitude(v, bodyMaxThrowSpeed);
                 }
 
-                // Re-register the bone with EFT's physics-support system (we unsupported it on
-                // grab); now non-kinematic, it rejoins the ragdoll like its siblings. Mirrors
-                // RagdollClass.Start()'s order (velocity, then SupportRigidbody at Low quality).
+                // Re-register the bone with EFT's physics-support system (unsupported on grab). Same order as
+                // RagdollClass.Start(): velocity, then SupportRigidbody at Low quality.
                 PhysicsExtensions.UpdateController.SupportRigidbody(grabbedBodyRb, 0f);
                 grabbedBodyRb.WakeUp();
 
                 VRInput.Haptic.Execute(0, 0.05f, 1, 0.3f, secondaryInputSource);
             }
 
-            // Re-enable physics on the WHOLE ragdoll so the body falls/settles instead of freezing mid-air,
-            // then hand it to the release-settle manager (drop -> land -> rest -> freeze). Same path for
-            // corpses AND downed teammates — a downed teammate ragdolls/settles naturally. (We tried
-            // freezing the downed ragdoll kinematic on release to stop the "teleports a short distance"
-            // jump; it did NOT help — so the jump is NOT the ragdoll physics. A kinematic body still
-            // follows its parent transform, so something outside the ragdoll is moving the body/root on
-            // release — under investigation. Reverted to FIKA's natural behavior.)
+            // Physics back on for the whole ragdoll so it falls, then the release-settle manager takes it (land -> rest ->
+            // freeze). Same path for corpses and downed teammates. Freezing a downed ragdoll kinematic on release does
+            // not stop its short jump: that comes from outside the ragdoll (something moves the body root).
             ReactivateRagdollBones();
             RestoreRagdollCollision();
 
@@ -600,8 +503,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (grabbedRagdoll != null)
             {
-                // Remember the corpse so the settle manager can relocate its AI loot position once it lands
-                // (null for a downed teammate — those relocate via Teleport-on-revive, not here).
+                // The corpse goes along so its AI loot position can be relocated once it lands (null for a downed
+                // teammate: those relocate via Teleport-on-revive)
                 AddReleasedBody(grabbedRagdoll, grabbedIsDownedPlayer ? null : grabbedCorpse);
             }
             else if (grabbedRagdoll != null)
@@ -616,8 +519,7 @@ namespace TarkovVR.Source.Player.Interactions
             ResetBodyGrabState();
         }
 
-        // Diagnostic coroutine: dump bone world/local + root each frame after a downed release so we can
-        // see whether the bones move themselves or just ride a moving parent/root. Gated by debugDownedRelease.
+        // Diagnostic (debugDownedRelease): logs bone world/local + root each frame after a downed release
         private System.Collections.IEnumerator LogDownedRelease(CorpseRagdoll ragdoll, Transform playerRoot)
         {
             RigidbodySpawner[] bones = ragdoll != null ? ragdoll._rigidbodySpawners : null;
@@ -653,11 +555,8 @@ namespace TarkovVR.Source.Player.Interactions
                     releasedBodies.RemoveAt(i);
         }
 
-        // Per physics step: for each let-go body, keep every bone awake + dynamic + gravity (so it
-        // FALLS instead of freezing mid-air), and watch its speed. Once all bones have been at rest
-        // (< bodyLandedSpeed) continuously for bodyFreezeDelay seconds — i.e. it landed and stopped
-        // — freeze it kinematic. bodyFreezeMaxTime is a hard fallback for a body that never fully
-        // stills.
+        // Per physics step, for each let-go body: keep every bone awake + dynamic + under gravity so it falls, and once
+        // all bones have stayed under bodyLandedSpeed for bodyFreezeDelay seconds (or bodyFreezeMaxTime passed) freeze it.
         private void UpdateReleasedBodies()
         {
             if (releasedBodies.Count == 0)
@@ -684,8 +583,7 @@ namespace TarkovVR.Source.Player.Interactions
                     if (rb == null)
                         continue;
                     anyValid = true;
-                    // Keep it active: a falling body must not sleep/freeze mid-air, and we want it
-                    // genuinely simulating (reacting to bumps) during the post-landing timer.
+                    // A falling body must not sleep or freeze mid-air, and stays simulated during the rest timer
                     if (rb.isKinematic)
                         rb.isKinematic = false;
                     rb.useGravity = true;
@@ -710,15 +608,13 @@ namespace TarkovVR.Source.Player.Interactions
                 if (body.restTimer >= bodyFreezeDelay || Time.time - body.releaseTime >= bodyFreezeMaxTime)
                 {
                     FreezeReleasedBody(body.ragdoll, bones);
-                    // The body has come to rest at its dragged-to spot — repoint the looting AI here so bots
-                    // loot it where it now lies instead of where it died.
+                    // Repoint the looting AI: bots loot the body where it now lies, not where it died
                     if (body.corpse != null)
                     {
-                        // LOCAL path (SP / this machine runs ORBIT): act directly.
+                        // Local: this machine runs ORBIT
                         OrbitSupport.OnDraggedCorpseSettled(body.corpse);
-                        // CO-OP path: tell the HOST/HEADLESS (which runs the bots/AI but not this VR mod)
-                        // the rest spot — it re-adds the ORBIT waypoint AND moves its ragdoll copy there
-                        // (so live scanners like LootingBots follow). No-op solo / on the host itself.
+                        // Co-op: the host/headless runs the bots but may not run this mod. Given the rest spot, it
+                        // re-adds the ORBIT waypoint and moves its ragdoll copy there (live scanners like LootingBots follow).
                         if (InstalledMods.FIKAInstalled)
                         {
                             Transform pelvis = body.corpse.TrackableTransform != null
@@ -733,10 +629,9 @@ namespace TarkovVR.Source.Player.Interactions
                 RefreshBonesKeptAwake();
         }
 
-        // Freeze a settled body kinematic in place (the efficient "done" state), mirroring EFT's own
-        // RagdollClass.method_1 (unsupport + Discrete + kinematic). Restores the tame depenetration
-        // velocity too so a later shot doesn't pop, and restores Func_0 to a terminating predicate so
-        // the settle coroutine we kept alive (NeverFreeze) exits cleanly instead of spinning forever.
+        // Freezes a settled body kinematic in place, like EFT's own RagdollClass.method_1 (unsupport + Discrete +
+        // kinematic). Also the rest depenetration velocity (a later shot must not pop it) and a Func_0 that returns true,
+        // so the settle coroutine kept alive by NeverFreeze exits.
         private void FreezeReleasedBody(CorpseRagdoll ragdoll, RigidbodySpawner[] bones)
         {
             for (int b = 0; b < bones.Length; b++)
@@ -753,10 +648,9 @@ namespace TarkovVR.Source.Player.Interactions
                 ragdoll._checkCorpseIsStill = RagdollAlwaysFreeze;
         }
 
-        // Force every bone of the dragged ragdoll back into active physics (dynamic + gravity +
-        // awake) so the body resumes falling/settling on release. No SupportRigidbody here — some
-        // bones may still be registered with EFT's support system locally (double-registering leaks
-        // a List_0 entry), and being unsupported doesn't stop a dynamic body from falling.
+        // Every bone of the dragged ragdoll back into active physics (dynamic + gravity + awake) on release. No
+        // SupportRigidbody here: some bones may still be registered with EFT's support system (double-registering leaks a
+        // List_0 entry), and an unsupported dynamic body still falls.
         private void ReactivateRagdollBones()
         {
             RigidbodySpawner[] bones = grabbedRagdoll != null ? grabbedRagdoll._rigidbodySpawners : null;
@@ -790,11 +684,9 @@ namespace TarkovVR.Source.Player.Interactions
             RefreshBonesKeptAwake(); // after ReleaseBody's AddReleasedBody: a let-go body stays awake while it settles
         }
 
-        // FIKA co-op "steal": another player grabbed the body we were dragging more recently, so
-        // hand it over — stop our local drive WITHOUT throwing it or broadcasting a release. Their
-        // incoming packets now drive our copy (the FikaSync module pins the bone THEY hold and lets the
-        // rest ragdoll locally). Invoked via FikaVrSync.onYieldBodyDrag from the module's BodyDragApply
-        // when we lose the contest. (Leaves the ragdoll live; the remote pin takes over the bone.)
+        // FIKA "steal": another player grabbed the body we were dragging more recently. Stop our drive without a throw
+        // or a release broadcast; their packets drive our copy now (the FikaSync module pins the bone they hold, the
+        // ragdoll stays live). Called through FikaVrSync.onYieldBodyDrag from the module's BodyDragApply.
         public void RelinquishBodyDrag()
         {
             if (!isDraggingBody)
@@ -806,9 +698,8 @@ namespace TarkovVR.Source.Player.Interactions
             bodyInteractionCorpse = null;
         }
 
-        // Reverse-lookup a corpse's network id (GameWorld.ObservedPlayersCorpses is keyed by the
-        // dead player's NetId). EFT-only; only meaningful for networked (ObservedCorpse) bodies —
-        // returns false for non-networked corpses (which simply won't sync).
+        // Reverse lookup of a corpse's network id (GameWorld.ObservedPlayersCorpses is keyed by the dead player's NetId).
+        // False for a non-networked corpse, which then doesn't sync.
         private static bool TryGetCorpseNetId(Corpse corpse, out int netId)
         {
             netId = -1;
@@ -829,8 +720,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Corpse loot grid (the old grip-on-corpse interaction) --------------------
-        // Opens the corpse's loot grid. Used by the tap-to-loot path here and by
-        // ProcessInteractiveObjects when body-grab is disabled, so looting is never lost.
+        // Opens the corpse's loot grid: the tap-to-loot path here, and ProcessInteractiveObjects
         private void OpenCorpseLoot(Corpse corpse)
         {
             if (corpse == null)
@@ -845,19 +735,11 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- FIKA bridge wrappers (companion-DLL isolation) --------------------------
-        // These are the ONLY members in this class that name a SptVrFikaSync (SPT-VR-FikaSync.dll)
-        // type, and every one is called EXCLUSIVELY from inside an `if (InstalledMods.FIKAInstalled)`
-        // block above. Why a separate method per call instead of inlining the FikaVrSync.* call at
-        // the gated site: Mono binds a cross-assembly call when it JITs the method CONTAINING the
-        // call — not when the call executes — so an inline FikaVrSync.* reference in an always-run
-        // method (TryFindBodyBone on left-grip, FixedUpdate, ReleaseBody) throws
-        // FileNotFoundException at THAT method's JIT the moment it runs without the companion DLL,
-        // even though the call is runtime-gated and never executes. (That's exactly what broke
-        // left-grip interactions when running solo / without FIKA.) Isolated into their own methods,
-        // these are only JITted when actually CALLED — which only happens with FIKA present — so solo
-        // the missing assembly is never bound. [MethodImpl(NoInlining)] stops the JIT from folding the
-        // body back into the caller and reintroducing the inline reference. Same isolation pattern as
-        // VRArmSync.Tick(); see memory note fika-softdep-no-typed-fields.
+        // The only members of this class that name a SptVrFikaSync (SPT-VR-FikaSync.dll) type; call them only inside an
+        // `if (InstalledMods.FIKAInstalled)` block. Mono binds a cross-assembly call when it JITs the method containing
+        // it, not when the call runs: an inline FikaVrSync.* call in an always-run method throws FileNotFoundException
+        // without the companion DLL, even behind a runtime gate. One NoInlining method per call keeps the reference out
+        // of the callers.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static MonoBehaviour FikaFindRevive(Collider bodyCollider, out CorpseRagdoll ragdoll)
             => FikaVrSync.FindReviveInteractable(bodyCollider, out ragdoll);

@@ -9,9 +9,8 @@ using Valve.VR;
 namespace TarkovVR.Source.Weapons
 {
     // Which controllers feel something that happens to the gun. The gun is one solid object: the hand doing the work feels it
-    // most, every other hand on the gun feels it through the gun ("when I pull back on a charging handle shouldn't the hand
-    // holding the grip still feel something? especially when letting go"), and the gun's own parts moving (a slam, a seat, a
-    // wall) reach every hand on its body at full. A hand that's let go feels nothing.
+    // most, every other hand on the gun feels it through the gun, and the gun's own parts moving (a slam, a seat, a wall) reach
+    // every hand on its body at full. A hand that's let go feels nothing.
     public static class GunHaptics
     {
         public enum Feel

@@ -3,16 +3,15 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Body
 {
-    // A hand's finger pose mirrored onto the other hand's bones - the piece a real left-handed mode needs (every grip, hold and finger
-    // pose in the mod is measured on one hand). Copying the joint angles across can't work (headset dead end, the open-hand bake): the
-    // two hands' bones aren't set up as mirror images, only their REST poses are. So each bone's turn away from its rest pose (the
-    // skinned mesh's bind pose), relative to its palm, is reflected through the body's centre plane and applied to the other hand's
-    // bone from that bone's own rest pose:
+    // A hand's finger pose mirrored onto the other hand's bones (every grip, hold and finger pose in the mod is measured on one hand).
+    // Copying the joint angles across can't work: the two hands' bones aren't set up as mirror images, only their rest poses are.
+    // So each bone's turn away from its rest pose (the skinned mesh's bind pose), relative to its palm, is reflected through the
+    // body's centre plane and applied to the other hand's bone from that bone's own rest pose:
     //     to = toPalmRest^-1 * Mirror(fromPalmRest * (fromPalm^-1 * from) * fromRest^-1) * toRest      (rest rotations in mesh space)
     // The rest pose maps exactly onto the rest pose; the centre plane is read off the two palms' bind positions (logged once).
     //
-    // Stage 2 test (live, UnityExplorer): mirrorTest = true, hold a gun right-handed, raise the free off hand - it should show a
-    // natural left-hand version of the gun hand's grip (fingers curled the right way, thumb on the correct side).
+    // mirrorTest (live, UnityExplorer): hold a gun right-handed and raise the free off hand: it shows a left-hand version of the
+    // gun hand's grip.
     public static class HandMirror
     {
         public static bool mirrorTest = false;
@@ -120,11 +119,11 @@ namespace TarkovVR.Source.Player.Body
             return true;
         }
 
-        // The fingers while the gun is in the left hand. EFT still animates the RIGHT hand gripping the gun and the LEFT as its support
+        // The fingers while the gun is in the left hand. EFT still animates the right hand gripping the gun and the left as its support
         // hand, so: the left = the right's animated grip, mirrored; the right = the left's animated foregrip pose, mirrored, only while
         // on the foregrip (off it, its own open pose: HandsInteractionController.UpdateRightHandFingers). Each is read as EFT animated
-        // it: a joint still holding what was on it at the end of last frame wasn't re-animated, and keeps its last animated value -
-        // otherwise our own (or the open pose's) output fed back in (headset: "the right hand off the gun copies the left hand pose").
+        // it: a joint still holding what was on it at the end of last frame wasn't re-animated, and keeps its last animated value.
+        // Otherwise our own (or the open pose's) output feeds back in.
         private static Quaternion[] rightAnimated, leftAnimated, rightFinal, leftFinal, mirroredOut;
 
         // Before the right hand's own finger update (it may put the open pose on): the gun grip, after the trigger discipline
@@ -142,8 +141,8 @@ namespace TarkovVR.Source.Player.Body
 
         // The right hand holding the gun alone (RealLeftHandedPatches.SupportHeld): the left's foregrip grip as EFT animated it, before
         // the left hand's own finger update puts its open pose on (it's free then). Kept on after the left takes the gun back while
-        // the right stays on the foregrip: the left's open pose eases out over a few frames, and read after it the right hand opened
-        // and closed again. A fresh foregrip grab reads it after the left's update as before (that ease is the hand closing on it).
+        // the right stays on the foregrip: the left's open pose eases out over a few frames, and read after it the right hand would
+        // open and close again. A fresh foregrip grab reads it after the left's update (that ease is the hand closing on it).
         private static bool supportGripEarly;
 
         public static void CaptureSupportGrip()

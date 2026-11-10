@@ -14,9 +14,8 @@ namespace TarkovVR.Source.Weapons
     // The small parts of the gun the hands work, moved the way Tarkov's own animations move them:
     //  - the mag release button goes in while a magazine rides up the last of the well and pops back out as it seats,
     //    and is held in while B (the mag release, Manual Reload) is down or the gun's magazine is pulled out by hand.
-    //    Each gun's button moves its own way, so how far and which way is measured from the gun's own insert animation
-    //    the first time it's needed. Pressed by B or the pull-out, the gun hand's index finger presses it, posed like the
-    //    gun's own mag-out animation has it with the button all the way in.
+    //    Its travel is measured from the gun's own insert animation; the gun hand's index finger presses it, posed like the
+    //    gun's own mag-out animation has it.
     //  - a magazine just seated stays in the hand while the grip is held
     //  - slapping the bolt catch with the open off hand releases a locked-back bolt: it runs forward (Tarkov's locked-back
     //    pose eased out, the bolt catch paddle is part of it)
@@ -26,7 +25,7 @@ namespace TarkovVR.Source.Weapons
         public static float releaseButtonTime = 0.06f;      // s for the button to go all the way in or out (Tarkov's mag-out: ~0.1)
         public static bool releaseFinger = true;            // the gun hand's index finger presses the button
         public static bool holdSeatedMagazine = true;       // the hand stays on a magazine it seated while the grip is held
-        // A pistol's magazine seated with the grip still held: the hand goes on into the two-handed grip (his ask), eased from the magazine
+        // A pistol's magazine seated with the grip still held: the hand goes on into the two-handed grip, eased from the magazine
         // onto EFT's support pose, then handed to the two-handing as if the grip were pressed there (VRPlayerManager.TakeSupportGrip)
         public static bool pistolSupportAfterSeat = true;
         public static float pistolSupportDelay = 0.15f;     // s the grip stays held on the seated magazine before the hand moves on
@@ -396,11 +395,10 @@ namespace TarkovVR.Source.Weapons
                 && partName.IndexOf("slide", StringComparison.OrdinalIgnoreCase) < 0;
         }
 
-        // Plays the gun's insert animations onto a bare copy of its bones (AnimationClip.SampleAnimation) and reads the
-        // button. Unity only samples a Mecanim clip onto an object with an Animator ("Non-Legacy animations cannot be
-        // sampled outside the Editor without an Animator"), and the gun's own Animator is no longer above it since the gun
-        // was moved onto the rig. The copy has the gun's names and local poses from Weapon_root down, so the clips' paths
-        // match, and the live gun isn't touched.
+        // Plays the gun's insert animations onto a bare copy of its bones (AnimationClip.SampleAnimation) and reads the button.
+        // Unity only samples a Mecanim clip onto an object with an Animator, and the gun's own Animator is no longer above it
+        // since the gun was moved onto the rig. The copy has the gun's names and local poses from Weapon_root down, so the
+        // clips' paths match, and the live gun isn't touched.
         private static MagazineReleaseMotion MeasureReleaseMotion(FirearmController firearmController, Slot magazineSlot)
         {
             string gunName = firearmController.Item.LocalizedShortName();
@@ -788,7 +786,8 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The open off hand coming into the bolt catch fast (against the gun hand, which carries the gun) is a slap on it,
-        // the way an AR's bolt is released (and an MP5's: there it's the handle in its notch). Only coming in counts: a hand already resting there has to leave first.
+        // the way an AR's bolt is released (and an MP5's: there it's the handle in its notch).
+        // Only coming in counts: a hand already resting there has to leave first.
         private static void UpdateBoltSlap(bool handFree)
         {
             FirearmController firearmController = null;
@@ -876,7 +875,7 @@ namespace TarkovVR.Source.Weapons
             boltReleaseFor = firearmController;
             boltReleaseStartTime = Time.time;
             // The catch let go (a slap: the hand hitting it, an AR's HandHit), then the bolt running home: whatever this gun calls them
-            // (only BoltInFast before, which pistols, the SCAR, the Vector and the shotguns don't have). The MP5's, out of its notch: its slap.
+            // (pistols, the SCAR, the Vector and the shotguns have no BoltInFast). The MP5's, out of its notch: its slap.
             SoundHand releaseHand = SoundHand.OffHand.Seating;
             if (!(slapped && PlayFirstGunSound(firearmController, releaseHand, "HandHit")))
                 PlayFirstGunSound(firearmController, releaseHand, CATCH_OFF_SOUNDS);

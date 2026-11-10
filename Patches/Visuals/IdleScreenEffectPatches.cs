@@ -4,15 +4,12 @@ using UnityEngine;
 
 namespace TarkovVR.Patches.Visuals
 {
-    // BSG's screen effects copy the WHOLE image every frame even while they show nothing (death fade off, no blood,
-    // no infection, grayscale 0, vintage filter None) - a full-screen copy per effect per eye, ~0.25 ms a frame in VR
-    // (StereoCostProbe, 2026-10-18). These prefixes skip the call in exactly the state where the game's own code would
-    // just copy, so nothing on screen changes; the components stay enabled (DeathFade/BloodOnScreen animate in their
-    // own Update) and the original runs again the moment an effect has something to draw.
-    // Safe for the chain: with BSG's SSAAPropagator, every effect reads/writes the propagator's ping-pong pair and the
-    // "current" index only moves on ReleaseSourceDestination, so a skipped effect leaves the image where the next one
-    // reads it (BSG's own NightVision.Switch disables chain effects the same way). Only skipped when that propagator is
-    // present - without it the effects draw into Unity's source/destination, which must be written.
+    // BSG's screen effects copy the whole image every frame even while they show nothing (death fade off, no blood, no infection,
+    // grayscale 0, vintage filter None): a full-screen copy per effect per eye, ~0.25 ms a frame in VR. These prefixes skip the call
+    // only in the state where the game's code would just copy; the components stay enabled (DeathFade/BloodOnScreen animate in
+    // their own Update). Safe with BSG's SSAAPropagator: every effect reads/writes its ping-pong pair and the "current" index only
+    // moves on ReleaseSourceDestination, so a skipped effect leaves the image where the next one reads it (NightVision.Switch
+    // disables chain effects the same way). Without the propagator the effects draw into Unity's source/destination, which must be written.
     [HarmonyPatch]
     internal class IdleScreenEffectPatches
     {

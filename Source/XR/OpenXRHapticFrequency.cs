@@ -6,12 +6,11 @@ using UnityEngine.XR.OpenXR.Features;
 namespace TarkovVR.Source.XR
 {
     // Haptic frequency under OpenXR. Unity's legacy XR haptics (InputDevice.SendHapticImpulse) take no frequency, so its OpenXR plugin
-    // calls xrApplyHapticFeedback with the frequency left unspecified and every buzz comes out the same (the sound-driven textures in
-    // AudioHaptics flatten into one rumble). OpenXR's own call does take a frequency: this feature puts itself in front of it, through
-    // the function lookup Unity lets every feature hook, and fills in the frequency OpenXRInput asked for on that hand.
+    // calls xrApplyHapticFeedback with the frequency unspecified and every buzz feels the same. This feature hooks that call through the
+    // function lookup Unity lets every feature hook, and fills in the frequency OpenXRInput asked for on that hand.
     public class OpenXRHapticFrequency : OpenXRFeature
     {
-        public static bool passFrequency = true;           // false = the runtime's own frequency, as before
+        public static bool passFrequency = true;           // false = the runtime's own frequency
 
         // ------------------------------------------------------------------------------------------------------------
         // OpenXR types and values, checked against openxr_reflection_full.h in the OpenXR package

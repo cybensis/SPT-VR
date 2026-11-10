@@ -9,24 +9,23 @@ using UnityEngine;
 
 namespace TarkovVR.ModSupport.ORBIT
 {
-    // Compiled into BOTH SPT-VR.dll (OrbitSupport: single player / the VR player hosting) and SPT-VR-FikaSync.dll (OrbitSync: the
-    // host / headless), linked from FikaSync.csproj. ORBIT-typed through and through: only ever touched from their NoInlining paths
-    // behind the ORBIT check, and held as `object` in their static dictionaries (a typed static field would load ORBIT's types).
+    // Compiled into both SPT-VR.dll (OrbitSupport: single player / the VR player hosting) and SPT-VR-FikaSync.dll (OrbitSync: the
+    // host / headless), linked from FikaSync.csproj. Only ever touched from their NoInlining paths behind the ORBIT check, and held
+    // as `object` in their static dictionaries (a typed static field would load ORBIT's types).
     //
     // A dragged corpse's ORBIT waypoint is pulled on the grab and a new one made where the body comes to rest (Waypoint.Position is
-    // readonly). The new one gets a NEW id on purpose: ORBIT refuses a claim on a removed id (WaypointSystem.TryClaim), so anything
-    // still holding the old object - a bot already sent to the death spot - fails safe; the old id reused would make that stale
-    // object, death spot and all, claimable again. ORBIT 3.x keeps more about a corpse than the waypoint and its killer tag, by id or
-    // by that object, so this carries it from the old waypoint to the new one:
+    // readonly). The new one gets a new id on purpose: ORBIT refuses a claim on a removed id (WaypointSystem.TryClaim), so anything
+    // still holding the old object (a bot already sent to the death spot) fails safe; reusing the old id would make that stale
+    // object claimable again. ORBIT 3.x keeps more about a corpse than the waypoint and its killer tag, by id or by that object,
+    // so this carries it from the old waypoint to the new one:
     //   - the killer squad tag (loot right without line of sight)
     //   - its killers' own-kill loot queue (Agent.OwnKillCorpseIds: ORBIT drops an id it no longer tracks - the killer gave up on it)
     //   - the squads that already looted it and the bots that judged it not worth it (CompletedPoiIds / ValueSkippedPoiIds)
     //   - a boss body Boss Rush squads look for (_rushCorpses, keyed by the waypoint object) and the squads' boss-loot memory of it
     //
-    // NO field of an ORBIT type, here or in a closure (a lambda capturing an ORBIT-typed local makes one): Assembly.GetTypes() on
-    // SPT-VR.dll loads every type's fields, so without ORBIT installed it threw ReflectionTypeLoadException for any mod that scans
-    // assemblies (a tester's WTT-ClientCommonLib log: "Could not load type of field 'OrbitCorpseCarry:pulled'"). Held as object, cast
-    // where used; ORBIT types only in method signatures and bodies, which load when they run.
+    // No field of an ORBIT type, here or in a closure (a lambda capturing an ORBIT-typed local makes one): Assembly.GetTypes() on
+    // SPT-VR.dll loads every type's fields, so without ORBIT installed it throws ReflectionTypeLoadException for any mod that scans
+    // assemblies. Held as object, cast where used; ORBIT types only in method signatures and bodies, which load when they run.
     internal sealed class OrbitCorpseCarry
     {
         private object pulled;                                          // Waypoint

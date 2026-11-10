@@ -7,12 +7,10 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Two magazines in one hand: with a new magazine held, the off-hand trigger at the gun's magazine takes that one too (the
-    // grip is already busy), B lets the catch go as on any pull and it comes out, and the new one goes in while the old
-    // stays in the hand until it lets go. Tarkov has the animation (*_reload_admin, *_mag_admin on AK-type guns, with its
-    // mod_magazine_new bone) but never finished it: ReloadExternalMagOperation.SwitchToReloadWithNewMag only logs "Not
-    // Implemented". The hand poses here are read from that clip; nothing plays it.
-    //
+    // Two magazines in one hand: with a new magazine held, the off-hand trigger at the gun's magazine takes that one too (the grip
+    // is already busy), B lets the catch go and it comes out, and the new one goes in while the old stays in the hand until it lets go.
+    // Tarkov has the animation (*_reload_admin, *_mag_admin on AK-type guns, with its mod_magazine_new bone) but
+    // ReloadExternalMagOperation.SwitchToReloadWithNewMag only logs "Not Implemented". The hand poses are read from that clip.
     // The gun holds one magazine, so the old one moves to the rig the moment it comes free of the well, while its model stays
     // in the hand. Letting go at the chest leaves it there; anywhere else throws it from the rig to the ground.
     public static partial class VRReloadController

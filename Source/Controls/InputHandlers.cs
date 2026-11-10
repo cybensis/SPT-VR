@@ -23,25 +23,19 @@ namespace TarkovVR.Source.Controls
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Vive-friendly JumpInputHandler (v2):
-        //   Uses a PHYSICAL CLICK of the right trackpad as the trigger (binary, no sweet-spot).
-        //   The click is only accepted when the finger rests in the UPPER HALF of the pad (y > 0)
-        //   at the moment the click fires, so that clicking DOWN for crouch never accidentally jumps.
-        //   Short click  → Jump
-        //   Hold click   → Vault  (threshold configurable via VRSettings.GetVaultHoldTime())
+        // Jump / vault. Vive wands: a physical click of the right trackpad, accepted only with the finger in the upper half of the pad
+        // (so clicking down for crouch never jumps). Short click = jump, held past VRSettings.GetVaultHoldTime() = vault.
         public class JumpInputHandler : IInputHandler
         {
             private enum JumpState { Idle, Held, Fired }
             private JumpState _state = JumpState.Idle;
             private float _heldTime = 0f;
 
-            // Y > 0 means finger is in the upper half of the Vive trackpad disc.
-            // We use a small positive guard (0.05) to avoid the dead-centre triggering vault+jump.
+            // Finger y above this = upper half of the Vive trackpad; the small guard keeps the dead centre from triggering
             private const float UPPER_HALF_Y = 0.05f;
 
             public void UpdateCommand(ref ECommand command)
             {
-                // Safety checks
                 if (VRGlobals.vrPlayer == null ||
                     SteamVR_Actions._default?.RightJoystick == null ||
                     SteamVR_Actions._default?.ClickRightJoystick == null)
@@ -60,12 +54,11 @@ namespace TarkovVR.Source.Controls
             // Vive Wand: physical trackpad click + upper-half guard
             private void UpdateVive(ref ECommand command)
             {
-                // Physical click state (binary, no sweet-spot on Vive)
                 // Source-less: with Swap Sticks this is the left controller's click (VRInput)
                 bool clickHeld = VRInput.ClickRightJoystick.state;
                 bool clickDown = VRInput.ClickRightJoystick.stateDown;
 
-                // Touch position — used only as a guard to separate "jump/vault" from "crouch"
+                // Touch position: only a guard to separate jump/vault from crouch
                 float fingerY = VRInput.RightJoystick.GetAxis(SteamVR_Input_Sources.Any).y;
                 bool fingerInUpperHalf = fingerY > UPPER_HALF_Y;
 
@@ -102,7 +95,6 @@ namespace TarkovVR.Source.Controls
                     case JumpState.Fired:
                         if (!clickHeld)
                         {
-                            // Send VaultingEnd if the player is still in vaulting state
                             if (VRGlobals.player != null && VRGlobals.player.IsVaultingPressed)
                                 command = ECommand.VaultingEnd;
                             _state = JumpState.Idle;
@@ -115,7 +107,7 @@ namespace TarkovVR.Source.Controls
                 }
             }
 
-            // Default (Index, Oculus, etc.): original joystick axis logic
+            // Default (Index, Oculus, etc.): joystick axis
             private bool _isVaulting = false;
             private float _timeHeld = 0f;
             private const float TIME_HELD_FOR_VAULT = 0.3f;
@@ -155,11 +147,9 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
-                // Exit early if required objects are not initialized or crouching is blocked
                 if (VRGlobals.vrPlayer == null || VRGlobals.player == null || VRGlobals.vrPlayer.blockCrouch)
                     return;
 
-                // Ensure movement context and character controller exist
                 var movementContext = VRGlobals.player.MovementContext;
                 if (movementContext == null || movementContext.CharacterController == null)
                     return;
@@ -168,7 +158,7 @@ namespace TarkovVR.Source.Controls
                 float crouchThreshold = VRGlobals.vrControllerType == "vive"
                     ? VRSettings.GetCrouchThreshold()
                     : 0.8f;
-                // When the right joystick is pulled down, lower player pose (crouch)
+                // Right joystick down: lower the pose (crouch)
                 if (joystickY < -crouchThreshold)
                 {
                     float poseDelta = -1.5f * Time.deltaTime;
@@ -179,7 +169,7 @@ namespace TarkovVR.Source.Controls
                     VRGlobals.vrPlayer.crouchHeightDiff = 1.6f - movementContext.CharacterController.height;
                 }
 
-                // When the joystick is pushed up and player has crouched, raise pose (stand)
+                // Joystick up while crouched: raise the pose (stand)
                 if (VRGlobals.vrPlayer.crouchHeightDiff > 0.01f && joystickY > crouchThreshold)
                 {
                     float poseDelta = 0.05f;
@@ -191,8 +181,7 @@ namespace TarkovVR.Source.Controls
                     //Plugin.MyLog.LogWarning(VRGlobals.player.MovementContext.PoseLevel + "   |  " + poseLevel + "   |  " + poseLevelResult + "  |   " + characterControllerHeight + "   |   " + VRGlobals.vrPlayer.crouchHeightDiff);
                 }
 
-                // Really shit way to do this, but this prevents a jump happening immediately after changing the crouch height diff by 
-                // keeping it at 0.01 until the right joystick Y axis goes down
+                // crouchHeightDiff stays at 0.01 until the right joystick Y comes back down, so standing up doesn't jump straight after
                 else if (VRGlobals.vrPlayer.crouchHeightDiff == 0.01f && joystickY < 0.5f)
                 {
                     VRGlobals.vrPlayer.crouchHeightDiff = 0f;
@@ -208,7 +197,7 @@ namespace TarkovVR.Source.Controls
             private static bool releasedPullAfterFullCrouch = false;
             public void UpdateCommand(ref ECommand command)
             {
-                // Block prone from activating when in a hideout or when the right joystick is being blocked
+                // No prone in the hideout or while the right joystick is blocked
                 if (VRGlobals.player is HideoutPlayer || VRGlobals.blockRightJoystick
                     || (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.blockCrouch))
                     return;
@@ -417,7 +406,6 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
-                // Prevent rapid toggling
                 if (Time.time - lastToggleTime < TOGGLE_COOLDOWN)
                     return;
 
@@ -470,7 +458,7 @@ namespace TarkovVR.Source.Controls
                 if (currentDepth > MAX_CAMERA_SEARCH_DEPTH)
                     return null;
 
-                // Check's if the current scope is an optic
+                // An optic's aim camera
                 string parentName = parent.name;
                 if (parentName == "mod_aim_camera" ||
                     parentName == "mod_aim_camera_000" ||
@@ -505,12 +493,10 @@ namespace TarkovVR.Source.Controls
 
                 Vector3 directionToScope = (eyeTargetPosition - headPosition).normalized;
 
-                // Angle between scope's forward direction and direction from head to scope
-                // (measures if scope is pointing at your head)
+                // Is the scope pointing at your head
                 float alignmentAngle = Vector3.Angle(scopeForward * -1f, directionToScope);
 
-                // Angle between head's forward direction and direction to scope
-                // (measures if you're looking at the scope)
+                // Are you looking at the scope
                 float viewAngle = Vector3.Angle(headForward, directionToScope);
 
                 if (!isAiming)
@@ -544,12 +530,10 @@ namespace TarkovVR.Source.Controls
 
                 Vector3 directionToSight = (sightPosition - headPosition).normalized;
 
-                // Angle between gun's forward direction and direction from head to sight
-                // (measures if gun is pointing at your head)
+                // Is the gun pointing at your head
                 float alignmentAngle = Vector3.Angle(gunForward, directionToSight);
 
-                // Angle between head's forward direction and direction to sight
-                // (measures if you're looking at the gun)
+                // Are you looking at the gun
                 float viewAngle = Vector3.Angle(headForward, directionToSight);
 
                 if (!isAiming)
@@ -593,10 +577,9 @@ namespace TarkovVR.Source.Controls
                 float primaryHandTriggerAmount = Handedness.GunHandTrigger.axis;
                 bool detached = TarkovVR.Source.Player.Interactions.ChestHang.Detached;
 
-                // No trigger finger on the grip (slung, or support-hand-only hold) = no firing; if the
-                // release happened mid-burst, end it. Same while VRReloadController has the gun apart: the
-                // magazine out in the hand (Tarkov still thinks it's in the gun), the charging handle being
-                // worked, or the chambered round is still in the magazine (not racked yet).
+                // No trigger finger on the grip (slung, or support-hand-only hold) = no firing; a burst under way ends. Same while
+                // VRReloadController has the gun apart: the magazine out in the hand (Tarkov still thinks it's in the gun), the charging
+                // handle being worked, or the chambered round not racked yet.
                 if (detached || VRReloadController.BlocksFiring)
                 {
                     if (isShooting)
@@ -971,10 +954,8 @@ namespace TarkovVR.Source.Controls
                 bool interactButtonUp = Handedness.GunHandLowerButton.GetStateDown(SteamVR_Input_Sources.Any);
                 bool interactButtonDown = Handedness.GunHandLowerButton.GetStateUp(SteamVR_Input_Sources.Any);
 
-                // Off-hand trigger executes a reach-selected weapon part (offHandInteract), mirroring
-                // the A-button's edge mapping. Gated on a part being selected - the off trigger
-                // otherwise belongs to breath-hold (ADS) and UI, and part selection already excludes
-                // aiming/supporting, so the two can't overlap.
+                // Off-hand trigger executes a reach-selected weapon part (offHandInteract) with the A-button's edge mapping. Only while a
+                // part is selected: the off trigger otherwise belongs to breath-hold (ADS) and UI, and selection excludes aiming/supporting.
                 bool offTriggerPress = false, offTriggerRelease = false;
                 if (GunInteractionController.offHandInteract
                     && WeaponPatches.currentGunInteractController != null
@@ -1034,7 +1015,7 @@ namespace TarkovVR.Source.Controls
                         HandleTripwirePlacement(grenadeController);
                         return;
                     }
-                    // Held by its button, the ring pulled by the other hand (GrenadeHold); below = the old flow (trigger = pin, let go = throw)
+                    // Held by its button, the ring pulled by the other hand (GrenadeHold); below = the flow without it (trigger = pin, let go = throw)
                     if (GrenadeHold.enabled)
                     {
                         GrenadeHold.UpdateCommand(grenadeController, ref command);
@@ -1112,7 +1093,6 @@ namespace TarkovVR.Source.Controls
                 // Default position for most grenades
                 VRGlobals.weaponHolder.transform.localPosition = new Vector3(-0.1f, -0.43f, -0.25f);
 
-                // Special handling for specific grenade types
                 if (IsSpecialGrenade(grenadeName))
                 {
                     VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(30, 273, 116);
@@ -1185,19 +1165,17 @@ namespace TarkovVR.Source.Controls
                 // Only with the hand on the foregrip: the same grip also holds magazines and loot
                 bool tacticalButtonDown = tacticalButtonAction.state && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isSupporting;
 
-                // Button just pressed
                 if (tacticalButtonDown && !tacticalButtonWasDown)
                 {
                     tacticalButtonDownTime = Time.time;
                     commandExecuted = false;
                 }
 
-                // Button is being held
                 if (tacticalButtonDown)
                 {
                     float holdTime = Time.time - tacticalButtonDownTime;
 
-                    // Execute next device after holding for HOLD_DURATION
+                    // Held for HOLD_DURATION: next device
                     if (holdTime >= HOLD_DURATION && !commandExecuted)
                     {
                         command = ECommand.NextTacticalDevice;
@@ -1205,12 +1183,11 @@ namespace TarkovVR.Source.Controls
                     }
                 }
 
-                // Button just released
                 if (!tacticalButtonDown && tacticalButtonWasDown)
                 {
                     float holdTime = Time.time - tacticalButtonDownTime;
 
-                    // If released before 1 second and command wasn't already executed, toggle device
+                    // Released before HOLD_DURATION: toggle the device
                     if (holdTime < HOLD_DURATION && !commandExecuted)
                     {
                         command = ECommand.ToggleTacticalDevice;

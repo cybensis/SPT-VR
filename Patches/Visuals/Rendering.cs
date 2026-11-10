@@ -19,8 +19,7 @@ namespace TarkovVR.Patches.Visuals
         private static Dictionary<string, Queue<RenderTexture>> _renderTargetPool = new Dictionary<string, Queue<RenderTexture>>();
         public static Material _fxaaMat;
 
-        // These two functions would return the screen resolution setting and would result in the game
-        // being very blurry
+        // Vanilla returns the screen resolution setting from these, which makes the game very blurry in the headset
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SSAAImpl), "GetOutputHeight")]
         private static bool ReturnVROutputHeight(SSAAImpl __instance, ref int __result)
@@ -98,12 +97,10 @@ namespace TarkovVR.Patches.Visuals
         }
 
         // The game camera's last step (SSAAImpl.OnRenderImage) draws its image with a full-screen quad straight in clip space,
-        // the Y-flipped one while FlippedV, and SSAA.Awake above sets FlippedV = true. Measured 2026-11-05: its destination is the
-        // eye image EVERY frame, and what decides the way up is uiCam: a headset camera drawing into the eye image after this one
-        // turns the image over once more (its own texture round trip). With uiCam drawing every frame the fixed flip was right; with
-        // uiCam skipped (UiCameraGate) it turned the HEADSET image upside down, and flipping by destination alone (never, then) was
-        // exactly backwards. So: into the eye image, flipped only when another headset camera draws after it this frame; into a
-        // texture of its own, flipped as before. false = FlippedV = true always (the old behavior).
+        // the Y-flipped one while FlippedV. Its destination is the eye image every frame, and a headset camera drawing into the eye
+        // image after this one (uiCam) turns the image over once more. So: into the eye image, flipped only when another headset
+        // camera draws after it this frame (uiCam can be skipped: UiCameraGate); into a texture of its own, always flipped.
+        // false = FlippedV = true always.
         public static bool flipByDestination = true;
         public static bool logFlipDestinations = false;    // each change of what was decided, the first 12
         private static string lastFlipDestination;
@@ -213,9 +210,8 @@ namespace TarkovVR.Patches.Visuals
             }
 
             VRGlobals.VRCam.useOcclusionCulling = vrOcclusionCulling;
-            // Re-applied every frame: the camera is reconfigured across raids, so a one-time set
-            // silently reverts (the usual reason a layerCullDistances attempt "does nothing"). Cheap:
-            // a cached array is reused, so there's no per-frame GC. See ApplyCullDistances below.
+            // Re-applied every frame: the camera is reconfigured across raids, so a one-time set silently reverts.
+            // The array is cached, so no per-frame GC.
             ApplyCullDistances(VRGlobals.VRCam);
 
             ResetRenderingState(__instance);
@@ -260,7 +256,6 @@ namespace TarkovVR.Patches.Visuals
 
             if (!needsUpdate) return;
 
-            // Return old targets to pool before creating new ones
             for (int i = 0; i < 2; i++)
             {
                 if (__instance._resampledColorTargetHDR[i] != null)
@@ -270,7 +265,6 @@ namespace TarkovVR.Patches.Visuals
                 }
             }
 
-            // Get new targets from pool or create if needed
             for (int i = 0; i < 2; i++)
             {
                 __instance._resampledColorTargetHDR[i] = GetFromPoolOrCreate(
@@ -295,7 +289,6 @@ namespace TarkovVR.Patches.Visuals
 
             if (!needsUpdate) return;
 
-            // Return old targets to pool
             for (int i = 0; i < 3; i++)
             {
                 if (__instance._resampledColorTargetLDR[i] != null)
@@ -440,11 +433,9 @@ namespace TarkovVR.Patches.Visuals
             commandBuffer.BeginSample("DEPTH_PREPASS");
             commandBuffer.SetRenderTarget(__instance._resampledColorTargetLDR[2], __instance._resampledDepthTarget);
 
-            // Batch renderer validation
             var validSightRenderers = new List<(Renderer renderer, Material material)>(__instance._sightNonLensRenderers.Length);
             var validWeaponRenderers = new List<(Renderer renderer, Material material)>(__instance._otherWeaponRenderers.Length);
 
-            // Pre-validate all renderers
             for (int i = 0; i < __instance._sightNonLensRenderers.Length; i++)
             {
                 if (IsRendererValid(__instance._sightNonLensRenderers[i], __instance._sightNonLensRenderersMaterials[i]))
@@ -461,7 +452,6 @@ namespace TarkovVR.Patches.Visuals
                 }
             }
 
-            // Render sight components
             if (validSightRenderers.Count > 0)
             {
                 commandBuffer.BeginSample("SIGHT_DEPTH");
@@ -472,7 +462,6 @@ namespace TarkovVR.Patches.Visuals
                 commandBuffer.EndSample("SIGHT_DEPTH");
             }
 
-            // Render weapon components
             if (validWeaponRenderers.Count > 0)
             {
                 commandBuffer.BeginSample("WEAPON_DEPTH");
@@ -624,17 +613,10 @@ namespace TarkovVR.Patches.Visuals
         //---------------------------------------------------------------------------------------------------------------------------------------------------------------
         // PER-LAYER CULL DISTANCES (CPU win)
         // -----------------------------------------------------------------------------------------
-        // Engine-level distance culling on the VR render camera. In MultiPass everything is culled
-        // AND draw-submitted once PER EYE, so dropping renderers from the set saves CPU twice over.
-        // Only RENDER layers matter here — collider/trigger/unused layers are no-ops for rendering,
-        // so we leave them at 0. A value of 0 means "no extra cull, use the camera far clip".
-        //
-        // STRUCTURAL layers (Default world geometry, Terrain, Water, Player, PlayerRenderers, Sky,
-        // LevelBorder) are deliberately left at 0 so buildings/terrain/other players never pop in/out.
-        // The win comes from the high-COUNT clutter layers (loot, foliage, ragdolls, casings, rain).
-        // If you want to push it further, lower cullDistanceMultiplier, or give Default a finite
-        // distance (e.g. 1500) to trim very distant world geometry — test for building pop-in first.
-        //
+        // Engine-level distance culling on the VR render camera. In MultiPass everything is culled and draw-submitted once per
+        // eye, so dropping renderers saves CPU twice. 0 = no extra cull (the camera far clip).
+        // Structural layers (Default world geometry, Terrain, Water, Player, PlayerRenderers, Sky, LevelBorder) stay at 0 so
+        // buildings/terrain/other players never pop in/out; the win comes from the high-count clutter layers.
         // useLayerCullDistances is live (UnityExplorer); cullDistanceMultiplier follows the VR Graphics
         // "Per-Layer Cull Distance" slider. Either change rebuilds + re-applies next frame. Log: "[CullDist]".
         public static bool useLayerCullDistances = true;   // master toggle
@@ -666,8 +648,8 @@ namespace TarkovVR.Patches.Visuals
             return d;
         }
 
-        // Applies the cull-distance table to a camera. Safe to call every frame — the array is cached
-        // and only rebuilt when the multiplier changes, so there's no allocation on the hot path.
+        // Applies the cull-distance table to a camera. Called every frame: the array is cached and only rebuilt when the
+        // multiplier changes.
         public static void ApplyCullDistances(Camera cam)
         {
             if (cam == null)

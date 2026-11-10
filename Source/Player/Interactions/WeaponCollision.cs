@@ -11,23 +11,17 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Physical weapon collision via a SANDBOXED PhysX rigidbody ([WeaponPhysicsProxy]): an invisible
-    // Rigidbody shaped like the gun (fat body + thin barrel capsule) is driven toward the controller pose
-    // and collided by the engine, in its OWN local physics scene with static COPIES of the nearby world
-    // colliders (so stepping it can't disturb the game's loot/ragdolls). WeaponCollision drives the proxy,
-    // STEPS IT AT RENDER RATE (proxy.Step from Apply, not FixedUpdate), and places the visible EFT gun on the
-    // resolved pose EVERY frame (render-body). Because it's stepped in lockstep with rendering, in free space
-    // the gain-1 drive reaches the hand exactly so the enact no-ops and the gun sits at the true controller
-    // pose (crisp), while a fast swing into a wall stops the visible gun the same frame it stops the proxy
-    // (no clip-through). Rig motion (locomotion + turning) is applied to the proxy as a rigid transform
-    // (AddRigMotion), not chased by the velocity drive, so moving/turning doesn't jitter.
-    // Vanilla TurnAwayEffector pose is suppressed for the local player (IKPatches: effector outputs zeroed
-    // + AvoidObstacles IsDirty gate); its OverlapValue bookkeeping still runs (ADS-stop etc.). The fireport
-    // is a child of WeaponRoot, so point-blank shots originate at the clamped muzzle, and the FIKA arm sync
+    // Physical weapon collision via a sandboxed PhysX rigidbody (WeaponPhysicsProxy): an invisible Rigidbody shaped like the
+    // gun (fat body + thin barrel capsule), driven toward the controller pose and collided in its own local physics scene
+    // against static copies of the nearby world colliders (so stepping it can't disturb the game's loot/ragdolls).
+    // It is stepped at render rate (proxy.Step from Apply, not FixedUpdate) and the visible gun is placed on its resolved
+    // pose every frame. Rig motion (locomotion + turning) reaches the proxy as a rigid transform (AddRigMotion), not
+    // through the velocity drive, which would jitter.
+    // Vanilla's TurnAwayEffector pose is suppressed for the local player (IKPatches); its OverlapValue still runs (ADS-stop
+    // etc.). The fireport is a child of WeaponRoot, so shots originate at the clamped muzzle, and the FIKA arm sync
     // samples WeaponRoot's world pose, so observers see the clamp too.
-    // NOTE: sandbox copies of NON-READABLE meshes fail (CollisionMeshData error) - collision is limited to
-    // readable-mesh + primitive geometry. Known limitation the user accepted over the ComputePenetration
-    // alternative (which clipped thin walls).
+    // Limit: sandbox copies of non-readable meshes fail (CollisionMeshData error), so only readable-mesh + primitive
+    // geometry collides. The ComputePenetration alternative clips thin walls: don't use it.
     public static class WeaponCollision
     {
         // ---- live-tunable knobs (UnityExplorer) ----
@@ -58,18 +52,16 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool maskIncludesGlass;
         private static int glassLayer = -1;
 
-        // Barrel tip: farthest of fireport + muzzle-device transforms (suppressors extend past the
-        // fireport), re-picked periodically so attachment changes are caught. Live world distance, NOT
-        // fc.WeaponLn - vanilla's value carries a lossyScale correction for EFT's shrunken first-person
-        // rig that inflated it ~15cm in the VR rig (user-measured).
+        // Barrel tip: farthest of fireport + muzzle-device transforms (suppressors extend past the fireport), re-picked
+        // periodically so attachment changes are caught. Live world distance, not fc.WeaponLn: vanilla's value carries a
+        // lossyScale correction for EFT's shrunken first-person rig that inflates it ~15cm in the VR rig.
         private static Transform muzzleTip;
         private static object muzzleTipOwner;
         private static float muzzleTipRefresh;
 
-        // Enactment bookkeeping: the collision offset is applied to weaponHolder AFTER the marker anchor
-        // each frame and stripped again right BEFORE the next frame's anchor (PreAnchor) - without the
-        // strip it accumulates (the anchor rewrites holder localPosition per frame but rotation only at
-        // equip).
+        // Enactment bookkeeping: the collision offset is applied to weaponHolder after the marker anchor each frame and
+        // stripped right before the next frame's anchor (PreAnchor). Without the strip it accumulates (the anchor
+        // rewrites holder localPosition per frame but rotation only at equip).
         private static bool enacted;
         private static Vector3 preEnactLocalPos;
         private static Quaternion preEnactLocalRot;
@@ -83,9 +75,9 @@ namespace TarkovVR.Source.Player.Interactions
             proxy?.Deactivate();
         }
 
-        // Called at the top of UpdateWeaponPosition, before the anchor measures weaponHolder: restore the
-        // holder to its pre-enactment local pose so the anchor always starts from the pristine
-        // controller-desired state. Change-detection lets equip-path re-stamps win.
+        // Called at the top of UpdateWeaponPosition, before the anchor measures weaponHolder: restores the holder's
+        // pre-enactment local pose so the anchor starts from the controller-desired state. Change detection lets
+        // equip-path re-stamps win.
         public static void PreAnchor()
         {
             StripEnacted();
@@ -133,13 +125,11 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 rawGrip = weaponRoot.position;
             Quaternion weaponRootRotation = weaponRoot.rotation;
 
-            // Rig motion (locomotion translation + turning rotation) = a rigid transform of the whole
-            // reference frame; apply it directly to the proxy (not via the velocity chase, whose per-frame
-            // lag would be on-stick jitter). Reference = camRoot (the VR rig root): the stick-turn rotates
-            // camRoot DIRECTLY (VRControlsPatches) and locomotion tracks camRoot to the player each frame
-            // (MovementPatches), so its frame-to-frame delta is the exact rig motion. The old reference
-            // (player.Transform) LAGGED on turns - the body yaw follows the headset via the aim system, so
-            // the leftover rotation got dumped on the speed-capped drive = the turn jitter.
+            // Rig motion (locomotion + turning) is a rigid transform of the whole reference frame: apply it directly to the
+            // proxy (through the velocity chase its per-frame lag is jitter on the sticks). Reference = camRoot, the VR rig
+            // root: the stick turn rotates it directly (VRControlsPatches) and locomotion tracks it to the player each
+            // frame (MovementPatches). player.Transform lags on turns (the body yaw follows the headset through the aim
+            // system): don't use it as the reference.
             Transform rig = VRGlobals.camRoot != null ? VRGlobals.camRoot.transform : VRGlobals.player.Transform.Original;
             Vector3 playerPos = rig.position;
             Quaternion playerRot = rig.rotation;
@@ -158,19 +148,16 @@ namespace TarkovVR.Source.Player.Interactions
 
             proxy.Configure(weaponLn, bodyRadius, barrelRadius);
             proxy.SetTarget(rawGrip, weaponRootRotation);               // drive the proxy to the controller pose
-            proxy.Step(Time.deltaTime);                    // step the sandbox NOW, at render rate (see WeaponPhysicsProxy.Step)
+            proxy.Step(Time.deltaTime);                    // step the sandbox now, at render rate (see WeaponPhysicsProxy.Step)
 
-            // Render the PhysX-resolved pose EVERY frame (render-body). The proxy was stepped this frame, so
-            // in free space it reaches the hand exactly -> EnactHolderPose auto-no-ops (its epsilon check) ->
-            // the gun sits at the true controller pose, crisp. The instant a fast swing meets a wall the
-            // proxy stops at it THIS frame -> the visible gun stops with it (no clip-through, no waiting for a
-            // 50Hz contact event). Feedback still comes from the proxy's collision events -> OnProxyContact.
+            // Draw the gun on the PhysX-resolved pose every frame. The proxy was stepped this frame: in free space it
+            // reaches the hand exactly and EnactHolderPose no-ops (its epsilon check); against a wall the visible gun
+            // stops the same frame the proxy does. Feedback comes from the proxy's collision events -> OnProxyContact.
             EnactHolderPose(rawGrip, weaponRootRotation, proxy.ResolvedPos, proxy.ResolvedRot);
         }
 
-        // Move weaponHolder so the gun's root goes from its current (un-collided) pose to the resolved
-        // pose - a rigid delta applied to the holder (weaponRoot is its descendant). Captured pre/post so
-        // PreAnchor strips it next frame (nothing may accumulate).
+        // Moves weaponHolder so the gun's root goes from its current (un-collided) pose to the resolved pose: a rigid
+        // delta on the holder (weaponRoot is its descendant). Pre/post poses are captured so PreAnchor strips it next frame.
         private static void EnactHolderPose(Vector3 currentPosition, Quaternion currentRotation, Vector3 targetPosition, Quaternion targetRotation)
         {
             Transform holder = VRGlobals.weaponHolder.transform;
@@ -188,9 +175,9 @@ namespace TarkovVR.Source.Player.Interactions
             enacted = true;
         }
 
-        // Create the sandboxed physics proxy. The world MASK selects which colliders get replicated into
-        // the sandbox: STATIC WORLD (+ glass) only, NOT Player/Deadbody (else the body-sized proxy would
-        // jam against your own body / corpses). The layer just needs the proxy + its copies to self-collide.
+        // Creates the sandboxed physics proxy. The world mask selects which colliders are copied into the sandbox: static
+        // world (+ glass) only, not Player/Deadbody (the body-sized proxy would jam against your own body / corpses).
+        // The layer only needs the proxy and its copies to collide with each other.
         private static bool EnsureProxy()
         {
             if (proxy != null)
@@ -270,10 +257,8 @@ namespace TarkovVR.Source.Player.Interactions
             return occlusionMask;
         }
 
-        // The physics proxy reports its collisions here (fires every frame while touching). Impact-only:
-        // fire once on a FRESH contact (a 0.15s gap since the last contact = you weren't touching), so
-        // pressing/sliding doesn't re-fire. contactEndStamp advances every event so sustained contact stays
-        // quiet.
+        // The physics proxy reports its collisions here (every frame while touching). Impact only: fires once on a fresh
+        // contact (0.15s since the last contact event); contactEndStamp advances every event so pressing/sliding stays quiet.
         internal static void OnProxyContact(Collider col, Vector3 point, Vector3 normal, float approach)
         {
             bool fresh = Time.time - contactEndStamp > 0.15f;
@@ -281,10 +266,9 @@ namespace TarkovVR.Source.Player.Interactions
             if (col == null || !fresh)
                 return;
 
-            // Walking into a wall delivers the closing speed via AddRigMotion (a rigid teleport), which the
-            // proxy's rb.velocity - and thus Collision.relativeVelocity (the `approach` passed in) - never
-            // sees, so a walk-in reported ~0 approach and stayed silent (a hand-swing works because its speed
-            // IS in the drive velocity). Add the rig's closing speed along the contact normal.
+            // Walking into a wall closes the distance through AddRigMotion (a rigid teleport), which the proxy's rb.velocity
+            // and so Collision.relativeVelocity (the `approach` passed in) never see: a walk-in would read ~0 and stay
+            // silent. Add the rig's closing speed along the contact normal.
             approach += Mathf.Max(0f, Vector3.Dot(lastRigVelocity, -normal));
 
             Vector3 barrelDir = VRGlobals.firearmController?.WeaponRoot != null
@@ -305,9 +289,8 @@ namespace TarkovVR.Source.Player.Interactions
                 TryBreakGlass(col, point, normal, barrelDir);
         }
 
-        // The gun's own surface-aware drop bank (the same banks vanilla plays when a weapon hits the
-        // ground), played at the contact point; surface resolved off the hit collider's BaseBallistic
-        // exactly like LootDropSoundPatches.
+        // The gun's own surface-aware drop bank (what vanilla plays when a weapon hits the ground), played at the contact
+        // point; surface resolved off the hit collider's BaseBallistic like LootDropSoundPatches.
         private static void PlayImpactSound(Collider hitCollider, Vector3 point, float approach)
         {
             BetterAudio betterAudio = Singleton<BetterAudio>.Instance;
@@ -334,10 +317,9 @@ namespace TarkovVR.Source.Player.Interactions
             betterAudio.PlayAtPoint(point, bank, distance, volume, -1f, EnvironmentType.Outdoor, EOcclusionTest.OneShotPropagation);
         }
 
-        // Whack a window with the gun -> shatter it, exactly like a VR melee surface hit: a melee
-        // DamageInfoStruct through GameWorld.HackShot (glass-break handler + knife-hit effects). Mirrors
-        // FikaSync/MeleeHitApply; observers replay the same melee-hit packet, so co-op needs no new
-        // netcode. GLASS ONLY: a gun bump must not chip walls or leave knife decals.
+        // A hard whack on a window shatters it like a VR melee surface hit: a melee DamageInfoStruct through
+        // GameWorld.HackShot (glass-break handler + knife-hit effects). Mirrors FikaSync/MeleeHitApply; observers replay
+        // the same melee-hit packet. Glass only: a gun bump must not chip walls or leave knife decals.
         private static void TryBreakGlass(Collider hitCollider, Vector3 point, Vector3 normal, Vector3 barrelDir)
         {
             BallisticCollider ballisticCollider = hitCollider.GetComponent<BallisticCollider>();
@@ -362,16 +344,16 @@ namespace TarkovVR.Source.Player.Interactions
                 damageInfo.Player = gameWorld.GetEverExistedBridgeByProfileID(gameWorld.MainPlayer.ProfileId);
             gameWorld.HackShot(damageInfo);
 
-            // The real pane's collider is now gone - drop the sandbox copy so the gun stops colliding with
-            // the phantom window (else it stays "there" until you walk >retainDistance away and back).
+            // The real pane's collider is gone: drop the sandbox copy too, or the gun keeps colliding with a phantom
+            // window until you walk more than retainDistance away and back.
             proxy?.ForgetCollider(hitCollider.GetInstanceID());
 
             if (InstalledMods.FIKAInstalled)
                 FikaSendGunSurfaceHit(point, normal, barrelDir, glassBreakDamage);
         }
 
-        // Companion-DLL isolation (same pattern as VRMeleeController.FikaSendMeleeHit): NoInlining so the
-        // cross-assembly reference is only JITted when actually called (i.e. with FIKA installed).
+        // Companion-DLL isolation (like VRMeleeController.FikaSendMeleeHit): NoInlining so the cross-assembly reference
+        // is only JITted when called, i.e. with FIKA installed.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void FikaSendGunSurfaceHit(Vector3 point, Vector3 normal, Vector3 direction, float damage)
             => FikaVrSync.SendMeleeHit(point, normal, direction, damage);

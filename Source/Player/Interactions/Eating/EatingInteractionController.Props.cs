@@ -9,11 +9,9 @@ namespace TarkovVR.Source.Player.Interactions
     // (detach/reattach/shake/take), and the restore-on-teardown path.
     internal static partial class EatingInteractionController
     {
-        // Canned (tushonka, sprats): can in the LEFT hand; spoon (if any) + food in the RIGHT.
-        // Food hangs off the spoon holder (HasSpoon) or the right hand. False+Reset if a prop's
-        // missing. Optional extras: a SECOND food piece (sugar's pair of cubes, own holder on
-        // the same hand) and a glued SIBLING group (sugar's remaining pile sits NEXT TO the box
-        // in the rig — without the glue it stays behind on the body-space rig).
+        // Canned (tushonka, sprats): can in the left hand; spoon (if any) + food in the right. Food hangs off the spoon holder
+        // (HasSpoon) or the right hand. Optional extras: a second food piece (sugar's pair of cubes, own holder on the same hand)
+        // and a glued sibling group (sugar's remaining pile sits next to the box in the rig: unglued it stays on the body-space rig).
         private static bool SetupCannedProps(Transform root, Transform leftHandBone, Transform rightHandBone)
         {
             baseT = FindDeep(root, def.rootName);
@@ -90,11 +88,9 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // Drink: container in the HOLDING hand (right unless holdInOffHand). The cap (if any)
-        // is a SIBLING of the container in the rig (cap + mod_item both under weapon), so
-        // reparenting the container alone would strand it — instead it's glued ON the
-        // container at its rest offset (visible from the draw), detached to the free hand by
-        // the open gesture, and glued back on a recap.
+        // Drink: container in the holding hand (right unless holdInOffHand). The cap (if any) is a sibling of the container in
+        // the rig (cap + mod_item both under weapon), so reparenting the container alone would strand it: it's glued on the
+        // container at its rest offset, detached to the free hand by the open gesture, and glued back on a recap.
         private static bool SetupDrinkProps(Transform root, Transform leftHandBone, Transform rightHandBone)
         {
             baseT = FindDeep(root, def.rootName);
@@ -131,9 +127,8 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // Handheld (chocolate bar): bar (rootName) in the RIGHT hand; the wrapper group is reparented
-        // UNDER the bar (pinned to its rest offset each frame in LateZeroProps) while its sn_cover
-        // child still animates the peel. No food-piece toggling.
+        // Handheld (chocolate bar): bar (rootName) in the right hand; the wrapper group is reparented under the bar (pinned to
+        // its rest offset each frame in LateZeroProps) while its sn_cover child still animates the peel. No food-piece toggling.
         private static bool SetupHandheldProps(Transform root, Transform rightHandBone)
         {
             baseT = FindDeep(root, def.rootName);                       // the bar (held item)
@@ -167,9 +162,9 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // Bag (croutons): bag root (rootName) in the RIGHT hand. The hold-crackers (names starting
-        // with foodPieceName) ride the bag, hidden, until a SHAKE pours them into the left hand;
-        // each is captured relative to the clump anchor (crackerT[0]) to keep its arrangement.
+        // Bag (croutons): bag root (rootName) in the right hand. The hold-crackers (names starting with foodPieceName) ride the
+        // bag, hidden, until a shake pours them into the left hand; each is captured relative to the clump anchor (crackerT[0])
+        // to keep its arrangement.
         private static bool SetupBagProps(Transform root, Transform rightHandBone)
         {
             baseT = FindDeep(root, def.rootName); // the bag (held item, holds everything)
@@ -203,10 +198,9 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // Pack (galette): pack (rootName) in the RIGHT hand; the wrapper group is glued to it
-        // (carries the cover, which opens in place, + the food piece). The piece (foodPieceName)
-        // is hidden until the LEFT hand takes it onto a left-hand holder. Mirror of CanHand.
-        // ReachBag (iskra/MRE) shares this wiring verbatim (held root + hidden piece, no wrapper).
+        // Pack (galette): pack (rootName) in the right hand; the wrapper group is glued to it (carries the cover, which opens
+        // in place, + the food piece). The piece (foodPieceName) is hidden until the left hand takes it onto a left-hand holder.
+        // Mirror of CanHand. ReachBag (iskra/MRE) shares this wiring (held root + hidden piece, no wrapper).
         private static bool SetupPackProps(Transform root, Transform rightHandBone)
         {
             baseT = FindDeep(root, def.rootName);                                            // the pack (held)
@@ -254,8 +248,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static void LateZeroProps()
         {
             if (!active || !reparented || def == null) return;
-            // Re-pin each archetype's props onto their holders (the animator keeps rewriting the
-            // props' locals every frame). One case per FoodKind — a new type adds its case here.
+            // One case per FoodKind: a new type adds its case here.
             switch (def.kind)
             {
                 case FoodKind.Handheld:
@@ -311,10 +304,9 @@ namespace TarkovVR.Source.Player.Interactions
                 PinRigToBody();
             }
 
-            // Pull-to-open latch LAST: it needs the prop re-zeroing above already applied
-            // (the grip is read through the holding wrist's rigid chain, which must have
-            // baseT back on its holder) and the rig pins final (the latch's parent target
-            // rides camRoot). Still pre-FinalIK, so the IK + pin aim at the result.
+            // Pull-to-open latch last: it needs the prop re-zeroing above applied (the grip is read through the holding wrist's
+            // rigid chain, which must have baseT back on its holder) and the rig pins final (the latch's parent target rides
+            // camRoot). Still pre-FinalIK, so the IK + pin aim at the result.
             DriveLatch();
             DriveReachLatch(); // the ReachBag rail (mutually exclusive with the pull latch)
             DriveLatchRelease(); // reloadStyleLatch: a released hand easing back onto its controller
@@ -372,11 +364,9 @@ namespace TarkovVR.Source.Player.Interactions
             reparented = false;
         }
 
-        // Segmented snack (sausage): hide the held item's renderers progressively — stepped
-        // at the audible bite sounds (called when a sound passes while held at the mouth)
-        // but SYNCED to the consumed fraction, so the sausage is gone exactly when the
-        // resource is, however many sounds fired. Hides from the tip inward
-        // (segmentHideFromEnd flips the end). All re-shown on restore.
+        // Segmented snack (sausage): hide the held item's renderers progressively. Called at each audible bite sound while held
+        // at the mouth, but synced to the consumed fraction, so the sausage is gone exactly when the resource is.
+        // Hides from the tip inward (segmentHideFromEnd flips the end). All re-shown on restore.
         private static void UpdateSnackSegments()
         {
             if (def == null || !def.segmentedBites || segR == null || segR.Length == 0) return;
@@ -389,8 +379,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Hide every poured cracker (Bag onEatHide). Named (not a lambda) so the loop body in
-        // the for-each stays readable.
+        // Hide every poured cracker (Bag onEatHide).
         private static void HideCrackers()
         {
             if (crackerR != null)
@@ -398,11 +387,9 @@ namespace TarkovVR.Source.Player.Interactions
             crackersShown = false;
         }
 
-        // Handheld: once peeled, move the WRAPPER (coverT, e.g. sn_cover) from the bar onto
-        // a LEFT-hand holder so the player holds the peeled wrapper in their off hand (like
-        // the spoon for a can). The bar (canT) AND the chocolate (sn_feces, still under
-        // wrapperT) stay in the right hand. From here coverT's local is pinned to zero so it
-        // sits on the (tunable) left-hand holder; its mesh keeps its own shape.
+        // Handheld: once peeled, move the wrapper (coverT, e.g. sn_cover) from the bar onto a left-hand holder. The bar and the
+        // chocolate (sn_feces, still under wrapperT) stay in the right hand. From here coverT's local is pinned to zero, so it
+        // sits on the left-hand holder.
         private static void DetachWrapperToLeftHand()
         {
             if (coverT == null || coverDetached || leftHandBoneRef == null) return;
@@ -471,8 +458,7 @@ namespace TarkovVR.Source.Player.Interactions
             crackersShown = true;
         }
 
-        // Move the single food piece (foodT) onto a left-hand holder and show it (re-shows for
-        // later picks too). Mirrors the bag/cracker move, but for one piece into the off hand.
+        // Move the single food piece (foodT) onto a left-hand holder and show it (re-shows for later picks too).
         private static void TakeFoodToLeftHand()
         {
             if (foodT == null) return;

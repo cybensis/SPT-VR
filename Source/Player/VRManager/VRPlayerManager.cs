@@ -37,7 +37,7 @@ namespace TarkovVR.Source.Player.VRManager
         public Transform gunTransform;
         public static Transform leftHandGunIK;
         // Where the support hand grabs the gun: the gun's left-hand marker, or with the gun in the left hand its mirror on the gun's
-        // right side, where the right hand supports (the same plane RealLeftHandedPatches mirrors the foregrip pose across)
+        // right side (the plane RealLeftHandedPatches mirrors the foregrip pose across)
         public static Vector3 SupportGripPoint()
         {
             // A gun with two places for it (the PKM: the handguard, or the box as its aiming clip has it): the one the hand is nearer
@@ -73,19 +73,12 @@ namespace TarkovVR.Source.Player.VRManager
         public bool blockJump = false;
         public bool blockCrouch = false;
         public bool interactMenuOpen = false;
-        // Number of selectable (non-disabled) actions in the currently-open interaction context
-        // menu. Updated from UIPatches' ActionPanel.method_0 patch. The right joystick Y axis is
-        // shared between the menu scroll (ScrollNext/Prev) and crouch, so the menu only needs to
-        // "own" the stick when there's more than one action to cycle through.
+        // Selectable (non-disabled) actions in the open interaction menu, set by UIPatches' ActionPanel.method_0 patch.
+        // The right stick's Y is shared between the menu scroll (ScrollNext/Prev) and crouch.
         public int interactMenuActionCount = 0;
-        // true: a single-option interaction menu ("Search" on a body/container, "Take" on loot)
-        // does NOT block joystick crouch / consume the scroll stick - only a multi-option menu
-        // (which actually needs the stick to navigate) does. false = old behavior (any open
-        // interaction menu blocks crouch).
+        // true: a single-option interaction menu ("Search", "Take") leaves the stick free to crouch. false: any open menu blocks crouch.
         public static bool allowCrouchWithSingleAction = true;
-        // True only when the open interaction menu genuinely needs the right joystick to navigate
-        // between actions; single-option menus leave the stick free to crouch. Both the blockCrouch
-        // calc and the ScrollHandler gate on this so they stay in lockstep.
+        // The open interaction menu needs the right stick to navigate. blockCrouch and ScrollHandler both gate on this.
         public bool interactMenuOwnsStick => interactMenuOpen && !(allowCrouchWithSingleAction && interactMenuActionCount <= 1);
         public static int LEFT_HAND_ANIMATOR_HASH = UnityEngine.Animator.StringToHash("ReloadFloat");
         private Transform ammoFireModeUi;
@@ -95,14 +88,12 @@ namespace TarkovVR.Source.Player.VRManager
         public bool showScopeZoom = false;
         public float crouchHeightDiff = 0;
 
-        // The joystick crouch drops the view instantly (crouchHeightDiff is derived from the instant
-        // CharacterController.height), but the body/arms ease down on SmoothedPoseLevel - so the view
-        // outruns the arms. We ease the value actually applied to the rig toward crouchHeightDiff at the
-        // body's rate so view + arms descend together. Tune crouchViewSmoothTime to match the arms.
-        public static float crouchViewSmoothTime = 0.14f; // 0 = instant (old behavior); only used when useHeadFollowView = false
+        // Joystick crouch drops the view instantly (crouchHeightDiff comes from CharacterController.height) while the body/arms ease
+        // down on SmoothedPoseLevel. Time to ease the view toward crouchHeightDiff so view and arms descend together.
+        public static float crouchViewSmoothTime = 0.14f; // 0 = instant; only used when useHeadFollowView = false
 
         public static float headViewYOffset = 0f;                  // (only used by head-follow) trims eye height relative to the head bone
-        public static bool drivePoseFromPhysicalCrouch = true;     // true: physically crouching drives the body pose down (the in-game head/anchor follows you)
+        public static bool drivePoseFromPhysicalCrouch = true;     // true: physically crouching drives the body pose down (the in-game head/anchor follows)
         public Transform scopeUiPosition;
         public bool isWeapPistol = false;
         public int framesAfterSwitching = 0;
@@ -144,16 +135,15 @@ namespace TarkovVR.Source.Player.VRManager
             //}
             //velocityHistory.Enqueue(currentVelocity);
 
-            // Convert the hand position to the local space of the VR rig
+            // Hand position in the VR rig's local space
             Vector3 localPosition = VRGlobals.vrOffsetter.transform.InverseTransformPoint(handTransform.position);
 
             Vector3 currentVelocity = (localPosition - lastRightHandPosition) / Time.deltaTime;
             lastRightHandPosition = localPosition;
 
-            // Add the current velocity to the history
             if (velocityHistory.Count >= maxVelocitySamples)
             {
-                velocityHistory.Dequeue(); // Remove the oldest velocity
+                velocityHistory.Dequeue();
             }
             velocityHistory.Enqueue(currentVelocity);
         }
@@ -319,13 +309,10 @@ namespace TarkovVR.Source.Player.VRManager
                     VRGlobals.blockLeftJoystick = (radialMenu && radialMenu.active) || (UIPatches.quickSlotUi && UIPatches.quickSlotUi.gameObject.active) || interactMenuOpen && cachedCurrentGunController && cachedCurrentGunController.GetComponent<MonoBehaviour>() && hasHighlightingMesh;                            
             }
 
-            // Jump/crouch/prone via the right stick are all blocked only when the interaction
-            // menu actually OWNS the stick (more than one option to scroll) — a single-option
-            // menu ("Take"/"Search") leaves jump free. (crouchHeightDiff != 0 keeps the existing
-            // "no jump while crouched" rule independent of menus.)
+            // The right stick's jump/crouch/prone are blocked only while the interaction menu owns the stick (more than one option).
+            // crouchHeightDiff != 0: no jump while crouched.
             blockJump = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick || crouchHeightDiff != 0;
             blockCrouch = VRGlobals.blockRightJoystick || VRGlobals.menuOpen || interactMenuOwnsStick;
-            // Cache ammoFireModeUi reference
             if (cachedAmmoFireModeUi != ammoFireModeUi)
                 cachedAmmoFireModeUi = ammoFireModeUi;
 
@@ -383,13 +370,11 @@ namespace TarkovVR.Source.Player.VRManager
                 //float normalizedHeightPosition = (Camera.main.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
                 float normalizedHeightPosition = (VRGlobals.VRCam.transform.localPosition.y - floorHeight) / (baseHeight - floorHeight);
 
-                // Ensure the normalized height is within 0 (full crouch/prone) and 1 (full stand).
-                // With Option A the physical headset is a 1:1 VIEW term, so we must NOT also feed it into the
-                // body pose here, or physical crouch double-drops the view. Joystick crouch still drives pose.
+                // Clamped to 0 (full crouch/prone) .. 1 (full stand). With drivePoseFromPhysicalCrouch off the headset height moves the
+                // view only and isn't fed into the body pose. Joystick crouch still drives the pose.
                 float crouchLevel = drivePoseFromPhysicalCrouch ? (1 - Mathf.Clamp(normalizedHeightPosition, 0, 1)) : 0f;
 
-                // crouchHeightDiff at max will be 0.4 when the joystick is used to crouch which will return a value between 0 and 1 which when subtracted from 1
-                // will return a value that can be used to subtract the physical crouch value from and will combine the physical and joystick crouching
+                // crouchHeightDiff is 0.4 at full joystick crouch: this combines the joystick and the physical crouch into one pose level
                 crouchLevel = Mathf.Clamp((1 - crouchHeightDiff / 0.4f) - crouchLevel, 0, 1);
 
                 VRGlobals.player.MovementContext._poseLevel = crouchLevel;
@@ -445,8 +430,8 @@ namespace TarkovVR.Source.Player.VRManager
             VRInput.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
             VRInput.LeftHandPose.AddOnUpdateListener(SteamVR_Input_Sources.LeftHand, UpdateRightHand);
             VRInput.RightHandPose.AddOnUpdateListener(SteamVR_Input_Sources.RightHand, UpdateLeftHand);
-            // The mirrored mode flips the arms + gun (scale -1) and uses offsets tuned for that (always, in left-handed mode: the real
-            // gun-in-the-left-hand is a right-handed-mode state, Handedness.GunInLeftHand)
+            // The mirrored mode flips the arms + gun (scale -1) and uses offsets tuned for that. The real gun-in-the-left-hand is a
+            // right-handed-mode state (Handedness.GunInLeftHand).
             bool mirror = Handedness.MirrorLeftHanded;
             Vector3 flip = mirror ? new Vector3(-1, 1, 1) : Vector3.one;
             if (VRGlobals.emptyHands)
@@ -581,15 +566,10 @@ namespace TarkovVR.Source.Player.VRManager
             }
         }
 
-        // The right-arm IK gets toggled OFF every time a gun is equipped (the gun drives the right
-        // side) and is only re-enabled on EmptyHandsController.Spawn (ResetWeaponOnEquipHands). The
-        // LEFT arm never gets that toggle, which is why only the RIGHT hand freezes: any transition
-        // that skips/races that single re-enable -- incl. the very first spawn before the rig is
-        // built -- strands the right hand IK off until you cycle a weapon. So re-assert it while
-        // STABLY empty-handed. It MUST be debounced (reassertEmptyDelay): a weapon draw briefly looks
-        // empty (EmptyHandsController.Drop disables the IK, then the firearm controller takes over a
-        // few frames later), and re-enabling the IK inside that window fought the draw and wedged it
-        // ("busy hands" on equip). firearmController != null also hard-gates any gun in play.
+        // The right-arm IK is turned off on every gun equip and only re-enabled in EmptyHandsController.Spawn (ResetWeaponOnEquipHands):
+        // a transition that skips that re-enable leaves the right hand frozen. So re-assert it while stably empty-handed.
+        // Must be debounced: a weapon draw briefly looks empty (EmptyHandsController.Drop disables the IK, the firearm controller
+        // takes over a few frames later), and re-enabling the IK in that window wedges the draw ("busy hands" on equip).
         public static bool reassertRightArmIkWhenEmpty = true;
         public static float reassertEmptyDelay = 0.25f; // seconds of continuous clean-empty before we touch the IK
         private float lastNotCleanEmptyTime;
@@ -624,8 +604,8 @@ namespace TarkovVR.Source.Player.VRManager
                 }
             }
 
-            // Stream our VR hand/arm poses to other players over FIKA (no-op without FIKA; the
-            // FIKA-referencing Tick() only JITs when actually called, so this stays load-safe).
+            // Stream our VR hand/arm poses to other players over FIKA. The FIKA-referencing Tick() only JITs when called, so this
+            // stays load-safe without FIKA.
             if (TarkovVR.ModSupport.InstalledMods.FIKAInstalled)
                 TarkovVR.ModSupport.FIKA.VRArmSync.Tick();
         }
@@ -634,13 +614,12 @@ namespace TarkovVR.Source.Player.VRManager
         private Quaternion rightHandRotationOffset;
 
         //---------------------------------------------------------------------------------------------------------
-        // Free hands: a fixed pose in the controller's frame, on Index controllers.
-        // The gun sliders only mean something for the gun; a free right hand riding them swung its fingertip ~15cm
-        // off. Rotation = the gun hand's at neutral sliders (its pointing finger is within 3 deg of Valve's openxr_poke
-        // axis), left = the mirror image of that. Wrist = what lands the pointing fingertip on openxr_poke
-        // (valve_controller_knu_1_0_*.json, no other controller's model has that point). IK aims the wrist at RightHand /
-        // LeftHand, so everything measured from those transforms keeps its relation to the rendered hand.
-        public static bool alignFreeHands = true;    // false = the old placement, for comparing in the headset
+        // Free hands: a fixed pose in the controller's frame, on Index controllers (the gun-hold sliders only mean something for the gun).
+        // Rotation = the gun hand's at neutral sliders (its pointing finger is within 3 deg of Valve's openxr_poke axis), left = its
+        // mirror image. Wrist = what lands the pointing fingertip on openxr_poke (valve_controller_knu_1_0_*.json, no other
+        // controller's model has that point). IK aims the wrist at RightHand / LeftHand, so everything measured from those
+        // transforms keeps its relation to the rendered hand.
+        public static bool alignFreeHands = true;    // false = free hands placed with the gun hand's offsets
         public static Vector3 freeRightHandWrist = new Vector3(0.0147f, 0.064f, -0.1715f);
         public static Vector3 freeRightHandRotation = new Vector3(50f, 170f, 70f);
         public static Vector3 freeLeftHandWrist = new Vector3(-0.0246f, 0.0468f, -0.188f);
@@ -659,11 +638,11 @@ namespace TarkovVR.Source.Player.VRManager
         private void PlaceRightHandForGun(VRPose fromAction)
         {
             Quaternion offset = Quaternion.Euler(VRSettings.GetPrimaryHandVertOffset() + mainHandRotOffset.x, mainHandRotOffset.y, mainHandRotOffset.z + VRSettings.GetPrimaryHandHorOffset());
-            // The gun in the left hand (Handedness.GunInLeftHand): the left controller holds the gun the way the right one does, mirrored, and the gun itself isn't
-            // mirrored. Controller -> gun right-handed = offset * gunInHand; its mirror image = that reflected through the controller's
-            // left-right plane (its x: the controllers' poses mirror across it) AND through the gun's own (Weapon_root x), which keeps
-            // the gun a real gun: hand rotation = F * (offset * gunInHand) * F * gunInHand^-1. (Reflecting the offset alone, headset
-            // round 2, only works if the gun's x lines up with the hand frame's: it didn't - the pistol pointed off to the side.)
+            // The gun in the left hand (Handedness.GunInLeftHand): the left controller holds the gun the way the right one does, mirrored,
+            // and the gun itself isn't mirrored. Controller -> gun right-handed = offset * gunInHand; its mirror image = that reflected
+            // through the controller's left-right plane (its x) and through the gun's own (Weapon_root x):
+            // hand rotation = F * (offset * gunInHand) * F * gunInHand^-1. Reflecting the offset alone only works if the gun's x lines
+            // up with the hand frame's, and it doesn't.
             bool real = Handedness.GunInLeftHand;
             // A grenade mirrored whole in the left hand (GrenadeHold.mirrorInLeftHand: its positioner scaled -1 on x): the right hold's
             // own offset mirrored through the controller's x, the scale mirrors the rest
@@ -675,9 +654,8 @@ namespace TarkovVR.Source.Player.VRManager
         }
 
         // The gun's rotation in the rig hand's frame (the rig hand (smoothed) -> RightHandPositioner -> weaponHolder -> Weapon_root), read
-        // ONCE when the gun goes into the left hand, with the holder in its restored pose (ChestHang, after Reattach). Read live it fed
-        // back: the weapon collision nudges the holder every frame, the nudge changed the hold, the hold moved the gun into a new nudge
-        // (headset: "spazzes out everywhere for a while, then randomly stabilizes").
+        // once when the gun goes into the left hand, with the holder in its restored pose (ChestHang, after Reattach). Don't read it
+        // live: the weapon collision nudges the holder every frame, and the nudge feeds back into the hold.
         private static Quaternion gunInHandCached = Quaternion.identity;
         private static Transform gunInHandFor;
 
@@ -712,11 +690,11 @@ namespace TarkovVR.Source.Player.VRManager
             return Quaternion.LookRotation(hold.GetColumn(2), hold.GetColumn(1));
         }
 
-        // The right hand's own natural pose at the right controller, the right-handed way - the target of the right arm while it's off the
+        // The right hand's own natural pose at the right controller, the right-handed way: the target of the right arm while it's off the
         // gun in the left hand (RealLeftHandedPatches; the rig's hands follow the swapped controllers then). A rig child placed from the
-        // right controller's pose callback, the same sample and the same moment as the rig hands, and solved by the arm's own IK update too,
-        // like every other free hand: a world point handed to EFT's arm pass alone jittered (headset, round 2; the free left hand did the
-        // same in round 1 while its own update was off). Index: the free-hand wrist pose; else the gun hand's offsets.
+        // right controller's pose callback (the same sample and moment as the rig hands) and solved by the arm's own IK update, like
+        // every other free hand: a world point handed to EFT's arm pass alone jitters. Index: the free-hand wrist pose; else the gun
+        // hand's offsets.
         private Transform rightControllerHand;
 
         public Transform RightControllerHand
@@ -901,8 +879,8 @@ namespace TarkovVR.Source.Player.VRManager
                 PlaceRightHandForGun(fromAction);
             VRBoolean primaryGripState = Handedness.GunHandGrip;
             bool blockJoystick = (VRSettings.GetLeftHandedMode()) ? VRGlobals.blockLeftJoystick : VRGlobals.blockRightJoystick;
-            // If the joystick is being blocked but the right grip isn't down, keep the joystick blocked until they stop pushing it beyond a certain threshold so the player
-            // doesn't immediately move forward after selecting something from the radial menu
+            // Joystick blocked but the grip isn't down: keep it blocked until the stick is back near centre, so the player doesn't
+            // move forward right after selecting something from the radial menu
             if (blockJoystick && !primaryGripState.state)
             {
                 Vector2 joystickInput = Handedness.GunHandJoystick.axis;
@@ -919,13 +897,9 @@ namespace TarkovVR.Source.Player.VRManager
             if (VRGlobals.firearmController && isSupporting && !isWeapPistol)
             {
 
-                // Joystick scope zoom rides BREATH-HOLD now, not grip: under the sling's grip-hold
-                // model the grip is always down while holding the gun, so grip-as-modifier stole the
-                // stick on every two-handed ADS. Breath-hold (off trigger while aiming) is already the
-                // deliberate "steady the shot" modifier - zooming while steadied is natural, and jump/
-                // crouch on this stick are meaningless mid-breath-hold.
-                // Or the gun hand SQUEEZING its grip (Index force), the old grip modifier: squeezing is a deliberate act apart from
-                // holding the gun, so it doesn't take the stick on every aim (headset: "can't hold grip and zoom anymore").
+                // Joystick scope zoom rides breath-hold (off trigger while aiming), not the grip: the grip is always down while holding
+                // the gun (the sling's grip-hold model), so as a modifier it would take the stick on every two-handed aim.
+                // Or the gun hand squeezing its grip (Index force): a deliberate act apart from holding the gun.
                 bool squeezingGrip = primaryGripState.TryGetSqueeze(out bool squeezed) && squeezed;
                 if (VRGlobals.firearmController.IsAiming && VRGlobals.vrOpticController && (InputHandlers.BreathingHandler.isHoldingBreath || squeezingGrip))
                 {
@@ -944,9 +918,8 @@ namespace TarkovVR.Source.Player.VRManager
                 }
 
 
-                // Virtual gunstock: with the butt seated in the shoulder pocket, the aim pivots about the
-                // shoulder instead of the (noisy) rear hand - ShoulderStock blends the base in/out.
-                // Transforms, not positions: ShoulderStock works in tracking space (hideout-safe).
+                // Virtual gunstock: with the butt seated in the shoulder, the aim pivots about the shoulder instead of the rear hand
+                // (ShoulderStock blends the base in/out). Transforms, not positions: ShoulderStock works in tracking space.
                 Vector3 aimBase = ShoulderStock.UpdateAimBase(RightHand.transform, LeftHand.transform, Time.deltaTime);
                 Quaternion combinedRotation = Quaternion.LookRotation((LeftHand.transform.position - aimBase).normalized, RightHand.transform.up);
 
@@ -959,18 +932,14 @@ namespace TarkovVR.Source.Player.VRManager
                     // Set the left hand IK back to the original gun position
                     VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
                     isEnteringTwoHandedMode = true;
-                    // First we get the current right hands local rotation
                     initialRightHandRotation = RightHand.transform.localRotation;
-                    // Then we get the new right hands rotation for when it points towards the left hand
                     RightHand.transform.rotation = combinedRotation;
-                    // Then we get the local rotation for the new rotation
                     Quaternion newLocalRotation = RightHand.transform.localRotation;
-                    // Then we get the difference between the two, and this value will be applied to every local rotation when two handing, so that the gun always starts
-                    // with the exact same rotation as when you were one handing it.
+                    // The one-handed local rotation vs the one pointing at the left hand. Applied to every local rotation while two-handing,
+                    // so the gun starts with the exact rotation it had one-handed.
                     rightHandRotationOffset = Quaternion.Inverse(newLocalRotation) * initialRightHandRotation;
                 }
-                // If aim smoothing is on, then we need to apply the rotation offset before the slerp is applied, so just use the right hand for this since it's going
-                // to be wiped over further down
+                // The rotation offset has to go on before the smoothing slerp: RightHand carries it here, and is overwritten further down
                 RightHand.transform.rotation = combinedRotation;
                 RightHand.transform.localRotation *= rightHandRotationOffset;
 
@@ -1004,8 +973,8 @@ namespace TarkovVR.Source.Player.VRManager
                     rawRightHand.transform.position = RightHand.transform.position;
                 }
 
-                // The first 2 frames after swapping to or from two handed mode are slow to update for some reason so the gun will appear at a very weird angle
-                // just for a moment, so just manually set the weaponholder pos and rotation here.
+                // The first 2 frames after swapping to or from two handed mode are slow to update and the gun shows at an odd angle,
+                // so set the weaponholder pos and rotation directly
                 if (framesAfterSwitching < 2)
                 {
                     VRGlobals.weaponHolder.transform.parent.position = rawRightHand.transform.position;
@@ -1103,8 +1072,8 @@ namespace TarkovVR.Source.Player.VRManager
             }
             */
 
-            // If the joystick is being blocked but the right grip isn't down, keep the joystick blocked until they stop pushing it beyond a certain threshold so the player
-            // doesn't immediately move forward after selecting something from the radial menu
+            // Joystick blocked but the grip isn't down: keep it blocked until the stick is back near centre, so the player doesn't
+            // move forward right after selecting something from the radial menu
             if (blockJoystick && !secondaryGripState.state)
             {
                 Vector2 joystickInput = Handedness.OffHandJoystick.axis;
@@ -1120,12 +1089,9 @@ namespace TarkovVR.Source.Player.VRManager
             if (VRGlobals.menuOpen || !LeftHand)
                 return;
 
-            // If holding a loot item, skip ALL gun/scope IK logic — just position hand freely
-            // Must come BEFORE scopeTransform check so heldItem always wins
-            // Same while holding or reaching for a magazine, so the grab never turns into a foregrip snap
-            // Same with the gun slung (his ask: "disable all the off hand gun hand pose locking while the gun is slung ... I have my hand
-            // around the sight location the hand can sometimes get locked and doesn't rotate": the scope grab below froze the hand, and
-            // the foregrip snap took it onto the hanging gun)
+            // Holding a loot item: skip all the gun/scope IK logic and place the hand freely. Must come before the scopeTransform check.
+            // Same while holding or reaching for a magazine, so the grab never turns into a foregrip snap.
+            // Same with the gun slung: the scope grab and the foregrip snap below would lock the hand onto the hanging gun.
             if (HandsInteractionController.HoldingLoot
                 || VRReloadController.OwnsOffHand || VRReloadController.ShellInOffHand || TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
             {
@@ -1145,7 +1111,7 @@ namespace TarkovVR.Source.Player.VRManager
             if (VRGlobals.handsInteractionController && VRGlobals.handsInteractionController.scopeTransform && secondaryGripState.state)
                 return;
 
-            // The old rig handed the left hand to Tarkov's reload / malfunction animation here; VRGunController keeps it yours
+            // Tarkov's reload / malfunction animation takes the left hand here, unless VRGunController keeps it on the controller
             if (!VRGunController.KeepLeftHandOnController() && VRGlobals.player && VRGlobals.player.BodyAnimatorCommon.GetFloat(LEFT_HAND_ANIMATOR_HASH) == 1.0)
             {
                 if (!leftHandInAnimation)
@@ -1170,9 +1136,8 @@ namespace TarkovVR.Source.Player.VRManager
 
                 leftHandInAnimation = false;
             }
-            // A grenade is never two-handed (the other hand on it pulls the ring or takes it over, GrenadeHold): its left-hand marker
-            // took the hand that had just handed it over, grip still closed, as a foregrip - the hand's turn frozen at the other
-            // controller's (his report: "my hand flips upside down" until that grip let go)
+            // A grenade is never two-handed (the other hand on it pulls the ring or takes it over, GrenadeHold). Else its left-hand marker
+            // takes the hand that just handed it over, grip still closed, as a foregrip, and that hand's rotation freezes.
             if (WeaponPatches.grenadeEquipped)
             {
                 if (isSupporting || isEnteringTwoHandedMode)
@@ -1195,9 +1160,8 @@ namespace TarkovVR.Source.Player.VRManager
                 else if (!isSupporting)
                     hapticTriggered = false;
 
-                // If the player is already in support position with snap enabled and they aren't holding grip, check for the position similar to above 
-                // but give the distance between hand and IK position some tolerance so the hand doesn't rapidly swap between support pos and non-support pos
-                // when in close vicinity.
+                // Already in support position with snap enabled and no grip held: give the hand-to-IK distance some tolerance, so the
+                // hand doesn't rapidly swap between support pos and non-support pos near the edge
                 bool withinDistanceAfterSnap = withinDistance && isSupporting && Vector3.Distance(LeftHand.transform.position, supportGripPoint) < 0.175f;
                 if (withinDistance || handLock || withinDistanceAfterSnap)
                 {
@@ -1358,11 +1322,10 @@ namespace TarkovVR.Source.Player.VRManager
                 VRGlobals.player._markers[0] = LeftHand.transform;
 
             // Two-handing ended here, not by the left hand letting go of the gun (UpdateRightHand's release): the sling taking the gun
-            // from the left hand alone, a hand swap, a menu. Undo what two-handing did to the left arm the way that release does - EFT's
-            // left marker back on the left hand, the arm's own update on its controller. Else EFT kept solving the free left arm toward
-            // the slung gun's foregrip marker with the arm's own update off (headset: "my left hand is jittering/lagging" walking after
-            // the gun went to its slot from the left hand alone, until a foregrip grab and release). Only while the arm is still the
-            // two-handed one (no target): a reload latch on it is VRReloadController's.
+            // from the left hand alone, a hand swap, a menu. Undo what two-handing did to the left arm the way that release does: EFT's
+            // left marker back on the left hand, the arm's own update on its controller. Else EFT keeps solving the free left arm toward
+            // the gun's foregrip marker with the arm's own update off. Only while the arm is still the two-handed one (no target):
+            // a reload latch on it is VRReloadController's.
             var leftArmIk = VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null;
             if (wasTwoHanding && leftArmIk != null && leftArmIk.solver != null && leftArmIk.solver.target == null && LeftHand != null)
             {
@@ -1375,9 +1338,9 @@ namespace TarkovVR.Source.Player.VRManager
         }
 
         // Two-handing taken without the grip press at the support point: a pistol's magazine seated with the grip still held
-        // (VRReloadController.UpdateSeatedHold), the hand already moved onto the support pose. As if the grip were pressed there now -
-        // the same entry as UpdateLeftHand's, and handLock so the hold / toggle setting decides when it lets go, like any support grab.
-        // The reload latch still on the arm hands it to EFT's IK itself once it sees isSupporting (VRReloadController.UpdateHandLatch).
+        // (VRReloadController.UpdateSeatedHold), the hand already on the support pose. The same entry as UpdateLeftHand's, with handLock
+        // so the hold / toggle setting decides when it lets go. The reload latch still on the arm hands it to EFT's IK itself once it
+        // sees isSupporting (VRReloadController.UpdateHandLatch).
         public void TakeSupportGrip()
         {
             if (isSupporting || LeftHand == null || VRGlobals.player == null || rawRightHand == null)

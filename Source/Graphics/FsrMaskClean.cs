@@ -10,15 +10,14 @@ namespace TarkovVR.Source.Graphics
     // such a point, so FSR's nearest-depth motion dilation and its previous-depth scatter spread them into the visible
     // image and its depth clip drops the history there (mask-shaped aliased patches). Before each eye's FSR, depth and
     // motion are copied with masked pixels set to far depth + zero motion (shader Hidden/SPTVR/FsrMaskClean, bundle
-    // sptvr/Assets/fsrmask) and FSR reads the copies (Remap). Only while the occlusion mesh is on; no bundle = as before.
+    // sptvr/Assets/fsrmask) and FSR reads the copies (Remap). Only while the occlusion mesh is on; no bundle = the originals.
     public static class FsrMaskClean
     {
         public static bool enabled = true;
 
-        // For FSR4 Bridge (typed, behind its SPT-VR check): the same masked copy straight into ITS depth / motion
-        // textures, run now. FSR4 copes with the raw mask (no visible artifact), but this is the same bad data gone for
-        // the cost of two tiny passes. False = not done (cleaner off, no mask, no bundle, sizes not matching) and the
-        // caller copies plainly as before.
+        // For FSR4 Bridge (typed, behind its SPT-VR check): the same masked copy straight into its depth / motion
+        // textures, run now (FSR4 copes with the raw mask; this removes the bad data for two tiny passes). False = not
+        // done (cleaner off, no mask, no bundle, sizes not matching) and the caller copies plainly.
         public static bool CopyClean(Texture depthSrc, Texture motionSrc, RenderTexture depthDst, RenderTexture motionDst)
         {
             if (!enabled || passThrough || !XRSettings.enabled || !XRSettings.useOcclusionMesh
@@ -68,9 +67,9 @@ namespace TarkovVR.Source.Graphics
             Ensure(ref depthCopy, width, height, RenderTextureFormat.RFloat, "SPT-VR FSR depth (mask as sky)");
             Ensure(ref mvCopy, width, height, RenderTextureFormat.RGHalf, "SPT-VR FSR motion (mask still)");
 
-            // The REAL textures, not BuiltinRenderTextureType.ResolvedDepth / MotionVectors: those don't resolve as blit
-            // sources in a buffer run outside a camera event (FSR4 Bridge hit the same) - bound wrong, the copies broke
-            // FSR3 completely (no AA, raw jitter; 2026-10-19). Same objects FSR4 Bridge reads.
+            // The real textures, not BuiltinRenderTextureType.ResolvedDepth / MotionVectors: those don't resolve as blit
+            // sources in a buffer run outside a camera event, and the wrong copies break FSR3 (no AA, raw jitter). Same
+            // objects FSR4 Bridge reads.
             Texture depthTexture = Shader.GetGlobalTexture(CameraDepthId), motionTexture = Shader.GetGlobalTexture(CameraMvId);
             if (depthTexture == null || motionTexture == null)
             {
@@ -98,8 +97,8 @@ namespace TarkovVR.Source.Graphics
             }
             else
             {
-                // Inputs as explicit globals: the blit's own _MainTex binding did not reach the shader's Texture2D, so the
-                // copies read the camera's colour image (readback check 2026-10-19).
+                // Inputs as explicit globals: the blit's own _MainTex binding doesn't reach the shader's Texture2D (the
+                // copies would read the camera's colour image).
                 commandBuffer.SetGlobalTexture(MaskDepthId, depthTexture);
                 commandBuffer.SetGlobalTexture(SrcId, depthTexture);
                 commandBuffer.Blit(depthTexture, depthCopy, mat, 0);
@@ -114,8 +113,8 @@ namespace TarkovVR.Source.Graphics
         }
 
         //------------------------------------------------------------------------------------------------------------
-        // Check (2026-10-19: the copies broke FSR3 and reasoning didn't find why): one frame's originals (through Unity's
-        // own blit, FSR4 Bridge's proven path) and copies are read back and compared pixel by pixel, one log line.
+        // Check: one frame's originals (through Unity's own blit, as FSR4 Bridge copies) and copies are read back and
+        // compared pixel by pixel, one log line.
         public static bool passThrough = false;
         private static bool diagPending;
         private static RenderTexture diagDepth, diagMv;

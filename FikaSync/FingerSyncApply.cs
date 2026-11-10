@@ -6,13 +6,10 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // Receive + render remote VR players' FINGER poses (authored open-hand poses / Index skeletal
-    // curls), in an ObservedPlayer.LateUpdate postfix like ArmSyncApply (after FIKA's visual pass,
-    // so the write beats the observed animator for the rendered frame). Joint identity is positional:
-    // 3 joints per finger in palm child-order under "Base HumanLPalm"/"Base HumanRPalm" - the exact
-    // order the sender samples in - valid because every player runs the same EFT hands prefab.
-    // A hand only gets driven while its Active flag is set AND the data is fresh; otherwise the
-    // observed animator keeps the fingers (vanilla look for non-VR/inactive states).
+    // Applies remote VR players' finger poses in an ObservedPlayer.LateUpdate postfix (after FIKA's visual pass, so the write
+    // beats the observed animator). Joints are matched by position: 3 per finger in palm child-order under "Base HumanLPalm" /
+    // "Base HumanRPalm", the sender's order (every player has the same EFT hands prefab). A hand is driven only while its
+    // Active flag is set and the data is fresh; otherwise the animator keeps the fingers.
     [HarmonyPatch]
     internal static class FingerSyncApply
     {
@@ -90,8 +87,8 @@ namespace SptVrFikaSync
                     handJoints[i].localRotation = Quaternion.Euler(eulers[i]);
         }
 
-        // Resolve (and cache) the observed player's finger joints. Cache invalidates itself if the
-        // rig was rebuilt (first cached bone destroyed).
+        // Resolves and caches the observed player's finger joints; the cache drops itself when the rig was rebuilt (first
+        // cached bone destroyed)
         private static JointCache ResolveJoints(ObservedPlayer p)
         {
             if (joints.TryGetValue(p.NetId, out JointCache jc))
@@ -120,8 +117,7 @@ namespace SptVrFikaSync
             return jc;
         }
 
-        // 3 joints per finger (base -> first-child chain), palm child-order - mirrors the sender's
-        // resolve exactly so the flat indices line up.
+        // 3 joints per finger (base -> first-child chain), palm child-order: must match the sender's order exactly
         private static Transform[] FlattenFingers(Transform palm)
         {
             var flat = new Transform[VRFingersPacket.JointCount];

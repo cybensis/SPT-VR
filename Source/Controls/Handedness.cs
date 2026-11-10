@@ -5,23 +5,23 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Controls
 {
-    // Who is the gun hand and who is the off hand, in one place (the groundwork for a real left-handed mode, 2026-11-06).
-    //  - The CONTROLLERS by role: the gun hand's controller is the right one, or the left one in left-handed mode. Its grip, trigger,
-    //    stick, face buttons and haptics. These read the same in today's mirrored left-handed mode and in a real one.
-    //  - The RIG hands by role: which of the rig's hands (and EFT arms) holds the gun. Today's left-handed mode keeps the gun on the
-    //    rig's RIGHT hand and mirrors the arms, so the gun rig hand is always the right one; a real left-handed mode flips these.
+    // Who is the gun hand and who is the off hand, in one place.
+    //  - The controllers by role: the gun hand's controller is the right one, or the left one in left-handed mode. Its grip, trigger,
+    //    stick, face buttons and haptics.
+    //  - The rig hands by role: which of the rig's hands (and EFT arms) holds the gun. The left-handed mode keeps the gun on the
+    //    rig's right hand and mirrors the arms, so the gun rig hand is always the right one.
     // New code should go through here rather than VRSettings.GetLeftHandedMode() ? left : right.
     public static class Handedness
     {
         public static bool LeftHanded => VRSettings.GetLeftHandedMode();
 
-        // Today's left-handed mode: the arms + gun mirrored (scale -1), everything right-handed underneath. Untouched by the below.
+        // The left-handed mode: the arms + gun mirrored (scale -1), everything right-handed underneath. Untouched by the below.
         public static bool MirrorLeftHanded => LeftHanded;
 
-        // The gun in the LEFT hand, right-handed mode (no mirroring anywhere - his call 2026-11-06, after the test built on the mirrored
-        // mode stacked mirror on mirror): the left hand took it off the sling (ChestHang). The rig's gun hand follows the left controller
-        // with the right-handed hold mirrored once (VRPlayerManager.MirroredGunHold), EFT's arms go onto the gun mirrored
-        // (RealLeftHandedPatches), the fingers swap (HandMirror). Back to the sling = back to normal.
+        // The gun in the left hand, right-handed mode (no mirroring anywhere: on the mirrored mode it would stack mirror on mirror):
+        // the left hand took it off the sling (ChestHang). The rig's gun hand follows the left controller with the right-handed hold
+        // mirrored once (VRPlayerManager.MirroredGunHold), EFT's arms go onto the gun mirrored (RealLeftHandedPatches), the fingers
+        // swap (HandMirror). Back to the sling = back to normal.
         public static bool GunInLeftHand { get; private set; }
 
         public static void SetGunInLeftHand(bool inLeftHand)
@@ -103,7 +103,7 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // The rig
 
-        // Today always the rig's right hand (see the top): the left-handed mode mirrors instead of moving the gun
+        // Always the rig's right hand: the left-handed mode mirrors instead of moving the gun
         public static bool GunOnRigLeft => false;
 
         public static Transform GunRigHand => RigHand(GunOnRigLeft);

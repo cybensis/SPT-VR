@@ -17,14 +17,14 @@ namespace SptVrFikaSync
     // ============================================================================================
     //  The public API + networking core of the FIKA sync module.
     //
-    //  SEND: the VR mod calls SendArmPose / SendDraggedBody(Released). Those need the VR rig (arms) or
-    //  the local grab (body), so the VR mod produces the data; this module only packetizes + sends.
-    //  REGISTER + RELAY + RECEIVE: handled entirely here so a peer that has ONLY this module (a
-    //  flatscreen player / headless host) registers the packets (no "Undefined packet" crash),
-    //  relays them as host, and applies them (ArmSyncApply / BodyDragApply).
+    //  SEND: the VR mod produces the data (it needs the VR rig / the local grab); this module only
+    //  packetizes + sends.
+    //  REGISTER + RELAY + RECEIVE: all here, so a peer that has only this module (a flatscreen player /
+    //  headless host) registers the packets (no "Undefined packet" crash), relays them as host and
+    //  applies them.
     //
-    //  Handlers run inside FIKA's NetPacketProcessor.ReadAllPackets, which has NO try/catch around it,
-    //  so a throw would drop the rest of the datagram (incl. weapon packets). Every handler is wrapped.
+    //  Handlers run inside FIKA's NetPacketProcessor.ReadAllPackets, which has no try/catch: a throw
+    //  would drop the rest of the datagram (incl. weapon packets). Every handler is wrapped.
     // ============================================================================================
     public static class FikaVrSync
     {
@@ -35,44 +35,37 @@ namespace SptVrFikaSync
         public static bool enableEatingSync = true;   // sync manual-eating gestures (food rides the synced hands)
         public static bool enableReloadSync = true;   // sync the manual reload (hands on parts, magazines, bolt / handle, sounds)
         public static bool enableBodyDragSync = true;
-        // Sync dragging a DOWNED/revive teammate (a live player, not a Corpse). Relocates the downed
-        // teammate's authoritative position so a revive lands at the dragged-to spot, and drives their
-        // revive-ragdoll on 3rd-party observers. See DownedDragApply.
+        // Sync dragging a downed/revive teammate (a live player, not a Corpse): relocates the teammate's authoritative
+        // position so a revive lands at the dragged-to spot, and drives their revive-ragdoll on observers. See DownedDragApply.
         public static bool enableDownedDragSync = true;
-        // Relocate the downed teammate on EVERY drag packet (their view follows continuously) instead of
-        // only on release. Off by default = one clean teleport at the safe spot when you let go (safest;
-        // the downed player is in a death cam and doesn't see their body mid-drag anyway).
+        // true = relocate the downed teammate on every drag packet (their view follows). false = one teleport when the drag
+        // ends (the downed player is in a death cam and doesn't see their body mid-drag).
         public static bool downedRelocateContinuous = false;
-        // Relocate the downed teammate to where their body was dragged. Applied at REVIVE, not on release
-        // (see DownedDragApply / RevivePatch): teleporting the root while still downed drags the decoupled
-        // ragdoll bones past the drop spot on observers (the "teleports a short distance" jump). false =
-        // no relocation at all (they'd revive at the fall spot). Must match on both clients.
+        // Relocate the downed teammate to where their body was dragged, applied at revive (see DownedDragApply / RevivePatch):
+        // teleporting the root while still downed drags the decoupled ragdoll bones past the drop spot on observers.
+        // false = they revive at the fall spot. Must match on both clients.
         public static bool relocateDownedTeammate = true;
 
         // ---- body-drag steal arbitration: read-hooks into the VR mod's local grab state ---------
-        // Callbacks (set once by the VR mod) so the VR mod stays the single source of truth and we
-        // never reference up into the VR assembly. Null/unset on a flatscreen peer = "not dragging".
+        // Callbacks set once by the VR mod, so this module never references the VR assembly. Unset on a flatscreen peer =
+        // "not dragging".
         public static Func<int> getLocalDraggedCorpseNetId;   // -> HandsInteractionController.localDraggedCorpseNetId
         public static Func<float> getLocalBodyGrabTime;        // -> HandsInteractionController.bodyGrabTime
         public static Action onYieldBodyDrag;                  // -> RelinquishBodyDrag (yield a contested body)
         public static float bodyStealGraceTime = 0.4f;         // we yield a contested body after this long
 
         // ---- release settle (mirror of the VR owner's HandsInteractionController manager) --------
-        // When a drag ends, the receiver keeps the body in ACTIVE physics until it lands AND rests
-        // for bodyFreezeDelay, then freezes it kinematic — so remotes settle a let-go body the same
-        // deterministic way the owner does (instead of EFT's unpredictable ~15s settle).
+        // When a drag ends, the receiver keeps the body in active physics until it lands and rests for bodyFreezeDelay, then
+        // freezes it kinematic, the same way the owner does (EFT's own settle takes an unpredictable ~15s).
         public static float bodyLandedSpeed = 0.3f;       // max bone speed (m/s) counted as "at rest"
         public static float bodyFreezeDelay = 3f;         // rest this long after landing, then freeze
         public static float bodyFreezeMaxTime = 20f;      // hard fallback freeze (jittery bodies)
         public static float bodyReleaseReorderGuard = 0.3f; // ignore a stale drag packet this long after a release
-        // Safety net: if the observer gets NO drag packet for a body this long (dragger disconnected /
-        // crashed mid-drag, so no Released ever arrives), auto-release it locally so it can't stay frozen.
-        // Generous so a lag spike during a real drag doesn't false-trigger (the reliable Released handles
-        // the normal case immediately; this only catches hard drops).
+        // If the observer gets no drag packet for a body this long (the dragger disconnected mid-drag, so no Released arrives),
+        // it releases the body locally. Long enough that a lag spike during a real drag doesn't trigger it.
         public static float bodyDragStaleTimeout = 2f;
-        // Exponential smoothing of the synced ragdoll pose, per frame, to hide the ~20 Hz packet stepping
-        // (same model as the arm/weapon sync's smoothRate). 0 = snap each packet. ~18 = smooth + responsive
-        // (~1/rate s of latency, which reads as natural drag weight).
+        // Exponential smoothing rate of the synced ragdoll pose, per frame, to hide the ~20 Hz packet stepping (same model as
+        // the arm/weapon sync's smoothRate). 0 = snap each packet. Latency is ~1/rate s.
         public static float bodyDragSmoothRate = 18f;
 
         public static void Init()
@@ -220,9 +213,9 @@ namespace SptVrFikaSync
         }
 
         // ===== MANUAL EATING (food props ride the synced hands) =====
-        // Stable FNV-1a-32 hash of a prop transform's name. MUST be deterministic across machines
-        // (string.GetHashCode is NOT), since the sender and the observer hash the same names on
-        // different processes and compare. Used to match a synced prop to the observed food model.
+        // FNV-1a-32 hash of a prop transform's name. Must be deterministic across machines (string.GetHashCode is not): the
+        // sender and the observer hash the same names in different processes and compare, to match a synced prop to the
+        // observed food model.
         public static int StableHash(string s)
         {
             if (string.IsNullOrEmpty(s))
@@ -235,8 +228,7 @@ namespace SptVrFikaSync
             }
         }
 
-        // Reusable send buffers (one local eater per peer, sent synchronously, so a single static
-        // set is safe — grown as needed, never shrunk).
+        // Reusable send buffers (one local eater per peer, sent synchronously): grown as needed, never shrunk.
         private static int[] _eHash = new int[0];
         private static Vector3[] _ePos = new Vector3[0];
         private static Quaternion[] _eRot = new Quaternion[0];
@@ -305,9 +297,8 @@ namespace SptVrFikaSync
             catch (Exception e) { LogOnce(ref _eatErr, "eating recv", e); }
         }
 
-        // One eat sound (by event name) the eater actually played — observers replay it on the observed
-        // food model's sound player (the looping vanilla audio is frozen out). Sent as a stable hash
-        // (no Put(string) at runtime); the observer reverse-resolves it against the food's sound bank.
+        // One eat sound (by event name) the eater played: observers replay it on the observed food model's sound player (the
+        // looping vanilla audio is frozen out). Sent as a stable hash; the observer resolves it against the food's sound bank.
         public static void SendEatingSound(int netId, string name)
         {
             if (!enableEatingSync || string.IsNullOrEmpty(name))
@@ -446,9 +437,8 @@ namespace SptVrFikaSync
         // ===== BODY DRAG =====
         public static void ClearRemoteDraggedCorpse(int netId) => BodyDragApply.ClearRemote(netId);
 
-        // Broadcast the dragged corpse's FULL ragdoll pose (every bone), so observers render the exact
-        // same ragdoll. method_20() returns FRESH world bone transforms (the TransformSyncs property
-        // caches, so we use the method directly).
+        // Broadcast the dragged corpse's full ragdoll pose (every bone). GetTransformSync() returns fresh world bone
+        // transforms (the TransformSyncs property caches).
         public static void SendDraggedBody(int corpseNetId, Corpse corpse)
         {
             if (!enableBodyDragSync || corpse == null)
@@ -477,9 +467,8 @@ namespace SptVrFikaSync
             BodyDragPacket p = default;
             p.CorpseId = corpseNetId;
             p.Released = true;
-            // RELIABLE: this is a one-shot "stop syncing, go client-only" signal — if it dropped, the
-            // observer would hold the body frozen at its last pose forever. The drag stream stays
-            // Unreliable (high-frequency, fine to lose a frame).
+            // Reliable: a one-shot "stop syncing" signal. If it dropped, the observer would hold the body frozen at its last
+            // pose. The drag stream stays Unreliable.
             SendReliableBroadcast(ref p);
         }
 
@@ -487,8 +476,7 @@ namespace SptVrFikaSync
         {
             try { BodyDragApply.Apply(p); }
             catch (Exception e) { LogOnce(ref _bodyErr, "body recv", e); }
-            // Relay regardless so a client-driven drag is still seen everywhere. The release marker must
-            // relay reliably too (same reason as the send).
+            // Relay so a client-driven drag is seen everywhere. The release marker relays reliably, like the send.
             Singleton<FikaServer>.Instance?.SendData(ref p,
                 p.Released ? DeliveryMethod.ReliableOrdered : DeliveryMethod.Unreliable, sender);
         }
@@ -500,11 +488,10 @@ namespace SptVrFikaSync
         }
 
         // ===== CORPSE LOOT SYNC (keep the host's bots/AI honest about a dragged body) =====
-        // Sent by the DRAGGER (a client) so the HOST/HEADLESS — which runs the bots + looting AI but not the
-        // VR mod — pulls the body's ORBIT waypoint on grab and re-adds it (+ relocates the server ragdoll for
-        // live scanners like LootingBots) at the rest spot on settle. Reliable: a dropped grab/settle marker
-        // would leave the body lootable in the wrong place or stuck unlootable. Only clients send (the host
-        // handles its OWN drags locally via SPT-VR.dll's OrbitSupport; the headless never drags).
+        // Sent by the dragger (a client) so the host/headless, which runs the bots + looting AI but not the VR mod, pulls the
+        // body's ORBIT waypoint on grab and re-adds it (+ relocates the server ragdoll for live scanners like LootingBots) at
+        // the rest spot on settle. Reliable: a dropped marker would leave the body lootable in the wrong place or stuck
+        // unlootable. Only clients send: the host handles its own drags locally (SPT-VR.dll's OrbitSupport).
         public static void SendCorpseLootGrab(string profileId)
         {
             if (string.IsNullOrEmpty(profileId) || !FikaBackendUtils.IsClient)
@@ -540,13 +527,10 @@ namespace SptVrFikaSync
         }
 
         // ===== DOWNED/REVIVE TEAMMATE DRAG =====
-        // Resolve a downed/revive teammate's ReviveInteractable from a collider, for the VR mod's body
-        // grab. ReviveInteractable is a Fika.Core type the VR assembly (SPT-VR.dll) must NOT name in a
-        // field or signature: doing so hard-links Fika.Core into a type that ALWAYS loads, so the whole
-        // mod fails to load when FIKA isn't installed (the field type can't resolve ->
-        // BadImageFormatException). This module legitimately references Fika.Core and only loads when FIKA
-        // is present, so the lookup lives here; it hands the component back as a plain MonoBehaviour plus
-        // the EFT RagdollClass to drive. Returns null when the collider isn't a downed teammate.
+        // Resolve a downed/revive teammate's ReviveInteractable from a collider, for the VR mod's body grab. ReviveInteractable
+        // is a Fika.Core type, and SPT-VR.dll must not name it in a field or signature: that hard-links Fika.Core into a type
+        // that always loads, and the mod fails to load without FIKA (BadImageFormatException). So the lookup lives here and
+        // returns a plain MonoBehaviour plus the EFT ragdoll to drive. Null = the collider isn't a downed teammate.
         public static MonoBehaviour FindReviveInteractable(Component col, out CorpseRagdoll ragdoll)
         {
             ragdoll = null;
@@ -594,8 +578,8 @@ namespace SptVrFikaSync
             SendUnreliableBroadcast(ref p);
         }
 
-        // Drag ended: send the FINAL relocate spot (reliable, so a dropped packet can't strand the
-        // teammate). No bones — observers reactivate + settle their ragdoll locally from its last pose.
+        // Drag ended: send the final relocate spot (reliable, so a dropped packet can't strand the teammate). No bones:
+        // observers reactivate + settle their ragdoll locally from its last pose.
         public static void SendDownedDragReleased(int netId, CorpseRagdoll ragdoll)
         {
             if (!enableDownedDragSync || netId < 0)

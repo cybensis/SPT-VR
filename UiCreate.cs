@@ -118,8 +118,7 @@ public class CircularSegmentUI : MonoBehaviour
         iconsList = new List<ItemIcon>();
         foreach (KeyValuePair<EBoundItem, Item> entry in quickSlots)
         {
-            // Grenades come off the chest slot (GrenadeSlot shows the quick-access one), held by the grip that took them; drawn from here
-            // they waited for a grip press first (his call: not in this menu)
+            // Grenades aren't in this menu: they come off the chest slot (GrenadeSlot shows the quick-access one), held by the grip that took them
             if (entry.Value is ThrowWeap)
                 continue;
             ItemIcon itemIcon = ItemViewFactory.LoadItemIcon(entry.Value);
@@ -153,9 +152,8 @@ public class CircularSegmentUI : MonoBehaviour
 
     }
 
-    // The menu is picked with the stick of the controller it sits on, and that stick's other use is held off while it's open: with
-    // Swap Sticks the right controller's stick is the one moving you (VRInput), so that one is blocked. Kept from the open so the close
-    // clears the same flag.
+    // The menu is picked with the stick of the controller it sits on, and that stick's other use is blocked while it's open (with
+    // Swap Sticks the right controller's stick is the one moving you: VRInput). Kept from the open so the close clears the same flag.
     private bool blockedLeftStick;
 
     private bool OnLeftController => pickerMode ? pickerOnLeftController : leftHand != VRSettings.GetLeftHandedMode();
@@ -173,8 +171,8 @@ public class CircularSegmentUI : MonoBehaviour
             VRGlobals.blockLeftJoystick = false;
         else
             VRGlobals.blockRightJoystick = false;
-        // The stick that picked in it reads centred for everything else until it's let go (his ask: the push that picked carried on as a
-        // crouch or a move). Only a menu that was up: they're also made and switched off at a raid's start.
+        // The stick that picked in it reads centred for everything else until it's let go, or the push that picked carries on as a
+        // crouch or a move. Only a menu that was up: they're also made and switched off at a raid's start.
         if (shown)
             VRInput.HoldStickUntilLetGo(OnLeftController ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND);
         shown = false;
@@ -186,7 +184,7 @@ public class CircularSegmentUI : MonoBehaviour
         bool leftHandedMode = VRSettings.GetLeftHandedMode();
         bool secondaryGripState = leftHandedMode ? VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand) : VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand);
         bool primaryGripState = leftHandedMode ? VRInput.LeftGrip.GetState(SteamVR_Input_Sources.LeftHand) : VRInput.RightGrip.GetState(SteamVR_Input_Sources.RightHand);
-        // Nothing in it (no quick slots, or grenades only): it still closes with its grip, else it stayed open holding a stick
+        // Nothing in it (no quick slots, or grenades only): it still closes with its grip, else it stays open holding a stick
         if (numberOfSegments == 0)
         {
             if (!pickerMode && (leftHand ? !secondaryGripState : !primaryGripState))
@@ -209,9 +207,8 @@ public class CircularSegmentUI : MonoBehaviour
             angle += 15;
             if (angle < 0) angle += 360;
 
-            // Determine the selected segment
             int selectedSegment = Mathf.FloorToInt(angle / (360f / numberOfSegments));
-            menuSegments[selectedSegment].color = new Color(1f, 1f, 1f, 0.5f); // Change to blue with desired opacity
+            menuSegments[selectedSegment].color = new Color(1f, 1f, 1f, 0.5f);
             menuSegments[selectedSegment].sprite = selectedMenuSprite;
             lastSelectedSegment = selectedSegment;
         }
@@ -233,7 +230,6 @@ public class CircularSegmentUI : MonoBehaviour
             
             
             gameObject.active = false;
-            // Add additional actions as necessary
         }
 
         if (leftHand && !secondaryGripState)
@@ -266,7 +262,7 @@ public class CircularSegmentUI : MonoBehaviour
         if (menuSprites == null || menuSprites.Length < numberOfSegments)
         {
             Debug.LogError($"menuSprites is null or too short! Expected at least {numberOfSegments}, got {(menuSprites == null ? "null" : menuSprites.Length.ToString())}");
-            return; // Bail early to avoid crash
+            return;
         }
 
         float angleStep = 360f / numberOfSegments;

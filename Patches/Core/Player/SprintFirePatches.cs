@@ -4,14 +4,13 @@ using UnityEngine;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // Firing while sprinting (his ask: "make it possible to shoot while sprinting"). Tarkov refuses a trigger pull from the idle gun
-    // while the player's state is in EFTHardSettings.UnsuitableStates (FirearmController.Idling.SetTriggerPressed ->
-    // Player.StateIsSuitableForHandInput), and a sprint starting releases the trigger (FirearmController.SprintStateChangedEvent).
-    // Your player only: the pull goes through with Sprint read as a fine state (every other unsuitable state still refuses it), and
-    // an automatic burst carries on when a sprint starts. The gun's sprint pose is already off in VR (IKPatches: the hands animator's
-    // sprint layer at weight 0), so it fires from where you hold it.
+    // Firing while sprinting. Tarkov refuses a trigger pull from the idle gun while the player's state is in
+    // EFTHardSettings.UnsuitableStates (FirearmController.Idling.SetTriggerPressed -> Player.StateIsSuitableForHandInput), and a
+    // sprint starting releases the trigger (FirearmController.SprintStateChangedEvent). Your player only: the pull goes through with
+    // Sprint read as a fine state (every other unsuitable state still refuses it), and an automatic burst carries on when a sprint
+    // starts. The gun's sprint pose is already off in VR (IKPatches: the hands animator's sprint layer at weight 0).
     // Only with the sprint animation off (VR tab "Disable Run Animation", VRSettings.GetDisableRunAnim): with it on the arms play the
-    // run, and firing stays blocked as in Tarkov (his call).
+    // run, and firing stays blocked as in Tarkov.
     [HarmonyPatch]
     public static class SprintFirePatches
     {

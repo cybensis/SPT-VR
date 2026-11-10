@@ -20,7 +20,7 @@ namespace TarkovVR.Source.Weapons
         public static bool saveReloadGrips = false;      // temporary: reloads with Manual Reload off record any hold that's missing
         public static bool rerecordReloadGrips = false;  // true = replace recordings, except the built in one below
 
-        private const string BUILT_IN_GRIP = "m4a1|0";   // tested in the headset, a recording never replaces it
+        private const string BUILT_IN_GRIP = "m4a1|0";   // a recording never replaces it
         private const int HIGHEST_MAGAZINE_TYPE = 15;
         private const int FIRST_THUMB_BONE = 1;          // palm bones in GetComponentsInChildren order: 0 is the palm
         private const int LAST_THUMB_BONE = 3;
@@ -312,7 +312,7 @@ namespace TarkovVR.Source.Weapons
 
         private static readonly Dictionary<string, ReloadGrip> reloadGrips = new Dictionary<string, ReloadGrip>
         {
-            // M4A1 with a standard 30 round magazine (3 reloads, identical)
+            // M4A1 with a standard 30 round magazine
             {
                 BUILT_IN_GRIP, new ReloadGrip
                 {
@@ -331,7 +331,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         // Where a clip's name says a magazine going in or out, -1 if it doesn't: "_mag_in" on every gun but the Five-seveN, whose
-        // clips spell it "_magin" (fiveseven_magin_0; missed, it had no animation set and so no data at all)
+        // clips spell it "_magin" (fiveseven_magin_0)
         private static int MagazineClipNameEnd(string clipName, bool goingIn)
         {
             int nameEnd = clipName.IndexOf(goingIn ? "_mag_in" : "_mag_out", StringComparison.OrdinalIgnoreCase);
@@ -622,7 +622,7 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // Fills in what isn't tested in the headset or recorded
+        // Fills in what isn't built in or recorded
         private static void LoadGeneratedHolds()
         {
             if (!File.Exists(GENERATED_HOLDS_FILE))

@@ -4,12 +4,10 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.VRManager
 {
-    // The gun sways while you sprint (his ask: "a sort of running movement to my hands/gun while running so that it's not so easy to
-    // aim"). Only while your arms don't play Tarkov's run (VR tab "Disable Run Animation" on) - the case where firing while sprinting
-    // is allowed (SprintFirePatches); with the run animation on, Tarkov animates the arms and firing stays blocked.
+    // The gun sways while you sprint. Only with "Disable Run Animation" on (the case where firing while sprinting is allowed,
+    // SprintFirePatches); with the run animation on, Tarkov animates the arms and firing stays blocked.
     // A rotation about the grip, laid on the gun's pose at its last stage (HandsPositioner), so the aim filters, the gunstock and the
-    // weight spring never see it, and the gun stays in the hand. The shot follows the drawn gun (the fireport rides WeaponRoot), the
-    // scope shows it, co-op players see it (the synced WeaponRoot pose). The view never moves.
+    // weight spring never see it. The shot follows it (the fireport rides WeaponRoot) and co-op sees it; the view never moves.
     // Gait: the nose dips with each footfall (the step rate), swings side to side and rolls with each stride (half of it), plus an
     // irregular drift so it can't be timed; all scaled by how fast you run.
     internal static class RunSway

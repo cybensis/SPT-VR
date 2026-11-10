@@ -6,14 +6,13 @@ using UnityEngine.UI;
 
 namespace TarkovVR.Source.Graphics
 {
-    // uiCam (the UI-layer camera drawn over the headset image) costs two camera passes a frame even with nothing of the UI layer in
-    // view: measured 0.87 ms of the main thread on Customs, most of it Unity's work for any camera. The wrist UI only fades in when the
-    // wrist is turned to the face, so most of a raid there's nothing for it to draw. This switches the camera off while no UI-layer
-    // graphic that can be seen (not faded out) is inside either eye's view, with a margin; on while a menu is open. Checked every few
-    // frames and kept on a moment after the last one (fade-outs finish). On the raid / hideout uiCam (InitVRPatches.SetMainCamParent).
+    // uiCam (the UI-layer camera drawn over the headset image) costs two camera passes a frame (~0.9 ms main thread) even with
+    // nothing to draw, which is most of a raid. This switches it off while no visible (not faded out) UI-layer graphic is inside
+    // either eye's view, with a margin; on while a menu is open. Checked every few frames, kept on a moment after the last one
+    // (fade-outs finish). On the raid / hideout uiCam (InitVRPatches.SetMainCamParent).
     public class UiCameraGate : MonoBehaviour
     {
-        public static bool skipWhenNoUiInView = true;  // false = uiCam every frame. (Skipping it once flipped the headset image: fixed at the game camera, Rendering.FlipForDestination)
+        public static bool skipWhenNoUiInView = true;  // false = uiCam every frame. (Skipping it flips the headset image unless Rendering.FlipForDestination corrects it)
         public static int checkEveryFrames = 3;
         public static float keepOnSeconds = 0.3f;      // after the last UI seen in view
         public static float marginMeters = 0.05f;      // grown around each graphic, plus...
@@ -21,7 +20,7 @@ namespace TarkovVR.Source.Graphics
         public static float minAlpha = 0.004f;         // below this a graphic counts as faded out
         public static bool logReasons = false;         // each canvas that turns the camera on, once
         public static float logHolderAfterSeconds = 10f; // on this long without a break: the graphic holding it logged (a new one at most every 15 s, first 60)
-        public static float minAngularSize = 0.002f;    // radians across (~0.1 degree, ~2 pixels of the eye image): smaller can't be seen (a raid's preloader clock, 33 cm, 1.2 km away)
+        public static float minAngularSize = 0.002f;    // radians across (~0.1 degree, ~2 pixels of the eye image): smaller can't be seen
 
         private const int UiLayer = 5;
         private Camera uiCamera;
@@ -187,10 +186,9 @@ namespace TarkovVR.Source.Graphics
             return GeometryUtility.TestPlanesAABB(eyePlanes[0], bounds) || GeometryUtility.TestPlanesAABB(eyePlanes[1], bounds);
         }
 
-        // An empty text is an enabled graphic with a rect that draws nothing (a raid's preloader 'Day' label, 2 m in front, empty).
+        // An empty text is an enabled graphic with a rect that draws nothing.
         // TMP: its character count, not .text (SetText(char[]) can leave .text stale while characters draw); not laid out yet = draws.
-        // A Mask's own graphic with showMaskGraphic off only marks the stencil (its children are checked on their own): the wrist's
-        // 'Notifier', 58 x 15 cm at alpha 1, kept the camera on for minutes.
+        // A Mask's own graphic with showMaskGraphic off only marks the stencil (its children are checked on their own).
         private static bool DrawsNothing(Graphic graphic)
         {
             if (graphic.TryGetComponent(out Mask mask) && mask.enabled && !mask.showMaskGraphic)

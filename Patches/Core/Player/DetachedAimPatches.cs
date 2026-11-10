@@ -3,15 +3,14 @@ using TarkovVR.Source.Player.Interactions;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // No ADS while the gun hand is off the grip (ChestHang: the gun slung, or held up by the support hand alone - mid-reload on a belt gun).
-    // Held that way the gun is placed off the support hand (ChestHang.DriveSupportPose) rather than through the gun hand's marker, which is
-    // what absorbs Tarkov's procedural aim shift on Weapon_root_anim, so aiming then moved the gun and the hand on it (his PKM: "still doing
-    // the ADS movement if you ADS while in the middle of the reload"). The trigger is off in that state too (InputHandlers.FireHandler).
-    // INFERRED from the code (not measured in the headset): if he sees it with both hands on the gun, this isn't it.
+    // No ADS while the gun hand is off the grip (ChestHang: the gun slung, or held up by the support hand alone, e.g. mid-reload on a
+    // belt gun). Held that way the gun is placed off the support hand (ChestHang.DriveSupportPose) rather than through the gun hand's
+    // marker, which is what absorbs Tarkov's procedural aim shift on Weapon_root_anim, so aiming would move the gun and the hand on it.
+    // The trigger is off in that state too (InputHandlers.FireHandler).
     [HarmonyPatch]
     internal class DetachedAimPatches
     {
-        public static bool enabled = true;      // false = aiming with the gun hand off the grip as before
+        public static bool enabled = true;      // false = aiming allowed with the gun hand off the grip
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), nameof(EFT.Player.FirearmController.SetAim), typeof(bool))]

@@ -27,16 +27,14 @@ namespace TarkovVR.Source.Player.Body
             rightTargetPos = rightBendGoalBasePos;
         }
 
-        // While sprinting with the run anim disabled, the forearm twist this reads is still being pumped by
-        // the gait, so the wrist-driven elbow goal swings and the elbows go crazy. Hold the goal at its
-        // neutral base position during that sprint instead (the existing lerp eases in/out smoothly).
+        // While sprinting with the run anim disabled, the gait still pumps the forearm twist this reads, so the elbow
+        // goal swings wildly. Hold it at its neutral base position during that sprint (the lerp eases in/out).
         public static bool sprintNeutralElbows = true;
 
-        // The Custom elbow driver (IKPatches.DriveElbow) ignores the bend GOALS this component moves, so
-        // the wrist-roll deflection is also published here (X delta from base, old goal units; clamped +
-        // sprint-frozen like the goals) for the driver to fold into its rest direction. This Update-phase
-        // read is load-bearing: it sees last frame's FINAL wrist pose (post-IK/TwistRelax), whereas the
-        // driver runs mid-VisualPass where the animator has already stomped the wrist roll.
+        // The Custom elbow driver (IKPatches.DriveElbow) ignores the bend goals this component moves, so the wrist-roll
+        // deflection is also published here (X delta from base, goal units; clamped + sprint-frozen like the goals).
+        // Must be read in Update: it sees last frame's final wrist pose (post-IK/TwistRelax), whereas the driver runs
+        // mid-VisualPass where the animator has already stomped the wrist roll.
         public static float leftTwistDeltaX;
         public static float rightTwistDeltaX;
 
@@ -45,10 +43,8 @@ namespace TarkovVR.Source.Player.Body
             bool freezeForSprint = sprintNeutralElbows && VRGlobals.player != null &&
                                    VRGlobals.player.IsSprintEnabled && VRSettings.GetDisableRunAnim();
 
-            // Twist input: the wrist driver's measured PHYSICAL hand roll when it's active - the bone
-            // euler this used to read now only carries the (1 - w2) residual of the roll, so its meaning
-            // (and this component's sensitivity) changed with every w1/w2 tune. Falls back to the euler
-            // read when the drivers are off.
+            // Twist input: the wrist driver's measured physical hand roll when it's active (the bone euler then only
+            // carries the (1 - w2) residual of the roll). Falls back to the euler read when the drivers are off.
             bool useTau = TarkovVR.Patches.Core.Player.IKPatches.naturalWrist &&
                           TarkovVR.Patches.Core.Player.IKPatches.naturalElbow;
 
@@ -78,10 +74,8 @@ namespace TarkovVR.Source.Player.Body
             return twist;
         }
 
-        // oneSidedClamp: the outward-only floor from the euler days. Keep it for the euler path, but the
-        // tau input is signed around its own neutral - with the clamp, an arm whose tau sits near 0 at
-        // neutral (no trim) has half its roll range floored to base and reads as dead (the right arm),
-        // while a trimmed arm (tau pushed far positive) never touches the clamp at all (the left arm).
+        // oneSidedClamp: the outward-only floor, for the euler path only. The tau input is signed around its own neutral:
+        // clamped, an untrimmed arm (tau near 0 at neutral) loses half its roll range and reads as dead.
         Vector3 CalculateElbowPosition(float wristTwist, Vector3 basePos, bool isLeftHand, bool oneSidedClamp)
         {
             float elbowOffset = wristTwist * elbowOffsetMultiplier;

@@ -196,7 +196,6 @@ namespace TarkovVR.Patches.Upscalers
             // Detect which eye is rendering
             int eyeIndex = (int)cam.stereoActiveEye % NUM_EYES;
 
-            // Use the appropriate eye's DLSS wrapper
             _wrappers[eyeIndex].CopyDepthMotion(source, dst, depthCopyMode, commandBuffer);
         }
 
@@ -211,7 +210,6 @@ namespace TarkovVR.Patches.Upscalers
             // Detect which eye is rendering
             int eyeIndex = (int)cam.stereoActiveEye % NUM_EYES;
 
-            // Use the appropriate eye's DLSS wrapper
             _wrappers[eyeIndex].OnRenderImage(src, dest, flipOutputUpDown, jitterOffset, externalCommandBuffer);
         }
 

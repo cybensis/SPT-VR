@@ -7,18 +7,15 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // Receiver for CorpseLootPacket. Runs on EVERY peer but ACTS only on the HOST/HEADLESS (FikaBackendUtils
-    // .IsServer) — the machine that actually runs the bots + looting AI. A VR client that drags a corpse
-    // can't update the AI itself (its OrbitManager / bot game are null), so it sends this and the server does
-    // the work here.
+    // Receiver for CorpseLootPacket. Runs on every peer but acts only on the host/headless (FikaBackendUtils.IsServer), which runs
+    // the bots + looting AI. A VR client dragging a corpse can't update the AI itself (its OrbitManager / bot game are null).
     //
     // What the server does with a dragged body:
     //   * ORBIT (if installed): pull the loot waypoint on grab, re-add it at the rest spot on settle
-    //     (OrbitSync). ORBIT loots logically, so the waypoint is what matters — not the body's collider.
+    //     (OrbitSync). ORBIT loots by waypoint, not by the body's collider.
     //   * LootingBots / base SPT (live collider scanners): relocate the server's ragdoll copy to the rest
-    //     spot on settle, so they detect the body where it was hidden, not where it died. The headless never
-    //     applies the body-drag sync (that's keyed on ObservedPlayersCorpses, which is empty on a headless),
-    //     so the server's copy otherwise stays at the death spot forever.
+    //     spot on settle. The headless never applies the body-drag sync (it's keyed on ObservedPlayersCorpses,
+    //     empty on a headless), so the server's copy otherwise stays at the death spot.
     internal static class CorpseLootApply
     {
         public static void Apply(CorpseLootPacket p)
@@ -66,11 +63,9 @@ namespace SptVrFikaSync
             }
         }
 
-        // Teleport the server's settled ragdoll to the rest spot by offsetting EVERY bone (and the root) by
-        // the pelvis delta — preserves the pose, moves the colliders. This is what makes a live collider
-        // scanner (LootingBots) find the body where the player dropped it. The bones are kinematic once the
-        // corpse has settled, so a transform write holds; even if EFT has torn the rigidbodies down, the
-        // bone GameObjects (and their colliders) still exist, so the offset still lands the colliders.
+        // Teleport the server's settled ragdoll to the rest spot by offsetting every bone (and the root) by the pelvis delta:
+        // keeps the pose, moves the colliders. The bones are kinematic once the corpse has settled, so a transform write holds;
+        // if EFT has torn the rigidbodies down, the bone GameObjects and their colliders still exist.
         private static void RelocateRagdoll(Corpse corpse, Vector3 restPos)
         {
             try

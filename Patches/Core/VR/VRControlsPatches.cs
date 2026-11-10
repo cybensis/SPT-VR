@@ -124,12 +124,10 @@ namespace TarkovVR.Patches.Core.VR
 
             if (VRSettings.GetRotationType() == VRSettings.RotationMode.Smooth)
             {
-                // Smooth rotation
                 axis[axisIndex] = VRInput.RightJoystick.axis.x * VRSettings.GetRotationSensitivity();
             }
             else
             {
-                // Snap rotation
                 ProcessSnapTurn(ref axis, axisIndex);
             }
 

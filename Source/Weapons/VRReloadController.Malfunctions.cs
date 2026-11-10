@@ -11,17 +11,15 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Clearing a malfunction by hand (Manual Reload), the way Tarkov's own clearing clips do it (each gun's misfire / jam_shell /
-    // jam_feed / jam_hard / jam_soft, read for the M4, AK, MP5, Glock and SV-98):
+    // Clearing a malfunction by hand (Manual Reload), per type, the way Tarkov's own clearing clips do it:
     //  - misfire, soft slide, failure to feed: the handle or slide all the way back and let go (a bolt-action: the bolt cycled)
     //  - failure to eject: the case stuck in the ejection port, taken out with either hand's trigger there (a full rack clears it too)
-    //  - hard slide: the handle (or bolt) doesn't move for the first hardSlideStuckTugs tugs, each a hard clunk through the gun; it
-    //    breaks free on the next, then a full rack clears it
-    // What clears it is Tarkov's one repair for all five (RepairMalfunction: the gun's state, the dud or stuck round thrown out, the
-    // next round chambered), started through Check Chamber and skipped to its end, like the magazine and rechamber skips. Tarkov wants
-    // the type examined first: the right fix by hand counts as that (its notification names the type as it clears).
-    // Co-op: those are FIKA's own CheckChamber / ExamineWeapon packets; the sync module finishes them on the other players' copy the
-    // moment they start (ReloadSyncApply.SkipMalfunctionOperation), else that copy refuses the repair and stays jammed.
+    //  - hard slide: the handle (or bolt) stays stuck for the first hardSlideStuckTugs tugs, breaks free on the next, then a full
+    //    rack clears it
+    // What clears it is Tarkov's one repair for all five (RepairMalfunction), started through Check Chamber and skipped to its end.
+    // Tarkov wants the type examined first: the right fix by hand counts as that.
+    // Co-op: those are FIKA's own CheckChamber / ExamineWeapon packets; the sync module finishes them on the other players' copy
+    // (ReloadSyncApply.SkipMalfunctionOperation), else that copy refuses the repair and stays jammed.
     public static partial class VRReloadController
     {
         public static bool malfunctionsByHand = true;           // false = clearing one stays the interaction menu's
@@ -49,9 +47,8 @@ namespace TarkovVR.Source.Weapons
         public static float jamCaseGive = 0.006f;               // m the stuck case gives toward the pull, all of it at the break
         public static float jamCaseWiggleDegrees = 15f;         // deg it tips with the hand's turn while stuck (about its end in the gun)
         public static float jamCaseStrain = 1f;                 // the building buzz in that hand while it pulls (0 = none)
-        // The thumb on the case ("Thumb needs to be closed a bit more but I imagine this will also depend on the bullet type"; a set bend
-        // along the finger tracking's curl axis then: "thumb is still no good"): its tip bent onto the case's surface every frame, from the
-        // round hold's pose (ThumbOntoCase), whatever the case's size and the hand's turn
+        // The thumb on the case: its tip bent onto the case's surface every frame, from the round hold's pose (ThumbOntoCase),
+        // whatever the case's size and the hand's turn. A set bend along the curl axis doesn't fit every case.
         public static bool jamCaseThumbReach = true;            // false = the round hold's thumb as it is
         public static float jamCaseThumbMaxBend = 45f;          // deg each thumb joint may turn off the hold's pose to get there
         public static float jamCaseThumbPad = 0.006f;           // m the tip point stays off the case's surface (the pad of the thumb)
@@ -178,8 +175,7 @@ namespace TarkovVR.Source.Weapons
                 hardSlideTugging = true;
                 hardSlideTugsDone++;
                 bool freed = hardSlideTugsDone > hardSlideStuckTugs;
-                // The gun's own: its first try (an AK's StuckBoltStart), its tug takes in turn, the one that frees it (only JamRattle before:
-                // six guns have that, so most tugs were silent)
+                // The gun's own sounds: its first try (an AK's StuckBoltStart), its tug takes in turn, the one that frees it
                 if (freed)
                 {
                     if (!PlayVariedGunSound(firearmController, hand, STUCK_FREE_SOUNDS))
@@ -206,9 +202,8 @@ namespace TarkovVR.Source.Weapons
             return Mathf.Min(wanted, hardSlideGive);
         }
 
-        // Let go from a full pull on a malfunctioned gun: the malfunction is cleared and the bolt goes home on the next round (Tarkov's repair
-        // chambers it) - or, the magazine empty, the follower catches it back, as any rack on an empty magazine does (BoltComesBack's rule,
-        // which the malfunction's full pull skipped): no round, no slam
+        // Let go from a full pull on a malfunctioned gun: cleared, and the bolt goes home on the next round (Tarkov's repair chambers it).
+        // On an empty magazine the follower catches it back instead (BoltComesBack's rule, which the malfunction's full pull skipped).
         private static void RackClearsMalfunction(FirearmController firearmController)
         {
             Weapon weapon = firearmController.Item;
@@ -229,7 +224,7 @@ namespace TarkovVR.Source.Weapons
 
         // The stuck case taken out by hand: that clears it, but nothing cycled the bolt. Tarkov's repair chambered the next round anyway; it
         // stays in the magazine as far as the hands go until a full rack (WaitingForRack: the trigger only clicks), like a magazine put in on
-        // a closed, empty chamber ("you should still have to pull the charging handle to chamber another round")
+        // a closed, empty chamber
         private static void NextRoundWaitsForRack(FirearmController firearmController)
         {
             Weapon weapon = firearmController.Item;
@@ -279,13 +274,10 @@ namespace TarkovVR.Source.Weapons
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // The stuck case in the fingers ("when I press trigger on the bullet, my fingers lock onto the bullet while it's stuck ... I can wiggle
-        // it a bit ... you need to give it some pull before it actually comes out"): Tarkov's own case model, the one in the port
-        // (Firearms._shellsInShellPort). The trigger locks the hand on it in the single-round hold (the Mosin clip's: HoldInPalm + RoundFingers)
-        // - the hand latched to the case, like the charging handle. Stuck, it stays in the port: it tips with the hand's turn (up to
-        // jamCaseWiggleDegrees, about its end inside the gun) and gives a few millimetres toward the pull, a strain building in that hand.
-        // Pulled jamCaseBreakDistance it comes out with a knock: cleared, the case in the fingers, the hand back on the controller. The
-        // trigger let go: thrown with the hand's motion (Tarkov's spent-shell physics and bounce sounds), or left in the port if still stuck.
+        // The stuck case in the fingers: Tarkov's own case model, the one in the port (Firearms._shellsInShellPort). The trigger latches the
+        // hand on it in the single-round hold (HoldInPalm + RoundFingers), like the charging handle. Stuck, it stays in the port, tipping
+        // with the hand's turn and giving a little toward the pull; pulled jamCaseBreakDistance it comes out: cleared, the case in the
+        // fingers. Trigger let go: thrown with the hand's motion (Tarkov's spent-shell physics), or left in the port if still stuck.
 
         private static SoundHand JamCaseHand => jamCaseInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
 
@@ -320,10 +312,9 @@ namespace TarkovVR.Source.Weapons
             MeasureShownCase(stuckCase.gameObject);
             HoldingJamCase = true;
 
-            // The hand locked on it ("It should keep its current hand position but while holding the bullet, the fingers lock to the bullet
-            // and that point becomes the pivot for the wrist"): turned as the controller is, placed so the point its fingers close on (the
-            // round hold's round centre, HoldInPalm) sits on the case where the hand reached it. The latch = the arm's IK target = the
-            // palm bone's pose, as the magazine's SnapHandToGrip takes it; it rides the case (PullStuckCase).
+            // The hand locked on it: turned as the controller is, placed so the point its fingers close on (the round hold's round centre,
+            // HoldInPalm) sits on the case where the hand reached it; that point is the wrist's pivot. The latch = the arm's IK target =
+            // the palm bone's pose; it rides the case (PullStuckCase).
             LatchHand(stuckCase.transform, gunHand);
             Transform weaponRoot = firearmController.WeaponRoot;
             Transform controller = LatchedHandRig;
@@ -372,10 +363,9 @@ namespace TarkovVR.Source.Weapons
             jamCaseRadius = (extent.x + extent.y + extent.z - longest) * 0.25f;
         }
 
-        // The thumb's tip onto the case: after the hand and its fingers are posed (the round hold), the thumb's three joints turned, tip first
-        // (cyclic coordinate descent), until the tip is on the case's surface (jamCaseThumbPad off it) at the point nearest it, each joint
-        // kept within jamCaseThumbMaxBend of the hold's pose. Each joint turns only about an axis across the line from it to the tip, so
-        // never about the finger's own length. The tip: 2.5 cm out along the last joint (the rig has no tip bone; TryGetPinch's point).
+        // The thumb's tip onto the case, after the hand and its fingers are posed (the round hold): the thumb's three joints turned, tip
+        // first (cyclic coordinate descent), until the tip is jamCaseThumbPad off the case's surface at the point nearest it, each joint
+        // within jamCaseThumbMaxBend of the hold's pose. The tip: 2.5 cm out along the last joint (the rig has no tip bone; TryGetPinch's point).
         private static void ThumbOntoCase(bool rightArm)
         {
             if (!jamCaseThumbReach || !HoldingJamCase || jamCase == null)
@@ -611,9 +601,8 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // From Tick
 
-        // A bolt-action's slide jam starts with a clip of the gun hand going to the bolt and bumping it, the bolt not moving (mosin_to_jam_slide
-        // 2.0 s, sv98_idle_to_jam_slide 1.8 s: its R-hand marker travels 10-30 cm) - here the hand does that itself ("the hardSlide jam for a
-        // bolt action causes an animation to play where the hands bump on the bolt a bit"). Skipped the frame after it starts, BSG's own skip
+        // A bolt-action's slide jam starts with a clip of the gun hand going to the bolt and bumping it (mosin_to_jam_slide 2.0 s,
+        // sv98_idle_to_jam_slide 1.8 s); here the hand does that itself. Skipped the frame after it starts, BSG's own skip
         // (StartMalfunction.FastForward = its end: the malfunction pose on, idle). The other guns' and types' start clips play as they are.
         public static bool skipBoltActionSlideJamClip = true;
 
@@ -644,8 +633,8 @@ namespace TarkovVR.Source.Weapons
         // Tarkov's notice and examine put the player on the gun's "knows about it" lists twice: at once, and again through inventory
         // operations (ExamineMalfunctionOperation / ExamineMalfTypeOperation.ExecuteInternal: AddPlayerWho...) that land after our same-frame
         // repair has cleared them (MalfunctionState.Repair). Left there, the next malfunction counts as already known: no jingle
-        // (PlayerOwnerInventoryController.ExamineMalfunction only plays MalfunctionExamined for an unknown one) and no glow ("the malfunction
-        // audio cue only seems to play on the first malfunction"). Nobody knows about a malfunction that isn't there: cleared, as Repair does.
+        // (PlayerOwnerInventoryController.ExamineMalfunction only plays MalfunctionExamined for an unknown one) and no glow. So the lists
+        // of a gun with no malfunction are cleared here, as Repair does.
         private static void ForgetClearedMalfunction()
         {
             FirearmController firearmController = VRGlobals.firearmController;

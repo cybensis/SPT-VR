@@ -4,11 +4,11 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Body
 {
-    // A jump in where the off hand's arm reaches, eased (his ask: "a sorta flicker ... on the grabbing hand or at the end of an animation ...
-    // It's usually the disconnect/connect that causes it"). Whenever what the left arm's IK aims at changes - another transform (the
-    // controller, a reload part's latch, our point on a pump) or none (Tarkov's own goal: the foregrip it two-hands on, a reload clip's
-    // hand) - its goal goes from where it was reaching to the new one over switchBlendTime, eased in and out, carried in the body's frame
-    // meanwhile so walking doesn't drag it. One source moving on its own is never touched.
+    // A jump in where the off hand's arm reaches, eased (else the hand flickers as it connects or disconnects). Whenever what the left
+    // arm's IK aims at changes - another transform (the controller, a reload part's latch, our point on a pump) or none (Tarkov's own
+    // goal: the foregrip it two-hands on, a reload clip's hand) - its goal goes from where it was reaching to the new one over
+    // switchBlendTime, eased in and out, carried in the body's frame meanwhile so walking doesn't drag it. One source moving on its
+    // own is never touched.
     // Hooked on the arm's own solver, so every switch anywhere goes through it: OnPreUpdate, before the solver reads its target (FinalIK
     // IKSolverTrigonometric.OnUpdate: target -> IKPosition), stands the blended goal in for it; OnPostUpdate puts the target back.
     // Off with the gun in the left hand: that arm is the gun's then, its grip has to stay on the gun.

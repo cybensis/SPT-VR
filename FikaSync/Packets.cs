@@ -30,10 +30,10 @@ namespace SptVrFikaSync
         }
     }
 
-    // One VR player's HELD WEAPON pose (the gun's WeaponRoot transform) in their own chest frame,
+    // One VR player's held weapon pose (the gun's WeaponRoot transform) in their own chest frame,
     // keyed by NetId. Sent instead of the arm packet while a firearm is held: the remote overrides the
-    // observed weapon to this pose and re-IKs the hands onto it, so other players see the gun aimed
-    // where the controller actually points (not where FIKA aims it from the head rotation).
+    // observed weapon to this pose and re-IKs the hands onto it, so the gun aims where the controller
+    // points (not where FIKA aims it from the head rotation).
     internal struct VRWeaponPacket : INetSerializable
     {
         public int NetId;
@@ -62,7 +62,7 @@ namespace SptVrFikaSync
         }
     }
 
-    // One VR player's FINGER pose: per-hand joint local eulers (15 = 5 fingers x 3 joints, palm
+    // One VR player's finger pose: per-hand joint local eulers (15 = 5 fingers x 3 joints, palm
     // child-order - both rigs are the same EFT prefab so the order matches), keyed by NetId. Sent
     // while the sender's hand-pose systems are driving (authored open poses / Index skeletal curls);
     // an all-inactive packet is the one-shot stop so observers hand the fingers back to the animator.
@@ -109,9 +109,9 @@ namespace SptVrFikaSync
         }
     }
 
-    // A VR melee SURFACE hit (wall sparks / glass break). The custom VR melee runs its collider only
+    // A VR melee surface hit (wall sparks / glass break). The custom VR melee runs its collider only
     // on the swinger, so observers never spawn the surface effect; this carries the hit so they can
-    // replay GameWorld.HackShot at the point. Player/AI hits are NOT sent (damage already syncs).
+    // replay GameWorld.HackShot at the point. Player/AI hits are not sent (damage already syncs).
     internal struct VRMeleeHitPacket : INetSerializable
     {
         public Vector3 Point;
@@ -136,21 +136,21 @@ namespace SptVrFikaSync
         }
     }
 
-    // One VR player's MANUAL-EATING state: the two rendered wrist poses (so observers drive the
+    // One VR player's manual-eating state: the two rendered wrist poses (so observers drive the
     // arms like empty hands) plus every live food prop's pose + visibility, all chest-local. The
-    // props are matched on the observer by a STABLE hash of the prop transform's name (the observed
-    // food model is the same prefab -> same bone names), and their world poses overridden after the
-    // observed meds animator, so the food rides the synced hands. Active=false is a one-shot STOP
-    // (restore hidden renderers + drop the override). Variable prop count like BodyDragPacket.
+    // props are matched on the observer by a stable hash of the prop transform's name (same prefab
+    // -> same bone names), and their world poses overridden after the observed meds animator, so the
+    // food rides the synced hands. Active=false is a one-shot stop (restore hidden renderers + drop
+    // the override).
     internal struct VREatingPacket : INetSerializable
     {
         public int NetId;
         public bool Active;                                   // false = stop (restore + clear)
         public Vector3 LeftPos;   public Quaternion LeftRot;  // rendered left wrist, chest-local
         public Vector3 RightPos;  public Quaternion RightRot; // rendered right wrist, chest-local
-        // Food animator (ObjectInHandsAnimator) state PER LAYER, mirrored so the observer's food shows
-        // the same skinned deformation (lid bone, bag rip, chew squash) the eater is at — a seek, not a
-        // play, so it never loops. All layers (not just 0) because a food's eat can live on any of them.
+        // Food animator (ObjectInHandsAnimator) state per layer, mirrored so the observer's food shows
+        // the same skinned deformation (lid bone, bag rip, chew squash): a seek, not a play, so it never
+        // loops. All layers, because a food's eat can live on any of them.
         public byte AnimLayerCount;
         public int[] AnimHashes;
         public float[] AnimTimes;
@@ -207,13 +207,12 @@ namespace SptVrFikaSync
         }
     }
 
-    // One eat SOUND event the local eater actually played — forwarded so observers hear the real
-    // gesture audio (open/scoop/gulp/bite) instead of the looping vanilla observed-meds sound (which
-    // we freeze out). Carried as a STABLE HASH of the event name, NOT the string: FIKA's bundled
-    // NetDataWriter has no runtime Put(string) (the publicized stub lies; the real DLL only has
-    // Put(string,int)/PutLargeString), so a plain Put(string) throws MissingMethodException. The
-    // observer reverse-resolves the hash against the food model's own sound bank (same prefab -> same
-    // event names). Fire-and-forget (Unreliable) — a dropped eat blip is harmless.
+    // One eat sound event the local eater played, so observers hear the real gesture audio
+    // (open/scoop/gulp/bite) instead of the looping vanilla observed-meds sound (which is frozen out).
+    // Carried as a stable hash of the event name, not the string: FIKA's bundled NetDataWriter has no
+    // runtime Put(string) (the publicized stub is wrong; the real DLL only has Put(string,int) /
+    // PutLargeString), so a plain Put(string) throws MissingMethodException. The observer resolves the
+    // hash against the food model's own sound bank. Sent Unreliable: a dropped one is harmless.
     internal struct VREatingSoundPacket : INetSerializable
     {
         public int NetId;
@@ -348,10 +347,9 @@ namespace SptVrFikaSync
         }
     }
 
-    // A body drag: the FULL ragdoll pose (one world transform per RigidbodySpawner bone), or a release
-    // marker. The receiver freezes the corpse's ragdoll kinematic and snaps every bone to this pose, so
-    // observers see the EXACT same ragdoll the dragger does — no local-physics divergence (which caused
-    // the body to stretch/freak out when only one bone was synced).
+    // A body drag: the full ragdoll pose (one world transform per RigidbodySpawner bone), or a release
+    // marker. The receiver freezes the corpse's ragdoll kinematic and snaps every bone to this pose.
+    // Syncing a single bone lets local physics diverge (the body stretches).
     internal struct BodyDragPacket : INetSerializable
     {
         public int CorpseId;        // GameWorld.ObservedPlayersCorpses key (dead player's NetId)
@@ -391,18 +389,18 @@ namespace SptVrFikaSync
         }
     }
 
-    // A FIKA DOWNED/revive teammate being dragged. Unlike BodyDragPacket (a dead Corpse keyed by
-    // GameWorld.ObservedPlayersCorpses), a downed teammate is a still-LIVE player keyed by NetId, and
-    // exists as two different things on different machines — so the receiver applies this two ways:
-    //   * the DOWNED player's OWN client teleports itself to RootPos, so a revive lands them where they
-    //     were dragged (their authoritative position is owned by their client; nothing else can move it);
-    //   * every OTHER client drives that player's revive-ragdoll bones to the synced world pose (the same
-    //     all-bones, no-stretch model as BodyDragPacket — one transform per RigidbodySpawner bone).
-    // RootPos is sent on EVERY packet (incl. the reliable release marker, which carries the FINAL spot so
+    // A FIKA downed/revive teammate being dragged. Unlike BodyDragPacket (a dead Corpse keyed by
+    // GameWorld.ObservedPlayersCorpses), a downed teammate is a still-live player keyed by NetId, and
+    // the receiver applies this two ways:
+    //   * the downed player's own client teleports itself to RootPos, so a revive lands them where they
+    //     were dragged (their position is owned by their client; nothing else can move it);
+    //   * every other client drives that player's revive-ragdoll bones to the synced world pose (all
+    //     bones, as BodyDragPacket: one transform per RigidbodySpawner bone).
+    // RootPos is sent on every packet (incl. the reliable release marker, which carries the final spot so
     // a dropped drag packet can't strand the teammate); the bone arrays are empty on the release marker.
     internal struct DownedDragPacket : INetSerializable
     {
-        public int NetId;            // the DOWNED player's NetId (CoopHandler.Players key)
+        public int NetId;            // the downed player's NetId (CoopHandler.Players key)
         public bool Released;
         public Vector3 RootPos;      // relocate target for the downed player (ground-projected body centroid)
         public byte BoneCount;       // 0 on release
@@ -438,15 +436,15 @@ namespace SptVrFikaSync
         }
     }
 
-    // A corpse a VR player grabbed / dropped while DRAGGING it, signalled to the HOST/HEADLESS — the machine
-    // that actually runs the bots + looting AI (the VR mod SPT-VR.dll needs SteamVR, so it does NOT run on a
-    // headless; only this companion does). Lets the server keep the AI's idea of the body in sync:
-    //   * Grab  (Released=false): the body is in transit — pull its ORBIT loot waypoint so bots can't loot
+    // A corpse a VR player grabbed / dropped while dragging it, signalled to the host/headless: the machine
+    // that runs the bots + looting AI (SPT-VR.dll needs SteamVR, so it does not run on a headless; only this
+    // companion does). Keeps the AI's idea of the body in sync:
+    //   * Grab  (Released=false): the body is in transit - pull its ORBIT loot waypoint so bots can't loot
     //     it from the death spot while it's carried.
-    //   * Settle (Released=true): it's resting at RestPos — re-add the ORBIT waypoint there AND relocate the
-    //     server's ragdoll copy there (so live collider scanners like LootingBots find it where it was hidden).
-    // Keyed by the dead entity's ProfileId: the ONLY identity that's stable on a headless-local Corpse (which
-    // is never in GameWorld.ObservedPlayersCorpses — that's client-only), identical on every machine, and
+    //   * Settle (Released=true): it's resting at RestPos - re-add the ORBIT waypoint there and relocate the
+    //     server's ragdoll copy there (so live collider scanners like LootingBots find it).
+    // Keyed by the dead entity's ProfileId: the only identity that's stable on a headless-local Corpse (which
+    // is never in GameWorld.ObservedPlayersCorpses - that's client-only), identical on every machine, and
     // resolvable via GameWorld.GetEverExistedPlayerByID + matches ORBIT's corpse-waypoint Target.PlayerProfileID.
     internal struct CorpseLootPacket : INetSerializable
     {

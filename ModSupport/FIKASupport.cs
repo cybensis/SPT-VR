@@ -46,12 +46,9 @@ namespace TarkovVR.ModSupport.FIKA
             });
         }
 
-        // Safety net for the loose-loot grab/summon/take: those reparent items, make them
-        // kinematic, or remove them into the inventory while FIKA's ItemPositionSyncer is still
-        // tracking them, so NotifyDone can null-ref on an item that's no longer where/what it
-        // expects (HandsInteractionController.RemoveFikaSyncer strips the syncer on grab, but a
-        // syncer added/active on another path would still spam). The sync is moot for an item
-        // we've taken control of — swallow that NRE (only) so it doesn't spam every FixedUpdate.
+        // The loose-loot grab/summon/take reparents items, makes them kinematic or removes them into the inventory while FIKA's
+        // ItemPositionSyncer may still track them (RemoveFikaSyncer only strips it on grab), so NotifyDone can null-ref every
+        // FixedUpdate. The sync is moot for an item we control: swallow only the NRE.
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Fika.Core.Main.Components.ItemPositionSyncer), "NotifyDone")]
         private static Exception SilenceItemSyncerNotifyDone(Exception __exception)
@@ -59,11 +56,8 @@ namespace TarkovVR.ModSupport.FIKA
             return __exception is NullReferenceException ? null : __exception;
         }
 
-        // Same syncer, same cause from the other end: ItemPositionSyncer.Start() NREs when it's
-        // created on an item whose rigidbody/state isn't valid yet (a grabbed/summoned loose item we
-        // re-sync on drop, or FIKA's own ThrowItem path racing our reparent). The component just
-        // fails to initialize (the drop won't network-sync that item) -- harmless, but it spams the
-        // log every time. Swallow ONLY the NRE so a genuine Start error still surfaces.
+        // Same syncer: Start() NREs when it's created on an item whose rigidbody/state isn't valid yet (a loose item we re-sync on drop,
+        // or FIKA's ThrowItem path racing our reparent). That drop just won't network-sync. Swallow only the NRE.
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(Fika.Core.Main.Components.ItemPositionSyncer), "Start")]
         private static Exception SilenceItemSyncerStart(Exception __exception)
@@ -72,14 +66,11 @@ namespace TarkovVR.ModSupport.FIKA
         }
 
         // ===== Loose-loot position sync for the VR loot pointer =====
-        // FIKA only syncs items the LOCAL player throws (ItemPositionSyncer is created in the
-        // ThrowItem patch), and that syncer self-destroys once the item settles. A resting item
-        // we grab with the loot pointer has none, so other players don't see it move. These two
-        // helpers reuse FIKA's exact mechanism: SyncHeldLootItem pushes the same LootSyncStruct
-        // the syncer's FixedUpdate sends (receivers apply it via ObservedLootItem.ApplyNetPacket),
-        // and ResyncDroppedItem re-creates FIKA's syncer on release so the physics drop syncs
-        // natively. Both no-op for items that aren't networked (ObservedLootItem) — e.g. solo.
-        // Only ever called when InstalledMods.FIKAInstalled, so they don't JIT without FIKA.
+        // FIKA only syncs items the local player throws (ItemPositionSyncer, created in its ThrowItem patch, destroys itself once the
+        // item settles), so a resting item grabbed with the loot pointer has none. SyncHeldLootItem pushes the same LootSyncStruct the
+        // syncer's FixedUpdate sends (receivers apply it via ObservedLootItem.ApplyNetPacket); ResyncDroppedItem re-creates FIKA's
+        // syncer on release so the drop syncs natively. Both no-op for items that aren't networked (ObservedLootItem).
+        // Only called when InstalledMods.FIKAInstalled, so they don't JIT without FIKA.
 
         public static void SyncHeldLootItem(LootItem item)
         {
@@ -104,8 +95,7 @@ namespace TarkovVR.ModSupport.FIKA
         {
             if (item == null || !(item is ObservedLootItem observed))
                 return;
-            // ItemPositionSyncer.Start requires a live rigidbody (it reads velocity each tick
-            // until the item settles, then sends the final Done position).
+            // ItemPositionSyncer.Start needs a live rigidbody (it reads velocity each tick until the item settles, then sends Done)
             if (item.RigidBody == null)
                 return;
             // Nothing to send to (the hideout: no FIKA session, see StopSyncerWithoutWorld)
@@ -121,9 +111,7 @@ namespace TarkovVR.ModSupport.FIKA
         }
 
         // An ItemPositionSyncer with no world to send to (the hideout has no FIKA session): its FixedUpdate dereferences the missing
-        // host / client world every physics tick while the item moves, and never reaches its own Destroy (headset log, one hideout
-        // session: 438 NullReferenceExceptions in ItemPositionSyncer.FixedUpdate, a round thrown out of the bolt and picked up). FIKA
-        // gives one to the item a throw puts in the world, and ResyncDroppedItem to one let go from the hand. Removed here instead.
+        // host / client world every physics tick while the item moves, and never reaches its own Destroy. Removed here instead.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(ItemPositionSyncer), "FixedUpdate")]
         private static bool StopSyncerWithoutWorld(ItemPositionSyncer __instance)
@@ -138,44 +126,23 @@ namespace TarkovVR.ModSupport.FIKA
         }
 
         // ===== Receiver-side: don't let a LOCAL rigidbody fight a remote player's hold =====
-        // ObservedLootItem.ApplyNetPacket hard-sets transform + velocity from each network packet.
-        // For a FRESH world item that has no rigidbody this is a clean teleport, so a remote
-        // player grabbing an item looks perfect. But once WE have grabbed-then-dropped an item,
-        // OUR machine left a non-kinematic rigidbody on it (from DropObject). When the OTHER
-        // player then grabs it, they broadcast their hand pose at ~25 Hz while our rigidbody keeps
-        // applying gravity at 50 Hz between those packets — the item visibly "fights"/stutters
-        // between their hand and falling. (This is exactly the after-a-hand-off symptom.)
-        //
-        // FIKA tags a HELD item with zero velocity + Done==false (see SyncHeldLootItem); a thrown
-        // or settling item carries real velocity. So: while a remote hold is being applied, turn
-        // OUR rigidbody's gravity OFF so it sits exactly where their packets put it; restore it
-        // the moment real motion (a throw/drop) or a Done arrives, so the physics drop still
-        // simulates in sync. And if WE are the one physically holding the item, skip the apply
-        // entirely so a stale/echoing syncer on another client can never disturb our own hold.
-        //
-        // How a grab of an item ANOTHER player is already holding resolves: newest grab wins —
-        // the new grabber steals it and the previous holder yields (no dual-ownership).
+        // ObservedLootItem.ApplyNetPacket hard-sets transform + velocity from each packet. An item we grabbed and dropped keeps our
+        // non-kinematic rigidbody (DropObject); when another player then holds it (pose at ~25 Hz), our gravity at 50 Hz makes it
+        // stutter between packets. A held item is tagged zero velocity + Done==false (SyncHeldLootItem); a thrown or settling one
+        // carries real velocity. So while a remote hold is applied our rigidbody's gravity is off, restored on real motion or Done.
+        // While we hold the item ourselves the apply is skipped. Two players on one item: newest grab wins, the previous holder yields.
 
-        // NetId -> Time.time after which the item stops counting as remote-held. Populated from
-        // ApplyNetPacket whenever we receive ANOTHER player's "held" broadcast (Done=false + zero
-        // velocity, i.e. SyncHeldLootItem). Our own held broadcasts never loop back to us, so any
-        // held packet we receive for an item is necessarily from another player.
+        // NetId -> Time.time after which the item stops counting as remote-held. Set from ApplyNetPacket on a "held" packet
+        // (Done=false + zero velocity). Our own held broadcasts never loop back, so a held packet is always another player's.
         private static readonly Dictionary<int, float> remoteHeldUntil = new Dictionary<int, float>();
-        // Holders broadcast at ~25/s (lootSyncInterval 0.04), so ~0.3s = ~7 missed packets before
-        // we treat the item as free again (covers a dropped packet without a long false positive).
+        // Holders broadcast at ~25/s (lootSyncInterval 0.04): ~0.3s = ~7 missed packets before the item counts as free again
         public static float remoteHeldGrace = 0.3f;
-        // Steal mode: a player who has held the contested item longer than this yields to the more
-        // recent grabber. Keep it well above the ~80ms a hand-off takes but below a realistic gap
-        // between two deliberate grabs, so back-and-forth steals each resolve to the newest grab.
-        // (The leading "Steal mode" framing predates the removal of an alternative "Block" mode;
-        // stealing is now the only behavior.)
+        // A player who has held the contested item longer than this yields to the more recent grabber. Well above the ~80ms a
+        // hand-off takes, below a realistic gap between two deliberate grabs.
         public static float stealGraceTime = 0.4f;
 
-        // Smoothing for RECEIVED held-item motion. A held item is position-synced at ~25 Hz; hard-
-        // snapping each packet looks choppy on observers. When on, a HELD item is driven through a
-        // per-frame exponential interpolator (the SAME smoothing the IK arm sync uses) instead of
-        // FIKA's hard SetPositionAndRotation. Only held items are smoothed; thrown/dropped/settling
-        // items keep FIKA's physics-driven sync (velocity already interpolates those). false = snap.
+        // Received held-item motion (~25 Hz) goes through a per-frame exponential interpolator (the same smoothing as the IK arm sync)
+        // instead of FIKA's hard SetPositionAndRotation. Held items only; thrown/dropped/settling items keep FIKA's sync. false = snap.
         public static bool lootSyncSmoothing = true;
         public static float lootSmoothRate = 18f;          // matches ArmSyncApply.smoothRate
         public static float lootSmoothStaleTimeout = 0.5f; // stop lerping if the holder goes quiet
@@ -192,8 +159,7 @@ namespace TarkovVR.ModSupport.FIKA
         [HarmonyPatch(typeof(ObservedLootItem), "ApplyNetPacket")]
         private static bool NeutralizeRemoteHeldLootPhysics(ObservedLootItem __instance, LootSyncPacket packet)
         {
-            // Copy to a local so the Harmony analyzer doesn't mistake the struct-field reads
-            // for writes to a by-value patch parameter.
+            // A local copy: the Harmony analyzer takes struct-field reads on a by-value patch parameter for writes
             LootSyncPacket packetCopy = packet;
             bool incomingHeld = !packetCopy.Done
                                 && packetCopy.Velocity.sqrMagnitude < 1e-6f
@@ -202,10 +168,8 @@ namespace TarkovVR.ModSupport.FIKA
             var hands = VRGlobals.handsInteractionController;
             if (hands != null && ReferenceEquals(hands.heldItem, __instance))
             {
-                // We're holding it locally AND a held broadcast for it just arrived — another
-                // player has grabbed the same item. Newest grab wins: if we grabbed it more than
-                // stealGraceTime ago we yield (hand authority to them and fall through to apply
-                // their pose); the more-recent grabber keeps it. Otherwise we keep it.
+                // We hold it and a held broadcast for it arrived: another player grabbed the same item. Newest grab wins: held longer
+                // than stealGraceTime we yield (and fall through to apply their pose), otherwise we keep it.
                 bool yield = incomingHeld
                              && Time.time - hands.heldItemGrabTime > stealGraceTime;
                 if (yield)
@@ -214,20 +178,15 @@ namespace TarkovVR.ModSupport.FIKA
                     return false; // keep authority — our own code drives it
             }
 
-            // Track who's being held remotely (cleared the moment real motion or a drop/Done
-            // arrives) so the steal arbitration above can resolve a contested grab.
+            // Track remote holds (cleared on real motion or a drop/Done) for the steal arbitration above
             int netId = __instance.GetNetId();
             if (incomingHeld)
             {
                 remoteHeldUntil[netId] = Time.time + remoteHeldGrace;
 
-                // BUG FIX: if WE dropped this item and still own its ItemPositionSyncer, that syncer
-                // keeps broadcasting the item's pose. Once another player GRABS the item, our syncer
-                // echoes their pose back at vel≈0/Done=false — byte-identical to a "held" broadcast —
-                // which trips the steal arbitration on the new holder: after stealGraceTime they
-                // think someone grabbed it from them and RelinquishHeldItem() → the item "detaches
-                // and floats" a second or two after pickup. We're no longer the authority for an
-                // item someone else is holding, so kill our syncer the instant we see their hold.
+                // If we dropped this item and still own its ItemPositionSyncer, it would echo the new holder's pose back at zero
+                // velocity / Done=false - identical to a "held" broadcast - and trip the steal arbitration on them (they'd let go
+                // after stealGraceTime). We're not the authority for an item someone else holds: destroy our syncer.
                 ItemPositionSyncer syncer = __instance.GetComponent<ItemPositionSyncer>();
                 if (syncer != null)
                     UnityEngine.Object.Destroy(syncer);
@@ -235,22 +194,19 @@ namespace TarkovVR.ModSupport.FIKA
             else
                 remoteHeldUntil.Remove(netId);
 
-            // Don't let a leftover local rigidbody (from when WE last dropped/held it) fall between
-            // the remote holder's pose updates and fight them; restore gravity on motion/drop/Done.
+            // A leftover local rigidbody must not fall between the remote holder's pose updates; gravity back on motion/drop/Done
             Rigidbody body = __instance.RigidBody;
             if (body != null && !body.isKinematic)
             {
                 body.useGravity = !incomingHeld;
-                // For a held item the smoother (below) drives the transform and FIKA's own
-                // velocity-zeroing is skipped (we return false), so zero it here to stop any
-                // leftover velocity drifting the body between the smoother's per-frame writes.
+                // Held: we return false below, so FIKA's own velocity-zeroing is skipped. Zero it here or leftover velocity drifts
+                // the body between the smoother's writes.
                 if (incomingHeld)
                     body.velocity = Vector3.zero;
             }
 
-            // SMOOTHING: drive a HELD item through a per-frame interpolator (same exp smoothing as
-            // the IK arm sync) instead of FIKA's hard 25 Hz snap. Motion/drop/Done packets tear the
-            // smoother down below so FIKA's native physics sync resumes for the throw/settle.
+            // A held item goes through the per-frame smoother instead of FIKA's hard snap; motion/drop/Done packets remove the
+            // smoother below so FIKA's physics sync resumes.
             if (lootSyncSmoothing && incomingHeld)
             {
                 LootSyncSmoother sm = __instance.GetComponent<LootSyncSmoother>()
@@ -429,7 +385,7 @@ namespace TarkovVR.ModSupport.FIKA
         private static bool OverrideExitRaidButton(Fika.Core.Main.Components.CoopHandler __instance)
         {
             EQuitState quitState = __instance.QuitState;
-            // Check VR button press (B for right-handed, Y for left-handed)
+            // B for right-handed, Y for left-handed
             bool vrExtractPressed = Handedness.GunHandUpperButton.stateDown;
 
             if (!vrExtractPressed || quitState == EQuitState.None || __instance._requestQuitGame)
@@ -478,12 +434,10 @@ namespace TarkovVR.ModSupport.FIKA
         }
     }
 
-    // Per-frame interpolator for a remotely-HELD loose item. FIKASupport.ApplyNetPacket stores the
-    // latest network pose here and skips FIKA's hard snap; this lerps the transform toward it every
-    // frame so the item glides between the ~25 Hz packets instead of stepping. Same exponential
-    // smoothing the IK arm sync uses (1 - e^(-rate·dt)); snaps on the first packet so a pickup
-    // doesn't ease in from the resting spot. Torn down (FIKASupport) the moment a motion/drop/Done
-    // packet arrives, or when WE grab the item (RemoveFikaSyncer), so it never fights another driver.
+    // Per-frame interpolator for a remotely held loose item. FIKASupport's ApplyNetPacket prefix stores the latest network pose here
+    // and skips FIKA's hard snap; this eases the transform toward it (1 - e^(-rate·dt)) between the ~25 Hz packets. Snaps on the
+    // first packet so a pickup doesn't ease in from the resting spot. Removed on a motion/drop/Done packet or when we grab the
+    // item (RemoveFikaSyncer), so it never fights another driver.
     internal class LootSyncSmoother : MonoBehaviour
     {
         private Vector3 _targetPos;
@@ -499,7 +453,7 @@ namespace TarkovVR.ModSupport.FIKA
             if (!_hasTarget)
             {
                 _hasTarget = true;
-                transform.SetPositionAndRotation(pos, rot); // snap on first packet (like the IK displayed init)
+                transform.SetPositionAndRotation(pos, rot); // snap on first packet
             }
         }
 

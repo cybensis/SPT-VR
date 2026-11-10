@@ -31,10 +31,9 @@ namespace TarkovVR.Source.Weapons
                 return weaponMeshDictionary[weaponName];
             }
             
-            // Automatically gather mesh data if weapon is not found
+            // Not cached yet: gather the parts from all children
             WeaponMeshParts newWeaponMeshParts = new WeaponMeshParts();
 
-            // Recursively gather weapon parts from all children
             GatherWeaponParts(weaponRoot, newWeaponMeshParts);
 
             weaponMeshDictionary.Add(weaponName, newWeaponMeshParts);
@@ -45,8 +44,8 @@ namespace TarkovVR.Source.Weapons
 
         private static void GatherWeaponParts(Transform root, WeaponMeshParts newWeaponMeshParts)
         {
-            //Order of the strings do matter here, reason being that some of the partnames are children of others. For example "weapon_cylinder_axis" is a child of "magazine"
-            //so if we find "weapon_cylinder_axis" first, we won't find "magazine" later on.
+            // The keyword order matters: the first match wins, and some parts are children of others (e.g. "weapon_cylinder_axis" is
+            // a child of "magazine", and must be found first).
 
             // MAGAZINE
             string[] magazineKeywords = new string[]

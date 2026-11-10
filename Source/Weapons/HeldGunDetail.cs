@@ -7,8 +7,7 @@ namespace TarkovVR.Source.Weapons
     // Keeps the item in your hands (gun, knife, grenade) on its most detailed model. Every weapon part has its own LODGroup
     // sized to the part, and Unity picks the model by how big the part looks against the camera's vertical FOV. The headset's
     // ~110 deg (flatscreen 50-75) drops small parts to their coarse LOD1 well within arm's length: the Glock front sight at
-    // ~13 cm, most pistol rear sights at 20-45 cm (bundle scan, 2026-11-09) = an iron sight you can't line up. Vanilla never
-    // forces LOD0; on a flat screen the gun just never gets that far from a narrow camera.
+    // ~13 cm, most pistol rear sights at 20-45 cm = an iron sight you can't line up. Vanilla never forces LOD0.
     // Guns are pooled (bots and dropped loot reuse the objects), so a part is released (ForceLOD(-1)) as soon as it leaves the hands.
     internal static class HeldGunDetail
     {

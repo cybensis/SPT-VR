@@ -8,16 +8,10 @@ namespace TarkovVR.Source.Settings
 {
     // Makes one of EFT's SelectSlider controls behave as a smooth, continuous slider.
     //
-    // Why a component instead of configuring the slider once: EFT's SelectSlider is discrete by
-    // design - SelectSlider.Awake() sets the inner UnityEngine.UI.Slider's wholeNumbers = true and
-    // adds an int-flooring onValueChanged listener (plus one notch per bound value). Our VR settings
-    // panels are CLONED from the sound-settings tab while it is INACTIVE, so each cloned
-    // SelectSlider.Awake() does not run until the VR tab is opened for the first time - i.e. AFTER
-    // initVrSettings(). A one-shot reconfigure done at build time is therefore overwritten by that
-    // deferred Awake (symptom: notches vanish but the handle still snaps in steps).
-    //
-    // OnEnable runs AFTER every Awake on the same activation, and fires every time the panel is
-    // shown, so re-applying the continuous config here always wins.
+    // SelectSlider.Awake() sets the inner Slider's wholeNumbers = true and adds an int-flooring onValueChanged listener.
+    // The VR panels are cloned from the sound-settings tab while it is inactive, so that Awake only runs the first time the
+    // VR tab opens, after initVrSettings(), and would undo a one-time setup. OnEnable runs after Awake on every show, so the
+    // config is re-applied there.
     public class SmoothSlider : MonoBehaviour
     {
         public Slider slider;                 // the real UnityEngine.UI.Slider (SelectSlider._slider)
@@ -36,34 +30,24 @@ namespace TarkovVR.Source.Settings
             Apply();
         }
 
-        // Strip EFT's stepping (wholeNumbers + the flooring listener), keep the notch ticks as a
-        // track, and drive our own continuous float callback + number label. Idempotent - runs on
-        // every OnEnable (every time the panel is shown).
+        // Strips EFT's stepping, keeps the notch ticks as a track, drives our own float callback + label. Idempotent.
         public void Apply()
         {
             if (slider == null || onChange == null || getValue == null)
                 return;
 
-            // Drop SelectSlider.Awake()'s listener that floored the value to an int and re-snapped it.
+            // Drops SelectSlider.Awake()'s int-flooring listener
             slider.onValueChanged.RemoveAllListeners();
             slider.wholeNumbers = false;
             slider.minValue = min;
             slider.maxValue = max;
 
-            // Keep the notch ticks VISIBLE - they form the slider's visible track/line, which is the
-            // only thing tying a handle to its label. The handle still moves continuously over them
-            // (wholeNumbers = false); the ticks are now just a decorative scale.
+            // The notch ticks are the slider's only visible track; the handle moves continuously over them
             if (notchContainer != null)
                 notchContainer.gameObject.SetActive(true);
 
-            // ALWAYS reseed from the LIVE stored value (not a captured initial). Two reasons:
-            //  - SelectSlider.Awake() sets wholeNumbers=true on first show, which rounds the handle to
-            //    the nearest integer - a fraction like 0.10 (hand offset) collapses to 0. Reseeding
-            //    here, after we set wholeNumbers=false, restores the real position.
-            //  - getValue() returns the setting the user last dragged to (onChange keeps it current),
-            //    so re-opening the panel shows the saved value instead of a stale/rounded one.
-            // We set the value while NO listener is attached (removed above, re-added below) so this
-            // reseed can't fire onChange and write a rounded value back over the setting.
+            // Reseed from the live stored value: Awake's wholeNumbers rounded the handle (0.10 -> 0). Set while no listener
+            // is attached, so the reseed can't write a rounded value back over the setting.
             slider.value = Mathf.Clamp(getValue(), min, max);
             if (valueText != null)
                 valueText.text = format(slider.value);

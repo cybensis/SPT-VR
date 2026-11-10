@@ -11,11 +11,10 @@ namespace TarkovVR.Patches.Visuals
     {
         // Grass (GPUI) motion vectors in stereo. GPUI's MotionVectors pass writes uv(A * pos with this frame's wind) -
         // uv(B * pos with last frame's wind), A/B = the _NonJitteredVP / _PreviousVP globals, and BSG's camera motion-vector
-        // pass (Hidden/Internal-MotionVectorsEFT) ADDS that where grass is in front, on top of the camera motion it gets from
-        // depth (decoded 2026-10-19). So the added term must be the grass's own wind motion only: A = B = this eye's current VP,
-        // set per eye in SetEyeGrassMatrices. Vanilla fills A/B once a frame from the mono camera (wrong in each eye); the
-        // identity matrices used before (perEyeGrassMotion = false) turned the wind sway into world metres read as screen
-        // motion, so FSR dropped the history on swaying grass = the grass/leaf aliasing. The scope's own managers stay vanilla.
+        // pass (Hidden/Internal-MotionVectorsEFT) adds that where grass is in front, on top of the camera motion it gets from
+        // depth. So the added term must be the grass's own wind motion only: A = B = this eye's current VP (SetEyeGrassMatrices).
+        // Vanilla fills A/B once a frame from the mono camera (wrong in each eye). false = identity matrices: the wind sway reads
+        // as screen motion and FSR drops the history on swaying grass. The scope's own managers stay vanilla.
         public static bool perEyeGrassMotion = true;
         private static readonly int NonJitteredVP = Shader.PropertyToID("_NonJitteredVP");
         private static readonly int PreviousVP = Shader.PropertyToID("_PreviousVP");
@@ -65,9 +64,8 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
-        // Before each eye: the eye's own current VP in both slots (jitter cancels in the difference, but the non-jittered
-        // matrix keeps it out entirely). The engine sets its own matrices for its camera motion pass, so this only feeds
-        // GPUI's grass pass (else the identity globals above would have broken FSR everywhere, not only on grass).
+        // Before each eye: the eye's own current non-jittered VP in both slots. The engine sets its own matrices for its camera
+        // motion pass, so this only feeds GPUI's grass pass.
         private static void SetEyeGrassMatrices(Camera cam)
         {
             if (!perEyeGrassMotion || cam == null || cam != VRGlobals.VRCam)
@@ -86,9 +84,7 @@ namespace TarkovVR.Patches.Visuals
             Shader.SetGlobalMatrix(PreviousVP, viewProjection);
         }
 
-        // This is where GPU Instancing handles culling, it does not work properly in multipass, it only takes left eye into account.
-        // Adding toggles for it because this can heavily impact performance depending on the scene and hardware.
-        // This isn't needed anymore so I have it commented out, leaving here for reference.
+        // GPU Instancer's culling: in multipass it only takes the left eye into account. Not needed any more; kept for reference.
         /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GPUInstancerManager), "UpdateBuffers")]
@@ -110,7 +106,6 @@ namespace TarkovVR.Patches.Visuals
         [HarmonyPatch(typeof(GPUInstancerManager), "Awake")]
         private static void ForceVRComputeShader(GPUInstancerManager __instance)
         {
-            // Force load the VR compute shader
             var vrShader = (ComputeShader)Resources.Load(GPUInstancerConstants.CAMERA_VR_COMPUTE_RESOURCE_PATH);
             if (vrShader != null)
             {
@@ -120,9 +115,8 @@ namespace TarkovVR.Patches.Visuals
                     kernelIDs[i] = vrShader.FindKernel(GPUInstancerConstants.CAMERA_COMPUTE_KERNELS[i]);
                 }
                 // Both fields are protected static in the game (public in our publicized reference; AllowUnsafeBlocks lets Mono skip the
-                // access check, as for every other private member we touch). Written directly; the reflection that did this before stays
-                // only as a fallback, in case an access check ever refuses the direct write (it's in its own method, so a refusal at JIT
-                // time lands in this catch too)
+                // access check). Written directly, in its own method so a refusal at JIT time lands in this catch too; reflection is
+                // the fallback.
                 try
                 {
                     SetCameraComputeShader(vrShader, kernelIDs);

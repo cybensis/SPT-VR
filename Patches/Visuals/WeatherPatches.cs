@@ -71,10 +71,8 @@ namespace TarkovVR.Patches.Visuals
             return false;
         }
 
-        // Old pre-FogSix fog hack: this used to drive a white PrismEffects fog on the scope (UpdateOpticFog)
-        // since the scope had no working fog in VR. FogSix now fogs the scope properly through the optic's
-        // own tod_Scattering_1, so that hack double-fogged it with a wrong-colored constant haze — removed.
-        // Kept only to force the fps prism fog off.
+        // Forces the fps PrismEffects fog off. FogSix fogs the scope through the optic's own tod_Scattering_1:
+        // don't add a PrismEffects fog on the scope, it double-fogs it.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WeatherController), "ControlScattering")]
         private static void DynamicFog(WeatherController __instance, float fog, ShowStatNotificationPacket interpolatedParams)

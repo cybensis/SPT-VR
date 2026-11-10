@@ -9,18 +9,17 @@ namespace TarkovVR.Source.Weapons
 {
     // The MDR's brass deflector by hand: the cover on the right of the receiver over its ejection port. Tarkov's own MDR clears of a failure
     // to eject or feed (mdr_jam_shell / mdr_jam_feed) flip it up on a hinge at one end - a pure turn about the bone's own -z, its origin on
-    // the hinge, about 60 deg - then lift it off; here it swings on that hinge only (his "hinge only and yes close before firing"):
+    // the hinge, about 60 deg - then lift it off; here it swings on that hinge only:
     //  - during one of those two malfunctions it has to be open: closed, the stuck case can't be reached and a rack doesn't clear it
     //  - open, the gun doesn't fire (BlocksFiring), whatever else is going on
     //  - either hand's trigger where Tarkov's hand takes it (the clip's index tip at the grab, or its free end) takes it, the hand that may
     //    take the stuck case (the off hand while the gun hand has the grip, the gun hand with the off hand holding the gun up); only during
     //    one of those malfunctions, or while it's open (to shut it). It stays where it's let go.
-    //  - Opened Tarkov's way ("Make it actually use the grab pose/animation for when they open it in base tarkov. Stop before it fully takes
-    //    off the latch ... it should be more of a push/pull motion with a bit of twist"): mdr_jam_shell t 2.93 -> 3.20, the hand on it, then
-    //    pushing it out and forward ~7 cm with ~35 deg of roll as it flips 0 -> 62 deg; the lift-off starts at 3.23. Baked (DEFLECTOR_OPEN_PATH):
-    //    the hinge angle and the right palm's pose in the gun's frame each frame. The controller's push along that path and its roll about the
-    //    path's own roll axis, since the grab, give how far along it is; the hinge and the right hand (the clip's, the gun hand's) follow the
-    //    clip there, the fingers as the clip has them. The left hand rides where it took it, with the clip's fingers mirrored.
+    //  - It opens along Tarkov's clip: mdr_jam_shell t 2.93 -> 3.20, the hand pushing it out and forward ~7 cm with ~35 deg of roll as it
+    //    flips 0 -> 62 deg (the lift-off starts at 3.23, never reached). Baked (DEFLECTOR_OPEN_PATH): the hinge angle and the right palm's
+    //    pose in the gun's frame each frame. The controller's push along that path and its roll about the path's own roll axis, since the
+    //    grab, give how far along it is; the hinge and the right hand follow the clip there, the fingers as the clip has them. The left
+    //    hand rides where it took it, with the clip's fingers mirrored.
     // Both MDR rigs (5.56 and 7.62) have the same weapon_deflector bone.
     public static partial class VRReloadController
     {

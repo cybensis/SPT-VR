@@ -14,11 +14,11 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace SptVrFikaSync
 {
-    // A VR player's MANUAL RELOAD on their copy here (VRReloadPacket, from SPT-VR's VRReloadController.Sync), drawn in the
-    // ObservedPlayer.LateUpdate postfix AFTER ArmSyncApply placed the gun (lower priority = later), so everything rides the placed gun:
+    // A VR player's manual reload on their copy here (VRReloadPacket, from SPT-VR's VRReloadController.Sync), drawn in the
+    // ObservedPlayer.LateUpdate postfix after ArmSyncApply placed the gun (lower priority = later), so everything rides the placed gun:
     //  - Tarkov's own magazine-out / magazine-in / rechamber operations, which the VR player's inventory moves start on this copy, are
-    //    finished the frame they start (the same skip the VR player's game does: their animation fought the synced arms, and the
-    //    copy was busy for seconds, so the next move of a quick reload landed on a busy copy and was refused)
+    //    finished the frame they start (as on the VR player's game: their animation fights the synced arms, and a busy copy refuses
+    //    the next move of a quick reload)
     //  - the gun's parts the reload moves or hides, by path under the gun's root (rest pose recorded, put back when they stop coming)
     //  - the bolt catch and the bolt-open layer
     //  - the magazines / round in the hands: the item's own model (found by id on this copy, or on the ground), on the synced pose
@@ -190,8 +190,8 @@ namespace SptVrFikaSync
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Tarkov's operations the VR player's moves start here, finished at once (VRReloadController.TryForceExpectedOperation's skips).
         // A VR player's magazines are always by hand, Manual Reload or not (Tarkov's B reload is a different operation, not touched
-        // here); the charging handle's rechamber is by hand only with Manual Reload on. Skipped only with that on, this copy played the
-        // whole clip for a player with it off, and the host's "done" to their game waited for its end (FIKA blocks their trigger till then).
+        // here), so those are always skipped: else this copy plays the whole clip and the host's "done" to their game waits for its
+        // end (FIKA blocks their trigger till then). The charging handle's rechamber is by hand only with Manual Reload on.
         private static void SkipTarkovReload(FirearmController firearmController, Remote remote, bool manualReload)
         {
             FirearmController.FirearmOperation operation = firearmController.CurrentOperation;
@@ -225,11 +225,11 @@ namespace SptVrFikaSync
         }
 
         // A VR player clearing a malfunction by hand: their game runs Tarkov's notice / examine / repair back to back, each skipped to
-        // its end (SPT-VR's VRReloadController.RepairByHand), and FIKA sends them as CheckChamber / ExamineWeapon packets. Those arrive
-        // here together: skipped only at the next LateUpdate, the repair's Check Chamber would land on the examine still running and be
-        // refused, and this copy would keep the malfunction. So these two are finished the moment the packet starts them.
-        // Before them: this copy may still be playing the "it jammed" beat (StartMalfunction, which ends on its animation's event), the
-        // packets arriving sooner than its animation ends here; the VR player's own was over, they couldn't have touched the gun otherwise
+        // its end (SPT-VR's VRReloadController.RepairByHand), and FIKA sends them as CheckChamber / ExamineWeapon packets that arrive
+        // together. Skipped only at the next LateUpdate, the repair's CheckChamber would land on the examine still running and be
+        // refused (this copy keeps the malfunction), so both are finished the moment the packet starts them.
+        // Before them this copy may still be playing the "it jammed" beat (StartMalfunction, which ends on its animation's event): the
+        // packets can arrive sooner than its animation ends here, so it is ended first.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(FirearmController), nameof(FirearmController.ExamineWeapon))]
         private static void EndJamBeatBeforeExamine(FirearmController __instance)
@@ -751,10 +751,10 @@ namespace SptVrFikaSync
     }
 
     // A VR player's bolt-action shot: they work the bolt by hand, so FIKA's bolt cycle on their copy (HandleObservedBoltAction: the
-    // cycle animation, then at its shell-eject event the next round into the chamber) is replaced by just the move, now, which is when
-    // the VR player's own game made it (Tarkov chambers a bolt-action's next round as it fires). The spent case flies when their bolt
-    // comes back (ReloadSyncApply's shell counter). SPT-VR sends the cycle packet itself (VRArmSync.SendBoltCycle): FIKA's own only
-    // went from a fire operation the manual bolt ends first.
+    // cycle animation, then at its shell-eject event the next round into the chamber) is replaced by just the move, at once, which is
+    // when the VR player's own game makes it (Tarkov chambers a bolt-action's next round as it fires). The spent case flies when their
+    // bolt comes back (ReloadSyncApply's shell counter). SPT-VR sends the cycle packet itself (VRArmSync.SendBoltCycle): FIKA's own
+    // only goes from a fire operation, which the manual bolt ends first.
     [HarmonyPatch]
     internal static class BoltCycleSync
     {

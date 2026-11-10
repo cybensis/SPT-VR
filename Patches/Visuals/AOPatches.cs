@@ -50,7 +50,7 @@ namespace TarkovVR.Patches.Visuals
         }
 
 
-        // Dumb workaround to fix an issue with AO during winter season. Visual artifacts where grass is, need to disable AO then re-enable after grass loads.
+        // Winter season: AO shows artifacts where the grass is unless it's disabled at raid start and re-enabled after the grass loads
         private static float aoRefreshTimer = -1f;
         private static float aoRefreshDelay = 3f;
 

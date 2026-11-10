@@ -6,12 +6,10 @@ using UnityEngine;
 namespace TarkovVR.Source.Player.Interactions
 {
     // A held loot item taken in both hands. The free hand gripping within reach of the item's surface takes hold where it touched (snapped
-    // onto the surface the way the grip places an item against a palm, Grasp.TryGraspItemShift). The first hand stays the anchor: the item
-    // keeps its grip there exactly, and turns about that grip so the line to the second grip follows the second controller (a support hand
-    // on a rifle), half the second hand's roll about that line added. The second hand is drawn locked to its grip on the item (its arm's IK
-    // target and EFT's hand marker both on secondHandLatch, a child of the item), its fingers closed on it by the grip like the first's.
-    // Letting go with the second hand leaves the item with the first, where it is; letting go with the first passes it to the second
-    // (HandOffToSecondHand); letting go with the last drops or throws it as before.
+    // onto the surface, Grasp.TryGraspItemShift). The first hand stays the anchor: the item keeps its grip there and turns about it so the
+    // line to the second grip follows the second controller, plus a share of the second hand's roll about that line. The second hand is
+    // drawn locked to its grip (its arm's IK target and EFT's hand marker both on secondHandLatch, a child of the item).
+    // The second hand letting go leaves the item with the first; the first letting go passes it to the second (HandOffToSecondHand).
     internal partial class HandsInteractionController
     {
         public static bool twoHandedLoot = true;

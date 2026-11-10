@@ -3,10 +3,9 @@ using UnityEngine;
 namespace TarkovVR.Source.Controls
 {
     // B (Y left-handed) is Escape in a menu and the gun's out of one: the mag release with Manual Reload on, Tarkov's reload and the
-    // double tap's drop with it off. Backing out of menus it gets pressed fast, again and again, and the presses after the one that
-    // closed the menu went to the gun (his report: "when I press B to exit out of a menu, my mag falls out"). So for a moment after a
-    // menu closes the button does nothing to the gun: each press in that moment starts it over, and one still held when it ends
-    // counts only once it's let go.
+    // double tap's drop with it off. Backing out of menus it gets pressed fast, and the presses after the one that closed the menu
+    // would go to the gun. So for a moment after a menu closes the button does nothing to the gun: each press in that moment starts
+    // it over, and one still held when it ends counts only once it's let go.
     public static class MenuExitButtonWait
     {
         public static float waitTime = 0.6f;    // s after a menu closes, or after the last press while waiting

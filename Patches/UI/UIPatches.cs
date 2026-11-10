@@ -66,8 +66,7 @@ namespace TarkovVR.Patches.UI
 
         }
 
-        // If you have a weapon equipped this gets ran as soon as you go from the loading screen to the game
-        // so its a good choice to init the quick slot icons since everything should be loaded by now.
+        // With a weapon equipped this runs right after the loading screen, when everything is loaded: init the quick slot icons here.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
         private static void InitQuickSlotRadialIcons(EFT.Player.FirearmController __instance)
@@ -171,7 +170,6 @@ namespace TarkovVR.Patches.UI
             if (controller == null || controller.WeaponRoot == null || !controller._player.IsYourPlayer)
                 return;
 
-            // Re-parent weapon under existing VR holder if available
             if (VRGlobals.weaponHolder == null)
             {
                 // fallback: try to find the holder
@@ -182,14 +180,12 @@ namespace TarkovVR.Patches.UI
                     return; // no valid holder found
             }
 
-            // Make sure weapon is parented correctly again
             controller.WeaponRoot.SetParent(VRGlobals.weaponHolder.transform, false);
 
-            // Apply default local offset/rotation
+            // Default local offset/rotation
             controller.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
             VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
 
-            // Refresh VR hand references
             if (controller._player)
             {
                 VRGlobals.player = controller._player;
@@ -357,7 +353,6 @@ namespace TarkovVR.Patches.UI
         {
             try
             {
-                // Check if VR player and UI are properly set up
                 if (VRGlobals.vrPlayer == null || !(VRGlobals.vrPlayer is RaidVRPlayerManager manager))
                 {
                     return;
@@ -369,14 +364,12 @@ namespace TarkovVR.Patches.UI
                     return;
                 }
 
-                // Check if SelectedAction or Name is null
                 if (interactionState.SelectedAction == null || string.IsNullOrEmpty(interactionState.SelectedAction.Name))
                 {
                     manager.positionTransitUi = false;
                     return;
                 }
 
-                // Check for the transit interaction and if the UI is available
                 if (interactionState.SelectedAction.Name.Contains("Transit") && VRGlobals.vrPlayer.interactionUi != null)
                 {
                     if (Camera.main == null)
@@ -385,7 +378,6 @@ namespace TarkovVR.Patches.UI
                         return;
                     }
 
-                    // Set the UI position and rotation
                     VRGlobals.vrPlayer.interactionUi.position = Camera.main.transform.position +
                         Camera.main.transform.forward * 0.4f +
                         Camera.main.transform.up * -0.2f;
@@ -405,10 +397,9 @@ namespace TarkovVR.Patches.UI
             }
         }
 
-        // method_0 is the reactive handler bound to GamePlayerOwner.AvailableInteractionState, so it
-        // fires whenever the available interaction actions change (and with null on look-away). Record
-        // how many actions are SELECTABLE (non-disabled) - that's what the right joystick cycles through
-        // (ScrollNext/Prev) - so the crouch/scroll handlers know whether the menu actually needs the stick.
+        // The handler bound to GamePlayerOwner.AvailableInteractionState: fires whenever the available interaction actions change
+        // (with null on look-away). Count the selectable (non-disabled) actions, which the right joystick cycles through
+        // (ScrollNext/Prev), so the crouch/scroll handlers know whether the menu needs the stick.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ActionPanel), "AvailableInteractionStateChangedHandler")]
         private static void TrackInteractionActionCount([CanBeNull] AvailableInteractionState interactionState)
@@ -475,8 +466,7 @@ namespace TarkovVR.Patches.UI
         //}
 
 
-        // When the grid is being initialized we need to make sure the rotation is 0,0,0 otherwise the grid items don't
-        // spawn in because of their weird code.
+        // The root rotation must be 0,0,0 while the grid initializes, otherwise the grid items don't spawn in.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridViewMagnifier), "CG_InitGridView")]
         private static void ReturnCommonUiToZeroRot(GridViewMagnifier __instance)
@@ -486,8 +476,8 @@ namespace TarkovVR.Patches.UI
 
 
 
-        // When in hideout the stash panel also gets shown which causes the UI to reposition/rotate so only rely
-        // on this patch if its in raid, for hideout use PositionInHideoutInventory()
+        // In the hideout the stash panel is shown too, which repositions/rotates the UI: this patch is for raids only,
+        // the hideout uses PositionInHideoutInventory()
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TabGroup), "Show")]
         private static void PositionInRaidInventory(TabGroup __instance)
@@ -589,28 +579,24 @@ namespace TarkovVR.Patches.UI
             return false;
         }
         */
-        //This sorta does the same thing as above but works better for how I'm now handling the inventory. This targets the method that directly handles the culling of items in stash.
-        //For some reason, items cull when turning head 90+ degrees from front of playspace, but doesn't cull if you turn using the joystick
+        // Same idea as above, on the method that culls the stash items directly. Items cull when the head turns 90+ degrees
+        // from the front of the playspace, but not when turning with the joystick.
         private static Dictionary<GridView, (Vector3 rot, Vector3 pos, Quaternion quat)> _originalTransforms = new Dictionary<GridView, (Vector3, Vector3, Quaternion)>();
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(GridView), "MagnifyIfPossible", new Type[] { typeof(Rect), typeof(bool) })]
         private static bool FixMagnifyWithRotationHandling(GridView __instance, ref Rect rect, bool force)
         {
-            // Add null checks
             if (__instance == null || __instance.transform == null || __instance.transform.root == null)
                 return true;
 
             Vector3 currentRotation = __instance.transform.root.eulerAngles;
 
-            // Only apply fix if there's rotation
             if (currentRotation != Vector3.zero)
             {
-                // Make sure dictionary is initialized
                 if (_originalTransforms == null)
                     _originalTransforms = new Dictionary<GridView, (Vector3, Vector3, Quaternion)>();
 
-                // Store original transform values
                 _originalTransforms[__instance] = (
                     __instance.transform.root.eulerAngles,
                     __instance.transform.root.position,
@@ -632,7 +618,6 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(GridView), "MagnifyIfPossible", new Type[] { typeof(Rect), typeof(bool) })]
         private static async void RestoreTransformAfterMagnify(GridView __instance, Task __result)
         {
-            // Check if we stored transforms for this instance
             if (_originalTransforms.TryGetValue(__instance, out var originalTransform))
             {
                 // Wait for the magnify operation to complete
@@ -641,12 +626,10 @@ namespace TarkovVR.Patches.UI
                     await __result;
                 }
 
-                // Restore original transform
                 __instance.transform.root.eulerAngles = originalTransform.rot;
                 __instance.transform.root.position = originalTransform.pos;
                 __instance.transform.root.rotation = originalTransform.quat;
 
-                // Clean up stored data
                 _originalTransforms.Remove(__instance);
             }
         }
@@ -656,11 +639,9 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(EFT.Player), "InteractionRaycast")]
         private static bool Raycaster(EFT.Player __instance)
         {
-            // Defensive: this prefix REPLACES InteractionRaycast with the VR raycast, which reads LOCAL
-            // rig state (VRGlobals.vrPlayer/VRCam). It must only ever run for your own player. Today
-            // ObservedPlayer overrides InteractionRaycast (so the base-method patch never fires for
-            // remotes) and only the local GamePlayerOwner invokes it -- but gate it explicitly so no
-            // future call path can run the VR raycast on a bot/remote player.
+            // This prefix replaces InteractionRaycast with the VR raycast, which reads local rig state (VRGlobals.vrPlayer/VRCam):
+            // own player only. ObservedPlayer overrides InteractionRaycast and only the local GamePlayerOwner calls it, but
+            // gate it explicitly anyway.
             if (!__instance.IsYourPlayer)
                 return true; // let vanilla interaction run for non-local players
             if (__instance._playerLookRaycastTransform == null || !__instance.HealthController.IsAlive || !(VRGlobals.vrPlayer is RaidVRPlayerManager))
@@ -754,10 +735,8 @@ namespace TarkovVR.Patches.UI
                 {
                     interactableObject = null;
                 }
-                // A Corpse IS a LootItem, so suppressWorldLootMenu (the loose-loot pointer change)
-                // hid the body gaze menu too. Corpses follow their own toggle instead: keep the
-                // menu hidden only when "Disable Corpse Context Menu" is on (the default). Loose
-                // loot is untouched and still uses suppressWorldLootMenu below.
+                // A Corpse is a LootItem, but it follows its own toggle: its gaze menu is hidden only when "Disable Corpse
+                // Context Menu" is on (the default). Loose loot uses suppressWorldLootMenu below.
                 else if (lootItem is Corpse)
                 {
                     if (!isHeld && VRSettings.GetDisableCorpseContextMenu())
@@ -839,7 +818,7 @@ namespace TarkovVR.Patches.UI
         
 
 
-        //Disables checking item distance when looting - not sure why but 3.11 broke this and it thinks you're too far when you pick up loose loot        
+        // Skips the item distance check when looting: the game thinks you're too far when you pick up loose loot        
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InteractionContextHelper.CG_Class1750), "method_0")]
         private static bool DisableLootDistanceCheck(InteractionContextHelper.CG_Class1750 __instance)
@@ -856,13 +835,10 @@ namespace TarkovVR.Patches.UI
         }
         
 
-        // FIKA co-op: the gaze "Take" on a VR-held loot item must stow the SAME way the behind-the-
-        // back gesture does (release -> reconcile gap -> RunNetworkTransaction), or the equip/removal
-        // doesn't replicate to other clients — a plain RunNetworkTransaction while the item is still on
-        // the mod's custom held-sync path won't fire RemoveLootItem/DestroyLoot there. smethod_10 is the
-        // Take entry point BEFORE the pickup animation/state starts, so rerouting here bypasses the
-        // animation entirely (user's choice) and hands off to StowHeldItemToInventory. Non-held takes
-        // fall through to the normal path (DisableLootDistanceCheck handles Class1750.method_0).
+        // FIKA co-op: the gaze "Take" on a VR-held loot item must stow like the behind-the-back gesture (release -> reconcile gap ->
+        // RunNetworkTransaction): a plain RunNetworkTransaction while the item is on the mod's held-sync path doesn't fire
+        // RemoveLootItem/DestroyLoot on other clients. smethod_10 is the Take entry point before the pickup animation starts, so
+        // the reroute skips the animation. Non-held takes fall through (DisableLootDistanceCheck handles Class1750.method_0).
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InteractionContextHelper), "smethod_10")]
         private static bool RerouteHeldItemTake(Item rootItem)
@@ -976,9 +952,8 @@ namespace TarkovVR.Patches.UI
         }
 
 
-        // Suppress BSG's native optic-magnification ("zoom times") panel entirely - it's not wanted
-        // in VR. AnimatedTextPanel is a shared type, so match ONLY the captured optic crate panel by
-        // reference and let every other AnimatedTextPanel show normally. Returning false skips Show().
+        // Suppress BSG's optic-magnification ("zoom times") panel in VR. AnimatedTextPanel is a shared type: match only the
+        // captured optic crate panel by reference.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(AnimatedTextPanel), "Show")]
         private static bool SuppressOpticZoomPanel(AnimatedTextPanel __instance)
@@ -1093,12 +1068,10 @@ namespace TarkovVR.Patches.UI
         {
             foreach (Transform child in current.transform)
             {
-                // Set the local Z position to 0
                 Vector3 localPosition = child.localPosition;
                 localPosition.z = 0;
                 child.localPosition = localPosition;
 
-                // Recursively call this method for each child
                 SetLocalZToZeroRecursively(child.gameObject);
             }
         }
@@ -1107,19 +1080,16 @@ namespace TarkovVR.Patches.UI
         [HarmonyPatch(typeof(GridView), "AcceptItem")]
         private static bool FixAcceptItem(GridView __instance, DragItemContext itemContext, ItemContext targetItemContext, ref Task __result)
         {
-            // Modify the flag argument based on your logic
             bool flag = Handedness.GunHandGrip.state;
 
-            // Call the original method with the modified flag
             __result = AcceptItemModified(__instance, itemContext, targetItemContext, flag);
 
-            // Skip the original method
             return false;
         }
 
         private static async Task AcceptItemModified(GridView __instance, DragItemContext itemContext, ItemContext targetItemContext, bool flag)
         {
-            // Your modified version of the AcceptItem method
+            // Modified version of the AcceptItem method
             if (!__instance.CanAccept(itemContext, targetItemContext, out var operation) || !(await UIExtensions.TryShowDestroyItemsDialog(operation.Value)))
             {
                 return;
@@ -1377,12 +1347,9 @@ namespace TarkovVR.Patches.UI
         {
             EFT.Player player = VRGlobals.player;
 
-            // Guard against a dead LootItem: when the gaze rests on a loose item (or corpse) whose
-            // backing Item has gone null -- e.g. it's being position-synced/removed by ANOTHER player,
-            // or a corpse mid ragdoll-sync (body-drag) -- EFT's GetActionsClass.smethod_8 NREs while
-            // building its action list, spamming the log every frame. Block the handler so it never
-            // runs on a dead item, and clear the stale interactable. (Isolated from the net pipeline,
-            // but noisy in co-op; surfaced alongside the body-drag/loose-item sync work.)
+            // A LootItem under the gaze whose Item has gone null (removed/position-synced by another player, or a corpse mid
+            // ragdoll-sync): EFT's GetActionsClass.smethod_8 throws every frame while building its action list. Skip the handler
+            // and clear the stale interactable.
             if (player != null && player.InteractableObject is LootItem dead && dead.Item == null)
             {
                 player.GetComponent<GamePlayerOwner>()?.ClearInteractionState();

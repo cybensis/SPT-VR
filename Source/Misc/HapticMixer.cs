@@ -5,13 +5,13 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Misc
 {
-    // Every gun / reload / eating buzz goes through here, one mix per controller. Each vibration sent to a controller REPLACES the
-    // one it's playing, so without this the sound stream (a new one every 20 ms) cut a clunk off within a frame and a clunk cut
-    // the stream off: whichever came last won. Here the strongest wins, the others add a little on top, the pitches blend, and a
-    // new vibration goes out only when the mix changes (or the last one is about to run out).
+    // Every gun / reload / eating buzz goes through here, one mix per controller. Each vibration sent to a controller replaces the
+    // one it's playing, so unmixed, the sound stream (a new one every 20 ms) and a clunk cut each other off. Here the strongest wins,
+    // the others add a little on top, the pitches blend, and a new vibration goes out only when the mix changes (or the last one is
+    // about to run out).
     public static class HapticMixer
     {
-        public static bool enabled = true;          // false = each one goes straight to the controller, the last replacing the rest (as before)
+        public static bool enabled = true;          // false = each one goes straight to the controller, the last replacing the rest
         public static float sendLength = 0.04f;     // s a sent vibration lasts at most; sent again before it runs out while something plays
         public static float resendAmplitude = 0.06f; // sent again when the mix moves this much...
         public static float resendPitch = 0.1f;     // ...or its pitch moves this fraction

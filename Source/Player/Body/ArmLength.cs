@@ -14,7 +14,7 @@ namespace TarkovVR.Source.Player.VR
     // (IKSolverTrigonometric.OnUpdate), so it just follows.
     internal static class ArmLength
     {
-        public static bool enabled = true;                // false = Tarkov's arm + the old height-based shoulder shift, for comparing in the headset
+        public static bool enabled = true;                // false = Tarkov's arm + the height-based shoulder shift
         public static float minWristSpan = 1f;            // m; arms at the sides or held forward stay well under this
         public static float shoulderBelowHead = 0.18f;    // m; same drop OverrideShoulders places the shoulders at
         public static float maxOffShoulderHeight = 0.3f;  // m; how far above or below the shoulders still counts as arms out
@@ -121,7 +121,7 @@ namespace TarkovVR.Source.Player.VR
         //---------------------------------------------------------------------------------------------------------
         // Called by the height reset. With the arms straight out it also measures the arm; with them anywhere else
         // the saved length stays. Hand action poses + the raw headset pose: the only head and hand pair that's in the
-        // same space in the hideout too (see ShoulderStock).
+        // same space in the hideout too.
         public static void TryMeasure()
         {
             if (!enabled || VRSettings.GetLeftHandedMode() || !HeadTracking.RawHmdPose(out Vector3 head, out _))

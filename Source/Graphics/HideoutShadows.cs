@@ -4,7 +4,7 @@ using UnityEngine;
 namespace TarkovVR.Source.Graphics
 {
     // "Disable Hideout Shadows" (VR Graphics): no realtime shadows while the hideout is loaded. Its ~100 shadowed spot / point lights are
-    // the hideout's cost (StereoCostProbe, 2026-11-05: shadows off = main thread 17.5 -> 11.0 ms, GPU 14.0 -> 8.7, frame 20.7 -> 14.1).
+    // the hideout's main cost (shadows off: main thread 17.5 -> 11.0 ms, GPU 14.0 -> 8.7).
     // QualitySettings.shadows is global, so it's set back to what it was the moment the hideout is gone (a raid, the menu). Re-applied
     // every frame: EFT's own graphics settings write it when they're applied.
     public class HideoutShadows : MonoBehaviour

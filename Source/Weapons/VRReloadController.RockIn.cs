@@ -125,9 +125,8 @@ namespace TarkovVR.Source.Weapons
         // The hand holds the magazine rigidly, so a point on it says how far the hand has rocked it, whether that came from the arm or
         // the wrist: its middle, fixed to the controller from here on. The hand holding it (MagazineHandRig): a belt box may be the gun hand's.
         // A belt box's middle is its body's: the middle of everything it draws sits far off it (the belt and the spent links, which a box
-        // just taken off the gun still has in the model's rest shape - a lever 25-30 cm off the hinge, so the hand had to sweep a long arc
-        // to rock it out: his "it gets stuck on the track and I have to pull my hand way down"; going in, the hanging belt and hidden spent
-        // links put it much nearer). rockAwayInWell: the way it hangs off the well, seated (well point to its body's middle).
+        // just taken off the gun still has in the model's rest shape: a lever 25-30 cm off the hinge, a long arc for the hand to sweep).
+        // rockAwayInWell: the way it hangs off the well, seated (well point to its body's middle).
         private static Vector3 rockAwayInWell;
         private static Quaternion rockHandRotationAtStart = Quaternion.identity;
 
@@ -166,8 +165,8 @@ namespace TarkovVR.Source.Weapons
 
         // The controller's move since the track started as a turn about the hinge, in track metres, and how far it is off the magazine.
         // Measured along the circle at the start rather than as an angle from the hinge: pushing up brings that point close to the
-        // hinge, where the angle jumps around (headset: pushing in knocked the magazine off the track). Going in, pushing it up seats it
-        // as well as rocking it back does, so the tilt doesn't have to be right.
+        // hinge, where the angle jumps around and knocks the magazine off the track. Going in, pushing it up seats it as well as rocking
+        // it back does, so the tilt doesn't have to be right.
         private static void MeasureHandOnRock(out float handAlongTrack, out float handOffTrack)
         {
             Vector3 hinge = magazineWell.TransformDirection(heldRockIn.axis).normalized;
@@ -184,9 +183,8 @@ namespace TarkovVR.Source.Weapons
             if (rockAwayInWell != Vector3.zero)
             {
                 float alongAway = Vector3.Dot(moved, magazineWell.TransformDirection(rockAwayInWell).normalized);
-                // The hand's own roll about the hinge's line (his video: "rolling it out to the left, the same way I roll it into place,
-                // doesn't work"): held by its far end, a roll of the wrist turns the box about the HAND, which carried the lever point the
-                // other way round the hinge - read as rocking it back in. The hand's turn itself, same sense as the box's.
+                // The hand's own roll about the hinge's line, same sense as the box's: held by its far end, a roll of the wrist turns the
+                // box about the hand, which carries the lever point the other way round the hinge (it would read as rocking it back in).
                 Quaternion turned = MagazineHandRig.rotation * Quaternion.Inverse(rockHandRotationAtStart);
                 if (turned.w < 0f)
                     turned = new Quaternion(-turned.x, -turned.y, -turned.z, -turned.w);
@@ -216,16 +214,10 @@ namespace TarkovVR.Source.Weapons
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // A belt box off its hinge (the PKM's): going in run backwards. Going in has no catch, pushing toward the hinge isn't coming off it,
-        // and coming off the track leaves the box where it is in the hand. Coming off had all three the other way: the mag catch held it
-        // until B (the same hand that holds and pulls it), pulling away from the hinge read as the hand coming off it, and that cancelled
-        // the hold - the box back in the gun, the hand off it (his: "it gets stuck on the track and I have to pull my hand way down", "my hand
-        // comes off the box at a point", "works perfect going in, horrible being taken out"). Every take-out change before measured the
-        // pull differently and kept those three, so none of them changed anything. Now: no catch (the box's latch is on the box, under the
-        // gripping hand), pulling away is taking it out, and too far off the track it comes away WITH the hand once it has moved at all.
-        // Round 2 (his log): it still came off along the whole 25 deg hook - "it starts doing some sort of railed animation" - the pull drove
-        // the box round its arc (78 % out with the hand not turned at all), and the drawn hand on its far end, ~25 cm off the hinge, swept
-        // half as far again as the real one and slid off it. Now it rocks out only beltBoxRockOutDegrees and then it's the hand's.
+        // A belt box off its hinge (the PKM's): going in run backwards. No catch (the box's latch is on the box, under the gripping hand),
+        // pulling away from the hinge is taking it out (not the hand coming off it), and too far off the track it comes away with the hand
+        // once it has moved at all. It rocks out only beltBoxRockOutDegrees, then it's the hand's: driven round its whole hook arc, the
+        // drawn hand on its far end (~25 cm off the hinge) sweeps further than the real one and slides off it.
         public static float beltBoxRockOutDegrees = 8f;     // deg a belt box rocks off its edge before it comes away in the hand (it hooks on at its full angle)
         private static Vector3 lastRockTerms;                // this frame's rock (deg), away from the hinge, down (m): the take-out log
         private static float lastRollDegrees;               // and the hand's own roll about the hinge's line

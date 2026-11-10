@@ -26,19 +26,17 @@ namespace TarkovVR.Patches.Core.VR
         private static bool isFrozen = false;
         private static readonly float freezeDuration = 0.5f; // Or use Random.Range(2f, 3f) when setting
 
-        // The throw as you make it (his ask: "make the actual throw be more proper"): the grenade leaves your hand at the release and its
-        // use ends that same frame - what Tarkov's throw clip did at its end (its FireEnd -> OnDropFinishedAction: the hands go back to
-        // what they held before), without the clip. false = the old way: the clip played on from 40 % after the release and the hands
-        // came back at its end, 0.3-0.5 s later (a freeze at its start if it wrapped first).
+        // true: the grenade leaves the hand at the release and its use ends that same frame, doing what the throw clip's end does
+        // (FireEnd -> OnDropFinishedAction: the hands go back to what they held before) without the clip. false: the clip plays on from
+        // 40 % after the release and the hands come back at its end, 0.3-0.5 s later.
         public static bool finishAtRelease = true;
         private static float releasedAt;
 
         public static float tripwireHoldDuration = 0.4f;        // long-hold time (s) on the face button to toggle plant mode
         public static float tripwireRayForwardOffset = 0.3f;    // ray start nudge ahead of the controller (matches native beacon code)
 
-        // Dominant hand = the throw/gun hand, which is always VRGlobals.vrPlayer.RightHand (the pose listeners are
-        // swapped in left-handed mode, so RightHand stays the dominant transform). Falls back to the headset ray if
-        // the rig isn't up yet so callers never NRE.
+        // Dominant hand = the throw/gun hand, always VRGlobals.vrPlayer.RightHand (the pose listeners swap in left-handed mode).
+        // Falls back to the headset ray if the rig isn't up yet.
         public static Ray GetTripwirePlacementRay()
         {
             if (VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null)
@@ -169,21 +167,19 @@ namespace TarkovVR.Patches.Core.VR
         {
             if (!__instance.IsYourPlayer || !throwInProgress)
                 return;
-            // Its grenade out of the hands before the clip got to the freeze below (the gun back 0.3-0.5 s after the throw): the throw's
-            // over. Left set, throwInProgress kept GrenadeHold's rushes off the next grenade - its draw and pin pull played out (his
-            // report: "every second grenade")
+            // The grenade left the hands before the clip reached the freeze below: the throw is over. Left set, throwInProgress keeps
+            // GrenadeHold's rushes off the next grenade (its draw and pin pull would play out in full)
             if (activeGrenadeController == null || activeGrenadeController._firearmsAnimator == null
                 || !ReferenceEquals(__instance.HandsController, activeGrenadeController))
             {
                 EndThrow();
                 return;
             }
-            // Thrown this frame (the release, in the input update): its use over now, here rather than inside the release - ending it
-            // swaps the hands' controller, which the rest of the release (the holder, emptyHands) mustn't then touch
+            // Thrown this frame (the release runs in the input update): end the use here, not inside the release. Ending it swaps the
+            // hands' controller, which the rest of the release (the holder, emptyHands) mustn't then touch
             if (finishAtRelease)
             {
-                // Co-op as a client: once the host has answered (the throw, and the grenade's draw before it, run at full length on its
-                // copy of you) - ending it sends Tarkov's next hands change, which the host refuses while it's still busy
+                // Co-op client: ending the throw sends a hands change, which the host refuses until it has answered the last move
                 if (CoopHost.HoldsBack(releasedAt))
                     return;
                 BaseGrenadeHandsController thrownNow = activeGrenadeController;
@@ -204,7 +200,7 @@ namespace TarkovVR.Patches.Core.VR
                     activeGrenadeController._firearmsAnimator.Animator.speed = 1f;
                     BaseGrenadeHandsController thrown = activeGrenadeController;
                     EndThrow();
-                    thrown.OnDropFinishedAction(); // Calls OnDropFinishedAction()
+                    thrown.OnDropFinishedAction();
                 }
                 return;
             }
@@ -222,7 +218,7 @@ namespace TarkovVR.Patches.Core.VR
             lastNormalizedTime = stateInfo.normalizedTime;
         }
 
-        // The grenade's own animators while its clip is frozen: given their speed back if the throw ends before the freeze does (the
+        // The grenade's own animators while its clip is frozen: their speed is restored if the throw ends before the freeze does (the
         // hands object goes back to Tarkov's pool with them)
         private static Animator[] frozenAnimators;
 
@@ -261,9 +257,9 @@ namespace TarkovVR.Patches.Core.VR
                 return false;
             thrownBy = __instance;
 
-            // The hand holding it (the left with a grenade the left hand took off the chest: GrenadeSlot). OpenXR: the palm's own velocity
-            // as the runtime reports it (ThrowVelocity.TryPalmVelocity) - the raw point's rebuilt one bent throws sideways, the measured
-            // one overshoots (predicted poses); else the runtime's, or the measured one with ThrowVelocity.enabled
+            // The hand holding it (the left if the left hand took it off the chest: GrenadeSlot). Velocity source, in order: the palm's
+            // own runtime velocity (OpenXR, ThrowVelocity.TryPalmVelocity), the measured one with ThrowVelocity.enabled, else the
+            // runtime's. The raw point's rebuilt velocity bends throws sideways; the measured one overshoots (predicted poses)
             SteamVR_Input_Sources throwingHand = Handedness.GunHandSource;
             Vector3 runtimeVelocity = ControllerVelocity.GetSteamVRVelocity(throwingHand);
             bool measured = ThrowVelocity.TryMeasure(throwingHand, out Vector3 measuredVelocity, out Vector3 measuredSpin);
@@ -292,7 +288,7 @@ namespace TarkovVR.Patches.Core.VR
             // controller's tracking point ~13 cm from it
             bool fromHand = ThrowVelocity.releaseFromHand && __instance._grenadeTransform != null;
 
-            // The old way: the throw clip from around where the hand opens (finishAtRelease ends the throw without it)
+            // finishAtRelease off: play the throw clip from around where the hand opens
             if (!finishAtRelease)
                 __instance._firearmsAnimator.Animator.Play(590329303, 1, 0.40f);
             // A fresh throw: nothing carried over from one that ended early (its freeze state, the clip time it last saw)
@@ -340,8 +336,8 @@ namespace TarkovVR.Patches.Core.VR
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Diagnostics (GrenadeSlot.debugLog): a grenade drawn without a grab - who drew it (the stack that found the after-throw draw of the
-        // grenade swapped from: PlayerOwner's after-use callback, see GrenadeSlot.SwapHeldTo)
+        // Diagnostics (GrenadeSlot.debugLog): a grenade drawn without a grab - who drew it (e.g. PlayerOwner's after-use callback
+        // drawing the grenade swapped from, see GrenadeSlot.SwapHeldTo)
 
         // The calls that led here, the game's and ours (no Harmony / System frames), newest first
         internal static string ShortStack()
@@ -372,8 +368,8 @@ namespace TarkovVR.Patches.Core.VR
         {
             if (!__instance._player.IsYourPlayer)
                 return true;
-            // Its hide clip reaching its end after the put-away was skipped already (GrenadeSlot.SkipPutAway: this event, called
-            // early): the hands are the next item's by now - its holder isn't ours to turn, and the put-away mustn't finish twice
+            // The hide clip ending after the put-away was already skipped (GrenadeSlot.SkipPutAway calls this event early): the hands
+            // are the next item's by now - its holder isn't ours to turn, and the put-away mustn't finish twice
             if (!ReferenceEquals(__instance._player.HandsController, __instance))
                 return false;
 

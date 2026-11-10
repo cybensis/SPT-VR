@@ -4,14 +4,12 @@ using UnityEngine.SceneManagement;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Real-PhysX collision for the gun, SANDBOXED. An invisible Rigidbody shaped like the weapon (fat body
-    // + thin barrel capsule) is driven toward the controller pose and collided by the engine, in its OWN
-    // local physics scene with static COPIES of the nearby world colliders. Tarkov runs autoSimulation OFF
-    // and Physics.Simulate() would step the WHOLE default scene (double-steps loot/ragdolls = "sped up"),
-    // so the proxy steps ONLY its sandbox -> game physics untouched, and because the sandbox is tiny it can
-    // afford FINE substepping (which is what catches a fast ROTATIONAL swing tunnelling a thin wall - PhysX
-    // CCD is blind to rotation). Known limitation: non-readable world meshes can't be copied (collision
-    // there is absent) + a one-time mesh-cook cost as regions come into range.
+    // Real-PhysX collision for the gun, sandboxed. An invisible Rigidbody shaped like the weapon (fat body + thin barrel capsule)
+    // is driven toward the controller pose and collided by the engine, in its own local physics scene with static copies of the
+    // nearby world colliders. Tarkov runs autoSimulation off and Physics.Simulate() would step the whole default scene
+    // (double-steps loot/ragdolls), so the proxy steps only its sandbox. The sandbox is tiny, so it can afford fine substepping,
+    // which is what catches a fast rotational swing tunnelling a thin wall (PhysX CCD is blind to rotation).
+    // Known limitation: non-readable world meshes can't be copied (no collision there) + a one-time mesh-cook cost per region.
     public class WeaponPhysicsProxy : MonoBehaviour
     {
         public static float driveGain = 1f;
@@ -21,15 +19,15 @@ namespace TarkovVR.Source.Player.Interactions
         public static float resyncDistance = 3f;    // if the body is this far from the hand it's desynced (garbage frame) -> snap
         public static float contactMemory = 0.04f;  // s a contact is remembered after it ends (small = no "stick" on pull-off; bridges single-frame gaps)
 
-        public static float queryRegion = 1.5f;     // m half-extent of the box that COOKS nearby colliders - big enough to cover a swing's reach so the collider is present before the swing arrives
+        public static float queryRegion = 1.5f;     // m half-extent of the box that cooks nearby colliders: covers a swing's reach, so the collider is there before the swing
         public static float retainDistance = 3f;    // m a cooked copy is kept until this far - hysteresis so back-and-forth doesn't re-cook
         public static float colliderRefreshMove = 0.25f;
         public static float colliderRefreshInterval = 0.3f;
 
-        public static float substepMuzzleDist = 0.015f;  // m; sandbox sim split so the muzzle moves at most this per substep - MUST be < the thinnest wall or a fast rotation tunnels (cheap here: tiny scene)
+        public static float substepMuzzleDist = 0.015f;  // m the muzzle moves at most per sandbox substep: must be < the thinnest wall or a fast rotation tunnels
         public static int maxSimSubsteps = 40;
 
-        public static float contactLeadMargin = 0.03f;   // m; STATIC lead on the free-space fast path: physics mode engages when geometry is within (gun radius + this-frame travel + this) of the gun. The this-frame-travel term is the real onset guard (always catches the approach), so this can be small = physics mode only when the gun is quite close. Bigger = engages earlier/further out.
+        public static float contactLeadMargin = 0.03f;   // m; physics mode engages when geometry is within (gun radius + this-frame travel + this); bigger = earlier
 
         private Rigidbody rb;
         private CapsuleCollider bodyCol;
@@ -52,11 +50,9 @@ namespace TarkovVR.Source.Player.Interactions
         private float nextQueryTime;
         private readonly Collider[] proximityBuf = new Collider[32];   // room for our own colliders (skipped) without crowding out the world's
 
-        // Our own player's colliders (the body, the guns on it, the gun in hands) and any weapon model are never world geometry here (his
-        // report: the first draw of another gun "takes half a second before the gun is properly attached to my hand" - the switch trace
-        // showed the holder pushed 14 cm / 26 deg two frames after the spawn, dragged back at the drive's capped speed, snapping home at
-        // +0.22 s: the fresh gun's own colliders, at the hand, copied in as world). Cached by instance id, the cache cleared now and
-        // then (a pooled gun model can come back as loot).
+        // Our own player's colliders (the body, the guns on it, the gun in hands) and any weapon model are never world geometry here:
+        // a freshly drawn gun's own colliders, copied in as world, push the holder off the hand. Cached by instance id, the cache
+        // cleared now and then (a pooled gun model can come back as loot).
         private readonly Dictionary<int, bool> ownColliders = new Dictionary<int, bool>();
         private float ownCollidersClearTime;
 
@@ -95,9 +91,8 @@ namespace TarkovVR.Source.Player.Interactions
             proxy.rb.interpolation = RigidbodyInterpolation.None;
             proxy.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
-            // Frictionless (Minimum combine -> every contact is frictionless regardless of the wall's
-            // material) so the gun SLIDES / PIVOTS along a surface instead of gripping it ("stuck pointing
-            // at the wall"). Zero bounce so it doesn't spring off.
+            // Frictionless (Minimum combine -> every contact is frictionless whatever the wall's material) so the gun
+            // slides / pivots along a surface instead of gripping it. Zero bounce so it doesn't spring off.
             var slick = new PhysicMaterial("WeaponCollisionSlick")
             {
                 dynamicFriction = 0f,
@@ -182,14 +177,11 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Step the sandbox at RENDER rate (called from WeaponCollision.Apply, which runs in Update), NOT in
-        // FixedUpdate. Stepping in lockstep with rendering means rb.position is current THIS frame, so:
-        //  - no rb.interpolation is needed (interpolation at 50Hz was the root cause of the render-body pose
-        //    jittering while walking - it fought AddRigMotion's teleport - and of the "weighty" lag);
-        //  - contact detection has zero lag (the proxy collides the same frame the hand does, so the visible
-        //    gun stops at the wall instead of clipping through until the next 50Hz tick);
-        //  - in free space the gain-1 drive reaches the hand exactly each frame, so the rendered gun sits at
-        //    the true controller pose (crisp, no lag).
+        // Step the sandbox at render rate (from WeaponCollision.Apply, in Update), not in FixedUpdate. rb.position is then
+        // current this frame, so:
+        //  - no rb.interpolation is needed (at 50Hz it fights AddRigMotion's teleport = jitter while walking, and it lags);
+        //  - the proxy collides the same frame the hand does, so the visible gun stops at the wall instead of clipping through;
+        //  - in free space the gain-1 drive reaches the hand exactly each frame: the gun sits at the true controller pose.
         public void Step(float dt)
         {
             if (!active || rb == null || rb.isKinematic)
@@ -198,13 +190,10 @@ namespace TarkovVR.Source.Player.Interactions
 
             RefreshNearbyColliders();
 
-            // FREE-SPACE FAST PATH: if no world geometry is within reach of the whole gun THIS frame, snap the
-            // proxy straight to the controller pose - zero lag, no speed cap, and NO rig-motion reconstruction
-            // needed (the target already includes locomotion + turn + hand). This is what keeps fast swings and
-            // stick-turns crisp; the speed-capped velocity drive below (capped so substepping can catch a fast
-            // rotation tunnelling a thin wall) only runs when something is actually nearby to collide with.
-            // "reach" spans the gun grip->muzzle capsule PLUS this frame's travel + a margin, so we drop into
-            // physics mode BEFORE the muzzle can reach a wall = no clip-through on the onset frame.
+            // Free-space fast path: no world geometry within reach of the whole gun this frame -> snap the proxy straight to
+            // the controller pose (zero lag, no speed cap; the target already includes locomotion + turn + hand). The
+            // speed-capped velocity drive below only runs when something is nearby to collide with. "Reach" = the gun's
+            // grip->muzzle capsule plus this frame's travel + a margin, so physics mode starts before the muzzle can reach a wall.
             float length = Mathf.Max(builtLen, 0f);
             Vector3 muzzle = rb.position + rb.rotation * new Vector3(0f, -length, 0f);
             float muzzleTravel = (targetPos - rb.position).magnitude
@@ -250,9 +239,8 @@ namespace TarkovVR.Source.Player.Interactions
                 rb.angularVelocity = Vector3.zero;
             }
 
-            // Step ONLY the sandbox (game physics untouched), SUBSTEPPED fine enough that a fast rotational
-            // swing can't skip through a thin wall. Cheap because the sandbox holds only the gun + nearby
-            // static copies. Velocity set once above; contact response carries between substeps.
+            // Step only the sandbox (game physics untouched), substepped fine enough that a fast rotational swing can't skip
+            // through a thin wall. Velocity is set once above; contact response carries between substeps.
             float muzzleSpeed = rb.velocity.magnitude + rb.angularVelocity.magnitude * builtLen;
             int steps = Mathf.Clamp(Mathf.CeilToInt(muzzleSpeed * dt / substepMuzzleDist), 1, maxSimSubsteps);
             float substep = dt / steps;
@@ -260,8 +248,8 @@ namespace TarkovVR.Source.Player.Interactions
                 sandboxPhysics.Simulate(substep);
         }
 
-        // Cook every world collider within queryRegion (a generous box around the gun) into the sandbox.
-        // Cached by instance id -> each cooks ONCE; kept until retainDistance away (hysteresis).
+        // Cook every world collider within queryRegion (a box around the gun) into the sandbox.
+        // Cached by instance id -> each cooks once; kept until retainDistance away (hysteresis).
         private void RefreshNearbyColliders()
         {
             if (builtLen <= 0f)
@@ -368,10 +356,9 @@ namespace TarkovVR.Source.Player.Interactions
             return copy;
         }
 
-        // Drop a world collider from the sandbox and never re-copy it (broken glass): the real pane's
-        // collider is gone after the break, but our static copy would persist until it drifted out of
-        // retainDistance - so the gun kept hitting the phantom pane. Blacklist so a throttled refresh can't
-        // re-copy it in the window before the real collider is actually destroyed.
+        // Drop a world collider from the sandbox and never re-copy it (broken glass): the real pane's collider is gone after
+        // the break, but our static copy would stay until out of retainDistance and the gun would keep hitting it.
+        // Blacklisted so a throttled refresh can't re-copy it before the real collider is actually destroyed.
         public void ForgetCollider(int instanceId)
         {
             ignoredColliders.Add(instanceId);

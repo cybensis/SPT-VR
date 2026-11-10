@@ -9,19 +9,13 @@ namespace TarkovVR.Source.Player.Interactions
     internal static partial class EatingInteractionController
     {
         //--- Gesture state machine --------------------------------------------------
-        // All archetypes share ONE open->take->eat loop; only the hand roles, the arms state
-        // the open plays, and a few reveal/advance hooks differ. Those live in the per-archetype
-        // EatStyle descriptor (built per food on spawn), so the control flow below is written
-        // once. The genuinely-unique routines (DetachWrapperToLeftHand / ShakeOutCrackers /
-        // TakeFoodToLeftHand / EnterUseState / DetectShake) are kept as-is and just called from
-        // the hooks. To add a TYPE: a new case here + its prop setup / late-zero tails.
+        // Per-archetype differences (hand roles, the arms state the open plays, reveal/advance hooks) live in the
+        // EatStyle built per food on spawn. To add a type: a new case here + its prop setup / late-zero tails.
         private static EatStyle BuildStyle(FoodDef foodDef)
         {
             EatStyle s = BuildStyleCore(foodDef);
-            // Per-food open-state override (OpenState(...)): the archetype defaults assume
-            // the SHARED state hashes, but some rigs run their own graph — noodles has no
-            // STATE_USE at all, so the Wrapper default scrubbed a state that doesn't exist
-            // (Play() is a silent no-op → the wrapper never ripped).
+            // Per-food open-state override (OpenState(...)): some rigs run their own animator graph (noodles has no
+            // STATE_USE), and Play() on a state the graph lacks is a silent no-op.
             if (foodDef.openState != 0) s.openStateHash = foodDef.openState;
             return s;
         }
@@ -30,10 +24,9 @@ namespace TarkovVR.Source.Player.Interactions
         {
             switch (foodDef.kind)
             {
-                // Chocolate bar: held in the RIGHT hand, the LEFT (off) hand peels the wrapper,
-                // then bite straight to the mouth — NO take step. The whole clip is STATE_USE.
-                // eatByTime foods (sausage/tarka/noodles) ride the timed-sip path instead of
-                // a bite: HOLD at the mouth and the use-time drains like a drink.
+                // Chocolate bar: held in the right hand, the left (off) hand peels the wrapper, then bite straight to
+                // the mouth, no take step. The whole clip is STATE_USE. eatByTime foods (sausage/tarka/noodles) hold
+                // at the mouth and drain the use-time like a drink instead of a bite.
                 case FoodKind.Handheld:
                     return new EatStyle
                     {
@@ -48,9 +41,8 @@ namespace TarkovVR.Source.Player.Interactions
                         logsGesturePose = false,
                         onOpened = () => DetachWrapperToLeftHand(), // peeled -> stays in the left hand (no-op without a cover)
                     };
-                // Drink: container in the holding hand (right unless holdInOffHand), the FREE
-                // hand pops the cap, then HOLD the container at the mouth — StepDrink runs the
-                // use-time down while held. Capped bottles recap to stop early.
+                // Drink: container in the holding hand (right unless holdInOffHand), the free hand pops the cap, then
+                // hold it at the mouth: StepDrink runs the use-time down while held. Capped bottles recap to stop early.
                 case FoodKind.Drink:
                 {
                     Hand hold = foodDef.holdInOffHand ? Hand.Off : Hand.Dominant;
@@ -68,9 +60,8 @@ namespace TarkovVR.Source.Player.Interactions
                         onOpened = () => DetachCapToFreeHand(), // cap popped -> rides the free hand
                     };
                 }
-                // Bag (croutons): held in the RIGHT hand, LEFT opens, then SHAKE pours crackers
-                // into the LEFT hand; eaten from the LEFT hand. The shake/eat don't advance the
-                // animator, so the take pushes it into STATE_USE (EnterUseState) for a clean finish.
+                // Bag (croutons): held in the right hand, left opens, a shake pours crackers into the left hand, eaten
+                // from there. The shake/eat don't advance the animator, so the take pushes it into STATE_USE (EnterUseState).
                 case FoodKind.Bag:
                     return new EatStyle
                     {
@@ -87,11 +78,9 @@ namespace TarkovVR.Source.Player.Interactions
                         onEatHide = HideCrackers,
                         onAfterBite = () => ResetShake(),
                     };
-                // Reach-into-bag (iskra/MRE): held RIGHT, LEFT rips the top, then the LEFT
-                // hand reaches INTO the bag (StepReachTake — rail latch + depth scrub; the
-                // grab fires onTake, the pull-out flips to Holding), eaten from the LEFT
-                // hand. No animator hooks beyond the take: the reach scrub itself parks the
-                // arms in STATE_USE, so the finish never sees STATE_OPEN.
+                // Reach-into-bag (iskra/MRE): held right, left rips the top, then the left hand reaches into the bag
+                // (StepReachTake: the grab fires onTake, the pull-out flips to Holding) and eats from there. The reach
+                // scrub parks the arms in STATE_USE, so the finish never sees STATE_OPEN.
                 case FoodKind.ReachBag:
                     return new EatStyle
                     {
@@ -106,8 +95,8 @@ namespace TarkovVR.Source.Player.Interactions
                         onTake = () => TakeFoodToLeftHand(), // cracker -> the reaching hand
                         onEatHide = () => SetRenderer(foodR, false),
                     };
-                // Pack (galette): mirror of CanHand — held RIGHT, LEFT opens, LEFT takes a piece
-                // and eats it. Deterministic grab/eat pulses (see StartGesturePulse).
+                // Pack (galette): mirror of CanHand: held right, left opens, left takes a piece and eats it.
+                // Deterministic grab/eat pulses (see StartGesturePulse).
                 case FoodKind.Pack:
                     return new EatStyle
                     {
@@ -123,8 +112,8 @@ namespace TarkovVR.Source.Player.Interactions
                         onEatHide = () => SetRenderer(foodR, false),
                         onAfterBite = () => StartGesturePulse(bitePoseState, bitePoseTime),
                     };
-                // Canned (tushonka spoon + sprats hand): can in the LEFT hand, RIGHT rolls the
-                // lid, RIGHT takes the food (onto the spoon, or grabbed directly) and eats it.
+                // Canned (tushonka spoon + sprats hand): can in the left hand, right rolls the lid, right takes the
+                // food (onto the spoon, or grabbed directly) and eats it.
                 default: // FoodKind.CannedFood
                     return new EatStyle
                     {
@@ -168,12 +157,10 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Open: bring the opening hand to the held item's open-zone + that hand's trigger ->
-        // play the open state forward to openReadyTime (lid rolls / wrapper peels / bag tears),
-        // then freeze and run the per-archetype onOpened reveal. With physicalPullToOpen the
-        // clip doesn't free-run — your hand latches onto it and your physical pull scrubs it
-        // up to pullEndTime; the playingOpen wait branch below is then SHARED by the pull's
-        // settle (pullEnd -> openReadyTime auto-plays after the unlatch) and the non-pull open.
+        // Open: opening hand at the held item's open zone + that hand's trigger -> the open state plays to
+        // openReadyTime, then freezes and runs onOpened. With physicalPullToOpen the hand latches on and the pull
+        // scrubs the clip up to pullEndTime; the playingOpen wait branch below also serves the pull's settle
+        // (pullEnd -> openReadyTime auto-plays after the unlatch).
         private static void StepOpen(EatStyle s)
         {
             if (playingOpenAnim) { WaitOpenAnim(s); return; } // riding the one-shot open animation (rip)
@@ -208,14 +195,10 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The open is done (pull settled / non-pull clip reached openReadyTime). Either play
-        // a one-shot open animation FOR REAL (openPlayState) before going Ready, or go Ready
-        // straight away. The one-shot exists because some rigs put the visible "open" in a
-        // state the pull can't scrub: noodles' bag-RIP lives in the early frames of its first
-        // eat state (2073176132), NOT in STATE_OPEN — scrubbing/settling STATE_OPEN never
-        // showed it, so the rip only appeared on the first hold-to-mouth. Playing that state
-        // for real here makes the rip happen as part of the open; the chew loop then runs a
-        // DIFFERENT eat state so it doesn't re-rip.
+        // The open is done (pull settled / clip reached openReadyTime): go Ready, or first play the one-shot
+        // openPlayState for real. Some rigs put the visible open in a state the pull can't scrub: noodles' bag rip
+        // is in the early frames of its first eat state (2073176132), not STATE_OPEN. The chew loop must then run
+        // a different eat state or it re-rips.
         private static void FinishOpen(EatStyle s)
         {
             if (openPlayState != 0 && !openAnimPlayed)
@@ -268,25 +251,16 @@ namespace TarkovVR.Source.Player.Interactions
             LogStep($"[ManualEat] Open animation done — ready (take={s.hasTakeStep}).");
         }
 
-        // Physical open. Squeezing the trigger at the open zone latches the opening hand
-        // ONTO THE HELD ITEM (LatchHandToItem — IK target + wrist pin aim at a latch glued
-        // to the holding hand's rig target, so the rendered hand rides that controller's
-        // 6dof). Each grab then runs two stages mapped onto the open clip's normalizedTime
-        // between the pull start and pullEndTime:
-        //   1. SQUEEZE — the trigger axis itself scrubs the first triggerOpenPortion (for
-        //      the Trigger kind: the whole open, completed by fully pressing then fully
-        //      releasing).
-        //   2. PHYSICAL — once fully pressed, the per-food gesture (def.openGesture) drives
-        //      the rest: Pull = palm travel away from the full-press point, Tilt = tipping
-        //      the hand off its full-press orientation. All measured RELATIVE to the
-        //      holding hand so walking/turning doesn't scrub; backing off rolls it back
-        //      down (to where this grab started).
-        // Trigger released = unlatch (hand snaps back to the controller); progress KEEPS,
-        // so a half-rolled lid stays half-rolled until you grab it again. The lid/cap/
-        // wrapper are bone-animated children of the HELD prop, so the scrub deforms the
-        // item in your actual hand, and the clip still animates the latched hand's FINGERS
-        // (the pin only owns the wrist). Completion goes through CompleteOpenPull
-        // (settle-or-Ready), so everything downstream is unchanged.
+        // Physical open. Squeezing the trigger at the open zone latches the opening hand onto the held item
+        // (LatchHandToItem: IK target + wrist pin aim at a latch under the holding hand's rig target). Each grab
+        // maps two stages onto the open clip's normalizedTime between the pull start and pullEndTime:
+        //   1. Squeeze: the trigger axis scrubs the first triggerOpenPortion (Trigger kind: the whole open,
+        //      completed by a full press then a full release).
+        //   2. Physical: once fully pressed, def.openGesture drives the rest (Pull = palm travel from the
+        //      full-press point, Tilt = tipping the hand off its full-press orientation), measured relative to
+        //      the holding hand so walking/turning doesn't scrub; backing off rolls it back.
+        // Trigger released = unlatch; progress keeps. The clip still animates the latched hand's fingers (the pin
+        // only owns the wrist). Completion goes through CompleteOpenPull (settle or Ready).
         private static void StepOpenPull(EatStyle s)
         {
             Transform acting = HandT(s.openHand);
@@ -295,9 +269,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             bool dominant = s.openHand == Hand.Dominant;
             float axis = TriggerAxisImpl(dominant);
-            // Keep the shared edge state fresh: the drink recap (StepDrink, next phase) edges
-            // via TriggerEdgeImpl off these prevs — a stale prev of 0 with the trigger still
-            // held from the open would fire a FALSE recap the moment the phase flips.
+            // Keep the shared edge state fresh: the drink recap (StepDrink) edges off these prevs via TriggerEdgeImpl,
+            // and a stale 0 with the trigger still held from the open would fire a false recap when the phase flips.
             float prevAxis = dominant ? prevTriggerAxis : prevOffTriggerAxis;
             if (dominant) prevTriggerAxis = axis; else prevOffTriggerAxis = axis;
 
@@ -306,13 +279,13 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (!pullingOpen)
             {
-                // Begin on a squeeze EDGE through pullLatchAxis at the open zone (edge so a
-                // trigger already held while reaching in doesn't auto-grab).
+                // Begin on a squeeze edge through pullLatchAxis at the open zone (edge so a trigger already held
+                // while reaching in doesn't auto-grab).
                 if (axis < pullLatchAxis || prevAxis >= pullLatchAxis
                     || !ZoneReached(s.openHand, Other(s.openHand), openZoneOffset, openDistance)) return;
 
-                // First grab: map progress 0 to wherever the animator froze after the draw
-                // (Wrapper foods spawn straight into STATE_USE — the capture handles both).
+                // First grab: map progress 0 to wherever the animator froze after the draw (Wrapper foods spawn
+                // straight into STATE_USE).
                 if (pullAnimStart < 0f)
                 {
                     float t0 = 0f;
@@ -337,16 +310,15 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // Trigger-kind, fully scrubbed: completing needs the full press-then-DEPRESS
-            // cycle, so hold at full and wait for the release. (Checked before the unlatch —
-            // this release means DONE, not let-go.)
+            // Trigger kind, fully scrubbed: hold at full and wait for the release to complete. Checked before the
+            // unlatch: this release means done, not let-go.
             if (pullAwaitRelease)
             {
                 if (axis <= pullReleaseAxis) CompleteOpenPull(s);
                 return;
             }
 
-            // Let go: unlatch (the IK snaps the hand back to the controller); progress keeps.
+            // Let go: unlatch (the hand goes back to the controller); progress keeps.
             if (axis <= pullReleaseAxis)
             {
                 EndPull();
@@ -356,11 +328,9 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (!pullSqueezeDone)
             {
-                // SQUEEZE: the trigger axis scrubs the first triggerSpan of the open (both
-                // directions, floored where this grab started). For the Trigger kind the
-                // span is the WHOLE open. At full press the physical gesture takes over —
-                // its references are captured HERE, so only motion made while fully
-                // gripping counts (no drift from the reach-in).
+                // Squeeze: the trigger axis scrubs the first triggerSpan of the open (both directions, floored where
+                // this grab started; Trigger kind: the whole open). At full press the physical gesture takes over;
+                // its references are captured here so only motion made while fully gripping counts.
                 float a = Mathf.InverseLerp(pullLatchAxis, pullFullPressAxis, axis);
                 pullProgress = Mathf.Max(pullGrabProgress, Mathf.Clamp01(a * triggerSpan));
                 ScrubOpen(s);
@@ -370,10 +340,9 @@ namespace TarkovVR.Source.Player.Interactions
                     if (kind == OpenGestureKind.Trigger) { pullAwaitRelease = true; return; }
                     pullSqueezeDone = true;
                     pullGrabProgress = pullProgress; // the physical phase's floor
-                    // Physical measures are RELATIVE to the holding hand (palm position in
-                    // its frame, rotation vs its rotation) so walking/body turns don't
-                    // scrub. Palm offset frozen here (curl tracking would feed the clip's
-                    // own finger animation back into the travel).
+                    // Measured relative to the holding hand (palm position in its frame, rotation vs its rotation) so
+                    // walking/body turns don't scrub. The palm offset is frozen here: live curl tracking would feed
+                    // the clip's own finger animation back into the travel.
                     pullPalmLocal = PalmOffsetLocal(s.openHand);
                     pullGrabLocal = anchor.InverseTransformPoint(acting.TransformPoint(pullPalmLocal));
                     pullGrabRel = Quaternion.Inverse(anchor.rotation) * acting.rotation;
@@ -382,7 +351,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // PHYSICAL: pull travel / tilt since the full press -> progress.
+            // Physical: pull travel / tilt since the full press -> progress.
             float measure = MeasureOpenGesture(kind, acting, anchor);
             float scale = kind == OpenGestureKind.Tilt ? openTiltDegrees : openPullDistance;
             pullProgress = Mathf.Clamp01(pullGrabProgress + Mathf.Max(0f, measure) / Mathf.Max(0.01f, scale));
@@ -391,29 +360,24 @@ namespace TarkovVR.Source.Player.Interactions
             if (pullProgress >= 1f) CompleteOpenPull(s);
         }
 
-        // The physical gesture's measure since the full-press capture, in its native units
-        // (Pull = metres of palm travel, Tilt = degrees). All anchor-relative. (A signed
-        // CCW-twist measure for screw caps was removed — wrist roll read too inconsistently;
-        // tilting the hand serves the same purpose.)
+        // The physical gesture's measure since the full-press capture, anchor-relative (Pull = metres of palm
+        // travel, Tilt = degrees). Wrist-roll twist reads too inconsistently for screw caps: they use Tilt.
         private static float MeasureOpenGesture(OpenGestureKind kind, Transform acting, Transform anchor)
         {
             if (kind == OpenGestureKind.Pull)
-                // Magnitude (not a fixed axis) so any pull direction works for any container
-                // orientation; moving back toward the grab rolls it back down.
+                // Magnitude (not a fixed axis) so any pull direction works; moving back toward the grab rolls it back.
                 return (anchor.InverseTransformPoint(acting.TransformPoint(pullPalmLocal)) - pullGrabLocal).magnitude;
 
-            // Tilt: any direction counts — how far the hand's forward tipped off the
-            // full-press orientation (caps, flip-top lids, can tabs).
+            // Tilt: how far the hand's forward tipped off the full-press orientation, any direction (caps, flip-top
+            // lids, can tabs).
             Quaternion rel = Quaternion.Inverse(anchor.rotation) * acting.rotation;
             return Vector3.Angle(pullGrabRel * Vector3.forward, rel * Vector3.forward);
         }
 
-        // A finished open (pull reached 1 / Trigger press-then-release cycle done): unlatch
-        // and either SETTLE or go Ready. The pull only covers the authored segment
-        // (pullStart -> pullEnd); if the open clip has a tail past that (the tushonka spoon
-        // grab), it settles: hand unlocked (back on the controller), the clip auto-plays
-        // pullEnd -> openReadyTime, and StepOpen's shared wait branch freezes it there and
-        // runs onOpened. With pullEnd at openReadyTime (default) this opens immediately.
+        // A finished open (pull reached 1 / Trigger press-then-release done): unlatch, then settle or go Ready.
+        // The pull only covers pullStart -> pullEnd; a clip tail past that (the tushonka spoon grab) auto-plays
+        // pullEnd -> openReadyTime with the hand unlocked, and StepOpen's wait branch freezes it there and runs
+        // onOpened. With pullEnd at openReadyTime (default) this opens immediately.
         private static void CompleteOpenPull(EatStyle s)
         {
             ReportOpenMovers(); // the lid-bone hint (no-op once reported / with OpenGrip set)
@@ -429,20 +393,18 @@ namespace TarkovVR.Source.Player.Interactions
             FinishOpen(s); // -> Ready, or play the one-shot open animation (rip) first
         }
 
-        // Drive the open clip's playhead to the pull progress. The animator stays at speed 0
-        // (Tick keeps it there while !playingOpen); Play() re-enters the state at the mapped
-        // normalizedTime and the animator re-applies its bone pose every frame even at speed
-        // 0, so this is a clean scrub. Clip sound events never fire from a seek — the
-        // milestone sounds below stand in for them.
+        // Drive the open clip's playhead to the pull progress. The animator stays at speed 0 (Tick keeps it there
+        // while !playingOpen) and still re-applies the bone pose every frame. Clip sound events never fire from a
+        // seek: the milestone sounds below stand in for them.
         private static void ScrubOpen(EatStyle s)
         {
             try { controller._player.ArmsAnimatorCommon.Play(s.openStateHash, 1, CurrentScrubTime()); }
             catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] pull scrub Play failed: {exception.Message}"); }
         }
 
-        // The open-state normalizedTime the current pull progress maps to (shared by the
-        // animator scrub and the HandPath sampling, so the hand and the lid stay in sync).
-        // pullStartTime (when set) overrides the auto-captured start, live.
+        // The open-state normalizedTime the current pull progress maps to (shared by the animator scrub and the
+        // HandPath sampling, so the hand and the lid stay in sync). pullStartTime (when set) overrides the
+        // auto-captured start.
         private static float CurrentScrubTime()
         {
             float end = PullEndResolved();
@@ -456,13 +418,10 @@ namespace TarkovVR.Source.Player.Interactions
         private static float PullEndResolved()
             => pullEndTime > 0f ? Mathf.Min(pullEndTime, openReadyTime) : openReadyTime;
 
-        // Fire the food's openSounds at evenly spaced milestones, each once — the high-water
-        // counter never refires one on a re-scrub. The slots live on the open-state TIME
-        // axis, evenly spaced between the pull start and openReadyTime (when the pull covers
-        // the whole open this is identical to the old progress-fraction spacing). A sound
-        // whose slot lands PAST pullEndTime is NOT fired here: the settle plays the clip's
-        // tail for real, so its own sound events cover it at the authored moment — firing it
-        // from the pull too was the "open sound plays again" double (tushonka's SpoonTake).
+        // Fire the food's openSounds once each (the high-water counter never refires on a re-scrub). The slots sit
+        // on the open-state time axis, evenly spaced between the pull start and openReadyTime. A slot past
+        // pullEndTime is not fired here: the settle plays the clip's tail for real, so its own sound events cover
+        // it (firing it from the pull too doubles the sound, e.g. tushonka's SpoonTake).
         private static void FirePullMilestoneSounds()
         {
             string[] sounds = def?.openSounds;
@@ -484,14 +443,13 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Take: the take gesture (reach the holding hand, or SHAKE the bag) reveals/moves the
-        // food onto the eating hand and advances the animator. -> Holding. The reach-into-bag
-        // take is a multi-frame latch, not a one-shot trigger — it runs its own step.
+        // Take: the take gesture (reach the holding hand, or shake the bag) reveals/moves the food onto the eating
+        // hand and advances the animator. -> Holding. The reach-into-bag take is a multi-frame latch with its own step.
         private static void StepTake(EatStyle s)
         {
             if (s.takeKind == TakeKind.ReachIn) { StepReachTake(s); return; }
-            // CanSpoon hybrid: holding the CAN itself at the mouth drinks it down instead
-            // of scooping (condensed milk). Returns true while the mouth path owns the frame.
+            // CanSpoon hybrid: holding the can itself at the mouth drinks it down instead of scooping (condensed
+            // milk). Returns true while the mouth path owns the frame.
             if (def != null && def.mouthDrink && StepCanDrink(s)) return;
             bool triggered = s.takeKind == TakeKind.Shake
                 ? DetectShake()
@@ -506,17 +464,11 @@ namespace TarkovVR.Source.Player.Interactions
             LogStep($"[ManualEat] Took {s.label} (round {biteCount + 1}/{def.bites}).");
         }
 
-        // Reach-into-bag take (iskra/MRE — the user's spec mapped onto the pull-latch
-        // primitives). Entering the take zone (the bag mouth) LATCHES the reaching hand
-        // onto a RAIL: its position locks to the entry->zone-center line (lateral motion
-        // dropped, rotation stays on the controller — DriveReachLatch) while the physical
-        // reach DEPTH scrubs the clip's reach segment, so the bag mouth widens as you push
-        // in and closes as you back out. Trigger while deep grabs the cracker into the
-        // reaching hand (it rides the latched hand — you still have to pull it out);
-        // withdrawing past the entry point completes the take (-> Holding, eat at the
-        // mouth). Backing out empty-handed or yanking sideways off the rail just releases
-        // the hand ("when you leave collision, you should have control over hand again") —
-        // re-enter the zone to reach again.
+        // Reach-into-bag take (iskra/MRE). Entering the take zone (the bag mouth) latches the reaching hand onto a
+        // rail: its position locks to the entry->zone-center line (lateral motion dropped, rotation stays on the
+        // controller, DriveReachLatch) while the reach depth scrubs the clip's reach segment. Trigger while deep
+        // grabs the cracker into the reaching hand; withdrawing past the entry point completes the take
+        // (-> Holding). Backing out empty-handed or yanking sideways off the rail just releases the hand.
         private static void StepReachTake(EatStyle s)
         {
             Transform acting = HandT(s.takeHand);
@@ -530,20 +482,18 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // Keep the trigger edge state fresh every latched frame — a stale prev would
-            // fire a false grab the moment the depth gate opened under a held trigger.
+            // Keep the trigger edge state fresh every latched frame: a stale prev would fire a false grab the moment
+            // the depth gate opened under a held trigger.
             bool trigEdge = TriggerEdgeImpl(s.takeHand == Hand.Dominant);
 
-            // Depth + lateral in the anchor frame, against the FROZEN entry refs (the scrub
-            // animates the latched fingers — a live palm offset would feed the clip back
-            // into the measure, the pullPalmLocal lesson).
+            // Depth + lateral in the anchor frame, against the frozen entry refs: the scrub animates the latched
+            // fingers, so a live palm offset would feed the clip back into the measure (same as pullPalmLocal).
             Vector3 palmLocal = anchor.InverseTransformPoint(acting.TransformPoint(reachPalmLocal));
             float depth = Vector3.Dot(palmLocal - reachEntryPalmLocal, reachAxisLocal);
             float lateral = (palmLocal - (reachEntryPalmLocal + reachAxisLocal * depth)).magnitude;
 
-            // Leaving the collider = control of the hand again: backwards past the entry
-            // point, or a sideways yank off the rail. WITH the cracker grabbed either exit
-            // completes the take — it's in your hand, it doesn't go back in the bag.
+            // Leaving (backwards past the entry point, or sideways off the rail) releases the hand. With the cracker
+            // grabbed either exit completes the take.
             if (depth < -reachExitDepth || lateral > reachLateralEscape)
             {
                 bool grabbed = reachGrabbed;
@@ -557,16 +507,14 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // Physical depth -> the reach segment (deeper = further in; backing out rolls
-            // it back down). Same speed-0 seek as ScrubOpen; the lerp runs either way
-            // (start may be > deep — see the FoodDef note on the inverted first guess).
+            // Physical depth -> the reach segment (backing out rolls it back). Same speed-0 seek as ScrubOpen;
+            // reachStartTime may be greater than reachDeepTime, the lerp runs either way.
             reachProgress = Mathf.Clamp01(depth / Mathf.Max(0.01f, reachDepthDistance));
             try { controller._player.ArmsAnimatorCommon.Play(STATE_USE_HASH, 1, Mathf.Lerp(reachStartTime, reachDeepTime, reachProgress)); }
             catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] reach scrub Play failed: {exception.Message}"); }
 
-            // Trigger while deep = grab: the cracker appears in the reaching hand (the
-            // holder hangs off that wrist, which is pinned to the latch — it rides the
-            // rail out with you). No animator pulse — it would fight the scrub.
+            // Trigger while deep = grab: the cracker appears in the reaching hand (its holder hangs off that wrist,
+            // which is pinned to the latch). No animator pulse: it would fight the scrub.
             if (!reachGrabbed && trigEdge && reachProgress >= reachGrabDepth)
             {
                 reachGrabbed = true;
@@ -579,9 +527,9 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Eat: bring the eating hand (+ eat-zone offset) to the mouth -> hide the eaten piece,
-        // count the bite, then finish (last bite) or advance for the next round. Shared by the
-        // Holding phase (foods with a take step) and the Ready phase (Handheld: open then bite).
+        // Eat: eating hand (+ eat-zone offset) at the mouth -> hide the eaten piece, count the bite, then finish
+        // (last bite) or advance for the next round. Shared by the Holding phase (foods with a take step) and the
+        // Ready phase (Handheld: open then bite).
         private static void StepEat(EatStyle s)
         {
             if (!EatZoneReached(s.eatHand)) return;
@@ -594,11 +542,9 @@ namespace TarkovVR.Source.Player.Interactions
             PlaySound(def.eatSound);
             LogStep($"[ManualEat] Ate {biteCount}/{def.bites}.");
 
-            // Resource foods tick their bar down PER BITE: the def's bites divide what was
-            // left at spawn (oat flakes 40/40 at bites:4 = 10 a shake; the HUD bar updates
-            // each bite). Each chunk is capped at the LIVE remaining, so a mouth-drunk
-            // CanSpoon (condensed milk) finishes in proportionally fewer scoops. The finish
-            // applies only the unapplied remainder (drinkAppliedFrac), so nothing doubles.
+            // Resource foods drain per bite: the def's bites divide what was left at spawn (oat flakes 40/40 at
+            // bites:4 = 10 a shake), each chunk capped at the live remaining, so a mouth-drunk CanSpoon finishes in
+            // fewer scoops. The finish applies only the unapplied remainder (drinkAppliedFrac).
             if (drinkFdc != null && def.kind != FoodKind.Drink && def.bites > 0)
             {
                 float live = drinkFdc.MaxResource > 0f ? Mathf.Clamp01(drinkFdc.HpPercent / drinkFdc.MaxResource) : 0f;
@@ -610,8 +556,8 @@ namespace TarkovVR.Source.Player.Interactions
                 }
             }
 
-            // Finish on the bite count OR the live resource hitting empty — a mixed
-            // mouth+spoon eat can empty the can before the counter runs out.
+            // Finish on the bite count or the live resource hitting empty: a mixed mouth+spoon eat can empty the
+            // can before the counter runs out.
             bool resourceEmpty = drinkFdc != null && drinkFdc.HpPercent <= 0.0001f;
             if (biteCount >= def.bites || resourceEmpty)
             {
@@ -624,17 +570,15 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // One held-at-the-mouth drink frame, shared by StepDrink (Drink/eatByTime foods)
-        // and StepCanDrink (the CanSpoon mouthDrink hybrid): start/continue the gulp loop +
-        // live drain while the item is at the mouth (mouthHand = the hand HOLDING it);
-        // pause (freeze the gulp + cut the glug) the frame it lowers. Auto-finishes the
-        // moment the LIVE resource empties (falls back to the use-time clock when the item
-        // has no resource component). Returns true while the item is at the mouth (the
-        // frame belongs to drinking).
+        // One held-at-the-mouth drink frame, shared by StepDrink (Drink/eatByTime foods) and StepCanDrink (the
+        // CanSpoon mouthDrink hybrid): runs the gulp loop + live drain while the item is at the mouth (mouthHand =
+        // the hand holding it), pauses (freezes the gulp, cuts the audio) the frame it lowers. Finishes when the
+        // live resource empties (the use-time clock when the item has no resource component). Returns true while
+        // the item is at the mouth.
         private static bool DrinkHeldFrame(Hand mouthHand)
         {
-            // Hysteresis: entering uses the exact zone, but once drinking the exit boundary
-            // is wider (drinkZoneExitScale) so a steady hold can't flicker the clock on/off.
+            // Hysteresis: entering uses the exact zone, but once drinking the exit boundary is wider
+            // (drinkZoneExitScale) so a steady hold can't flicker the clock on/off.
             if (EatZoneReached(mouthHand, drinkingHeld ? drinkZoneExitScale : 1f))
             {
                 if (!drinkingHeld)
@@ -648,15 +592,11 @@ namespace TarkovVR.Source.Player.Interactions
                 drinkHeldTime += Time.deltaTime;
                 DriveDrinkLoop();
                 DrainDrinkLive();
-                // Gulp fallback: no animation-driven gulp arrived in time (see nextGulpFallback
-                // in State.cs — events die after a fast lower->re-raise) — play the def's own
-                // sound manually and keep the throttle in sync so a late animation event can't
-                // double-gulp. Manual gulps shed snack segments too (normally done per allowed
-                // animation sound in AllowSound). ONLY when the name actually resolves in the
-                // player's bank: a missing element is a silent no-op that would still claim
-                // nextDrinkSound and throttle the clip's REAL events into silence (sausage's
-                // 'Eat'-vs-'Take1' bug, 2026-06-12) — in that case stand down and leave the
-                // throttle to the animation events.
+                // Gulp fallback: no animation-driven gulp arrived in time (events die after a fast lower->re-raise, see
+                // nextGulpFallback in State.cs), so play the def's sound manually, shed a snack segment (normally done
+                // per allowed animation sound in AllowSound), and sync the throttle so a late animation event can't
+                // double-gulp. Only when the name resolves in the player's bank: a missing element plays nothing but
+                // would still claim nextDrinkSound and throttle the clip's real events into silence.
                 if (Time.time >= nextGulpFallback)
                 {
                     nextGulpFallback = Time.time + drinkGulpInterval;
@@ -667,8 +607,7 @@ namespace TarkovVR.Source.Player.Interactions
                         nextDrinkSound = Time.time + drinkGulpInterval;
                     }
                 }
-                // Health-based finish: the LIVE resource just hit empty. Items without a
-                // resource component finish on the use-time clock as before.
+                // Finish when the live resource hits empty; items without a resource component use the use-time clock.
                 bool done = drinkFdc != null && drinkLiveDrain
                     ? drinkFdc.HpPercent <= 0.0001f
                     : drinkHeldTime >= drinkUseTime * drinkRemainingFrac;
@@ -689,17 +628,15 @@ namespace TarkovVR.Source.Player.Interactions
             return false;
         }
 
-        // CanSpoon hybrid (mouthDrink): HOLD the CAN at your mouth and it drinks down the
-        // item's use-time exactly like a Drink. The spoon path stays available from Ready;
-        // a spoon scoop after a partial drink is capped at what's LEFT (see the per-bite
-        // drain in StepEat), so "drink half, then one scoop finishes it". The can rides
-        // the OFF hand (eatHand = the spoon hand), so the mouth check anchors there.
+        // CanSpoon hybrid (mouthDrink): hold the can at the mouth and it drinks down the use-time like a Drink.
+        // The spoon path stays available from Ready; a scoop after a partial drink is capped at what's left (the
+        // per-bite drain in StepEat). The can rides the off hand (eatHand = the spoon hand), so the mouth check
+        // anchors there.
         private static bool StepCanDrink(EatStyle s) => DrinkHeldFrame(Other(s.eatHand));
 
-        // Drink: HOLD the container at the mouth — the resource drains LIVE while held
-        // (DrinkHeldFrame). Lowering it pauses; bringing the free hand back to the
-        // cap/open zone + trigger recaps and finishes with just what was drunk (the
-        // item keeps the rest — already applied by the live drain).
+        // Drink: hold the container at the mouth and the resource drains live (DrinkHeldFrame). Lowering it
+        // pauses; the free hand back at the cap/open zone + trigger recaps and finishes with just what was drunk
+        // (the item keeps the rest).
         private static void StepDrink(EatStyle s)
         {
             if (DrinkHeldFrame(s.eatHand)) return;
@@ -715,29 +652,23 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Incremental at-mouth drain: apply the held-time fraction that hasn't been applied
-        // yet, in drinkDrainStep chunks (CutPiece is non-mutating — it clones and scales —
-        // so chunked applications sum EXACTLY to the single-shot total). Capped at what the
-        // bottle had left, so over-holding can't over-apply. The drain rate IS the vanilla
-        // rate: MaxResource over the template UseTime, nutrition proportional — the same
-        // model DoMedEffect runs.
+        // Incremental at-mouth drain: apply the not-yet-applied held-time fraction in drinkDrainStep chunks
+        // (CutPiece clones and scales without mutating, so chunks sum exactly to the single-shot total), capped at
+        // what the bottle had left. The rate is vanilla's: MaxResource over the template UseTime, nutrition
+        // proportional, the same model DoMedEffect runs.
         private static void DrainDrinkLive()
         {
             if (!drinkLiveDrain) return;
-            // Time-based progress is tracked SEPARATELY from the total applied
-            // (drinkTimeAppliedFrac vs drinkAppliedFrac): a CanSpoon's spoon bites also
-            // bump the total, and measuring the mouth drain against it would stall the bar
-            // until the held time "caught up" to what the spoon already ate. The time
-            // delta is capped at the LIVE remaining, so mixed mouth+spoon can't over-apply.
+            // Time-based progress (drinkTimeAppliedFrac) is tracked apart from the total applied (drinkAppliedFrac):
+            // a CanSpoon's spoon bites also bump the total, and draining against it would stall the bar until the
+            // held time caught up. The time delta is capped at the live remaining, so mixed mouth+spoon can't over-apply.
             float timeTarget = drinkUseTime > 0f ? drinkHeldTime / drinkUseTime : drinkRemainingFrac;
             float live = drinkFdc != null && drinkFdc.MaxResource > 0f
                 ? Mathf.Clamp01(drinkFdc.HpPercent / drinkFdc.MaxResource)
                 : Mathf.Max(0f, drinkRemainingFrac - drinkAppliedFrac); // no component: budget the unapplied rest
             float delta = Mathf.Min(timeTarget - drinkTimeAppliedFrac, live);
-            // Once the held time covers everything that's left, the FINAL sliver is due
-            // even though it's under a full chunk — without this the bar stalled one step
-            // short (observed: water stuck at 1/60, the empty-finish never fired and only
-            // the recap's remainder pass drained it).
+            // Once the held time covers everything left, the final sliver is due even though it's under a full
+            // chunk; without this the bar stalls one step short and the empty-finish never fires.
             bool last = live > 0f && timeTarget - drinkTimeAppliedFrac >= live - 0.0001f;
             if (delta >= drinkDrainStep || (last && delta > 0f))
             {
@@ -745,20 +676,17 @@ namespace TarkovVR.Source.Player.Interactions
                 drinkTimeAppliedFrac += delta;
                 drinkAppliedFrac += delta;
             }
-            // Chunked float math can leave a hair of resource after the last application —
-            // snap it to a true 0 so the health-based finish/discard checks fire.
+            // Chunked float math can leave a hair of resource after the last application: snap it to a true 0 so
+            // the finish/discard checks fire.
             if (last && drinkFdc != null && drinkFdc.HpPercent > 0f && drinkFdc.HpPercent <= drinkFdc.MaxResource * 0.01f)
                 drinkFdc.HpPercent = 0f;
         }
 
-        // Cut the currently-playing gulp audio. BaseSoundPlayer routes every clip through one
-        // pooled BetterSource. The cut is BetterSource.Stop() — NOT ReleaseClipsSource:
-        // Release hands the source back to BetterAudio's pool mid-play, and a fast
-        // lower→re-raise wedged the player into permanent silence (reported 2026-06-12).
-        // Stop() keeps the source owned by the sound player (_isClipSourceReleased stays
-        // false), the next gulp's PlayClipInternal just reuses it, and the vanilla
-        // BaseSoundPlayer.Update auto-release handles eventual cleanup. The drinkingHeld
-        // transition resets nextDrinkSound, so re-raising restarts the glug instantly.
+        // Cut the playing gulp audio. BaseSoundPlayer routes every clip through one pooled BetterSource. Use
+        // BetterSource.Stop(), not ReleaseClipsSource: Release hands the source back to BetterAudio's pool mid-play
+        // and a fast lower->re-raise leaves the player permanently silent. Stop() keeps the source owned
+        // (_isClipSourceReleased stays false), the next gulp's PlayClipInternal reuses it, and
+        // BaseSoundPlayer.Update releases it later.
         private static void StopDrinkSound()
         {
             try { if (cutDrinkSoundOnLower) soundPlayer?._clipsSource?.Stop(); }
@@ -766,11 +694,10 @@ namespace TarkovVR.Source.Player.Interactions
             TarkovVR.Source.Misc.AudioHaptics.Stop(); // the hand buzz cuts with the audio
         }
 
-        // Keep the gulp/chew animation running while the item is at the mouth. The natural
-        // USE<->EAT transitions are effect-driven (and the effect is suppressed), so whenever
-        // the animator runs out of the loop segment — or strays toward OPEN/END — replay it
-        // from the top. The loop state is per-food (eatLoopState; 0 = STATE_USE): sausage's
-        // clip uses non-standard hashes, so it overrides.
+        // Keep the gulp/chew animation running while the item is at the mouth. The USE<->EAT transitions are
+        // effect-driven and the effect is suppressed, so whenever the animator runs out of the loop segment or
+        // strays toward OPEN/END, replay it from the top. The loop state is per-food (eatLoopState; 0 = STATE_USE):
+        // sausage's clip uses non-standard hashes.
         private static void DriveDrinkLoop()
         {
             playUntil = Time.time + 0.1f; // animator keeps playing while held
@@ -779,8 +706,8 @@ namespace TarkovVR.Source.Player.Interactions
                 int loop = eatLoopState != 0 ? eatLoopState : STATE_USE_HASH;
                 var stateInfo = controller._player.ArmsAnimatorCommon.GetCurrentAnimatorStateInfo(1);
                 bool inDrink = stateInfo.fullPathHash == loop || stateInfo.fullPathHash == STATE_USE_HASH || stateInfo.fullPathHash == STATE_EAT_HASH;
-                // Throttled: a WRONG loop hash (sausage's is a guess) never enters the
-                // state, and an unthrottled retry would hammer Play every frame.
+                // Throttled: a wrong loop hash (sausage's is a guess) never enters the state, and an unthrottled
+                // retry would hammer Play every frame.
                 if ((!inDrink || stateInfo.normalizedTime >= 1f) && Time.time >= nextLoopPlay)
                 {
                     nextLoopPlay = Time.time + 0.25f;
@@ -790,18 +717,14 @@ namespace TarkovVR.Source.Player.Interactions
             catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] drink loop Play failed: {exception.Message}"); }
         }
 
-        // Move the arms animator from STATE_OPEN into STATE_USE (the "use" phase). The brief
-        // playUntil makes Tick run the animator a few frames so the state actually engages;
-        // then it freezes. Needed so FinishSequence cancels from STATE_USE like every other
-        // food (cancelling from STATE_OPEN = busy hands + the food won't discard). Used by the
-        // Bag (shake) and Pack (take) gestures, whose grabs don't otherwise advance the animator.
+        // Move the arms animator from STATE_OPEN into STATE_USE; the brief playUntil lets Tick run it a few frames
+        // so the state engages, then it freezes. FinishSequence must cancel from STATE_USE: cancelling from
+        // STATE_OPEN = busy hands + the food won't discard. Used by the Bag (shake) and Pack (take) gestures, whose
+        // grabs don't otherwise advance the animator.
         private static void EnterUseState()
         {
-            // Non-standard graphs (noodles) have no STATE_USE — push into the food's own
-            // use/chew state instead (eatLoopState, same resolution as DriveDrinkLoop).
-            // With the bare STATE_USE the Play was a no-op there: the arms stayed in OPEN
-            // and the finish rode the deadline fallback straight into the busy-hands
-            // cancel-from-OPEN bug.
+            // Non-standard graphs (noodles) have no STATE_USE: push into the food's own use/chew state (eatLoopState,
+            // as in DriveDrinkLoop). Play(STATE_USE) is a no-op there and the arms would stay in OPEN.
             int use = eatLoopState != 0 ? eatLoopState : STATE_USE_HASH;
             try { controller._player.ArmsAnimatorCommon.Play(use, 1, 0f); }
             catch (Exception exception) { Plugin.MyLog.LogWarning($"[ManualEat] EnterUseState failed: {exception.Message}"); }
@@ -819,10 +742,9 @@ namespace TarkovVR.Source.Player.Interactions
             shakePrevPos = (rightHand != null && head != null) ? head.InverseTransformPoint(rightHand.position) : Vector3.zero;
         }
 
-        // Detect a shake: the bag (right hand) wiggling near the left hand. Velocity is
-        // measured in HEAD-LOCAL space so walking/turning doesn't count. Each direction
-        // reversal above shakeMinSpeed is a wiggle; shakeReversalsNeeded within shakeWindow
-        // seconds = a shake.
+        // Detect a shake: the bag (right hand) wiggling near the left hand. Velocity is measured in head-local
+        // space so walking/turning doesn't count. Each direction reversal above shakeMinSpeed is a wiggle;
+        // shakeReversalsNeeded within shakeWindow seconds = a shake.
         private static bool DetectShake()
         {
             Transform rightHand = RightHand(); Transform head = GetHead();
@@ -848,13 +770,10 @@ namespace TarkovVR.Source.Player.Interactions
             return false;
         }
 
-        // Begin a per-gesture animation pulse (the bit of finger/hand motion played on
-        // each grab/eat). With deterministicGesturePose it first SNAPS the arms animator to
-        // a fixed (state, normalizedTime) so every grab/eat replays the SAME segment —
-        // identical finger pose + food deform each bite. Without it the pulse free-runs from
-        // wherever the last bite froze, so the timeline drifts and each bite looks different
-        // (the sprats symptom: each grabbed fish a different orientation). bitePlayTime is
-        // how long the segment plays before it freezes again.
+        // Begin a per-gesture animation pulse (the finger/hand motion played on each grab/eat). With
+        // deterministicGesturePose it first snaps the arms animator to a fixed (state, normalizedTime) so every
+        // grab/eat replays the same segment; without it the pulse free-runs from wherever the last bite froze and
+        // each bite looks different. bitePlayTime = how long the segment plays before it freezes again.
         private static void StartGesturePulse(int stateHash, float startTime)
         {
             if (deterministicGesturePose)

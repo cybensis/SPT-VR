@@ -11,31 +11,23 @@ using UnityEngine;
 
 namespace TarkovVR.Patches.Misc
 {
-    // EFT only voices a loose item physically landing if the item's template has a DropSoundType other
-    // than None -- and the enum only holds weapon classes (Pistol/SubMachineGun/Rifle). So every
-    // non-weapon hits the ground silently by data design.
+    // EFT only voices a loose item landing if its template has a DropSoundType other than None, and that enum only holds
+    // weapon classes (Pistol/SubMachineGun/Rifle), so every non-weapon lands silently. This gives those items a drop sound.
+    // Weapons are never touched here: they keep vanilla's own surface-aware gun banks.
     //
-    // We give the silent items a drop sound. Weapons are NEVER touched here -- they keep vanilla's own
-    // surface-aware gun banks. Two independent axes:
-    //
-    // dropSoundMode -- WHICH layers play:
-    //   InventorySounds -- the item's inventory "_drop" foley (GUISounds/ItemSounds): material identity
-    //                      (cloth/food/meds/...), not surface-aware.
+    // dropSoundMode -- which layers play:
+    //   InventorySounds -- the item's inventory "_drop" foley (GUISounds/ItemSounds): material identity, not surface-aware.
     //   SurfaceOnly     -- just a per-surface thud (no material).
-    //   Layered (default) -- BOTH: material foley + a quiet surface thud. The ear fuses them into "soft
-    //                      thing landed on metal."
+    //   Layered (default) -- both.
+    // surfaceSource -- where the surface thud comes from:
+    //   FootstepBanks (default) -- the player's footstep SurfaceSet (Sounds.GetSurfaceSet): a per-surface body-thud
+    //                      (ProneDrop/Landing) with no gun rattle.
+    //   GunBanks        -- the gun drop banks (ItemDropSounds), class by weight; the gun clatter is baked into every clip.
     //
-    // surfaceSource -- WHERE the surface thud comes from (used by SurfaceOnly + Layered):
-    //   FootstepBanks (default) -- the player's footstep SurfaceSet (Sounds.GetSurfaceSet): a PURE per-
-    //                      surface body-thud (ProneDrop/Landing) with NO gun rattle. The clean source.
-    //   GunBanks        -- borrow the gun drop banks (ItemDropSounds), class by weight. Surface-aware but
-    //                      the gun clatter is baked into every clip (can't be stripped out).
-    //
-    // CO-OP SYNC (FIKA): a dropped item is an ObservedLootItem on every machine. The DROPPER simulates it
-    // locally (bool_3 == false) -> vanilla OnCollisionEnter. EVERYONE ELSE observes it (bool_3 == true) ->
-    // LootSyncStruct -> ApplyNetPacket -> PlayDropSound() on settle (the same path weapon drops sync on).
-    // We hook BOTH and split by bool_3 so no machine double-plays. References only EFT types (no Fika
-    // types), so it's inert and safe in solo.
+    // Co-op (FIKA): a dropped item is an ObservedLootItem on every machine. The dropper simulates it locally
+    // (bool_3 == false) -> vanilla OnCollisionEnter. Everyone else observes it (bool_3 == true) -> LootSyncStruct ->
+    // ApplyNetPacket -> PlayDropSound() on settle (the path weapon drops sync on). Both are hooked and split by bool_3 so no
+    // machine double-plays. References only EFT types (no Fika types), so it's inert in solo.
     [HarmonyPatch]
     internal class LootDropSoundPatches
     {
@@ -61,7 +53,7 @@ namespace TarkovVR.Patches.Misc
         public static int invRolloff = 10;
         public static float invVolume = 1f;
 
-        // Surface thud volume scales with the item's CURRENT weight: silent below surfaceMinWeight, then
+        // Surface thud volume scales with the item's current weight: silent below surfaceMinWeight, then
         // ramps from surfaceVolMin (just above the cutoff) up to surfaceVolMax, hitting max at surfaceVolMaxWeight.
         public static float surfaceVolMin = 0.02f;
         public static float surfaceVolMax = 0.5f;
@@ -72,7 +64,7 @@ namespace TarkovVR.Patches.Misc
         public static float surfaceMinWeight = 0.4f;
 
         // Velocity-based volume: a harder throw/drop is louder. Impact speed (m/s) maps to a volume multiplier
-        // between velVolumeSoft and velVolumeLoud, applied MORE to the inventory foley than the surface thud
+        // between velVolumeSoft and velVolumeLoud, applied more to the inventory foley than the surface thud
         // via per-layer "influence" (0 = ignore velocity, 1 = full multiplier).
         public static float velSpeedSoft = 1.5f;         // m/s -- gentle drop -> velVolumeSoft
         public static float velSpeedHard = 8f;           // m/s -- hard throw -> velVolumeLoud
@@ -90,7 +82,7 @@ namespace TarkovVR.Patches.Misc
         private static readonly ConditionalWeakTable<LootItem, StrongBox<float>> peakNetSpeed =
             new ConditionalWeakTable<LootItem, StrongBox<float>>();
 
-        // DROPPER side (you drop it) + singleplayer: vanilla fires OnCollisionEnter from real collisions.
+        // Dropper side (you drop it) + singleplayer: vanilla fires OnCollisionEnter from real collisions.
         // Networked observers (bool_3 == true) are driven by packets instead and handled in PlayDropSound.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(LootItem), "OnCollisionEnter")]
@@ -112,7 +104,7 @@ namespace TarkovVR.Patches.Misc
             Voice(__instance, position, surface, impact);
         }
 
-        // OBSERVER side in co-op: ObservedLootItem.ApplyNetPacket calls this on the networked settle (the
+        // Observer side in co-op: ObservedLootItem.ApplyNetPacket calls this on the networked settle (the
         // path that syncs weapon drops). Only the networked observer reaches here.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(LootItem), "PlayDropSound")]
@@ -127,7 +119,7 @@ namespace TarkovVR.Patches.Misc
             Voice(__instance, position, __instance._currentSurface, speed);
         }
 
-        // OBSERVER side: remember the fastest velocity the synced item reaches in flight, so the settle can
+        // Observer side: remember the fastest velocity the synced item reaches in flight, so the settle can
         // scale volume by how hard it was thrown. ApplyNetPacket sets _rigidBody.velocity from each packet.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ObservedLootItem), "ApplyNetPacket")]
@@ -185,8 +177,7 @@ namespace TarkovVR.Patches.Misc
         }
 
         // The item's "<category>_drop" inventory clip, played at the landing point through BetterAudio (3D),
-        // exactly like the vanilla pickup sound. Null clip (category has none) -> no-op, stays silent.
-        // Volume mostly follows throw/drop speed (material identity gets punchier the harder it's thrown).
+        // like the vanilla pickup sound. Null clip (category has none) -> stays silent. Volume mostly follows throw/drop speed.
         private static void PlayInventoryDrop(Item item, Vector3 pos, float impact)
         {
             AudioClip clip = Singleton<GUISounds>.Instance.GetItemClip(item.ItemSound, EInventorySoundType.drop);
@@ -196,14 +187,14 @@ namespace TarkovVR.Patches.Misc
         }
 
         // A per-surface thud: either the pure footstep SurfaceSet bank (no gun) or a weight-picked gun bank.
-        // Volume scales with the item's CURRENT weight (incl. contents) and a little with impact speed.
+        // Volume scales with the item's current weight (incl. contents) and a little with impact speed.
         private static void PlaySurfaceBank(Item item, BaseBallistic.ESurfaceSound surface, Vector3 pos, float impact)
         {
             BetterAudio betterAudio = Singleton<BetterAudio>.Instance;
             if (betterAudio == null)
                 return;
 
-            // TotalWeight is the CURRENT weight incl. contents (loaded mag, filled rig/backpack, ammo stack)
+            // TotalWeight is the current weight incl. contents (loaded mag, filled rig/backpack, ammo stack)
             // -- the same value the inspect window shows -- not the empty Template.Weight.
             float weight = item.TotalWeight;
             if (weight < surfaceMinWeight)

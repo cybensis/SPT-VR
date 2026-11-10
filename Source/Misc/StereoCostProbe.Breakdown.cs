@@ -49,8 +49,8 @@ namespace TarkovVR.Source.Misc
             public readonly int[] block = { -1, -1, -1 };   // where it was first seen, per bucket
         }
         private static readonly List<Item> items = new List<Item>();
-        // Buffers are identified by their NATIVE pointer: Camera.GetCommandBuffers hands back fresh managed wrappers on
-        // every call, so reference identity never matches (that bug stacked thousands of markers on the camera).
+        // Buffers are identified by their native pointer: Camera.GetCommandBuffers hands back fresh managed wrappers on
+        // every call, so reference identity never matches.
         private static readonly FieldInfo bufferPtrField = typeof(CommandBuffer).GetField("m_Ptr", BindingFlags.Instance | BindingFlags.NonPublic);
         private static IntPtr Ptr(CommandBuffer commandBuffer) => commandBuffer == null || bufferPtrField == null ? IntPtr.Zero : (IntPtr)bufferPtrField.GetValue(commandBuffer);
         private static readonly HashSet<IntPtr> ownBuffers = new HashSet<IntPtr>();

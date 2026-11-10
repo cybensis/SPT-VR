@@ -8,34 +8,25 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // Receive + render a remote VR player's MANUAL EATING, in the ObservedPlayer.LateUpdate postfix
-    // (after FIKA's observed-meds visual pass + the food animator). Two halves, both fed from one
-    // VREatingPacket so they can't desync:
-    //   1) the ARMS are driven to the sender's rendered wrist poses (exactly like empty-hands sync),
-    //   2) every live food PROP is matched on the observer's copy of the food model (same prefab ->
-    //      same bone names, matched by a stable name hash) and its world pose + renderer visibility
-    //      overridden to the synced values.
-    // Because the food is placed from the same synced frame as the hands (not parented to them), the
-    // food and hands stay together without re-running the local gesture machine observer-side, and
-    // without fighting the vanilla observed-meds animation (we override its result each frame).
-    //
-    // Runs on ANY peer with this module (incl. flatscreen/headless), so everyone sees the VR eating.
+    // Receives and renders a remote VR player's manual eating, in the ObservedPlayer.LateUpdate postfix (after FIKA's
+    // observed-meds visual pass and the food animator). Both halves come from one VREatingPacket so they can't desync:
+    //   1) the arms are driven to the sender's rendered wrist poses (like empty-hands sync),
+    //   2) every live food prop is matched on the observer's copy of the food model (same prefab -> same bone names,
+    //      matched by a stable name hash) and its world pose + renderer visibility overridden to the synced values.
+    // The vanilla observed-meds animation's result is overridden each frame. Runs on any peer with this module
+    // (incl. flatscreen/headless).
     [HarmonyPatch]
     internal static class EatingSyncApply
     {
         // ---- live tunables ----
         public static float smoothRate = 18f;       // chest-local pose smoothing (0 = snap). Matches arm/weapon sync.
         public static float staleTimeout = 0.6f;    // no packet this long -> restore + stop (disconnect/finish safety)
-        // Freeze the observed food animator while synced — exactly like the local controller does at
-        // spawn. Without it FIKA's observed-meds animation runs free: the food's own bones loop AND its
-        // clip sound events fire on a loop. We override the prop world poses anyway (the moving parts),
-        // and forward the real gesture sounds, so the food sits in the synced pose, no loop, no loop
-        // audio. false = leave FIKA's looping animation (the old middle-ground).
+        // Freeze the observed food animator while synced, like the local controller does at spawn. Without it FIKA's
+        // observed-meds animation runs free: the food's own bones and its clip sound events loop. false = leave it looping.
         public static bool freezeObservedAnimator = true;
-        // Mirror the eater's food-animator base-layer state (a SEEK, frozen) so the food's own skinned
-        // deformation (lid bone opening, bag rip, chew squash) matches the eater instead of sitting at
-        // the spawn pose. Needs freezeObservedAnimator (the seek + speed 0 = a held pose, no loop).
-        // false = just freeze at spawn (the simpler middle-ground if the seek ever looks glitchy).
+        // Mirror the eater's food-animator state (a seek, frozen) so the food's own skinned deformation (lid bone opening,
+        // bag rip, chew squash) matches the eater instead of sitting at the spawn pose. Needs freezeObservedAnimator.
+        // false = just freeze at spawn.
         public static bool syncFoodAnimatorState = true;
         public static bool debug = false;
 
@@ -65,9 +56,8 @@ namespace SptVrFikaSync
 
         private static readonly Dictionary<int, EatState> states = new Dictionary<int, EatState>();
 
-        // Observed food sound players whose OWN events we mute (FIKA's looping observed-meds events AND
-        // the per-frame animator-seek's clip events — both spam / mis-timed). Only our forwarded gesture
-        // sounds get through (played with playingForwarded set). Runs on every peer incl. flatscreen.
+        // Observed food sound players whose own events we mute (FIKA's looping observed-meds events and the per-frame
+        // animator-seek's clip events). Only our forwarded gesture sounds get through (played with playingForwarded set).
         private static readonly HashSet<BaseSoundPlayer> suppressed = new HashSet<BaseSoundPlayer>();
         private static bool playingForwarded;
 
@@ -88,8 +78,7 @@ namespace SptVrFikaSync
             playingForwarded = false;
         }
 
-        // Packet handler thread == FIKA's read loop, which runs on the main thread (the existing
-        // arm/body sync touches Time.time / Unity here too), so renderer restores are safe.
+        // The packet handler runs in FIKA's read loop, on the main thread, so renderer restores are safe.
         public static void Store(VREatingPacket p)
         {
             if (!states.TryGetValue(p.NetId, out EatState s)) { s = new EatState(); states[p.NetId] = s; }
@@ -147,11 +136,9 @@ namespace SptVrFikaSync
                 }
                 s.meds = meds;
 
-                // Stop FIKA's looping observed-meds animation. Either seek the food animator to the
-                // eater's current state (mirrors the skinned deformation, frozen so it can't loop) or
-                // just freeze it at spawn. The seek's forced evaluation (SkipTime below) DOES re-fire the
-                // clip's sound events, so this food's sound player is muted (suppressed set) and only the
-                // forwarded gesture sounds play. The prop world overrides below place the moving parts.
+                // Stop FIKA's looping observed-meds animation: seek the food animator to the eater's current state (frozen so
+                // it can't loop) or just freeze it at spawn. The seek's forced evaluation (SkipTime below) re-fires the clip's
+                // sound events, so this food's sound player is muted (suppressed set) and only the forwarded sounds play.
                 if (freezeObservedAnimator)
                 {
                     try
@@ -165,10 +152,8 @@ namespace SptVrFikaSync
                                 for (int i = 0; i < n; i++)
                                     if (s.animHashes[i] != 0) fa.Animator.Play(s.animHashes[i], i, s.animTimes[i]);
                                 fa.SetAnimationSpeed(0f);
-                                // CRITICAL: at speed 0 a Play() is never evaluated on its own, so the
-                                // seek wouldn't apply. Force one zero-length evaluation so the food jumps
-                                // to (and holds at) the eater's pose. A 0 step crosses no event frames, so
-                                // no clip sounds fire (audio is forwarded separately).
+                                // At speed 0 a Play() is never evaluated on its own, so the seek wouldn't apply: force one
+                                // zero-length evaluation so the food jumps to (and holds at) the eater's pose.
                                 fa.SkipTime(0f);
                             }
                             else
@@ -187,8 +172,8 @@ namespace SptVrFikaSync
             catch (Exception e) { LogOnce(e); }
         }
 
-        // Drive both observed arm IKs to the synced (smoothed) wrist poses — same machinery as
-        // empty-hands sync; the held food piece is placed separately so the hand reaches it.
+        // Drives both observed arm IKs to the synced (smoothed) wrist poses, like empty-hands sync; the held food piece
+        // is placed separately.
         private static void DriveArms(ObservedPlayer p, EatState s, Transform chest)
         {
             LimbIK[] limbs = p._limbs;
@@ -219,9 +204,8 @@ namespace SptVrFikaSync
                 if (tf != null) _ordered.Add(new KeyValuePair<int, Transform>(kv.Key, tf));
             }
 
-            // POSE: shallow-first so a parent's world override doesn't drag a child off (the props
-            // we override are NOT reparented observer-side, so a glued cover IS a child of its
-            // wrapper here — set the parent before the child).
+            // Pose: shallow-first, so a parent's world override doesn't drag a child off (props aren't reparented
+            // observer-side, so a glued cover is a child of its wrapper here).
             _ordered.Sort(CompareDepthAsc);
             for (int i = 0; i < _ordered.Count; i++)
             {
@@ -236,9 +220,8 @@ namespace SptVrFikaSync
                 tf.SetPositionAndRotation(chest.TransformPoint(d.pos), chest.rotation * d.rot);
             }
 
-            // VISIBILITY: deep-first claiming, so a piece (deep) owns its mesh before its container
-            // (shallow) — a container's GetComponentInChildren can otherwise alias a child piece's
-            // renderer and re-show it. We only ever re-enable renderers we ourselves hid.
+            // Visibility: deep-first claiming, so a piece owns its mesh before its container (whose GetComponentInChildren
+            // can alias a child piece's renderer and re-show it). Only renderers we hid are re-enabled.
             _ordered.Sort(CompareDepthDesc);
             _claimed.Clear();
             for (int i = 0; i < _ordered.Count; i++)
@@ -276,8 +259,7 @@ namespace SptVrFikaSync
             return found;
         }
 
-        // DFS pre-order first match — mirrors the local FindDeep so duplicate-named rigs resolve the
-        // SAME node both sides (same prefab, same traversal).
+        // DFS pre-order first match, like the local FindDeep, so duplicate-named rigs resolve the same node on both sides
         private static Transform FindDeepByHash(Transform root, int hash)
         {
             if (root == null) return null;
@@ -304,9 +286,9 @@ namespace SptVrFikaSync
             => Depth(b.Value).CompareTo(Depth(a.Value));
 
         // ---- forwarded eat sounds ----
-        // Queued by the network handler (NetId + name-hash), drained in Apply (where we have the
-        // observed sound player). Reverse-resolved against the food model's own sound bank (same
-        // prefab -> same event names) and played by event name — positioned at the eater.
+        // Queued by the network handler (NetId + name-hash), drained in Apply (where we have the observed sound player).
+        // Resolved against the food model's own sound bank (same prefab -> same event names) and played by event name,
+        // positioned at the eater.
         public static void QueueSound(int netId, int nameHash)
         {
             if (!states.TryGetValue(netId, out EatState s)) { s = new EatState(); states[netId] = s; }
@@ -329,9 +311,8 @@ namespace SptVrFikaSync
             s.pendingSounds.Clear();
         }
 
-        // Find the sound-bank entry whose event name hashes to `hash` and play it. The sender hashed
-        // the raw name it passed to OnSound (e.g. "Take"); the bank entry's EventName may be that name
-        // OR "Snd"+name (mirrors EFT's OnSound resolution), so test both candidates per entry.
+        // Plays the sound-bank entry whose event name hashes to `hash`. The sender hashed the raw name it passed to OnSound
+        // (e.g. "Take"); the bank entry's EventName may be that name or "Snd"+name (EFT's OnSound resolution): test both.
         private static void PlayByHash(BaseSoundPlayer sp, int hash)
         {
             var list = sp.AdditionalSounds;
@@ -354,8 +335,7 @@ namespace SptVrFikaSync
         private static void Deactivate(EatState s)
         {
             RestoreHidden(s);
-            // Un-freeze the food animator so FIKA's put-away / next state can play (the controller
-            // usually gets destroyed right after, but don't leave it stuck at speed 0 if it lingers).
+            // Un-freeze the food animator so FIKA's put-away / next state can play
             if (s.meds != null) { try { s.meds.FirearmsAnimator?.SetAnimationSpeed(1f); } catch { } }
             if (s.sound != null) suppressed.Remove(s.sound); // un-mute (pooled sound players get reused)
             ResetResolve(s);

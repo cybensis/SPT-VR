@@ -6,7 +6,7 @@ namespace TarkovVR.Source.Player.Interactions
 {
     // Trigger discipline: holding a gun with your finger off the trigger, the gun hand's index finger comes off it and lies straight
     // along the gun. Needs a touch sensor on the trigger (OpenXR: Index, Touch); SteamVR has no touch action in the mod's manifest,
-    // and a trigger press alone read wrong (the finger only went on when you fired). The animator's trigger curl is stripped
+    // and a trigger press alone isn't enough (the finger would only go on as you fire). The animator's trigger curl is stripped
     // (ApplyFlatFlex, the right hand's own frame); the mag release press, later in LateUpdate, starts from this pose.
     internal partial class HandsInteractionController
     {

@@ -34,11 +34,9 @@ namespace TarkovVR.Source.Player.VR
         public LimbIK leftArmIk;
         public LimbIK rightArmIk;
 
-        // The elbow bend solve moved to IKPatches.DriveElbowBendNormals (BendModifier.Custom, our own
-        // bend normal). BendModifier.Arm was tried here and is UNUSABLE on this rig: the LimbIK sits ON
-        // the collarbone, so FinalIK's root == bone1.parent and the Arm axis hints resolve in the
-        // COLLARBONE'S LOCAL frame - mirrored on the right side of this Max-biped rig (right elbow solved
-        // exactly backwards), character-misaligned on the left. Don't re-try Arm mode.
+        // The elbow bend solve is in IKPatches.DriveElbowBendNormals (BendModifier.Custom). Don't use BendModifier.Arm on this
+        // rig: the LimbIK sits on the collarbone, so the Arm axis hints resolve in the collarbone's local frame (the right elbow
+        // solves backwards, the left misaligned).
 
         private void Awake()
         {
@@ -143,15 +141,13 @@ namespace TarkovVR.Source.Player.VR
             {
                 matchingHeadToBody = true;
 
-                // Calculate follow intensity based on lean distance
-                // The further/faster the lean, the quicker the body follows
+                // The further the lean, the quicker the body follows
                 float forwardIntensity = Mathf.Clamp01(Mathf.Abs(forwardLean) / emergencyThreshold * 2f);
                 float sideIntensity = Mathf.Clamp01(Mathf.Abs(sideLean) / emergencyThreshold * 2f);
                 float followIntensity = followCurve.Evaluate(Mathf.Max(forwardIntensity, sideIntensity));
 
                 float currentSpeed = followSpeed * (isUsingControls ? movementMultiplier : 1.0f);
 
-                // This is the function that handles the legs/body following the head
                 SmartFollowHead(headPosFlat, headRot, currentSpeed, followIntensity, isUsingControls, isLeaning);
             }
             else

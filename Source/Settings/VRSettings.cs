@@ -111,10 +111,10 @@ namespace TarkovVR.Source.Settings
             // The grenade slot moved by hand (GrenadeSlot): the grenade's middle x, y, z from the neck and its body's rotation x, y, z, w,
             // body frame
             public float[] grenadeSlotMiddle { get; set; }
-            // The first build's: its model ROOT's pose (~40 cm off the grenade), turned into grenadeSlotMiddle once and cleared
+            // Older saved format: the grenade model root's pose (~40 cm off the grenade), turned into grenadeSlotMiddle once and cleared
             public float[] grenadeSlot { get; set; }
             public float armLength { get; set; }    // m, shoulder joint to wrist; 0 = never measured
-            // B no longer runs Tarkov's reload on guns with detachable magazines: a press drops the magazine, held = the off hand can pull it out
+            // On guns with detachable magazines B doesn't run Tarkov's reload: a press drops the magazine, held = the off hand can pull it out
             public bool manualReload { get; set; }
 
             // Vive Wand controller settings
@@ -283,9 +283,8 @@ namespace TarkovVR.Source.Settings
             }
         }
 
-        // Linearly remaps a value from one range to another. Used by the sliders to DISPLAY a clean,
-        // friendly number (e.g. 0..10 or -1..1) decoupled from the messy underlying value range -
-        // the stored setting keeps its real units; only the label is scaled.
+        // Linearly remaps a value from one range to another. The sliders use it to display a friendly number
+        // (e.g. 0..10 or -1..1); the stored setting keeps its real units.
         private static float Remap(float value, float fromMin, float fromMax, float toMin, float toMax)
         {
             if (Mathf.Approximately(fromMax, fromMin))
@@ -294,14 +293,11 @@ namespace TarkovVR.Source.Settings
             return Mathf.Lerp(toMin, toMax, t);
         }
 
-        // Turns one of EFT's discrete SelectSlider controls ("jumping to each line") into a smooth,
-        // continuous slider over a real [min,max] range. EFT's SelectSlider.Awake() forces
-        // wholeNumbers = true + an int-flooring listener + one notch per value, and - because our VR
-        // panels are cloned from an INACTIVE tab - that Awake runs only when the VR tab is first
-        // shown, i.e. AFTER this method. So we can't just reconfigure the slider once here; instead we
-        // attach a SmoothSlider component that re-applies the continuous config in OnEnable (which
-        // runs after Awake, every time the panel is shown). See SmoothSlider.cs.
-        // Call AFTER BindIndexTo (which builds + shows the control).
+        // Turns one of EFT's discrete SelectSlider controls into a continuous slider over [min,max]. SelectSlider.Awake()
+        // forces wholeNumbers = true + an int-flooring listener + one notch per value, and our panels are cloned from an
+        // inactive tab, so that Awake runs when the tab is first shown, after this method. The SmoothSlider component
+        // therefore re-applies the continuous config in OnEnable (after Awake, every time the panel is shown).
+        // Call after BindIndexTo (which builds + shows the control).
         private static void MakeSliderSmooth(SettingSelectSlider control, float min, float max,
                                              Func<float> getValue, Action<float> onChange, Func<float, string> format)
         {
@@ -315,13 +311,10 @@ namespace TarkovVR.Source.Settings
                 return;
             }
 
-            // CRITICAL: BindIndexTo binds this slider to the REAL OverallVolume (master volume)
-            // GameSetting - it sets SelectSlider.action_0 = (index => OverallVolume.Value = index),
-            // and that value gets applied to the audio on save. We don't drive OverallVolume; our
-            // SmoothSlider writes the actual setting via the Unity slider's own onValueChanged. So
-            // sever action_0 here - otherwise saving pushes our slider value into the master volume
-            // and mutes the game. (The old code masked this by overwriting action_0 with its own
-            // ChangeX callback; the SmoothSlider rewrite dropped that, hence the muted-audio bug.)
+            // BindIndexTo bound this slider to the real OverallVolume (master volume) GameSetting: it sets
+            // SelectSlider.action_0 = (index => OverallVolume.Value = index), applied to the audio on save. Sever it, or
+            // saving pushes our slider value into the master volume and mutes the game. SmoothSlider writes the actual
+            // setting through the Unity slider's own onValueChanged.
             sel._onValueChanged = null;
 
             SmoothSlider cfg = sel.gameObject.GetComponent<SmoothSlider>();
@@ -335,11 +328,9 @@ namespace TarkovVR.Source.Settings
             cfg.getValue = getValue;
             cfg.onChange = onChange;
             cfg.format = format;
-            // Only Apply now if the panel is ALREADY active (then SelectSlider.Awake has already run,
-            // so its wholeNumbers=true rounding happened before our listener exists - no write-back).
-            // The usual case is the panel being cloned INACTIVE: we deliberately DON'T Apply here, so
-            // our onChange listener isn't attached when the deferred Awake rounds the handle on first
-            // show. OnEnable does the full setup (and reseeds from getValue) once the panel appears.
+            // Apply now only if the panel is already active (SelectSlider.Awake has run). Cloned inactive (the usual case),
+            // don't: our onChange listener must not be attached when the deferred Awake rounds the handle on first show.
+            // OnEnable does the full setup (and reseeds from getValue) once the panel appears.
             if (sel.gameObject.activeInHierarchy)
                 cfg.Apply();
         }
@@ -526,9 +517,8 @@ namespace TarkovVR.Source.Settings
             heldItemWeightToggle.Text.localizationKey = "Turn On Held Item Adds To Carry Weight";
             heldItemWeightToggle.Toggle.UpdateValue(settings.heldItemWeight);
 
-            // Virtual gunstock (shouldering): raise the rifle into an aim-like posture to seat the
-            // stock and stabilize aim. Activation is ANGLE-based (like ADS detection) - pose-invariant,
-            // so no per-body position sliders are needed (the old shoulder-pocket sliders are gone).
+            // Virtual gunstock (shouldering): raise the rifle into an aim-like posture to seat the stock and stabilize aim.
+            // Activation is angle-based (like ADS detection), so no per-body position sliders are needed.
             virtualStockToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             virtualStockToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
             virtualStockToggle.Toggle._onValueChanged = SetVirtualStockOn;
@@ -561,9 +551,8 @@ namespace TarkovVR.Source.Settings
 
             aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            // smoothingSensitivity is the slerp factor used as `smoothingFactor`: lower = heavier
-            // smoothing, 50 = the special "no smoothing" value. Drive it directly so the bar spans
-            // the whole 0..50 range continuously (wider than the old ~0..22 it could reach).
+            // smoothingSensitivity is the slerp factor used as `smoothingFactor`: lower = heavier smoothing,
+            // 50 = the special "no smoothing" value.
             aimSmoothingSlider.Text.localizationKey = "Weapon Smoothing (lower = smoother):";
             MakeSliderSmooth(aimSmoothingSlider, 0f, 50f, () => settings.smoothingSensitivity,
                 (v) => settings.smoothingSensitivity = v, (v) => Remap(v, 0f, 50f, 0f, 10f).ToString("0"));
@@ -584,8 +573,8 @@ namespace TarkovVR.Source.Settings
 
             rightHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
             rightHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            // Vertical hand offsets pivot around 50 in CalculateRightHandPosOffset (>=50 positive,
-            // <50 negative), so keep 50 as the neutral centre and widen symmetrically.
+            // Vertical hand offsets pivot around 50 in CalculateRightHandPosOffset (>=50 positive, <50 negative):
+            // keep 50 as the centre of the range.
             rightHandVerticalAngleSlider.Text.localizationKey = "Right hand vertical rot offset:";
             MakeSliderSmooth(rightHandVerticalAngleSlider, -30f, 130f, () => settings.rightHandVerticalAngle,
                 (v) => settings.rightHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
@@ -844,9 +833,8 @@ namespace TarkovVR.Source.Settings
             disableMouseInput.Text.localizationKey = "Disable Mouse Input";
             disableMouseInput.Toggle.UpdateValue(settings.disableMouseInput);
 
-            // Disable corpse context menu — the loose-loot pointer suppresses the gaze "Take" menu
-            // for all world LootItems (a Corpse IS a LootItem), which inadvertently hid the body
-            // context menu too. On (default) keeps it hidden; off brings the gaze menu back for bodies.
+            // Disable corpse context menu: the loose-loot pointer suppresses the gaze "Take" menu for all world LootItems,
+            // and a Corpse is a LootItem. On (default) keeps it hidden for bodies too; off brings it back for them.
             disableCorpseContextMenuToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
             disableCorpseContextMenuToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
             disableCorpseContextMenuToggle.Toggle._onValueChanged = SetDisableCorpseContextMenu;
@@ -1126,7 +1114,7 @@ namespace TarkovVR.Source.Settings
             SaveSettings();
         }
 
-        // The first build's placement (grenadeSlot): the pose of the model's root, which sits ~40 cm off the grenade. GrenadeSlot turns
+        // The older saved placement (grenadeSlot): the pose of the model's root, which sits ~40 cm off the grenade. GrenadeSlot turns
         // it into the middle-and-body pose once it has a model to measure.
         public static bool GetOldGrenadeSlot(out Vector3 rootPosition, out Quaternion rootRotation)
         {
@@ -1305,10 +1293,8 @@ namespace TarkovVR.Source.Settings
             return settings.enableSharpen;
         }
 
-        // The "Laser Pointer In Left Hand" toggle (stored as leftHandedMode, so a setting saved before keeps its value): the laser and the menu
-        // controls on the left controller (his ask 2026-11-08: "make the left hand toggle in the vr settings just change the laser/menu
-        // interactions to be on the left hand"). It used to be the mirrored left-handed mode - the arms and gun mirrored, the gun on the left
-        // controller, the sticks swapped; the gun goes into the left hand by the hand swap now (ChestHang), so that mode is retired.
+        // The "Laser Pointer In Left Hand" toggle (stored as leftHandedMode, so saved settings keep their value): the laser and the
+        // menu controls on the left controller. The gun goes into the left hand by the hand swap (ChestHang), not by this.
         private static void SetLeftHandedMode(bool toggle)
         {
             settings.leftHandedMode = toggle;
@@ -1316,8 +1302,9 @@ namespace TarkovVR.Source.Settings
                 VRGlobals.menuVRManager.SetLaserHand(toggle);
         }
 
-        // The retired mirrored left-handed mode: off for good. Everything that read it (the arms' mirror, the gun hand's controller, the
-        // sticks, the holsters, the wrist panels) plays right-handed; the setting itself is the laser's hand (GetLaserInLeftHand).
+        // The mirrored left-handed mode is retired: always false, so everything that reads it (the arms' mirror, the gun hand's
+        // controller, the sticks, the holsters, the wrist panels) plays right-handed. The setting itself is the laser's hand
+        // (GetLaserInLeftHand).
         public static bool GetLeftHandedMode()
         {
             return false;
@@ -1361,7 +1348,7 @@ namespace TarkovVR.Source.Settings
             settings.hideoutShadowsOff = off;
         }
 
-        // Degrees across the desktop window (a settings file from before these sliders reads 0: the default then)
+        // Degrees across the desktop window (a settings file without this field reads 0: the default then)
         public static float GetDesktopViewFieldOfView()
         {
             return settings == null || settings.desktopViewFieldOfView < 1f ? 80f : Mathf.Clamp(settings.desktopViewFieldOfView, 30f, 150f);

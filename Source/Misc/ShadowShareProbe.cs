@@ -11,9 +11,8 @@ namespace TarkovVR.Source.Misc
     // copies both eyes' sun shadow maps of one frame (raw depth, at LightEvent.AfterShadowMap) and compares them, twice:
     //   as drawn  : each eye culled from its own view (the game as it is)
     //   one view  : both eyes culled through the LEFT eye's culling matrix (Camera.cullingMatrix, set in each eye's pre-cull)
-    // If the maps match in the second, Unity lays the cascades out from the culling matrix: with one culling matrix for both eyes, the
-    // first eye's map and matrices are exactly right for the second (nothing to change in any shader). If they differ, it reports by how
-    // many texels each cascade is shifted (the cascades follow the eye itself) or that the content differs. Logs the shadow settings too.
+    // A match in the second means Unity lays the cascades out from the culling matrix: the first eye's map and matrices are right for
+    // the second. Otherwise it reports each cascade's shift in texels, or that the content differs. Logs the shadow settings too.
     internal class ShadowShareProbe : MonoBehaviour
     {
         public static bool hotkeyEnabled = true;
@@ -147,10 +146,10 @@ namespace TarkovVR.Source.Misc
             RenderTexture.active = previous;
         }
 
-        // One copy buffer on the sun for the whole frame (the first run swapped one buffer per eye in pre-render and neither eye's
-        // map got written: Unity takes a light's buffers before that). It copies into latestMap each time the map is drawn; after
-        // each eye (post-render, in order on the GPU) latestMap goes into that eye's map and is cleared, so an eye that drew no
-        // shadow map of its own shows as not written instead of as a copy of the other's.
+        // One copy buffer on the sun for the whole frame: Unity takes a light's buffers before the eyes' pre-render, so swapping one
+        // per eye there writes neither map. It copies into latestMap each time the map is drawn; after each eye (post-render, in
+        // order on the GPU) latestMap goes into that eye's map and is cleared, so an eye that drew no shadow map of its own shows
+        // as not written instead of as a copy of the other's.
         private static void Prepare()
         {
             for (int eye = 0; eye < 2; eye++)

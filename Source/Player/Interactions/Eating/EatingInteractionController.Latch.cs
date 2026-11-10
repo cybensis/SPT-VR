@@ -4,18 +4,14 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The hand-latch toolkit: glue a rendered hand onto the held item (pull latch),
-    // ride a clip-animated bone (OpenGrip), replay a baked palm path (HandPath), or
-    // slide along the reach rail (ReachBag). This is the reusable core for future
-    // manual interactions (meds, gun manipulation) - see CLAUDE.md's design notes.
+    // The hand-latch toolkit: glue a rendered hand onto the held item (pull latch), ride a clip-animated bone (OpenGrip),
+    // replay a baked palm path (HandPath), or slide along the reach rail (ReachBag).
     internal static partial class EatingInteractionController
     {
-        // Latch the acting hand onto the held item: park a latch transform at the hand's
-        // CURRENT pose, parented to the holding hand's rig target so it rides that
-        // controller's full 6dof. DriveArms aims the latched arm's IK at it and the bone3
-        // pin glues the rendered wrist to it (Left/RightPinTarget), so the hand stays
-        // locked on the item no matter where your physical hand pulls — the pull only
-        // drives the scrub. The acting RIG target keeps controller-tracking throughout.
+        // Latches the acting hand onto the held item: a latch transform at the hand's current pose, parented to the
+        // holding hand's rig target so it rides that controller's full 6dof. DriveArms aims the latched arm's IK at it and
+        // the bone3 pin glues the rendered wrist to it (Left/RightPinTarget); the physical pull only drives the scrub.
+        // The acting rig target keeps tracking its controller throughout.
         private static void LatchHandToItem(Hand hand, Transform acting, Transform anchor)
         {
             CaptureLatchStart(hand, acting);
@@ -29,21 +25,20 @@ namespace TarkovVR.Source.Player.Interactions
             latchFrozenLocalPosition = pullLatch.transform.localPosition;
             BeginLatchEase(anchor, acting);
 
-            // OpenGrip: the hand rides the lid/cover bone from here (DriveLatch). With
-            // pullSnapToGrip it JUMPS onto the bone (+ the tunable pullSnapPos offset);
-            // otherwise it keeps the offset from where you pressed trigger. Re-grabs
-            // capture against the lid's current mid-roll pose.
+            // OpenGrip: the hand rides the lid/cover bone from here (DriveLatch). pullSnapToGrip snaps it onto the bone
+            // (+ pullSnapPos); otherwise it keeps the offset from the trigger press. Re-grabs capture against the lid's
+            // current mid-roll pose.
             latchRidesProp = openGripT != null;
             if (latchRidesProp)
             {
                 if (pullSnapToGrip)
-                    propGrabLocalPos = pullSnapPos; // DriveLatch puts the FINGERTIP on the bone this same frame (pre-IK)
+                    propGrabLocalPos = pullSnapPos; // DriveLatch puts the fingertip on the bone this same frame (pre-IK)
                 else
                     propGrabLocalPos = openGripT.InverseTransformPoint(pullLatch.transform.position);
                 propGrabLocalRot = Quaternion.Inverse(openGripT.rotation) * pullLatch.transform.rotation;
             }
-            // No ride bone configured: snapshot the held item's bones once (first grab =
-            // the closed pose) so a completed pull can rank & log the real lid bone.
+            // No ride bone configured: snapshot the held item's bones once (first grab = the closed pose) so a completed
+            // pull can rank and log the lid bone.
             else if (logOpenMovers && moverBones == null && baseT != null)
             {
                 moverBones = baseT.GetComponentsInChildren<Transform>(true);
@@ -148,42 +143,29 @@ namespace TarkovVR.Source.Player.Interactions
                 ReleaseLatch(immediate: true);
         }
 
-        // Per-frame latch update. Runs at the END of LateZeroProps — AFTER the prop
-        // re-zeroing — and works ONLY in relative frames: in Player.LateUpdate every bone
-        // WORLD pose is the PRE-pin animated pose (the animator just re-stomped the arms
-        // AND the prop roots; the visible pose only exists after FinalIK + the wrist pins
-        // later this frame). Reading openGripT.position directly here anchored the hand to
-        // wherever the ANIMATION's holding wrist was — "nowhere near the item" (observed;
-        // never read bone world poses in this window). So: the grip pose is taken in the
-        // holding WRIST's local frame — the chain wrist -> holder -> item -> lid is rigid
-        // within the frame, valid whatever the wrist's world pose is — and re-anchored on
-        // the holding RIG TARGET, which is exactly where that wrist gets pinned, i.e.
-        // where the can visibly sits.
-        //  * pullRotationFree: ROTATION stays live on the player's controller (full 3dof
-        //    twist) even while the position is locked or riding; otherwise it rides the
-        //    bone with the offset captured at the grab.
+        // Per-frame latch update, at the end of LateZeroProps (after the prop re-zeroing). Relative frames only: in
+        // Player.LateUpdate every bone world pose is the pre-pin animated pose (the visible pose exists only after FinalIK
+        // + the wrist pins later this frame), so never read bone world poses here. The grip pose is taken in the holding
+        // wrist's local frame (wrist -> holder -> item -> lid is rigid within the frame) and re-anchored on the holding
+        // rig target, which is where that wrist gets pinned.
+        //  * pullRotationFree: rotation stays on the controller even while the position is locked or riding; otherwise
+        //    it rides the bone with the offset captured at the grab.
         private static void DriveLatch()
         {
             if (!pullingOpen || !handLatched || pullLatch == null) return;
             Transform holdingTarget = pullLatch.transform.parent; // the holding hand's rig target (latch anchor)
             Transform holdingWrist = (latchedHandIsDominant ? VRGlobals.ikManager?.leftArmIk : VRGlobals.ikManager?.rightArmIk)?.solver?.bone3?.transform;
 
-            // A Trigger-kind open (soda tab) has no gradual physical gesture — the axis can
-            // sweep the whole scrub in a frame, and replaying the authored path/bone ride
-            // teleports the latched hand through it (observed: "hand jumps to the wrong
-            // spot" on the press). Keep the freeze-at-grab latch instead: the hand stays
-            // where it grabbed (rotation live via pullRotationFree) while the clip cracks
-            // the tab under it.
+            // A Trigger-kind open has no gradual physical gesture: the axis can sweep the whole scrub in a frame, and the
+            // path/bone ride would teleport the hand through it. It keeps the freeze-at-grab latch.
             bool triggerKind = def != null && def.openGesture == OpenGestureKind.Trigger;
-            // reloadStyleLatch: a pull's wiggle turns the hand about the fingertip on the lid (ShapeLatch). A tilt's gesture IS the
-            // hand's turn: it keeps the old small wiggle about the wrist.
+            // reloadStyleLatch: a pull's wiggle turns the hand about the fingertip on the lid (ShapeLatch). A tilt's gesture is the
+            // hand's turn: it keeps the small wiggle about the wrist (WiggleDelta).
             bool contactWiggle = reloadStyleLatch && (def == null || def.openGesture == OpenGestureKind.Pull);
 
-            // Baked HandPath: replay the authored palm pose for the current scrub time —
-            // sampled in ITEM-root space off the vanilla clip, re-anchored through the same
-            // rigid chain (item -> holding wrist -> pinned target). The path IS the palm-pin
-            // pose, so no fingertip offset applies. Before the first key (the clip's hand
-            // arriving at the item — the draw arc is trimmed at capture) it holds that key.
+            // Baked HandPath: the authored palm pose (item-root space, from the vanilla clip) at the current scrub time,
+            // re-anchored through the rigid chain item -> holding wrist -> pinned target. The path is the palm-pin pose, so
+            // no fingertip offset applies. Before the first key it holds that key.
             if (!triggerKind && def?.openHandPath != null && baseT != null && holdingTarget != null && holdingWrist != null)
             {
                 SampleHandPath(def.openHandPath, CurrentScrubTime(), out Vector3 lp, out Quaternion lr);
@@ -204,9 +186,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             bool riding = !triggerKind && latchRidesProp && openGripT != null && holdingTarget != null && holdingWrist != null;
 
-            // Rotation first — the fingertip offset below rotates with the hand. Anchor =
-            // the ridden bone's rotation (riding) or the grab pose riding the item (frozen),
-            // plus the clamped controller wiggle; pullRotationFree = fully controller-driven.
+            // Rotation first: the fingertip offset below rotates with the hand. Anchor = the ridden bone's rotation (riding)
+            // or the grab pose riding the item (frozen), plus the clamped controller wiggle.
             Quaternion rotation;
             if (pullRotationFree)
             {
@@ -224,11 +205,11 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (riding)
             {
-                // lid -> holding-wrist-local (rigid) -> re-anchored where the wrist is PINNED.
+                // lid -> holding-wrist-local (rigid) -> re-anchored where the wrist is pinned.
                 Vector3 gripLocal = holdingWrist.InverseTransformPoint(openGripT.TransformPoint(propGrabLocalPos));
                 Vector3 gripWorld = holdingTarget.TransformPoint(gripLocal);
-                // The latch is the WRIST pin target: back the wrist off the grip point by
-                // the fingertip's offset so the FINGERTIP (not the palm) lands on it.
+                // The latch is the wrist pin target: back it off the grip point by the fingertip's offset so the fingertip
+                // lands on it.
                 pullLatch.transform.position = gripWorld
                     - (pullSnapToGrip ? rotation * FingerOffsetInWristFrame() : Vector3.zero);
             }
@@ -236,9 +217,8 @@ namespace TarkovVR.Source.Player.Interactions
             ShapeLatch(grabWiggle, grabWiggle ? FingerOffsetInWristFrame() : Vector3.zero);
         }
 
-        // The controller's rotation deviation from its grab-moment orientation, clamped to
-        // pullWiggleDeg — the bounded "wiggle" applied on top of an anchored rotation so the
-        // latched hand responds to your wrist without leaving the authored pose.
+        // The controller's rotation off its grab-moment orientation, clamped to pullWiggleDeg: applied on top of an
+        // anchored rotation so the latched hand follows the wrist a little without leaving the authored pose.
         private static Quaternion WiggleDelta()
         {
             if (pullWiggleDeg <= 0f) return Quaternion.identity;
@@ -248,14 +228,10 @@ namespace TarkovVR.Source.Player.Interactions
             return Quaternion.RotateTowards(Quaternion.identity, delta, pullWiggleDeg);
         }
 
-        // What lands ON the OpenGrip bone: the index finger's most distal bone, else the
-        // centroid of the hand's NEAR fingertip leaves, else the palm (zero offset). The
-        // wrist (bone3) is the root of the whole hand skeleton, so its subtree IS the
-        // fingers — minus our own prop holders ("Eat*"), which hang off the same bone.
-        // EFT names the fingers Digit11..Digit53 (first digit = finger, 2 = index; second =
-        // segment), so "digit2" is matched alongside "index". Anything farther than hand
-        // distance from the wrist is a marker/attach dummy, not a finger — rejected, or the
-        // centroid lands metres off the item (observed).
+        // What lands on the OpenGrip bone: the index finger's most distal bone, else the centroid of the near fingertip
+        // leaves, else the palm (zero offset). The wrist (bone3) is the root of the hand skeleton; our prop holders
+        // ("Eat*") hang off it too and are skipped. EFT names the fingers Digit11..Digit53 (first digit = finger,
+        // 2 = index; second = segment). Bones farther than hand distance from the wrist are marker/attach dummies: rejected.
         private static void ResolveFingerAnchor()
         {
             fingerAnchorResolved = true;
@@ -286,8 +262,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             Walk(actingWristT, 0);
 
-            // Sanity: a finger is hand-sized close to the wrist; a "match" farther out is a
-            // misnamed dummy.
+            // A name match farther than a hand's length from the wrist is a misnamed dummy.
             if (best != null && (best.position - wristPos).magnitude > 0.25f) best = null;
             if (best != null) fingerAnchors = new[] { best };
             else
@@ -306,9 +281,8 @@ namespace TarkovVR.Source.Player.Interactions
                     : $"[ManualEat] pull-snap finger anchor: centroid of {fingerAnchors.Length} near fingertip leaves.");
         }
 
-        // The fingertip's offset in the wrist's frame, from THIS frame's animated curl.
-        // World-delta math (not local chains) so bone scales don't skew it; valid whatever
-        // the wrist's stale world pose is, because the fingers are rigid descendants of it.
+        // The fingertip's offset in the wrist's frame, from this frame's animated curl. World-delta math (not local chains)
+        // so bone scales don't skew it; valid whatever the wrist's stale world pose, the fingers being rigid descendants.
         private static Vector3 FingerOffsetInWristFrame()
         {
             if (!fingerAnchorResolved) ResolveFingerAnchor();
@@ -324,9 +298,8 @@ namespace TarkovVR.Source.Player.Interactions
             return Quaternion.Inverse(actingWristT.rotation) * (sum / n - actingWristT.position);
         }
 
-        // Sample the packed open-hand path (stride 8: t, pos, quat) at normalizedTime t,
-        // clamped to the endpoints; between keys position lerps and rotation slerps (keys
-        // are sign-aligned at capture, so Slerp takes the short way).
+        // Samples the packed hand path (stride 8: t, pos, quat) at normalizedTime t, clamped to the endpoints. Keys are
+        // sign-aligned at capture, so Slerp takes the short way.
         private static void SampleHandPath(float[] p, float t, out Vector3 position, out Quaternion rotation)
         {
             const int S = 8;
@@ -350,9 +323,8 @@ namespace TarkovVR.Source.Player.Interactions
             rotation = new Quaternion(p[o + 4], p[o + 5], p[o + 6], p[o + 7]);
         }
 
-        // No OpenGrip configured: rank every bone under the held item by how far it moved
-        // (item-local) across the completed pull and log the top 3 — the winner is the lid
-        // bone name to paste into OpenGrip(...). One report per eat.
+        // No OpenGrip configured: ranks every bone under the held item by how far it moved (item-local) across the
+        // completed pull and logs the top 3; the winner is the lid bone for OpenGrip(...). One report per eat.
         private static void ReportOpenMovers()
         {
             if (!logOpenMovers || moverBones == null || moverStartLocal == null || baseT == null) return;
@@ -370,19 +342,16 @@ namespace TarkovVR.Source.Player.Interactions
             moverBones = null; moverStartLocal = null;
         }
 
-        // Latch the reaching hand onto the bag-mouth rail: freeze its palm offset, capture
-        // the entry point and the rail axis (entry -> zone center = INTO the bag) in the
-        // holding hand's frame, and park the latch at the hand's current pose (no snap —
-        // the rail starts where you are). Reuses the pull-latch glue: handLatched aims the
-        // IK + bone3 pin at pullLatch (Left/RightPinTarget) and gates ForceLeftHandTracking
-        // via OffHandLatched, exactly like the pull-open.
+        // Latches the reaching hand onto the bag-mouth rail: freezes its palm offset, captures the entry point and the rail
+        // axis (entry -> zone center = into the bag) in the holding hand's frame, parks the latch at the hand's current
+        // pose (no snap). Same glue as the pull latch: handLatched aims the IK + bone3 pin at pullLatch and gates
+        // ForceLeftHandTracking via OffHandLatched.
         private static void BeginReach(EatStyle s, Transform acting, Transform anchor)
         {
             reachPalmLocal = PalmOffsetLocal(s.takeHand);
             reachEntryPalmLocal = anchor.InverseTransformPoint(acting.TransformPoint(reachPalmLocal));
             Vector3 axis = PalmOffsetLocal(Other(s.takeHand)) + takeZoneOffset - reachEntryPalmLocal;
-            // Entered dead-center: no direction to aim the rail at — any stable axis works
-            // (you're already at full entry; the first push defines nothing better).
+            // Entered dead-center: no direction to aim the rail at, any stable axis works.
             reachAxisLocal = axis.sqrMagnitude > 1e-6f ? axis.normalized : Vector3.forward;
             reachingIn = true;
             reachGrabbed = false;
@@ -409,21 +378,14 @@ namespace TarkovVR.Source.Player.Interactions
             ReleaseLatch(immediate); // the IK re-aims at the rig target -> hand back to the controller
         }
 
-        // Per-frame reach update (LateZeroProps tail, right after DriveLatch — same frame
-        // rules: rig-target frames only, never animated-bone world reads). With a baked
-        // ReachPath the rendered hand replays the AUTHORED in-bag palm pose for the
-        // current scrub time, re-anchored through the same rigid chain as DriveLatch's
-        // HandPath branch (item -> holding wrist -> pinned target) — the hand dives along
-        // the clip's curve and can't drift from the bag-mouth animation, because both are
-        // driven off the SAME STATE_USE time. The physical depth still drives
-        // reachProgress (StepReachTake); the path only decides WHERE the rendered hand
-        // sits for that depth. Rotation stays live on the controller (reachRotationFree —
-        // reaching into a bag, the wrist is yours) unless A/B'd off to the authored roll.
-        // No path baked = the synthetic RAIL fallback: the reaching palm projected onto
-        // entry + axis * clamped depth in the holding hand's frame (lateral wobble
-        // dropped). The latch is the WRIST pin target, so the rail backs it off the rail
-        // point by the frozen palm offset (bone3 is pinned position+rotation, so
-        // palm = latch * palmLocal); the path needs no offset — it IS the palm-pin pose.
+        // Per-frame reach update (LateZeroProps tail, after DriveLatch; same frame rules: rig-target frames only, never
+        // animated-bone world reads). With a baked ReachPath the hand replays the authored in-bag palm pose for the
+        // current scrub time through DriveLatch's rigid chain (item -> holding wrist -> pinned target); hand and bag mouth
+        // run off the same STATE_USE time. Physical depth still drives reachProgress (StepReachTake). reachRotationFree
+        // keeps rotation on the controller.
+        // No path = the rail fallback: the palm projected onto entry + axis * clamped depth in the holding hand's frame
+        // (lateral dropped). The latch is the wrist pin target, so it is backed off the rail point by the frozen palm
+        // offset (palm = latch * palmLocal); the path needs no offset, it is the palm-pin pose.
         private static void DriveReachLatch()
         {
             if (!reachingIn || !handLatched || pullLatch == null || style == null) return;

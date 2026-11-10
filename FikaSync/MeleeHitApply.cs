@@ -5,24 +5,17 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // Replays a remote VR-melee SURFACE hit so this client spawns the same sparks/decal/impact sound
-    // AND breaks the same destructible (glass). The custom VR melee runs its collider only on the
-    // swinger, so observers never reproduce the hit; this carries the hit point/normal/swing-dir, we
-    // re-find the SAME world surface collider on THIS client, rebuild a melee DamageInfoStruct and call
-    // GameWorld.HackShot -- which on a FIKA client/host (a ClientGameWorld) runs BOTH
-    // BallisticCollider.ApplyHit (-> the collider's OnHitAction, i.e. the destructible/glass-break
-    // handler) AND EffectsCommutator.PlayKnifeHitEffect (-> Effects.Emit(isKnife:true), the
-    // sparks/decal/impact sound). SURFACE ONLY -- body parts are filtered both ends (their damage
-    // already syncs through ApplyShot; replaying HackShot on a body part would double-damage).
-    //
-    // The previous version cast along the SWING DIRECTION to find the collider, which for a slash is
-    // ~tangent to a wall, so the ray missed and nothing happened (no sparks AND no glass break). We now
-    // cast straight INTO the surface along -normal (always reliable, the swing dir is irrelevant for
-    // locating the surface), with the knife's own layer mask + trigger-collide, plus an OverlapSphere
-    // fallback for grazing/edge hits.
+    // Replays a remote VR-melee surface hit so this client spawns the same sparks/decal/impact sound and breaks the same
+    // destructible (glass). The VR melee runs its collider only on the swinger: the packet carries the hit point/normal/swing
+    // dir, we re-find the same world surface collider here, rebuild a melee DamageInfoStruct and call GameWorld.HackShot.
+    // On a FIKA client/host (a ClientGameWorld) that runs BallisticCollider.ApplyHit (-> the collider's OnHitAction: the
+    // glass break) and EffectsCommutator.PlayKnifeHitEffect (-> Effects.Emit(isKnife:true): sparks/decal/impact sound).
+    // Surface only: body parts are filtered at both ends (their damage syncs through ApplyShot; HackShot would double it).
+    // The collider is found by casting into the surface along -normal, with the knife's own layer mask + trigger-collide:
+    // a slash's swing direction is ~tangent to the wall and misses.
     internal static class MeleeHitApply
     {
-        // Cast from raycastBack metres OUTSIDE the surface, along -normal, for (raycastBack+raycastRange).
+        // Cast from raycastBack metres outside the surface, along -normal, for (raycastBack+raycastRange).
         public static float raycastBack = 0.3f;
         public static float raycastRange = 0.3f;
         public static float overlapRadius = 0.2f;   // fallback: nearest surface collider within this sphere

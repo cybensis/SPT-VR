@@ -90,8 +90,7 @@ namespace TarkovVR.ModSupport.ORBIT
         {
             try
             {
-                // Only re-add if we pulled it on grab — i.e. ORBIT WAS tracking it. Avoids fabricating a loot
-                // waypoint for a corpse ORBIT never knew about.
+                // Only re-add if we pulled it on grab (ORBIT was tracking it): no loot waypoint for a corpse ORBIT never knew.
                 if (!_heldCorpses.TryGetValue(corpse, out object held) || !(held is OrbitCorpseCarry carry))
                     return;
                 _heldCorpses.Remove(corpse);
@@ -135,8 +134,7 @@ namespace TarkovVR.ModSupport.ORBIT
             Plugin.MyLog.LogWarning($"[OrbitSupport] carrying a corpse's ORBIT state: {message}");
         }
 
-        // Find the corpse's current loot waypoint (its Target is this corpse).One grid scan per settle —
-        // dragging is a rare user action, so it isn't worth a cross-raid cache.
+        // The corpse's current loot waypoint (its Target is this corpse). A full grid scan: dragging is rare, no cache.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static Waypoint FindCorpseWaypoint(WaypointSystem waypointSystem, Corpse corpse)
         {

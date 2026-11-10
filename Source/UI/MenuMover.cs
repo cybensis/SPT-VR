@@ -15,7 +15,7 @@ namespace TarkovVR.Source.UI
 
         void Awake()
         {
-            mainCamera = Camera.main; // Cache the main camera
+            mainCamera = Camera.main;
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -52,7 +52,6 @@ namespace TarkovVR.Source.UI
         {
             menuCollider.enabled = true;
             menuCollider.center = commonUI.transform.position;
-            // Optionally handle any cleanup or reset after dragging ends
         }
     }
 }

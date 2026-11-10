@@ -12,18 +12,14 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Misc
 {
-    // Measurement only: what does the SECOND eye cost, on which thread, and in which part of the frame?
+    // Measurement only: what the second eye costs, on which thread and in which part of the frame.
     // Ctrl+F10 (raid or hideout) runs an interleaved A/B on the headset camera - both eyes vs left eye only
     // (Camera.stereoTargetEye; the right eye freezes while left-only runs) - then logs one "[StereoCost]" summary:
-    //   main thread  : the VR camera's onPreCull/onPreRender/onPostRender (they fire once per eye pass), the frame, and the time
-    //                  between frames; wall clock AND busy (the thread's own CPU cycles, QueryThreadCycleTime: waits don't count)
-    //   render thread: CPU clock at plugin events queued by command buffers at camera events + the sun's light
-    //                  events (shadow map, shadow mask), plus frame markers: start (our early Update - so the
-    //                  LateUpdate GPU work, e.g. CloudSix's once-a-frame sky bake, is inside the frame), render
-    //                  start (Application.onBeforeRender), the VR camera's pre-cull / pre-render per eye, and end
-    //                  (WaitForEndOfFrame); wall AND busy, so time it waits for the main thread's commands shows apart
-    //   GPU          : D3D11 timestamp queries at the SAME events (native helper native/SPTVRGpuProbe.dll), and
-    //                  SteamVR's own frame timing (OpenVR only)
+    //   main thread  : the VR camera's onPreCull/onPreRender/onPostRender (once per eye pass) and the frame; wall clock and
+    //                  busy (the thread's own CPU cycles, QueryThreadCycleTime: waits don't count)
+    //   render thread: CPU clock at plugin events queued at camera events and the sun's light events, plus frame markers
+    //                  (early Update, Application.onBeforeRender, the VR camera's pre-cull / pre-render, WaitForEndOfFrame)
+    //   GPU          : D3D11 timestamp queries at the same events (native/SPTVRGpuProbe.dll); SteamVR's frame timing (OpenVR only)
     //   OpenXR       : how long xrWaitFrame held its thread a frame, and which thread (native frame watcher)
     //   main per eye : every per-camera script callback on the main thread, per eye (StereoCostProbe.MainThread.cs)
     // BSG's build has Unity's frame-timing stats switched off, so these are our own clocks. Stand still, don't aim

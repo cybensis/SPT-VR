@@ -96,22 +96,15 @@ namespace TarkovVR.Patches.Core.Player
 
             //if (!__instance.WeaponRoot.parent.GetComponent<GunInteractionController>())
             //    currentGunInteractController = __instance.WeaponRoot.parent.gameObject.AddComponent<GunInteractionController>();
-            // Going to empty hands should always detach any VR-held weapon back to its origin,
-            // in case we got here via Escape/cancel rather than a weapon switch-out (which fires
-            // IEventsConsumerOnWeapOut). Guard makes it a no-op if already cleaned up.
+            // Empty hands must put a VR-held weapon back on its original parent: Escape/cancel gets here without the
+            // switch-out event (IEventsConsumerOnWeapOut). No-op if that already cleaned up.
             if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
             {
                 VRGlobals.weaponHolder.transform.GetChild(0).SetParent(VRGlobals.oldWeaponHolder.transform, false);
                 VRGlobals.oldWeaponHolder.transform.localRotation = Quaternion.identity;
                 VRGlobals.oldWeaponHolder = null;
-                // NOTE: do NOT null emptyHands here. We are entering EMPTY HANDS, so it
-                // must stay = ControllerGameObject (set above) for the per-frame pins to
-                // run (HandsPositioner.LateUpdate does emptyHands.rotation = handsRotation
-                // and the camRoot pin only when emptyHands != null). This guard is copied
-                // from ReturnWeaponToOriginalParentOnChange, where nulling is correct
-                // because you're switching TO a weapon — but on the knife->empty path
-                // (where ReturnWeapon doesn't fire) nulling it here left the hands
-                // unpinned = jittery, while gun->empty skipped this guard entirely.
+                // Don't null emptyHands here (ReturnWeaponToOriginalParentOnChange does, when switching to a weapon):
+                // HandsPositioner's per-frame pins (emptyHands.rotation, camRoot) only run while it's set, else the hands jitter.
             }
 
             if (VRGlobals.vrPlayer)
@@ -236,7 +229,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.Player), "PropUpdate")]
         private static bool FixCompassToLeftHand(EFT.Player __instance)
         {
-            // Bad way of doing this, it does not need to be set every frame but trying to set in SetCompassState aint working
+            // Set every frame: setting it once in SetCompassState doesn't work
             if (__instance.IsYourPlayer && __instance._propActive && __instance._compassArrow) {
                 //__instance._compassArrow.transform.parent.localPosition = new Vector3(0.1851f, -0.4271f, -0.0684f);
                 //__instance._compassArrow.transform.parent.localEulerAngles = new Vector3(55, 40, 11);
@@ -288,12 +281,10 @@ namespace TarkovVR.Patches.Core.Player
 
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------       
-        // Tarkov's skip of a draw or a put-away (FastForwardCurrentState) finishes the op directly - the draw's FastForward plays
-        // IDLE and calls WeaponAppeared, the put-away's calls HideWeaponComplete - without the clip's WeapIn / WeapOut events,
-        // so the VR work on those events below never ran: the old gun stayed on its holder, and the drawn one kept the last
-        // gun's pistol/rifle flag and elbow goals, its GunInteractionController stayed off (a gun drawn before = not anchored to
-        // the hand: "the gun angled wrong") and switchingWeapon stayed set (FireHandler bails). Every VR skip goes through here,
-        // which does that work first, as the event would have.
+        // Tarkov's skip of a draw or put-away (FastForwardCurrentState) finishes the op without the clip's WeapIn / WeapOut events
+        // (the draw's plays IDLE and calls WeaponAppeared, the put-away's calls HideWeaponComplete). Every VR skip goes through
+        // here to do that event work first: else the old gun stays on its holder, the drawn one's GunInteractionController stays
+        // off (not anchored to the hand) and switchingWeapon stays set (FireHandler bails).
         internal static void SkipDrawOrPutAway(EFT.Player.FirearmController firearmController)
         {
             if (firearmController.IsInSpawnOperation())
@@ -319,7 +310,7 @@ namespace TarkovVR.Patches.Core.Player
                             renderer.enabled = false;
                 }
             }
-            // Check if a weapon is currently equipped, if that weapon isn the same as the one trying to be equipped, and that the weaponHolder actually has something there
+            // Only when a weapon is equipped and the weaponHolder actually has something there
             if (VRGlobals.oldWeaponHolder != null && VRGlobals.weaponHolder.transform.childCount > 0)
             {
                 VRGlobals.weaponHolder.transform.GetChild(0).SetParent(VRGlobals.oldWeaponHolder.transform, false);
@@ -333,10 +324,8 @@ namespace TarkovVR.Patches.Core.Player
 
         }
 
-        // Some animations get stuck when switching weapon mainly while in inventory with only some guns, possibly because of VR controls having control over the hands.
-        // This forces the animation to move to WeapIn and finish the switch
-        // Also has the nice side effect of skipping to the correct hand position rather than it taking a second to update
-        // This may also be a good place to get started with manual reloads by checking for reload events here
+        // Some guns' switch animation gets stuck (mainly in the inventory), possibly because VR controls own the hands.
+        // This forces WeapIn to finish the switch, which also puts the hands in the right position at once.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(AnimationEventSystem.AnimationEventsEmitter), "EmitEvents")]
         public static void CheckQueue(AnimationEventSystem.AnimationEventsEmitter __instance)
@@ -539,9 +528,8 @@ namespace TarkovVR.Patches.Core.Player
             {
 
                 ScopeReticle reticle = opticSight.ScopeData.Reticle;
-                // Reticle isn't always resolved when ScopeZoomHandler.Update calls this (scope just
-                // equipped / reticle bundle not loaded yet / sight mode with no reticle). Vanilla guards
-                // this null in its mesh-setup path but NOT in UpdateTransform, so skip the frame until it's ready.
+                // Reticle can still be null when ScopeZoomHandler.Update calls this (scope just equipped, bundle not loaded,
+                // sight mode with no reticle) and vanilla doesn't guard it in UpdateTransform: skip the frame.
                 if (reticle == null)
                     return false;
                 __instance._renderer.transform.localPosition = reticle.Position;
@@ -643,7 +631,6 @@ namespace TarkovVR.Patches.Core.Player
                     if (__instance._player?.ProceduralWeaponAnimation == null)
                         return;
 
-                    // Check each sight to find an optic
                     bool foundOptic = false;
                     int sightCount = __instance.Firearms._sightModVisualControllers.Length;
 
@@ -652,7 +639,6 @@ namespace TarkovVR.Patches.Core.Player
                         // Directly set the aim index and check if it's an optic
                         __instance.ChangeAimingMode(i);
 
-                        // Check if this scope is an optic
                         if (__instance._player.ProceduralWeaponAnimation.CurrentScope != null &&
                             __instance._player.ProceduralWeaponAnimation.CurrentScope.IsOptic)
                         {
@@ -696,8 +682,8 @@ namespace TarkovVR.Patches.Core.Player
             return child2.Find("mod_aim_camera_000");
         }
 
-        //Damn nulls... This creates a dummy invisible Material when HighLightMesh is activated. This catches a null that happens with the weapon highlight when entering a raid
-        //MoveWeaponToIKHands adds the HighLightMesh monobehavior component to the camera if it's not detected. This causes the script to run before a material is attached to it
+        // MoveWeaponToIKHands adds HighLightMesh to the camera, so its Awake runs before a material is attached (null on entering
+        // a raid): give it a dummy invisible Material
         /*
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HighLightMesh), "Awake")]
@@ -765,7 +751,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPrefix]
         private static void CleanupHighlightMesh(EFT.Player.FirearmController __instance)
         {
-            // Our own weapon switch only: a bot drawing a gun took our weapon-part highlight off the camera
+            // Our own weapon switch only: else a bot drawing a gun takes our weapon-part highlight off the camera
             if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
                 return;
             RemoveHighlightFromCamera();
@@ -785,17 +771,16 @@ namespace TarkovVR.Patches.Core.Player
         public static List<Transform> weaponInteractables;
         public static Transform gunCollider;
 
-        // Custom grip points for specific guns, for some reason very few guns don't place the left hand IK marker in the right spot
+        // Custom left-grip points for the few guns whose left hand IK marker is in the wrong spot
         private static readonly Dictionary<string, Vector3> LeftHandIKOverrides = new()
         {
             { "weapon_sako_trg_m10_86x70_container", new Vector3(-0.099f, -0.480f, -0.054f) },
             { "weapon_toz_tt_gold_762x25tt_container", new Vector3(-0.058f, -0.416f, -0.187f) },
         };
 
-        // The same for the RIGHT-grip marker (weapon_R_hand_marker, HandsHierarchy.Transforms[8]): the Sako's sits 58 cm out to the side
-        // in every one of its clips, like its left one, so its gun spot on the back / hip, the reach to take it back and the stock length
-        // all measured from there (headset: let go of it from the back, "it puts itself in front of me"). A sound marker sits on the right
-        // palm in the gun's idle pose (SV-98, M700: to the mm), so this is the Sako's palm there (sako_idle_armed, Weapon_root frame).
+        // The same for the right-grip marker (weapon_R_hand_marker, HandsHierarchy.Transforms[8]): the Sako's sits 58 cm out to the side
+        // in all its clips, which throws off its gun spot on the back / hip, the reach to take it back and the stock length. A sound
+        // marker sits on the right palm in the gun's idle pose, so this is the Sako's palm there (sako_idle_armed, Weapon_root frame).
         private static readonly Dictionary<string, Vector3> RightHandMarkerOverrides = new()
         {
             { "weapon_sako_trg_m10_86x70_container", new Vector3(0.047f, -0.150f, -0.103f) },
@@ -1024,13 +1009,13 @@ namespace TarkovVR.Patches.Core.Player
                 float weaponAngleOffset = VRSettings.GetRightHandVerticalOffset();
                 if (weaponAngleOffset < 50)
                 {
-                    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                    // How far below 50 the angle is, as a fraction, scales the offset
                     float rotOffsetMultiplier = (50 - weaponAngleOffset) / 100;
                     weaponOffset += new Vector3(0.08f, 0, -0.02f) * rotOffsetMultiplier;
                 }
                 else if (weaponAngleOffset > 50)
                 {
-                    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                    // How far above 50 the angle is, as a fraction, scales the offset
                     float rotOffsetMultiplier = (weaponAngleOffset - 50) / 100;
                     weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier;
                 }
@@ -1068,7 +1053,6 @@ namespace TarkovVR.Patches.Core.Player
                     if (__instance._player?.ProceduralWeaponAnimation == null)
                         return;
 
-                    // Check each sight to find an optic
                     bool foundOptic = false;
                     int sightCount = __instance.Firearms._sightModVisualControllers.Length;
 
@@ -1077,7 +1061,6 @@ namespace TarkovVR.Patches.Core.Player
                         // Directly set the aim index and check if it's an optic
                         __instance.ChangeAimingMode(i);
 
-                        // Check if this scope is an optic
                         if (__instance._player.ProceduralWeaponAnimation.CurrentScope != null &&
                             __instance._player.ProceduralWeaponAnimation.CurrentScope.IsOptic)
                         {
@@ -1099,17 +1082,10 @@ namespace TarkovVR.Patches.Core.Player
             VRGlobals.vrPlayer.isWeapPistol = (__instance.Weapon.WeapClass == "pistol");          
         }     
 
-        // #3 perf: the optic camera renders the whole scene into a square RT (GClass3687.RenderTexture_0,
-        // vanilla 1024) bound as the global _CamTex the lens samples. In VR that 1024 second scene-render for a
-        // small lens is costly. We ALWAYS shrink that camera target to opticRenderResolution - the camera still
-        // renders into its OWN RenderTexture_0, just smaller, which keeps GPU-Instancer grass correct (confirmed
-        // in-headset; redirecting the camera to a DIFFERENT target froze/blued the grass, so we never do that).
-        // The reticle has two modes:
-        //  - decoupleOpticReticle = true (default): keep a separate FULL-res lensTex, point the lens's _CamTex
-        //    global at it, and each frame upscale RenderTexture_0 -> lensTex + re-draw the reticle sharp
-        //    (OpticReticleDecoupler). Cheap soft scene, crisp reticle, grass intact.
-        //  - decoupleOpticReticle = false: the lens samples the shrunk RenderTexture_0 directly - cheapest, but
-        //    the reticle softens with the scene.
+        // The optic camera renders the whole scene into a square RT (GClass3687.RenderTexture_0, vanilla 1024) bound as the global
+        // _CamTex the lens samples. We shrink that camera's own target; redirecting it to a different target breaks GPU-Instancer grass.
+        // decoupleOpticReticle = true: _CamTex points at a separate full-res lensTex, and OpticReticleDecoupler upscales RenderTexture_0
+        // into it and re-draws the reticle sharp each frame. false: the lens samples the shrunk RT directly (cheapest, soft reticle).
         public static bool decoupleOpticReticle = true;
         public static int opticLensResolution = 1024;     // lens/reticle texture size when decoupling (sharp).
 
@@ -1117,8 +1093,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(OpticCameraManager), "SetResolution")]
         private static void ScaleOpticResolution(ref int resolution)
         {
-            // Shrink the optic camera's OWN render target to the user-selected scope resolution (grass-safe:
-            // same target object, just smaller). Driven by the "Scope Render Resolution" VR Graphics setting.
+            // The "Scope Render Resolution" VR Graphics setting: same target object, just smaller (grass-safe)
             int res = VRSettings.GetOpticRenderResolution();
             if (res > 0)
                 resolution = Mathf.Clamp(res, 256, 1024);
@@ -1135,8 +1110,8 @@ namespace TarkovVR.Patches.Core.Player
 
             if (!decoupleOpticReticle)
             {
-                // Soft-reticle mode: lens samples the shrunk RenderTexture_0 directly (vanilla binding, which
-                // SetResolution just set). Drop the decoupler + make sure _CamTex points back at RenderTexture_0.
+                // Soft-reticle mode: the lens samples the shrunk RenderTexture_0 directly (the vanilla binding SetResolution
+                // just set). Drop the decoupler and point _CamTex back at RenderTexture_0.
                 if (decoupler != null)
                 {
                     UnityEngine.Shader.SetGlobalTexture("_CamTex", __instance._renderTexture);
@@ -1150,8 +1125,7 @@ namespace TarkovVR.Patches.Core.Player
             if (decoupler == null)
                 decoupler = __instance.Camera.gameObject.AddComponent<TarkovVR.Source.Weapons.OpticReticleDecoupler>();
 
-            // Full-res lens texture the lens samples. The CAMERA keeps rendering into RenderTexture_0 (shrunk,
-            // grass-safe); the decoupler upscales that into lensTex + draws the reticle sharp each frame.
+            // Full-res texture the lens samples; the camera keeps rendering into the shrunk RenderTexture_0
             if (decoupler.lensTex == null || decoupler.lensTex.width != lensSize)
             {
                 if (decoupler.lensTex != null)
@@ -1169,9 +1143,8 @@ namespace TarkovVR.Patches.Core.Player
             UnityEngine.Shader.SetGlobalTexture("_CamTex", decoupler.lensTex);
         }
 
-        // When decoupling, the reticle is re-drawn sharp into the full-res _CamTex by OpticReticleDecoupler.
-        // Vanilla OpticRetrice ALSO draws it (low-res) into the scene RT, which upscales blurry under the sharp
-        // one - the "double reticle" halo. Suppress the vanilla low-res draw so only the crisp one remains.
+        // When decoupling, OpticReticleDecoupler draws the reticle sharp into the full-res _CamTex. Vanilla OpticRetrice also draws
+        // it low-res into the scene RT, which upscales to a blurry halo under the sharp one: suppress the vanilla draw.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticRetrice), "OnPreCull")]
         private static bool SuppressLowResReticle(EFT.CameraControl.OpticRetrice __instance)
@@ -1190,9 +1163,8 @@ namespace TarkovVR.Patches.Core.Player
             {
                 return false;
             }
-            // The updater lives ON the optic camera, so __instance.transform IS the optic camera —
-            // move it onto the pivot (the main camera). 4.1 renamed transform_0 -> cameraPivot; do NOT
-            // let that rename touch the assignment target or the optic camera never gets positioned.
+            // The updater lives on the optic camera, so __instance.transform is the optic camera: move it onto the pivot
+            // (the main camera). cameraPivot (transform_0 before 4.1) is the source here, never the assignment target.
             __instance.transform.position = __instance.cameraPivot.position;
             __instance.transform.rotation = __instance.cameraPivot.rotation;
 
@@ -1214,8 +1186,7 @@ namespace TarkovVR.Patches.Core.Player
             MBOIT_Scattering mboit_Scattering_0 = __instance.mboit_Scattering_0;
             if (tod_Scattering_1 != null && tod_Scattering_0 != null)
             {
-                // Keep enabled: FogSix hijacks TOD_Scattering's image effect to draw its fog, so this is what
-                // puts fog in the scope at all.
+                // Keep enabled: FogSix draws its fog through TOD_Scattering's image effect, so this is what puts fog in the scope
                 tod_Scattering_1.enabled = tod_Scattering_0.enabled;
                 tod_Scattering_1.DitheringTexture = tod_Scattering_0.DitheringTexture;
                 tod_Scattering_1.GlobalDensity = tod_Scattering_0.GlobalDensity;
@@ -1257,7 +1228,7 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
 
-        //New scope zoom handler, this patch waits for vrOpticController to be created before going forward with the CopyComponentFromOptic method
+        //Waits for vrOpticController to be created before going forward with the CopyComponentFromOptic method
         static SightModVisualControllers visualController;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
@@ -1366,8 +1337,7 @@ namespace TarkovVR.Patches.Core.Player
             return false;
         }
         
-        //BSG changed something with how physics was being killed which caused physically holding items to break
-        //This disables the coroutine that checks to disable physics until you drop the item you're holding
+        // Tarkov's physics-stop coroutine breaks physically held items: don't start it until the held item is dropped
         [HarmonyPrefix]
         [HarmonyPatch(typeof(LootItem), "StartPhysics")]
         private static bool DisableCoroutineWhenHeldItem(LootItem __instance)
@@ -1398,8 +1368,7 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (VRGlobals.handsInteractionController == null)
                 return true;
-            
-            // block StopPhysics while item is held
+
             return VRGlobals.handsInteractionController.heldItem != __instance;
         }
 
@@ -1408,7 +1377,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(PhysicalBase.PlayerBridge), "TotalWeight", MethodType.Getter)]
         private static void AddHeldItemWeight(PhysicalBase.PlayerBridge __instance, ref float __result)
         {
-            // Every player's weight comes through here: only ours carries the item in our hand (bots and the other co-op players weighed it too)
+            // Every player's weight comes through here: only ours carries the item in our hand
             if (__instance == null || __instance.iPlayer == null || !__instance.iPlayer.IsYourPlayer)
                 return;
             if (!VRSettings.GetHeldItemWeight())
@@ -1508,8 +1477,7 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        // FixWeightAfterOnWeightUpdated handles recalculation every time OnWeightUpdated fires.
-        // Trigger OnWeightUpdated every frame while holding an item so stamina stays current.
+        // Triggers OnWeightUpdated (and FixWeightAfterOnWeightUpdated with it) every frame while holding an item, so stamina stays current
         [HarmonyPrefix]
         [HarmonyPatch(typeof(PhysicalBase), "LateUpdate")]
         private static void ForceWeightRecalcWhileHoldingItem(PhysicalBase __instance)
@@ -1529,7 +1497,7 @@ namespace TarkovVR.Patches.Core.Player
             __instance._weightIsOutOfDate = true;
         }
         
-        // throwingHand = the physical controller that let go; the left default is the old hardcode
+        // throwingHand = the physical controller that let go
         public static void DropObject(LootItem val, bool useThrowVelocity = false, SteamVR_Input_Sources throwingHand = SteamVR_Input_Sources.LeftHand)
         {
             AssetPoolObject component = val.GetComponent<AssetPoolObject>();
@@ -1602,15 +1570,11 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
-        // Start the loot-item physics-settle coroutine (LootItem.method_4) on a JUST-DROPPED item.
-        // DropObject runs method_3 while we still "hold" the item, so the coroutine is intentionally
-        // NOT started there: at that moment the body is still kinematic, and IsRigidbodyDone() is
-        // true for a kinematic body (IsSleeping()), so the coroutine's first synchronous tick would
-        // StopPhysics and DESTROY the rigidbody before the drop gets any physics ("dropped items
-        // have no physics"). Call this AFTER the body is non-kinematic and we've released our hold.
-        // WakeUp guarantees IsSleeping()==false on the first check so the item actually falls; the
-        // coroutine then frees the rigidbody on rest — which is also what lets FIKA's
-        // ItemPositionSyncer reach Done instead of broadcasting a settled drop as "still held".
+        // Starts the loot item's physics-settle coroutine on a just-dropped item. DropObject doesn't start it: while the item is
+        // held the body is kinematic, IsRigidbodyDone() is true for a kinematic body (IsSleeping()), and the coroutine's first
+        // tick would StopPhysics and destroy the rigidbody. Call this after the body is non-kinematic and the hold is released.
+        // WakeUp makes the first IsSleeping() check false. The coroutine frees the rigidbody at rest, which is also what lets
+        // FIKA's ItemPositionSyncer reach Done.
         public static void StartSettleCoroutine(LootItem item)
         {
             if (item == null || item._rigidBody == null || !item.gameObject.activeInHierarchy)
@@ -1624,13 +1588,12 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPrefix]
         private static void CleanupHighlightMeshMeds(MedsController __instance)
         {
-            // Our own meds only: a bot healing took our weapon-part highlight off the camera
+            // Our own meds only: else a bot healing takes our weapon-part highlight off the camera
             if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
                 return;
             RemoveHighlightFromCamera();
         }
 
-        // Trying to attempt manual eating/drinking but it's not turning out how I want. Maybe I'll come back to it but the end goal is to have a full custom VR player controller for everything
         /*
         private static int lastStateHash = 0;
         private static FieldInfo delayedEventsField;
@@ -1691,12 +1654,8 @@ namespace TarkovVR.Patches.Core.Player
                 if (player == null || !player.IsYourPlayer)
                     return;
 
-                // NOTE: manual (gesture-gated) eating is handled by EatingPatches /
-                // EatingInteractionController as a separate postfix on this same
-                // Spawn. We intentionally let the normal body below run for food too
-                // (it disables both arm IKs + sets usingItem=true), so the game's
-                // consume animation owns the arms while the manual controller only
-                // gates the animation SPEED. Don't early-return for food here.
+                // Manual eating (EatingPatches / EatingInteractionController) is a separate postfix on this same Spawn.
+                // The body below runs for food too (both arm IKs off, usingItem = true): don't early-return for food here.
 
                 if (VRGlobals.menuOpen)
                 {

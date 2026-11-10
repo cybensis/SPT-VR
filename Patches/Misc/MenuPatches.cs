@@ -423,7 +423,7 @@ namespace TarkovVR.Patches.Misc
             __result = new LocationInGrid(Mathf.Clamp(Mathf.RoundToInt(vector2.x), 0, __instance.Grid.GridWidth), Mathf.Clamp(Mathf.RoundToInt(vector2.y), 0, __instance.Grid.GridHeight), itemContext.ItemRotation);
             //Quaternion gridRotation = rectTransform.rotation;
             //vector2 = gridRotation * vector2;
-            // a uiPointerPos of -3.4 and 1.5 on X left most grid and Y in the middle, seems to be working just fine
+            // a uiPointerPos of -3.4 and 1.5 = X left most grid and Y in the middle
             return false;
         }
 
@@ -452,7 +452,7 @@ namespace TarkovVR.Patches.Misc
             }
         }
 
-        // This adds support for VR buttons to close context menu when clicking away from it. BSG has it set so it closes on mouseclick state up/down which isn't detected with VR controls
+        // Closes the context menu on a VR button press away from it: BSG closes it on mouse click state, which VR controls don't produce
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SimpleContextMenu), "Update")]
         private static void CloseContextMenu(SimpleContextMenu __instance)
@@ -558,8 +558,7 @@ namespace TarkovVR.Patches.Misc
         }
 
 
-        // Some piece of code keeps repositioning this shit and I can't figure out what 
-        // so just wait a frame and set it. This is for the delete/confirm windows
+        // Something repositions the delete/confirm windows after Show, so wait a frame and set the position
         [HarmonyPostfix]
         [HarmonyPatch(typeof(DialogWindow<DialogWindowContext>), "Show")]
         private static void DisplayDialogWindow(DialogWindow<DialogWindowContext> __instance, string title, Action showCloseButton)
@@ -592,7 +591,7 @@ namespace TarkovVR.Patches.Misc
             return true;
         }
         
-        // This allows the grips to be used as modifier keys when in the menu for quick moving items to stash and quick moving to sell etc..
+        // In menus the grips act as modifier keys (quick-move to stash, quick-sell, ...)
         [HarmonyPrefix]
         [HarmonyPatch(typeof(Input), nameof(Input.GetKey), typeof(KeyCode))]
         private static bool GetKeyPrefix(KeyCode key, ref bool __result)
@@ -622,8 +621,6 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(TraderScreensGroup), "Awake")]
         private static void PositionTraderSeparatorBars(TraderScreensGroup __instance)
         {
-            // Need to wait a bit before setting the FoV on this cam because
-            // something else is changing it
             if (__instance._traderCardsContainer)
             {
                 RectTransform separator = (RectTransform)__instance._traderCardsContainer.parent.Find("SeparatorTop");
@@ -680,15 +677,13 @@ namespace TarkovVR.Patches.Misc
             //float xRot = (MenuPatches.vrUiInteracter.pressPosition.x - MenuPatches.vrUiInteracter.uiPointerPos.x) * -1 * 10;
             //float yRot = (MenuPatches.vrUiInteracter.pressPosition.y - MenuPatches.vrUiInteracter.uiPointerPos.y) * -1 * 10;
 
-            // Get the world positions
             Vector3 pressPosition = vrUiInteracter.pressPosition;
             Vector3 currentPointerPosition = vrUiInteracter.uiPointerPos;
 
-            // Transform the world positions to the local space of the UI/object
             Vector3 localPressPosition = VRGlobals.preloaderUi.transform.InverseTransformPoint(pressPosition);
             Vector3 localCurrentPointerPosition = VRGlobals.preloaderUi.transform.InverseTransformPoint(currentPointerPosition);
 
-            // Calculate the difference in local space, invert it to make it rotate the correction direction, then divide by 15 so it doesn't rotate so quickly
+            // Difference in the UI's local space, inverted so it rotates the right way
             float yRot = (localPressPosition.y - localCurrentPointerPosition.y) * -1;
             float xRot = (localPressPosition.x - localCurrentPointerPosition.x) * -1;
             __instance._weaponPreview.Rotate(xRot, yRot, 0f, 0f);
@@ -898,7 +893,6 @@ namespace TarkovVR.Patches.Misc
             // OpenXR has no system keyboard (SteamVR's overlay keyboard is OpenVR-only), so it always uses ours.
             if (VRSettings.GetUseVRKeyboard() || OpenXRBootstrap.Active)
             {
-                // Create the controller if it doesn't exist
                 if (VRKeyboardController.Instance == null)
                 {
                     if (VRGlobals.camRoot != null)
@@ -946,7 +940,7 @@ namespace TarkovVR.Patches.Misc
 
         }
 
-        //Not needed anymore with the new way I'm handling opening inventory. I take that back, maybe is needed but now checking if you're in game/hideout, if so skip    
+        // Skipped in game / hideout
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TransferItemsScreen), "Show", new Type[] { typeof(TransferItemsScreenController) })]
         private static void UndoRotationOnTransferItems(TransferItemsScreen __instance)
@@ -1177,8 +1171,8 @@ namespace TarkovVR.Patches.Misc
 
         //}
 
-        // These patches fix the edit build/modding menu for weapon modding, it moves the gun model to the correct position, adds support for drag to rotate using the laser pointer, fixes some UI selection issues,
-        // and adds custom line renderer sync to reposition the lines pointing to attachments correctly in VR
+        // Edit build / weapon modding screen: places the gun model, drag to rotate with the laser pointer, UI selection fixes,
+        // and a line renderer sync so the lines pointing to attachments sit right in VR
         //----------------------------------------------------------------------
 
         [HarmonyPostfix]
@@ -1591,13 +1585,13 @@ namespace TarkovVR.Patches.Misc
                 float weaponAngleOffset = VRSettings.GetRightHandVerticalOffset();
                 if (weaponAngleOffset < 50)
                 {
-                    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                    // Scale the offset by how far the angle is below 50
                     float rotOffsetMultiplier = (50 - weaponAngleOffset) / 100;
                     weaponOffset += new Vector3(0.08f, 0, -0.01f) * rotOffsetMultiplier;
                 }
                 else if (weaponAngleOffset > 50)
                 {
-                    // if the angle is less than 50, get how much less than 50 it is, divide by 100 to get a percent, then multiply our offset by it
+                    // Scale the offset by how far the angle is above 50
                     float rotOffsetMultiplier = (weaponAngleOffset - 50) / 100;
                     weaponOffset += new Vector3(-0.01f, -0.01f, +0.04f) * rotOffsetMultiplier; 
                 }

@@ -26,9 +26,8 @@ namespace TarkovVR.Patches.Core.VR
     internal class InitVRPatches
     {
         // The UI-layer camera draws only unlit canvases, usually nothing at all. Unity's default camera is deferred + HDR: a G-buffer
-        // pass, a lighting pass and an HDR copy of the eye image, per eye, every frame (measured 1.3 ms GPU + 0.84 ms render thread
-        // in the hideout). Forward without HDR/MSAA draws straight into the eye image. false = Unity's default camera (applies to the
-        // next uiCam made).
+        // pass, a lighting pass and an HDR copy of the eye image, per eye, every frame (1.3 ms GPU + 0.84 ms render thread in the hideout).
+        // Forward without HDR/MSAA draws straight into the eye image. false = Unity's default camera (applies to the next uiCam made).
         public static bool lightUiCamera = true;
         internal static void MakeUiCameraLight(Camera uiCam)
         {
@@ -62,7 +61,6 @@ namespace TarkovVR.Patches.Core.VR
 
             void OnPostRender()
             {
-                // Reset everything
                 cam.ResetProjectionMatrix();
                 GL.invertCulling = false;
             }
@@ -219,7 +217,7 @@ namespace TarkovVR.Patches.Core.VR
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Don't know why I chose this method for setting the main cam but it works so whatever
+        // BloodOnScreen.Start is only the hook to reach the main camera ("FPS Camera")
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BloodOnScreen), "Start")]
@@ -382,13 +380,13 @@ namespace TarkovVR.Patches.Core.VR
             public Transform leftHandTarget;
             public Transform rightHandTarget;
 
-            // --- NEW: We must store individual bone lengths ---
+            // Individual bone lengths
             private float leftUpperArmNaturalLength;
             private float leftForearmNaturalLength;
             private float rightUpperArmNaturalLength;
             private float rightForearmNaturalLength;
 
-            // This now stores the TOTAL length
+            // Upper arm + forearm
             private float leftArmTotalNaturalLength;
             private float rightArmTotalNaturalLength;
 
@@ -487,7 +485,7 @@ namespace TarkovVR.Patches.Core.VR
                         upperArmOriginalScale.z
                     );
 
-                    // ALWAYS reset the forearm scale (since you don't want it stretched)
+                    // Only the upper arm stretches: the forearm keeps its scale
                     forearm.localScale = forearmOriginalScale;
                 }
                 else
@@ -499,7 +497,7 @@ namespace TarkovVR.Patches.Core.VR
                 armIk.solver.IKPosition = targetPosition;
                 armIk.solver.Update();
             }
-            
+
             /*
             void StretchArm(LimbIK armIk, Vector3 targetPosition,
                 float totalNaturalLength, float upperArmNaturalLength, float forearmNaturalLength,
@@ -570,13 +568,10 @@ namespace TarkovVR.Patches.Core.VR
             if (__instance.transform.root.GetComponent<EFT.Player>() && !__instance.transform.root.GetComponent<EFT.Player>().IsYourPlayer)
                 return;
 
-            // The check above PASSES when the root has no EFT.Player component yet - exactly the window
-            // bot rigs hit this in (their Player attaches later in activation), and the stack heuristic
-            // below names a stale obfuscated class. A leaked bot reaches the UNCONDITIONAL
-            // ikManager/leftArmIk/rightArmIk writes below and hijacks the mod rig onto the bot's skeleton
-            // - fatal now that the elbow/wrist drivers consume those refs every frame. Two positive
-            // identity guards (Unity's fake-null makes destroyed refs skip these, so new-raid rebuilds
-            // still pass):
+            // The check above passes when the root has no EFT.Player component yet (bot rigs: their Player attaches later in
+            // activation), and the stack check below names a stale obfuscated class. A bot getting through would rewire
+            // ikManager/leftArmIk/rightArmIk onto its skeleton. Two identity guards (destroyed refs are fake-null and skip
+            // these, so a new raid's rebuild still passes):
             if (VRGlobals.player != null && __instance.transform.root != VRGlobals.player.gameObject.transform.root)
             {
                 Plugin.MyLog.LogWarning($"[SetupIK] Ignoring non-local rig '{__instance.transform.root.name}' ({__instance.name}).");
@@ -602,11 +597,8 @@ namespace TarkovVR.Patches.Core.VR
                 }
             }
 
-            // This is a bot player, so do not execute the rest of the code
             if (isBotPlayer)
                 return;
-
-            //    //This is for Base HumanSpine3 to stop it doing something, cant remember
 
             // Disable the weapon holsters so they dont wack the player in the face
             if (__instance.transform.parent.parent.FindChild("weapon_holster"))
@@ -620,9 +612,9 @@ namespace TarkovVR.Patches.Core.VR
                     VRGlobals.ikManager.enabled = false;
                     VRGlobals.camRoot.transform.position = new Vector3(0, -999.8f, -0.5f);
                 }
-                // Fresh rig: clear the wrist-twist binds so the collarbone blocks below recapture them
-                // from this rig's spawn rest pose (once per arm per rig; weapon-equip re-entries of this
-                // method - rightArmIk gets disabled on every equip - must NOT re-zero on a live pose).
+                // Fresh rig: clear the wrist-twist binds so the collarbone blocks below recapture them from this rig's spawn rest
+                // pose. Once per rig only: this method runs again on every weapon equip (rightArmIk gets disabled), and must not
+                // re-zero on a live pose.
                 TarkovVR.Patches.Core.Player.IKPatches.ClearWristBind();
             }
 

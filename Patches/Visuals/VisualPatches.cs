@@ -16,7 +16,7 @@ namespace TarkovVR.Patches.Visuals
         public static DistantShadow distantShadow;
 
 
-        // Disables eye exposure, this does not work nicely in VR at all, cloudy weather causes everything to get absurdly dark
+        // Disables eye exposure: in VR, cloudy weather makes everything absurdly dark
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EnvironmentManager), "Update")]
         private static void LimitExposureForVR(EnvironmentManager __instance)
@@ -25,8 +25,7 @@ namespace TarkovVR.Patches.Visuals
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // The volumetric light was only using the projection matrix for one eye which made it appear
-        // off position in the other eye, this gets the current eyes matrix to fix this issue              
+        // Vanilla volumetric light uses one eye's projection matrix (off position in the other eye): use the current eye's matrices
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VolumetricLightRenderer), "OnPreRender")]
         private static bool PatchVolumetricLightingToVR(VolumetricLightRenderer __instance)
@@ -147,7 +146,7 @@ namespace TarkovVR.Patches.Visuals
         
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // When aiming a lot of stuff gets culled do to the lowered LodBiasFactor, so set this to a minimum of 1 which is whats normal
+        // Aiming lowers LodBiasFactor and culls a lot: keep it at the setting's value (normal is 1)
         [HarmonyPostfix]
         [HarmonyPatch(typeof(CameraLodBiasController), "SetBiasByFov")]
         private static void FixAimCulling(CameraLodBiasController __instance)

@@ -31,7 +31,7 @@ namespace TarkovVR.ModSupport.DynamicMaps
             }
         }
 
-        // Just disable minimap for now, minimaps aren't nice in VR, may add some custom solution, maybe a certain gesture to make it appear
+        // Minimap disabled: minimaps aren't nice in VR
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MapPeekComponent), "HandleMinimapState")]
         private static bool DisableMinimap(MapPeekComponent __instance)
@@ -87,8 +87,8 @@ namespace TarkovVR.ModSupport.DynamicMaps
             return false;
         }
 
-        // (The map-texture downscale is gone: since DynamicMaps 1.1.0 the map layers are SVGs tessellated into meshes
-        // (SvgUtils.LoadSvgFromPath), so LoadTexture2DFromPath only loads the small marker icons - halving those just blurred them.)
+        // No map-texture downscale: since DynamicMaps 1.1.0 the map layers are SVGs tessellated into meshes (SvgUtils.LoadSvgFromPath),
+        // so LoadTexture2DFromPath only loads the small marker icons, and halving those just blurs them.
 
         [HarmonyFinalizer]
         [HarmonyPatch(typeof(ModdedMapScreen), "ReadConfig")]
@@ -116,7 +116,7 @@ namespace TarkovVR.ModSupport.DynamicMaps
             if (interacter == null) return;
 
             // Cast inside the method: MapView (DynamicMaps') only resolves when this runs, and this component only exists once the
-            // DynamicMaps patch above has added it. (Was C# dynamic = the runtime binder on every frame the map was open.)
+            // DynamicMaps patch above has added it.
             MapView mapView = (MapView)_mapViewRef;
 
             // The laser's hand ("Laser Pointer In Left Hand"): its trigger drags, its own stick zooms

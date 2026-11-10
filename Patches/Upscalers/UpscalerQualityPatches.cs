@@ -108,9 +108,9 @@ namespace TarkovVR.Patches.Upscalers
             return false;
         }
         // VR Native AA (DLAA-style): render at native (or near) and let FSR/DLSS run purely as an anti-
-        // aliaser. VR sets the camera rect DIRECTLY here (not the game's SSAA.Switch state machine), so the
-        // flatscreen NOSCALE gate that forced 0.99 there doesn't apply — 1.0 is worth trying for TRUE native.
-        // If FSR stops running at exactly 1.0 (jitter appears, same tell as flatscreen), set this to 0.99.
+        // aliaser. VR sets the camera rect directly here (not the game's SSAA.Switch state machine), so the
+        // flatscreen NOSCALE gate that forces 0.99 there doesn't apply. If FSR stops running at exactly 1.0
+        // (jitter appears), set this to 0.99.
         public static float NativeAAScale = 1.0f;
 
         // The quality mode's real scale (pre Native-AA), stashed so the menu toggle can re-apply live.
@@ -134,8 +134,8 @@ namespace TarkovVR.Patches.Upscalers
             }
         }
 
-        // Re-apply the last upscaler scale when the Native AA menu toggle flips (recomputes native vs the
-        // stored mode scale). No need to re-select the FSR quality. No-op until a mode has been applied once.
+        // Re-apply the last upscaler scale when the Native AA menu toggle flips (native vs the stored mode
+        // scale). No-op until a mode has been applied once.
         internal static void ReapplyForNativeAA()
         {
             if (_lastBaseScale > 0f)

@@ -11,26 +11,21 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // Companion-side ORBIT bridge. The headless/host runs ORBIT + the bots, but NOT the VR mod
-    // (SPT-VR.dll needs SteamVR), so the dragged-corpse loot-relocation must live HERE, not in
-    // SPT-VR.dll's OrbitSupport. Same pull-on-grab / re-add-on-settle model:
-    //   * Grab   -> remove the corpse's ORBIT loot waypoint so bots can't loot a body being carried away
-    //               (ORBIT loots LOGICALLY: a bot drains corpse.Item once it reaches the waypoint, wherever
-    //               the body physically is — a stale waypoint = a bot empties a body from the death spot).
+    // Companion-side ORBIT bridge. The headless/host runs ORBIT + the bots but not SPT-VR.dll (it needs SteamVR), so the
+    // dragged-corpse loot relocation lives here, not in SPT-VR.dll's OrbitSupport:
+    //   * Grab   -> remove the corpse's ORBIT loot waypoint. ORBIT loots logically: a bot drains corpse.Item once it reaches
+    //               the waypoint, wherever the body physically is.
     //   * Settle -> re-add an identical corpse waypoint at the resting place, restoring the kill credit.
-    //
     // The corpse is matched by its PlayerProfileID (the only stable identity for a headless-local Corpse).
-    // ORBIT is a SOFT dependency: Available is set by FikaSyncPlugin's BepInEx-registry check, and every
-    // ORBIT-typed method is [MethodImpl(NoInlining)] called ONLY behind that gate, so a FIKA peer WITHOUT
-    // ORBIT never JITs an ORBIT-binding method (the fika-softdep-no-typed-fields rule).
+    // ORBIT is a soft dependency: Available is set by FikaSyncPlugin's BepInEx-registry check, and every ORBIT-typed method is
+    // NoInlining and called only behind that gate, so a FIKA peer without ORBIT never JITs an ORBIT-binding method.
     internal static class OrbitSync
     {
         // Set once by FikaSyncPlugin.Awake (Chainloader.PluginInfos contains com.chazut.orbit).
         public static bool Available;
 
-        // Corpses whose ORBIT waypoint we've pulled for the duration of a drag. Key present = "re-add on
-        // settle"; value = what ORBIT knew about it (OrbitCorpseCarry, linked from ModSupport/ - the same code
-        // SPT-VR.dll runs), held as object so the static field names no ORBIT type when ORBIT isn't loaded.
+        // Corpses whose ORBIT waypoint is pulled for a drag (key present = re-add on settle). Value = what ORBIT knew about it
+        // (OrbitCorpseCarry, linked from ModSupport/), held as object so the field names no ORBIT type when ORBIT isn't loaded.
         private static readonly Dictionary<Corpse, object> _held = new Dictionary<Corpse, object>();
 
         // Corpse-typed signatures only (EFT) → these JIT safely without ORBIT; the ORBIT work is isolated.
@@ -83,8 +78,8 @@ namespace SptVrFikaSync
                     return;
                 }
 
-                // Identical to ORBIT's own corpse registration (Corpse category, corpse.name, radius 3*3,
-                // empty door/cover) — only the position + fresh id differ.
+                // Same as ORBIT's own corpse registration (Corpse category, corpse.name, radius 3*3, empty door/cover);
+                // only the position and a fresh id differ.
                 Waypoint moved = new Waypoint(
                     ws.NewRuntimeWaypointId(), WaypointCategory.Corpse, corpse.name, restPos,
                     3f * 3f, new List<Door>(), new List<CoverPoint>(), corpse);

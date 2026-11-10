@@ -5,20 +5,19 @@ using UnityEngine;
 namespace TarkovVR.Source.Player.Interactions
 {
     // The press check's fingers (VRReloadController.PressCheck turns the gun in the hand about the thumb's knuckle): as it turns they
-    // let go of the grip and open (the open-hand pose, rightRestPoseEuler), then come down onto the top of the slide (that pose bent
-    // about each joint's flexion axis, the way the finger tracking and the loot grip close this hand: curlAxis, rightCurlSign). The
-    // thumb stays exactly where it grips the frame (his design): from the knuckle out it turns with the gun, against the hand.
-    // Always worked for the RIGHT hand: with the gun in the left hand that's the hand EFT holds it with, and the left shows its mirror
+    // open (rightRestPoseEuler), then come down onto the top of the slide (that pose bent about curlAxis * rightCurlSign, like the
+    // finger tracking and the loot grip). The thumb stays where it grips the frame: from the knuckle out it turns with the gun.
+    // Always computed on the right hand: with the gun in the left hand that's the hand EFT holds it with, and the left shows its mirror
     // image (nothing written on the free right hand; HandMirror.ApplyMirroredRight, from ApplyPressCheckHookLeft after the grip's mirror).
     internal partial class HandsInteractionController
     {
         // deg on the slide: knuckle / middle / tip joint. The turn leaves the knuckles beside the slide at about its middle height
-        // (1911, offline), so the knuckle bends most to reach over the top, then the rest wraps down onto it.
-        // His headset tuning 2026-11-08 (with VRReloadController's wrist open 30 and offset):
+        // (1911), so the knuckle bends most to reach over the top, then the rest wraps down onto it.
+        // Tuned together with VRReloadController's wrist open 30 and offset:
         public static Vector3 pressCheckHookFinger = new Vector3(30f, 40f, 45f);   // index to ring
         public static Vector3 pressCheckHookPinky = new Vector3(-15f, -5f, 5f);
-        // deg on top of the gripping thumb, its base / knuckle / tip joint: + closes it toward the palm, - opens it (his ask: "anything to
-        // adjust the thumb open/close"). Bending the base moves the knuckle the gun turns about, the rest bends from it.
+        // deg on top of the gripping thumb, its base / knuckle / tip joint: + closes it toward the palm, - opens it.
+        // Bending the base moves the knuckle the gun turns about, the rest bends from it.
         public static Vector3 pressCheckHookThumb = Vector3.zero;
 
         private static readonly Quaternion[] pressCheckJointAnimated = new Quaternion[3];
@@ -117,10 +116,9 @@ namespace TarkovVR.Source.Player.Interactions
                 TarkovVR.Source.Player.Body.HandMirror.ApplyMirroredRight(pressCheckMirrorLocals);
         }
 
-        // The thumb joint the gun turns about gets the gun's turn against the hand, so it and the rest of the thumb stay where they
-        // grip: worked in the gun's frame (the palm's turn there is known), not from the bones' world poses this frame. Its reference is
-        // taken when a press check starts: the palm there and the thumb's grip as EFT animates it. The thumb knobs on top, eased in with
-        // the turn: the joints before that one first (they carry it), then it, then the ones after.
+        // The thumb joint the gun turns about gets the gun's turn against the hand, so the thumb stays where it grips. Worked in the
+        // gun's frame (the palm's turn there is known), not from this frame's bone world poses. Reference taken when a press check
+        // starts: the palm there and the thumb's grip as EFT animates it. The thumb knobs on top, eased in with the turn.
         private readonly Quaternion[] pressCheckThumbShown = new Quaternion[3];
 
         private void KeepThumbOnGun(Transform[] joints, float amount, bool mirrored)

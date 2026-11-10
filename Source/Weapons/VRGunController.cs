@@ -3,22 +3,18 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // The start of the VR player controller: the VR player owns the gun and hands, Tarkov keeps the rules.
-    //
-    // Version 1 fixes the two places where Tarkov's animations took the gun or the left hand away from you:
-    //  - The gun is anchored to your controller through weapon_R_IK_marker (_markers[1]), which is a bone ON
-    //    the weapon that reloads, mag checks and malfunctions animate. Anchoring that moving marker shoved the gun
-    //    around in your hand. While any of those animations runs, the gun now stays where it was in your hand.
-    //  - Tarkov hands the left arm to the animation through the LEFT_HAND_WEIGHT curve, and the old rig froze the
-    //    left hand while ReloadFloat was set. If either stayed up (after a malfunction), the hand stayed stuck on
-    //    the gun. The left hand now always follows your controller.
+    // The VR player owns the gun and hands, Tarkov keeps the rules. Two places where Tarkov's animations would take them away:
+    //  - The gun is anchored to the controller through weapon_R_IK_marker (_markers[1]), a bone on the weapon that
+    //    reloads, mag checks and malfunctions animate. While any of those runs, the gun stays where it was in the hand.
+    //  - Tarkov hands the left arm to the animation through the LEFT_HAND_WEIGHT curve, and the rig freezes the left
+    //    hand while ReloadFloat is set. If either stays up (after a malfunction), the hand sticks on the gun, so the
+    //    left hand always follows the controller.
     public static class VRGunController
     {
-        public static bool enabled = true;    // false = the old behavior, for comparing in the headset
-        // The gun arm the same way (his ask: "get rid of the take out animation when switching guns"): a weapon switch plays the BODY
-        // animator's draw, whose RIGHT_HAND_WEIGHT curve dropped the right arm's IK weight (1 - curve) and handed the arm, and with it the
-        // gun (PlayerBones.Kinematics below 1), to that take-out - however fast the hands animator's draw was skipped. Only a switch plays
-        // it: a slung gun taken back never goes through Tarkov. false = Tarkov's weight, to compare.
+        public static bool enabled = true;    // false = Tarkov's animations move the gun and the left hand, to compare
+        // The gun arm the same way: a weapon switch plays the body animator's draw, whose RIGHT_HAND_WEIGHT curve drops the right
+        // arm's IK weight (1 - curve) and hands the arm, and with it the gun (PlayerBones.Kinematics below 1), to that take-out.
+        // Only a switch plays it: a slung gun taken back never goes through Tarkov. false = Tarkov's weight, to compare.
         public static bool keepGunArmOffAnimation = true;
 
         public static bool KeepGunArmOffAnimation(EFT.Player player)
@@ -30,7 +26,7 @@ namespace TarkovVR.Source.Weapons
         private static Transform heldForWeaponHolder;
         private static FirearmController heldForFirearm;
 
-        // Tarkov's own "really idle" test (FirearmController line ~13287): idling, but not examining or checking
+        // Tarkov's own "really idle" test: idling, but not examining or checking
         public static bool IsTarkovAnimatingTheGun()
         {
             FirearmController firearmController = VRGlobals.firearmController;

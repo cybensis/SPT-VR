@@ -12,8 +12,8 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // TEMPORARY RECON - profiles a VANILLA magazine reload (Manual Reload off, press B) to gather what the hand-driven
-    // reload needs to look and sound like Tarkov's: the [FoodRecon] workflow, for guns.
+    // Temporary recon: profiles a vanilla magazine reload (Manual Reload off, press B) to gather what the hand-driven
+    // reload needs to look and sound like Tarkov's.
     //
     // The reload animation lives on the gun model: its clip moves the magazine, the left-hand IK marker the arm reaches
     // for (weapon_L_IK_marker), and an animated copy of the left hand (the gun's HumanLPalm) whose fingers Tarkov's
@@ -30,7 +30,7 @@ namespace TarkovVR.Patches.Core.Player
     //  * [FINGERS]  the gun's left-hand finger pose while holding the new magazine (index-matched to your hand)
     internal static class WeaponRecon
     {
-        public static bool enabled = false;             // temporary: on while we capture guns
+        public static bool enabled = false;             // master toggle
         public static float stableMaxDistance = 0.35f;  // m: magazine farther than this from the marker = not in the hand
         public static float stablePositionTolerance = 0.01f;    // m frame-to-frame that still counts as held still
         public static float stableAngleTolerance = 6f;          // deg, same
@@ -443,9 +443,9 @@ namespace TarkovVR.Patches.Core.Player
             bool saved = false;
             if (oldMagazineType >= 0)
             {
-                // The hold = where the magazine stays still in the hand. Its fingers = the most closed moment IN that hold: a
-                // drum's wide grip is less closed than the hand passing the well on its way there (PMAG 40, D-60 and Beta-C all
-                // "gripped" at that pass, 10 cm off), and the still run itself ends with the hand opening over the pouch.
+                // The hold = where the magazine stays still in the hand. Its fingers = the most closed moment within that hold: a
+                // drum's wide grip is less closed than the hand passing the well on its way there, and the still run itself
+                // ends with the hand opening over the pouch.
                 if (oldMagazineInMarker.bestFrames >= stableMinimumFrames && oldMagazineFingers != null)
                 {
                     Quaternion[] holdFingers = oldMagazineFingers;

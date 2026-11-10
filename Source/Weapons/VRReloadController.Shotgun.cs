@@ -10,22 +10,13 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // Tube shotguns by hand (Manual Reload): MR-133, M870, M590, KS-23, M3 (pump mode) and the MR-153 / MP-155 (semi-autos).
-    //  - Shells come out of the chest pouch one at a time, the free hand's grip (the same split as the bolt-action rounds: the off hand
-    //    while the gun hand has the grip, the gun hand while the off hand holds the gun up), held the way Tarkov's reload clip holds one.
-    //  - Brought up to the loading port underneath, the shell goes onto the clip's own path into the tube (gen_shotguns.py): the shell and
-    //    the hand follow the clip as the hand pushes; past shellCommit it's in (the inventory move then) and finishes on its own. Pulled
-    //    away before that it comes back off the path into the hand; let go of the grip and it's back in the pouch.
-    //  - With the action open (the pump all the way back, a semi-auto's bolt locked back) and the chamber empty, the ejection port takes it
-    //    the same way, along the clip's first-shell drop. A pump gun's close then carries it into the chamber the way that clip does; a
-    //    semi-auto's bolt runs forward on its own (ReleaseBolt).
-    //  - The pump: two-handing, the support hand pulling back along the gun (the two controllers' distance) moves it, every bone the
-    //    clip's stroke moves with it - the left-hand IK marker too, so the hand on the gun rides the pump. Written before Tarkov's IK
-    //    reads the markers (Player.LateUpdate prefix, ShotgunPatches). All the way back throws out a chambered shell (Tarkov's rechamber,
-    //    which brings the next one up) or feeds the one waiting; closed, that one is chambered. Tarkov still pumps after every shot.
-    // Inventory: a shell into an empty chamber goes in the chamber but waits for the action (WaitingForRack, like a round a magazine
-    // brought in): through the loading port it's in the tube as far as the player can see until the pump strokes, so it counts against
-    // the tube's room. The move itself is the bolt-action rounds' (TryBuildLoadOne, let through by LetsSingleRoundIn).
+    // Tube shotguns by hand (Manual Reload): MR-133, M870, M590, KS-23, M3 (pump mode) and the semi-auto MR-153 / MP-155.
+    //  - Shells come from the chest pouch one at a time. At the loading port a shell follows the reload clip's own path into the tube
+    //    (gen_shotguns.py); past shellCommit the inventory move runs. With the action open on an empty chamber the ejection port takes it.
+    //  - The pump follows the support hand's pull along the gun (the two controllers' distance): every bone of the clip's stroke, the
+    //    left-hand IK marker included, written before Tarkov's IK reads the markers (Player.LateUpdate prefix, ShotgunPatches).
+    //  - A shell into an empty chamber is in the chamber but waits for the action (WaitingForRack) and counts against the tube's room.
+    //    The inventory move is the bolt-action rounds' (TryBuildLoadOne, let through by LetsSingleRoundIn).
     public static partial class VRReloadController
     {
         public static bool shotguns = true;                 // false = Tarkov's own shotgun reloads only
@@ -36,21 +27,20 @@ namespace TarkovVR.Source.Weapons
         public static float shellFinishSpeed = 0.35f;       // m/s the rest of the way once it's in
         public static float shellFollowSpeed = 1.2f;        // m/s the shell follows the hand along the path at most (no jumps)
         public static float shellSnapTime = 0.08f;          // s the shell eases from the hand onto the path
-        // m the support hand comes back before the pump moves (headset round 1: 1.5 cm was "a bit too easy to accidentally pull")
+        // m the support hand comes back before the pump moves
         public static float pumpDeadzone = 0.035f;
         public static float pumpRestFollowTime = 0.4f;      // s the closed pump's rest follows a slow drift of the hands (no creeping open)
-        // After a shot the pump is the hand's (his round 1: "shooting automatically does a pump after each shot"): Tarkov's pump after the
-        // shot is skipped (BoltActionPatches, like a bolt-action's bolt), the fired shell stays in and the trigger is dead until the pump
-        // has been all the way back. false = Tarkov pumps after every shot.
+        // After a shot the pump is the hand's: Tarkov's pump is skipped (BoltActionPatches), the fired shell stays in and the trigger is
+        // dead until the pump has been all the way back. false = Tarkov pumps after every shot.
         public static bool pumpAfterShotByHand = true;
-        // The support hand rides the pump (round 1: "the hand does not seem to move with the pump"): Tarkov's IK holds it on the foregrip's
-        // grip pose, which isn't one of the stroke's bones; while the pump is open the left arm aims at our point on the pump instead
+        // The support hand rides the pump: Tarkov's IK holds it on the foregrip's grip pose, which isn't one of the stroke's bones, so
+        // while the pump is open the left arm aims at our point on the pump instead
         public static bool pumpHandFollows = true;
         public static float pumpFullBack = 0.92f;           // share of the stroke that counts as all the way back
         // A semi-auto's shell into the tube with the bolt closed on an empty chamber stays in the tube until the bolt handle is racked
-        // (WaitingForRack, like a magazine put in on a closed bolt). false = it goes straight into the chamber (before there was a handle).
+        // (WaitingForRack, like a magazine put in on a closed bolt). false = it goes straight into the chamber.
         public static bool semiShellWaitsForHandle = true;
-        public static bool shotgunDebugLog = true;          // grabs, paths, strokes (on for its first headset rounds)
+        public static bool shotgunDebugLog = true;          // grabs, paths, strokes
 
         public static bool HoldingShell => HoldingRound && heldShell != null;
         public static bool ShellInOffHand => HoldingShell && !roundInGunHand;
@@ -260,9 +250,8 @@ namespace TarkovVR.Source.Weapons
                 && firearmController._player.IsYourPlayer && TryGetShotgun(firearmController, out data);
         }
 
-        // The hands load this shotgun (Manual Reload + its data): the off hand's weapon-part menu isn't needed (GunInteractionController's
-        // ManualReloadReplacesMenu; it only knew magazine guns, so a tube shotgun kept the menu - his report "the shotgun still has the
-        // weapon interact menu when bringing offhand up to it")
+        // The hands load this shotgun (Manual Reload + its data), so the off hand's weapon-part menu isn't needed
+        // (GunInteractionController's ManualReloadReplacesMenu)
         public static bool HandsLoadShotgun(FirearmController firearmController)
         {
             return ManualShotgunOn(firearmController, out _);
@@ -847,18 +836,16 @@ namespace TarkovVR.Source.Weapons
         {
             pumpHandWanted = false;
             TickPump();
-            // Nothing measuring the pull (the gun hand let go of the grip: the off hand holds the gun alone; Tarkov's rechamber under way)
-            // but the pump left open: the hand stays on it (his round 2: "if I pull the pump back, then let go of main hand, my offhand moved
-            // back to default foregrip position")
+            // Nothing measuring the pull (the off hand holds the gun alone, or Tarkov's rechamber is under way) but the pump left open:
+            // the hand stays on it
             if (!pumpHandWanted)
                 HoldPumpHand();
             if (!pumpHandWanted)
                 ReleasePumpHand();
         }
 
-        // From Tick, no hand busy: what the magazine guns' grab block does (CanStartGrab, which a tube shotgun isn't for) - a semi-auto's bolt
-        // handle by the trigger (the off hand off the gun, or the gun hand while the off hand holds it up), and a shell stuck in the port of
-        // either kind (a pump gun's support hand off the pump for it; a full stroke clears it too)
+        // From Tick, no hand busy: the magazine guns' grab block (CanStartGrab) doesn't cover a tube shotgun. A trigger press grabs a
+        // semi-auto's bolt handle (the off hand off the gun, or the gun hand while the off hand holds it up) or a shell stuck in the port.
         private static void TickShotgunGrabs(bool triggerPressed, bool gunHandTriggerPressed)
         {
             if (!CanWorkShotgun(out FirearmController firearmController, out Weapon weapon))
@@ -914,8 +901,7 @@ namespace TarkovVR.Source.Weapons
         private static void HoldPumpHand()
         {
             FirearmController firearmController = VRGlobals.firearmController;
-            // A shell in the gun hand doesn't count (his round 3: taking one out with the pump open moved the hand off it); the off hand
-            // holding one isn't on the gun (isSupporting)
+            // A shell in the gun hand doesn't take the off hand off the pump; the off hand holding one isn't on the gun (isSupporting)
             if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.isSupporting || VRGlobals.menuOpen || ShellInOffHand)
                 return;
             if (!ManualShotgunOn(firearmController, out ShotgunData data) || !PumpMode(firearmController.Item, data)

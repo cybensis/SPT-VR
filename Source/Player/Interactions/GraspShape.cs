@@ -8,19 +8,19 @@ using UnityEngine.SceneManagement;
 namespace TarkovVR.Source.Player.Interactions
 {
     // A held loot item's surface as the fingers closing on it see it (HandsInteractionController.Grasp), in the item's own frame: its
-    // root's position and rotation, unscaled. Every visible part starts as the box of its mesh's bounds, there at once for any mesh; each
-    // part then gets its convex hull from the mesh's own vertices - read on the CPU when the mesh is readable, else copied back from the
-    // GPU (most of Tarkov's item meshes aren't readable: the weapon collision's copies of world meshes failed on exactly that). A hull
-    // replaces its part's box as it arrives (Version goes up, the grip re-solves). The hulls are convex MeshColliders in a physics scene
-    // of their own (LocalPhysicsMode), so nothing in the game can hit them; Physics.ClosestPoint measures them at the pose it's given.
+    // root's position and rotation, unscaled. Every visible part starts as the box of its mesh's bounds; each part then gets its convex
+    // hull from the mesh's own vertices - read on the CPU when the mesh is readable, else copied back from the GPU (most of Tarkov's
+    // item meshes aren't readable). A hull replaces its part's box as it arrives (Version goes up, the grip re-solves). The hulls are
+    // convex MeshColliders in a physics scene of their own (LocalPhysicsMode), so nothing in the game can hit them;
+    // Physics.ClosestPoint measures them at the pose it's given.
     internal sealed class GraspShape
     {
         public static bool buildHulls = true;
         public static bool readGpuMeshes = true;        // non-readable meshes: their vertices back from the GPU (AsyncGPUReadback)
         public static int maxParts = 10;                 // the biggest parts by volume; the rest (screws, decals) don't shape a grip
         // A hull = each part's furthest vertex in this many directions spread over a sphere. A hull of n points has at most 2n-4 faces and
-        // PhysX cooks at most 255 polygons (more = its "partial hull" warning on every grab, headset log 2026-11-07), so 100 = at most
-        // 196. They're ~20 deg apart: half a millimetre off a 6 cm bottle.
+        // PhysX cooks at most 255 polygons (more = its "partial hull" warning on every grab), so 100 = at most 196.
+        // They're ~20 deg apart: half a millimetre off a 6 cm bottle.
         public static int hullDirections = 100;
         public static int preThinPoints = 4000;          // the grid thinning first, so the direction search stays cheap
         public static float hullCellSize = 0.003f;       // m: the thinning grid's first cell

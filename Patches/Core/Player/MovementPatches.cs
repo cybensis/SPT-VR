@@ -16,7 +16,7 @@ namespace TarkovVR.Patches.Core.Player
 
         // --- Proper analog movement direction (see AnalogMovementDirection below) -----------------------------------
         // ON = body physically travels in the exact analog stick heading (full 360°). OFF = vanilla EFT behaviour,
-        // i.e. travel snapped to the 8 directions Tarkov has walk animations for. Live-tunable for A/B in the headset.
+        // i.e. travel snapped to the 8 directions Tarkov has walk animations for.
         public static bool analogMovementDirection = true;
         // Don't bother redirecting below this planar root-motion magnitude (avoids normalizing noise while idle/stopping).
         public static float analogMinPlanarMotion = 0.0001f;
@@ -138,7 +138,6 @@ namespace TarkovVR.Patches.Core.Player
             float dotProduct = Vector3.Dot(VRGlobals.VRCam.transform.up, Vector3.up);
             float headY = (dotProduct < 0) ? (VRGlobals.VRCam.transform.eulerAngles.y - 180) : VRGlobals.VRCam.transform.eulerAngles.y;
 
-            // Get head pitch
             float headPitch = VRGlobals.VRCam.transform.eulerAngles.x;
             float pitchThreshold = 50f;
 
@@ -155,7 +154,7 @@ namespace TarkovVR.Patches.Core.Player
                 }
                 else if (VRSettings.GetMovementMode() == VRSettings.MovementMode.JoyStickOnly)
                 {
-                    // If the right joystick is used, or the head is rotated more than 80 degrees, or you are aiming down sight, set the legs to rotate based on head Y axis
+                    // Right joystick used, or the head turned far off the body: the legs rotate to the head's Y axis
                     if (rightJoystickUsed || Mathf.Abs(rotDiff) > 100)
                         lastYRot = headY;
                 }
@@ -181,8 +180,7 @@ namespace TarkovVR.Patches.Core.Player
             else
                 VRGlobals.player.MovementContext._relativeSpeed = xAxis;
 
-            // Dragging a body weighs you down: scale locomotion speed by the body-drag multiplier
-            // (1 when not dragging). Derived from the corpse's ragdoll mass on grab — see BodyGrab.cs.
+            // Dragging a body slows you: the multiplier (1 when not dragging) comes from the corpse's ragdoll mass on grab (BodyGrab.cs)
             VRGlobals.player.MovementContext.SetCharacterMovementSpeed(
                 VRGlobals.player.MovementContext._relativeSpeed * VRGlobals.player.MovementContext.MaxSpeed
                 * Source.Player.Interactions.HandsInteractionController.bodyDragMoveSpeedMultiplier);
@@ -216,25 +214,15 @@ namespace TarkovVR.Patches.Core.Player
         // -------------------------------------------------------------------------------------------------------------
         // Proper analog (full-360°) movement direction.
         //
-        // Tarkov locomotion is ROOT-MOTION driven: the character is translated by the displacement baked into whichever
-        // directional walk animation is playing (RunStateClass.UpdatePosition -> motion = PlayerAnimatorDeltaPosition ->
-        // MovementContext.ApplyMotion -> CharacterController.Move). Which clip plays is chosen by binning the analog
-        // stick into ONE OF 8 directions (GClass2076.ConvertToMovementDirection -> SetUpDiscreteDirection, with
-        // hysteresis), so the body can only ever physically travel F/B/L/R + the 4 exact 45° diagonals. Pushing the
-        // stick ~30° off forward still plays the 45° FrontRight clip, so you slide at 45° ("feels like holding W+D").
+        // Tarkov locomotion is root-motion driven (RunStateClass.UpdatePosition -> motion = PlayerAnimatorDeltaPosition ->
+        // MovementContext.ApplyMotion -> CharacterController.Move), and the walk clip is picked by binning the stick into one
+        // of 8 directions (GClass2076.ConvertToMovementDirection -> SetUpDiscreteDirection, with hysteresis), so the body can
+        // only travel in those 8. This rotates the horizontal part of the motion onto the true analog heading
+        // (MovementContext.AbsoluteMovementDirection), keeping its magnitude (EFT's accel/inertia/speed limits stay) and its y.
+        // The legs still animate in 8 directions.
         //
-        // We can't add new locomotion animations, but we CAN redirect where the root motion carries you. This rotates
-        // the HORIZONTAL part of the motion vector to point along the true analog heading
-        // (MovementContext.AbsoluteMovementDirection = the smoothed analog stick direction in world space) while KEEPING:
-        //   - the horizontal MAGNITUDE from root motion (so EFT's accel/decel/inertia/speed-limits stay untouched), and
-        //   - the vertical component (gravity is applied just after this; we leave any y alone).
-        // Net: you physically move in the exact direction you push, at Tarkov's normal speed feel. The legs still
-        // animate in 8 directions (cosmetic foot-slide at shallow angles) since the clips themselves are unchanged.
-        //
-        // Runs BEFORE EFT's BlendMotion/ProjectMotionToSurface/ApplyGravity (this is the base MovementState.ApplyMotion,
-        // not overridden by RunStateClass), so slope projection & gravity are computed from the corrected heading.
-        // Gated to your own player, grounded, and the normal upright move state (RunStateClass) so vaulting / prone /
-        // jump-arc / ladder root motion (other state classes / airborne) stay exactly vanilla.
+        // Runs before EFT's BlendMotion/ProjectMotionToSurface/ApplyGravity (this is the base MovementState.ApplyMotion,
+        // not overridden by RunStateClass), so slope projection and gravity are computed from the corrected heading.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MovementState), "ApplyMotion")]
         private static void AnalogMovementDirection(MovementState __instance, ref Vector3 motion)

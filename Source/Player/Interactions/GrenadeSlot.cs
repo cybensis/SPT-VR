@@ -16,32 +16,25 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The grenade on the chest (his grenade plan, round 2): the grenade Tarkov would throw next shown on the top left of the chest (in
-    // the body's frame like the guns' spots), taken by either hand's grip (his call: no trigger option). Which one:
-    // Tarkov's own pick for its throw key (PlayerInputTranslator.vmethod_1) - the quick-access panel's grenade (TopPriorityGrenade), else a
-    // random reachable one, not the type thrown last. That pick is random when the key is pressed, so it's made here once, shown, and the
-    // grab takes that very one (SetItemInHands, as the key does); a new one after it's gone.
-    // What's shown is our own copy of the grenade's meshes (Look), placed by the middle of the grenade. Tarkov's model of an item is its
-    // hands prefab, whose root sits ~40 cm off the grenade, and comes out of the same pool as the grenade in your hand: one the VR hold
-    // had rebuilt (the grenade moved under the RightHandPositioner) drew it wherever that hold left it (his test: "the slot just
-    // disappears" after a grenade was put back).
-    // The grab is Tarkov's own switch with the gun's put-away and the grenade's draw skipped (BodyWeapons' way), the model riding the hand
-    // meanwhile. The left hand holds it the way it holds a gun (Handedness.GunInLeftHand: the right-handed hold mirrored,
-    // RealLeftHandedPatches for the arms). In the hand, GrenadeHold; put back, its put-away is skipped too and the hands go back as they
-    // were (a gun that hung on its spot hangs there again, its draw skipped).
-    // Moving the slot: the trigger held 1 s at it, it rides the hand until the trigger opens, saved like a gun spot. In the hand, the
-    // other hand's grip at it takes it over (GrenadeHold.UpdateSwap; HoldIn here).
+    // The grenade on the chest: the grenade Tarkov would throw next, shown on the chest in the body's frame and taken by either hand's
+    // grip. The pick is Tarkov's own for its throw key (PlayerInputTranslator.vmethod_1: TopPriorityGrenade, else a random reachable
+    // one, not the type thrown last), made here once so the grab takes the one shown (SetItemInHands, as the key does).
+    // What's shown is our own copy of the grenade's meshes (Look), placed by the grenade's middle: Tarkov's model is the hands prefab,
+    // whose root sits ~40 cm off the grenade and which shares a pool with the grenade in the hand (the VR hold may have rebuilt it).
+    // The grab is Tarkov's own switch with the gun's put-away and the grenade's draw skipped; the left hand holds it the way it holds
+    // a gun (Handedness.GunInLeftHand). Put back, its put-away is skipped too and the hands go back as they were.
+    // The trigger held holdSeconds at the slot moves it (saved like a gun spot).
     public static class GrenadeSlot
     {
         public static bool enabled = true;
-        public static Vector3 slotFromNeck = new Vector3(-0.12f, -0.20f, 0.14f);    // m, body frame (x right, y up, z forward): the grenade's middle, top left of the chest (his placement)
-        public static Vector3 slotEuler = new Vector3(278.5f, 132.7f, 166f);        // the grenade body's turn there, body frame (his placement)
+        public static Vector3 slotFromNeck = new Vector3(-0.12f, -0.20f, 0.14f);    // m, body frame (x right, y up, z forward): the grenade's middle, top left of the chest
+        public static Vector3 slotEuler = new Vector3(278.5f, 132.7f, 166f);        // the grenade body's turn there, body frame
         public static float grabRadius = 0.08f;     // m any point of the hand (palm, knuckles, fingertips) to the grenade's middle
         public static float holdSeconds = 1f;       // trigger held at the slot: moving the slot
         public static float switchTimeout = 3f;     // s before a grab whose switch never lands is given up
         public static float rehangSeconds = 3f;     // s a gun that hung before the grenade has, once it's back in the hands, to hang again
         public static float throwReturnTimeout = 8f;    // s after a throw Tarkov's draw of the gun that hung before still counts as its return
-        public static bool debugLog = true;         // one line per grab / pick / placement (first round)
+        public static bool debugLog = true;         // one line per grab / pick / placement
 
         private sealed class Hand
         {
@@ -370,8 +363,7 @@ namespace TarkovVR.Source.Player.Interactions
             puttingAway = current;
             putAwayStarted = Time.time;
             // Tarkov draws the item a grenade came in after once it's thrown (PlayerOwner.SetHandsController keeps PreviousItem for its
-            // after-use callback): after this swap that's the grenade swapped from (his report, [GrenadeDiag]: thrown, and the other one
-            // came into the hand by itself). The item before the first one instead.
+            // after-use callback): after this swap that would be the grenade swapped from. The item before the first one instead.
             EFT.PlayerOwner owner = VRGlobals.player.GetComponent<EFT.PlayerOwner>();
             if (owner != null)
                 owner.PreviousItem = afterThrowItem;
@@ -400,7 +392,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 if (!fromSlot)
                 {
-                    // Not asked for by a grab or the picker (his report: one came by itself after a throw): who drew it
+                    // Not asked for by a grab or the picker: who drew it
                     if (debugLog)
                         Plugin.MyLog.LogInfo($"[GrenadeDiag] {grenade.Item?.LocalizedShortName()} drawn without a grab (process {grenade._player.ProcessStatus}, next {grenade._player.ScheduledProcess?.GetType().Name ?? "none"}): {TarkovVR.Patches.Core.VR.VRGrenadeController.ShortStack()}");
                     return;
@@ -439,7 +431,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static float pendingReturnSince;
 
         // GrenadeHold, let go before the pin was out: the hands back as they were - once the host has answered the grenade's own move
-        // (co-op as a client: sent before, the host refused it and the hands stayed broken, his raid log)
+        // (co-op as a client: sent sooner, the host refuses it and the hands stay broken)
         public static void ReturnHands(EFT.Player.GrenadeHandsController grenade)
         {
             if (CoopHost.StillAnswering)
@@ -500,8 +492,8 @@ namespace TarkovVR.Source.Player.Interactions
             grabbedByHold = false;
         }
 
-        // The grenade put back: Tarkov's put-away (Remove: the hide clip, "an animation which disarms it") ended as it starts, by the
-        // clip's own end event (WeapOut: our VRGrenadeController cleanup, then Tarkov's next hands)
+        // The grenade put back: Tarkov's put-away (Remove: the hide clip) ended as it starts, by the clip's own end event (WeapOut: our
+        // VRGrenadeController cleanup, then Tarkov's next hands)
         private static void SkipPutAway()
         {
             if (puttingAway == null)
@@ -528,7 +520,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The gun coming back into the hands: after a put-back (the hands as they were), or Tarkov's own draw after a throw of the gun that
-        // hung before (his report: "after you throw a grenade it automatically unslings your current weapon")
+        // hung before
         private static void ExpectGunBack(Item gun, bool hangs, float timeout)
         {
             returningGun = gun;
@@ -710,7 +702,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 poppedBySlot.Add(pooled.GetInstanceID());
                 bool rebuiltByVrHold = pooled.GetComponentInChildren<HandsPositioner>(true) != null;
-                // Its animator's pose now (the model played it on the slot the first build drew it on: TurnOldPlacement measures that)
+                // Its animator's pose now (TurnOldPlacement measures the model in that pose)
                 foreach (Animator animator in pooled.GetComponentsInChildren<Animator>())
                 {
                     if (animator.isActiveAndEnabled && animator.runtimeAnimatorController != null)
@@ -810,8 +802,8 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        // The first build saved the model ROOT's pose (grenadeSlot); measured on a model the VR hold never had, that's the grenade's
-        // middle and body turn now, kept exactly where it was placed
+        // The old setting (grenadeSlot) holds the model root's pose: converted, on a model the VR hold never had, to the grenade's middle
+        // and body turn, so the slot stays where it was placed
         private static void TurnOldPlacement(Transform top, Transform body, Vector3 middle)
         {
             if (VRSettings.GetGrenadeSlot(out _, out _) || !VRSettings.GetOldGrenadeSlot(out Vector3 rootPosition, out Quaternion rootRotation))

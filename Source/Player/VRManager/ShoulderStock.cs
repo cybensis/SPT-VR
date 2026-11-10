@@ -6,16 +6,13 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.VRManager
 {
-    // Virtual gunstock, v2 (2026-11-10). Modelled on the VR Expansion Plugin's GS_GunTools stock (the open-source Unreal VR toolkit;
-    // memory virtual-stock-reference): the gun stays in the rear hand and only its AIM changes, the mount rides the head's POSITION
-    // (never its turning) under the neck, and its influence fades in and out with distance instead of snapping.
-    // One change from the plugin: our support hand is drawn on the gun's foregrip, so the gun must keep passing through it. The
-    // plugin aims from the mount itself (off the gun's line = the drawn front hand pulled ~15 cm off its controller); here the pivot
-    // starts ON the gun's line at the butt, then rides the neck and follows the real butt only slowly - the rear hand's shake is
-    // filtered out of the aim, the lever to the support hand grows by the stock's length, and posture changes still come through.
+    // Virtual gunstock, modelled on the VR Expansion Plugin's GS_GunTools stock: the gun stays in the rear hand and only its aim changes,
+    // the mount rides the head's position (never its turning) under the neck, and its influence fades with distance instead of snapping.
+    // The support hand is drawn on the foregrip, so the gun must keep passing through it: the pivot starts on the gun's line at the
+    // butt, then rides the neck and follows the real butt only slowly (filters the rear hand's shake out of the aim).
     // Only guns with a stock on the shoulder: a mod Tarkov marks HasShoulderContact and not Weapon.Folded, or a built-in stock
     // (no stock slot: AUG, MDR, ASh-12, RFB, AXMC, AK-50) by its measured length.
-    // All maths in TRACKING space (hand rig-locals + the raw headset pose): the hideout rewrites the camera's local transform.
+    // All maths in tracking space (hand rig-locals + the raw headset pose): the hideout rewrites the camera's local transform.
     public static class ShoulderStock
     {
         public static bool enabled = true;           // dev kill-switch; the user-facing gate is the "Virtual Gunstock" menu toggle
@@ -107,8 +104,8 @@ namespace TarkovVR.Source.Player.VRManager
             }
             influence = Mathf.MoveTowards(influence, target, influenceRate * deltaTime);
 
-            // The resting pivot: captured ON the gun's line at the butt (no aim change when the stock comes on), then held to the
-            // neck - turning with the gun around it (your body), not with your head - and pulled slowly toward the real butt
+            // The resting pivot: captured on the gun's line at the butt (no aim change when the stock comes on), then held to the
+            // neck, turning with the gun around it (not with the head), and pulled slowly toward the real butt
             float supportYaw = HorizontalYaw(supportHand - neck, lastSupportYaw);
             if (!engaged && influence > 0f)
             {
@@ -267,7 +264,7 @@ namespace TarkovVR.Source.Player.VRManager
         }
 
         // Grip -> buttplate: the rear-most extent behind the grip marker along the barrel-back axis (WeaponRoot +up; muzzle = -up) of
-        // the STOCK's own renderers (under the mod_stock* slot transforms) - not the whole gun, whose receiver caps, scope eyecups and
+        // the stock's own renderers (under the mod_stock* slot transforms), not the whole gun, whose receiver caps, scope eyecups and
         // stock-release bones sit behind the grip too. A gun without a stock slot (built-in stock) measures every renderer.
         private static float MeasureStock(EFT.Player.FirearmController firearmController, bool hasStockSlot)
         {
@@ -288,8 +285,8 @@ namespace TarkovVR.Source.Player.VRManager
             float rearMost = 0f;
             foreach (Renderer renderer in stockRenderers)
             {
-                // MESH-LOCAL bounds corners transformed out - NOT Renderer.bounds: a world box grows with the gun's world turn
-                // (~40% on a diagonal), which made the length depend on which way you faced
+                // Mesh-local bounds corners transformed out, not Renderer.bounds: a world box grows with the gun's world turn
+                // (~40% on a diagonal), so the length would depend on facing
                 Mesh mesh = null;
                 if (renderer is SkinnedMeshRenderer skinned)
                     mesh = skinned.sharedMesh;

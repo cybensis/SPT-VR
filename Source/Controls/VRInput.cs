@@ -6,10 +6,10 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Controls
 {
-    // Every controller read in the mod goes through here instead of SteamVR_Actions._default. Same action names and
-    // members as SteamVR's, so call sites only changed their prefix. With SteamVR each action just calls the SteamVR
-    // action. With OpenXR the values come from OpenXRInput, bound like the mod's SteamVR bindings: each action
-    // belongs to one controller, and asking for the other hand reads it as not pressed.
+    // Every controller read in the mod goes through here instead of SteamVR_Actions._default, with the same action names
+    // and members as SteamVR's. With SteamVR each action just calls the SteamVR action. With OpenXR the values come from
+    // OpenXRInput, bound like the mod's SteamVR bindings: each action belongs to one controller, and asking for the other
+    // hand reads it as not pressed.
     public static class VRInput
     {
         public static readonly VRBoolean RightGrip = new VRBoolean(() => SteamVR_Actions._default.RightGrip, OpenXRInput.RIGHT_HAND, OpenXRInput.Button.Grip);
@@ -35,8 +35,7 @@ namespace TarkovVR.Source.Controls
         private static readonly VRVector2 rawLeftJoystick = new VRVector2(() => SteamVR_Actions._default.LeftJoystick, OpenXRInput.LEFT_HAND);
 
         // A radial menu just picked with this controller's stick (CircularSegmentUI closing): everything else reads that stick as centred
-        // until it's let go - else the pick's push carried on as a move or a crouch (his report: a grenade picked by pushing the stick
-        // down, "as soon as the grenade is selected and the radial menu goes away, my character starts crouching")
+        // until it's let go - else the pick's push carries on as a move or a crouch
         public static float menuStickLetGoRadius = 0.2f;    // how far from the centre counts as let go
         private static readonly bool[] stickHeld = new bool[2];
 
@@ -59,7 +58,7 @@ namespace TarkovVR.Source.Controls
             return false;
         }
 
-        // The "Swap Sticks" setting (VRSettings.GetSwapSticks, his ask for left-handed players): the stick everything calls the right one is
+        // The "Swap Sticks" setting (VRSettings.GetSwapSticks, for left-handed players): the stick everything calls the right one is
         // the left controller's, and back - turning, jump / crouch and its click, the scope dial, the weapon-part menu's scroll; moving,
         // sprint's click. Done here so every feature follows it. Asked for with a hand (GetState(RightHand)) they'd read the other hand's
         // action, so callers use the source-less reads. The Raw* ones stay on their controller (the menus scroll with the laser's hand).

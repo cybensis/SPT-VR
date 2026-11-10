@@ -19,12 +19,10 @@ using TarkovVR.Source.Controls;
 namespace TarkovVR
 {
     [BepInPlugin("com.matsix.sptvr", "matsix-sptvr", "2.0.0")]
-    // Soft: the FikaSync module only loads its plugin when FIKA is present, so we must NOT hard-depend
-    // on it (that would break solo VR). We still ship its DLL alongside ours and load after it here.
+    // Soft: the FikaSync module only loads its plugin when FIKA is present; a hard dependency would break solo VR
     [BepInDependency("com.matsix.sptvr.fikasync", BepInDependency.DependencyFlags.SoftDependency)]
-    // Soft: ORBIT (bot-AI mod) is referenced (publicized DLL) so dragged corpses can relocate their loot
-    // waypoints, but the VR mod must still load without it. The dependency only guarantees ORBIT loads
-    // first so it's in the Chainloader registry when we detect it below.
+    // Soft: ORBIT (bot-AI mod) is referenced (publicized DLL) so dragged corpses can relocate their loot waypoints. The VR mod
+    // must load without it; the dependency only makes ORBIT load first so it's in the Chainloader registry when we look.
     [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
     // Soft: FuckThisCulling (GPU occlusion culling) gets stereo support patches (ModSupport/FuckThisCulling) when installed
     [BepInDependency("com.rootdarkarchon.fuckthisculling", BepInDependency.DependencyFlags.SoftDependency)]
@@ -37,8 +35,8 @@ namespace TarkovVR
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource MyLog;
-        // Verbose logging for the dragged-corpse loot-relocation path (OrbitSupport): logs whether an ORBIT
-        // waypoint / vanilla DeadBody record was found and where it was moved. Off by default; flip live.
+        // Verbose logging for the dragged-corpse loot relocation (OrbitSupport): whether an ORBIT waypoint / vanilla DeadBody record
+        // was found and where it was moved
         public static bool debugBodyDragLoot = false;
         private bool vrInitializedSuccessfully = false;
         public static GameObject WeaponModdingAnchor { get; set; }
@@ -153,31 +151,25 @@ namespace TarkovVR
 
                 XRSettings.useOcclusionMesh = true;
 
-                // Initialize SteamVR
                 SteamVR.Initialize();
 
                 Plugin.MyLog.LogInfo("StereoRenderingMode:" + XRSettings.stereoRenderingMode);
-                // Verify SteamVR is running
                 if (!SteamVR.active)
                 {
                     Plugin.MyLog.LogError("[SteamVR] Initialization failed. SteamVR is not active.");
                     return false;
                 }
 
-                // Verify OpenVR initialization
                 if (SteamVR.instance == null || SteamVR.instance.hmd == null)
                 {
                     Plugin.MyLog.LogError("[OpenVR] HMD not found or OpenVR initialization failed.");
                     return false;
                 }
 
-                // Make sure SteamVR input is initialized
                 SteamVR_Input.Initialize();
 
-                // Check for controller presence and log controller types
                 DetectAndLogControllers();
 
-                // Initialize action sets - important for different controller types
                 InitializeActionSets();
 
                 Plugin.MyLog.LogInfo("[VR] Initialization completed successfully.");
@@ -200,7 +192,6 @@ namespace TarkovVR
                     return;
                 }
 
-                // Get active controllers
                 var system = OpenVR.System;
                 if (system == null)
                 {
@@ -208,7 +199,6 @@ namespace TarkovVR
                     return;
                 }
 
-                // Log all connected devices
                 Plugin.MyLog.LogInfo("[Controller Detection] Checking for connected devices...");
 
                 for (uint deviceIndex = 0; deviceIndex < OpenVR.k_unMaxTrackedDeviceCount; deviceIndex++)
@@ -218,12 +208,12 @@ namespace TarkovVR
                         ETrackedDeviceClass deviceClass = system.GetTrackedDeviceClass(deviceIndex);
                         if (deviceClass == ETrackedDeviceClass.Controller)
                         {
-                            // Use a large buffer — some model strings exceed 64 chars
+                            // A large buffer: some model strings exceed 64 chars
                             ETrackedPropertyError error = new ETrackedPropertyError();
                             StringBuilder modelNumber = new StringBuilder(256);
                             system.GetStringTrackedDeviceProperty(deviceIndex, ETrackedDeviceProperty.Prop_ModelNumber_String, modelNumber, 256, ref error);
 
-                            // Also read the render model name as a fallback identifier
+                            // The render model name: a fallback identifier
                             StringBuilder renderModel = new StringBuilder(256);
                             system.GetStringTrackedDeviceProperty(deviceIndex, ETrackedDeviceProperty.Prop_RenderModelName_String, renderModel, 256, ref error);
 
@@ -275,7 +265,6 @@ namespace TarkovVR
         {
             try
             {
-                // Make sure actions are initialized and updated
                 SteamVR_ActionSet[] actionSets = SteamVR_Input.actionSets;
                 if (actionSets != null && actionSets.Length > 0)
                 {
@@ -285,7 +274,6 @@ namespace TarkovVR
                         actionSet.Activate();
                     }
 
-                    // Explicitly activate the default action set if it exists
                     var defaultActionSet = SteamVR_Input.GetActionSet("default");
                     if (defaultActionSet != null)
                     {
@@ -298,7 +286,7 @@ namespace TarkovVR
                     Plugin.MyLog.LogWarning("[ActionSet] No action sets found to initialize");
                 }
 
-                // Force SteamVR Input update to ensure controllers are recognized
+                // Forced update so the controllers are recognized
                 SteamVR_Input.Update();
             }
             catch (Exception exception)
@@ -310,7 +298,7 @@ namespace TarkovVR
         private void InitializeConditionalPatches()
         {
             if (!vrInitializedSuccessfully)
-                return; // Skip patching if VR failed to initialize
+                return;
 
             InstalledMods.ORBITInstalled = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("com.chazut.orbit");
             MyLog.LogInfo(InstalledMods.ORBITInstalled
@@ -322,11 +310,9 @@ namespace TarkovVR
             InstalledMods.FIKAInstalled = ApplyModSupport("com.fika.core", "FIKA", "TarkovVR.ModSupport.FIKA");
             if (InstalledMods.FIKAInstalled)
             {
-                // The custom-packet sync (arm poses + body-drag) now lives in the standalone
-                // SPT-VR-FikaSync.dll module, which self-initializes via its OWN plugin so that
-                // flatscreen / headless peers can register + relay + render it too (that's the fix
-                // for the "Undefined packet" busy-hands crash). We only feed it the VR-side hooks it
-                // needs for the body-drag steal arbitration.
+                // The custom-packet sync (arm poses + body-drag) lives in the standalone SPT-VR-FikaSync.dll, which starts through its
+                // own plugin so flatscreen / headless peers register, relay and render the packets too (a peer without them fails on
+                // "Undefined packet"). We only give it the VR-side hooks for the body-drag steal arbitration.
                 try
                 {
                     BindFikaSyncHooks();
@@ -363,9 +349,8 @@ namespace TarkovVR
         }
 
         // Another mod's VR support: found through BepInEx's registry by its plugin ID, wherever its DLL sits (each is a soft dependency
-        // above, so it's loaded and registered before us). Was: its DLL loaded from one fixed path and a type looked up by name - a mod in
-        // another folder went unseen, and the EFT API check named a namespace KmyTarkovConfiguration had since renamed, so those patches
-        // never applied. Patches that fail (another version of the mod) are logged and the rest of our start carries on. True = installed.
+        // above, so it's loaded and registered before us). Patches that fail (another version of the mod) are logged and the rest of
+        // our start carries on. True = installed.
         private bool ApplyModSupport(string pluginId, string modName, string patchNamespace)
         {
             if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue(pluginId, out PluginInfo modInfo))
@@ -385,27 +370,23 @@ namespace TarkovVR
             return true;
         }
 
-        // Bind the body-drag steal-arbitration hooks into the FikaSync companion module. Isolated into
-        // its own NoInlining method (only called from the FIKA-detected branch above) so the
-        // SptVrFikaSync (SPT-VR-FikaSync.dll) references it contains are only JITted when FIKA is
-        // actually present. Inlined into Awake, they'd bind the companion assembly at Awake's JIT and
-        // throw at startup when the companion DLL isn't installed (the solo / no-FIKA deployment). Same
-        // isolation pattern as HandsInteractionController.BodyGrab; see memory fika-softdep-no-typed-fields.
+        // Binds the body-drag steal-arbitration hooks into the FikaSync companion module. Its own NoInlining method, only called when
+        // FIKA is detected: inlined into Awake, the SptVrFikaSync (SPT-VR-FikaSync.dll) references would bind that assembly at Awake's
+        // JIT and throw at startup when the companion DLL isn't installed (solo, no FIKA).
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void BindFikaSyncHooks()
         {
             SptVrFikaSync.FikaVrSync.getLocalDraggedCorpseNetId = () => Source.Player.Interactions.HandsInteractionController.localDraggedCorpseNetId;
             SptVrFikaSync.FikaVrSync.getLocalBodyGrabTime = () => Source.Player.Interactions.HandsInteractionController.bodyGrabTime;
             SptVrFikaSync.FikaVrSync.onYieldBodyDrag = () => VRGlobals.handsInteractionController?.RelinquishBodyDrag();
-            // Corpse loot-AI sync for co-op is handled inside the companion (it runs on the headless/host
-            // where ORBIT lives; SPT-VR.dll does not). The VR mod just SENDS the grab/settle markers via
-            // FikaVrSync.SendCorpseLoot* from HandsInteractionController — no callback needed here.
+            // Corpse loot-AI sync runs inside the companion (on the headless/host, where ORBIT lives; SPT-VR.dll does not). The VR mod
+            // only sends the grab/settle markers via FikaVrSync.SendCorpseLoot* from HandsInteractionController: no callback needed here.
         }
 
         private void ApplyPatches(string @namespace)
         {
             if (!vrInitializedSuccessfully)
-                return; // Skip patching if VR failed to initialize
+                return;
 
             var harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
             var assembly = Assembly.GetExecutingAssembly();

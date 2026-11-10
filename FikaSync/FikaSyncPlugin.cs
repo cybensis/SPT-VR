@@ -4,19 +4,17 @@ using HarmonyLib;
 
 namespace SptVrFikaSync
 {
-    // 2.1.0: the manual reload sync adds packet types (VRReloadPacket / VRReloadSoundPacket). Every peer needs this version or newer:
-    // a peer whose module doesn't register them throws on them inside FIKA's packet loop (the "busy hands" drop).
-    // 2.1.1: malfunctions cleared by hand finish on the VR player's copy (ReloadSyncApply.SkipMalfunctionOperation). No new packets;
-    // a 2.1.0 peer's copy of them just stays jammed.
-    // 2.1.2: a tube shotgun's shells loaded by hand are accepted on the VR player's copy (BoltRoundSync). No new packets; on a host
-    // with an older module the shells stay in the VR player's pouch.
-    // 2.1.3: a VR player's by-hand magazine moves skip Tarkov's animation on their copy with Manual Reload off too (ReloadSyncApply.
-    // SkipTarkovReload). No new packets; an older host plays the clip, and FIKA holds that player's trigger until it ends.
+    // Version compatibility between peers:
+    // 2.1.0 adds packet types (VRReloadPacket / VRReloadSoundPacket): every peer needs 2.1.0 or newer, or FIKA's packet loop throws
+    // on them (the "busy hands" drop).
+    // 2.1.1 (ReloadSyncApply.SkipMalfunctionOperation): on an older peer a malfunction cleared by hand stays jammed on the VR player's copy.
+    // 2.1.2 (BoltRoundSync): on an older host, tube-shotgun shells loaded by hand stay in the VR player's pouch.
+    // 2.1.3 (ReloadSyncApply.SkipTarkovReload): an older host plays Tarkov's reload clip for by-hand magazine moves with Manual Reload
+    // off, and FIKA holds that player's trigger until it ends.
     [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.1.3")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
-    // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module. When present we relocate a
-    // dragged corpse's loot waypoint here (the VR mod can't — it doesn't run on a headless). Soft so this
-    // module still loads on a peer without ORBIT; the dep just guarantees ORBIT is in the registry below.
+    // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module; when present, a dragged corpse's loot waypoint is
+    // relocated here (SPT-VR.dll doesn't run on a headless). The dep only guarantees ORBIT is in the registry checked below.
     [BepInDependency("com.chazut.orbit", BepInDependency.DependencyFlags.SoftDependency)]
     public class FikaSyncPlugin : BaseUnityPlugin
     {
@@ -25,19 +23,16 @@ namespace SptVrFikaSync
         private void Awake()
         {
             Log = Logger;
-            // Detect ORBIT via the BepInEx registry (string literal → never binds an ORBIT type on a
-            // no-ORBIT peer). Gates OrbitSync's ORBIT-typed corpse-relocation.
+            // ORBIT detected via the BepInEx registry (a string, so no ORBIT type is bound on a peer without it)
             OrbitSync.Available = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("com.chazut.orbit");
-            // Patches ArmSyncApply (the ObservedPlayer.LateUpdate postfix). Body-drag apply is driven
-            // from the packet handlers, not a patch.
+            // Patches ArmSyncApply (the ObservedPlayer.LateUpdate postfix). Body-drag apply is driven from the packet handlers.
             new Harmony("com.matsix.sptvr.fikasync").PatchAll();
             FikaVrSync.Init();
             Log.LogInfo($"SPT-VR FIKA Sync loaded. ORBIT corpse-loot sync: {(OrbitSync.Available ? "ON" : "off (ORBIT not present)")}");
         }
 
-        // Pump the body-drag receiver on every peer (incl. flatscreen/headless). FixedUpdate (physics
-        // step) settles let-go bodies (keep active until landed + rest, then freeze); LateUpdate (per
-        // frame) eases the synced ragdoll pose toward the latest packet so it renders smoothly.
+        // Body-drag receiver, on every peer (incl. flatscreen/headless). FixedUpdate settles let-go bodies (active until landed
+        // and at rest, then frozen); LateUpdate eases the synced ragdoll pose toward the latest packet.
         private bool _bodyTickErr;
         private void FixedUpdate()
         {

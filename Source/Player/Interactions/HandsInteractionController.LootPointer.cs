@@ -11,70 +11,50 @@ using TarkovVR.Source.Weapons;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Palm-cone loose-loot pointer + telekinetic summon.
-    //
-    // Replaces the old "look at item -> gaze 'Take' menu" loot flow with a physical,
-    // native-VR one:
-    //   1. A short cone projects out of the (secondary) palm. Every loose item inside it
-    //      gets a small white dot at its center.
-    //   2. A thin capsule/sphere probe straight out of the palm center picks the "main"
-    //      item (most-centered / probe-hit). Its dot grows smoothly; the others shrink.
-    //   3. Grip = summon the main item to the palm. It flies in and stops with its collider
-    //      surface resting on the palm (the same surface-snap is used for point-blank grabs,
-    //      so a close grab forces the item to the outer part of its collider instead of
-    //      grabbing it wherever the hand is buried). Collide-and-slide keeps it out of walls.
-    //   4. Once it's in hand, looking at it shows the native name + "Take" menu (handled in
-    //      UIPatches.Raycaster, gated by suppressWorldLootMenu).
-    //
-    // Everything is exposed as live-tunable statics so it can be A/B'd in the headset.
+    // Palm-cone loose-loot pointer + summon. A short cone out of the palm puts a white dot on every loose item inside it;
+    // a thin probe down the cone axis picks the "main" item (its dot grows). Grip pulls the main item to the palm, where
+    // its collider surface rests on the palm (collide-and-slide keeps it out of walls). Looking at the held item shows
+    // the native name + "Take" menu (UIPatches.Raycaster, gated by suppressWorldLootMenu).
     internal partial class HandsInteractionController
     {
         //--- Tunables ----------------------------------------------------------------
 
-        // When true (req #1) loose items in the WORLD no longer pop the gaze "Take" menu —
-        // the dots replace it, and the menu only returns for the item that's in your hand
-        // (req #5). Read by UIPatches.Raycaster. false reverts to the old gaze-Take.
+        // true: loose items in the world don't pop the gaze "Take" menu, only the item in your hand does.
+        // Read by UIPatches.Raycaster. false = gaze "Take" on world items.
         public static bool suppressWorldLootMenu = true;
 
-        // Cone reach (~0.6 m ≈ 2 ft) and half-angle. pointBlankRange items count regardless
-        // of angle (the hand is basically on/in them).
+        // Cone reach (m) and half-angle (deg). Items within pointBlankRange count at any angle.
         public static float coneRange = 0.6f;
         public static float coneHalfAngle = 35f;
         public static float pointBlankRange = 0.13f;
 
-        // The thin center probe that selects the main item (swept-sphere = a small capsule).
+        // Radius of the swept-sphere center probe that selects the main item.
         public static float capsuleRadius = 0.05f;
 
-        // The cone aim transform's local pose under the hand. Only its ORIENTATION matters now
-        // (the origin comes from the palm bone below); coneAimLocalEuler sets the aim direction.
+        // The cone aim transform's local pose under the hand. Only its orientation matters (coneAimLocalEuler = the aim
+        // direction); the origin comes from the palm, below.
         public static Vector3 coneAimLocalPos = new Vector3(0f, 0f, 0f);
         public static Vector3 coneAimLocalEuler = new Vector3(75f, 266f, 0f);
 
-        // The cone ORIGIN. The hand's rig transform is the WRIST (~17 cm back from the
-        // controller — the palmCollisionPoints lesson), so the cone used to start at the wrist.
-        // Instead originate from the actual palm BONE (InitVRPatches.leftPalm = "Base HumanLPalm");
-        // this offset (in the palm bone's local frame) nudges it toward the fingers/grip.
+        // Nudge of the cone origin, in the palm bone's local frame (InitVRPatches.leftPalm = "Base HumanLPalm"). The origin
+        // is taken from the palm because the hand's rig transform is the wrist (~17 cm back from the controller).
         public static Vector3 conePalmLocalOffset = Vector3.zero;
 
         // Dot sizes (world diameters) and how fast they ease toward their target size.
         public static float dotMinSize = 0.012f;
         public static float dotMaxSize = 0.030f;
         public static float dotGrowSpeed = 14f;
-        // 0 = dot exactly at item center (can be buried in big items); 1 = on the near
-        // surface facing the palm (always visible). Default biases toward visible.
+        // 0 = dot at the item center (can be buried in big items); 1 = on the near surface facing the palm.
         public static float dotSurfaceBias = 0.7f;
-        // Extra push OUTWARD off the box surface (m), along the item-center->surface normal,
-        // so the dot floats just clear of the collider instead of sinking into the mesh on
-        // some shapes (the box surface can sit inside a concave item).
+        // Extra push outward off the box surface (m), along item-center -> surface, so the dot floats clear of the mesh
+        // (the box surface can sit inside a concave item).
         public static float dotSurfaceOffset = 0.03f;
 
-        // Weights the "main" pick: lower angle (more centered) wins; distance is a soft
-        // tie-break (degrees-equivalent per meter).
+        // "Main" pick: the smallest angle wins; distance is a soft tie-break (degrees-equivalent per meter).
         public static float centerDistWeight = 25f;
 
-        // Summon timing: duration scales with pull distance (so a point-blank grab snaps
-        // almost instantly while a 2 ft pull eases in) and the rest depth sinks the item
-        // this far past the palm-surface contact so it reads as gripped rather than floating.
+        // Summon duration scales with pull distance (clamped). summonRestDepth sinks the item this far (m) past the
+        // palm-surface contact so it reads as gripped.
         public static float summonSecPerMeter = 0.5f;
         public static float summonMinDuration = 0.04f;
         public static float summonMaxDuration = 0.35f;
@@ -82,26 +62,22 @@ namespace TarkovVR.Source.Player.Interactions
 
         public static float handPoseWeight = 1f;
 
-        // Per-finger flex DELTA in finger order (index 0 = thumb, then index/middle/ring/pinky).
-        // The hand eases from fingerFlexDeg (idle / free hand) to fingerReadyFlexDeg (a loot dot
-        // is in view). 0 = that finger sits at the baked pose; negative opens it, positive curls
-        // it in. flexSign flips the direction globally; midJointScale tapers the delta per joint.
+        // Per-finger flex delta (deg) on the baked pose, index 0 = thumb, then index/middle/ring/pinky. Eases from
+        // fingerFlexDeg (idle) to fingerReadyFlexDeg (a loot dot in view). 0 = the baked pose; negative opens, positive curls.
+        // flexSign flips the direction; midJointScale tapers the delta per joint.
         public static float[] fingerFlexDeg = new float[] { 5f, -15f, -20f, -27f, -27f };
         public static float[] fingerReadyFlexDeg = new float[] { 0f, -25f, -25f, -25f, -25f };
         public static float flexSign = 1f;
         public static float midJointScale = 0.6f;
         public static float handOpenLerp = 10f;
 
-        // Lateral finger SPREAD (abduction) so the flattened hand fans out instead of looking
-        // like a paddle. Degrees between adjacent fingers, applied at the knuckle around
-        // spreadAxis (local). Negate the degrees (or flip spreadAxis) if the fingers cross
-        // instead of fanning; change spreadAxis if they splay forward/back instead of sideways.
-        public static float fingerSpreadDeg = -5f; // DELTA on the baked pose (negative = fan OUT)
+        // Lateral finger spread: degrees between adjacent fingers, applied at the knuckle around spreadAxis (local).
+        public static float fingerSpreadDeg = -5f; // delta on the baked pose (negative = fan out)
         public static Vector3 spreadAxis = new Vector3(0f, 1f, 0f);
 
         public static bool captureRestPose = false;
-        // Baked from EFT's natural NO-WEAPON hand animation (the empty rested hand). This is the
-        // BASE pose; flex/spread layer on top as deltas (see ReplayRestPose). finger0 = thumb.
+        // The base pose, baked from EFT's no-weapon hand animation. Flex/spread layer on top as deltas (ReplayRestPose).
+        // finger0 = thumb.
         public static Vector3[] restPoseEuler = new Vector3[]
         {
             new Vector3(57.54f, 83.71f, 65.10f),   // finger0 (thumb) joint0
@@ -121,27 +97,22 @@ namespace TarkovVR.Source.Player.Interactions
             new Vector3(359.34f, 359.70f, 48.33f), // finger4 joint2
         };
 
-        // Live per-joint editor for authoring/refining the baked pose with real-time feedback
-        // (needs useRestPose=true + a seeded restPoseEuler). poseEditJoint = the flat joint index
-        // to edit (-1 = off; indices match the CaptureRestPose log labels). CHANGING it loads
-        // that joint's current Euler into poseEditEuler; then your edits to poseEditEuler write
-        // back live so you watch the joint move. logRestPose=true prints the full current
-        // restPoseEuler array to paste into the file once you're happy.
+        // Live per-joint editor for the baked pose. poseEditJoint = the flat joint index (-1 = off; indices match the
+        // CaptureRestPose log labels): changing it loads that joint's Euler into poseEditEuler, edits to poseEditEuler
+        // write back live. logRestPose = true prints restPoseEuler as a paste-ready array.
         public static int poseEditJoint = -1;
         public static Vector3 poseEditEuler = Vector3.zero;
         public static bool logRestPose = false;
 
-        // Loot pointing is blocked while the off-hand is within this distance of the foregrip
-        // (the two-hand support trigger ~0.1-0.175 m), so you don't grab loot reaching for it.
+        // Loot pointing is blocked while the off hand is within this distance (m) of the foregrip
+        // (the two-hand support trigger is ~0.1-0.175 m).
         public static float foregripBlockDistance = 0.2f;
 
-        // FIKA co-op: how often (seconds) we broadcast a held item's position to other players.
-        // ~0.04 = 25/s (FIKA's own item sync uses FixedUpdate ~50/s; 20-30/s is plenty).
+        // FIKA co-op: seconds between broadcasts of a held item's position (0.04 = 25/s; FIKA's own item sync runs ~50/s).
         public static float lootSyncInterval = 0.04f;
 
-        // The cone aim euler for the DOMINANT hand (the rig transforms' local frames differ between
-        // hands, so the left's tuned euler can't be reused) - tune with debugLootPointer +
-        // debugVizDominantHand=true.
+        // The cone aim euler for the dominant hand (the hands' rig transforms have different local frames).
+        // Tune with debugLootPointer + debugVizDominantHand.
         public static Vector3 coneAimLocalEulerRight = new Vector3(75f, 94f, 0f);
 
         //--- Runtime state -----------------------------------------------------------
@@ -149,20 +120,18 @@ namespace TarkovVR.Source.Player.Interactions
         private readonly LootItem[] lastMains = new LootItem[2];
         private bool heldInDominantHand;                            // which grip drops the held item
         public static bool debugVizDominantHand = false;            // cone gizmo shows the right hand instead of the left
-        // 0 = AUTO: use EFT's own interaction raycast mask (EFT.GameWorld.int_0) — the exact
-        // mask the head-gaze raycast in UIPatches.Raycaster uses to hit loose loot/containers/
-        // doors. We then filter to the LootItem component, so only loose loot becomes a
-        // candidate. Set non-zero to override. (First cut hard-coded layer 3 and found nothing.)
+        // 0 = auto: EFT's own interaction raycast mask (the one the head-gaze raycast in UIPatches.Raycaster uses), then
+        // filtered to LootItem. Non-zero overrides. Layer 3 alone finds nothing.
         public static int lootLayerMask = 0;
         private int currentLootMask;
-        // Flip on in UnityExplorer to log overlap/candidate counts once a second.
+        // Logs overlap/candidate counts once a second.
         public static bool debugLootPointer = false;
         private float lastPointerLog;
         private int lastOverlapCount;
 
         private bool isSummoningLoot;
-        // Time.time of the most recent grab — read by FIKASupport's steal arbitration so the
-        // newest grabber wins a contested item (a player who grabbed >stealGraceTime ago yields).
+        // Time.time of the most recent grab. FIKASupport's steal arbitration reads it: the newest grabber wins a contested
+        // item (a grab older than stealGraceTime yields).
         public float heldItemGrabTime;
         private float summonT;
         private float currentSummonDuration;
@@ -208,12 +177,11 @@ namespace TarkovVR.Source.Player.Interactions
         private GameObject coneOriginViz, coneDirViz, coneEndViz;
 
         //--- Per-frame entry ---------------------------------------------------------
-        // Runs the pointer for BOTH hands: the off hand as always, and the DOMINANT hand whenever
-        // it's off the gun (empty hands / gun slung or support-held). Dots are swept once, each hand
-        // contributes, then one finalize pass renders them.
+        // Runs the pointer for both hands (the dominant hand only while it's off the gun: empty hands / gun slung or
+        // support-held). Dots are swept once, each hand contributes, then one finalize pass renders them.
         private void UpdateLootPointer()
         {
-            lootDotPresent = false; // set true below once we actually have candidates
+            lootDotPresent = false; // set true below once there are candidates
 
             // A body grab owns the off-hand grip — don't also point at / summon loose loot.
             if (isDraggingBody || bodyInteractionArmed)
@@ -222,19 +190,16 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            // The gaze "Take" can consume it into the
-            // inventory — the item_0 nulls (and the GameObject is destroyed shortly after).
-            // Reset our refs so the weight/interaction state clears and pointing resumes.
+            // The gaze "Take" can consume the held item into the inventory: item_0 nulls and the GameObject is destroyed
+            // shortly after. Reset our refs so the weight/interaction state clears and pointing resumes.
             if (!ReferenceEquals(heldItem, null) && !HeldItemAlive())
                 CleanupAfterHeldItemGone();
 
             bool usingOrEating = VRGlobals.usingItem || EatingInteractionController.ManualActive;
 
-            // (Req 1) A use/eat started while we still physically hold a loot item — get our
-            // hold out of the way. Default (deferUseLootRelease): just HIDE the item for the
-            // duration and decide its fate when the use ENDS (stowing it into a backpack mid-eat
-            // moves the item's address out from under the in-place use and STOPS the eat). The old
-            // path stowed/dropped it immediately.
+            // A use/eat started while a loot item is still held. deferUseLootRelease: hide the item and decide its fate when
+            // the use ends (stowing it mid-eat moves the item's address under the in-place use and stops the eat).
+            // Otherwise it is stowed/dropped right away.
             if (usingOrEating && HeldItemAlive())
             {
                 if (deferUseLootRelease) BeginDeferredUseRelease();
@@ -257,10 +222,9 @@ namespace TarkovVR.Source.Player.Interactions
             FinalizeDots();
         }
 
-        // The dominant hand is "free" for world interactions (loot pointing, doors, containers,
-        // corpse taps) when it's OFF the gun (empty hands / gun slung or support-held), not holding
-        // a grenade, not inside the holster zones (their grip gestures own the hand there), and not
-        // reaching for the slung gun's regrab.
+        // The dominant hand is free for world interactions (loot pointing, doors, containers, corpse taps) when it's off the
+        // gun (empty hands / gun slung or support-held), not holding a grenade, outside the holster zones (their grip
+        // gestures own the hand there) and not reaching for the slung gun's regrab.
         private bool DominantHandFree()
         {
             bool handFree = ChestHang.Detached || (VRGlobals.player != null && VRGlobals.player.HandsIsEmpty);
@@ -272,8 +236,7 @@ namespace TarkovVR.Source.Player.Interactions
                 && !BodyWeapons.HandAtBodyGun && !BodyWeapons.Switching && !BodyWeapons.GrabbedThisPress;
         }
 
-        // One hand's full pointer pass: eligibility -> cone -> candidates -> main -> dots/haptic ->
-        // grip = summon (to THAT hand).
+        // One hand's full pointer pass: eligibility -> cone -> candidates -> main -> dots/haptic -> grip = summon (to that hand).
         private void PointWithHand(bool dominant)
         {
             if (VRGlobals.vrPlayer == null)
@@ -285,15 +248,14 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (dominant)
             {
-                // The dominant hand points only when it's genuinely free (see DominantHandFree),
-                // and not while a corpse tap owns its grip.
+                // Only when the hand is free (DominantHandFree) and no corpse tap owns its grip.
                 if (!DominantHandFree() || rightCorpseTapArmed)
                     return;
             }
             else
             {
-                // Off hand: not while it's near the foregrip trigger (Req 4), or holding / reaching for a magazine. Nor with the gun in
-                // the left hand: the off hand is the RIGHT one then, and this pointer is built on the left palm (the hand on the gun).
+                // Off hand: not near the foregrip trigger, nor holding / reaching for a magazine. Nor with the gun in the left
+                // hand: the off hand is the right one then, and this pointer is built on the left palm (the hand on the gun).
                 // Nor at the gun hand's grip: a grip press there takes the gun into this hand (ChestHang)
                 if (NearForegrip() || VRReloadController.OwnsOffHand || Handedness.GunInLeftHand || ChestHang.OffHandAtGunGrip)
                     return;
@@ -302,8 +264,7 @@ namespace TarkovVR.Source.Player.Interactions
             EnsureConeAim(dominant, hand);
             InteractionState nearState = dominant ? rightHandState : leftHandState;
 
-            // Origin from the actual hand grip (the rig transform is the WRIST). Direction still
-            // from the tunable coneAim (child of the hand) so the aim-euler tuning holds.
+            // Origin from the palm (the rig transform is the wrist); direction from the tunable coneAim child of the hand.
             Vector3 palm = PalmOrigin(dominant);
             Vector3 aim = coneAims[dominant ? 1 : 0].forward;
 
@@ -311,7 +272,7 @@ namespace TarkovVR.Source.Player.Interactions
             LootItem main = PickMain(palm, aim, nearState);
             ContributeDots(main);
             if ((dominant && debugVizDominantHand) || (!dominant && !debugVizDominantHand))
-                UpdateConeViz(palm, aim); // in-headset gizmo for tuning the aim direction
+                UpdateConeViz(palm, aim); // gizmo for tuning the aim direction
             lootDotPresent |= lootCandidates.Count > 0; // drives the "ready to grab" hand pose
 
             if (debugLootPointer && Time.time - lastPointerLog > 1f)
@@ -320,14 +281,14 @@ namespace TarkovVR.Source.Player.Interactions
                 Plugin.MyLog.LogInfo($"[LootPointer] hand={(dominant ? "dom" : "off")} mask=0x{currentLootMask:X} overlap={lastOverlapCount} candidates={lootCandidates.Count} main={(main != null ? main.name : "null")}");
             }
 
-            // Light pulse when the highlighted item changes, like entering an interact zone.
+            // Light pulse when the highlighted item changes.
             int slot = dominant ? 1 : 0;
             SteamVR_Input_Sources source = dominant ? primaryInputSource : secondaryInputSource;
             if (main != null && main != lastMains[slot])
                 VRInput.Haptic.Execute(0, 0.04f, 1, 0.25f, source);
             lastMains[slot] = main;
 
-            // Grip (of THIS hand) = summon. Guarded on heldItem == null so it never double-grabs.
+            // This hand's grip = summon. Guarded on heldItem == null so it never double-grabs.
             VRBoolean grip = dominant ? primaryHandGrip : secondaryHandGrip;
             if (grip.stateDown && debugLootPointer)
                 Plugin.MyLog.LogInfo($"[LootPointer] GRIP hand={(dominant ? "dom" : "off")} main={(main != null ? main.name : "null")} candidates={lootCandidates.Count} near={(nearState.lootItem != null ? nearState.lootItem.name : "null")} held={(heldItem != null ? heldItem.name : "null")}");
@@ -356,13 +317,11 @@ namespace TarkovVR.Source.Player.Interactions
                 float dist = toItem.magnitude;
                 float ang = dist > 1e-4f ? Vector3.Angle(aim, toItem) : 0f;
 
-                // The hand is physically INSIDE this item's collider — a point-blank physical grab,
-                // valid at any angle/distance (a large item's CENTRE can be outside the cone while
-                // your hand is buried in it — that was the "in the collider but no dot" gap).
+                // The hand is inside this item's collider: valid at any angle/distance (a large item's centre can be outside
+                // the cone while the hand is buried in it).
                 bool inside = li._boundCollider != null && IsInsideBox(li._boundCollider, palm);
 
-                // Otherwise: point-blank (centre within reach) at any angle, or the centre must be
-                // inside the cone.
+                // Otherwise: centre within pointBlankRange at any angle, or inside the cone.
                 if (!inside && dist > pointBlankRange && ang > coneHalfAngle)
                 {
                     lootCandidateSet.Remove(li);
@@ -380,9 +339,8 @@ namespace TarkovVR.Source.Player.Interactions
                 });
             }
 
-            // Belt-and-suspenders: the proven 20 Hz reach-in detector (UpdateCollisionStates)
-            // already resolves the point-blank loot item for this hand, so always include it —
-            // a close grab then works regardless of the cone/mask specifics.
+            // The 20 Hz reach-in detector (UpdateCollisionStates) already resolves this hand's point-blank loot item: always
+            // include it, so a close grab works whatever the cone/mask.
             LootItem near = nearState != null ? nearState.lootItem : null;
             if (near != null && near.Item != null && lootCandidateSet.Add(near))
             {
@@ -401,16 +359,13 @@ namespace TarkovVR.Source.Player.Interactions
 
         private LootItem PickMain(Vector3 palm, Vector3 aim, InteractionState nearState)
         {
-            // PHYSICAL GRAB has priority over the cone: if the hand is physically ON an item,
-            // grab THAT one — never let the cone's capsule probe pull a different (possibly far)
-            // item across a cluster. 1) the proven reach-in detector (hand within 0.125 m);
-            // 2) else the closest candidate inside pointBlankRange.
+            // A physical grab beats the cone: the item the hand is on wins over whatever the probe hits further out.
+            // First the reach-in detector's item (hand within 0.125 m).
             LootItem near = nearState != null ? nearState.lootItem : null;
             if (near != null && near.Item != null && lootCandidateSet.Contains(near))
                 return near;
 
-            // The item the palm is INSIDE wins (closest centre if several); else the closest
-            // candidate within pointBlankRange.
+            // Then the item the palm is inside (closest centre if several), else the closest candidate within pointBlankRange.
             LootItem insideClosest = null;
             float bestInside = float.MaxValue;
             LootItem closestPointBlank = null;
@@ -434,7 +389,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (closestPointBlank != null)
                 return closestPointBlank;
 
-            // CONE (aiming from a distance): the thin center probe wins if it lands on a candidate.
+            // Cone (aiming from a distance): the center probe wins if it lands on a candidate.
             if (Physics.SphereCast(palm, capsuleRadius, aim, out RaycastHit hit, coneRange, currentLootMask, QueryTriggerInteraction.Collide))
             {
                 LootItem probed = ResolveLootItem(hit.collider);
@@ -465,8 +420,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!lootColliderCache.TryGetValue(col, out LootItem li))
             {
                 li = col.GetComponentInParent<LootItem>();
-                // A Corpse IS a LootItem; bodies are grabbed physically (BodyGrab), never via the
-                // loot pointer — keep them out so no white dot ever appears on a body.
+                // A Corpse is a LootItem. Bodies are grabbed through BodyGrab, never the loot pointer: no dot on a body.
                 if (li is Corpse) li = null;
                 lootColliderCache[col] = li; // may cache null (collider with no LootItem) on purpose
             }
@@ -474,8 +428,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Dots --------------------------------------------------------------------
-        // Split into sweep -> per-hand contribute -> finalize so BOTH hands' pointer passes can
-        // feed one shared dot set (an item pointed by both hands keeps the larger size).
+        // Sweep -> per-hand contribute -> finalize: both hands feed one shared dot set (an item pointed by both keeps the
+        // larger size).
         private void SweepDots()
         {
             foreach (KeyValuePair<LootItem, DotState> entry in lootDots)
@@ -546,9 +500,8 @@ namespace TarkovVR.Source.Player.Interactions
             go.name = "VRLootGizmo";
             Destroy(go.GetComponent<Collider>());
 
-            // Internal-Colored multiplies vertex color by _Color, so paint the mesh white (the
-            // primitive meshes have no color channel) or the marker renders black. mf.mesh
-            // returns a unique instance, so this doesn't touch the shared primitive mesh.
+            // Internal-Colored multiplies vertex color by _Color and primitive meshes have no color channel: paint the
+            // vertices white or the marker renders black. .mesh is a unique instance, the shared primitive mesh is untouched.
             MeshFilter meshFilter = go.GetComponent<MeshFilter>();
             if (meshFilter != null && meshFilter.mesh != null)
             {
@@ -567,9 +520,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static Material MakeMarkerMaterial(Color color)
         {
-            // "Hidden/Internal-Colored" is an engine built-in that actually honors _ZTest
-            // (Sprites/Default silently ignores it), so ZTest Always = render ON TOP of all
-            // geometry — the dot can never be hidden behind something.
+            // "Hidden/Internal-Colored" honors _ZTest (Sprites/Default silently ignores it): ZTest Always draws the marker on
+            // top of all geometry.
             Shader sh = Shader.Find("Hidden/Internal-Colored");
             if (sh != null)
             {
@@ -587,9 +539,8 @@ namespace TarkovVR.Source.Player.Interactions
             return new Material(s2) { color = color };
         }
 
-        // True while the off-hand is within foregripBlockDistance of the foregrip trigger, so
-        // loot pointing is suppressed there (Req 4). activeInHierarchy guards a stale ref left
-        // over after the weapon was put away.
+        // True while the off hand is within foregripBlockDistance of the foregrip trigger (loot pointing is suppressed
+        // there). activeInHierarchy guards a stale ref left over after the weapon was put away.
         private bool NearForegrip()
         {
             Transform grip = VRPlayerManager.leftHandGunIK;
@@ -662,15 +613,11 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The cone/probe origin: the centroid of the FINGER-BASE joints (the knuckle line at the
-        // front of the palm — the actual grip point, well forward of the wrist), + a hand-frame
-        // nudge (conePalmLocalOffset). The palm BONE sits close to the wrist so it read as
-        // "coming from the wrist"; the knuckles are the real palm. Falls back to the palm bone,
-        // then the cone transform.
+        // The cone/probe origin: the centroid of the finger-base joints (the knuckle line, well forward of the wrist; the
+        // palm bone sits close to the wrist) + conePalmLocalOffset. Falls back to the palm bone, then the cone transform.
         internal Vector3 PalmOrigin(bool dominant)
         {
-            // Knuckle-line centroid of that hand's fingers (the actual grip point, well forward of
-            // the wrist), thumb skipped (it's off to the side and would pull the origin sideways).
+            // The thumb is skipped: it's off to the side and would pull the origin sideways.
             if (!fingersResolved) ResolveLeftFingers();
             if (!rightFingersResolved) ResolveRightFingers();
             Transform[][] fingers = dominant ? rightFingerJoints : leftFingerJoints;
@@ -721,8 +668,8 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Cone direction gizmo (debugLootPointer) ---------------------------------
-        // A cyan sphere at the palm origin + a ray down the cone axis + an orange end sphere
-        // at coneRange, so the aim can be SEEN and coneAimLocalEuler tuned live in the headset.
+        // A cyan sphere at the palm origin + a ray down the cone axis + an orange end sphere at coneRange, for tuning
+        // coneAimLocalEuler live.
         private void UpdateConeViz(Vector3 palm, Vector3 aim)
         {
             if (!debugLootPointer)
@@ -788,10 +735,8 @@ namespace TarkovVR.Source.Player.Interactions
             cachedHand = (dominant ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand).transform;
             Vector3 itemPos = item.transform.position;
 
-            // Rest pose: the item's collider surface nearest the palm should sit on the palm,
-            // then sink summonRestDepth further in so it reads as held. NearestBoxSurfacePoint
-            // also handles the hand being INSIDE the box (point-blank): it pushes the item out
-            // to its near face instead of leaving the palm buried at the center.
+            // Rest pose: the collider surface nearest the palm sits on the palm, sunk summonRestDepth further in.
+            // NearestBoxSurfacePoint also handles the hand inside the box: the item is pushed out to its near face.
             Vector3 surface = item._boundCollider != null ? NearestBoxSurfacePoint(item._boundCollider, palm) : itemPos;
             Vector3 moveDir = palm - surface;
             if (moveDir.sqrMagnitude < 1e-6f) moveDir = palm - itemPos;
@@ -848,16 +793,14 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (summonT >= 1f)
             {
-                // Hand off to the normal held-item maintenance: cachedGrabOffset is the rest
-                // pose relative to the hand, so UpdateHeldItemPosition holds it right there.
+                // Hand off to UpdateHeldItemPosition: cachedGrabOffset is the rest pose relative to the hand.
                 cachedGrabOffset = cachedHand.InverseTransformPoint(heldItem.transform.position);
                 isSummoningLoot = false;
             }
         }
 
-        // Resets the cached held-item plumbing after the in-hand item was consumed by the
-        // gaze "Take" (its GameObject is gone). Mirrors the tail of ForceDropHeldItem without
-        // touching the (already destroyed) transform/rigidbody.
+        // Resets the held-item state after the gaze "Take" consumed the in-hand item (its GameObject is gone). The tail of
+        // ForceDropHeldItem, without touching the destroyed transform/rigidbody.
         private void CleanupAfterHeldItemGone()
         {
             heldItem = null;
@@ -869,9 +812,8 @@ namespace TarkovVR.Source.Player.Interactions
             NotifyWeightChanged();
         }
 
-        // Where a dot sits: between the item center and its near box surface (dotSurfaceBias),
-        // then pushed outward off the surface (dotSurfaceOffset) so it floats clear of the
-        // mesh. outward = item-center -> surface (the local outward normal of the near face).
+        // Where a dot sits: between the item center and its near box surface (dotSurfaceBias), then pushed outward
+        // (item-center -> surface) by dotSurfaceOffset.
         private static Vector3 DotPos(Vector3 center, Vector3 surf, Vector3 palm)
         {
             Vector3 outward = surf - center;
@@ -881,19 +823,13 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         //--- Left-hand "ready to grab" pose ------------------------------------------
-        // FLATTENS the free off-hand (strips EFT's animated finger curl) and bends to an
-        // absolute flex, more open when a loot dot is in view. Runs in LateUpdate (after EFT
-        // animates the hand) and is accumulation-safe whether or not EFT re-stomps the bone.
+        // Poses the free off hand's fingers (EFT's animated curl replaced), more open when a loot dot is in view. Runs in
+        // LateUpdate (after EFT animates the hand); doesn't accumulate whether or not EFT re-wrote the bone (RecoverAnimated).
         private void UpdateLeftHandFingers()
         {
-            // When EFT plays a left-hand weapon animation (reload, examine, check ammo/chamber,
-            // malfunction fix) it raises the "ReloadFloat" animator param to 1. VRPlayerManager
-            // already releases leftArmIk on that signal so the ARM follows the animation — but our
-            // baked finger pose runs in LateUpdate independently and would otherwise keep the
-            // fingers welded to the open "ready" pose for the whole reload (the supporting/foregrip
-            // case works only because isSupporting already makes us yield). Yield the fingers too:
-            // free -> false eases handWeightBlend to 0 (handOpenLerp) and stops touching the bones,
-            // handing the fingers back to the animation. Re-arms automatically when the float drops.
+            // EFT raises the "ReloadFloat" animator param to 1 while a left-hand weapon animation plays (reload, examine,
+            // check ammo/chamber, malfunction fix). VRPlayerManager releases leftArmIk on it; the fingers yield too
+            // (free = false eases handWeightBlend to 0 and stops touching the bones).
             // VRGunController keeps the left hand on the controller during those animations, so the fingers stay ours too
             bool leftHandAnimating = !VRGunController.KeepLeftHandOnController()
                 && VRGlobals.player != null && VRGlobals.player.BodyAnimatorCommon != null
@@ -928,7 +864,7 @@ namespace TarkovVR.Source.Player.Interactions
                 LogRestPose();
             }
 
-            // SURE WAY: replay a baked rest pose instead of the procedural flatten/flex/spread.
+            // Replay the baked rest pose instead of the procedural flatten/flex/spread.
             if (restPoseEuler != null && restPoseEuler.Length > 0)
             {
                 EditRestPoseLive();
@@ -937,11 +873,9 @@ namespace TarkovVR.Source.Player.Interactions
                 Vector3[] basePose = mirrored ? mirroredPose : restPoseEuler;
                 if (handWeightBlend >= 0.01f)
                 {
-                    // Index controllers curl the real off-hand fingers from the baked pose (with the
-                    // left's flex/spread deltas layered, matching ReplayRestPose's look); everything
-                    // else replays the static baked open pose. While HOLDING a loot item in this hand,
-                    // skeletal is suppressed (the grip squeeze would clench the fist through the item)
-                    // - the baked rest pose shows instead, like before finger tracking.
+                    // Index controllers curl the fingers from the baked pose (with the left's flex/spread deltas, as in
+                    // ReplayRestPose); everything else replays the baked pose. Holding a loot item in this hand suppresses
+                    // the skeletal curls: the grip squeeze would clench the fist through the item.
                     bool holdingInThisHand = HoldsLoot(false);
                     if (holdingInThisHand
                         || !(SkeletalActive(false) && ApplySkeletalCurls(false, leftFingerJoints, leftFingerIsThumb, basePose, leftCurlSign, handWeightBlend, leftDeltas: !mirrored)))
@@ -960,14 +894,12 @@ namespace TarkovVR.Source.Player.Interactions
                 Transform[] joints = leftFingerJoints[fingerIndex];
                 float fingerSpread = (leftFingerSpread != null && fingerIndex < leftFingerSpread.Length)
                     ? leftFingerSpread[fingerIndex] * fingerSpreadDeg : 0f;
-                // The thumb is flattened like the fingers but gets its OWN flex (it over-curls
-                // toward the palm with the fingers' value).
+                // The thumb is flattened like the fingers but has its own flex value (it over-curls with the fingers').
                 float flexBase = PerFingerFlex(fingerIndex);
-                for (int j = 0; j < joints.Length && j < 3; j++) // base, middle AND tip
+                for (int j = 0; j < joints.Length && j < 3; j++) // base, middle and tip
                 {
                     if (joints[j] == null) continue;
-                    // Flex tapers down the finger; the FLATTEN (weight) is full on every joint
-                    // so the tip straightens too. Spread (abduction) is only at the knuckle.
+                    // Flex tapers down the finger; the flatten weight is full on every joint. Spread is only at the knuckle.
                     float flex = flexBase * Mathf.Pow(midJointScale, j) * flexSign;
                     float sp = (j == 0) ? fingerSpread : 0f;
                     ApplyFlatFlex(joints[j], flex, sp, handWeightBlend);
@@ -976,10 +908,9 @@ namespace TarkovVR.Source.Player.Interactions
             ApplyGrasp(false, leftFingerJoints, leftFingerIsThumb, leftCurlSign, handWeightBlend);
         }
 
-        // Recover the ANIMATED pose for a bone: if EFT re-animated it this frame, its current
-        // localRotation differs from our last output and IS the fresh pose; if it matches our
-        // last output, EFT left it alone, so reuse the pose we last derived from (so our
-        // override never accumulates frame to frame). Shared by the flatten and the rest-replay.
+        // The animated pose of a bone. If its localRotation differs from our last output, EFT re-animated it this frame and
+        // that is the pose; if it matches, EFT left it alone: reuse the pose we last derived from, so the override never
+        // accumulates frame to frame.
         private Quaternion RecoverAnimated(Transform t)
         {
             Quaternion cur = t.localRotation;
@@ -989,9 +920,8 @@ namespace TarkovVR.Source.Player.Interactions
             return cur;
         }
 
-        // Capture the CURRENT rendered left-finger local rotations into restPoseEuler (+ a
-        // paste-ready log) so a good pose can be frozen and replayed deterministically. Iterates
-        // in the exact order ReplayRestPose does, so the flat indices line up.
+        // Captures the rendered left-finger local rotations into restPoseEuler (+ a paste-ready log). Same iteration order
+        // as ReplayRestPose, so the flat indices line up.
         private void CaptureRestPose()
         {
             var list = new List<Vector3>();
@@ -1013,9 +943,8 @@ namespace TarkovVR.Source.Player.Interactions
             Plugin.MyLog.LogInfo(builder.ToString());
         }
 
-        // Live per-joint editing: changing poseEditJoint LOADS that joint's current Euler so you
-        // continue from where it is; otherwise your poseEditEuler edits write back into the baked
-        // array each frame so the joint moves in real time.
+        // Live per-joint editing: changing poseEditJoint loads that joint's Euler; otherwise poseEditEuler writes back into
+        // the baked array each frame.
         private void EditRestPoseLive()
         {
             if (poseEditJoint < 0 || restPoseEuler == null || poseEditJoint >= restPoseEuler.Length)
@@ -1049,8 +978,8 @@ namespace TarkovVR.Source.Player.Interactions
             Plugin.MyLog.LogInfo(builder.ToString());
         }
 
-        // Per-finger flex delta (finger index f; 0 = thumb), eased between the idle and
-        // "dot in view" arrays by flexProgress. Out-of-range fingers get 0.
+        // Per-finger flex delta (0 = thumb), eased between the idle and "dot in view" arrays by flexProgress.
+        // Out-of-range fingers get 0.
         private float IdleFlex(int fingerIndex)
         {
             return fingerFlexDeg != null && fingerIndex < fingerFlexDeg.Length ? fingerFlexDeg[fingerIndex] : 0f;
@@ -1063,13 +992,10 @@ namespace TarkovVR.Source.Player.Interactions
             return Mathf.Lerp(idle, ready, flexProgress);
         }
 
-        // Drive every left-finger joint to its baked local rotation, with the flex (curl/open)
-        // and spread (fan) knobs layered ON TOP as deltas, then Slerped from the live animation
-        // by handWeightBlend. The baked pose is the natural rested BASE; idle/readyFlexDeg and
-        // fingerSpreadDeg are small adjustments relative to it (0 = baked pose exactly). Same
-        // iteration order as CaptureRestPose for index parity.
+        // Drives every left-finger joint to its baked local rotation with the flex and spread deltas on top (0 = the baked
+        // pose exactly), Slerped from the live animation by handWeightBlend. Same iteration order as CaptureRestPose.
         // basePose: the left bake, or the right's open pose mirrored. staticDeltas: the idle flex + spread tuned for the left bake
-        // (off on the mirrored pose: it IS the look); the loot-dot "ready" curl (its move from idle) shows either way.
+        // (off on the mirrored pose: it is the look); the loot-dot "ready" curl (its move from idle) shows either way.
         private void ReplayRestPose(Vector3[] basePose, bool staticDeltas)
         {
             int index = 0;
@@ -1096,16 +1022,13 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // Replace the animated finger curl with an absolute flex (+ a lateral spread), blended
-        // by weight.
+        // Replaces the animated finger curl with an absolute flex (+ a lateral spread), blended by weight.
         private void ApplyFlatFlex(Transform t, float flexDeg, float spreadDeg, float weight)
         {
             Quaternion animated = RecoverAnimated(t);
 
-            // Swing-twist split around local Z (the finger flex axis): drop the animated curl
-            // (twist) and replace it with our flat target flex, keeping the swing (natural splay)
-            // so the hand stays oriented correctly while the curl is flattened out. Then fan the
-            // finger sideways (abduction) around spreadAxis.
+            // Swing-twist split around local Z (the finger flex axis): the animated curl (twist) is replaced by the target
+            // flex, the swing (natural splay) is kept. Then the finger fans sideways around spreadAxis.
             Quaternion twist = TwistAround(animated, Vector3.forward);
             Quaternion swing = animated * Quaternion.Inverse(twist);
             Quaternion flatPose = swing
@@ -1174,8 +1097,8 @@ namespace TarkovVR.Source.Player.Interactions
                 leftFingerJoints = fingers.ToArray();
                 leftFingerIsThumb = thumbs.ToArray();
 
-                // Signed centered ordinal among the NON-thumb fingers (e.g. 4 fingers ->
-                // -1.5,-0.5,0.5,1.5), so the knuckle fan splays outward from the middle.
+                // Signed centered ordinal among the non-thumb fingers (e.g. 4 fingers -> -1.5,-0.5,0.5,1.5), so the knuckle
+                // fan splays outward from the middle.
                 int nonThumb = 0;
                 for (int i = 0; i < thumbs.Count; i++) if (!thumbs[i]) nonThumb++;
                 float center = (nonThumb - 1) * 0.5f;
@@ -1186,12 +1109,10 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        // The point on a (possibly oriented) BoxCollider surface nearest a world point. Unlike
-        // Collider.ClosestPoint this returns a SURFACE point even when the query point is INSIDE
-        // the box — it pushes the least-penetrated axis out to its face — which is what makes a
-        // point-blank grab snap to the outer part of the collider instead of staying at center.
-        // True if a world point is inside the (oriented) box collider — same local-frame test as
-        // NearestBoxSurfacePoint's inside branch, used to flag a point-blank physical grab.
+        // NearestBoxSurfacePoint: the point on an oriented BoxCollider's surface nearest a world point. Unlike
+        // Collider.ClosestPoint it returns a surface point even when the query point is inside the box (the least-penetrated
+        // axis is pushed out to its face), so a point-blank grab snaps to the outside of the collider.
+        // IsInsideBox: true if a world point is inside the oriented box collider (the same local-frame test).
         private static bool IsInsideBox(BoxCollider box, Vector3 worldPoint)
         {
             Vector3 local = box.transform.InverseTransformPoint(worldPoint) - box.center;

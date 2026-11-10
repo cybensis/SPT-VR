@@ -7,12 +7,11 @@ using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // An AK's magazine knocked out with the next one (his ask: "pop out another mag with a mag if you push it into the back of the mag
-    // where the release latch is ... with actual physics, like I actually pushed it out"). The new magazine in the off hand, its body
-    // pushed forward into the paddle catch behind the gun's magazine: the catch lets go and the old magazine leaves with the push - the
-    // gun's own motion plus the push's share forward, rocking off its hinge the way it comes out by hand (the gun's rock-in axis, which
-    // the push at the catch turns it about) - then it's loose loot like any dropped magazine. Only guns whose magazines rock in (the
-    // paddle behind the magazine), not a belt box's hinge. The B drop's path (RunDrop): synced and placed the same way.
+    // An AK's magazine knocked out with the next one. The new magazine in the off hand, its body pushed forward into the paddle catch
+    // behind the gun's magazine: the catch lets go and the old magazine leaves with the push - the gun's own motion plus the push's
+    // share forward, rocking off its hinge about the gun's rock-in axis - then it's loose loot like any dropped magazine. Only guns
+    // whose magazines rock in (the paddle behind the magazine), not a belt box's hinge. The B drop's path (RunDrop): synced and
+    // placed the same way.
     public static partial class VRReloadController
     {
         public static bool knockMagazineOut = true;
@@ -23,7 +22,7 @@ namespace TarkovVR.Source.Weapons
         public static float knockDrop = 0.3f;               // m/s down on top (it falls out of the well as the catch lets go)
         public static float knockSpin = 1f;                 // its rock off the hinge = the push over the catch's lever to the hinge, times this
         public static float knockMaxSpin = 7f;              // rad/s cap (Unity's own default cap on a body's spin)
-        public static bool knockLog = true;                 // a line per knock, and per touch too slow to knock (round 1)
+        public static bool knockLog = true;                 // a line per knock, and per touch too slow to knock
 
         private static FirearmController knockCatchFor;
         private static Transform knockCatchPart;

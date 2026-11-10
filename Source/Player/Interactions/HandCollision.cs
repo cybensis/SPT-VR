@@ -6,13 +6,11 @@ using Valve.VR;
 namespace TarkovVR.Source.Player.Interactions
 {
     // Physical hand collision: the free hands (and everything anchored to them - arms IK, held items)
-    // can't reach through geometry. Same model as the loose-loot clamp: swept-sphere collide-and-slide
-    // from last frame's RESOLVED position toward the controller-desired one, so fast swings can't tunnel
-    // and release is instant (a free path back = no constraint, no spring needed). Per-hand exemptions:
-    // the gun-driven hand while a firearm is up (WeaponCollision owns that side), the support hand while
-    // gripping the gun, and both hands during manual eating (it pins its own hands).
-    // Enactment mirrors WeaponCollision: strip-before-rewrite bookkeeping so nothing accumulates no
-    // matter how Update order falls against the SteamVR pose callbacks (which rewrite the raw pose).
+    // can't reach through geometry. Swept-sphere collide-and-slide from last frame's resolved position
+    // toward the controller-desired one, so fast swings can't tunnel and release is instant. Exempt: the
+    // gun hand while a firearm is up (WeaponCollision owns that side), the support hand while gripping the
+    // gun, both hands during manual eating. The enactment is stripped before each rewrite, so nothing
+    // accumulates however Update order falls against the SteamVR pose callbacks (which rewrite the raw pose).
     public static class HandCollision
     {
         // ---- live-tunable knobs (UnityExplorer) ----
@@ -51,11 +49,10 @@ namespace TarkovVR.Source.Player.Interactions
             bool eating = EatingInteractionController.ManualActive;
             bool leftHanded = VRSettings.GetLeftHandedMode();
 
-            // With a firearm up, the gun hand is constrained INSIDE the gun pipeline (WeaponCollision's
-            // swept grip sphere) - clamping the marker from here raced GIC's anchor read (Update order is
-            // nondeterministic) and lost, so the gun side is exempt again. The support hand stays exempt
-            // while gripping: its PHYSICAL position drives two-handed aim, and clamping it would steer
-            // your aim near walls (the rendered hand rides the gun anyway).
+            // With a firearm up, the gun hand is constrained inside the gun pipeline (WeaponCollision):
+            // clamping it from here races GunInteractionController's anchor read (Update order is
+            // nondeterministic). The support hand is exempt while gripping: its physical position drives
+            // two-handed aim, and clamping it would steer the aim near walls.
             ClampHand(right, VRGlobals.vrPlayer.RightHand ? VRGlobals.vrPlayer.RightHand.transform : null,
                 !firearm && !eating, physRight: !leftHanded);
             ClampHand(left, VRGlobals.vrPlayer.LeftHand ? VRGlobals.vrPlayer.LeftHand.transform : null,
@@ -82,7 +79,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             // Strip last frame's enactment - unless the pose callback (or an equip path) already rewrote
-            // the transform, in which case the fresh value IS the raw pose.
+            // the transform, in which case the fresh value is the raw pose.
             if (state.enacted)
             {
                 state.enacted = false;
@@ -118,8 +115,8 @@ namespace TarkovVR.Source.Player.Interactions
                 Vector3 direction = move / distance;
                 if (!SweepSphere(resolved, direction, distance, out RaycastHit hit, out bool startBlocked))
                 {
-                    // A cast that STARTS in contact reports "free" - only allow the move if it escapes
-                    // the overlap (silently skipping zero-distance hits = pressure push-through).
+                    // A cast that starts in contact reports "free": only allow the move if it escapes
+                    // the overlap (else pressing pushes through).
                     if (startBlocked && OverlappingWorld(resolved + move, handRadius * 0.6f))
                         break;
                     resolved += move;

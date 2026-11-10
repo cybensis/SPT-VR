@@ -9,16 +9,12 @@ using Valve.VR;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // The guns' body spots placed by hand (his design, 2026-11-06): a free hand on a gun at its spot (the chest sling, the shoulder, the
-    // hip - the gun in hands too while it hangs there), the trigger held holdSeconds -> the gun comes off its spot and rides that
-    // controller, position and angle -> letting go of the trigger leaves the slot's spot there, saved in ModSettings.json straight away.
-    //
+    // The guns' body spots placed by hand: a free hand on a gun at its spot (the chest sling, the shoulder, the hip - the gun in hands
+    // too while it hangs there), the trigger held holdSeconds -> the gun comes off its spot and rides that controller, position and
+    // angle -> letting go of the trigger leaves the slot's spot there, saved in ModSettings.json ("Reset Placed Gun Spots" clears them).
     // Per slot, not per gun: the grip point (the R-hand marker) and the Weapon_root's rotation in the body's frame (ChestHang.BodyYaw:
-    // the neck and the body's yaw, the sling's own frame), so any gun in that slot puts its grip where you left one. ChestHang.SpotPose
-    // draws a placed spot instead of the default, for the guns on the body (BodyWeapons) and the gun in hands hanging (ChestHang). The
-    // shoulder and hip zones stop taking a placed slot's gun (BodyWeapons: the reach finds it where it is). "Reset Placed Gun Spots" in
-    // the VR tab clears them. Not mirrored when the left-handed setting changes (a placed spot is where you put it).
-    //
+    // the neck and the body's yaw). ChestHang.SpotPose draws a placed spot instead of the default; the shoulder and hip zones stop
+    // taking a placed slot's gun (BodyWeapons). Not mirrored when the left-handed setting changes.
     // Free hand: the off hand off the foregrip and not on a reload part, the scope, a weapon part, loot or the breath hold; the gun hand
     // only with its gun slung or the hands empty (its trigger fires the gun in hand otherwise).
     public static class GunSpots

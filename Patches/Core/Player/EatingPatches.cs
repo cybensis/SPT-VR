@@ -8,17 +8,15 @@ using static EFT.Player.MedsController;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // Routes the game's MedsController lifecycle into the manual (gesture-gated)
-    // eating controller. See EatingInteractionController for the full design — the
-    // short version is: we suppress the food's heal/nutrition effect (method_5 ->
-    // DoMedEffect) until the player physically brings the item to their mouth, then
-    // let the vanilla consume play out normally.
+    // Routes the game's MedsController lifecycle into the manual (gesture-gated) eating controller,
+    // EatingInteractionController. The food's heal/nutrition effect (method_5 -> DoMedEffect) is
+    // suppressed until the gestures allow it.
     [HarmonyPatch]
     internal class EatingPatches
     {
 
-        // PREFIX: arm the controller BEFORE the original Spawn body runs
-        // Start()->method_5(), so AllowEffect can suppress that initial effect.
+        // Arm the controller before the original Spawn body runs Start()->method_5(), so AllowEffect can suppress
+        // that initial effect.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MedsController), "Spawn")]
         public static void OnSpawnPre(MedsController __instance, float animationSpeed)
@@ -26,7 +24,7 @@ namespace TarkovVR.Patches.Core.Player
             EatingInteractionController.OnSpawnPre(__instance, animationSpeed);
         }
 
-        // POSTFIX: freeze the held item's animator (Spawn just set it to play).
+        // Freeze the held item's animator (Spawn just set it to play).
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MedsController), "Spawn")]
         public static void OnSpawnPost(MedsController __instance)
@@ -37,8 +35,7 @@ namespace TarkovVR.Patches.Core.Player
             EatingInteractionController.OnSpawnPost(__instance);
         }
 
-        // The gate: suppress the real DoMedEffect until the player has raised the
-        // food to their mouth (returns false to skip the original method).
+        // The gate: suppress the real DoMedEffect until the gestures allow it
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MedsInHandsOperation), "GoNextBodyPart")]
         public static bool GateEffect(MedsInHandsOperation __instance)
@@ -46,8 +43,7 @@ namespace TarkovVR.Patches.Core.Player
             return EatingInteractionController.AllowEffect(__instance);
         }
 
-        // Per-frame tick on the held-item controller — reads the gesture and, once
-        // satisfied, kicks off the suppressed effect.
+        // Per-frame tick on the held-item controller (the gesture machine)
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MedsController), "ManualUpdate")]
         public static void OnUpdate(MedsController __instance)
@@ -55,9 +51,8 @@ namespace TarkovVR.Patches.Core.Player
             EatingInteractionController.Tick(__instance);
         }
 
-        // Suppress the body eat animation while we're running the manual sequence.
-        // IEventsConsumerOnThirdAction only feeds BodyAnimatorCommon's
-        // FIRST_PERSON_ACTION (via TranslateAnimatorParameter); blocking it keeps
+        // Suppress the body eat animation during the manual sequence. IEventsConsumerOnThirdAction only feeds
+        // BodyAnimatorCommon's FIRST_PERSON_ACTION (via TranslateAnimatorParameter); blocking it keeps
         // LEFT_HAND_ANIMATOR_HASH at 0 so UpdateLeftHand keeps both hands tracking.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MedsController), "IEventsConsumerOnThirdAction")]
@@ -66,9 +61,8 @@ namespace TarkovVR.Patches.Core.Player
             return EatingInteractionController.AllowThirdAction(__instance);
         }
 
-        // Switching off the item (swap weapon / cancel to empty hands). Fires for EVERY
-        // MedsController in the raid — gate on our armed controller (OnControllerGone) so a
-        // bot's weap-out doesn't tear down the local eat mid-sequence.
+        // Switching off the item (swap weapon / cancel to empty hands). Fires for every MedsController in the raid:
+        // OnControllerGone gates on our armed controller so a bot's weap-out doesn't tear down the local eat.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MedsController), "IEventsConsumerOnWeapOut")]
         public static void OnWeapOut(MedsController __instance)
@@ -76,9 +70,8 @@ namespace TarkovVR.Patches.Core.Player
             EatingInteractionController.OnControllerGone(__instance);
         }
 
-        // PREFIX: clean up (restore the reparented props) BEFORE the original
-        // Destroy returns the controller object to the pool — a postfix is too late.
-        // Also fires for every MedsController, so gate the same way as OnWeapOut.
+        // Restore the reparented props before the original Destroy returns the controller object to the pool
+        // (a postfix is too late). Fires for every MedsController, gated like OnWeapOut.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MedsController), "Destroy")]
         public static void OnDestroy(MedsController __instance)
@@ -86,8 +79,8 @@ namespace TarkovVR.Patches.Core.Player
             EatingInteractionController.OnControllerGone(__instance);
         }
 
-        // After the animator runs (LateUpdate), zero the props' animator-driven local
-        // transforms so they sit on their (tunable) holders. See LateZeroProps.
+        // After the animator runs (LateUpdate), zero the props' animator-driven local transforms so they sit on
+        // their holders.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
         public static void LateZeroProps(EFT.Player __instance)
@@ -96,18 +89,15 @@ namespace TarkovVR.Patches.Core.Player
             EatingInteractionController.LateZeroProps();
         }
 
-        // Suppress our controller's animation-driven sounds so they don't burst at the
-        // finish — we play the right ones per-step ourselves.
+        // Suppress our controller's animation-driven sounds so they don't burst at the finish; the steps play their own.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BaseSoundPlayer), "SoundEventHandler")]
         public static bool OnSoundGate(BaseSoundPlayer __instance, string soundName)
         {
             bool allow = EatingInteractionController.AllowSound(__instance, soundName);
-            // A sound that passes the gate on OUR eat's sound player is one we actually play — forward
-            // it so co-op observers hear the real gesture audio (they freeze out the looping vanilla
-            // observed-meds sound). FIKA-gated so the FikaPlayer-touching send only JITs with FIKA.
-            // The send is wrapped: OnSound IS the eat-audio path, so a throw here would kill the local
-            // eater's own audio (how a stale stub's bad Put(string) bricked it the first time).
+            // A sound passing the gate on our eat's sound player is forwarded so co-op observers hear it (they mute the
+            // looping vanilla observed-meds sound). FIKA-gated so the FikaPlayer-touching send only JITs with FIKA.
+            // Wrapped: this is the eat-audio path, so a throw here would kill the local eater's own audio.
             if (allow && TarkovVR.ModSupport.InstalledMods.FIKAInstalled
                 && EatingInteractionController.IsOwnEatSound(__instance))
             {
@@ -121,10 +111,9 @@ namespace TarkovVR.Patches.Core.Player
         }
         private static bool _loggedSoundFwdErr;
 
-        // Our controller's clips play HEAD-LOCKED 2D (see PlayClipHeadLocked): the vanilla
-        // PlayClip path leaves the pooled source 3D-blended on the (VR-reparented) weapon
-        // transform — intermittently quiet/mislocated/silent. Prefix returns false (skip
-        // original) when it handled the clip; the haptics postfix below still runs.
+        // Our controller's clips play head-locked 2D (PlayClipHeadLocked): the vanilla PlayClip path leaves the pooled
+        // source 3D-blended on the VR-reparented weapon transform (intermittently quiet/mislocated/silent).
+        // Skips the original when it handled the clip; the haptics postfix below still runs.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(BaseSoundPlayer), "PlayClip")]
         public static bool ForceHeadLockedEatAudio(BaseSoundPlayer __instance, AudioClip clip, int rolloff, float volume)
@@ -132,10 +121,8 @@ namespace TarkovVR.Patches.Core.Player
             return !EatingInteractionController.PlayClipHeadLocked(__instance, clip, rolloff, volume);
         }
 
-        // Audio -> haptics: every audible clip on OUR controller's sound player (gulps,
-        // lid rolls, holster — whatever made it past the gate above) also plays its
-        // waveform envelope on the controllers, so you FEEL what you hear. PlayClip is
-        // the one funnel every clip goes through, AFTER the distance/occlusion culls.
+        // Audio -> haptics: every audible clip on our controller's sound player also plays its waveform envelope on the
+        // controllers. PlayClip is the one funnel every clip goes through, after the distance/occlusion culls.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BaseSoundPlayer), "PlayClip")]
         public static void AudioToHaptics(BaseSoundPlayer __instance, AudioClip clip, float volume)
@@ -143,11 +130,9 @@ namespace TarkovVR.Patches.Core.Player
             EatingInteractionController.OnEatAudio(__instance, clip, volume);
         }
 
-        // Keep the LEFT hand tracking the controller during manual eating. Normally
-        // UpdateLeftHand early-returns while LEFT_HAND_ANIMATOR_HASH==1 (eat anim),
-        // freezing LeftHand + disabling leftArmIk. While we're active we replicate
-        // the simple non-supporting placement and skip the original. Returns false to
-        // bypass the original.
+        // Keep the left hand tracking the controller during manual eating. UpdateLeftHand early-returns while
+        // LEFT_HAND_ANIMATOR_HASH==1 (eat anim), freezing LeftHand and disabling leftArmIk, so this does the simple
+        // non-supporting placement and skips the original.
         [HarmonyPrefix]
         [HarmonyPatch(typeof(VRPlayerManager), "UpdateLeftHand")]
         public static bool ForceLeftHandTracking(VRPlayerManager __instance, VRPose fromAction)
@@ -158,11 +143,9 @@ namespace TarkovVR.Patches.Core.Player
 
             __instance.PlaceOffHand(fromAction);
 
-            // While a pull-to-open has the LEFT hand latched onto the held item, keep
-            // updating the rig target (above — so releasing lands the hand on the
-            // controller) but do NOT re-point its IK at it: this runs on the SteamVR pose
-            // callback, after the eat Tick aimed the IK at the latch, and would yank the
-            // rendered hand off the item back to the controller mid-pull.
+            // While a pull-to-open has the left hand latched onto the held item, the rig target still updates (so release
+            // lands on the controller) but the IK isn't re-pointed at it: this runs on the SteamVR pose callback, after the
+            // eat Tick aimed the IK at the latch, and would yank the hand off the item mid-pull.
             if (VRGlobals.ikManager?.leftArmIk != null && !EatingInteractionController.OffHandLatched)
             {
                 VRGlobals.ikManager.leftArmIk.solver.target = lh.transform;

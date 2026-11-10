@@ -7,21 +7,18 @@ using UnityEngine;
 
 namespace TarkovVR.Patches.Core.Player
 {
-    // The gun in the LEFT hand (Handedness.GunInLeftHand: right-handed mode, the left hand took it off the sling; nothing is mirrored but
-    // the poses below). The gun is placed as always - on the rig's gun hand, which the left controller drives then, with the right-handed
-    // hold mirrored once (VRPlayerManager.MirroredGunHold). EFT aims its RIGHT arm at the gun's grip and its LEFT at the support (Player.
-    // IkProcess sets both, Player.IkApply solves them); right after IkProcess, first of its postfixes (the elbow bend normals read the
-    // targets after it):
+    // The gun in the left hand (Handedness.GunInLeftHand: right-handed mode, the left hand took it off the sling). The gun sits on the rig's
+    // gun hand as always (driven by the left controller, the hold mirrored once by VRPlayerManager.MirroredGunHold). EFT aims its right arm at
+    // the grip and its left at the support (Player.IkProcess sets both, IkApply solves them); this runs first among IkProcess's postfixes
+    // (the elbow bend normals read the targets after it):
     //  - left arm: the right hand's grip pose mirrored across the gun's centre plane (HandMirror.TryMirrorPalm)
     //  - right arm on the foregrip: the left hand's foregrip pose mirrored
     //  - right arm off the gun: VRPlayerManager.RightControllerHand, a rig child placed in the right controller's pose callback
     //  - the right hand holding the gun alone (SupportHeld): right arm on the foregrip as above, left arm free on LeftControllerHand
-    // The hands on the gun are solved by EFT's arm pass alone, like the gun hand and the support hand always are. The free right hand is
-    // also solved by its own IK update onto that rig child, like every other free hand (the slung gun's, the free left hand): handed to
-    // EFT's pass alone as a world point it jittered (headset round 2; the free left hand did the same in round 1 while its update was off).
-    // The gun's centre plane is its Weapon_root's x = 0 (measured on the AK-74 / M4A1 / M700 models: bore along -y, sights +z, the two
-    // hand markers at x = +3 / -4 cm). The mod's own targets on the gun hands (solver.target wins over IKPosition) are taken off for the
-    // solve and put back after IkApply. The fingers: HandMirror.CaptureGunHandGrip / ApplyRealLeftHanded (HandsInteractionController.LateUpdate).
+    // Hands on the gun are solved by EFT's arm pass alone. A free hand is also solved by its own IK update onto its rig child: as a world
+    // point for EFT's pass alone it jitters. Centre plane = Weapon_root x = 0 (bore along -y, sights +z, hand markers at x = +3 / -4 cm).
+    // The mod's targets on the gun hands (solver.target wins over IKPosition) are taken off for the solve and put back after IkApply.
+    // Fingers: HandMirror.CaptureGunHandGrip / ApplyRealLeftHanded (HandsInteractionController.LateUpdate).
     [HarmonyPatch]
     internal static class RealLeftHandedPatches
     {
@@ -31,8 +28,8 @@ namespace TarkovVR.Patches.Core.Player
         // The free right hand's own target, left on the arm between frames (its own update solves it in LateUpdate); what was there before
         private static bool freeRightOn;
         private static Transform freeRightTarget, rightTargetOriginal;
-        // The limbs' own update, set while the gun is in the left hand, put back as it was when that ends (headset: left switched off,
-        // the left hand jittered / lagged after handing the gun back until a foregrip grab re-enabled it)
+        // The limbs' own update, set while the gun is in the left hand, put back as it was when that ends (left switched off, the left
+        // hand jitters / lags after handing the gun back)
         private static bool limbUpdatesOff;
         private static bool leftEnabledBefore, rightEnabledBefore;
         private static Transform swayFrameFor, swayFrame;
@@ -119,10 +116,9 @@ namespace TarkovVR.Patches.Core.Player
             Vector3 supportPosition = supportFromTarget ? left.target.position : left.IKPosition;
             Quaternion supportRotation = supportFromTarget ? left.target.rotation : left.IKRotation;
 
-            // The plane rides EFT's sway / inertia: that moves Weapon_root_anim (PlayerBones.ShiftWeaponRoot / Kinematics) under
-            // Weapon_root, gun mesh and markers with it, so a plane on Weapon_root mirrored the hand the OPPOSITE way to the gun's sway
-            // (headset: "the gun moves slightly out of hand while moving / turning"; the right hand on the foregrip jittered). On the
-            // models Weapon_root_anim sits on Weapon_root at rest (zero offset, zero turn), so its x is the same centre plane.
+            // The plane rides EFT's sway / inertia, which moves Weapon_root_anim (PlayerBones.ShiftWeaponRoot / Kinematics) under
+            // Weapon_root, gun mesh and markers with it: a plane on Weapon_root would mirror the hand the opposite way to the sway.
+            // At rest Weapon_root_anim sits on Weapon_root (zero offset, zero turn), so its x is the same centre plane.
             if (!GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
                 return;
             Vector3 leftPosition = Vector3.zero;
@@ -136,18 +132,17 @@ namespace TarkovVR.Patches.Core.Player
             }
             else if (Source.Weapons.GrenadeHold.TryMirrorNormal(out Vector3 mirrorNormal))
             {
-                // A grenade mirrored whole (its positioner scaled -1 on x): the grip marker is on the left grip already; its rotation
-                // Unity reports without the scale's sign, so the palm is mirrored through the positioner's x. Read off the marker itself,
+                // A grenade mirrored whole (its positioner scaled -1 on x): the grip marker is on the left grip already; Unity reports
+                // its rotation without the scale's sign, so the palm is mirrored through the positioner's x. Read off the marker itself,
                 // not the right arm's IK target: EFT only writes that while the right arm's weight (1 - the clip's RIGHT_HAND_WEIGHT,
-                // VisualPass) isn't 0, else it keeps the free right hand's (his report: the left hand jumps off the grenade it took)
+                // VisualPass) isn't 0, else it keeps the free right hand's
                 Transform gripMarker = __instance._markers != null && __instance._markers.Length > 1 ? __instance._markers[1] : null;
                 Vector3 grip = gripMarker != null ? gripMarker.position : gripPosition;
                 Quaternion gripTurn = gripMarker != null ? gripMarker.rotation : gripRotation;
                 GrenadeIkGap = Vector3.Distance(gripPosition, grip);
                 GrenadeRightWeight = right.IKPositionWeight;
-                // The palm off the grip marker's own matrix (a mirrored frame: the -1 is in it): the rotation's sign under that scale
-                // was an assumption, and the hold came out turned (his log: palm on its target to 0.0 cm and 0 deg, the grenade in it not
-                // the right hand's mirror). Off the matrix wherever the scale's sign lands.
+                // The palm off the grip marker's own matrix (a mirrored frame: the -1 is in it), which is right wherever the scale's
+                // sign lands; the rotation-based mirror is only the fallback
                 if (gripMarker == null || !HandMirror.TryOtherPalmFromMirroredFrame(gripMarker.localToWorldMatrix, rightToLeft: true, out leftRotation))
                 {
                     if (!HandMirror.TryMirrorPalm(gripTurn, mirrorNormal, rightToLeft: true, out leftRotation))
@@ -295,9 +290,8 @@ namespace TarkovVR.Patches.Core.Player
             }
             planeNormal = swayFrame.right;
             planePoint = swayFrame.position;
-            // A grenade: through the grenade itself. Its Weapon_root_anim isn't on it (Tarkov's idle hold, offline from its clips: the
-            // right grip 11-12 cm off that plane, the grenade 2-3.5 cm), which put the mirrored left hand ~6 cm off the grenade (his
-            // report: "not placed properly in the left hand, it's close though")
+            // A grenade: through the grenade itself. Its Weapon_root_anim isn't on it (idle hold: the right grip 11-12 cm off that plane,
+            // the grenade 2-3.5 cm), which would put the mirrored left hand ~6 cm off the grenade
             if (GrenadeCentre(weaponRoot, out Vector3 centre))
                 planePoint = centre;
             return true;

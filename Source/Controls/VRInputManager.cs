@@ -13,14 +13,13 @@ namespace TarkovVR.Source.Controls
 
         private static float lastCooldownCommandTime = 0f;
 
-        // Commands queued by code (not a physical input) to inject into the game's
-        // command stream — e.g. auto-cancelling an eat by faking a trigger/fire press.
-        // Drained one per input frame so a press+release lands on consecutive frames.
+        // Commands queued by code (not a physical input) to inject into the game's command stream, e.g. the fire press
+        // that cancels an eat. Drained one per input frame so a press+release lands on consecutive frames.
         private static readonly Queue<ECommand> forcedCommands = new Queue<ECommand>();
         public static void ForceCommand(ECommand command) => forcedCommands.Enqueue(command);
 
-        // Cooldown system setup to avoid busy hands bug, bag and headlight collider were pretty close and if they were toggled too quickly together, busy hands would trigger
-        // Commands not listed here will have no cooldown
+        // Cooldowns avoid the busy hands bug: the bag and headlight colliders are close, and toggling them too quickly together triggers it.
+        // Commands not listed here have no cooldown
         private static Dictionary<ECommand, float> commandCooldowns = new Dictionary<ECommand, float>
         {
             { ECommand.ToggleGoggles, 1.5f },

@@ -6,16 +6,15 @@ using UnityEngine;
 namespace TarkovVR.Source.Player.Interactions
 {
     // The hand holding a loot item closes on it, the item kept the way it was grabbed. On the grab the item comes up against the palm
-    // (TryGraspRestPosition: no longer sunk into it, which a closing hand would show), or between the index and the thumb for a small
-    // one (a round, a key: a pinch). Each finger then curls from its rest pose with its joints coupled like a real finger's until any
-    // part of it touches the item, and its middle and tip joints wrap on until they touch too; the thumb is led to the surface nearest
-    // its tip (the stuck case's thumb, ThumbOntoCase, for every item). Against the item's shape (GraspShape): its parts' boxes at once,
-    // their convex hulls as they arrive. Solved once per grab and again when the item moves in the hand or a hull arrives, eased in.
+    // (TryGraspRestPosition), or between the index and the thumb for a small one (a pinch). Each finger then curls from its rest pose
+    // with coupled joints until any part of it touches the item, and its middle and tip joints wrap on until they touch too; the thumb
+    // is led to the surface nearest its tip. Against the item's shape (GraspShape): its parts' boxes at once, their convex hulls as
+    // they arrive. Solved once per grab and again when the item moves in the hand or a hull arrives, eased in.
     // Index controllers: each finger closes onto it unless the real one is lifted off the controller, never past the item.
     // Runs inside each hand's finger pass, on the pose that pass just wrote, and keeps its RecoverAnimated bookkeeping.
     internal partial class HandsInteractionController
     {
-        public static bool graspItems = true;                   // false = the open hand on a held item, and the old placement sunk into the palm
+        public static bool graspItems = true;                   // false = the open hand on a held item, the item sunk into the palm
         public static bool graspDebug = false;                  // a line per grab: the shape, the grip, the solve time, each finger's contact
         public static float graspCloseTime = 0.12f;             // s the fingers take to close on it
         public static float graspOpenTime = 0.1f;               // s to open again on letting go
@@ -148,7 +147,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!TryGetGraspContact(dominant, pinch, out Vector3 contact, out Vector3 normal, out Vector3 along))
                 return false;
             Vector3 movedTo = itemPosition;
-            // (a palm inside it: its nearest way out comes to the palm, as the old placement did)
+            // (a palm inside it: its nearest way out comes to the palm)
             if (shape.NearestSurface(contact, movedTo, itemRotation, out Vector3 surface, out _, out _))
                 movedTo += contact - surface;
             Vector3 across = Vector3.Cross(normal, along);

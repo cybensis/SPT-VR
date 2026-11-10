@@ -9,17 +9,16 @@ using FirearmController = EFT.Player.FirearmController;
 namespace TarkovVR.Source.Weapons
 {
     // A bolt-action rifle's bolt, by hand (Manual Reload). Either hand's trigger takes the knob: the off hand while the gun hand
-    // has the grip, the gun hand once it has let go of the grip with the off hand holding the gun up (ChestHang's support hold).
-    // The hand turns the handle up about the bolt, then slides it back, forward and down, as on the real gun; let go anywhere and
-    // the bolt stays there.
-    //  - After a shot Tarkov's own bolt cycle doesn't play (BoltActionPatches skips it at the shot): the spent case stays in and the
-    //    trigger is dead until the bolt has been all the way back. Tarkov already counted the next round in the chamber at the shot.
+    // has the grip, the gun hand while the off hand holds the gun up (ChestHang's support hold). The handle turns up, then slides
+    // back, forward and down; let go anywhere and the bolt stays there.
+    //  - After a shot Tarkov's own bolt cycle doesn't play (BoltActionPatches skips it): the spent case stays in and the trigger
+    //    is dead until the bolt has been all the way back. Tarkov already counted the next round in the chamber at the shot.
     //  - All the way back: the spent case flies out (Tarkov's own shell); a live round is thrown out by Tarkov's rechamber, which
     //    takes the next one in; a round a draw or a magazine brought in on an empty chamber is still in the magazine (WaitingForRack).
     //  - Closed and turned down: the round in the chamber shows, the trigger works.
     // The bolt is two bones from the gun's own after-shot clip (gen_bolts.py, ReloadHolds.json "bolts"): one slides back, one (or the
-    // same, the DVL-10) turns the handle up. We move them from their closed pose while the bolt isn't closed: in Update as the hand
-    // moves them (the latched hand reads them this frame) and again after the animator (LateUpdate), which may write them too.
+    // same, the DVL-10) turns the handle up. While the bolt isn't closed they are moved off their closed pose in Update (the
+    // latched hand reads them this frame) and again after the animator (LateUpdate), which may write them too.
     public static partial class VRReloadController
     {
         public static bool boltAction = true;               // false = Tarkov cycles a bolt-action's bolt itself after every shot
@@ -27,9 +26,9 @@ namespace TarkovVR.Source.Weapons
         public static float boltFullBack = 0.92f;           // share of the slide that counts as all the way back
         public static float boltTurnedUp = 0.97f;           // share of the turn before it slides
         public static float boltClosedTurn = 0.03f;         // share of the turn left that counts as turned down
-        public static bool boltShowsChamberedRound = true;  // a live round in the chamber comes back on the bolt face as it opens (you can see one's in)
+        public static bool boltShowsChamberedRound = true;  // a live round in the chamber comes back on the bolt face as it opens
         public static float boltTurnSign = 1f;          // -1 if the handle turns the wrong way (the clip's turn read the other way round)
-        public static bool boltDebugLog = false;            // the bolt's grabs, strokes and what came out of the chamber (on for its first headset rounds)
+        public static bool boltDebugLog = false;            // the bolt's grabs, strokes and what came out of the chamber
 
         public static bool HoldingBolt { get; private set; }
         public static bool BoltInGunHand => HoldingBolt && boltInGunHand;
@@ -95,9 +94,9 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 controllerToKnob;            // at the grab, in the gun body's rotation (m)
         private static Vector3[] boltHandFingers;
         private static bool loggedBoltSounds;
-        // The stroke's sounds, once each per stroke: guns name and cut them differently (the M700's four short ones - BoltOpen the lift,
-        // BoltBack, BoltForward, BoltClose the turn down; the Mosin's two long ones - BoltOut = "bolt toward you" 0.55 s, BoltIn = "away"
-        // 0.45 s - which only fit from the start of the movement; the DVL-10's BoltStart / BoltOut / BoltIn / BoltEnd)
+        // The stroke's sounds, once each per stroke. Guns name and cut them differently: the M700 has four short ones (BoltOpen the
+        // lift, BoltBack, BoltForward, BoltClose the turn down), the Mosin two long ones (BoltOut = toward you 0.55 s, BoltIn = away
+        // 0.45 s) that only fit from the start of the movement, the DVL-10 BoltStart / BoltOut / BoltIn / BoltEnd
         private static bool boltPullSounded, boltPushSounded;
         private static float boltSlidePeak;
         private static GameObject boltZoneViz;
@@ -162,8 +161,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         // The hands load this bolt-action round by round through its open action (the Mosin's internal magazine, VRReloadController.Rounds):
-        // the off hand's weapon-part menu isn't needed (GunInteractionController.ManualReloadReplacesMenu; the bolt-actions with a detachable
-        // magazine already had it off, the Mosins kept it - his "yes, do the Mosins too")
+        // the off hand's weapon-part menu isn't needed (GunInteractionController.ManualReloadReplacesMenu)
         public static bool HandsLoadBoltAction(FirearmController firearmController)
         {
             if (!singleRoundLoading || !ManualBoltOn(firearmController))
@@ -455,7 +453,7 @@ namespace TarkovVR.Source.Weapons
             if (!wasClosed && state.Closed)
                 BoltClosed(boltForFirearm, state);
 
-            // Only letting go of the trigger lets go (his call: no distance release); the bolt stays where it is
+            // Only letting go of the trigger lets go (no distance release); the bolt stays where it is
             if (triggerReleased)
                 LetGoOfBolt();
         }
@@ -609,11 +607,10 @@ namespace TarkovVR.Source.Weapons
             ApplyBoltChamberView(firearmController, state, boltBonesData);
         }
 
-        // Closed and ours, the gun idle: held shut against the animator, so the bolt shows where it is. Handed back to the animator once
-        // closed, a bolt-action stayed drawn open by it (headset, once, a hideout session that threw a live round out: "the bolt was stuck
-        // open and when I tried grabbing it, it would grab at the closed position ... I wouldn't be able to grab bullets" - our state was
-        // closed). Suspected: the rechamber skip sends only the arms layer back to idle, and a layer left in Tarkov's rechamber clip held
-        // the bolt open. Tarkov's own operations (its reload, check chamber, a malfunction) aren't idle: their bolt animations play.
+        // Closed and ours, the gun idle: held shut against the animator, so the bolt shows where it is. Left to the animator once
+        // closed, the bolt can stay drawn open while our state is closed (suspected: the rechamber skip sends only the arms layer back
+        // to idle, and a layer left in Tarkov's rechamber clip holds it open). Tarkov's own operations (its reload, check chamber, a
+        // malfunction) aren't idle: their bolt animations play.
         public static bool keepBoltShut = true;
 
         private static void KeepBoltShut(FirearmController firearmController)

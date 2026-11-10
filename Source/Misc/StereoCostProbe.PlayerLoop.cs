@@ -239,7 +239,7 @@ namespace TarkovVR.Source.Misc
             }
         }
 
-        // Per-frame means for the three compared modes: "wall busy | wall busy | wall busy"
+        // Per-frame means for the compared modes (loopModes): "wall busy | wall busy | ..."
         private static string ModeColumns(double[] wall, double[] busy, bool perFrameAlready = false)
         {
             var builder = new StringBuilder();

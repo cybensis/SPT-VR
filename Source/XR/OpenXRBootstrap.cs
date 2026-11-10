@@ -122,8 +122,8 @@ namespace TarkovVR.Source.XR
             hapticFrequency.enabled = true;
             features.Add(hapticFrequency);
 
-            // The frame-call watcher (native, hooks xrWaitFrame and friends) only fed the cost probe's OpenXR rows, which is no
-            // longer added: not registered in release builds
+            // The frame-call watcher (native, hooks xrWaitFrame and friends) only feeds the cost probe's OpenXR rows: not
+            // registered in release builds
             if (registerFrameWatch)
             {
                 OpenXRFrameWatch frameWatch = ScriptableObject.CreateInstance<OpenXRFrameWatch>();

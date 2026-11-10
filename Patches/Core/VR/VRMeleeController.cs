@@ -22,11 +22,9 @@ namespace TarkovVR.Patches.Core.VR
         // to see send vs. apply in the BepInEx log).
         public static bool debugMeleeSend = false;
 
-        // When OUR VR melee swing hits a SURFACE (wall sparks / glass break), broadcast it so observers
-        // replay the effect -- the custom collider swing runs only locally, so FIKA never replicates it
-        // (unlike a normal melee/shot). Player/AI hits are NOT sent: their damage already syncs through
-        // ApplyShot. method_6 is the knife collider's OnHit handler (non-virtual, fires only on the
-        // swinger's collision), so this is a reliable, local-only hook.
+        // When our VR melee swing hits a surface (wall sparks / glass break), broadcast it so observers replay the effect:
+        // the custom collider swing runs only locally, so FIKA never replicates it. Player/AI hits are not sent (their damage
+        // syncs through ApplyShot). This is the knife collider's OnHit handler, firing only on the swinger's collision.
         [HarmonyPostfix]
         [HarmonyPatch(typeof(BaseKnifeController), "ProcessOverlap")]
         private static void SyncMeleeSurfaceHit(BaseKnifeController __instance, KnifeRaycastHit other)
@@ -49,12 +47,9 @@ namespace TarkovVR.Patches.Core.VR
             FikaSendMeleeHit(point, other.normal, __instance.GlobalSwingDirection, dmg);
         }
 
-        // Companion-DLL isolation: the FikaVrSync (SPT-VR-FikaSync.dll) call lives in its own
-        // NoInlining method so it's only JITted when actually CALLED — which only happens after the
-        // InstalledMods.FIKAInstalled early-return above. Inlining it into SyncMeleeSurfaceHit would
-        // bind the cross-assembly reference at that patch method's JIT (on the first surface hit) and
-        // throw FileNotFoundException when running without the companion DLL. See the same pattern in
-        // HandsInteractionController.BodyGrab + memory note fika-softdep-no-typed-fields.
+        // The FikaVrSync (SPT-VR-FikaSync.dll) call lives in its own NoInlining method so it's only JITted when called, after
+        // the FIKAInstalled check. Inlined, SyncMeleeSurfaceHit's JIT would bind the reference and throw FileNotFoundException
+        // without the companion DLL.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void FikaSendMeleeHit(Vector3 point, Vector3 normal, Vector3 direction, float damage)
             => FikaVrSync.SendMeleeHit(point, normal, direction, damage);

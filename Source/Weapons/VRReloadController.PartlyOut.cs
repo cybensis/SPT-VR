@@ -8,13 +8,12 @@ using FirearmController = EFT.Player.FirearmController;
 namespace TarkovVR.Source.Weapons
 {
     // A pistol's magazine sits inside the grip, so a hand can't take hold of it seated. With Manual Reload, holding the release
-    // (B) slides it partly out of the well and keeps it there, hand or no hand ("if you hold B it makes the mag come out
-    // partially"); from there the off hand can grab it (grip, or the trigger with a new magazine in the hand, for palming) and push
-    // it back in or pull it out. The release let go while it's partly out: it falls ("if you let go while it's partially out, it'll
-    // fall to the floor") - so a tap just drops it.
+    // (B) slides it partly out of the well and keeps it there, hand or no hand; from there the off hand can grab it (grip, or the
+    // trigger with a new magazine in the hand, for palming) and push it back in or pull it out. The release let go while it's
+    // partly out: it falls - so a tap just drops it.
     public static partial class VRReloadController
     {
-        public static float partlyOutDistance = 0.045f;     // m the magazine slides out (headset: at 0.03 the hands were too close to take it)
+        public static float partlyOutDistance = 0.045f;     // m the magazine slides out (at 0.03 the hands are too close to take it)
         public static float partlyOutPullLeft = 0.02f;      // m from there to it coming free in the hand
         public static float partlyOutSpeed = 0.4f;          // m/s
         public static float belowWellDepth = 0.10f;         // m below the magazine where the hand takes it partly out

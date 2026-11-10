@@ -8,16 +8,13 @@ using UnityEngine.XR;
 namespace TarkovVR.Source.Graphics
 {
     // The desktop window, for recording: one eye's finished image (VR Graphics: "Desktop View Uses Right Eye"), cropped to the
-    // window's shape and stabilised. Unity's own mirror copies the whole eye texture: nearly square, the headset's wide field of
-    // view, the lenses' black corners, and every head movement. Instead a virtual camera at the eye follows the head's turning
-    // smoothed (with a cap on how far it can lag, and never so far that the window reaches the lens mask), and every window point
-    // is looked up in the eye image through that eye's own view and projection. Rotation only: where the eye was is what the
-    // image shows. Field of view (across, and up if set apart from the window's shape: that squashes the picture), smoothing and
-    // a downward tilt of the view: VR Graphics sliders.
-    // Drawn after the eyes, before the screen overlays (UnityExplorer's canvases, BepInEx's F12 menu), which drawing at the very end
-    // of the frame covered: where the chosen eye's picture is finished (drawAfterEyes, see there), or by a camera of our own that
-    // renders nothing and comes last of the cameras (drawAfterEyes = false; costs a camera's work a frame). A frame neither drew is
-    // drawn at the very end of the frame instead, the way it was first built.
+    // window's shape and stabilised (Unity's own mirror copies the whole eye texture: nearly square, lens corners, every head
+    // movement). A virtual camera at the eye follows the head's turning smoothed (capped lag, never so far that the window reaches
+    // the lens mask), and every window point is looked up in the eye image through that eye's own view and projection. Rotation
+    // only. Field of view (across, and up if set apart from the window's shape), smoothing and a downward tilt: VR Graphics sliders.
+    // Drawn after the eyes and before the screen overlays (UnityExplorer's canvases, BepInEx's F12 menu): where the chosen eye's
+    // picture is finished (drawAfterEyes, see there), or by a camera of our own that renders nothing and comes last
+    // (drawAfterEyes = false). A frame neither drew is drawn at the very end of the frame instead, over the overlays.
     public class DesktopMirror : MonoBehaviour
     {
         public static bool stabilized = true;           // false = Unity's own mirror of the eye texture (also set when drawing fails)
@@ -30,15 +27,15 @@ namespace TarkovVR.Source.Graphics
         public static bool useLensMask = true;          // keep the window off the eye's own lens mask (its occlusion mesh), corners included
         public static int lensMaskMarginCells = 3;      // the mask grown by this many of its 128 cells (about 2% of the eye image)
         public static int edgeChecks = 6;               // points checked along each side of the window to keep it inside the eye image
-        public static bool flipVertical = true;         // the eye texture is stored top row first (headset: upside down without it)
+        public static bool flipVertical = true;         // the eye texture is stored top row first (upside down without it)
         public static int gridColumns = 24;             // the window is drawn as a grid; each corner looked up exactly, straight in between
         public static int gridRows = 14;
         public static float cameraDepth = 100000f;      // after every other camera
         public static bool logDetails = false;         // setup and drawing-path lines ("[DesktopMirror]"); warnings always
 
         // The game's (Unity 2022) XRMirrorViewBlitMode values: Default 0 = Unity's own mirror, None -6. Not the constants: they compile
-        // in from the 2019 references this builds against, where None is 0 (= 2022's Default). (The render pass structs below are
-        // fine: their layout comes from the game's assembly at run time; only fields both versions have are read.)
+        // in from the 2019 references this builds against, where None is 0 (= 2022's Default). The render pass structs below are
+        // fine: their layout comes from the game's assembly at run time; only fields both versions have are read.
         private const int UnityMirror = 0;
         private const int NoMirror = -6;
         private const int LensMaskSize = 128;
@@ -62,12 +59,12 @@ namespace TarkovVR.Source.Graphics
         private Camera windowCamera;
 
         // Drawn without a camera of its own (the window camera costs ~0.5 ms of the main thread a frame: Unity's work for any camera),
-        // right where the chosen eye's picture is finished. false = the window camera, the old way.
+        // right where the chosen eye's picture is finished. false = the window camera.
         //   The last camera drawing into the headset has the game's final step (SSAAImpl; uiCam skipped): right after that step
         //     (Rendering's SSAAImpl.OnRenderImage postfix -> AfterFinalImage), from the eye image, finished there.
-        //   Another camera (uiCam): at its post-render, from ITS OWN working texture. Its copy back into the eye image comes after
-        //     post-render: the eye image there is still the game's picture stored the other way up, without the UI (why the first
-        //     try, 33c659c, came out upside down); the working texture holds the whole picture, stored like any render texture.
+        //   Another camera (uiCam): at its post-render, from its own working texture. Its copy back into the eye image comes after
+        //     post-render: the eye image there is still the game's picture stored the other way up, without the UI; the working
+        //     texture holds the whole picture, stored like any render texture.
         public static bool drawAfterEyes = true;
         public static bool afterEyesExtraFlip = false;  // turns the window over on those paths (A/B, if one comes out upside down)
         internal static DesktopMirror instance;
@@ -91,8 +88,8 @@ namespace TarkovVR.Source.Graphics
         private readonly LensMask[] lensMasks = { new LensMask(), new LensMask() };
         private LensMask currentLensMask;
 
-        // On the plugin's own object (headset: on an object of its own nothing of it ever ran - not the camera, not the end-of-frame
-        // draw); the camera on a child of it, so it lives as long as the plugin does
+        // On the plugin's own object (on an object of its own nothing of it ever ran - not the camera, not the end-of-frame draw);
+        // the camera on a child of it, so it lives as long as the plugin does
         private void Awake()
         {
             instance = this;
@@ -401,11 +398,10 @@ namespace TarkovVR.Source.Graphics
                 smoothedRotation = Quaternion.RotateTowards(eyeRotation, smoothedRotation, maxLagDegrees);
         }
 
-        // Each eye's image reaches less far toward the nose than outward, and the trailing view moved the crop toward it on a turn
-        // (headset: turning left with the left eye, the black mask came in on the right; then "a bit in the corner" with only the
-        // image's edges checked: the mask is rounded). The window's whole border has to land inside the eye image (less edgeMargin)
-        // and off the lens mask: where it wouldn't, the view trails less, just as far as fits (between the head's own turn and the
-        // smoothed one).
+        // Each eye's image reaches less far toward the nose than outward, and the trailing view moves the crop toward it on a turn.
+        // The window's whole border has to land inside the eye image (less edgeMargin) and off the lens mask (it's rounded: the
+        // image's edges alone aren't enough): where it wouldn't, the view trails less, just as far as fits (between the head's own
+        // turn and the smoothed one).
         private void KeepInsideEyeImage(Quaternion eyeRotation, Matrix4x4 view, Matrix4x4 projection, float tanHalfAcross, float tanHalfUp, float fieldOfView)
         {
             if (BorderInsideEyeImage(smoothedRotation * viewTilt, view, projection, tanHalfAcross, tanHalfUp))
@@ -659,7 +655,7 @@ namespace TarkovVR.Source.Graphics
         }
     }
 
-    // On the window camera: its render reaches the mirror, and what happens to it is logged (the first build's camera never rendered)
+    // On the window camera: its render reaches the mirror, and what happens to it is logged
     public class DesktopMirrorCamera : MonoBehaviour
     {
         internal DesktopMirror mirror;

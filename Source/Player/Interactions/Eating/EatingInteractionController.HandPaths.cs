@@ -1,23 +1,18 @@
 ﻿
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Baked open/reach hand paths (recon [HANDPATH] captures) - see the trap note
-    // below on why these MUST be properties, not fields.
+    // Baked open/reach hand paths (recon [HANDPATH] captures). These must be properties, not fields (see below).
     internal static partial class EatingInteractionController
     {
-        // ===== Baked open-hand paths (recon [HANDPATH], 2026-06) =================
-        // The vanilla clip's opening-palm pose vs the item root, replayed by the pull
-        // (see FoodDef.openHandPath). Packed stride 8: t, px,py,pz, qx,qy,qz,qw.
-        // Trailing keys where the vanilla hand LEAVES the item (the tushonka clip's
-        // spoon-grab dive, the bottles carrying the cap away) are trimmed — the replay
-        // holds the last kept key instead of yanking the hand off the food.
-        // PROPERTIES, not readonly fields: C# initializes static fields in DECLARATION
-        // order and Defs is declared ABOVE these — as fields they were still null while
-        // Defs built itself, so every HandPath silently stored null (observed: all foods
-        // fell back to the OpenGrip/freeze latch). A getter evaluates at call time.
+        // ===== Baked open-hand paths (recon [HANDPATH]) =================
+        // The vanilla clip's opening-palm pose vs the item root, replayed by the pull (see FoodDef.openHandPath).
+        // Packed stride 8: t, px,py,pz, qx,qy,qz,qw. Trailing keys where the vanilla hand leaves the item are
+        // trimmed: the replay holds the last kept key.
+        // Properties, not readonly fields: static fields initialize in declaration order and Defs is declared above
+        // these, so as fields they'd still be null while Defs builds (every HandPath silently null).
 
-        // Tushonka-measured; shared by every can on the saira rig (big cans too — same
-        // clip, slightly larger body). Spoon-dive keys (t≈0.80/0.90, 0.5-0.6m off) trimmed.
+        // Tushonka-measured; shared by every can on the saira rig (big cans too: same clip). Spoon-dive keys
+        // (t≈0.80/0.90, 0.5-0.6m off) trimmed.
         private static float[] SairaOpenPath => new float[]
         {
             0.108f, 0.089f, -0.126f, 0.308f, 0.0748f, -0.5211f, -0.3189f, 0.7881f,
@@ -74,8 +69,7 @@ namespace TarkovVR.Source.Player.Interactions
             0.996f, 0.198f, 0.036f, 0.142f, 0.4435f, 0.1367f, 0.458f, -0.7582f,
         };
 
-        // L palm popping the drink tab (vs hr_root / tc_root); last key (hand pulling
-        // away) trimmed on both.
+        // L palm popping the drink tab (vs hr_root / tc_root); last key (hand pulling away) trimmed on both.
         private static float[] HotrodOpenPath => new float[]
         {
             0.057f, 0.285f, 0.009f, 0.194f, 0.6403f, -0.034f, -0.3103f, 0.7019f,
@@ -102,8 +96,8 @@ namespace TarkovVR.Source.Player.Interactions
             0.893f, 0.216f, -0.063f, 0.016f, -0.1749f, -0.1509f, -0.3677f, 0.9008f,
         };
 
-        // R palm unscrewing/working the cap (vs mod_item) — the carry-the-cap-away tails
-        // (hand 0.4-0.65m off the bottle) trimmed on all of these.
+        // R palm unscrewing/working the cap (vs mod_item); the carry-the-cap-away tails (hand 0.4-0.65m off the
+        // bottle) trimmed on all of these.
         private static float[] VodkaOpenPath => new float[]
         {
             0.218f, 0.24f, 0.018f, 0.251f, -0.6847f, 0.0075f, -0.541f, -0.4884f,
@@ -171,8 +165,8 @@ namespace TarkovVR.Source.Player.Interactions
             0.743f, 0.167f, -0.257f, 0.167f, 0.9118f, -0.3428f, 0.0694f, 0.2154f,
         };
 
-        // R palm rolling the can key (vs saira_root) — the condensed milk uses the can
-        // clip; its spoon-dive tail trimmed like SairaOpenPath.
+        // R palm rolling the can key (vs saira_root): the condensed milk uses the can clip; spoon-dive tail
+        // trimmed like SairaOpenPath.
         private static float[] CondMilkOpenPath => new float[]
         {
             0.109f, 0.092f, -0.122f, 0.315f, 0.072f, -0.5104f, -0.3096f, 0.799f,
@@ -184,8 +178,7 @@ namespace TarkovVR.Source.Player.Interactions
             0.703f, -0.169f, 0.067f, 0.073f, 0.1908f, -0.9608f, -0.1119f, 0.1671f,
         };
 
-        // Vanilla tears the pouch with the R hand while WE hold it right (mirror food) —
-        // the path is item-relative so it may still read fine; judge in the headset.
+        // Vanilla tears the pouch with the R hand while we hold it right (mirror food); the path is item-relative.
         private static float[] RationOpenPath => new float[]
         {
             0.18f, -0.285f, 0.141f, 0.142f, 0.0085f, -0.7366f, 0.3071f, 0.6026f,
@@ -214,9 +207,8 @@ namespace TarkovVR.Source.Player.Interactions
             0.999f, -0.014f, -0.238f, -0.062f, -0.7352f, 0.0791f, -0.6673f, 0.0895f,
         };
 
-        // ===== 2026-06-13 batch (the "logs for food" recon run) =====
-        // Tetrapak corner tear (milk-measured; shared by both cartons). Last two keys
-        // (the torn nose carried away, z 0.19->0.41) trimmed.
+        // Tetrapak corner tear (milk-measured; shared by both cartons). Last two keys (the torn nose carried away,
+        // z 0.19->0.41) trimmed.
         private static float[] TetraPakOpenPath => new float[]
         {
             0.077f, -0.232f, 0.081f, 0.242f, -0.6145f, 0.4164f, -0.3035f, -0.5974f,
@@ -229,8 +221,8 @@ namespace TarkovVR.Source.Player.Interactions
             0.794f, -0.075f, -0.04f, 0.193f, -0.609f, 0.5491f, -0.1059f, -0.5625f,
         };
 
-        // Juice screw cap (vita-measured; apple/vita/grand share the rig). Last three keys
-        // (the unscrewed cap carried aside) trimmed.
+        // Juice screw cap (vita-measured; apple/vita/grand share the rig). Last three keys (the cap carried aside)
+        // trimmed.
         private static float[] JuiceOpenPath => new float[]
         {
             0.085f, 0.279f, -0.045f, 0.196f, 0.5257f, -0.4313f, -0.1751f, 0.712f,
@@ -302,8 +294,8 @@ namespace TarkovVR.Source.Player.Interactions
             1f, 0.102f, -0.042f, 0.198f, 0.75f, 0.1894f, 0.583f, -0.2486f,
         };
 
-        // Iskra strap rip (L palm vs IFR_CAT). Last two keys (the torn strip carried up and
-        // away, y -> 0.27) trimmed; the pull only samples to openReadyTime 0.6 anyway.
+        // Iskra strap rip (L palm vs IFR_CAT). Last two keys (the torn strip carried away, y -> 0.27) trimmed; the
+        // pull only samples to openReadyTime 0.6.
         private static float[] IskraOpenPath => new float[]
         {
             0f, 0.136f, 0.185f, 0.073f, -0.1181f, -0.4629f, -0.1456f, 0.8664f,
@@ -329,11 +321,9 @@ namespace TarkovVR.Source.Player.Interactions
             0.778f, 0.206f, 0.187f, 0.019f, -0.6106f, -0.7392f, 0.0314f, 0.2826f,
         };
 
-        // Iskra reach-in (L palm vs IFR_CAT, STATE_USE time axis). Headset-verified layout:
-        // low t = hand OUTSIDE at the bag mouth (Take@0.014 is just the food-appear event),
-        // deep IN the bag ≈ t 0.23-0.34, mid keys 0.45-0.89 are the mouth trip. The scrub
-        // samples t between reachStartTime and reachDeepTime (0.02 -> 0.3); the FULL pass
-        // is kept so the segment can be retuned anywhere on the clip without a recapture.
+        // Iskra reach-in (L palm vs IFR_CAT, STATE_USE time axis). Low t = hand outside at the bag mouth
+        // (Take@0.014 is just the food-appear event), deep in the bag ≈ t 0.23-0.34, keys 0.45-0.89 are the mouth
+        // trip. The scrub samples reachStartTime -> reachDeepTime (0.02 -> 0.3); the full pass is kept for retuning.
         private static float[] IskraReachPath => new float[]
         {
             0.007f, -0.017f, 0.26f, 0.105f, -0.4258f, -0.7702f, 0.1603f, 0.4469f,
@@ -374,8 +364,7 @@ namespace TarkovVR.Source.Player.Interactions
             0.601f, 0.096f, -0.069f, 0.196f, -0.4871f, 0.3587f, 0.3016f, -0.7369f,
         };
 
-        // Tarka dried-meat pack rip. Last two keys (the cover strip yanked away, y -> 0.45)
-        // trimmed.
+        // Tarka dried-meat pack rip. Last two keys (the cover strip yanked away, y -> 0.45) trimmed.
         private static float[] TarkaOpenPath => new float[]
         {
             0.004f, -0.069f, 0.069f, 0.146f, 0.2624f, 0.5207f, 0.7354f, 0.3453f,
@@ -388,8 +377,7 @@ namespace TarkovVR.Source.Player.Interactions
             0.777f, -0.072f, 0.083f, -0.05f, -0.1147f, -0.7646f, 0.347f, 0.5309f,
         };
 
-        // Salad box lid peel (saira-family clip): the 0.80/0.90 spoon-dive keys trimmed,
-        // final settle key kept — exactly the SairaOpenPath treatment.
+        // Salad box lid peel (saira-family clip): the 0.80/0.90 spoon-dive keys trimmed, final settle key kept.
         private static float[] SaladOpenPath => new float[]
         {
             0.113f, 0.214f, -0.149f, 0.209f, -0.0371f, -0.4195f, -0.4625f, 0.7802f,
@@ -402,10 +390,9 @@ namespace TarkovVR.Source.Player.Interactions
             0.999f, -0.148f, -0.093f, 0.12f, 0.6261f, -0.6873f, -0.3658f, 0.0435f,
         };
 
-        // Noodles bag handling/rip — LEFT palm vs pack_CAT over STATE_OPEN (its open state).
-        // Self-contained reach-up (y peaks ~0.197 at t≈0.44) then tear-down arc; no carry-away
-        // runaway, so all 10 keys kept (the pre-0.45 keys are unsampled at PullStart 0.45 but
-        // left in so lowering it live still works). The actual rip VISUAL is OpenPlay, separate.
+        // Noodles bag handling/rip: left palm vs pack_CAT over STATE_OPEN (its open state). Reach-up (y peaks ~0.197
+        // at t≈0.44) then tear-down arc; all 10 keys kept (the pre-0.45 keys are unsampled at PullStart 0.45, kept
+        // so it can be lowered live). The rip visual itself is OpenPlay.
         private static float[] NoodlesOpenPath => new float[]
         {
             0f, 0.304f, 0.011f, -0.019f, -0.8398f, 0.0213f, 0.4825f, -0.2479f,

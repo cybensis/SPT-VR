@@ -16,9 +16,8 @@ namespace TarkovVR.Source.Player.VRManager
         public GameObject LeftHand = null;
         public GameObject RightHand = null;
         public LaserPointer pointer = null;
-        // The laser and the menu input (VRUIInteracter) on their own object, on the controller the "Laser Pointer In Left Hand" setting picks.
-        // They were on RightHand, which the raid rig reuses as its gun hand: putting the laser on the left meant moving that hand to the
-        // left controller (the retired mirrored left-handed mode). Placed with the offsets RightHand had for it.
+        // The laser and the menu input (VRUIInteracter) on their own object, on the controller the "Laser Pointer In Left Hand" setting
+        // picks. Not on RightHand: the raid rig reuses that as its gun hand. Placed with RightHand's offsets.
         public GameObject LaserHand = null;
         private float x = 42;
         private float y = 355;
@@ -181,7 +180,7 @@ namespace TarkovVR.Source.Player.VRManager
 
             }
         }
-        // The laser, on its controller, as RightHand was placed for it. Kept beside the hands: they're moved under other parents on the way
+        // The laser, on its controller, placed as RightHand is. Kept beside the hands: they're moved under other parents on the way
         // into and out of raids (MenuPatches), the laser follows.
         private void UpdateLaserHand(VRPose fromAction, SteamVR_Input_Sources fromSource)
         {

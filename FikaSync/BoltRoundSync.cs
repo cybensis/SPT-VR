@@ -9,15 +9,15 @@ namespace SptVrFikaSync
 {
     // A VR player's single round into an open bolt-action (SPT-VR loads those by hand, one round at a time from the rig).
     //
-    // Every inventory move touching a player's gun in hands is put to that gun's hands controller after it's applied, and on a copy of
-    // another player FIKA does the same (ObservedInventoryController.HandleInProcess -> HandsController.Execute). Tarkov's
-    // FirearmController.Idling.Execute refuses a round into the internal magazine that isn't its own reload (LoadMagOperation) and turns
-    // one into the chamber into its LoadCartridgeToChamber animation. The host refusing the move refuses it for the VR player too: a FIKA
-    // client only applies a move the host accepted (ClientInventoryController). So on every peer with this module the VR player's move is
-    // accepted as it is, no animation (ObservedIdleOperation inherits Idling.Execute). The VR player's own game does the same for itself
-    // (SPT-VR's BoltActionPatches.LetSingleRoundIn); IsSingleRoundIntoGun is the same rule as its VRReloadController.LetsSingleRoundIn.
+    // Every inventory move touching a gun in hands goes to that gun's hands controller after it's applied, on observed copies too
+    // (ObservedInventoryController.HandleInProcess -> HandsController.Execute). Tarkov's FirearmController.Idling.Execute refuses a round
+    // into the internal magazine that isn't its own reload (LoadMagOperation) and turns one into the chamber into its
+    // LoadCartridgeToChamber animation. A FIKA client only applies a move the host accepted (ClientInventoryController), so a host refusal
+    // refuses it for the VR player too. On every peer with this module the VR player's move is accepted as is, no animation
+    // (ObservedIdleOperation inherits Idling.Execute). The VR player's own game does the same (SPT-VR's BoltActionPatches.LetSingleRoundIn);
+    // IsSingleRoundIntoGun is the same rule as its VRReloadController.LetsSingleRoundIn.
     //
-    // Only VR players (ArmSyncApply.IsVrPlayer): anyone else's Mosin keeps Tarkov's own chambering. Live A/B switch: enabled.
+    // Only VR players (ArmSyncApply.IsVrPlayer): anyone else's Mosin keeps Tarkov's own chambering. Switch: enabled.
     [HarmonyPatch]
     internal static class BoltRoundSync
     {

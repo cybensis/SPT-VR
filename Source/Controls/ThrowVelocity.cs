@@ -4,19 +4,17 @@ using Valve.VR;
 namespace TarkovVR.Source.Controls
 {
     // A throw's velocity from how the controller actually moved: its raw tracking point (the one the pose listeners place the hands
-    // from) over the last few frames, in tracking space - the space the old velocity came in, so the throw code is unchanged.
-    //
-    // Why (his report 2026-11-09: "throws seem to be going a bit more right than I expect" since OpenXR): SteamVR gave the raw point's
-    // velocity itself; OpenXR has no raw point, so OpenXRInput rebuilds it as the grip's velocity + the spin x the 10-15 cm lever from
-    // the grip to the raw point. A throw spins the controller fast, so that term is big, and a spin read in the wrong frame bends the
-    // throw sideways. Measuring the point's own motion needs neither. One log line per throw compares the two (and the spin itself).
+    // from) over the last few frames, in tracking space (the space the runtime's velocity comes in).
+    // Why: SteamVR gives the raw point's velocity itself; OpenXR has no raw point, so OpenXRInput rebuilds it as the grip's velocity
+    // + the spin x the 10-15 cm lever from the grip to the raw point. A throw spins the controller fast, so that term is big, and a
+    // spin read in the wrong frame bends the throw sideways. Measuring the point's own motion needs neither.
     public static class ThrowVelocity
     {
-        // OpenXR: the palm's (grip pose's) velocity as the runtime reports it - its IMU-backed own, no spin term (the raw point's rebuilt
-        // one bent throws sideways) and no prediction overshoot (the measured one below: his log had it 1.5-2x the runtime's and up to
-        // 60 deg off, toward the arc's centre - the predicted poses run ahead of an accelerating hand). The grenade's in the palm.
+        // OpenXR: the palm's (grip pose's) velocity as the runtime reports it: IMU-backed, no spin term (the raw point's rebuilt one
+        // bends throws sideways) and no prediction overshoot (the measured one below reads 1.5-2x the runtime's and up to 60 deg off,
+        // toward the arc's centre: the predicted poses run ahead of an accelerating hand). The grenade's in the palm.
         public static bool usePalmVelocity = true;
-        public static float palmScale = 1.25f;      // the palm moves slower than the controller's top (the raw point the throws used, ~1.25x in his log): kept to that strength
+        public static float palmScale = 1.25f;      // the palm moves slower than the controller's top (the raw point, ~1.25x): scaled up to that strength
         public static bool releaseFromHand = true;  // the thrown grenade starts where it is in the hand, not at the controller's tracking point
         public static bool enabled = false;         // the measured velocity (pose slope) when the palm's isn't used; false = the runtime's
         public static float window = 0.05f;         // s of samples fitted (about 4-5 frames): short, so a late curve of the arm doesn't lag in
@@ -119,7 +117,6 @@ namespace TarkovVR.Source.Controls
             return true;
         }
 
-        // The throw's line in the log: what the runtime said, what the tracking showed, and with OpenXR what the spin term added
         // The palm's velocity, tracking space, scaled by palmScale (OpenXR only)
         public static bool TryPalmVelocity(SteamVR_Input_Sources source, out Vector3 velocity)
         {
@@ -130,6 +127,7 @@ namespace TarkovVR.Source.Controls
             return true;
         }
 
+        // The throw's line in the log: what the runtime said, what the tracking showed, and with OpenXR what the spin term added
         public static void LogThrow(SteamVR_Input_Sources source, Vector3 runtimeVelocity, Vector3 measuredVelocity, Vector3 measuredSpin, string used, Vector3 bodyVelocity)
         {
             if (!throwLog)

@@ -4,175 +4,120 @@ using static EFT.Player;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Tunables (public statics so they can be A/B'd live in the headset) and the
-    // per-eat runtime state. Per-food values are SEEDED into the live statics each
-    // spawn (OnSpawnPre), so FoodDef stays the source of truth and the statics stay tunable.
+    // Tunables (public statics, live-tunable) and the per-eat runtime state. Per-food values are seeded into
+    // the statics each spawn (OnSpawnPre): FoodDef is the source of truth.
     internal static partial class EatingInteractionController
     {
         //--- Tunables (public so they can be A/B'd live in the headset) -------------
         public static bool enableManualEating = VRSettings.GetManualEating();
 
-        // Gesture trigger radii (metres); generous since the prop sits offset from the controller.
-        // Seeded per-food on spawn (= the zone radii). mouthForwardDot gates the eat to in-front.
+        // Gesture trigger radii (metres), seeded per food on spawn (= the zone radii). mouthForwardDot gates the eat to in front.
         public static float openDistance = 0.18f;
         public static float scoopDistance = 0.18f;
         public static float eatDistance = 0.18f;
         public static float mouthForwardDot = -0.2f;
-        // The eat anchor in HEAD-local space: the camera sits between the EYES, so anchor the
-        // zone a bit below + in front (the mouth) instead of eye-center — the old zero anchor
-        // is why "bring food to the mouth" felt too high. (0,0,0) = the old behavior; A/B live.
+        // The eat anchor in head-local space: the camera sits between the eyes, so the mouth is a bit below and in front.
         public static Vector3 mouthLocalOffset = new Vector3(0f, -0.08f, 0.08f);
 
-        // Reach offsets (anchor-local), seeded from the FoodDef each spawn; public for live A/B.
-        // Zero = the original hand-to-hand / hand-to-mouth triggers. Radii are the statics above.
+        // Reach offsets (anchor-local), seeded from the FoodDef each spawn. Zero = hand-to-hand / hand-to-mouth triggers.
         public static Vector3 openZoneOffset = Vector3.zero;
         public static Vector3 takeZoneOffset = Vector3.zero;
         public static Vector3 eatZoneOffset = Vector3.zero;
 
-        // Palm-anchored collision points. The hand rig transforms' ORIGIN is the WRIST (the
-        // controller pose pushed back controllerLength (~17.5cm) along its forward), a good
-        // 10cm from where the hand actually grips — probing/anchoring the zones there made
-        // physically ROTATING the hand sweep the collision point through an arc (it visibly
-        // slid off the hand), and the visible fingers crossed the debug spheres well before
-        // the origin did (the zones felt smaller than drawn). true = probe/anchor at the
-        // rendered hand's PALM instead (fingertip-leaf centroid of the hand skeleton,
-        // recomputed per frame so it rides the finger curl — see PalmOffsetLocal); false =
-        // the old origin behavior.
+        // true = probe/anchor the zones at the rendered hand's palm (fingertip-leaf centroid, recomputed per frame so it rides
+        // the finger curl, see PalmOffsetLocal). false = the rig transform's origin, which is the wrist (the controller pose
+        // pushed back controllerLength, ~10cm off the grip): rotating the hand sweeps that point through an arc.
         public static bool palmCollisionPoints = true;
-        // Rough wrist-local stand-in palm offset, used only if a hand skeleton can't be
-        // resolved (the centroid needs ikManager's bone3 — normally always there mid-eat).
+        // Wrist-local stand-in palm offset, used only if the hand skeleton can't be resolved (the centroid needs ikManager's bone3).
         public static Vector3 palmFallbackLocal = new Vector3(0f, 0f, 0.08f);
 
-        // Bag shake-to-pour: the bag must be within shakeNearDistance of the left hand, and you
-        // wiggle it — shakeReversalsNeeded head-relative velocity reversals (> shakeMinSpeed)
-        // within shakeWindow seconds pour the crackers (head-relative so walking doesn't count).
+        // Bag shake-to-pour: with the bag within shakeNearDistance of the left hand, shakeReversalsNeeded velocity reversals
+        // (> shakeMinSpeed) within shakeWindow seconds pour the crackers. Head-relative, so walking doesn't count.
         public static float shakeNearDistance = 0.60f;
         public static float shakeMinSpeed = 0.2f;     // m/s, head-relative
         public static int shakeReversalsNeeded = 1;
         public static float shakeWindow = 1.2f;
 
-        // Reach-into-bag (ReachBag): entering the take zone latches the reaching hand onto
-        // a RAIL — the line from where the palm entered toward the zone center (the bag
-        // mouth), captured at entry in the HOLDING hand's frame so walking/turning can't
-        // scrub it. Physical depth along the rail drives the reach segment.
-        public static float reachDepthDistance = 0.18f; // metres of reach for FULL depth
+        // Reach-into-bag (ReachBag): entering the take zone latches the reaching hand onto a rail, the line from where the
+        // palm entered toward the zone center (the bag mouth), captured in the holding hand's frame so walking/turning can't
+        // scrub it. Depth along the rail drives the reach segment.
+        public static float reachDepthDistance = 0.18f; // metres of reach for full depth
         // Fraction of the full reach where the trigger can grab the cracker.
         public static float reachGrabDepth = 0.5f;
-        // Withdrawing past the entry point by this many metres releases the rail (the
-        // "leave the collider" exit; with the cracker grabbed it completes the take).
+        // Withdrawing past the entry point by this many metres releases the rail (with the cracker grabbed it completes the take).
         public static float reachExitDepth = 0.03f;
-        // Yanking this far SIDEWAYS off the rail releases it too.
+        // Moving this far sideways off the rail releases it too.
         public static float reachLateralEscape = 0.15f;
-        // ReachPath foods only: true = rotation stays live on the controller and the baked
-        // path drives just the POSITION (reaching into a bag, the wrist is yours — the
-        // rail's behavior); false = the authored wrist roll replays too. A/B live.
+        // ReachPath foods only: true = the baked path drives just the position, rotation stays on the controller.
+        // false = the authored wrist roll replays too.
         public static bool reachRotationFree = false;
-        // The STATE_USE reach segment, SEEDED per food from FoodDef.reachStartTime/
-        // reachDeepTime each spawn — values set here or between eats are WIPED by the
-        // re-seed (the "adjusting them did nothing" trap); tune them LIVE MID-EAT, then
-        // DumpFoodDef round-trips them into the def so they stick.
+        // The STATE_USE reach segment. Re-seeded from FoodDef.reachStartTime/reachDeepTime each spawn, so values set
+        // between eats are lost: tune them mid-eat, then DumpFoodDef writes them into the def.
         public static float reachStartTime = 0.02f;
         public static float reachDeepTime = 0.3f;
 
         public static bool eatingHaptics = true;
-        // Audio -> haptics: every audible eating clip also streams its waveform envelope
-        // to BOTH controllers (Source/Misc/AudioHaptics) — you feel the lid roll, each
-        // gulp, the holster. Master scale lives on AudioHaptics.strength.
+        // Every audible eating clip also streams its waveform envelope to the controllers (Source/Misc/AudioHaptics).
+        // Master scale: AudioHaptics.strength.
         public static bool audioHaptics = true;
-        // Drive the body-follow ourselves each eat frame. Mid-eat nothing else does (IKManager/
-        // VRPlayerManager gates skip it, the gun's HandsPositioner is disabled) -> rig/IK desync =
-        // walking jitter. (A weapon switch left an orphan caller, hence "switching fixed it.") Keep true.
+        // Drive the body-follow ourselves each eat frame: mid-eat nothing else does (the IKManager/VRPlayerManager gates
+        // skip it, the gun's HandsPositioner is disabled), and the rig/IK desync shows as walking jitter. Keep true.
         public static bool driveBodyFollowDuringEat = true;
-        // A/B: parent props to the IK wrist bone (bone3) vs the rig target. bone3 (pinned to the
-        // smooth target by driveHandsToTargets) tracks to ~2-3mm with no walk lag and removes the
-        // last prop/hand mismatch — so false is the good default; true routes to the targets.
+        // A/B: false (default) parents props to the IK wrist bone (bone3, pinned to the rig target by driveHandsToTargets:
+        // no walk lag, no prop/hand mismatch); true parents them to the rig targets.
         public static bool debugParentToTarget = false;
-        // Pin bone3 to the rig target after the IK solve so the wrist tracks 1:1 (no lag).
-        // Required for the prop-on-bone3 setup above.
+        // Pin bone3 to the rig target after the IK solve so the wrist tracks 1:1. Required for the prop-on-bone3 setup above.
         public static bool driveHandsToTargets = true;
-        // Physical pull-to-open: holding trigger at the open zone LATCHES the opening hand onto
-        // the held item (LatchHandToItem — the rendered hand glues to the holding controller's
-        // 6dof), and your physical pull (travel relative to the holding hand) SCRUBS the
-        // lid-roll/peel/cap-pop forward. Release = unlatch, the lid stays where you left it;
-        // grab again to continue. Shared by every archetype (the open step is one path); the
-        // drink RECAP stays a plain trigger press. false = the old press-once-and-play open.
+        // Pull-to-open: holding trigger at the open zone latches the opening hand onto the held item (LatchHandToItem), and
+        // the hand's travel relative to the holding hand scrubs the open. Release = unlatch, progress stays. Every archetype;
+        // the drink recap stays a plain trigger press. false = press once and the open plays.
         public static bool physicalPullToOpen = true;
-        // Metres of hand travel (in the holding hand's frame) for a FULL open pull.
+        // Metres of hand travel (in the holding hand's frame) for a full open pull.
         public static float openPullDistance = 0.28f;
-        // The trigger AXIS scrubs the START of every open grab: squeezing from pullLatchAxis
-        // up to pullFullPressAxis drives the first triggerOpenPortion of the open (both
-        // directions, floored at the grab), and the PHYSICAL gesture (pull/tilt) only
-        // engages once the trigger is FULLY pressed — so an open = squeeze, then move.
-        // 0 = no squeeze portion (full press still required before the physical part).
+        // The trigger axis scrubs the start of every open grab: pullLatchAxis..pullFullPressAxis drives the first
+        // triggerOpenPortion of the open (both directions, floored at the grab). The physical gesture (pull/tilt) engages
+        // only at full press. 0 = no squeeze portion (full press still required).
         public static float triggerOpenPortion = 0.2f;
-        // Trigger axis thresholds: latch = the squeeze level that grabs (edge-gated),
-        // full press = the physical gesture engages (or a Trigger-kind open is fully
-        // scrubbed), release = unlatch — and a fully-pressed Trigger-kind open COMPLETES
-        // here (the press-then-fully-depress cycle).
+        // Trigger axis thresholds: latch = the squeeze level that grabs (edge-gated); full press = the physical gesture
+        // engages (or a Trigger-kind open is fully scrubbed); release = unlatch, and a fully pressed Trigger-kind open completes.
         public static float pullLatchAxis = 0.15f;
         public static float pullFullPressAxis = 0.95f;
         public static float pullReleaseAxis = 0.12f;
-        // Tilt scale for a FULL open: degrees the hand tips off its full-press orientation,
-        // any direction (the squeeze consumes triggerOpenPortion first, so the physical part
-        // needs the remaining fraction of this). 90 headset-tuned 2026-06-12. (A signed CCW
-        // wrist-TWIST scale lived here briefly for screw caps — removed: wrist roll measured
-        // too inconsistently in the headset and the tilt reads the same.)
+        // Degrees the hand tips off its full-press orientation (any direction) for a full open; the squeeze consumes
+        // triggerOpenPortion first. A wrist-twist gesture is a dead end: wrist roll measures too inconsistently.
         public static float openTiltDegrees = 70f;
-        // Open-state normalizedTime the pull STARTS from: progress 0 maps here, progress 1
-        // maps to pullEndTime. -1 = auto (wherever the animator froze after the draw, ≈0).
-        // Raise it to skip the clip's early draw/reach beat — the lid scrub, the baked
-        // HandPath and the milestone sounds all share this time axis. SEEDED per food from
-        // FoodDef.pullStartTime (PullStart(...)) each spawn, like openReadyTime; still
-        // A/B-able live, and DumpFoodDef round-trips the tuned value.
+        // Open-state normalizedTime the pull starts from (progress 0); progress 1 maps to pullEndTime. -1 = auto (where the
+        // animator froze after the draw, ≈0). The lid scrub, the baked HandPath and the milestone sounds share this time axis.
+        // Seeded per food from FoodDef.pullStartTime (PullStart(...)); DumpFoodDef round-trips it.
         public static float pullStartTime = -1f;
-        // Open-state normalizedTime the pull ENDS at = where the hand UNLOCKS (progress 1
-        // maps here). -1 = openReadyTime, i.e. the pull covers the whole open (the old
-        // behavior). Set it EARLIER when the clip's tail isn't pull motion — e.g. the
-        // tushonka spoon grab: after the unlatch the remaining clip AUTO-PLAYS from here to
-        // openReadyTime (hand back on the controller, fingers still animating) instead of
-        // being scrubbed by your pull. Seeded from FoodDef.pullEndTime (PullEnd(...));
-        // A/B live; DumpFoodDef round-trips it.
+        // Open-state normalizedTime the pull ends at (progress 1) = where the hand unlocks. -1 = openReadyTime (the pull covers
+        // the whole open). Set it earlier when the clip's tail isn't pull motion: the rest auto-plays to openReadyTime.
+        // Seeded from FoodDef.pullEndTime (PullEnd(...)); DumpFoodDef round-trips it.
         public static float pullEndTime = -1f;
-        // When a pull-open completes WITHOUT an OpenGrip bone, log the bones under the held
-        // item ranked by how far they moved across the pull — the winner is the lid/cover
-        // bone name to paste into OpenGrip(...). (Reading the CLIP's wrist bones to place
-        // the hand was tried twice and is a DEAD END: raw reads see last frame's post-pin
-        // values, and forced Animator.Update(0) reads come back in the wrong frame — the
-        // hand flew off in the wrong direction. The OpenGrip prop-ride can't misalign: the
-        // bone it follows is the same one you SEE moving on the item.)
+        // When a pull-open completes without an OpenGrip bone, log the bones under the held item ranked by how far they
+        // moved: the winner is the bone name for OpenGrip(...). Placing the hand from the clip's wrist bones is a dead end
+        // (raw reads see last frame's post-pin values, forced Animator.Update(0) reads come back in the wrong frame).
         public static bool logOpenMovers = false;
         public static bool logSteps = false;              // each eat's step-by-step progress ("[ManualEat] Opening / Took / Ate ..."); warnings always
         internal static void LogStep(string message) { if (logSteps) Plugin.MyLog.LogInfo(message); }
-        // OpenGrip snap: at the grab, JUMP the hand onto the lid/cover bone instead of
-        // keeping the offset from where you pressed trigger. The INDEX FINGERTIP is what
-        // lands on the bone — resolved from the hand skeleton at the grab (deepest bone
-        // named *index* under the wrist; falls back to the fingertip-leaf centroid, then
-        // the palm) and re-applied every frame, so it tracks the finger-curl animation and
-        // the hand pivots around the fingertip while you twist. No manual offsets needed;
-        // pullSnapPos is an OPTIONAL extra nudge in the bone's local frame (default zero).
-        // false = the latch keeps your grab-moment offset to the bone.
+        // OpenGrip snap: at the grab the hand jumps onto the lid/cover bone, index fingertip on the bone (deepest *index* bone
+        // under the wrist; else the fingertip-leaf centroid, then the palm), re-applied every frame so it follows the finger
+        // curl. pullSnapPos = optional nudge in the bone's local frame. false = the latch keeps the grab-moment offset to the bone.
         public static bool pullSnapToGrip = true;
         public static Vector3 pullSnapPos = Vector3.zero;
-        // Keep the latched hand's ROTATION on your controller (full 3dof twist) while its
-        // POSITION is locked in place / riding the lid. Applies to the freeze-at-grab latch
-        // too. false = the rotation rides the bone (captured at the grab) like before.
+        // Keep the latched hand's rotation on the controller while its position is locked / riding the lid (the freeze-at-grab
+        // latch too). false = the rotation rides the bone (captured at the grab).
         public static bool pullRotationFree = true;
-        // HandPath foods only: true = keep the rotation on the controller and take just the
-        // POSITION from the baked path (the authored rotation — the wrist rolling the key —
-        // is the point of the path, so false is the default). A/B live.
+        // HandPath foods only: true = rotation stays on the controller, the baked path gives just the position.
+        // false = the authored rotation replays too.
         public static bool pathRotationFree = false;
-        // Degrees of controller twist the latched hand may WIGGLE off its anchored rotation
-        // (the authored path / the ridden bone / the grab pose). Measured as the controller's
-        // deviation from its grab-moment orientation, clamped — so the hand feels alive in
-        // your grip without breaking the authored look. 0 = rigid lock (the old behavior);
-        // for fully free rotation use pathRotationFree / pullRotationFree instead.
+        // Degrees of controller twist the latched hand may deviate from its anchored rotation (authored path / ridden bone /
+        // grab pose), measured from the controller's grab-moment orientation. 0 = rigid.
         public static float pullWiggleDeg = 2f;
-        // The manual reload's hand latch (VRReloadController.LatchHand / ApplyLatchWiggle) for the eating latches (pull-open, reach-in):
-        // the hand EASES onto the authored pose at the grab and back onto the controller at the release (the old latch jumped on and
-        // snapped off), and wiggles about the point it holds - the index fingertip on the lid, the palm in the bag - by the controller's
-        // turn since the grab measured against the HOLDING hand (so turning the item doesn't count), capped at latchWiggleDegrees.
-        // Tilt opens (caps, tabs) keep pullWiggleDeg about the wrist: their gesture IS the hand's turn, a wiggle would count it twice.
-        // false = the old latch, exactly.
+        // The reload's hand latch (VRReloadController.LatchHand / ApplyLatchWiggle) for pull-open and reach-in: the hand eases onto
+        // the authored pose at the grab and back to the controller at the release, and wiggles about the point it holds by the
+        // controller's turn since the grab (measured against the holding hand), capped at latchWiggleDegrees. Tilt opens keep
+        // pullWiggleDeg about the wrist: their gesture is the hand's turn. false = the latch jumps on and snaps off.
         public static bool reloadStyleLatch = true;
         public static float latchWiggleDegrees = 15f;   // = VRReloadController.handWiggleDegrees
         public static float latchSnapTime = 0.06f;      // s onto the authored pose (= handSnapTime)
@@ -245,17 +190,10 @@ namespace TarkovVR.Source.Player.Interactions
         private static Renderer[] hideOnOpenR;  // renderers hidden at open completion (noodles' torn cover); re-shown on restore
         private static bool hiddenOnOpen;       // one-shot guard
 
-        // Pull-to-open runtime. pullProgress persists across grabs (a half-rolled lid stays
-        // half-rolled until you grab it again); pullAnimStart = the normalizedTime progress 0
-        // maps to (captured at the first grab — wherever the animator froze after the draw).
-        // handLatched glues the rendered acting hand to the HELD ITEM at its grab pose: a
-        // latch transform parented to the holding hand's rig target, and the latched arm's IK
-        // target AND bone3 pin both aim at it. The IK stays ON — an earlier IK-off "let the
-        // clip drive the arm" version didn't hold (the hand kept controller-tracking), and
-        // item-glue is the better feel anyway: the hand rides the holding controller's full
-        // 6dof while your physical pull drives the scrub invisibly. The acting RIG target
-        // keeps tracking the controller throughout, so unlatching snaps the hand straight
-        // back to your real hand.
+        // Pull-to-open runtime. pullProgress persists across grabs; pullAnimStart = the normalizedTime progress 0 maps to
+        // (captured at the first grab). handLatched: a latch transform under the holding hand's rig target, and the latched
+        // arm's IK target and bone3 pin both aim at it. The IK stays on (with IK off the clip doesn't hold the arm). The acting
+        // rig target keeps tracking the controller, so unlatching returns the hand to the real hand.
         private static bool pullingOpen;            // trigger held, hand latched to the item
         private static float pullProgress;          // 0..1 open progress (persists across grabs)
         private static float pullGrabProgress;      // progress when the current grab started
@@ -303,12 +241,9 @@ namespace TarkovVR.Source.Player.Interactions
         private static Transform[] moverBones;
         private static Vector3[] moverStartLocal;
 
-        // Reach-into-bag runtime (ReachBag take — see StepReachTake). Reuses the latch
-        // plumbing (pullLatch/handLatched, the IK + bone3 pin re-aim) but drives the latch
-        // along a RAIL instead of the open scrub: entry point + axis captured at zone entry
-        // in the HOLDING hand's frame; the palm offset is FROZEN at entry (the scrub
-        // animates the latched fingers — live curl tracking would feed the clip back into
-        // the depth measure, the pullPalmLocal lesson).
+        // Reach-into-bag runtime (ReachBag take, see StepReachTake). Reuses the latch plumbing (pullLatch/handLatched, the IK +
+        // bone3 pin re-aim) but drives the latch along a rail: entry point + axis captured at zone entry in the holding hand's
+        // frame. The palm offset is frozen at entry, for the same reason as pullPalmLocal.
         private static bool reachingIn;             // off hand latched on the bag-mouth rail
         private static bool reachGrabbed;           // cracker grabbed this reach (pull it out)
         private static float reachProgress;         // 0..1 depth along the rail
@@ -316,114 +251,88 @@ namespace TarkovVR.Source.Player.Interactions
         private static Vector3 reachAxisLocal;      // rail direction (anchor-local), entry -> zone center
         private static Vector3 reachPalmLocal;      // reaching palm offset frozen at entry
 
-        // Arms layer-1 states, shared across foods (confirmed in recon).
+        // Arms layer-1 states, shared across foods.
         private const int STATE_OPEN_HASH = 492683391;  // draw -> roll lid -> [grab spoon]
         private const int STATE_USE_HASH = -735675743;  // scoop / take (the grab motion)
         private const int STATE_EAT_HASH = 719885042;   // bite
         private const int STATE_END_HASH = -1014941517; // put-away
 
-        // Per-gesture pose determinism (loaded from the FoodDef on spawn; public for live A/B).
-        // See FoodDef.deterministicGesture + StartGesturePulse. *State = the replayed segment,
-        // *Time = where in it the pulse starts.
+        // Per-gesture pose determinism (seeded from the FoodDef on spawn), see FoodDef.deterministicGesture + StartGesturePulse.
+        // *State = the replayed segment, *Time = where in it the pulse starts.
         public static bool deterministicGesturePose = false;
         public static int takePoseState = STATE_USE_HASH;
         public static float takePoseTime = 0f;
         public static int bitePoseState = STATE_EAT_HASH;
         public static float bitePoseTime = 0f;
-        // Log each take/bite pulse's starting arms state+normalizedTime (to find the exact
-        // "perfect" segment to bake into takePoseTime/bitePoseTime).
+        // Log each take/bite pulse's starting arms state + normalizedTime (to find the segment for takePoseTime/bitePoseTime).
         public static bool logGesturePose = false;
-        // STATE_OPEN normalizedTime of the finished-open READY pose — where the open clip
-        // FREEZES (a non-pull open plays to here; a pull settles to here after pullEndTime).
-        // Set from the current FoodDef on spawn; public so it can still be A/B'd live.
+        // STATE_OPEN normalizedTime of the finished-open ready pose, where the open clip freezes (a non-pull open plays to
+        // here; a pull settles to here after pullEndTime). Seeded from the FoodDef on spawn.
         public static float openReadyTime = 0.92f;
         // Last bite: auto-fire the trigger/fire cancel (fast put-away + weapon draw).
         // Off = wait out the operation's use-time.
         public static bool cancelToFinish = true;
         // Last bite: jump the animator straight to STATE_END instead of playing out STATE_EAT.
         public static bool skipLastBiteAnim = true;
-        // Where in STATE_END the put-away starts (skips the can-hold bite at the start). Seeded per-food, A/B live.
+        // Where in STATE_END the put-away starts (skips the can-hold bite at the start). Seeded per food.
         public static float putAwayStartTime = 0.3f;
-        // Each scoop/eat gesture plays the animation forward this long (finger/hand
-        // motion) then freezes. Set 0 to keep bites fully frozen.
+        // Each scoop/eat gesture plays the animation forward this long (seconds), then freezes. 0 = bites stay frozen.
         public static float bitePlayTime = 0.5f;
         private static float playUntil;        // animation plays (speed>0) while Time.time < this
 
-        // Both-trigger cancel + the queued finish. The finish must NEVER run from STATE_OPEN
-        // (busy hands + the food won't discard — see FinishSequence), so a finish requested
-        // while the arms are still in the draw/open state first kicks them into STATE_USE
-        // and completes a few frames later (finishDeadline = give-up fallback).
+        // Both-trigger cancel + the queued finish. The finish must never run from STATE_OPEN (busy hands, the food won't
+        // discard, see FinishSequence): a finish requested there first kicks the arms into STATE_USE and completes a few
+        // frames later (finishDeadline = give-up fallback).
         private static bool prevBothTriggers;
         private static bool finishPending;
         private static bool finishIsCancel;
         private static float finishDeadline;
 
-        // Drink: resource/timing snapshot. drinkUseTime = seconds at the mouth to drink the
-        // WHOLE item (vanilla UseTime unless the FoodDef overrides); drinkRemainingFrac =
-        // HpPercent/MaxResource at spawn (a half-drunk bottle only has half left to drink);
-        // drinkHeldTime accumulates while the container is held at the mouth.
+        // Drink snapshot. drinkUseTime = seconds at the mouth to drink the whole item (vanilla UseTime unless the FoodDef
+        // overrides); drinkRemainingFrac = HpPercent/MaxResource at spawn; drinkHeldTime accumulates while held at the mouth.
         private static float drinkUseTime;
         private static float drinkRemainingFrac = 1f;
         private static float drinkHeldTime;
         private static bool drinkingHeld;      // at the mouth right now (gulp loop playing)
-        // LIVE drain: while held at the mouth the consumed fraction is applied INCREMENTALLY
-        // (energy/hydration + HpPercent + bar refresh, in drinkDrainStep chunks of the whole
-        // item) instead of once at the finish — the resource bar visibly ticks down as you
-        // drink, and the auto-finish triggers off the LIVE resource hitting empty (health-
-        // based), not the use-time math alone. drinkAppliedFrac = what's already applied
-        // this eat; the finish only applies the remainder, so nothing doubles.
+        // Live drain: while held at the mouth the consumed fraction is applied in drinkDrainStep chunks of the whole item
+        // (energy/hydration + HpPercent + bar refresh), and the auto-finish fires when the live resource hits empty.
+        // drinkAppliedFrac = what's already applied this eat; the finish applies only the remainder.
         public static bool drinkLiveDrain = true;
         public static float drinkDrainStep = 0.01f; // 1% chunks — smooth, near vanilla's per-tick cadence
         private static float drinkAppliedFrac;
         private static float drinkTimeAppliedFrac; // the part of drinkAppliedFrac that came from at-mouth TIME
                                                    // (spoon bites bump only the total — see DrainDrinkLive)
         private static EFT.InventoryLogic.FoodDrinkComponent drinkFdc; // cached at spawn (the live resource)
-        // The gulp sound is an animation event, but the drink loop restarts STATE_USE faster
-        // than the clip's audio length, so without throttling it retriggers mid-playback (the
-        // "repeats too quickly" symptom). Gate it to one play per drinkGulpInterval seconds —
-        // the CLIP runs longer than its audible part (trailing silence), so this sits a bit
-        // under the clip length or the next gulp feels late (1.6 did — reported).
+        // The gulp sound is an animation event, and the drink loop restarts STATE_USE faster than the clip's audio length:
+        // gate it to one play per drinkGulpInterval seconds. The clip has trailing silence, so this sits a bit under its length.
         public static float drinkGulpInterval = 1.2f;
         private static float nextDrinkSound;
-        // Gulp-audio FALLBACK clock: the gulp is normally the clip's own Drink/Eat sound
-        // event (allowed through AllowSound on the nextDrinkSound throttle), but after a
-        // fast lower->re-raise the animation events were observed to STOP arriving entirely
-        // (reported twice, 2026-06: permanent drink silence; the source-side cut was ruled
-        // out — Release() vs Stop() made no difference). So whenever a gulp is overdue by a
-        // grace past the throttle, DrinkHeldFrame plays the def's own eatSound manually
-        // (PlaySound — the same proven path the per-bite sounds use). When animation events
-        // ARE flowing they keep beating the fallback, so vanilla timing is unchanged.
+        // Gulp-audio fallback clock: the gulp is normally the clip's own Drink/Eat sound event (let through AllowSound on the
+        // nextDrinkSound throttle), but after a fast lower -> re-raise the animation events can stop arriving. When a gulp is
+        // overdue by GulpFallbackGrace past the throttle, DrinkHeldFrame plays the def's eatSound itself (PlaySound).
         private static float nextGulpFallback;
         private const float GulpFallbackGrace = 0.35f;
-        // Mouth-zone HYSTERESIS while drinking: once the drink is held at the mouth, the
-        // exit boundary is this multiple of the entry radius. Without it a steady hold
-        // flickers across the boundary (superwater log 2026-06-12: ~20 Lowered/Drinking
-        // cycles in 3s of holding), which pauses the drink clock — "held it forever, never
-        // finished" — and chops the gulp cadence. 1 = old exact-radius behavior.
+        // Mouth-zone hysteresis while drinking: the exit boundary is this multiple of the entry radius. Without it a steady
+        // hold flickers across the boundary, which pauses the drink clock and chops the gulp cadence. 1 = exact radius.
         public static float drinkZoneExitScale = 1.35f;
-        // Cut the glug the moment the bottle leaves the mouth. The cut is BetterSource.Stop()
-        // on the player's own clip source — NOT ReleaseClipsSource: releasing returned the
-        // pooled source to BetterAudio mid-play, and a fast lower→raise wedged the sound
-        // player into permanent silence (reported). false = let the gulp clip finish on its
-        // own when lowering (the vanilla auto-release then cleans it up).
+        // Cut the glug when the bottle leaves the mouth, with BetterSource.Stop() on the player's own clip source. Not
+        // ReleaseClipsSource: returning the pooled source to BetterAudio mid-play can leave the sound player silent after a
+        // fast lower -> raise. false = the gulp clip finishes on its own (the vanilla auto-release cleans it up).
         public static bool cutDrinkSoundOnLower = true;
-        // Timed-eat loop state, seeded from FoodDef.eatLoopState each spawn (0 = STATE_USE).
-        // Live-tunable: sausage's non-standard chew hash is a recon GUESS — paste another
-        // hash here in UnityExplorer if its loop doesn't play/sound.
+        // Timed-eat loop state, seeded from FoodDef.eatLoopState each spawn (0 = STATE_USE). Live-tunable: sausage's
+        // non-standard chew hash is a guess.
         public static int eatLoopState;
         private static float nextLoopPlay; // DriveDrinkLoop replay throttle (wrong-hash safety)
-        // One-shot open animation: an arms state PLAYED FOR REAL (not scrubbed) when the open
-        // completes, for open visuals a scrub can't show — noodles' bag-RIP lives in the early
-        // frames of its first eat state (2073176132), not STATE_OPEN. Seeded per-food from
-        // FoodDef.openPlayState/openPlayMaxTime each spawn; A/B live (max time = stop before the
-        // first bite). 0 = none. The chew loop must be a DIFFERENT state or eating re-rips.
+        // One-shot open animation: an arms state played for real (not scrubbed) when the open completes, for visuals a scrub
+        // can't show: noodles' bag rip is in the early frames of its first eat state (2073176132), not STATE_OPEN. Seeded from
+        // FoodDef.openPlayState/openPlayMaxTime (max time = stop before the first bite). 0 = none. The chew loop must be a
+        // different state or eating re-rips.
         public static int openPlayState;
         public static float openPlayMaxTime = 1f;
-        // Segmented bites (sausage): hide from the END of the name-sorted renderer list
-        // (the tip) first; flip live if it visibly eats from the wrong end.
+        // Segmented bites (sausage): hide from the end of the name-sorted renderer list (the tip) first.
         public static bool segmentHideFromEnd = true;
-        // The cap's rest offset ON the container (captured before any reparenting) so it can
-        // sit glued there until opened and be glued back on a recap.
+        // The cap's rest offset on the container (captured before any reparenting), so it can sit glued there until opened
+        // and be glued back on a recap.
         private static Vector3 capLocalPos; private static Quaternion capLocalRot;
         private static Transform capHandBoneRef; // the free hand's IK bone (cap goes here on open)
     }

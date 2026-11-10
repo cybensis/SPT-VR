@@ -24,8 +24,7 @@ namespace TarkovVR.Patches.Misc
 
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // When at the shooting range, if you look or point the gun away from down range it lowers the weapon
-        // which is annoying so do this to prevent it from happening
+        // At the shooting range the game lowers the weapon when you look or point away from down range; keep it up
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HideoutPlayer), "SetPatrol")]
         private static bool PreventGunBlockInHideout(HideoutPlayer __instance, ref bool patrol)
@@ -189,7 +188,7 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
-        // The pointer on exit is fucked up so remove it altogether
+        // The light button's hover-end handler misbehaves in VR, so remove it
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HoverTrigger), "Init")]
         private static void RemoveOnExitTriggerFromLightSelection(HoverTrigger __instance)
@@ -253,9 +252,8 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(MainMenuShowOperation), "method_23")]
         private static void SetInGameOnReturnToHideout_Preloader(MainMenuShowOperation __instance)
         {
-            // Only set inGame if the player is set. If this is the first time going to hideout when starting the game
-            // we only want inGame set if everythings been loaded, and if player is set then that means the hideout
-            // has already been opened once, and swapping between hideout and the menu is fast now
+            // Only when the player is set: on the first hideout visit inGame must wait until everything has loaded;
+            // a set player means the hideout was already opened once
             if (VRGlobals.player)
             {
                 if (VRGlobals.vrPlayer)
@@ -289,7 +287,7 @@ namespace TarkovVR.Patches.Misc
             }
         }
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
-        // Changes to in game when selecting the hideout option in the main menu Common UI
+        // Hideout loading screen: dark background, black camera clear, 1 m far clip
         [HarmonyPostfix]
         [HarmonyPatch(typeof(HideoutLoadingScreen), "Show")]
         private static void SetInGameOnReturnToHideout_Common(HideoutLoadingScreen __instance)
@@ -330,7 +328,7 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
-        //BSG... Why make coroutine for this?
+        // The game positions the list from a coroutine, so reset its parent one frame later
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SelectItemContextMenu), "GetItem")]
         private static void SetItemContainerListPos(SelectItemContextMenu __instance)
