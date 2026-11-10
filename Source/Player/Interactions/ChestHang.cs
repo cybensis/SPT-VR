@@ -969,7 +969,7 @@ namespace TarkovVR.Source.Player.Interactions
                     return false;
             }
             // The offsets are from the eyes looking level; the anchor is the neck, so take that part off
-            position = neck + bodyRot * (offset - ShoulderStock.neckLocalOffset);
+            position = neck + bodyRot * (offset - HeadTracking.neckLocalOffset);
             return true;
         }
 
@@ -1034,7 +1034,7 @@ namespace TarkovVR.Source.Player.Interactions
                     bodyYawInRig = Mathf.MoveTowardsAngle(bodyYawInRig, headYawInRig, bodyRecenterRate * dt);
                 lastHeadYawInRig = headYawInRig;
             }
-            neck = headPos + headRot * ShoulderStock.neckLocalOffset;
+            neck = headPos + headRot * HeadTracking.neckLocalOffset;
             return Quaternion.Euler(0f, rigYaw + bodyYawInRig, 0f);
         }
 

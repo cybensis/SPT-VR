@@ -124,7 +124,7 @@ namespace TarkovVR.Source.Player.VR
         // same space in the hideout too (see ShoulderStock).
         public static void TryMeasure()
         {
-            if (!enabled || VRSettings.GetLeftHandedMode() || !ShoulderStock.RawHmdPose(out Vector3 head, out _))
+            if (!enabled || VRSettings.GetLeftHandedMode() || !HeadTracking.RawHmdPose(out Vector3 head, out _))
                 return;
 
             Vector3 leftWrist = WristOf(VRInput.LeftHandPose, SteamVR_Input_Sources.LeftHand, -1f);

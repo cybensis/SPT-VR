@@ -10,7 +10,7 @@ namespace TarkovVR.Source.Controls
     // stick is pushed forward (or is pushed within goGrace after), a quick step or lean back ends it. Easing off the stick still ends
     // it and the stick click still toggles it (InputHandlers.SprintInputHandler).
     //
-    // Measured on the NECK point under the raw headset pose (ShoulderStock.RawHmdPose + neckLocalOffset): the headset swings ~10 cm
+    // Measured on the NECK point under the raw headset pose (HeadTracking.RawHmdPose + neckLocalOffset): the headset swings ~10 cm
     // round the neck when you look around or nod, the neck only moves when the body does. Raw tracking space, so the sticks'
     // moving and turning never show up in it. Forward = the way the character faces (the way it runs), taken into tracking space
     // through the rig.
@@ -78,12 +78,12 @@ namespace TarkovVR.Source.Controls
         {
             float now = Time.unscaledTime;
             Confirm(now, running);
-            if (!ShoulderStock.RawHmdPose(out Vector3 headPos, out Quaternion headRot))
+            if (!HeadTracking.RawHmdPose(out Vector3 headPos, out Quaternion headRot))
             {
                 Clear();
                 return 0;
             }
-            Vector3 neck = headPos + headRot * ShoulderStock.neckLocalOffset;
+            Vector3 neck = headPos + headRot * HeadTracking.neckLocalOffset;
 
             // A gap (menus, a hitch) or a jump no body makes: the history doesn't describe this movement
             if (stored > 0)

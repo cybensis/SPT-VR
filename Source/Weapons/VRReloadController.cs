@@ -2936,7 +2936,7 @@ namespace TarkovVR.Source.Weapons
             // In the body's frame from the neck, like the guns on the body: on the headset, looking down at the pouch swung it forward
             // and down with the head (the HMD pivots ~10 cm about the neck). The offset is from the eyes looking level.
             Quaternion bodyRot = ChestHang.BodyYaw(out Vector3 neck);
-            pouchCenter = neck + bodyRot * (offset - Player.VRManager.ShoulderStock.neckLocalOffset);
+            pouchCenter = neck + bodyRot * (offset - Player.VRManager.HeadTracking.neckLocalOffset);
             return true;
         }
 

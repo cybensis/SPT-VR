@@ -3,9 +3,6 @@ using EFT.InventoryLogic;
 using TarkovVR.Source.Misc;
 using TarkovVR.Source.Settings;
 using UnityEngine;
-using Valve.VR;
-using TarkovVR.Source.Controls;
-using TarkovVR.Source.XR;
 
 namespace TarkovVR.Source.Player.VRManager
 {
@@ -23,8 +20,6 @@ namespace TarkovVR.Source.Player.VRManager
     {
         public static bool enabled = true;           // dev kill-switch; the user-facing gate is the "Virtual Gunstock" menu toggle
 
-        // The HMD pivots ~10 cm around the NECK when you look around; every head reference is the neck point (HMD-local, rides the head)
-        public static Vector3 neckLocalOffset = new Vector3(0f, -0.075f, -0.08f);
 
         // Influence = reach x height x posture, each a fade (full -> zero):
         // reach = the butt's sideways/forward distance from the line straight down from the neck (a butt in the shoulder pocket sits
@@ -81,7 +76,7 @@ namespace TarkovVR.Source.Player.VRManager
             Transform rig = rearHandTransform.parent;
             Vector3 rearHand = rearHandTransform.localPosition;
             Vector3 supportHand = rig != null ? rig.InverseTransformPoint(supportHandTransform.position) : supportHandTransform.position;
-            if (!RawHmdPose(out Vector3 headPosition, out Quaternion headRotation))
+            if (!HeadTracking.RawHmdPose(out Vector3 headPosition, out Quaternion headRotation))
             {
                 Camera camera = VRGlobals.VRCam != null ? VRGlobals.VRCam : Camera.main;
                 if (camera == null)
@@ -89,7 +84,7 @@ namespace TarkovVR.Source.Player.VRManager
                 headPosition = camera.transform.localPosition;
                 headRotation = camera.transform.localRotation;
             }
-            Vector3 neck = headPosition + headRotation * neckLocalOffset;
+            Vector3 neck = headPosition + headRotation * HeadTracking.neckLocalOffset;
 
             Vector3 gunDirection = (supportHand - rearHand).normalized;
             bool stocked = TryGetStock(out float stockLength, out string stockReason);
@@ -360,35 +355,6 @@ namespace TarkovVR.Source.Player.VRManager
         private static void SetSphere(ref GameObject sphere, Vector3 position, float radius, Color color)
         {
             DebugShapes.Sphere(ref sphere, "ShoulderStockViz", true, position, radius, color);
-        }
-
-        //--- Head pose + haptics ------------------------------------------------------------------------------------------------------
-        // The HMD's pose straight from the runtime, in the same tracking space as the hand poses
-        private static readonly TrackedDevicePose_t[] hmdPoses = new TrackedDevicePose_t[1];
-        internal static bool RawHmdPose(out Vector3 pos, out Quaternion rot)
-        {
-            if (OpenXRBootstrap.Active)
-                return OpenXRInput.TryGetHeadPose(out pos, out rot);
-            var sys = OpenVR.System;
-            if (sys == null)
-            {
-                pos = Vector3.zero;
-                rot = Quaternion.identity;
-                return false;
-            }
-            var origin = OpenVR.Compositor != null
-                ? OpenVR.Compositor.GetTrackingSpace() : ETrackingUniverseOrigin.TrackingUniverseStanding;
-            sys.GetDeviceToAbsoluteTrackingPose(origin, 0f, hmdPoses);
-            if (!hmdPoses[0].bPoseIsValid)
-            {
-                pos = Vector3.zero;
-                rot = Quaternion.identity;
-                return false;
-            }
-            var rt = new SteamVR_Utils.RigidTransform(hmdPoses[0].mDeviceToAbsoluteTracking);
-            pos = rt.pos;
-            rot = rt.rot;
-            return true;
         }
 
         // The stock coming fully on: every hand on the gun (GunHaptics)
