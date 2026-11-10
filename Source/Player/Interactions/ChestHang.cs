@@ -327,7 +327,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // ...or with the LEFT hand at its grip: then it's held left-handed (Handedness.GunInLeftHand: not mirrored, the hold, arms
                 // and fingers mirrored onto the left). Right-handed mode only; the left hand free (nothing in it, not on a reload part).
                 else if (!Handedness.LeftHanded && leftGripPressed && LeftHandAtGrip(fc) && !VRReloadController.OwnsOffHand
-                    && (VRGlobals.handsInteractionController == null || VRGlobals.handsInteractionController.heldItem == null))
+                    && !HandsInteractionController.HoldingLoot)
                 {
                     Handedness.SetGunInLeftHand(true);
                     Reattach(restore: true);

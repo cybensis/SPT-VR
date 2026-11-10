@@ -343,9 +343,9 @@ namespace TarkovVR.Source.Weapons
             weapon = firearmController.Item;
             if (!weapon.SupportsInternalReload || weapon.MalfState.State != Weapon.EMalfunctionState.None)
                 return false;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+            if (!GunIdle(firearmController))
                 return false;
-            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            if (HandsInteractionController.HoldingLoot)
                 return false;
             magazine = weapon.GetCurrentMagazine();
             if (magazine == null || magazine is CylinderMagazine)
@@ -373,26 +373,10 @@ namespace TarkovVR.Source.Weapons
         {
             if (!CanLoadShells(out FirearmController firearmController, out Weapon weapon, out Magazine magazine, out ShotgunData data))
                 return false;
-            if (gunHand ? !ChestHang.SupportOnly || ChestHang.HandInRegrabZone : VRGlobals.vrPlayer.isSupporting || ChestHang.Detached)
+            if (!TryTakeRoundFromPouch(firearmController, weapon, magazine, gunHand, out Ammo source, out GameObject prop))
                 return false;
-            if (!InChestPouchZone(HandPalm(gunHand)))
-                return false;
-            Ammo source = FindRoundToLoad(weapon, magazine);
-            if (source == null)
-            {
-                PulseRoundHand(gunHand, 0.2f, 0.03f);
-                PulseRoundHand(gunHand, 0.2f, 0.03f, 0.08f);
-                return true;
-            }
-            GameObject prop = CreateProp(source);
             if (prop == null)
                 return true;
-            heldRoundSource = source;
-            heldRoundProp = prop;
-            heldRoundFor = firearmController;
-            roundInGunHand = gunHand;
-            roundOnRightArm = OnRightArm(gunHand);
-            roundLoading = false;
             heldShell = data;
             shellPath = null;
             shellCommitted = false;
@@ -452,8 +436,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool ShotgunIdle(FirearmController firearmController)
         {
-            return firearmController.CurrentOperation is FirearmController.Idling && expectedOperation == ExpectedOperation.None
-                && firearmController.Item.MalfState.State == Weapon.EMalfunctionState.None;
+            return GunIdle(firearmController) && firearmController.Item.MalfState.State == Weapon.EMalfunctionState.None;
         }
 
         // The zones the held shell goes onto a path from (debugZones shows them), and onto it when it's in one
@@ -910,9 +893,9 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (!ManualShotgunOn(firearmController, out _) || firearmController.IsInLauncherMode() || firearmController.WeaponRoot == null)
                 return false;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+            if (!GunIdle(firearmController))
                 return false;
-            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            if (HandsInteractionController.HoldingLoot)
                 return false;
             weapon = firearmController.Item;
             return true;
@@ -967,7 +950,7 @@ namespace TarkovVR.Source.Weapons
                     ResetPump(state);
                 return;
             }
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+            if (!GunIdle(firearmController))
             {
                 PumpHeld = false;
                 return;

@@ -10,6 +10,7 @@ using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Misc;
+using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using TarkovVR.Source.XR;
@@ -1198,7 +1199,7 @@ namespace TarkovVR.Source.Player.VRManager
             // Same with the gun slung (his ask: "disable all the off hand gun hand pose locking while the gun is slung ... I have my hand
             // around the sight location the hand can sometimes get locked and doesn't rotate": the scope grab below froze the hand, and
             // the foregrip snap took it onto the hanging gun)
-            if ((VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            if (HandsInteractionController.HoldingLoot
                 || VRReloadController.OwnsOffHand || VRReloadController.ShellInOffHand || TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
             {
                 handLock = false;

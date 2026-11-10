@@ -59,7 +59,7 @@ namespace TarkovVR.Source.Weapons
                 return true;
             if (!MagazineSlidesOntoHand || !TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return false;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None
+            if (!GunIdle(firearmController)
                 || ChestHang.Detached || weapon.MalfState.State == Weapon.EMalfunctionState.Feed || weapon.GetCurrentMagazine() == null)
                 return false;
             if (!StartPartlyOut(firearmController, magazineSlot, 0f, partlyOutDistance))

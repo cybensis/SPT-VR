@@ -225,7 +225,7 @@ namespace TarkovVR.Source.Weapons
                 ResetBolt(weapon);
                 return;
             }
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+            if (!GunIdle(firearmController))
                 return;
             if (!EnsureBoltBones(firearmController, bolt))
                 return;
@@ -258,7 +258,7 @@ namespace TarkovVR.Source.Weapons
             // A malfunction only when the hands clear it (VRReloadController.Malfunctions): cycling the bolt does
             if (firearmController.IsInLauncherMode() || !HandsMayWorkAction(firearmController, firearmController.Item))
                 return false;
-            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            if (HandsInteractionController.HoldingLoot)
                 return false;
             return TryGetBolt(firearmController, out bolt);
         }

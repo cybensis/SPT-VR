@@ -38,6 +38,8 @@ namespace TarkovVR.Source.Player.Interactions
         public Transform scopeTransform;
         public Transform leftHand;
         public LootItem heldItem;
+        // A hand holds a loot item (the pointer's grab, a magazine off the ground)
+        internal static bool HoldingLoot => VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null;
         public Vector3 heldItemOffset = new Vector3(-0.1f, -0.05f, 0);
         private bool changingScopeZoom = false;
         private bool isInRange = false;

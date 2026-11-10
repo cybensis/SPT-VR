@@ -601,15 +601,21 @@ namespace TarkovVR.Source.Weapons
         // an "Iraqi" reload: the magazine's swapped with the bolt held back). Not slung, not held up by the off hand itself.
         private static bool OffHandFreeOnGun => !ChestHang.Detached || ChestHang.HandleHeld;
 
+        // Tarkov's hands run nothing on the gun, and no move of ours is waiting to be forced through
+        private static bool GunIdle(FirearmController firearmController)
+        {
+            return firearmController.CurrentOperation is FirearmController.Idling && expectedOperation == ExpectedOperation.None;
+        }
+
         private static bool CanWorkGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
         {
             weapon = null;
             magazineSlot = null;
             if (!TryGetMagazineGun(out firearmController, out weapon, out magazineSlot))
                 return false;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+            if (!GunIdle(firearmController))
                 return false;
-            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            if (HandsInteractionController.HoldingLoot)
                 return false;
             return true;
         }
@@ -913,7 +919,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             if (!TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None || !OffHandFreeOnGun)
+            if (!GunIdle(firearmController) || !OffHandFreeOnGun)
                 return;
             // No loose loot moves in the hideout (FIKA's item sync has no world there)
             if (Singleton<GameWorld>.Instance == null || Singleton<GameWorld>.Instance is HideoutGameWorld)
@@ -2007,7 +2013,7 @@ namespace TarkovVR.Source.Weapons
                 return true;
             if (!TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return false;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None
+            if (!GunIdle(firearmController)
                 || !OffHandFreeOnGun || weapon.MalfState.State == Weapon.EMalfunctionState.Feed)
                 return false;
             Magazine magazine = weapon.GetCurrentMagazine();
@@ -2714,9 +2720,9 @@ namespace TarkovVR.Source.Weapons
                 return;
             FirearmController firearmController = VRGlobals.firearmController;
             if (firearmController == null || firearmController.Item == null || firearmController.IsInLauncherMode()
-                || !(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+                || !GunIdle(firearmController))
                 return;
-            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            if (HandsInteractionController.HoldingLoot)
                 return;
             if (OffHandFreeOnGun && !VRGlobals.vrPlayer.isSupporting)
                 PreGrabFor(firearmController, gunHand: false, out offHandPreGrabPose, out offHandPreGrabPoseIsRight, out offHandPreGrabWeight);

@@ -808,7 +808,7 @@ namespace TarkovVR.Source.Weapons
             FirearmController firearmController = null;
             bool canSlap = slapBoltRelease && handFree && TryGetMagazineGun(out firearmController, out Weapon slappedWeapon, out _) && slappedWeapon.IsBoltCatch
                 && !VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached
-                && (VRGlobals.handsInteractionController == null || VRGlobals.handsInteractionController.heldItem == null);
+                && !HandsInteractionController.HoldingLoot;
             bool atCatch = false;
             Vector3 catchPoint = Vector3.zero;
             bool hasCatchPoint = canSlap && TryGetBoltCatchPoint(firearmController, out catchPoint);
@@ -879,7 +879,7 @@ namespace TarkovVR.Source.Weapons
             Weapon weapon = firearmController.Item;
             if (firearmsAnimator == null || weapon == null || !firearmsAnimator.GetBoltCatch() || BoltStaysBack(weapon))
                 return;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+            if (!GunIdle(firearmController))
                 return;
             if (debugLog)
                 LogAction($"[VRReload] bolt release, chamber: {weapon.ChamberAmmoCount}");

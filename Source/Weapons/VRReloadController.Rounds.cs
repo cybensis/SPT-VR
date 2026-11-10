@@ -82,9 +82,9 @@ namespace TarkovVR.Source.Weapons
             weapon = firearmController.Item;
             if (!weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload || weapon.MalfState.State != Weapon.EMalfunctionState.None)
                 return false;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) || expectedOperation != ExpectedOperation.None)
+            if (!GunIdle(firearmController))
                 return false;
-            if (VRGlobals.handsInteractionController != null && VRGlobals.handsInteractionController.heldItem != null)
+            if (HandsInteractionController.HoldingLoot)
                 return false;
             if (!boltStates.TryGetValue(weapon, out BoltState state) || state.slide < boltFullBack)
                 return false;
@@ -94,25 +94,26 @@ namespace TarkovVR.Source.Weapons
             return magazine.Count < magazine.MaxCount || (weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0);
         }
 
-        // A grip at the chest: true when it was a round's grip (taken, or nothing that fits: a double buzz), so nothing else takes that
-        // press. gunHand: the gun hand's grip, only while the off hand holds the gun up and the hand isn't at the gun's grip (that's
-        // ChestHang's regrab); the off hand's only while the gun hand has the grip and the off hand isn't on the foregrip.
-        private static bool TryGrabRound(bool gunHand)
+        // What taking a round and taking a shell start with: this hand free for one and at the chest pouch, a round that fits found, its
+        // prop made and noted as held. False = not a round's grip. True with prop null = it was, with nothing to take (no round fits:
+        // a double buzz). gunHand: the gun hand's grip, only while the off hand holds the gun up and the hand isn't at the gun's grip
+        // (that's ChestHang's regrab); the off hand's only while the gun hand has the grip and the off hand isn't on the foregrip.
+        private static bool TryTakeRoundFromPouch(FirearmController firearmController, Weapon weapon, Magazine magazine, bool gunHand, out Ammo source, out GameObject prop)
         {
-            if (!CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine))
-                return false;
+            source = null;
+            prop = null;
             if (gunHand ? !ChestHang.SupportOnly || ChestHang.HandInRegrabZone : VRGlobals.vrPlayer.isSupporting || ChestHang.Detached)
                 return false;
             if (!InChestPouchZone(HandPalm(gunHand)))
                 return false;
-            Ammo source = FindRoundToLoad(weapon, magazine);
+            source = FindRoundToLoad(weapon, magazine);
             if (source == null)
             {
                 PulseRoundHand(gunHand, 0.2f, 0.03f);
                 PulseRoundHand(gunHand, 0.2f, 0.03f, 0.08f);
                 return true;
             }
-            GameObject prop = CreateProp(source);
+            prop = CreateProp(source);
             if (prop == null)
                 return true;
             heldRoundSource = source;
@@ -121,6 +122,18 @@ namespace TarkovVR.Source.Weapons
             roundInGunHand = gunHand;
             roundOnRightArm = OnRightArm(gunHand);
             roundLoading = false;
+            return true;
+        }
+
+        // A grip at the chest: true when it was a round's grip (taken, or nothing that fits), so nothing else takes that press
+        private static bool TryGrabRound(bool gunHand)
+        {
+            if (!CanLoadRounds(out FirearmController firearmController, out Weapon weapon, out Magazine magazine))
+                return false;
+            if (!TryTakeRoundFromPouch(firearmController, weapon, magazine, gunHand, out Ammo source, out GameObject prop))
+                return false;
+            if (prop == null)
+                return true;
             MeasureRound(prop);
             PointRoundAlongBore(firearmController);
             HoldingRound = true;
