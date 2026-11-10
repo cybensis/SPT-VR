@@ -1133,8 +1133,31 @@ namespace TarkovVR.Source.Player.Interactions
             return twist;
         }
 
-        // The finger chains under "Base HumanLPalm": each child is a finger root; walk its
-        // first-child chain to collect up to 3 joints (base/middle/tip).
+        // The finger chains under a palm: each child is a finger root, its first-child chain gives up to 3 joints (base / middle /
+        // tip). The thumb is EFT's "...Digit1..." ("thumb" alone never matches its bone names).
+        private static void FingerChainsUnder(Transform palm, List<Transform[]> fingers, List<bool> thumbs)
+        {
+            for (int fingerIndex = 0; fingerIndex < palm.childCount; fingerIndex++)
+            {
+                Transform fingerRoot = palm.GetChild(fingerIndex);
+                var joints = new List<Transform>();
+                Transform joint = fingerRoot;
+                while (joint != null && joints.Count < 3)
+                {
+                    joints.Add(joint);
+                    joint = joint.childCount > 0 ? joint.GetChild(0) : null;
+                }
+                if (joints.Count >= 1)
+                {
+                    fingers.Add(joints.ToArray());
+                    string fingerName = fingerRoot.name;
+                    thumbs.Add(fingerName.IndexOf("thumb", System.StringComparison.OrdinalIgnoreCase) >= 0
+                            || fingerName.IndexOf("Digit1", System.StringComparison.OrdinalIgnoreCase) >= 0);
+                }
+            }
+        }
+
+        // The left hand's finger chains, under "Base HumanLPalm"
         private void ResolveLeftFingers()
         {
             fingersResolved = true;
@@ -1148,29 +1171,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             var fingers = new List<Transform[]>();
             var thumbs = new List<bool>();
-            var names = new List<string>();
-            for (int i = 0; i < palm.childCount; i++)
-            {
-                Transform root = palm.GetChild(i);
-                var joints = new List<Transform>();
-                Transform j = root;
-                while (j != null && joints.Count < 3)
-                {
-                    joints.Add(j);
-                    j = j.childCount > 0 ? j.GetChild(0) : null;
-                }
-                if (joints.Count >= 1)
-                {
-                    fingers.Add(joints.ToArray());
-                    // EFT names the digits "...Digit1..." (thumb) .. "...Digit5..." - "thumb" alone
-                    // never matched, so the thumb flag was all-false (headset symptom once skeletal
-                    // curls used it: index curl drove the thumb, everything shifted one finger).
-                    string n = root.name;
-                    thumbs.Add(n.IndexOf("thumb", System.StringComparison.OrdinalIgnoreCase) >= 0
-                            || n.IndexOf("Digit1", System.StringComparison.OrdinalIgnoreCase) >= 0);
-                    names.Add(n);
-                }
-            }
+            FingerChainsUnder(palm, fingers, thumbs);
             if (fingers.Count > 0)
             {
                 leftFingerJoints = fingers.ToArray();

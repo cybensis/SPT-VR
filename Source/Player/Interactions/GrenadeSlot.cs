@@ -489,7 +489,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (back != null && back.Parent != null && BodyWeapons.SlotOf(back, out EquipmentSlot slot))
             {
                 ExpectGunBack(back, back == hungGun, switchTimeout);
-                VRInputManager.ForceCommand(SelectCommand(slot));
+                VRInputManager.ForceCommand(BodyWeapons.SelectCommand(slot));
             }
             else
             {
@@ -566,16 +566,6 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        private static ECommand SelectCommand(EquipmentSlot slot)
-        {
-            switch (slot)
-            {
-                case EquipmentSlot.SecondPrimaryWeapon: return ECommand.SelectSecondPrimaryWeapon;
-                case EquipmentSlot.Holster: return ECommand.SelectSecondaryWeapon;
-                case EquipmentSlot.Scabbard: return ECommand.SelectKnife;
-                default: return ECommand.SelectFirstPrimaryWeapon;
-            }
-        }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Moving the slot

@@ -443,7 +443,7 @@ namespace TarkovVR.Source.Player.Interactions
             standIn = null;
         }
 
-        private static ECommand SelectCommand(EquipmentSlot slot)
+        internal static ECommand SelectCommand(EquipmentSlot slot)
         {
             switch (slot)
             {

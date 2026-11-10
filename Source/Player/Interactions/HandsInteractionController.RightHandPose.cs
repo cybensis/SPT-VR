@@ -213,27 +213,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             var fingers = new List<Transform[]>();
             var thumbs = new List<bool>();
-            var names = new List<string>();
-            for (int i = 0; i < palm.childCount; i++)
-            {
-                Transform root = palm.GetChild(i);
-                var joints = new List<Transform>();
-                Transform j = root;
-                while (j != null && joints.Count < 3)
-                {
-                    joints.Add(j);
-                    j = j.childCount > 0 ? j.GetChild(0) : null;
-                }
-                if (joints.Count >= 1)
-                {
-                    fingers.Add(joints.ToArray());
-                    // EFT thumbs are "...Digit1..." / contain "thumb"; Digit1 = the thumb chain
-                    string n = root.name;
-                    thumbs.Add(n.IndexOf("thumb", System.StringComparison.OrdinalIgnoreCase) >= 0
-                            || n.IndexOf("Digit1", System.StringComparison.OrdinalIgnoreCase) >= 0);
-                    names.Add(n);
-                }
-            }
+            FingerChainsUnder(palm, fingers, thumbs);
             if (fingers.Count > 0)
             {
                 rightFingerJoints = fingers.ToArray();
