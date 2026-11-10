@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Comfort.Common;
 using EFT;
+using EFT.AssetsManager;
 using EFT.Interactive;
 using EFT.InventoryLogic;
 using SptVrFikaSync;
@@ -181,6 +182,43 @@ namespace TarkovVR.Source.Player.Interactions
             public float releaseTime; // for the bodyFreezeMaxTime hard fallback
         }
         private readonly List<ReleasedBody> releasedBodies = new List<ReleasedBody>();
+
+        // "Bodies float down slowly" (held, and after you let go). EFT's settle coroutine (CorpseRagdoll.WorkingCycle) runs every
+        // frame and calls TryPutToSleep on each bone: one slow for a moment (kinetic energy under EFTHardSettings.CorpseEnergyToSleep,
+        // 0.05) is marked MustBeSleeping and from then on Sleep()'d EVERY frame - and PhysX zeroes a body's velocity when it's put to
+        // sleep. Our per-step WakeUp kept the bones moving but their speed was gone, so a lifted body sank ~g*dt a frame. HollywoodFX
+        // (installed in June) sets CorpseEnergyToSleep to -1, so nothing was ever marked; without it this came back.
+        // The bones of every body we hold or are letting settle skip that call (BodyDragPatches); the rest of the coroutine still runs.
+        public static bool keepHeldBodiesAwake = true;
+        internal static readonly HashSet<PlayerRigidbodySleepHierarchy> bonesKeptAwake = new HashSet<PlayerRigidbodySleepHierarchy>();
+
+        // Rebuilt whenever a body is grabbed, let go, frozen or handed over
+        private void RefreshBonesKeptAwake()
+        {
+            bonesKeptAwake.Clear();
+            if (isDraggingBody)
+                AddBonesKeptAwake(grabbedRagdoll);
+            foreach (ReleasedBody body in releasedBodies)
+                AddBonesKeptAwake(body.ragdoll);
+        }
+
+        private static void AddBonesKeptAwake(CorpseRagdoll ragdoll)
+        {
+            List<PlayerRigidbodySleepHierarchy> bones = ragdoll != null ? ragdoll._rigidbodySleepHierarchy : null;
+            if (bones == null)
+                return;
+            foreach (PlayerRigidbodySleepHierarchy bone in bones)
+            {
+                if (bone != null)
+                    bonesKeptAwake.Add(bone);
+            }
+        }
+
+        // No references to a raid's bodies kept past it
+        private void OnDestroy()
+        {
+            bonesKeptAwake.Clear();
+        }
 
         private int DeadBodyMask => 1 << DEAD_BODY_LAYER;
 
@@ -372,6 +410,7 @@ namespace TarkovVR.Source.Player.Interactions
             grabBodyRotOffset = Quaternion.Inverse(hand.rotation) * grabbedBodyRb.rotation;
 
             isDraggingBody = true;
+            RefreshBonesKeptAwake();
 
             // FIKA: resolve the network id so the drag can be broadcast (no-op solo). Two paths:
             //   - vanilla corpse: keyed by GameWorld.ObservedPlayersCorpses (the existing body-drag sync).
@@ -626,6 +665,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (releasedBodies.Count == 0)
                 return;
+            int settlingBefore = releasedBodies.Count;
             float dt = Time.fixedDeltaTime;
             float landedSqr = bodyLandedSpeed * bodyLandedSpeed;
 
@@ -692,6 +732,8 @@ namespace TarkovVR.Source.Player.Interactions
                     releasedBodies.RemoveAt(i);
                 }
             }
+            if (releasedBodies.Count != settlingBefore)
+                RefreshBonesKeptAwake();
         }
 
         // Freeze a settled body kinematic in place (the efficient "done" state), mirroring EFT's own
@@ -748,6 +790,7 @@ namespace TarkovVR.Source.Player.Interactions
             localDraggedCorpseNetId = -1;
             localDraggedDownedNetId = -1;
             bodyDragMoveSpeedMultiplier = 1f; // restore full movement speed when we stop dragging
+            RefreshBonesKeptAwake(); // after ReleaseBody's AddReleasedBody: a let-go body stays awake while it settles
         }
 
         // FIKA co-op "steal": another player grabbed the body we were dragging more recently, so
