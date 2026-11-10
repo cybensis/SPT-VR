@@ -63,10 +63,6 @@ namespace TarkovVR.Source.Player.VRManager
 
 
         public bool isSupporting = false;
-        // The off hand holds the gun up (ChestHang: who's left holding it when the gun hand lets go). In the hold mode the grip is the
-        // hold: an open hand left on the foregrip keeps isSupporting until it's 10 cm off, but holds nothing up. In the other mode the
-        // hand stays on without the grip and a press takes it off, so supporting is holding.
-        public bool OffHandHoldsGun => isSupporting && (handLock || !VRSettings.GetSupportGunHoldToggle());
         //private bool secondaryGripHeld = false;
         public bool wasSupporting = false;
         public Transform interactionUi;
@@ -1163,12 +1159,11 @@ namespace TarkovVR.Source.Player.VRManager
                 else if (!isSupporting)
                     hapticTriggered = false;
 
-                // Already in support position with snap enabled and no grip held: give the hand-to-IK distance some tolerance, so the
-                // hand doesn't rapidly swap between support pos and non-support pos near the edge
-                bool withinDistanceAfterSnap = withinDistance && isSupporting && Vector3.Distance(LeftHand.transform.position, supportGripPoint) < 0.175f;
-                if (withinDistance || handLock || withinDistanceAfterSnap)
+                // The grip holds the foregrip: closed at it takes it (handLock, then isSupporting the frame after), open lets go at once.
+                // While held, the hand stays on however far the controller strays.
+                if (withinDistance || handLock)
                 {
-                    if (!isSupporting && (!VRSettings.GetSnapToGun() || handLock))
+                    if (!isSupporting && handLock)
                     {
                         if (isWeapPistol)
                             VRGlobals.player._markers[0] = WeaponPatches.previousLeftHandMarker;
@@ -1186,41 +1181,13 @@ namespace TarkovVR.Source.Player.VRManager
                         if (UIPatches.extractionTimerUi)
                             UIPatches.extractionTimerUi.Hide();
                     }
+                    handLock = secondaryGripState.state;
+                }
 
-                    if (VRSettings.GetSupportGunHoldToggle())
-                    {
-                        if (secondaryGripState.state)
-                            handLock = true;
-                        else
-                            handLock = false;
-                    }
-                    else
-                    {
-                        if (!isSupporting && secondaryGripState.stateDown)
-                            handLock = true;
-                        else if (isSupporting && secondaryGripState.stateDown)
-                        {
-                            isSupporting = false;
-                            //VRGlobals.player._markers[0] = LeftHand.transform;
-                            ////VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
-
-                            handLock = false;
-                        }
-                    }
-
-                    // This condition should only ever happen if snapping to the gun is disabled
-                    if (!isSupporting)
-                    {
-                        LeftHand.transform.localPosition = OffHandPosition(fromAction);
-                    }
-                    else
-                    {
-                        //Vector3 virtualBasePosition = fromAction.localPosition - fromAction.localRotation * Vector3.forward * controllerLength;
-                        //LeftHand.transform.localPosition = virtualBasePosition;
-                        LeftHand.transform.localPosition = fromAction.localPosition;
-                    }
-
-
+                if (isSupporting && handLock)
+                {
+                    // Position only: the support hand's rotation stays as it was at the grab (the arm follows the foregrip marker)
+                    LeftHand.transform.localPosition = fromAction.localPosition;
                 }
                 else
                 {
@@ -1229,12 +1196,6 @@ namespace TarkovVR.Source.Player.VRManager
                         isSupporting = false;
                         if (isWeapPistol)
                             VRGlobals.player._markers[0] = LeftHand.transform;
-                        //VRGlobals.player._markers[0] = LeftHand.transform;
-                        ////VRGlobals.ikManager.leftArmIk.solver.target = LeftHand.transform;
-                        //VRGlobals.weaponHolder.transform.localPosition = WeaponPatches.weaponOffset;
-                        //VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
-                        //VRGlobals.firearmController.WeaponRoot.localPosition = new Vector3(0.1327f, -0.0578f, -0.0105f);
-
                     }
                     PlaceOffHand(fromAction);
                 }
@@ -1342,7 +1303,7 @@ namespace TarkovVR.Source.Player.VRManager
 
         // Two-handing taken without the grip press at the support point: a pistol's magazine seated with the grip still held
         // (VRReloadController.UpdateSeatedHold), the hand already on the support pose. The same entry as UpdateLeftHand's, with handLock
-        // so the hold / toggle setting decides when it lets go. The reload latch still on the arm hands it to EFT's IK itself once it
+        // so opening the grip lets go. The reload latch still on the arm hands it to EFT's IK itself once it
         // sees isSupporting (VRReloadController.UpdateHandLatch).
         public void TakeSupportGrip()
         {

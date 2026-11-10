@@ -310,9 +310,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // letting go of the grip for it doesn't sling it (VRReloadController.PressCheck)
                 bool gunHandHolds = Handedness.GunHandGrip.state
                     || (!ChestHang.Detached && !VRGlobals.vrPlayer.isSupporting && VRReloadController.PressCheckHoldsGun);
-                // Not isSupporting: in SupportOnly the gun rides the off hand, so a hand that let go never gets 10 cm off the foregrip and
-                // isSupporting would never end it
-                ChestHang.UpdateInput(gunHandHolds, hangGripOwnedElsewhere, VRGlobals.vrPlayer.OffHandHoldsGun);
+                ChestHang.UpdateInput(gunHandHolds, hangGripOwnedElsewhere, VRGlobals.vrPlayer.isSupporting);
                 // A gun's body spot placed by hand (the trigger held on it)
                 GunSpots.Tick();
             }

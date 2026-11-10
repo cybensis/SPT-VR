@@ -56,8 +56,6 @@ namespace TarkovVR.Source.Settings
             public RotationMode rotationType { get; set; }
             public SnapTurnAmount snapTurnAmount { get; set; }
             public bool weaponAimSmoothing { get; set; }
-            public bool snapToGun { get; set; }
-            public bool supportGunHoldToggle { get; set; }
             public bool leftHandedMode { get; set; }
             public bool swapSticks { get; set; }
             public bool seatedMode { get; set; }
@@ -134,8 +132,6 @@ namespace TarkovVR.Source.Settings
                 seatedMode = false;
                 leftHandedMode = false;
                 swapSticks = false;
-                snapToGun = true;
-                supportGunHoldToggle = false;
                 smoothingSensitivity = 1;
                 variableZoomSensitivity = 0.5f;
                 scopeSmoothingSensitivity = 5;
@@ -198,8 +194,6 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle leftHandedMode;
         private static SettingToggle swapSticksToggle;
         private static SettingToggle aimSmoothingToggle;
-        private static SettingToggle snapToGunToggle;
-        private static SettingToggle supportGunHoldToggle;
         private static SettingToggle weaponWeightToggle;
         private static SettingToggle virtualStockToggle;
         private static SettingToggle chestSlingToggle;
@@ -468,18 +462,6 @@ namespace TarkovVR.Source.Settings
             swapSticksToggle.Toggle._onValueChanged = SetSwapSticks;
             swapSticksToggle.Text.localizationKey = "Swap Sticks (move with the right, turn with the left)";
             swapSticksToggle.Toggle.UpdateValue(settings.swapSticks);
-
-            snapToGunToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            snapToGunToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            snapToGunToggle.Toggle._onValueChanged = SetSnapToGun;
-            snapToGunToggle.Text.localizationKey = "Turn On Left Hand Snap To Weapon ";
-            snapToGunToggle.Toggle.UpdateValue(settings.snapToGun);
-
-            supportGunHoldToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            supportGunHoldToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            supportGunHoldToggle.Toggle._onValueChanged = SetSupportGunHoldToggle;
-            supportGunHoldToggle.Text.localizationKey = "Toggle Hold Grip For Two Handing ";
-            supportGunHoldToggle.Toggle.UpdateValue(settings.supportGunHoldToggle);
 
             scopeSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
             scopeSmoothingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
@@ -1252,14 +1234,6 @@ namespace TarkovVR.Source.Settings
             return settings.handPosOffset;
         }
 
-        public static bool GetSnapToGun()
-        {
-            return settings.snapToGun;
-        }
-        private static void SetSnapToGun(bool turnOn)
-        {
-            settings.snapToGun = turnOn;
-        }
         private static void SetSeatedMode(bool turnOn)
         {        
             settings.seatedMode = turnOn;
@@ -1267,14 +1241,6 @@ namespace TarkovVR.Source.Settings
         public static bool GetSeatedMode()
         {
             return settings.seatedMode;
-        }
-        public static bool GetSupportGunHoldToggle()
-        {
-            return settings.snapToGun;
-        }
-        private static void SetSupportGunHoldToggle(bool turnOn)
-        {
-            settings.supportGunHoldToggle = turnOn;
         }
 
 
