@@ -25,8 +25,6 @@ namespace TarkovVR.Source.Player.VRManager
         private float z = 0;
         private Vector3 pos;
         public VRVibration hapticAction;
-        private float timeHeld = 0;
-        private bool _listenersAdded = false;
 
         public void Awake()
         {

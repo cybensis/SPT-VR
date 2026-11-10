@@ -52,9 +52,6 @@ namespace TarkovVR.Patches.Misc
     [HarmonyPatch]
     internal class MenuPatches
     {
-        private static BoxCollider backingCollider;
-        private static GameObject cubeUiMover;
-        private static MenuMover menuMover;
         private static EnvironmentUI environmentUi;
 
 

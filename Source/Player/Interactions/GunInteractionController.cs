@@ -23,8 +23,6 @@ public class GunInteractionController : MonoBehaviour
     private List<Transform> tacDevices;
     private List<Transform> interactables;
     private GameObject gunRaycastReciever;
-    private Vector3 rotOffset = new Vector3(-0.02f, 0, 0.1f);
-    private Vector3 rotOffset2 = new Vector3(0.06f, 0.03f, -0.06f);
     public bool initialized = false;
     public int lastHitCompIndex = -1;
 
@@ -198,17 +196,9 @@ public class GunInteractionController : MonoBehaviour
     private Vector3 prevRot;
     private Vector3 prevPos;
     private Vector3 prevForward;
-    private Vector3 prevBodyPos;
     public int framesAfterEnabled = 0;
 
     // --- TEMPORARY crouch-walk jolt diagnostics (remove once source is confirmed) ---
-    private bool joltLogActive = false;
-    private int joltLogFrame = 0;
-    private float joltPrevSpeed = 0f;
-    private int joltStopCounter = 0;
-    private const int JOLT_MAX_FRAMES = 160;
-    private float bDist, bRibc, bMarkY, bShldr;  // baselines captured at capture start
-    private float peakDist;                       // max gun<->hand separation seen
     
     private void Update()
     {

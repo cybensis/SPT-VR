@@ -221,13 +221,8 @@ namespace TarkovVR.Source.Settings
         private static SettingSelectSlider viveWandCrouchThresholdSlider;
         private static SettingSelectSlider viveWandVaultHoldTimeSlider;
 
-        // Graphics Settings
-        private static SettingToggle sharpenToggle;
         private static SettingToggle nativeAAToggle;
-        private static SettingToggle occCullingToggle;
-        private static SettingToggle frusCullingToggle;
         private static SettingDropDown shadowOptsToggle;
-        private static SettingToggle disablePrismEffectsToggle;
         private static SettingToggle disableFogToggle;
         private static SettingDropDown opticResolutionDropDown;
         private static SettingSelectSlider lodBiasSlider;
@@ -973,17 +968,6 @@ namespace TarkovVR.Source.Settings
             return scrollRect;
         }
 
-        private static void ChangeLeftStickDriftSensitivity(int sensitivity)
-        {
-            settings.leftStickDriftSensitivity = Mathf.Clamp((float)sensitivity / 10, 0.1f, 0.9f);
-        }
-        private static void ChangeRightStickDriftSensitivity(int sensitivity)
-        {
-            float f = (float)sensitivity / 10;
-
-            settings.rightStickDriftSensitivity = Mathf.Clamp(f, 0.1f, 0.9f);
-
-        }
         private static void ChangeMovementMode(int mode)
         {
             settings.movementType = (MovementMode)mode;
@@ -1305,23 +1289,6 @@ namespace TarkovVR.Source.Settings
             settings.supportGunHoldToggle = turnOn;
         }
 
-        private static void SetSharpen(bool on)
-        {
-            if (on && VRGlobals.VRCam)
-            {
-                CC_Sharpen sharpen = VRGlobals.VRCam.GetComponent<CC_Sharpen>();
-                if (sharpen != null)
-                    sharpen.enabled = true;
-            }
-            else if (!on && VRGlobals.VRCam)
-            {
-                CC_Sharpen sharpen = VRGlobals.VRCam.GetComponent<CC_Sharpen>();
-                if (sharpen != null)
-                    sharpen.enabled = false;
-            }
-            settings.enableSharpen = on;
-        }
-
 
         public static float GetRightHandHorizontalOffset()
         {
@@ -1511,18 +1478,6 @@ namespace TarkovVR.Source.Settings
             return settings.disablePrismEffects;
         }
 
-        private static void SetDisablePrismEffects(bool turnOff)
-        {
-            settings.disablePrismEffects = turnOff;
-            if (VRGlobals.VRCam)
-            {
-                var prismEffects = VRGlobals.VRCam.GetComponent<PrismEffects>();
-                if (prismEffects != null)
-                {
-                    prismEffects.enabled = !turnOff;
-                }
-            }
-        }
         public static bool GetDisableFog()
         {
             return settings.disablePrismFog;
@@ -1538,19 +1493,9 @@ namespace TarkovVR.Source.Settings
             return settings.disableOccCulling;
         }
 
-        private static void SetOccCulling(bool turnOff)
-        {
-            settings.disableOccCulling = turnOff;
-        }
-
         public static bool GetFrusCulling()
         {
             return settings.disableFrusCulling;
-        }
-
-        private static void SetFrusCulling(bool turnOff)
-        {
-            settings.disableFrusCulling = turnOff;
         }
 
         private static void ChangeShadowOpts(int mode)

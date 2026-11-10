@@ -17,7 +17,6 @@ namespace TarkovVR.Patches.Visuals
     internal class Rendering
     {
         private static Dictionary<string, Queue<RenderTexture>> _renderTargetPool = new Dictionary<string, Queue<RenderTexture>>();
-        private static readonly int MAX_POOLED_TARGETS = 6;
         public static Material _fxaaMat;
 
         // These two functions would return the screen resolution setting and would result in the game

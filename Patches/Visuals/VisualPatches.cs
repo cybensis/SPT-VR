@@ -13,7 +13,6 @@ namespace TarkovVR.Patches.Visuals
     [HarmonyPatch]
     internal class VisualPatches
     {
-        private static Camera postProcessingStoogeCamera;
         public static DistantShadow distantShadow;
 
 
@@ -212,54 +211,5 @@ namespace TarkovVR.Patches.Visuals
             }
         }      
 
-        private static Matrix4x4 CalculateFrustumCorners(Camera cam, Camera.StereoscopicEye eye = Camera.StereoscopicEye.Left)
-        {
-            float nearClipPlane = cam.nearClipPlane;
-            float farClipPlane = cam.farClipPlane;
-            float fieldOfView = cam.fieldOfView;
-            float aspect = cam.aspect;
-
-            // Adjust based on the eye (left or right) in VR mode
-            Vector3 forward = cam.transform.forward;
-            Vector3 right = cam.transform.right;
-            Vector3 up = cam.transform.up;
-
-            if (UnityEngine.XR.XRSettings.enabled)
-            {
-                Matrix4x4 eyeMatrix = cam.GetStereoViewMatrix(eye);
-                forward = eyeMatrix.MultiplyVector(forward);
-                right = eyeMatrix.MultiplyVector(right);
-                up = eyeMatrix.MultiplyVector(up);
-            }
-
-            float halfFOV = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
-            Vector3 toRight = right * halfFOV * aspect * nearClipPlane;
-            Vector3 toTop = up * halfFOV * nearClipPlane;
-
-            Vector3 topLeft = (forward * nearClipPlane - toRight + toTop);
-            float scale = topLeft.magnitude * farClipPlane / nearClipPlane;
-            topLeft.Normalize();
-            topLeft *= scale;
-
-            Vector3 topRight = (forward * nearClipPlane + toRight + toTop);
-            topRight.Normalize();
-            topRight *= scale;
-
-            Vector3 bottomRight = (forward * nearClipPlane + toRight - toTop);
-            bottomRight.Normalize();
-            bottomRight *= scale;
-
-            Vector3 bottomLeft = (forward * nearClipPlane - toRight - toTop);
-            bottomLeft.Normalize();
-            bottomLeft *= scale;
-
-            Matrix4x4 frustumCorners = Matrix4x4.identity;
-            frustumCorners.SetRow(0, topLeft);
-            frustumCorners.SetRow(1, topRight);
-            frustumCorners.SetRow(2, bottomRight);
-            frustumCorners.SetRow(3, bottomLeft);
-
-            return frustumCorners;
-        }
     }
 }

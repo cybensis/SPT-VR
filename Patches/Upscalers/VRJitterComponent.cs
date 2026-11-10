@@ -7,7 +7,6 @@ namespace TarkovVR.Patches.Upscalers
     {
         private Camera _camera;
         private SSAAImpl _ssaaImpl;
-        private Vector3 originalPosition;
         private Matrix4x4 _originalProj;
         public static Vector2 CurrentJitter { get; private set; }
 
@@ -183,7 +182,6 @@ namespace TarkovVR.Patches.Upscalers
 
     public static class VRJitterHelper
     {
-        private static int _sampleIndex = 0;
         public static int CurrentSampleCount { get; private set; } = 8;
 
         // Use FSR's exact documented jitter sequence length, ceil(8*n^2) (18 @1.5x, 23 @1.7x, 32 @2x),

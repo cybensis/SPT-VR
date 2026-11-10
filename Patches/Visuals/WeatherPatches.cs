@@ -12,9 +12,6 @@ namespace TarkovVR.Patches.Visuals
         // Cache for expensive operations
         private static Camera fpsCam;
         private static PrismEffects fpsPrism;
-        private static GameObject cloudInstance;
-        private static Renderer lowRenderer;
-        private static Material lowMaterial;
 
         // Wind system state
         public static float lastWind = 0.0f;

@@ -152,7 +152,6 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class CrouchHandler : IInputHandler
         {
-            private static float MAX_CROUCH_HEIGHT_DIFF = 0.4f;
 
             public void UpdateCommand(ref ECommand command)
             {
@@ -203,7 +202,6 @@ namespace TarkovVR.Source.Controls
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         public class ProneInputHandler : IInputHandler
         {
-            float timeHeld = 0f;
             private static float MIN_TIME_BETWEEN_PRESSES = 1f;
             private static float MAX_CROUCH_HEIGHT_DIFF = 0.4f;
             float timeSinceLastPress = 0;
@@ -640,7 +638,6 @@ namespace TarkovVR.Source.Controls
         public class ScrollHandler : IInputHandler
         {
             private bool isScrolling = false;
-            private bool scrolledLastFrame = false;
             public void UpdateCommand(ref ECommand command)
             {
                 if (VRGlobals.vrPlayer == null || !VRGlobals.vrPlayer.interactMenuOwnsStick)

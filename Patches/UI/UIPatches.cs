@@ -37,7 +37,6 @@ namespace TarkovVR.Patches.UI
     [HarmonyPatch]
     internal class UIPatches
     {
-        private static int playerLayer = 8;
         public static CircularSegmentUI quickSlotUi;
         public static EftBattleUIScreen battleScreenUi;
         public static BattleStancePanel stancePanel;

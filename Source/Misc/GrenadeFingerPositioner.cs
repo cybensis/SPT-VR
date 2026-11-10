@@ -7,7 +7,6 @@ namespace TarkovVR.Source.Misc
 
         private float fingerBaseRotation = 22;
         private float x, y, z;
-        private float rx, ry, rz;
         public Transform target;
         public bool left = false;
         private void Awake()

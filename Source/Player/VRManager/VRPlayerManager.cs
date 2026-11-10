@@ -65,7 +65,6 @@ namespace TarkovVR.Source.Player.VRManager
         public bool isSupporting = false;
         //private bool secondaryGripHeld = false;
         public bool wasSupporting = false;
-        private float timeHeld = 0;
         public Transform interactionUi;
         public Vector3 startingPlace;
         private bool showingHealthUi = false;
@@ -101,8 +100,6 @@ namespace TarkovVR.Source.Player.VRManager
         // outruns the arms. We ease the value actually applied to the rig toward crouchHeightDiff at the
         // body's rate so view + arms descend together. Tune crouchViewSmoothTime to match the arms.
         public static float crouchViewSmoothTime = 0.14f; // 0 = instant (old behavior); only used when useHeadFollowView = false
-        private float displayedCrouchHeightDiff = 0f;
-        private float crouchViewVel = 0f;
 
         public static float headViewYOffset = 0f;                  // (only used by head-follow) trims eye height relative to the head bone
         public static bool drivePoseFromPhysicalCrouch = true;     // true: physically crouching drives the body pose down (the in-game head/anchor follows you)
@@ -114,8 +111,6 @@ namespace TarkovVR.Source.Player.VRManager
         private bool cachedLeftHandedMode;
         private int leftHandedModeCheckFrame = -1;
         private Vector3 lastLocalPos = Vector3.zero;
-        private bool lastProneState = false;
-        private bool lastOrigArmsActive = true;
         private GunInteractionController cachedCurrentGunController;
         private int gunControllerCacheFrame = -1;
         private Transform cachedAmmoFireModeUi;
@@ -132,8 +127,6 @@ namespace TarkovVR.Source.Player.VRManager
             ammoFireModeUi = uiObject;
 
         }
-
-        private Vector3 currentRightHandVelocity;
 
         private Queue<Vector3> velocityHistory = new Queue<Vector3>();
         private int maxVelocitySamples = 5;
@@ -163,15 +156,6 @@ namespace TarkovVR.Source.Player.VRManager
                 velocityHistory.Dequeue(); // Remove the oldest velocity
             }
             velocityHistory.Enqueue(currentVelocity);
-        }
-        private Vector3 CalculateAverageVelocity()
-        {
-            Vector3 sum = Vector3.zero;
-            foreach (Vector3 velocity in velocityHistory)
-            {
-                sum += velocity;
-            }
-            return sum / velocityHistory.Count;
         }
 
         protected virtual void Awake()
@@ -441,13 +425,11 @@ namespace TarkovVR.Source.Player.VRManager
         // scale 0.0003 0.0003 0.0003
         private float controllerLength = 0.175f;
         private Quaternion initialRightHandRotation;
-        private Quaternion rotDiff;
         public bool isEnteringTwoHandedMode = false;
         public Transform rawRightHand;
 
         private Vector3 inertiaVelocity;
         private float inertiaDamping = 0.95f;  // Controls how quickly inertia fades
-        private float returnSpeed = 5.0f;     // Controls how quickly the gun returns to the hand
 
         // The gun's current muzzle direction (WeaponRoot points -up along the barrel); the twist axis for
         // WeaponWeightFeel's swing/twist split.
@@ -455,33 +437,6 @@ namespace TarkovVR.Source.Player.VRManager
         {
             Transform weaponRoot = VRGlobals.firearmController ? VRGlobals.firearmController.WeaponRoot : null;
             return weaponRoot != null ? -weaponRoot.up : rawRightHand.transform.forward;
-        }
-
-        private void ApplyInertia(Transform handTransform, Transform targetHandTransform, Vector3 currentVelocity)
-        {
-            // Calculate the average velocity from the history
-            Vector3 averageVelocity = CalculateAverageVelocity();
-
-            // Trigger inertia when the current frame's velocity drops below the threshold
-            if (currentVelocity.magnitude < 0.1f && averageVelocity.magnitude > 0.2f && averageVelocity.magnitude > inertiaVelocity.magnitude)
-            {
-                inertiaVelocity = averageVelocity;
-            }
-
-            // Apply inertia if it's active
-            if (inertiaVelocity.magnitude > 0.01f && VRGlobals.firearmController)
-            {
-
-                // Apply inertia effect by moving the hand in the direction of inertia velocity in local space
-                Vector3 localPosition = VRGlobals.vrOffsetter.transform.InverseTransformPoint(rawRightHand.position);
-                localPosition += inertiaVelocity * (x.x * VRGlobals.firearmController.ErgonomicWeight);
-
-                // Convert back to world space and apply the adjusted position
-                rawRightHand.position = VRGlobals.vrOffsetter.transform.TransformPoint(localPosition);
-
-                // Dampen the inertia over time
-                inertiaVelocity *= inertiaDamping;
-            }
         }
 
         public void LeftHandedMode()

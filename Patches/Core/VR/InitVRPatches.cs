@@ -68,8 +68,6 @@ namespace TarkovVR.Patches.Core.VR
             }
         }
 
-        private static Transform originalLeftHandMarker;
-        private static Transform originalRightHandMarker;
         public static Transform quickSlot;
         public static Transform rigCollider;
         public static Transform leftWrist;

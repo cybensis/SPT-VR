@@ -1261,7 +1261,6 @@ namespace TarkovVR.Patches.Core.Player
 
         //New scope zoom handler, this patch waits for vrOpticController to be created before going forward with the CopyComponentFromOptic method
         static SightModVisualControllers visualController;
-        static float zoomLevel;
         [HarmonyPrefix]
         [HarmonyPatch(typeof(EFT.CameraControl.OpticComponentUpdater), "CopyComponentFromOptic")]
         private static void WaitForVROpticController(EFT.CameraControl.OpticComponentUpdater __instance, OpticSight opticSight)

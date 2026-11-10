@@ -12,12 +12,7 @@ namespace TarkovVR.Patches.Core.Player
     {
 
         private static float lastYRot = 0f;
-        private static float timeSinceLastLookRot = 0f;
         private static bool leftJoystickLastUsed = false;
-        private static bool isRotatingToHead = false;
-        private static float rotationStartY = 0f;
-        private static float rotationTargetY = 0f;
-        private static float rotationProgress = 0f;
 
         // --- Proper analog movement direction (see AnalogMovementDirection below) -----------------------------------
         // ON = body physically travels in the exact analog stick heading (full 360°). OFF = vanilla EFT behaviour,
