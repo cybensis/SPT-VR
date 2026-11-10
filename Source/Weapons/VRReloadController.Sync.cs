@@ -76,8 +76,9 @@ namespace TarkovVR.Source.Weapons
             bool gunInLeftHand = Handedness.GunInLeftHand;
             syncDriveRight = gunInLeftHand || ChestHang.Detached;
             syncDriveLeft = !(VRGlobals.vrPlayer.isSupporting && !gunInLeftHand);
-            InGunFrame(weaponRoot, WristOf(VRGlobals.ikManager.leftArmIk), out syncLeftPosition, out syncLeftRotation);
-            InGunFrame(weaponRoot, WristOf(VRGlobals.ikManager.rightArmIk), out syncRightPosition, out syncRightRotation);
+            EnsureWristHooks();
+            SyncWrist(0, VRGlobals.ikManager.leftArmIk, weaponRoot, out syncLeftPosition, out syncLeftRotation);
+            SyncWrist(1, VRGlobals.ikManager.rightArmIk, weaponRoot, out syncRightPosition, out syncRightRotation);
 
             AddProp(weaponRoot, heldProp, heldMagazine);
             AddProp(weaponRoot, palmedProp, palmedMagazine);
@@ -144,6 +145,66 @@ namespace TarkovVR.Source.Weapons
         private static Transform WristOf(RootMotion.FinalIK.LimbIK armIk)
         {
             return armIk != null && armIk.solver != null && armIk.solver.bone3 != null ? armIk.solver.bone3.transform : null;
+        }
+
+        // The wrists as the arm IK leaves them, in the gun's frame. Tarkov animates the arms in Player.Update and solves them in
+        // Player.LateUpdate (VisualPass), in no fixed order with VRPlayerManager.LateUpdate where the sync is built: read there, a
+        // wrist can still be the animation's right-handed hold. With the gun in the left hand both observed arms go to these.
+        // Instance ids, not references: nothing raid-scoped is kept alive here.
+        private struct SolvedWrist
+        {
+            public int gunId;
+            public int frame;
+            public Vector3 position;
+            public Quaternion rotation;
+        }
+        private static readonly SolvedWrist[] solvedWrists = { new SolvedWrist { frame = -10 }, new SolvedWrist { frame = -10 } };
+        private static int hookedLeftArmId, hookedRightArmId;
+
+        private static void EnsureWristHooks()
+        {
+            RootMotion.FinalIK.LimbIK left = VRGlobals.ikManager.leftArmIk;
+            if (left != null && left.solver != null && left.GetInstanceID() != hookedLeftArmId)
+            {
+                left.solver.OnPostUpdate -= CaptureLeftWrist;
+                left.solver.OnPostUpdate += CaptureLeftWrist;
+                hookedLeftArmId = left.GetInstanceID();
+            }
+            RootMotion.FinalIK.LimbIK right = VRGlobals.ikManager.rightArmIk;
+            if (right != null && right.solver != null && right.GetInstanceID() != hookedRightArmId)
+            {
+                right.solver.OnPostUpdate -= CaptureRightWrist;
+                right.solver.OnPostUpdate += CaptureRightWrist;
+                hookedRightArmId = right.GetInstanceID();
+            }
+        }
+
+        private static void CaptureLeftWrist() => CaptureWrist(0, VRGlobals.ikManager != null ? VRGlobals.ikManager.leftArmIk : null);
+        private static void CaptureRightWrist() => CaptureWrist(1, VRGlobals.ikManager != null ? VRGlobals.ikManager.rightArmIk : null);
+
+        // Every solve of the arm: the last one in the frame is the pose drawn
+        private static void CaptureWrist(int index, RootMotion.FinalIK.LimbIK armIk)
+        {
+            Transform weaponRoot = VRGlobals.firearmController != null ? VRGlobals.firearmController.WeaponRoot : null;
+            Transform wrist = WristOf(armIk);
+            if (weaponRoot == null || wrist == null)
+                return;
+            InGunFrame(weaponRoot, wrist, out solvedWrists[index].position, out solvedWrists[index].rotation);
+            solvedWrists[index].gunId = weaponRoot.GetInstanceID();
+            solvedWrists[index].frame = Time.frameCount;
+        }
+
+        // This frame's or last frame's solved wrist on this gun, else the wrist as it is now
+        private static void SyncWrist(int index, RootMotion.FinalIK.LimbIK armIk, Transform weaponRoot, out Vector3 position, out Quaternion rotation)
+        {
+            SolvedWrist solved = solvedWrists[index];
+            if (solved.gunId == weaponRoot.GetInstanceID() && Time.frameCount - solved.frame <= 1)
+            {
+                position = solved.position;
+                rotation = solved.rotation;
+                return;
+            }
+            InGunFrame(weaponRoot, WristOf(armIk), out position, out rotation);
         }
 
         private static void InGunFrame(Transform weaponRoot, Transform thing, out Vector3 position, out Quaternion rotation)
