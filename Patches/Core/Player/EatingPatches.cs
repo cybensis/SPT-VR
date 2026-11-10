@@ -33,6 +33,9 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(MedsController), "Spawn")]
         public static void OnSpawnPost(MedsController __instance)
         {
+            // The gun drawn back after it goes to its spot (ChestHang.hangAfterMeds)
+            if (__instance._player != null && __instance._player.IsYourPlayer)
+                TarkovVR.Source.Player.Interactions.ChestHang.NoteMedsInHands();
             EatingInteractionController.OnSpawnPost(__instance);
         }
 

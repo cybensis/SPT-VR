@@ -49,6 +49,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static Vector3 hipMuzzle = new Vector3(0f, -1f, 0.15f);
         public static Vector3 hipGrip = new Vector3(0.2f, 0f, -1f);
         public static bool hangHaptics = true;
+        // Done eating / using meds: the gun Tarkov draws back goes to its spot like at a raid start, unless the gun hand's grip is held
+        // (his report: "my current weapon goes to my hand rather than going back to the slot. I need to regrip then re-let go")
+        public static bool hangAfterMeds = true;
+        public static float afterMedsHangWindow = 5f;   // s after the hands change for the gun to go idle and hang
         public static bool debugLog = false;            // 1/sec chain dump while detached + save/restore lines (for the prone-corrupts-regrab hunt)
         private static float nextDebugLog;
         public static bool gripSound = true;            // every grab (foregrip / grip retake / off the sling / a gun off the body)
@@ -90,6 +94,13 @@ namespace TarkovVR.Source.Player.Interactions
         private static object lastHandsController;
         private static object lastPlayer;
         private static float hangOnArrivalUntil = -1f;  // the gun Tarkov hands you (raid start, walking into the range) goes to its spot
+        private static bool medsSinceGun;               // a food / med came into your hands since the last hands change seen here
+
+        // MedsController.Spawn (EatingPatches) for your player: runs with menus open too
+        internal static void NoteMedsInHands()
+        {
+            medsSinceGun = true;
+        }
         private static EFT.Player.FirearmController detachedGun;   // the gun slung / support-held: only its holder is ever stamped
         // Holder local pose from BEFORE the first detach; the anchor only re-stamps rotation at equip,
         // so it MUST be restored when the gun returns to the hand - and preserved across a
@@ -154,6 +165,14 @@ namespace TarkovVR.Source.Player.Interactions
             object hc = player != null ? player.HandsController : null;
             if (!ReferenceEquals(hc, lastHandsController))
             {
+                // From food / meds straight back to a gun (Tarkov's draw of the item you had): hang it once it's idle (the branch below:
+                // its draw skipped, not with the grip held). The MedsController covers every food, drink and med, manual or vanilla;
+                // medsSinceGun also catches a med used from the inventory screen (this doesn't run in menus, so the meds controller
+                // can come and go unseen)
+                if (hangAfterMeds && (medsSinceGun || lastHandsController is EFT.Player.MedsController) && hc is EFT.Player.FirearmController)
+                    HangOnArrival(afterMedsHangWindow);
+                if (!(hc is EFT.Player.MedsController))
+                    medsSinceGun = false;
                 lastHandsController = hc;
                 gripSeen = false;
                 releaseTimer = 0f;
