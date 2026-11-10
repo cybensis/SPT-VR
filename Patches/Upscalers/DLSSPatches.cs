@@ -1,15 +1,8 @@
 ﻿using HarmonyLib;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine.Rendering;
 using UnityEngine;
-using UnityEngine.Rendering.PostProcessing;
 using EFT.Settings.Graphics;
-using UnityEngine.XR;
-using Comfort.Common;
 
 namespace TarkovVR.Patches.Upscalers
 {

@@ -1,9 +1,6 @@
 ﻿using EFT;
-using EFT.UI;
 using EFT.Visual;
 using HarmonyLib;
-using System;
-using System.Collections;
 using System.IO;
 using System.Linq;
 using TarkovVR.Source.Settings;

@@ -1,38 +1,12 @@
-﻿using Comfort.Common;
-using EFT;
-using EFT.BlitDebug;
-using EFT.CameraControl;
+﻿using EFT.CameraControl;
 using EFT.EnvironmentEffect;
-using EFT.Rendering.Clouds;
-using EFT.Settings.Graphics;
-using EFT.UI;
-using EFT.Visual;
-using EFT.Weather;
-using GPUInstancer;
 using HarmonyLib;
-using Newtonsoft.Json;
-using System;
 using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Reflection.Emit;
-using System.Security.Cryptography;
-using System.Text;
-using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
-using Unity.Audio;
-using Unity.XR.OpenVR;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
-using UnityEngine.XR;
-using UnityStandardAssets.ImageEffects;
-using Valve.VR;
 using static HBAO_Core;
-using static UnityEngine.ParticleSystem.PlaybackState;
-using static Val;
 
 namespace TarkovVR.Patches.Visuals
 {

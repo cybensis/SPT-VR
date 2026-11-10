@@ -1,7 +1,6 @@
 using EFT.Impostors;
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.XR;
 
 namespace TarkovVR.Patches.Visuals
 {

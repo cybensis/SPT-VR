@@ -1,13 +1,9 @@
-﻿using EFT;
-using EFT.Hideout;
-using EFT.Interactive;
-using EFT.UI;
+﻿using EFT.Interactive;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Settings;
 using UnityEngine;
-using Valve.VR;
 
 namespace TarkovVR.Source.Player.VRManager
 {

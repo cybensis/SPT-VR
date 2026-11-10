@@ -14,21 +14,10 @@ using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
 using static TarkovVR.Source.Controls.InputHandlers;
-using UnityStandardAssets.ImageEffects;
-using UnityEngine.Rendering.PostProcessing;
-using System.Linq;
 using UnityEngine.XR;
-using UnityEngine.Rendering;
-using System.Collections;
-using Valve.VR.InteractionSystem;
-using System.IO;
-using System;
-using EFT.UI.Matchmaker;
 using EFT.UI;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Player.Body;
-using static DistantShadow;
-using TarkovVR.Source.Graphics;
 using TarkovVR.Patches.Upscalers;
 
 namespace TarkovVR.Patches.Core.VR

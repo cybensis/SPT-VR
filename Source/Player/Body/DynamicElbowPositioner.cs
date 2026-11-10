@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using TarkovVR.Source.Settings;
+﻿using TarkovVR.Source.Settings;
 using UnityEngine;
 using TarkovVR.Source.Controls;
 

@@ -2,24 +2,15 @@ using EFT;
 using EFT.InputSystem;
 using EFT.InventoryLogic;
 using EFT.UI;
-using RootMotion.FinalIK;
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using TarkovVR.ModSupport;
-using TarkovVR.ModSupport.EFTApi;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
-using TarkovVR.Source.Player.VR;
-using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
 using Valve.VR;
-using Valve.VR.InteractionSystem;
 using static EFT.Player;
 
 namespace TarkovVR.Source.Controls

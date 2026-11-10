@@ -2,8 +2,6 @@
 using HarmonyLib;
 using System.Collections.Generic;
 using UnityEngine;
-using Valve.VR;
-using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;

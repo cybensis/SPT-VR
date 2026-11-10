@@ -1,21 +1,10 @@
 ﻿using HarmonyLib;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine;
-using static SSAAImpl;
-using GPUInstancer;
-using EFT.Settings.Graphics;
-using Comfort.Common;
-using static Val;
-using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.XR;
-using System.Diagnostics;
-using Valve.VR;
 using TarkovVR.Source.Graphics;
 
 namespace TarkovVR.Patches.Upscalers

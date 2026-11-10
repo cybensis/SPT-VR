@@ -3,13 +3,8 @@ using HarmonyLib;
 using System;
 using UnityEngine;
 using TarkovVR.Source.Settings;
-using static EFT.Player;
 using EFT.Animations;
-using EFT.ItemInHandSubsystem;
-using EFT.UI.Ragfair;
 using RootMotion.FinalIK;
-using Valve.VR;
-using EFT.InputSystem;
 using AnimationSystem;
 using TarkovVR.Source.Controls;
 

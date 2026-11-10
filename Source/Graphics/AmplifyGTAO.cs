@@ -1,11 +1,6 @@
 ﻿using EFT.Settings.Graphics;
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 
 namespace TarkovVR.Source.Graphics

@@ -1,12 +1,6 @@
 ﻿using EFT.CameraControl;
 using EFT.Settings.Graphics;
-using GPUInstancer;
 using HarmonyLib;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using TarkovVR.Source.Graphics;
 using UnityEngine;
 

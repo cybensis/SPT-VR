@@ -1,10 +1,6 @@
 ﻿using EFT;
 using RootMotion.FinalIK;
-using System.Threading;
-using TarkovVR.Patches.UI;
-using TarkovVR.Source.Settings;
 using UnityEngine;
-using Valve.VR;
 using TarkovVR.Source.Controls;
 
 namespace TarkovVR.Source.Player.VR

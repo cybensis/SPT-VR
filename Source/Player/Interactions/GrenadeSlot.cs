@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 using Comfort.Common;
 using EFT;
 using EFT.AssetsManager;
-using EFT.InputSystem;
 using EFT.InventoryLogic;
 using TarkovVR.ModSupport;
 using TarkovVR.Patches.Core.Player;

@@ -3,11 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
-using System.Linq;
-using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Controls;
 using Comfort.Common;
-using EFT;
 using EFT.UI;
 using Valve.VR;
 

@@ -1,6 +1,4 @@
 ﻿using EFT.Settings.Graphics;
-using EFT.UI;
-using EFT.Visual;
 using HarmonyLib;
 using System.Collections.Generic;
 using TarkovVR.Source.Player.Interactions;

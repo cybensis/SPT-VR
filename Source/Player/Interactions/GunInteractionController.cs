@@ -1,11 +1,6 @@
 ﻿using EFT;
 using EFT.UI;
-using EFT.UI.Ragfair;
-using JetBrains.Annotations;
-using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Text;
 using TarkovVR;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Controls;
@@ -13,12 +8,7 @@ using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
-using UnityEngine.UI;
-using UnityEngine.UIElements;
-using Valve.VR;
-using Valve.VR.InteractionSystem;
 using static HighLightMesh;
-using static System.Net.Mime.MediaTypeNames;
 using static TarkovVR.Source.Controls.InputHandlers;
 
 

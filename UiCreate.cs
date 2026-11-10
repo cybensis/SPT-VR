@@ -1,12 +1,9 @@
 ﻿using EFT.InventoryLogic;
-using EFT.UI;
 using EFT.UI.DragAndDrop;
-using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using TarkovVR;
-using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
 using TarkovVR.Source.Settings;
 using UnityEngine;

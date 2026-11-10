@@ -1,5 +1,4 @@
-﻿using EFT;
-using UnityEngine;
+﻿using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Controls;
 

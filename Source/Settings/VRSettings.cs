@@ -1,26 +1,16 @@
 ﻿using EFT;
 using EFT.CameraControl;
 using EFT.UI;
-using EFT.UI.Ragfair;
 using EFT.UI.Settings;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml;
-using TarkovVR;
 using TarkovVR.Patches.Upscalers;
 using TarkovVR.Patches.Visuals;
-using Unity.XR.OpenVR;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.XR;
-using static HBAO_Core;
 
 namespace TarkovVR.Source.Settings
 {

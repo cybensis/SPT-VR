@@ -7,12 +7,9 @@ using EFT.Interactive;
 using EFT.InventoryLogic;
 using SptVrFikaSync;
 using TarkovVR.ModSupport;
-using TarkovVR.ModSupport.FIKA;
 using TarkovVR.ModSupport.ORBIT;
 using TarkovVR.Source.Controls;
-using TarkovVR.Source.Player.VRManager;
 using UnityEngine;
-using Valve.VR;
 
 namespace TarkovVR.Source.Player.Interactions
 {

@@ -3,7 +3,6 @@ using Valve.VR;
 using TarkovVR.Patches.Misc;
 using TarkovVR.Source.Misc;
 using TarkovVR.Source.UI;
-using System.Reflection;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Controls;
 

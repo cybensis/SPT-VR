@@ -1,23 +1,14 @@
 ﻿using Comfort.Common;
 using EFT.Settings;
 using EFT.Settings.Graphics;
-using EFT.UI.Settings;
-using EFT.Visual;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
 using UnityEngine.XR;
-using Valve.VR;
-using static DLSSWrapper;
 using static SSAAImpl;
 
 namespace TarkovVR.Patches.Visuals

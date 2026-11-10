@@ -2,15 +2,9 @@
 // Copyright (c) Amplify Creations, Lda <info@amplify.pt>
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using UnityEngine;
-using System.IO;
-using TarkovVR.Patches.Core.VR;
 
 namespace TarkovVR.Source.Graphics
 {

@@ -1,11 +1,5 @@
-﻿using EFT.InventoryLogic;
-using RootMotion.FinalIK;
-using System;
-using System.Text;
-using TarkovVR.Source.Player.VRManager;
-using TarkovVR.Source.Settings;
+﻿using TarkovVR.Source.Settings;
 using UnityEngine;
-using Valve.VR;
 using static EFT.Player;
 
 namespace TarkovVR.Source.Player.Interactions

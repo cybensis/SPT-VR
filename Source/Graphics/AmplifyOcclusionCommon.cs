@@ -1,14 +1,8 @@
 ﻿// Amplify Occlusion 2 - Robust Ambient Occlusion for Unity
 // Copyright (c) Amplify Creations, Lda <info@amplify.pt>
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine.Rendering;
 using UnityEngine;
-using System.IO;
 
 namespace TarkovVR.Source.Graphics
 {

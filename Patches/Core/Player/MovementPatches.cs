@@ -1,23 +1,9 @@
-﻿using Comfort.Common;
-using EFT;
-using EFT.Animations;
+﻿using EFT;
 using EFT.CameraControl;
-using EFT.UI;
 using HarmonyLib;
-using RootMotion.FinalIK;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using TarkovVR.Source.Settings;
 using UnityEngine;
-using UnityEngine.Rendering;
-using Valve.VR;
-using Valve.VR.InteractionSystem;
 using TarkovVR.Source.Controls;
-using static RootMotion.FinalIK.AimPoser;
-using static UnityEngine.UIElements.VisualElement;
 
 namespace TarkovVR.Patches.Core.Player
 {

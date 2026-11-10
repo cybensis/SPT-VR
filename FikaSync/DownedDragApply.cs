@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using EFT;
 using EFT.Interactive;
 using Fika.Core.Main.Components;
 using Fika.Core.Main.Players;

@@ -1,23 +1,14 @@
-﻿using EFT.InventoryLogic;
-using Newtonsoft.Json.Linq;
-//using Open.Nat;
-using Sirenix.Serialization;
-using System.Collections;
+﻿//using Open.Nat;
 using System.Collections.Generic;
-using TarkovVR;
 using TarkovVR.Patches.Core.Player;
-using TarkovVR.Patches.Core.VR;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Controls;
-using TarkovVR.Source.Misc;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Weapons;
 using TarkovVR.Source.XR;
 using UnityEngine;
-using UnityEngine.UI;
 using Valve.VR;
-using static RootMotion.FinalIK.FBIKChain;
 
 namespace TarkovVR.Source.Player.VRManager
 {

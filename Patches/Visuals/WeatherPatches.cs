@@ -1,16 +1,8 @@
 using EFT;
-using EFT.EnvironmentEffect;
 using EFT.Rendering.Clouds;
 using EFT.Weather;
 using HarmonyLib;
-using System;
-using System.Reflection;
-using TarkovVR.Source.Settings;
 using UnityEngine;
-using UnityEngine.Rendering;
-using UnityEngine.XR;
-using static SSAAImpl;
-using static UnityEngine.ParticleSystem.PlaybackState;
 
 namespace TarkovVR.Patches.Visuals
 {

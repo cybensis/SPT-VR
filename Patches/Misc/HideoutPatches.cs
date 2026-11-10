@@ -1,25 +1,16 @@
 ﻿using Cinemachine;
 using EFT;
 using EFT.Hideout;
-using EFT.InventoryLogic;
 using EFT.UI;
 using EFT.UI.DragAndDrop;
 using HarmonyLib;
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Reflection;
-using System.Reflection.Emit;
-using System.Threading.Tasks;
 using TarkovVR.Patches.UI;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Weapons;
 using UnityEngine;
-using UnityEngine.UI;
 using Valve.VR;
-using static EFT.Hideout.SelectItemContextMenu;
 using static EFT.UI.InventoryScreen;
 using static EFT.UI.MenuTaskBar;
 

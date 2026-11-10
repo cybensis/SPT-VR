@@ -7,13 +7,10 @@ using EFT.UI.Utilities.LightScroller;
 using System;
 using System.Collections.Generic;
 using TarkovVR.Source.Player.VRManager;
-using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using Valve.VR;
 using TarkovVR.Source.Controls;
-using static RootMotion.FinalIK.HitReaction;
 
 namespace TarkovVR.Source.UI
 {

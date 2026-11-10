@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using TarkovVR.Source.Player.VRManager;
 using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions

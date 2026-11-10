@@ -18,9 +18,6 @@ using HarmonyLib;
 using JetBrains.Annotations;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Reflection.Emit;
 using System.Threading.Tasks;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Patches.Core.VR;
@@ -29,15 +26,12 @@ using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VRManager;
 using TarkovVR.Source.Settings;
 using UnityEngine;
-using UnityEngine.Profiling;
 using UnityEngine.UI;
-using Valve.VR;
 using TarkovVR.Source.Controls;
 using static EFT.InventoryLogic.Grid;
 using static EFT.UI.EftBattleUIScreen;
 using static EFT.UI.ItemsPanel;
 using static EFT.UI.TransferItemsInRaidScreen;
-using static RootMotion.FinalIK.InteractionTrigger.Range;
 namespace TarkovVR.Patches.UI
 {
     [HarmonyPatch]

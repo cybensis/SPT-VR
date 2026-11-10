@@ -1,15 +1,8 @@
 ﻿using GPUInstancer;
 using HarmonyLib;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.XR;
-using static RootMotion.FinalIK.InteractionTrigger;
 
 namespace TarkovVR.Patches.Visuals
 {

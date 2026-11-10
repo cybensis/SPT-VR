@@ -1,11 +1,8 @@
 using System.Collections.Generic;
 using EFT;
 using EFT.Interactive;
-using TarkovVR.ModSupport;
-using TarkovVR.ModSupport.FIKA;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Player.VRManager;
-using TarkovVR.Source.Settings;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Valve.VR;

@@ -1,6 +1,5 @@
 ﻿using EFT;
 using EFT.InputSystem;
-using EFT.InventoryLogic;
 using System.Collections.Generic;
 using System.Linq;
 using TarkovVR.Source.Controls;

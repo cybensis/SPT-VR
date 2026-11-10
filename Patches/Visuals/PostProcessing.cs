@@ -1,17 +1,5 @@
-﻿using EFT.InventoryLogic;
-using EFT.Settings.Graphics;
-using HarmonyLib;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using UnityEngine;
-using UnityEngine.Rendering;
+﻿using HarmonyLib;
 using UnityEngine.Rendering.PostProcessing;
-using UnityEngine.XR;
-using static UnityEngine.Rendering.PostProcessing.PostProcessRenderContext;
 
 namespace TarkovVR.Patches.Visuals
 {

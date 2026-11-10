@@ -1,9 +1,7 @@
 using HarmonyLib;
 using TarkovVR.Source.Player.Interactions;
 using TarkovVR.Source.Player.VRManager;
-using TarkovVR.Source.Settings;
 using UnityEngine;
-using Valve.VR;
 using TarkovVR.Source.Controls;
 using static EFT.Player;
 using static EFT.Player.MedsController;
