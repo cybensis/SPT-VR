@@ -65,10 +65,7 @@ namespace TarkovVR.Patches.Core.Player
             if (VRGlobals.menuOpen || !VRGlobals.inGame)
                 return true;
 
-            // Normally you'd stand with your left foot forward and right foot back, which doesn't feel natural in VR so rotate 28 degrees to have both feet in front when standing still
-            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
-            GetBodyRotation(bodyForward, ref deltaRotation);
-            __instance.MovementContext.Rotation = deltaRotation;
+            TurnBodyWithHead(__instance.MovementContext, ref deltaRotation);
            
             return false;
         }
@@ -84,10 +81,7 @@ namespace TarkovVR.Patches.Core.Player
             if (VRGlobals.menuOpen || !VRGlobals.inGame)
                 return false;
 
-            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
-            GetBodyRotation(bodyForward, ref deltaRotation);
-
-            __instance.MovementContext.Rotation = deltaRotation;
+            TurnBodyWithHead(__instance.MovementContext, ref deltaRotation);
             
             return false;
         }
@@ -102,13 +96,19 @@ namespace TarkovVR.Patches.Core.Player
             if (VRGlobals.menuOpen || !VRGlobals.inGame)
                 return false;
 
-            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * __instance.MovementContext._player.gameObject.transform.forward;
-            GetBodyRotation(bodyForward, ref deltaRotation);
-
-            __instance.MovementContext.Rotation = deltaRotation;
+            TurnBodyWithHead(__instance.MovementContext, ref deltaRotation);
 
             return false;
         }      
+        // Tarkov stands left foot forward, which feels wrong in VR: the body is turned 28 degrees so both feet are in front when
+        // standing still
+        private static void TurnBodyWithHead(MovementContext movementContext, ref Vector2 deltaRotation)
+        {
+            Vector3 bodyForward = Quaternion.Euler(0, 28, 0) * movementContext._player.gameObject.transform.forward;
+            GetBodyRotation(bodyForward, ref deltaRotation);
+            movementContext.Rotation = deltaRotation;
+        }
+
         private static float CalculateYawDifference(float yawA, float yawB)
         {
             float difference = yawB - yawA;

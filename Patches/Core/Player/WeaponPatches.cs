@@ -768,19 +768,17 @@ namespace TarkovVR.Patches.Core.Player
             // Our own weapon switch only: a bot drawing a gun took our weapon-part highlight off the camera
             if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
                 return;
-            // Clean up any existing highlight mesh before switching weapons
-            if (VRGlobals.VRCam != null)
-            {
-                HighLightMesh existingHighlight = VRGlobals.VRCam.gameObject.GetComponent<HighLightMesh>();
-                if (existingHighlight != null)
-                {
-                    // Remove any command buffers
-                    if (existingHighlight._cmb != null)
-                    {
-                        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight._cmb);
-                    }
-                }
-            }
+            RemoveHighlightFromCamera();
+        }
+
+        // The weapon-part highlight's command buffer off the headset camera
+        private static void RemoveHighlightFromCamera()
+        {
+            if (VRGlobals.VRCam == null)
+                return;
+            HighLightMesh existingHighlight = VRGlobals.VRCam.gameObject.GetComponent<HighLightMesh>();
+            if (existingHighlight != null && existingHighlight._cmb != null)
+                VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight._cmb);
         }
         
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1629,19 +1627,7 @@ namespace TarkovVR.Patches.Core.Player
             // Our own meds only: a bot healing took our weapon-part highlight off the camera
             if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
                 return;
-            // Clean up any existing highlight mesh before switching weapons
-            if (VRGlobals.VRCam != null)
-            {
-                HighLightMesh existingHighlight = VRGlobals.VRCam.gameObject.GetComponent<HighLightMesh>();
-                if (existingHighlight != null)
-                {
-                    // Remove any command buffers
-                    if (existingHighlight._cmb != null)
-                    {
-                        VRGlobals.VRCam.RemoveCommandBuffer(UnityEngine.Rendering.CameraEvent.AfterImageEffectsOpaque, existingHighlight._cmb);
-                    }
-                }
-            }
+            RemoveHighlightFromCamera();
         }
 
         // Trying to attempt manual eating/drinking but it's not turning out how I want. Maybe I'll come back to it but the end goal is to have a full custom VR player controller for everything

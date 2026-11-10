@@ -1313,12 +1313,15 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(EditBuildScreen), nameof(EditBuildScreen.Show), new Type[] { typeof(EditBuildScreenController) })]
         private static void PositionWeaponPreviewEditBuild(EditBuildScreen __instance)
         {
-            WeaponPreview weaponPreview = __instance._weaponPreview;
+            PlaceWeaponPreview(__instance._weaponPreview);
+        }
+
+        // The preview's rotator parent onto the preview itself, 1.5x, and the preview layer on the camera
+        private static void PlaceWeaponPreview(WeaponPreview weaponPreview)
+        {
             Transform parent = weaponPreview.Rotator?.parent;
             if (weaponPreview != null && parent != null)
             {
-                Vector3 delta = weaponPreview.transform.position - parent.position;
-
                 parent.position = weaponPreview.transform.position;
                 parent.rotation = weaponPreview.transform.rotation;
                 parent.localScale = Vector3.one * 1.5f;
@@ -1332,19 +1335,7 @@ namespace TarkovVR.Patches.Misc
         [HarmonyPatch(typeof(WeaponModdingScreen), nameof(WeaponModdingScreen.Show), new Type[] { typeof(WeaponModdingScreenController) })]
         private static void PositionWeaponPreviewModding(WeaponModdingScreen __instance)
         {
-            WeaponPreview weaponPreview = __instance._weaponPreview;
-            Transform parent = weaponPreview.Rotator?.parent;
-            if (weaponPreview != null && parent != null)
-            {
-                Vector3 delta = weaponPreview.transform.position - parent.position;
-
-                parent.position = weaponPreview.transform.position;
-                parent.rotation = weaponPreview.transform.rotation;
-                parent.localScale = Vector3.one * 1.5f;
-
-                if (Camera.main != null)
-                    Camera.main.cullingMask |= (1 << LayersMaskController.WeaponPreview);
-            }
+            PlaceWeaponPreview(__instance._weaponPreview);
         }
         
         private static readonly HashSet<int> _hookedViewporters = new();
