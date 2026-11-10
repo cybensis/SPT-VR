@@ -329,6 +329,16 @@ namespace TarkovVR.Patches.Core.VR
                 lowThrow
             );
 
+            // The throw clip's fuse crack (SoundAtPoint SndFuse, just after its drop on every grenade) doesn't play when the throw ends
+            // at the release. Played now, while the hands are out: their sound player lets a playing clip finish when they go back to
+            // the pool. No SndFuse in a grenade's sounds (M67, RDG-2) = silent, as in the clip.
+            if (finishAtRelease && __instance._controllerObject != null)
+            {
+                BaseSoundPlayer grenadeSounds = __instance._controllerObject.GetComponent<BaseSoundPlayer>();
+                if (grenadeSounds != null)
+                    grenadeSounds.SoundAtPointEventHandler("SndFuse");
+            }
+
             VRGlobals.weaponHolder.transform.localRotation = Quaternion.Euler(15, 275, 90);
             InitVRPatches.rightPointerFinger.enabled = false;
             VRGlobals.emptyHands = null;
