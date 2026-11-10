@@ -551,8 +551,8 @@ namespace TarkovVR.Source.Player.Interactions
         private static void BeginSupportHold(EFT.Player.FirearmController firearmController)
         {
             Transform weaponRoot = firearmController.WeaponRoot;
-            var lhObj = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand : null;
-            if (weaponRoot == null || lhObj == null || VRGlobals.weaponHolder == null || VRGlobals.ikManager == null)
+            var leftHandObject = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand : null;
+            if (weaponRoot == null || leftHandObject == null || VRGlobals.weaponHolder == null || VRGlobals.ikManager == null)
                 return;
 
             WeaponCollision.Reset();   // strip any live collision enact BEFORE saving (see BeginHang)
@@ -562,10 +562,10 @@ namespace TarkovVR.Source.Player.Interactions
             // ROTATION comes from the raw pose action, NOT LeftHand.transform: while isSupporting,
             // UpdateLeftHand only writes localPosition - the transform's rotation is frozen at
             // support-grab time (that was the "left hand only has positional control" bug).
-            Transform leftHand = lhObj.transform;
-            Quaternion ctrl = SupportControllerRot(leftHand);
-            supportRelPos = Quaternion.Inverse(ctrl) * (weaponRoot.position - leftHand.position);
-            supportRelRot = Quaternion.Inverse(ctrl) * weaponRoot.rotation;
+            Transform leftHand = leftHandObject.transform;
+            Quaternion controllerRotation = SupportControllerRot(leftHand);
+            supportRelPos = Quaternion.Inverse(controllerRotation) * (weaponRoot.position - leftHand.position);
+            supportRelRot = Quaternion.Inverse(controllerRotation) * weaponRoot.rotation;
             supportGripLever = Quaternion.Inverse(supportRelRot) * supportRelPos;
             supportSmoothedRot = weaponRoot.rotation;
 
@@ -1167,12 +1167,12 @@ namespace TarkovVR.Source.Player.Interactions
             if (!DetachedGunOnHolder())
                 return true;
             var firearmController = VRGlobals.firearmController;
-            var lhObj = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand : null;
-            if (firearmController == null || firearmController.WeaponRoot == null || VRGlobals.weaponHolder == null || lhObj == null)
+            var leftHandObject = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand : null;
+            if (firearmController == null || firearmController.WeaponRoot == null || VRGlobals.weaponHolder == null || leftHandObject == null)
                 return true;
-            Transform leftHand = lhObj.transform;
-            Quaternion ctrl = SupportControllerRot(leftHand);
-            Quaternion target = ctrl * supportRelRot;
+            Transform leftHand = leftHandObject.transform;
+            Quaternion controllerRotation = SupportControllerRot(leftHand);
+            Quaternion target = controllerRotation * supportRelRot;
 
             // Weight feel on the one-handed support hold: the same swing/twist spring as the main hand,
             // on its OWN momentum state (SupportHold instance) so the two paths can never double-filter

@@ -106,17 +106,17 @@ namespace TarkovVR.Patches.Visuals
             }
 
             var aoTarget = stereoAOTargets[__instance][eyeIndex];
-            var cmdBuf = __instance._cmdBuf;
+            var commandBuffer = __instance._cmdBuf;
             var hbaoMaterial = __instance._hbaoMaterial;
 
-            cmdBuf.Clear();
-            cmdBuf.SetRenderTarget(aoTarget);
-            cmdBuf.ClearRenderTarget(false, true, Color.white);
-            cmdBuf.BlitFullscreenTriangle(source, aoTarget, hbaoMaterial, __instance.GetAoPass(), null, false, null);
+            commandBuffer.Clear();
+            commandBuffer.SetRenderTarget(aoTarget);
+            commandBuffer.ClearRenderTarget(false, true, Color.white);
+            commandBuffer.BlitFullscreenTriangle(source, aoTarget, hbaoMaterial, __instance.GetAoPass(), null, false, null);
 
             hbaoMaterial.SetTexture(ShaderProperties.hbaoTex, aoTarget);
-            cmdBuf.BlitFullscreenTriangle(source, destination, hbaoMaterial, __instance.GetFinalPass(), null, false, null);
-            Graphics.ExecuteCommandBuffer(cmdBuf);
+            commandBuffer.BlitFullscreenTriangle(source, destination, hbaoMaterial, __instance.GetFinalPass(), null, false, null);
+            Graphics.ExecuteCommandBuffer(commandBuffer);
             return false;
         }
 

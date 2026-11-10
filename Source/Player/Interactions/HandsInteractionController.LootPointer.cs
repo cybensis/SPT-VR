@@ -281,8 +281,8 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (VRGlobals.vrPlayer == null)
                 return;
-            GameObject handObj = dominant ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand;
-            Transform hand = handObj != null ? handObj.transform : null;
+            GameObject handObject = dominant ? VRGlobals.vrPlayer.RightHand : VRGlobals.vrPlayer.LeftHand;
+            Transform hand = handObject != null ? handObject.transform : null;
             if (hand == null)
                 return;
 

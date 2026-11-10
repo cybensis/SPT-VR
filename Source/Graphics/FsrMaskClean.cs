@@ -71,15 +71,15 @@ namespace TarkovVR.Source.Graphics
             // The REAL textures, not BuiltinRenderTextureType.ResolvedDepth / MotionVectors: those don't resolve as blit
             // sources in a buffer run outside a camera event (FSR4 Bridge hit the same) - bound wrong, the copies broke
             // FSR3 completely (no AA, raw jitter; 2026-10-19). Same objects FSR4 Bridge reads.
-            Texture depthTex = Shader.GetGlobalTexture(CameraDepthId), mvTex = Shader.GetGlobalTexture(CameraMvId);
-            if (depthTex == null || mvTex == null)
+            Texture depthTexture = Shader.GetGlobalTexture(CameraDepthId), motionTexture = Shader.GetGlobalTexture(CameraMvId);
+            if (depthTexture == null || motionTexture == null)
             {
                 LogOnce("[VR FSR] mask clean skipped: no camera depth / motion texture bound yet");
                 return;
             }
-            if (depthTex.width != width || depthTex.height != height || mvTex.width != width || mvTex.height != height)
+            if (depthTexture.width != width || depthTexture.height != height || motionTexture.width != width || motionTexture.height != height)
             {
-                LogOnce($"[VR FSR] mask clean off: depth {depthTex.width}x{depthTex.height}, motion {mvTex.width}x{mvTex.height}, FSR render size {width}x{height} - not matching, FSR reads the originals");
+                LogOnce($"[VR FSR] mask clean off: depth {depthTexture.width}x{depthTexture.height}, motion {motionTexture.width}x{motionTexture.height}, FSR render size {width}x{height} - not matching, FSR reads the originals");
                 return;
             }
 
@@ -93,21 +93,21 @@ namespace TarkovVR.Source.Graphics
             if (passThrough)
             {
                 // Test: plain copies through Unity's own blit (as FSR4 Bridge does), no masking.
-                commandBuffer.Blit(depthTex, depthCopy);
-                commandBuffer.Blit(mvTex, mvCopy);
+                commandBuffer.Blit(depthTexture, depthCopy);
+                commandBuffer.Blit(motionTexture, mvCopy);
             }
             else
             {
                 // Inputs as explicit globals: the blit's own _MainTex binding did not reach the shader's Texture2D, so the
                 // copies read the camera's colour image (readback check 2026-10-19).
-                commandBuffer.SetGlobalTexture(MaskDepthId, depthTex);
-                commandBuffer.SetGlobalTexture(SrcId, depthTex);
-                commandBuffer.Blit(depthTex, depthCopy, mat, 0);
-                commandBuffer.SetGlobalTexture(SrcId, mvTex);
-                commandBuffer.Blit(mvTex, mvCopy, mat, 1);
+                commandBuffer.SetGlobalTexture(MaskDepthId, depthTexture);
+                commandBuffer.SetGlobalTexture(SrcId, depthTexture);
+                commandBuffer.Blit(depthTexture, depthCopy, mat, 0);
+                commandBuffer.SetGlobalTexture(SrcId, motionTexture);
+                commandBuffer.Blit(motionTexture, mvCopy, mat, 1);
             }
             if (diagPending)
-                RecordCheck(commandBuffer, depthTex, mvTex, width, height);
+                RecordCheck(commandBuffer, depthTexture, motionTexture, width, height);
             if (external == null)
                 UnityEngine.Graphics.ExecuteCommandBuffer(ownCb);
             active = true;
@@ -128,13 +128,13 @@ namespace TarkovVR.Source.Graphics
             Plugin.MyLog.LogWarning("[VR FSR] mask clean check queued for the next FSR2/3 frame (needs the cleaner on + the mask on)");
         }
 
-        private static void RecordCheck(CommandBuffer commandBuffer, Texture depthTex, Texture mvTex, int width, int height)
+        private static void RecordCheck(CommandBuffer commandBuffer, Texture depthTexture, Texture motionTexture, int width, int height)
         {
             diagPending = false;
             Ensure(ref diagDepth, width, height, RenderTextureFormat.RFloat, "SPT-VR FSR check depth");
             Ensure(ref diagMv, width, height, RenderTextureFormat.RGHalf, "SPT-VR FSR check motion");
-            commandBuffer.Blit(depthTex, diagDepth);
-            commandBuffer.Blit(mvTex, diagMv);
+            commandBuffer.Blit(depthTexture, diagDepth);
+            commandBuffer.Blit(motionTexture, diagMv);
             rbW = width; rbH = height; rbParts = 4;
             rbOrigDepth = rbCopyDepth = rbOrigMv = rbCopyMv = null;
             commandBuffer.RequestAsyncReadback(diagDepth, 0, TextureFormat.RFloat, request => { rbOrigDepth = Read(request); Part(); });

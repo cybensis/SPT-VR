@@ -100,7 +100,7 @@ namespace TarkovVR.Source.Player.VRManager
             float k = springBase / Mathf.Max(ergoWeight, 1f) * (twoHanded ? supportStiffness : 1f);
             k *= ShoulderStock.SpringMult;   // a seated stock braces the gun (tighter spring)
             float damping = 2f * dampingRatio * Mathf.Sqrt(k);
-            Vector3 accel = k * swingError - damping * swingVel;
+            Vector3 acceleration = k * swingError - damping * swingVel;
 
             // Jumping: the body's vertical acceleration on the gun, against its weight torque (1 g's worth: what holds the one-handed droop)
             UpdateBody();
@@ -113,7 +113,7 @@ namespace TarkovVR.Source.Player.VRManager
                     float weightTorque = springBase / Mathf.Max(ergoWeight, 1f) * Mathf.Min(droopPerErgo * ergoWeight, maxDroop) * Mathf.Deg2Rad
                         * jumpInertiaScale;
                     if (frameWeightless)
-                        accel -= dipAxis * weightTorque;
+                        acceleration -= dipAxis * weightTorque;
                     if (frameSpeedChange > 0f && lastJumpDipFrame != Time.frameCount)
                     {
                         lastJumpDipFrame = Time.frameCount;
@@ -129,10 +129,10 @@ namespace TarkovVR.Source.Player.VRManager
                 float sag = Mathf.Min(droopPerErgo * ergoWeight, maxDroop) * Mathf.Deg2Rad;
                 Vector3 droopAxis = Vector3.Cross(barrelDir, Vector3.down);
                 if (droopAxis.sqrMagnitude > 1e-6f)
-                    accel += droopAxis.normalized * (k * sag);
+                    acceleration += droopAxis.normalized * (k * sag);
             }
 
-            swingVel += accel * dt;                   // semi-implicit Euler - stable at these stiffnesses
+            swingVel += acceleration * dt;                   // semi-implicit Euler - stable at these stiffnesses
             float swingSpeed = swingVel.magnitude;
             if (swingSpeed > maxSwingVel)
                 swingVel *= maxSwingVel / swingSpeed;

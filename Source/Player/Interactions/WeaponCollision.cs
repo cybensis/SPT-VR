@@ -132,7 +132,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             Vector3 rawGrip = weaponRoot.position;
-            Quaternion wrRot = weaponRoot.rotation;
+            Quaternion weaponRootRotation = weaponRoot.rotation;
 
             // Rig motion (locomotion translation + turning rotation) = a rigid transform of the whole
             // reference frame; apply it directly to the proxy (not via the velocity chase, whose per-frame
@@ -158,7 +158,7 @@ namespace TarkovVR.Source.Player.Interactions
             hasLastPlayerPos = true;
 
             proxy.Configure(weaponLn, bodyRadius, barrelRadius);
-            proxy.SetTarget(rawGrip, wrRot);               // drive the proxy to the controller pose
+            proxy.SetTarget(rawGrip, weaponRootRotation);               // drive the proxy to the controller pose
             proxy.Step(Time.deltaTime);                    // step the sandbox NOW, at render rate (see WeaponPhysicsProxy.Step)
 
             // Render the PhysX-resolved pose EVERY frame (render-body). The proxy was stepped this frame, so
@@ -166,24 +166,24 @@ namespace TarkovVR.Source.Player.Interactions
             // the gun sits at the true controller pose, crisp. The instant a fast swing meets a wall the
             // proxy stops at it THIS frame -> the visible gun stops with it (no clip-through, no waiting for a
             // 50Hz contact event). Feedback still comes from the proxy's collision events -> OnProxyContact.
-            EnactHolderPose(rawGrip, wrRot, proxy.ResolvedPos, proxy.ResolvedRot);
+            EnactHolderPose(rawGrip, weaponRootRotation, proxy.ResolvedPos, proxy.ResolvedRot);
         }
 
         // Move weaponHolder so the gun's root goes from its current (un-collided) pose to the resolved
         // pose - a rigid delta applied to the holder (weaponRoot is its descendant). Captured pre/post so
         // PreAnchor strips it next frame (nothing may accumulate).
-        private static void EnactHolderPose(Vector3 curPos, Quaternion curRot, Vector3 tgtPos, Quaternion tgtRot)
+        private static void EnactHolderPose(Vector3 currentPosition, Quaternion currentRotation, Vector3 targetPosition, Quaternion targetRotation)
         {
             Transform holder = VRGlobals.weaponHolder.transform;
-            Quaternion turn = tgtRot * Quaternion.Inverse(curRot);
-            bool wantRot = Quaternion.Angle(turn, Quaternion.identity) > 0.01f;
-            bool wantPos = (tgtPos - curPos).sqrMagnitude > 1e-10f;
-            if (!wantRot && !wantPos)
+            Quaternion turn = targetRotation * Quaternion.Inverse(currentRotation);
+            bool applyRotation = Quaternion.Angle(turn, Quaternion.identity) > 0.01f;
+            bool applyPosition = (targetPosition - currentPosition).sqrMagnitude > 1e-10f;
+            if (!applyRotation && !applyPosition)
                 return;
             preEnactLocalPos = holder.localPosition;
             preEnactLocalRot = holder.localRotation;
-            Vector3 offset = holder.position - curPos;
-            holder.SetPositionAndRotation(tgtPos + turn * offset, turn * holder.rotation);
+            Vector3 offset = holder.position - currentPosition;
+            holder.SetPositionAndRotation(targetPosition + turn * offset, turn * holder.rotation);
             lastEnactLocalPos = holder.localPosition;
             lastEnactLocalRot = holder.localRotation;
             enacted = true;

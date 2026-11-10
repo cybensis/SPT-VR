@@ -112,11 +112,11 @@ namespace TarkovVR.Source.Player.Interactions
             float deltaTime = Mathf.Max(Time.deltaTime, 1e-4f);
             for (int iter = 0; iter < 3; iter++)
             {
-                float dist = move.magnitude;
-                if (dist < 1e-5f)
+                float distance = move.magnitude;
+                if (distance < 1e-5f)
                     break;
-                Vector3 direction = move / dist;
-                if (!SweepSphere(resolved, direction, dist, out RaycastHit hit, out bool startBlocked))
+                Vector3 direction = move / distance;
+                if (!SweepSphere(resolved, direction, distance, out RaycastHit hit, out bool startBlocked))
                 {
                     // A cast that STARTS in contact reports "free" - only allow the move if it escapes
                     // the overlap (silently skipping zero-distance hits = pressure push-through).
@@ -126,7 +126,7 @@ namespace TarkovVR.Source.Player.Interactions
                     break;
                 }
                 hitAny = true;
-                approach = Mathf.Max(approach, Vector3.Dot(direction, -hit.normal) * dist / deltaTime);
+                approach = Mathf.Max(approach, Vector3.Dot(direction, -hit.normal) * distance / deltaTime);
                 // Shrunk cast (0.8 r) stopping 0.2 r short: the cast sphere never starts a frame
                 // overlapping a collider (start-overlapped colliders are silently omitted by casts).
                 float safe = Mathf.Max(0f, hit.distance - handRadius * 0.2f);
@@ -162,13 +162,13 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Same world/filter rules as the gun's barrel cast: solid-world mask (+ glass), trigger hits only
         // on the glass layer, own body ignored. startBlocked = the cast began already in contact.
-        private static bool SweepSphere(Vector3 origin, Vector3 direction, float dist, out RaycastHit best,
+        private static bool SweepSphere(Vector3 origin, Vector3 direction, float distance, out RaycastHit best,
             out bool startBlocked)
         {
             best = default;
             startBlocked = false;
             float bestDist = float.MaxValue;
-            int hitCount = Physics.SphereCastNonAlloc(origin, handRadius * 0.8f, direction, castHits, dist,
+            int hitCount = Physics.SphereCastNonAlloc(origin, handRadius * 0.8f, direction, castHits, distance,
                 WeaponCollision.GetOcclusionMask(), QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {

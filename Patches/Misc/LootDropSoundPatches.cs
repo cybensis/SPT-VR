@@ -180,8 +180,8 @@ namespace TarkovVR.Patches.Misc
         // much that layer should respond to velocity (influence 0 = none, 1 = full).
         private static float VelocityMult(float impact, float influence)
         {
-            float mult = Mathf.Lerp(velVolumeSoft, velVolumeLoud, Mathf.InverseLerp(velSpeedSoft, velSpeedHard, impact));
-            return Mathf.Lerp(1f, mult, influence);
+            float multiplier = Mathf.Lerp(velVolumeSoft, velVolumeLoud, Mathf.InverseLerp(velSpeedSoft, velSpeedHard, impact));
+            return Mathf.Lerp(1f, multiplier, influence);
         }
 
         // The item's "<category>_drop" inventory clip, played at the landing point through BetterAudio (3D),

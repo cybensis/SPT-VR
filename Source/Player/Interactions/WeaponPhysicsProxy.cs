@@ -296,7 +296,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             staleKeys.Clear();
-            float retSqr = retainDistance * retainDistance;
+            float retainDistanceSquared = retainDistance * retainDistance;
             foreach (var entry in colliderCopies)
             {
                 GameObject copyObject = entry.Value;
@@ -306,9 +306,9 @@ namespace TarkovVR.Source.Player.Interactions
                     continue;
                 }
                 Collider copyCollider = copyObject.GetComponent<Collider>();
-                float dSqr = copyCollider != null ? copyCollider.bounds.SqrDistance(rb.position)
+                float distanceSquared = copyCollider != null ? copyCollider.bounds.SqrDistance(rb.position)
                                        : (copyObject.transform.position - rb.position).sqrMagnitude;
-                if (dSqr > retSqr)
+                if (distanceSquared > retainDistanceSquared)
                     staleKeys.Add(entry.Key);
             }
             for (int i = 0; i < staleKeys.Count; i++)

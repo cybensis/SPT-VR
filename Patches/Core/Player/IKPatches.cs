@@ -633,11 +633,11 @@ namespace TarkovVR.Patches.Core.Player
         // Signed twist (deg) of q around axis, in (-180, 180] (swing-twist decomposition).
         private static float TwistAngle(Quaternion q, Vector3 axis)
         {
-            float proj = q.x * axis.x + q.y * axis.y + q.z * axis.z;
-            float magnitude = Mathf.Sqrt(proj * proj + q.w * q.w);
+            float alongAxis = q.x * axis.x + q.y * axis.y + q.z * axis.z;
+            float magnitude = Mathf.Sqrt(alongAxis * alongAxis + q.w * q.w);
             if (magnitude < 1e-6f)
                 return 0f;
-            float w = q.w / magnitude, s = proj / magnitude;
+            float w = q.w / magnitude, s = alongAxis / magnitude;
             if (w < 0f) { w = -w; s = -s; }   // canonical hemisphere
             return 2f * Mathf.Atan2(s, w) * Mathf.Rad2Deg;
         }
