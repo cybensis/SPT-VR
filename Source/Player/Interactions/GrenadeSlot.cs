@@ -135,6 +135,7 @@ namespace TarkovVR.Source.Player.Interactions
                 Application.onBeforeRender += OnBeforeRender;
             }
             SkipPutAway();
+            UpdatePendingReturn();
             if (grabbedItem != null && !GrabbedInHands && !IsSwitching())
             {
                 grabbedItem = null;
@@ -299,6 +300,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static string WhyNotSwitch(Hand hand)
         {
             if (WeaponPatches.grenadeEquipped) return "a grenade in hand already";
+            if (VRReloadController.HostStillAnswering) return "co-op: the host hasn't answered your last move yet";
             if (VRReloadController.HoldingMagazine || VRReloadController.HoldingChargingHandle) return "the reload has a hand";
             if (VRGlobals.player.InventoryController.IsChangingWeapon) return "switching weapons";
             object hands = VRGlobals.player.HandsController;
@@ -347,6 +349,13 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (current == null || next == null || VRGlobals.player == null || switchingTo != null)
                 return;
+            // Co-op as a client: not before the host has answered the last move (a hands change sent sooner is refused)
+            if (VRReloadController.HostStillAnswering)
+            {
+                if (debugLog)
+                    Plugin.MyLog.LogInfo($"[GrenadeSlot] {current.Item.LocalizedShortName()} not swapped: the host hasn't answered your last move yet");
+                return;
+            }
             bool left = Handedness.GunInLeftHand;
             switchingTo = next;
             switchFromHand = true;
@@ -424,9 +433,52 @@ namespace TarkovVR.Source.Player.Interactions
             return grabbedByHold && item != null && item == grabbedItem;
         }
 
-        // GrenadeHold, let go before the pin was out: the hands back as they were (the grenade's on the slot again: it's in the bag). Its
-        // put-away is skipped (SkipPutAway), the gun's draw too (OnGunDrawStarted); a gun that hung on its spot goes back there.
+        // Co-op as a client: a put-back held until the host has answered the move before it (VRReloadController.HostStillAnswering)
+        private static EFT.Player.GrenadeHandsController pendingReturn;
+        private static float pendingReturnSince;
+        public static float hostWaitLimit = 5f;     // s a hands change waits on the host's answer before it goes anyway
+
+        // GrenadeHold, let go before the pin was out: the hands back as they were - once the host has answered the grenade's own move
+        // (co-op as a client: sent before, the host refused it and the hands stayed broken, his raid log)
         public static void ReturnHands(EFT.Player.GrenadeHandsController grenade)
+        {
+            if (VRReloadController.HostStillAnswering)
+            {
+                if (pendingReturn != grenade)
+                {
+                    pendingReturn = grenade;
+                    pendingReturnSince = Time.time;
+                    if (debugLog)
+                        Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade?.Item?.LocalizedShortName()} put back: waiting for the host to answer the last move first");
+                }
+                return;
+            }
+            ReturnHandsNow(grenade);
+        }
+
+        // Every frame: a held put-back goes once the host has answered (or after hostWaitLimit), or never if the grenade left another way
+        private static void UpdatePendingReturn()
+        {
+            if (pendingReturn == null)
+                return;
+            if (VRGlobals.player == null || !ReferenceEquals(VRGlobals.player.HandsController, pendingReturn))
+            {
+                pendingReturn = null;
+                return;
+            }
+            bool timedOut = Time.time - pendingReturnSince > hostWaitLimit;
+            if (VRReloadController.HostStillAnswering && !timedOut)
+                return;
+            EFT.Player.GrenadeHandsController grenade = pendingReturn;
+            pendingReturn = null;
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] put-back {(timedOut ? $"going anyway: no answer from the host in {hostWaitLimit:0} s" : $"going: the host answered after {Time.time - pendingReturnSince:0.00} s")}");
+            ReturnHandsNow(grenade);
+        }
+
+        // The hands back as they were (the grenade's on the slot again: it's in the bag). Its put-away is skipped (SkipPutAway), the gun's
+        // draw too (OnGunDrawStarted); a gun that hung on its spot goes back there.
+        private static void ReturnHandsNow(EFT.Player.GrenadeHandsController grenade)
         {
             // Taken here: what the hands held before. Drawn another way (the radial menu): Tarkov's own last weapon.
             bool fromHere = grenade != null && grenade.Item == takenFromSlot;

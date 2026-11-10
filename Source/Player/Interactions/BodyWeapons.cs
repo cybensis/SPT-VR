@@ -319,6 +319,8 @@ namespace TarkovVR.Source.Player.Interactions
             if (ChestHang.SupportOnly) return "the off hand holds the gun";
             if (VRReloadController.HoldingMagazine) return "holding a magazine";
             if (VRReloadController.HoldingChargingHandle) return "holding the charging handle";
+            // Co-op as a client: a hands change sent before the host answered the last move is refused, and the hands stay broken
+            if (VRReloadController.HostStillAnswering) return "co-op: the host hasn't answered your last move yet";
             object hands = VRGlobals.player.HandsController;
             if (hands is FirearmController firearmController)
             {

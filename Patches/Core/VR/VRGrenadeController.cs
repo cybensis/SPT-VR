@@ -33,6 +33,7 @@ namespace TarkovVR.Patches.Core.VR
         // what they held before), without the clip. false = the old way: the clip played on from 40 % after the release and the hands
         // came back at its end, 0.3-0.5 s later (a freeze at its start if it wrapped first).
         public static bool finishAtRelease = true;
+        private static float releasedAt;
 
         public static float tripwireHoldDuration = 0.4f;        // long-hold time (s) on the face button to toggle plant mode
         public static float tripwireRayForwardOffset = 0.3f;    // ray start nudge ahead of the controller (matches native beacon code)
@@ -183,6 +184,10 @@ namespace TarkovVR.Patches.Core.VR
             // swaps the hands' controller, which the rest of the release (the holder, emptyHands) mustn't then touch
             if (finishAtRelease)
             {
+                // Co-op as a client: once the host has answered (the throw, and the grenade's draw before it, run at full length on its
+                // copy of you) - ending it sends Tarkov's next hands change, which the host refuses while it's still busy
+                if (VRReloadController.HostStillAnswering && Time.time - releasedAt < TarkovVR.Source.Player.Interactions.GrenadeSlot.hostWaitLimit)
+                    return;
                 BaseGrenadeHandsController thrownNow = activeGrenadeController;
                 EndThrow();
                 thrownNow.OnDropFinishedAction();
@@ -296,6 +301,7 @@ namespace TarkovVR.Patches.Core.VR
             EndThrow();
             throwInProgress = true;
             activeGrenadeController = __instance;
+            releasedAt = Time.time;
 
             if (throwVelocity.magnitude > 0.1f)
             {
