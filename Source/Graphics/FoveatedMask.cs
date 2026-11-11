@@ -55,13 +55,28 @@ namespace TarkovVR.Source.Graphics
         // Off for this session after an error (never written to the config: the setting stays the user's)
         private static bool faulted;
 
+        // The VR Graphics tab's toggle and slider
+        public static bool IsEnabled => enabledSetting != null && enabledSetting.Value;
+        public static void SetEnabled(bool on)
+        {
+            if (enabledSetting != null)
+                enabledSetting.Value = on;
+        }
+        public static float InnerRadius
+        {
+            get => innerRadiusSetting != null ? innerRadiusSetting.Value : 0.55f;
+            set { if (innerRadiusSetting != null) innerRadiusSetting.Value = value; }
+        }
+
         public static void Init(ConfigFile config)
         {
+            // Shown in the VR Graphics tab (VRSettings), not F12. Still BepInEx entries: SixBench A/Bs "Enabled" through them.
             enabledSetting = config.Bind("Foveated Masking", "Enabled", true,
-                "Shade every other 2x2 pixel block outside the middle of each eye from its neighbours instead (saves GPU time, softer edges).");
+                new ConfigDescription("Shade every other 2x2 pixel block outside the middle of each eye from its neighbours instead (saves GPU time, softer edges).",
+                    null, new TarkovVR.Source.Settings.ConfigurationManagerAttributes { Browsable = false }));
             innerRadiusSetting = config.Bind("Foveated Masking", "Inner Radius", 0.55f,
                 new ConfigDescription("Where the masking starts, from the middle of each eye (0 = everywhere, 1 = the edge of the view straight left / right / up / down).",
-                    new AcceptableValueRange<float>(0.1f, 1.5f)));
+                    new AcceptableValueRange<float>(0.1f, 1.5f), new TarkovVR.Source.Settings.ConfigurationManagerAttributes { Browsable = false }));
             eyeTrackingSetting = config.Bind("Foveated Masking", "Eye Tracking", true,
                 "On a headset that tracks your eyes (OpenXR eye gaze), the sharp circle follows where you look and uses Gaze Inner Radius. Without eye tracking it stays in the middle of each lens.");
             gazeInnerRadiusSetting = config.Bind("Foveated Masking", "Gaze Inner Radius", 0.3f,

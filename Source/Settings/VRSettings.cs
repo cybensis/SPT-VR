@@ -228,6 +228,8 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle desktopViewRightEyeToggle;
         private static SettingToggle desktopViewPlainMirrorToggle;
         private static SettingToggle hideoutShadowsOffToggle;
+        private static SettingToggle foveatedToggle;
+        private static SettingSelectSlider foveatedRadiusSlider;
         private static SettingSelectSlider desktopViewFieldOfViewSlider;
         private static SettingSelectSlider desktopViewSmoothingSlider;
         private static SettingSelectSlider desktopViewVerticalFieldOfViewSlider;
@@ -713,7 +715,21 @@ namespace TarkovVR.Source.Settings
             hideoutShadowsOffToggle.Text.localizationKey = "Disable Hideout Shadows (Saves FPS)";
             hideoutShadowsOffToggle.Toggle.UpdateValue(settings.hideoutShadowsOff);
 
-            lodBiasSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
+            // Software foveated rendering (FoveatedMask). Its values are BepInEx config entries (SixBench A/Bs them), not ModSettings;
+            // its debug options stay in F12.
+            foveatedToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
+            foveatedToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            foveatedToggle.Toggle._onValueChanged = TarkovVR.Source.Graphics.FoveatedMask.SetEnabled;
+            foveatedToggle.Text.localizationKey = "Foveated Rendering (Saves FPS, Softer Edges)";
+            foveatedToggle.Toggle.UpdateValue(TarkovVR.Source.Graphics.FoveatedMask.IsEnabled);
+
+            foveatedRadiusSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
+            foveatedRadiusSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
+            foveatedRadiusSlider.Text.localizationKey = "Foveated Inner Radius (Smaller = More FPS):";
+            MakeSliderSmooth(foveatedRadiusSlider, 0.2f, 1.2f, () => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius,
+                (value) => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius = value, (v) => v.ToString("0.00"));
+
+            lodBiasSlider =gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
             lodBiasSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
             lodBiasSlider.Text.localizationKey = "LOD Bias Factor (FPS Hit):";
             MakeSliderSmooth(lodBiasSlider, 0.5f, 2f, () => settings.lodBias,
