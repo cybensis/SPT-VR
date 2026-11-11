@@ -27,6 +27,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float keyholeAxialReach = 0.07f;  // ...and along it from the lock (either face of the door)
         public static float keyInsertAngle = 40f;       // deg the key may be off the keyway
         public static float keyInsertDepth = 0.03f;     // m the tip goes in past the door's face
+        // The face is the door's own surface along the keyway within this of the lock's pivot (a door's handles and thick colliders stand
+        // further out); none there = the pivot less keyFaceFallback
+        public static float keyFaceBand = 0.06f;        // m
+        public static float keyFaceFallback = 0.02f;    // m
         public static float keyInsertTime = 0.08f;      // s the hand takes onto the lock
         public static float keyUnlockTurn = 60f;        // deg of wrist turn about the keyway that unlocks
         public static float keyMaxTurn = 90f;
@@ -473,13 +477,14 @@ namespace TarkovVR.Source.Player.Interactions
             Door door = keyHold.door;
 
             // In at the door's face along the keyway, the blade on edge: its flat across the hinge's axis, the nearer way up
-            bool faceFound = DoorFaceAlong(door, lockPoint, inward, out Vector3 face);
-            keyHold.seatedTip = (faceFound ? face : lockPoint) + inward * keyInsertDepth;
-            if (logGrabs && seatLogged.Add(door.Id ?? door.name))
+            bool logSeat = logGrabs && seatLogged.Add(door.Id ?? door.name);
+            bool faceFound = DoorFaceAlong(door, lockPoint, inward, logSeat, out Vector3 face, out string surfaces);
+            keyHold.seatedTip = face + inward * keyInsertDepth;
+            if (logSeat)
             {
-                Plugin.MyLog.LogInfo($"[Doors] key seated in '{door.name}': "
-                    + (faceFound ? $"the face {Vector3.Dot(lockPoint - face, inward) * 100f:0.0} cm before the lock's pivot along the keyway" : "no face found (at the lock's pivot)")
-                    + $", tip {keyInsertDepth * 100f:0.0} cm in, the key {Vector3.Distance(propTransform.TransformPoint(keyHold.gripLocal), propTransform.TransformPoint(keyHold.tipLocal)) * 100f:0.0} cm grip to tip");
+                Plugin.MyLog.LogInfo($"[Doors] key seated in '{door.name}': the face {Vector3.Dot(lockPoint - face, inward) * 100f:0.0} cm before the lock's pivot "
+                    + $"{(faceFound ? "" : "(none found: the fallback) ")}along the keyway, tip {keyInsertDepth * 100f:0.0} cm in; the door's surfaces on the way "
+                    + $"(cm before the pivot): {surfaces}");
             }
             keyHold.inward = inward;
             Vector3 widthNow = propTransform.TransformDirection(keyHold.widthLocal);
@@ -515,21 +520,30 @@ namespace TarkovVR.Source.Player.Interactions
             PlayKeySound(keyHold, keySoundVolume * 0.5f);
         }
 
-        // The door's first surface along the keyway, coming in from outside
-        private static bool DoorFaceAlong(Door door, Vector3 lockPoint, Vector3 inward, out Vector3 face)
+        // The door's face the key goes in at: its first surface along the keyway, coming in from outside, within keyFaceBand of the lock's
+        // pivot: the first surface of any of its colliders can be 9-12 cm out from it on a door ~4 cm thick (a handle, a collider
+        // thicker than the door).
+        private static bool DoorFaceAlong(Door door, Vector3 lockPoint, Vector3 inward, bool describe, out Vector3 face, out string surfaces)
         {
-            face = lockPoint;
-            int mask = (1 << 22) | (1 << LayersMaskController.DoorLayer) | (int)LayersMaskController.PlayerStaticCollisionsMask;
-            int count = Physics.RaycastNonAlloc(lockPoint - inward * 0.2f, inward, keyholeHits, 0.4f, mask, QueryTriggerInteraction.Ignore);
+            face = lockPoint - inward * keyFaceFallback;
+            surfaces = "";
+            int count = Physics.RaycastNonAlloc(lockPoint - inward * 0.2f, inward, keyholeHits, 0.25f, Physics.AllLayers, QueryTriggerInteraction.Ignore);
             float best = float.MaxValue;
+            System.Text.StringBuilder described = describe ? new System.Text.StringBuilder() : null;
             for (int i = 0; i < count; i++)
             {
                 RaycastHit hit = keyholeHits[i];
-                if (hit.collider == null || hit.distance >= best || hit.collider.GetComponentInParent<Door>() != door)
+                if (hit.collider == null || hit.collider.GetComponentInParent<Door>() != door)
+                    continue;
+                float before = Vector3.Dot(lockPoint - hit.point, inward);
+                described?.Append($"{before * 100f:0.0} '{hit.collider.name}' ({LayerMask.LayerToName(hit.collider.gameObject.layer)}); ");
+                if (before < -0.01f || before > keyFaceBand || hit.distance >= best)
                     continue;
                 best = hit.distance;
                 face = hit.point;
             }
+            if (described != null)
+                surfaces = described.Length > 0 ? described.ToString().TrimEnd(' ', ';') : "none";
             return best < float.MaxValue;
         }
 
