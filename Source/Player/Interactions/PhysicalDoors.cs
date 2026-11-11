@@ -46,7 +46,13 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool releaseFromHandVelocity = true;
         // The let-go registers 20-70 ms after the hand starts opening (OpenXRInput's grip), the hand already slowing: the swing takes the
         // hand's fastest over this window before it
-        public static float releasePeakWindow = 0.08f;  // s
+        public static float releasePeakWindow = 0.12f;  // s
+        // Index: a held door lets go when the hand opens (the wrap under this), not on OpenXRInput's fast-open - that reads a squeeze
+        // relaxing onto the handle (the wrap drops from 1 to the fingers' resting curl within a frame or two) as letting go
+        public static float doorGripReleaseWrap = 0.3f;
+        // The player's body blocks a door a hand moves or that coasts: it stops against the body. Tarkov's character controller pushes
+        // the body out of a door's colliders at any speed, which dragged the shoulder off the held handle.
+        public static bool bodyBlocksDoors = true;
         // A door let go of coasts on its hinges: their friction (a steady slowdown) and the air's drag (growing with the speed squared)
         public static float swingFriction = 45f;        // deg/s^2
         public static float swingDrag = 0.0005f;        // deg/s^2 per (deg/s)^2
@@ -264,7 +270,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (hold.held)
             {
-                if (!free || grip == null || !grip.state || !StillHeld(hold))
+                if (!free || !GripHolds(hold, grip) || !StillHeld(hold))
                     Release(hold);
                 else if (triggerPressed[hold.dominant ? 1 : 0])
                     TryTakeKey(hold);
@@ -272,6 +278,17 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (free && grip != null && grip.stateDown && hands != null)
                 TryGrab(hands, hold);
+        }
+
+        private static bool GripHolds(Hold hold, VRBoolean grip)
+        {
+            if (grip != null && grip.state)
+                return true;
+            if (!VRInput.UsingOpenXR)
+                return false;
+            SteamVR_Input_Sources source = hold.dominant ? Handedness.GunHandSource : Handedness.OffHandSource;
+            int hand = source == SteamVR_Input_Sources.LeftHand ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND;
+            return OpenXRInput.IsIndex(hand) && OpenXRInput.GetGripValue(hand) >= doorGripReleaseWrap;
         }
 
         private static bool StillHeld(Hold hold)
@@ -301,6 +318,12 @@ namespace TarkovVR.Source.Player.Interactions
 
             DoorRun run = RunFor(door);
             onHandle &= run.handle != null;
+            if (!onHandle && run.HasTurnableHandle && logGrabs && panelGrabLogs < 20)
+            {
+                panelGrabLogs++;
+                Plugin.MyLog.LogInfo($"[Doors] {(hold.dominant ? "gun" : "off")} hand took '{door.name}' by its panel ({door.DoorState}): the palm "
+                    + $"{HandleDistance(door, palm) * 100f:0} cm from the handle (takes it within {handleReach * 100f:0})");
+            }
             if (hold.latch == null)
                 hold.latch = new GameObject("VRDoorHandLatch").transform;
             hold.door = door;
@@ -696,6 +719,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         private static int releaseLogs;
+        private static int panelGrabLogs;
 
         private static Hold OtherHold(Hold hold, bool onHandle)
         {
@@ -926,6 +950,7 @@ namespace TarkovVR.Source.Player.Interactions
                 newOpenness = Mathf.Clamp01(Mathf.MoveTowards(openness, desiredOpenness, maxSwingSpeed * deltaTime / Mathf.Abs(span)));
                 if (newOpenness >= 1f && openness < 1f && Mathf.Abs(run.angularVelocity) > 60f)
                     Pulse(hold, 0.3f, 0.04f, 70f);      // the door at its stop
+                newOpenness = Openness(door, BlockedByBody(door, current, AngleAt(door, newOpenness)));
             }
             else
             {
@@ -943,6 +968,66 @@ namespace TarkovVR.Source.Player.Interactions
                 run.rattleAtStop = atStop;
             }
             SetAngle(run, AngleAt(door, newOpenness), deltaTime);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The player's body in the door's way
+
+        // The furthest the door turns from `from` toward `to` without its colliders going into the player's body (the character
+        // controller's capsule). A door already in it (the body stepped into the swing) may only move out.
+        private static float BlockedByBody(Door door, float from, float to)
+        {
+            if (!bodyBlocksDoors || Mathf.Abs(Mathf.DeltaAngle(from, to)) < 1e-3f)
+                return to;
+            Collider body = PlayerBody();
+            if (body == null)
+                return to;
+            float intoAtTarget = DepthInBody(door, to, body);
+            if (intoAtTarget <= 0f)
+                return to;
+            float intoNow = DepthInBody(door, from, body);
+            if (intoNow > 0f)
+                return intoAtTarget <= intoNow ? to : from;
+            float turn = Mathf.DeltaAngle(from, to);
+            float clear = 0f, blocked = 1f;
+            for (int i = 0; i < 7; i++)
+            {
+                float middle = (clear + blocked) * 0.5f;
+                if (DepthInBody(door, from + turn * middle, body) > 0f)
+                    blocked = middle;
+                else
+                    clear = middle;
+            }
+            return from + turn * clear;
+        }
+
+        // How deep the door at this angle is in the body: its colliders that collide with players (Door.CollisionColliders), turned
+        // there about the hinge (the setter only turns the door about its origin)
+        private static float DepthInBody(Door door, float angle, Collider body)
+        {
+            Vector3 hinge = door.transform.position;
+            Quaternion turn = Quaternion.AngleAxis(Mathf.DeltaAngle(door.CurrentAngle, angle), HingeAxis(door));
+            Transform bodyTransform = body.transform;
+            float deepest = 0f;
+            List<Collider> colliders = door.CollisionColliders;
+            for (int i = 0; i < colliders.Count; i++)
+            {
+                Collider collider = colliders[i];
+                if (collider == null || !collider.enabled || collider.isTrigger || !collider.gameObject.activeInHierarchy)
+                    continue;
+                Transform colliderTransform = collider.transform;
+                Vector3 position = hinge + turn * (colliderTransform.position - hinge);
+                Quaternion rotation = turn * colliderTransform.rotation;
+                if (Physics.ComputePenetration(collider, position, rotation, body, bodyTransform.position, bodyTransform.rotation, out _, out float depth))
+                    deepest = Mathf.Max(deepest, depth);
+            }
+            return deepest;
+        }
+
+        private static Collider PlayerBody()
+        {
+            EFT.Player player = VRGlobals.player;
+            return player != null && player.CharacterController != null ? player.CharacterController.GetCollider() : null;
         }
 
         private static bool InReach(Hold hold, Door door, Vector3 target)
@@ -985,7 +1070,16 @@ namespace TarkovVR.Source.Player.Interactions
                 next = 0f;
                 run.swinging = false;     // the speed is kept for the shut's volume (UpdateGameState)
             }
-            door.CurrentAngle = AngleAt(door, next);
+            float nextAngle = AngleAt(door, next);
+            float allowed = BlockedByBody(door, door.CurrentAngle, nextAngle);
+            if (allowed != nextAngle)
+            {
+                // Against the body: it stops there
+                nextAngle = allowed;
+                run.swinging = false;
+                run.angularVelocity = 0f;
+            }
+            door.CurrentAngle = nextAngle;
             if (run.swinging)
             {
                 float speed = Mathf.Abs(run.angularVelocity);
