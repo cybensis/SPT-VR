@@ -14,6 +14,9 @@ namespace TarkovVR.Source.XR
 
         private void Update()
         {
+            // (the spaces Unity let go of, destroyed once no queued frame can name them)
+            OpenXRLateSpaceDestroy.DestroyDue();
+
             if (logHeadHeightTime > 0f && Time.unscaledTime >= logHeadHeightTime)
             {
                 logHeadHeightTime = -1f;

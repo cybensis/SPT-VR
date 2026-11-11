@@ -139,6 +139,12 @@ namespace TarkovVR.Source.XR
             hapticFrequency.enabled = true;
             features.Add(hapticFrequency);
 
+            // A space Unity lets go of is destroyed a second later: a frame-generation layer can still have a frame naming it
+            OpenXRLateSpaceDestroy lateSpaceDestroy = ScriptableObject.CreateInstance<OpenXRLateSpaceDestroy>();
+            nameField?.SetValue(lateSpaceDestroy, "SPT-VR Late Space Destroy");
+            lateSpaceDestroy.enabled = true;
+            features.Add(lateSpaceDestroy);
+
             // The frame-call watcher (native, hooks xrWaitFrame and friends) only feeds the cost probe's OpenXR rows: not
             // registered in release builds
             if (registerFrameWatch)
