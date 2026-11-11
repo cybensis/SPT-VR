@@ -2,6 +2,7 @@ using Comfort.Common;
 using EFT;
 using EFT.Ballistics;
 using EFT.CameraControl;
+using EFT.Interactive;
 using JsonType;
 using SptVrFikaSync;
 using System.Runtime.CompilerServices;
@@ -13,27 +14,30 @@ namespace TarkovVR.Source.Player.Interactions
 {
     // Physical weapon collision via a sandboxed PhysX rigidbody (WeaponPhysicsProxy): an invisible Rigidbody shaped like the
     // gun (fat body + thin barrel capsule), driven toward the controller pose and collided in its own local physics scene
-    // against static copies of the nearby world colliders (so stepping it can't disturb the game's loot/ragdolls).
+    // against copies of the nearby world colliders (so stepping it can't disturb the game's loot/ragdolls).
     // It is stepped at render rate (proxy.Step from Apply, not FixedUpdate) and the visible gun is placed on its resolved
-    // pose every frame. Rig motion (locomotion + turning) reaches the proxy as a rigid transform (AddRigMotion), not
-    // through the velocity drive, which would jitter.
+    // pose every frame. Rig motion (locomotion + turning) is in the target, so near geometry it goes through the collision
+    // (rigMotionThroughPhysics); in open space the proxy snaps to the target anyway.
     // Vanilla's TurnAwayEffector pose is suppressed for the local player (IKPatches); its OverlapValue still runs (ADS-stop
     // etc.). The fireport is a child of WeaponRoot, so shots originate at the clamped muzzle, and the FIKA arm sync
     // samples WeaponRoot's world pose, so observers see the clamp too.
-    // Limit: sandbox copies of non-readable meshes fail (CollisionMeshData error), so only readable-mesh + primitive
-    // geometry collides. The ComputePenetration alternative clips thin walls: don't use it.
+    // The ComputePenetration alternative clips thin walls: don't use it.
     public static class WeaponCollision
     {
         // ---- live-tunable knobs (UnityExplorer) ----
         public static bool enabled = true;                 // master switch (also gates HandCollision + the TurnAway suppression)
         public static float bodyRadius = 0.05f;            // m; gun body/receiver capsule
         public static float barrelRadius = 0.02f;          // m; gun barrel capsule
+        // false = walking / turning moves the proxy rigidly (AddRigMotion): no lag, but it can shove the gun into a wall
+        public static bool rigMotionThroughPhysics = true;
         public static bool haptics = true;                 // first-impact thud only
         public static float impactHapticStrength = 1f;     // amplitude ~ approach speed
         public static bool impactSound = true;             // the gun's surface-aware drop bank on first contact
-        public static float impactSoundVolume = 0.5f;
-        public static float impactSoundMinSpeed = 0.4f;    // m/s approach below which contact stays silent
-        public static float impactSoundRetrigger = 0.3f;   // s between impact sounds
+        public static float impactSoundVolume = 0.3f;
+        public static float impactSoundMinSpeed = 1.2f;    // m/s the gun meets the surface at (from the hand's motion) below which it stays silent
+        public static float impactSoundFullSpeed = 4f;     // m/s at which it plays at impactSoundVolume
+        public static float impactSoundRetrigger = 0.8f;   // s between impact sounds
+        public static float freshContactGap = 0.3f;        // s off a surface before touching it again counts as a new impact
         public static bool collideWithGlass = true;        // windows (TransparentCollider) are solid to the gun until broken
         public static bool glassBreak = true;              // whack a window hard enough and it shatters
         public static float glassBreakMinSpeed = 2.0f;     // m/s approach needed to break
@@ -45,7 +49,12 @@ namespace TarkovVR.Source.Player.Interactions
         private static Vector3 lastPlayerPos;              // rig root last frame (rig-motion delta for the proxy)
         private static Quaternion lastPlayerRot;
         private static bool hasLastPlayerPos;
-        private static Vector3 lastRigVelocity;            // rig world translation velocity this frame (walk-into approach - the proxy's rb.velocity can't see AddRigMotion's teleport)
+        private static Vector3 lastTargetGrip;             // the hand's gun pose last frame: how fast the gun meets a surface
+        private static Quaternion lastTargetRotation;
+        private static bool hasLastTarget;
+        private static Vector3 targetGrip;
+        private static Vector3 targetVelocity;
+        private static Vector3 targetAngularVelocity;      // rad/s
         private static float contactEndStamp = -10f;       // impact re-arm
         private static float lastImpactSoundStamp = -10f;
         private static int occlusionMask;
@@ -72,6 +81,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             StripEnacted();
             hasLastPlayerPos = false;
+            hasLastTarget = false;
             proxy?.Deactivate();
         }
 
@@ -125,23 +135,36 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 rawGrip = weaponRoot.position;
             Quaternion weaponRootRotation = weaponRoot.rotation;
 
-            // Rig motion (locomotion + turning) is a rigid transform of the whole reference frame: apply it directly to the
-            // proxy (through the velocity chase its per-frame lag is jitter on the sticks). Reference = camRoot, the VR rig
+            // How the hand moves the gun (locomotion and turning included): the speed it meets a surface at
+            float deltaTime = Mathf.Max(Time.deltaTime, 1e-4f);
+            if (hasLastTarget && (rawGrip - lastTargetGrip).sqrMagnitude < 1f)
+            {
+                targetVelocity = (rawGrip - lastTargetGrip) / deltaTime;
+                (weaponRootRotation * Quaternion.Inverse(lastTargetRotation)).ToAngleAxis(out float turnDegrees, out Vector3 turnAxis);
+                if (turnDegrees > 180f)
+                    turnDegrees -= 360f;
+                targetAngularVelocity = float.IsInfinity(turnAxis.x) || float.IsNaN(turnAxis.x) ? Vector3.zero
+                    : turnAxis * (turnDegrees * Mathf.Deg2Rad / deltaTime);
+            }
+            else
+            {
+                targetVelocity = Vector3.zero;
+                targetAngularVelocity = Vector3.zero;
+            }
+            lastTargetGrip = rawGrip;
+            lastTargetRotation = weaponRootRotation;
+            targetGrip = rawGrip;
+            hasLastTarget = true;
+
+            // Optional: rig motion (locomotion + turning) as a rigid transform of the proxy. Reference = camRoot, the VR rig
             // root: the stick turn rotates it directly (VRControlsPatches) and locomotion tracks it to the player each
             // frame (MovementPatches). player.Transform lags on turns (the body yaw follows the headset through the aim
             // system): don't use it as the reference.
             Transform rig = VRGlobals.camRoot != null ? VRGlobals.camRoot.transform : VRGlobals.player.Transform.Original;
             Vector3 playerPos = rig.position;
             Quaternion playerRot = rig.rotation;
-            if (hasLastPlayerPos)
-            {
+            if (hasLastPlayerPos && !rigMotionThroughPhysics)
                 proxy.AddRigMotion(playerRot * Quaternion.Inverse(lastPlayerRot), lastPlayerPos, playerPos);
-                lastRigVelocity = (playerPos - lastPlayerPos) / Mathf.Max(Time.deltaTime, 1e-4f);
-            }
-            else
-            {
-                lastRigVelocity = Vector3.zero;
-            }
             lastPlayerPos = playerPos;
             lastPlayerRot = playerRot;
             hasLastPlayerPos = true;
@@ -206,7 +229,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (pctest >= 0) mask &= ~(1 << pctest);
 
             proxy = WeaponPhysicsProxy.Create(mask);
-            proxy.gameObject.layer = layer;
+            proxy.UseLayer(layer);
             Plugin.MyLog.LogInfo($"[WeaponCollision] physics proxy (sandboxed) on layer {layer} ('{LayerMask.LayerToName(layer)}')");
             return true;
         }
@@ -240,6 +263,18 @@ namespace TarkovVR.Source.Player.Interactions
 
         internal static int GlassLayer => glassLayer;
 
+        private static int lowPolyLayer = -2, doorLowPolyLayer = -2;
+
+        private static bool IsMovementLayer(int layer)
+        {
+            if (lowPolyLayer == -2)
+            {
+                lowPolyLayer = LayerMask.NameToLayer("LowPolyCollider");
+                doorLowPolyLayer = LayerMask.NameToLayer("DoorLowPolyCollider");
+            }
+            return layer == lowPolyLayer || layer == doorLowPolyLayer;
+        }
+
         internal static int GetOcclusionMask()
         {
             if (occlusionMask == 0 || maskIncludesGlass != collideWithGlass)
@@ -257,19 +292,22 @@ namespace TarkovVR.Source.Player.Interactions
             return occlusionMask;
         }
 
-        // The physics proxy reports its collisions here (every frame while touching). Impact only: fires once on a fresh
-        // contact (0.15s since the last contact event); contactEndStamp advances every event so pressing/sliding stays quiet.
-        internal static void OnProxyContact(Collider col, Vector3 point, Vector3 normal, float approach)
+        // Any contact (pressing, sliding): a new impact needs freshContactGap off the surface first
+        internal static void NoteContact() => contactEndStamp = Time.time;
+
+        // The physics proxy reports its collisions here. Impact only: fires once on a fresh contact (freshContactGap since the
+        // last contact event); contactEndStamp advances every event so pressing/sliding stays quiet.
+        internal static void OnProxyContact(Collider col, Vector3 point, Vector3 normal)
         {
-            bool fresh = Time.time - contactEndStamp > 0.15f;
+            bool fresh = Time.time - contactEndStamp > freshContactGap;
             contactEndStamp = Time.time;
             if (col == null || !fresh)
                 return;
 
-            // Walking into a wall closes the distance through AddRigMotion (a rigid teleport), which the proxy's rb.velocity
-            // and so Collision.relativeVelocity (the `approach` passed in) never see: a walk-in would read ~0 and stay
-            // silent. Add the rig's closing speed along the contact normal.
-            approach += Mathf.Max(0f, Vector3.Dot(lastRigVelocity, -normal));
+            // How fast the hand brings that point of the gun into the surface. Not the contact's relative velocity: that is the
+            // proxy's catch-up toward a hand already inside the wall, large whenever the gun is pressed in, however gently.
+            Vector3 pointVelocity = targetVelocity + Vector3.Cross(targetAngularVelocity, point - targetGrip);
+            float approach = Mathf.Max(0f, Vector3.Dot(pointVelocity, -normal));
 
             Vector3 barrelDir = VRGlobals.firearmController?.WeaponRoot != null
                 ? -VRGlobals.firearmController.WeaponRoot.up : -normal;
@@ -299,6 +337,14 @@ namespace TarkovVR.Source.Player.Interactions
 
             BaseBallistic.ESurfaceSound surface = BaseBallistic.ESurfaceSound.Concrete;
             BaseBallistic ballistic = hitCollider.GetComponent<BaseBallistic>();
+            // A movement collider (a door's, a tree trunk's) has no surface: its door's / tree's bullet mesh does
+            if (ballistic == null && IsMovementLayer(hitCollider.gameObject.layer))
+            {
+                Door door = hitCollider.GetComponentInParent<Door>();
+                Transform owner = door != null ? door.transform : hitCollider.transform.parent;
+                if (owner != null)
+                    ballistic = owner.GetComponentInChildren<BaseBallistic>();
+            }
             if (ballistic != null)
                 surface = ballistic.GetSurfaceSound(point);
 
@@ -311,8 +357,9 @@ namespace TarkovVR.Source.Player.Interactions
             if (bank == null)
                 return;
 
-            // Louder the harder you hit; gentle grazes stay quiet.
-            float volume = impactSoundVolume * Mathf.Lerp(0.35f, 1f, Mathf.InverseLerp(0.5f, 3.5f, approach));
+            // Louder the harder you hit, rising slowly: a knock is soft, only a real whack is loud
+            float hardness = Mathf.InverseLerp(impactSoundMinSpeed, impactSoundFullSpeed, approach);
+            float volume = impactSoundVolume * Mathf.Lerp(0.25f, 1f, hardness * hardness);
             float distance = CameraManager.Instance.Distance(point);
             betterAudio.PlayAtPoint(point, bank, distance, volume, -1f, EnvironmentType.Outdoor, EOcclusionTest.OneShotPropagation);
         }

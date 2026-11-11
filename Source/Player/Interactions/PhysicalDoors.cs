@@ -99,6 +99,9 @@ namespace TarkovVR.Source.Player.Interactions
             public float syncedAngle = float.NaN;
             public float syncedTurn;
             public bool sent;
+            public int gunFrame = -10;                  // the last frame the gun's physics body moved it (WeaponPhysicsProxy)
+            public bool gunMoved;
+            public float hitSpeed;                      // deg/s the gun drove it into a stop at (the shut's volume)
             public bool HasTurnableHandle => handle != null && handleFullTurn > 0f;
         }
 
@@ -394,10 +397,72 @@ namespace TarkovVR.Source.Player.Interactions
                 run.handleFullTurn = degrees;
                 run.handleAxisLocal = axisLocal;
             }
-            bool inFrame = Mathf.Abs(Mathf.DeltaAngle(door.CloseAngle, door.CurrentAngle)) < 0.05f;
-            run.latched = inFrame && (door.DoorState == EDoorState.Locked || (door.DoorState == EDoorState.Shut && run.HasTurnableHandle));
+            run.latched = StartsLatched(door, run.HasTurnableHandle);
             runs[door] = run;
             return run;
+        }
+
+        // In its frame and locked, or shut with a handle to turn
+        private static bool StartsLatched(Door door, bool turnableHandle)
+        {
+            bool inFrame = Mathf.Abs(Mathf.DeltaAngle(door.CloseAngle, door.CurrentAngle)) < 0.05f;
+            return inFrame && (door.DoorState == EDoorState.Locked || (door.DoorState == EDoorState.Shut && turnableHandle));
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The gun's physics body (WeaponPhysicsProxy) pushing doors
+
+        // Free to move and nobody else moving it: open a bit or without a handle to turn, not locked, no hand on it
+        internal static bool GunMayPush(Door door)
+        {
+            if (!Active || !Supports(door))
+                return false;
+            EDoorState state = door.DoorState;
+            if (state == EDoorState.Locked || state == EDoorState.Interacting || state == EDoorState.Breaching)
+                return false;
+            if (runs.TryGetValue(door, out DoorRun run))
+                return !run.latched && run.driver == null;
+            return !StartsLatched(door, TurnOf(door._handle, out _, out _));
+        }
+
+        internal static float AngularVelocityOf(Door door) => door != null && runs.TryGetValue(door, out DoorRun run) ? run.angularVelocity : 0f;
+
+        // Where the gun's push left it this frame: the state, the sounds and the co-op sync follow from here (UpdateRun)
+        internal static void MovedByGun(Door door, float angle, float angularVelocity, float hitSpeed)
+        {
+            if (!GunMayPush(door))
+                return;
+            DoorRun run = RunFor(door);
+            door.CurrentAngle = angle;
+            run.angularVelocity = angularVelocity;
+            run.hitSpeed = Mathf.Max(run.hitSpeed, hitSpeed);
+            run.swinging = false;
+            run.gunFrame = Time.frameCount;
+        }
+
+        // An angle kept within the door's range, measured from a known in-range angle (a wide door's range comes near 180 degrees,
+        // where an absolute DeltaAngle would wrap); a speed out past the stop is stopped
+        internal static float ClampToRange(Door door, float referenceAngle, float angle, ref float angularVelocity, out bool atStop)
+        {
+            float span = Span(door);
+            float openness = Openness(door, referenceAngle) + Mathf.DeltaAngle(referenceAngle, angle) / span;
+            float opening = angularVelocity * Mathf.Sign(span);
+            atStop = false;
+            if (openness >= 1f)
+            {
+                atStop = true;
+                if (opening > 0f)
+                    angularVelocity = 0f;
+                return AngleAt(door, 1f);
+            }
+            if (openness <= 0f)
+            {
+                atStop = true;
+                if (opening < 0f)
+                    angularVelocity = 0f;
+                return AngleAt(door, 0f);
+            }
+            return angle;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -521,17 +586,31 @@ namespace TarkovVR.Source.Player.Interactions
                 run.angularVelocity = 0f;
                 run.sent = false;
             }
-            else
+            bool gunMoves = Time.frameCount - run.gunFrame <= 1;
+            if (door.DoorState != EDoorState.Interacting && door.DoorState != EDoorState.Breaching)
             {
                 UpdateHandle(run, deltaTime);
                 if (run.driver != null)
                     DriveByHand(run, run.driver, deltaTime);
-                else if (run.swinging)
-                    Swing(run, deltaTime);
+                else if (gunMoves)
+                    run.gunMoved = true;            // the gun's physics body moves it this frame
+                else
+                {
+                    // The gun off it: it carries on with the speed the push left it
+                    if (run.gunMoved)
+                    {
+                        run.gunMoved = false;
+                        run.swinging = Mathf.Abs(run.angularVelocity) >= swingStopSpeed;
+                        if (!run.swinging)
+                            run.angularVelocity = 0f;
+                    }
+                    if (run.swinging)
+                        Swing(run, deltaTime);
+                }
                 UpdateLatched(run);
                 UpdateGameState(run);
             }
-            bool moving = run.driver != null || run.turner != null || run.swinging || run.handleOffRest;
+            bool moving = run.driver != null || run.turner != null || run.swinging || run.handleOffRest || gunMoves;
             Sync(run, final: !moving);
             return moving;
         }
@@ -602,7 +681,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The part of a rotation about an axis, signed by it
-        private static float TwistDegrees(Quaternion rotation, Vector3 axis)
+        internal static float TwistDegrees(Quaternion rotation, Vector3 axis)
         {
             Vector3 along = Vector3.Project(new Vector3(rotation.x, rotation.y, rotation.z), axis);
             Quaternion twist = new Quaternion(along.x, along.y, along.z, rotation.w);
@@ -717,6 +796,8 @@ namespace TarkovVR.Source.Player.Interactions
         private static void UpdateGameState(DoorRun run)
         {
             Door door = run.door;
+            float hitSpeed = run.hitSpeed;
+            run.hitSpeed = 0f;
             if (Time.time < run.nextStateTryTime)
                 return;
             float degreesOpen = Mathf.Abs(Mathf.DeltaAngle(door.CloseAngle, door.CurrentAngle));
@@ -729,7 +810,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (TryInteraction(door, EInteractionType.Close))
                 {
-                    PlayShut(door, Mathf.Abs(run.angularVelocity));
+                    PlayShut(door, Mathf.Max(Mathf.Abs(run.angularVelocity), hitSpeed));
                     run.angularVelocity = 0f;
                     if (run.driver != null)
                         Pulse(run.driver, 0.5f, 0.05f, 80f);
@@ -799,7 +880,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static float AngleAt(Door door, float openness) => door.CloseAngle + Mathf.Clamp01(openness) * Span(door);
 
-        private static Vector3 HingeAxis(Door door) => WorldInteractiveObject.GetRotationAxis(door.DoorAxis, door.transform.parent).normalized;
+        internal static Vector3 HingeAxis(Door door) => WorldInteractiveObject.GetRotationAxis(door.DoorAxis, door.transform.parent).normalized;
 
         // The palm as the controller has it: the rig hand without HandCollision's clamp (the door is in the way of it)
         private static Vector3 ControllerPoint(Hold hold)

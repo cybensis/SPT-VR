@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using EFT.Interactive;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -9,7 +10,10 @@ namespace TarkovVR.Source.Player.Interactions
     // nearby world colliders. Tarkov runs autoSimulation off and Physics.Simulate() would step the whole default scene
     // (double-steps loot/ragdolls), so the proxy steps only its sandbox. The sandbox is tiny, so it can afford fine substepping,
     // which is what catches a fast rotational swing tunnelling a thin wall (PhysX CCD is blind to rotation).
-    // Known limitation: non-readable world meshes can't be copied (no collision there) + a one-time mesh-cook cost per region.
+    // The world it holds: the bullet geometry (HighPolyCollider) + terrain + glass, minus each tree's bullet mesh (every branch:
+    // "LOD0Collider") for the tree's movement capsule (the trunk). Not the movement layer as a whole: it blocks window openings.
+    // Doors the hand can move (PhysicalDoors) are hinged bodies here: the gun pushes a free one, a held / latched / locked one
+    // moves with the real door. Copies of unreadable meshes work (Tarkov's meshes nearly all are), at a one-time cook cost.
     public class WeaponPhysicsProxy : MonoBehaviour
     {
         public static float driveGain = 1f;
@@ -29,6 +33,12 @@ namespace TarkovVR.Source.Player.Interactions
 
         public static float contactLeadMargin = 0.03f;   // m; physics mode engages when geometry is within (gun radius + this-frame travel + this); bigger = earlier
 
+        public static float proxyMass = 10f;             // kg; only matters against a door body: heavier = the gun shoves doors more easily
+        public static float doorMass = 1f;               // kg of a door in the sandbox
+        public static float doorJumpDegrees = 10f;       // a held / latched door that moved more than this since it was last simulated is placed, not swept
+        public static string treeBranchesName = "LOD0Collider";
+        public static float worldClearDelay = 5f;        // s out of a raid before the copies go (they hold the map's meshes)
+
         private Rigidbody rb;
         private CapsuleCollider bodyCol;
         private CapsuleCollider barrelCol;
@@ -42,13 +52,45 @@ namespace TarkovVR.Source.Player.Interactions
         private Scene sandbox;
         private PhysicsScene sandboxPhysics;
         private int worldMask;
-        private readonly Dictionary<int, GameObject> colliderCopies = new Dictionary<int, GameObject>(128);
-        private readonly Collider[] overlapBuf = new Collider[128];
+        private int queryMask;
+        private int highPolyLayer = -1, lowPolyLayer = -1;
+        private int staticCopyLayer;                 // a layer apart from the proxy's, so door bodies can leave the static copies alone
+        private bool separateStaticLayer;
+        private readonly Dictionary<int, GameObject> colliderCopies = new Dictionary<int, GameObject>(256);
+        private readonly Collider[] overlapBuf = new Collider[512];
         private readonly List<int> staleKeys = new List<int>(128);
         private readonly HashSet<int> ignoredColliders = new HashSet<int>();   // e.g. broken glass - never (re)copy these into the sandbox
         private Vector3 lastQueryCenter = new Vector3(1e9f, 1e9f, 1e9f);
         private float nextQueryTime;
-        private readonly Collider[] proximityBuf = new Collider[32];   // room for our own colliders (skipped) without crowding out the world's
+        private readonly Collider[] proximityBuf = new Collider[128];
+        private float outOfRaidSince = -1f;
+
+        // What the gun collides with, per world collider (cached: a collider's kind doesn't change)
+        private enum ColliderUse : byte { Ignore, Static, Door }
+        private readonly Dictionary<int, ColliderUse> colliderUses = new Dictionary<int, ColliderUse>(1024);
+        private readonly Dictionary<int, Door> colliderDoors = new Dictionary<int, Door>();
+        private float colliderUsesClearTime;
+
+        // A door in the sandbox: one body holding copies of its colliders, rotating about the door's own origin (its hinge)
+        private sealed class DoorBody
+        {
+            public Door door;
+            public GameObject root;
+            public Rigidbody body;
+            public readonly Dictionary<int, GameObject> parts = new Dictionary<int, GameObject>();
+            public bool pushable;                    // dynamic this frame: the gun pushes it
+            public bool pinned;                      // pushed against its stop: kinematic for the rest of the frame
+            public float angle;                      // this frame's simulated angle (CurrentAngle units)
+            public float angularSpeed;               // deg/s about the hinge
+            public float hitSpeed;                   // deg/s it hit a stop at this frame (the shut sound)
+            public float writtenAngle = float.NaN;   // the real door's angle we left it at
+            public int lastSimulatedFrame = -10;
+            public Quaternion sweepFrom;             // a held / latched door: where this frame's substeps take it from and to
+            public Quaternion sweepTo;
+        }
+        private readonly Dictionary<int, DoorBody> doorBodies = new Dictionary<int, DoorBody>();
+        private readonly Dictionary<int, DoorBody> doorPartOwners = new Dictionary<int, DoorBody>();
+        private readonly List<int> staleDoors = new List<int>();
 
         // Our own player's colliders (the body, the guns on it, the gun in hands) and any weapon model are never world geometry here:
         // a freshly drawn gun's own colliders, copied in as world, push the holder off the hand. Cached by instance id, the cache
@@ -82,12 +124,17 @@ namespace TarkovVR.Source.Player.Interactions
             GameObject proxyObject = new GameObject("WeaponPhysicsProxy");
             var proxy = proxyObject.AddComponent<WeaponPhysicsProxy>();
             proxy.worldMask = worldMask;
+            proxy.highPolyLayer = LayerMask.NameToLayer("HighPolyCollider");
+            proxy.lowPolyLayer = LayerMask.NameToLayer("LowPolyCollider");
+            int doorLayer = LayerMask.NameToLayer("DoorLowPolyCollider");
+            // + the movement layer (tree trunks) and the doors' own colliders
+            proxy.queryMask = worldMask | (proxy.lowPolyLayer >= 0 ? 1 << proxy.lowPolyLayer : 0) | (doorLayer >= 0 ? 1 << doorLayer : 0);
 
             proxy.rb = proxyObject.AddComponent<Rigidbody>();
             proxy.rb.useGravity = false;
             proxy.rb.drag = 0f;
             proxy.rb.angularDrag = 0f;
-            proxy.rb.mass = 1f;
+            proxy.rb.mass = proxyMass;
             proxy.rb.interpolation = RigidbodyInterpolation.None;
             proxy.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
@@ -117,6 +164,17 @@ namespace TarkovVR.Source.Player.Interactions
             return proxy;
         }
 
+        // The proxy's layer (its copies collide with it). Static copies go on a menu-only layer of their own (nothing in a raid is
+        // on it) that the proxy includes and the door bodies exclude: a door body would otherwise jam against its own frame.
+        public void UseLayer(int proxyLayer)
+        {
+            gameObject.layer = proxyLayer;
+            int menuLayer = LayerMask.NameToLayer("Menu Environment");
+            separateStaticLayer = menuLayer >= 0 && menuLayer != proxyLayer;
+            staticCopyLayer = separateStaticLayer ? menuLayer : proxyLayer;
+            rb.includeLayers = separateStaticLayer ? 1 << staticCopyLayer : 0;
+        }
+
         public void Configure(float weaponLn, float bodyR, float barrelR)
         {
             if (Mathf.Abs(weaponLn - builtLen) < 0.005f &&
@@ -135,6 +193,11 @@ namespace TarkovVR.Source.Player.Interactions
             barrelCol.radius = barrelR;
             barrelCol.height = barrelLen + barrelR * 2f;
             barrelCol.center = new Vector3(0f, -(bodySplit * weaponLn + barrelLen * 0.5f), 0f);
+
+            // The body turns about the grip, the point the drive places: about Unity's computed centre (out along the barrel) every
+            // turn would also move the grip, off its target until the next frame
+            rb.centerOfMass = Vector3.zero;
+            rb.mass = proxyMass;
         }
 
         public void SetTarget(Vector3 pos, Quaternion rot)
@@ -200,14 +263,16 @@ namespace TarkovVR.Source.Player.Interactions
                                + Quaternion.Angle(rb.rotation, targetRot) * Mathf.Deg2Rad * length;
             float reachRadius = contactLeadMargin + Mathf.Max(builtBodyR, builtBarrelR) + muzzleTravel;
             int found = Physics.OverlapCapsuleNonAlloc(rb.position, muzzle, reachRadius, proximityBuf,
-                                                      worldMask, QueryTriggerInteraction.Collide);
-            int near = 0;
-            for (int i = 0; i < found; i++)
+                                                      queryMask, QueryTriggerInteraction.Collide);
+            // (a full buffer may have missed something solid: physics mode then)
+            bool near = found >= proximityBuf.Length;
+            for (int i = 0; i < found && !near; i++)
             {
-                if (proximityBuf[i] != null && !IsOwnCollider(proximityBuf[i]))
-                    near++;
+                Collider collider = proximityBuf[i];
+                if (collider != null && !IsOwnCollider(collider) && UseOf(collider, out _) != ColliderUse.Ignore)
+                    near = true;
             }
-            if (near == 0)
+            if (!near)
             {
                 rb.position = targetPos;
                 rb.rotation = targetRot;
@@ -244,8 +309,62 @@ namespace TarkovVR.Source.Player.Interactions
             float muzzleSpeed = rb.velocity.magnitude + rb.angularVelocity.magnitude * builtLen;
             int steps = Mathf.Clamp(Mathf.CeilToInt(muzzleSpeed * dt / substepMuzzleDist), 1, maxSimSubsteps);
             float substep = dt / steps;
+            PrepareDoorBodies();
             for (int i = 0; i < steps; i++)
+            {
+                SweepHeldDoors(i, steps);
                 sandboxPhysics.Simulate(substep);
+                KeepDoorsOnHinges();
+            }
+            ReportDoorMotion();
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The world in the sandbox
+
+        private ColliderUse UseOf(Collider collider, out Door door)
+        {
+            door = null;
+            if (Time.time > colliderUsesClearTime)
+            {
+                colliderUses.Clear();
+                colliderDoors.Clear();
+                colliderUsesClearTime = Time.time + 10f;
+            }
+            int id = collider.GetInstanceID();
+            if (!colliderUses.TryGetValue(id, out ColliderUse use))
+            {
+                use = Classify(collider, out door);
+                colliderUses[id] = use;
+                if (use == ColliderUse.Door)
+                    colliderDoors[id] = door;
+                return use;
+            }
+            if (use == ColliderUse.Door && (!colliderDoors.TryGetValue(id, out door) || door == null))
+                return ColliderUse.Static;
+            return use;
+        }
+
+        private ColliderUse Classify(Collider collider, out Door door)
+        {
+            door = null;
+            int layer = collider.gameObject.layer;
+            // A trigger isn't solid (a glass pane can be one)
+            if (collider.isTrigger && layer != WeaponCollision.GlassLayer)
+                return ColliderUse.Ignore;
+            // A tree's bullet mesh has every branch: the gun goes through those, its trunk (below) stops it
+            if (layer == highPolyLayer && collider.name == treeBranchesName)
+                return ColliderUse.Ignore;
+            // The movement layer gives only the trunks (and poles): it also closes window openings
+            if (layer == lowPolyLayer && !(collider is CapsuleCollider))
+                return ColliderUse.Ignore;
+            Door owner = collider.GetComponentInParent<Door>();
+            if (owner != null && PhysicalDoors.Supports(owner))
+            {
+                door = owner;
+                return ColliderUse.Door;
+            }
+            return ColliderUse.Static;
         }
 
         // Cook every world collider within queryRegion (a box around the gun) into the sandbox.
@@ -261,7 +380,7 @@ namespace TarkovVR.Source.Player.Interactions
             nextQueryTime = Time.time + colliderRefreshInterval;
 
             int overlapCount = Physics.OverlapBoxNonAlloc(rb.position, Vector3.one * queryRegion, overlapBuf,
-                Quaternion.identity, worldMask, QueryTriggerInteraction.Collide);
+                Quaternion.identity, queryMask, QueryTriggerInteraction.Collide);
             for (int i = 0; i < overlapCount; i++)
             {
                 Collider source = overlapBuf[i];
@@ -270,6 +389,14 @@ namespace TarkovVR.Source.Player.Interactions
                 int id = source.GetInstanceID();
                 if (ignoredColliders.Contains(id) || IsOwnCollider(source))
                     continue;
+                ColliderUse use = UseOf(source, out Door door);
+                if (use == ColliderUse.Ignore)
+                    continue;
+                if (use == ColliderUse.Door)
+                {
+                    AddDoorPart(source, door);
+                    continue;
+                }
                 if (colliderCopies.TryGetValue(id, out GameObject existing))
                 {
                     if (existing != null)
@@ -277,7 +404,7 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 else
                 {
-                    GameObject copy = CopyCollider(source);
+                    GameObject copy = CopyCollider(source, staticCopyLayer);
                     if (copy != null)
                         colliderCopies[id] = copy;
                 }
@@ -305,13 +432,25 @@ namespace TarkovVR.Source.Player.Interactions
                     Destroy(go);
                 colliderCopies.Remove(staleKeys[i]);
             }
+
+            // A door far off (a door is wide: its hinge is measured, plus a door's width)
+            staleDoors.Clear();
+            float doorRetain = retainDistance + 2f;
+            foreach (var entry in doorBodies)
+            {
+                Door door = entry.Value.door;
+                if (door == null || entry.Value.root == null || (door.transform.position - rb.position).sqrMagnitude > doorRetain * doorRetain)
+                    staleDoors.Add(entry.Key);
+            }
+            for (int i = 0; i < staleDoors.Count; i++)
+                RemoveDoorBody(staleDoors[i]);
         }
 
-        // A static clone of a world collider inside the sandbox (same shape/mesh/pose/scale, same layer as
-        // the proxy so they collide). Carries the source collider for feedback (glass break / surface sound).
-        private GameObject CopyCollider(Collider source)
+        // A static clone of a world collider inside the sandbox (same shape/mesh/pose/scale; the layer the proxy collides with).
+        // Carries the source collider for feedback (glass break / surface sound).
+        private GameObject CopyCollider(Collider source, int layer)
         {
-            GameObject copy = new GameObject("wc_copy") { layer = gameObject.layer };
+            GameObject copy = new GameObject("wc_copy") { layer = layer };
             SceneManager.MoveGameObjectToScene(copy, sandbox);
             Transform sourceTransform = source.transform;
             copy.transform.SetPositionAndRotation(sourceTransform.position, sourceTransform.rotation);
@@ -322,8 +461,10 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 case MeshCollider meshCollider when meshCollider.sharedMesh != null:
                     var meshCopy = copy.AddComponent<MeshCollider>();
+                    // The same cooking options as the original reuse its cooked mesh (an unreadable one can't be cooked again)
+                    meshCopy.cookingOptions = meshCollider.cookingOptions;
+                    meshCopy.convex = meshCollider.convex;
                     meshCopy.sharedMesh = meshCollider.sharedMesh;
-                    meshCopy.convex = false;
                     made = true;
                     break;
                 case BoxCollider boxCollider:
@@ -362,18 +503,232 @@ namespace TarkovVR.Source.Player.Interactions
         public void ForgetCollider(int instanceId)
         {
             ignoredColliders.Add(instanceId);
-            if (colliderCopies.TryGetValue(instanceId, out GameObject copy))
-            {
+            GameObject copy = null;
+            if (colliderCopies.TryGetValue(instanceId, out copy))
                 colliderCopies.Remove(instanceId);
+            else if (doorPartOwners.TryGetValue(instanceId, out DoorBody doorBody))
+            {
+                doorBody.parts.TryGetValue(instanceId, out copy);
+                doorBody.parts.Remove(instanceId);
+                doorPartOwners.Remove(instanceId);
+            }
+            if (copy != null)
+            {
+                Collider copyCollider = copy.GetComponent<Collider>();
+                if (copyCollider != null)
+                    copyCollider.enabled = false;   // immediate: stop colliding this frame too (Destroy is deferred to end of frame)
+                Destroy(copy);
+            }
+        }
+
+        // Out of a raid for a while: the copies go (they hold the map's meshes, which would stay loaded past the raid)
+        private void Update()
+        {
+            if (VRGlobals.inGame)
+            {
+                outOfRaidSince = -1f;
+                return;
+            }
+            if (outOfRaidSince < 0f)
+                outOfRaidSince = Time.time;
+            if (Time.time - outOfRaidSince > worldClearDelay && (colliderCopies.Count > 0 || doorBodies.Count > 0))
+                ClearWorld();
+        }
+
+        private void ClearWorld()
+        {
+            foreach (GameObject copy in colliderCopies.Values)
                 if (copy != null)
-                {
-                    Collider copyCollider = copy.GetComponent<Collider>();
-                    if (copyCollider != null)
-                        copyCollider.enabled = false;   // immediate: stop colliding this frame too (Destroy is deferred to end of frame)
                     Destroy(copy);
+            colliderCopies.Clear();
+            foreach (DoorBody doorBody in doorBodies.Values)
+                if (doorBody.root != null)
+                    Destroy(doorBody.root);
+            doorBodies.Clear();
+            doorPartOwners.Clear();
+            colliderUses.Clear();
+            colliderDoors.Clear();
+            ownColliders.Clear();
+            ignoredColliders.Clear();
+            lastQueryCenter = new Vector3(1e9f, 1e9f, 1e9f);
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Doors
+
+        private void AddDoorPart(Collider source, Door door)
+        {
+            int doorId = door.GetInstanceID();
+            if (!doorBodies.TryGetValue(doorId, out DoorBody doorBody) || doorBody.root == null)
+            {
+                GameObject root = new GameObject("wc_door") { layer = gameObject.layer };
+                SceneManager.MoveGameObjectToScene(root, sandbox);
+                root.transform.SetPositionAndRotation(door.transform.position, door.transform.rotation);
+                Rigidbody body = root.AddComponent<Rigidbody>();
+                body.useGravity = false;
+                body.isKinematic = true;
+                body.mass = doorMass;
+                body.drag = 0f;
+                body.angularDrag = 0f;
+                body.interpolation = RigidbodyInterpolation.None;
+                body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                if (separateStaticLayer)
+                    body.excludeLayers = 1 << staticCopyLayer;
+                doorBody = new DoorBody { door = door, root = root, body = body };
+                doorBodies[doorId] = doorBody;
+            }
+            int id = source.GetInstanceID();
+            if (doorBody.parts.ContainsKey(id))
+                return;
+            // Parts sit where they are on the door as it is now
+            doorBody.root.transform.SetPositionAndRotation(door.transform.position, door.transform.rotation);
+            GameObject part = CopyCollider(source, gameObject.layer);
+            if (part == null)
+                return;
+            part.transform.SetParent(doorBody.root.transform, worldPositionStays: true);
+            // Not against the other doors (double doors meet in the middle)
+            Collider partCollider = part.GetComponent<Collider>();
+            foreach (DoorBody other in doorBodies.Values)
+            {
+                if (other == doorBody)
+                    continue;
+                foreach (GameObject otherPart in other.parts.Values)
+                {
+                    Collider otherCollider = otherPart != null ? otherPart.GetComponent<Collider>() : null;
+                    if (otherCollider != null)
+                        Physics.IgnoreCollision(partCollider, otherCollider, true);
+                }
+            }
+            doorBody.parts[id] = part;
+            doorPartOwners[id] = doorBody;
+            // It turns about its hinge (the door's origin)
+            doorBody.body.centerOfMass = Vector3.zero;
+            doorBody.body.mass = doorMass;
+        }
+
+        private void RemoveDoorBody(int doorId)
+        {
+            if (!doorBodies.TryGetValue(doorId, out DoorBody doorBody))
+                return;
+            foreach (int partId in doorBody.parts.Keys)
+                doorPartOwners.Remove(partId);
+            if (doorBody.root != null)
+                Destroy(doorBody.root);
+            doorBodies.Remove(doorId);
+        }
+
+        // Before this frame's substeps: a door the gun may push is a free body, started from the real door as it is (its swing
+        // carried in); any other door follows the real one (swept through the substeps, so the gun meets a moving door)
+        private void PrepareDoorBodies()
+        {
+            int frame = Time.frameCount;
+            foreach (DoorBody doorBody in doorBodies.Values)
+            {
+                Door door = doorBody.door;
+                if (door == null || doorBody.root == null)
+                    continue;
+                Transform doorTransform = door.transform;
+                Rigidbody body = doorBody.body;
+                bool simulatedLastFrame = doorBody.lastSimulatedFrame == frame - 1;
+                doorBody.lastSimulatedFrame = frame;
+                doorBody.angle = door.CurrentAngle;
+                doorBody.hitSpeed = 0f;
+                bool pushable = PhysicalDoors.GunMayPush(door);
+                if (pushable)
+                {
+                    // Moved by something else since (the hand, its swing, another player), or newly free: start from the real door
+                    bool movedElsewhere = float.IsNaN(doorBody.writtenAngle)
+                        || Mathf.Abs(Mathf.DeltaAngle(doorBody.writtenAngle, door.CurrentAngle)) > 0.01f;
+                    if (!doorBody.pushable || doorBody.pinned || movedElsewhere || !simulatedLastFrame)
+                    {
+                        body.isKinematic = false;
+                        body.position = doorTransform.position;
+                        body.rotation = doorTransform.rotation;
+                        body.velocity = Vector3.zero;
+                        body.angularVelocity = PhysicalDoors.HingeAxis(door) * (PhysicalDoors.AngularVelocityOf(door) * Mathf.Deg2Rad);
+                    }
+                    doorBody.angularSpeed = PhysicalDoors.AngularVelocityOf(door);
+                }
+                else
+                {
+                    if (!body.isKinematic)
+                        body.isKinematic = true;
+                    Quaternion target = doorTransform.rotation;
+                    if (!simulatedLastFrame || Quaternion.Angle(body.rotation, target) > doorJumpDegrees)
+                    {
+                        body.position = doorTransform.position;
+                        body.rotation = target;
+                    }
+                    doorBody.sweepFrom = body.rotation;
+                    doorBody.sweepTo = target;
+                    doorBody.writtenAngle = float.NaN;
+                }
+                doorBody.pushable = pushable;
+                doorBody.pinned = false;
+            }
+        }
+
+        private void SweepHeldDoors(int step, int steps)
+        {
+            foreach (DoorBody doorBody in doorBodies.Values)
+            {
+                if (doorBody.door == null || doorBody.root == null || doorBody.pushable)
+                    continue;
+                doorBody.body.MoveRotation(Quaternion.Slerp(doorBody.sweepFrom, doorBody.sweepTo, (step + 1f) / steps));
+            }
+        }
+
+        // After each substep: a pushed door stays on its hinge and within its range; pushed against a stop it holds there (kinematic
+        // for the rest of the frame, else the gun would drive a light door through its stop every substep)
+        private void KeepDoorsOnHinges()
+        {
+            foreach (DoorBody doorBody in doorBodies.Values)
+            {
+                Door door = doorBody.door;
+                if (door == null || doorBody.root == null || !doorBody.pushable || doorBody.pinned)
+                    continue;
+                Transform doorTransform = door.transform;
+                Rigidbody body = doorBody.body;
+                Vector3 axis = PhysicalDoors.HingeAxis(door);
+                Quaternion parentRotation = doorTransform.parent.rotation;
+                float twist = PhysicalDoors.TwistDegrees(body.rotation * Quaternion.Inverse(parentRotation), axis);
+                float angle = doorBody.angle + Mathf.DeltaAngle(doorBody.angle, twist);
+                float speed = Vector3.Dot(body.angularVelocity, axis) * Mathf.Rad2Deg;
+                float unclampedSpeed = speed;
+                angle = PhysicalDoors.ClampToRange(door, doorBody.angle, angle, ref speed, out bool atStop);
+                body.position = doorTransform.position;
+                body.rotation = Quaternion.AngleAxis(angle, axis) * parentRotation;
+                body.velocity = Vector3.zero;
+                body.angularVelocity = axis * (speed * Mathf.Deg2Rad);
+                doorBody.angle = angle;
+                doorBody.angularSpeed = speed;
+                if (atStop && speed != unclampedSpeed)
+                {
+                    doorBody.hitSpeed = Mathf.Max(doorBody.hitSpeed, Mathf.Abs(unclampedSpeed));
+                    doorBody.pinned = true;
+                    body.isKinematic = true;
                 }
             }
         }
+
+        // The pushed doors' new angles to the real doors (PhysicalDoors: the state, the sounds, the co-op sync)
+        private void ReportDoorMotion()
+        {
+            foreach (DoorBody doorBody in doorBodies.Values)
+            {
+                Door door = doorBody.door;
+                if (door == null || doorBody.root == null || !doorBody.pushable)
+                    continue;
+                bool moved = Mathf.Abs(Mathf.DeltaAngle(door.CurrentAngle, doorBody.angle)) > 1e-3f
+                    || Mathf.Abs(doorBody.angularSpeed) > 0.5f || doorBody.hitSpeed > 0f;
+                if (moved)
+                    PhysicalDoors.MovedByGun(door, doorBody.angle, doorBody.angularSpeed, doorBody.hitSpeed);
+                // (refused - the door was taken meanwhile: next frame starts from the real door)
+                doorBody.writtenAngle = Mathf.Abs(Mathf.DeltaAngle(door.CurrentAngle, doorBody.angle)) < 0.01f ? door.CurrentAngle : float.NaN;
+            }
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
         private void OnCollisionEnter(Collision c)
         {
@@ -383,13 +738,16 @@ namespace TarkovVR.Source.Player.Interactions
             ContactPoint contact = c.GetContact(0);
             Collider source = contact.otherCollider != null ? contact.otherCollider.GetComponent<ProxyColliderSource>()?.source : null;
             if (source != null)
-                WeaponCollision.OnProxyContact(source, contact.point, contact.normal, c.relativeVelocity.magnitude);
+                WeaponCollision.OnProxyContact(source, contact.point, contact.normal);
         }
 
         private void OnCollisionStay(Collision c)
         {
             if (active && c.contactCount > 0)
+            {
                 lastContactTime = Time.time;
+                WeaponCollision.NoteContact();
+            }
         }
     }
 
