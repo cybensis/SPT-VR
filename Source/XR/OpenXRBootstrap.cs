@@ -18,6 +18,14 @@ namespace TarkovVR.Source.XR
         // No static field may name an OpenXR type: Active is read every frame (VRInput), and without Unity.XR.OpenXR.dll the class
         // initializer would throw on every read - OpenVR mode included
         public static bool Active { get; private set; }
+
+        // The runtime enabled eye gaze (the headset tracks the eyes and the runtime offers XR_EXT_eye_gaze_interaction). Only call
+        // while Active: it's an OpenXR plugin type.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        internal static bool EyeGazeEnabled()
+        {
+            return OpenXRRuntime.IsExtensionEnabled(EyeGazeInteraction.extensionString);
+        }
         public static bool registerFrameWatch = false;   // dev: the native frame-call watcher for the cost probe
 
         // false = Plugin falls back to OpenVR. Called through Plugin.TryStartOpenXR, which also catches the call itself failing
@@ -116,6 +124,15 @@ namespace TarkovVR.Source.XR
             nameField?.SetValue(handTracking, "SPT-VR Hand Tracking");
             handTracking.enabled = true;
             features.Add(handTracking);
+
+            // Eye gaze (XR_EXT_eye_gaze_interaction) for the foveated masking's centre. The editor normally fills the extension list
+            // from the feature's attribute; created here it's empty, so it's set. Where the runtime lacks the extension the feature
+            // turns itself off (EyeGazeInteraction.OnInstanceCreate).
+            EyeGazeInteraction eyeGaze = ScriptableObject.CreateInstance<EyeGazeInteraction>();
+            extensionsField?.SetValue(eyeGaze, EyeGazeInteraction.extensionString);
+            nameField?.SetValue(eyeGaze, "SPT-VR Eye Gaze");
+            eyeGaze.enabled = true;
+            features.Add(eyeGaze);
 
             OpenXRHapticFrequency hapticFrequency = ScriptableObject.CreateInstance<OpenXRHapticFrequency>();
             nameField?.SetValue(hapticFrequency, "SPT-VR Haptic Frequency");

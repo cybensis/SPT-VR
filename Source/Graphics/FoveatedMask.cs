@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using BepInEx.Configuration;
+using TarkovVR.Source.Player.VRManager;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.XR;
@@ -17,11 +19,14 @@ namespace TarkovVR.Source.Graphics
     //    there, so the fill runs here: depth into SPT-VR's own copy, then GBuffer0-2 + depth for the masked blocks. The depth texture
     //    global points at the filled copy for the rest of the eye's render (fog, AO, SSR, FSR read it).
     //  - AfterLighting: the lit image filled from the neighbours (before the skybox, forward and transparent passes).
+    //  - The circle's centre is the middle of each lens, or where you look on a headset with eye tracking (OpenXR eye gaze).
     // Config section "Foveated Masking" (BepInEx: F12, and SixBench can A/B "Enabled").
     public static class FoveatedMask
     {
         private static ConfigEntry<bool> enabledSetting;
         private static ConfigEntry<float> innerRadiusSetting;
+        private static ConfigEntry<bool> eyeTrackingSetting;
+        private static ConfigEntry<float> gazeInnerRadiusSetting;
         private static ConfigEntry<bool> showHolesSetting;
         private static ConfigEntry<bool> tintSetting;
         private static ConfigEntry<bool> alternateSetting;
@@ -57,6 +62,11 @@ namespace TarkovVR.Source.Graphics
             innerRadiusSetting = config.Bind("Foveated Masking", "Inner Radius", 0.55f,
                 new ConfigDescription("Where the masking starts, from the middle of each eye (0 = everywhere, 1 = the edge of the view straight left / right / up / down).",
                     new AcceptableValueRange<float>(0.1f, 1.5f)));
+            eyeTrackingSetting = config.Bind("Foveated Masking", "Eye Tracking", true,
+                "On a headset that tracks your eyes (OpenXR eye gaze), the sharp circle follows where you look and uses Gaze Inner Radius. Without eye tracking it stays in the middle of each lens.");
+            gazeInnerRadiusSetting = config.Bind("Foveated Masking", "Gaze Inner Radius", 0.3f,
+                new ConfigDescription("The sharp circle's size while it follows your eyes (smaller than Inner Radius: it's always where you look).",
+                    new AcceptableValueRange<float>(0.1f, 1.5f)));
             alternateSetting = config.Bind("Foveated Masking", "Alternate Pattern", false,
                 "Swap which blocks are masked every frame (the upscaler's history then sees all of them).");
             showHolesSetting = config.Bind("Foveated Masking", "Show Holes", false,
@@ -91,18 +101,25 @@ namespace TarkovVR.Source.Graphics
 
                 Camera.StereoscopicEye eye = camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left;
                 // The GPU projection (flipped for a render texture on D3D) maps the view's forward axis to (-m02, -m12) in its NDC,
-                // the same NDC the shader rebuilds from each pixel's position
+                // the same NDC the shader rebuilds from each pixel's position: the lens centre
                 Matrix4x4 gpuProjection = GL.GetGPUProjectionMatrix(camera.GetStereoProjectionMatrix(eye), true);
+                UpdateGaze();
+                Vector2 centre = new Vector2(-gpuProjection.m02, -gpuProjection.m12);
+                if (gazeWeight > 0f && DirectionToNdc(camera, eye, gpuProjection, gazeInHead, out Vector2 gazeCentre))
+                    centre = Vector2.Lerp(centre, gazeCentre, gazeWeight);
+                float radius = Mathf.Lerp(innerRadiusSetting.Value, gazeInnerRadiusSetting.Value, gazeWeight);
                 float parity = alternateSetting.Value ? (Time.frameCount & 1) : 0f;
-                Shader.SetGlobalVector(FoveaId, new Vector4(-gpuProjection.m02, -gpuProjection.m12, innerRadiusSetting.Value, parity));
+                Shader.SetGlobalVector(FoveaId, new Vector4(centre.x, centre.y, radius, parity));
                 Shader.SetGlobalVector(FoveaSizeId, new Vector4(width, height, 0f, 0f));
                 Shader.SetGlobalVector(FoveaTintId, tintSetting.Value ? new Vector4(1.6f, 0.35f, 0.35f, 1f) : Vector4.one);
 
                 if (!loggedAttach)
                 {
                     loggedAttach = true;
-                    Plugin.MyLog.LogInfo($"[Foveated] on '{camera.name}': {width}x{height} an eye, masking past {innerRadiusSetting.Value:0.00} from each eye's centre"
-                                         + $" ({eye} centre {-gpuProjection.m02:0.000}, {-gpuProjection.m12:0.000})");
+                    string eyeGaze = !TarkovVR.Source.XR.OpenXRBootstrap.Active ? "eye gaze needs OpenXR"
+                        : TarkovVR.Source.XR.OpenXRBootstrap.EyeGazeEnabled() ? "the runtime has eye gaze" : "no eye gaze from the runtime (no eye tracking)";
+                    Plugin.MyLog.LogInfo($"[Foveated] on '{camera.name}': {width}x{height} an eye, masking past {innerRadiusSetting.Value:0.00} from each lens centre"
+                                         + $" ({eye} {-gpuProjection.m02:0.000}, {-gpuProjection.m12:0.000}); {eyeGaze}");
                 }
             }
             catch (Exception exception)
@@ -123,6 +140,103 @@ namespace TarkovVR.Source.Graphics
             Plugin.MyLog.LogInfo(bound == depthCopy
                 ? "[Foveated] the depth texture is the filled copy to the end of the eye's render"
                 : $"[Foveated] the depth texture was rebound after the fill (now '{(bound != null ? bound.name : "none")}'): effects after that read the masked blocks' depth");
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+        // Eye tracking. Read through Unity's XR devices by usage name, so there's no OpenXR plugin type here (the OpenVR fallback runs
+        // without that DLL). The device is EyeGazeInteraction's "Eye Tracking OpenXR", registered by OpenXRBootstrap.
+        public static float gazeHoldTime = 0.3f;      // s a lost gaze (a blink) keeps its last direction before the lens centre takes over
+        public static float gazeBlendTime = 0.25f;    // s to move between the lens centre / Inner Radius and the gaze / Gaze Inner Radius
+        private static readonly InputFeatureUsage<Quaternion> GazeRotationUsage = new InputFeatureUsage<Quaternion>("gazeRotation");
+        private static readonly List<InputDevice> eyeDevices = new List<InputDevice>();
+        private static readonly List<InputFeatureUsage> gazeUsages = new List<InputFeatureUsage>();
+        private static InputDevice gazeDevice;
+        private static float nextGazeLookup;
+        private static int gazeFrame = -1;
+        private static Vector3 gazeInHead = Vector3.forward;    // the gaze direction in the headset's frame (+z forward)
+        private static float lastGazeTime = -10f;
+        private static float gazeWeight;                         // 0 = the lens centre and Inner Radius, 1 = the gaze and Gaze Inner Radius
+        private static bool gazeFollowing, loggedGazeDevice;
+        private static int gazeLogs;
+
+        // Once a frame (both eyes use the same gaze)
+        private static void UpdateGaze()
+        {
+            if (gazeFrame == Time.frameCount)
+                return;
+            float deltaTime = gazeFrame < 0 ? 0f : Time.unscaledDeltaTime;
+            gazeFrame = Time.frameCount;
+            if (eyeTrackingSetting.Value && ReadGaze())
+                lastGazeTime = Time.unscaledTime;
+            bool following = eyeTrackingSetting.Value && Time.unscaledTime - lastGazeTime <= gazeHoldTime;
+            gazeWeight = Mathf.MoveTowards(gazeWeight, following ? 1f : 0f, gazeBlendTime > 0f ? deltaTime / gazeBlendTime : 1f);
+            if (following != gazeFollowing)
+            {
+                gazeFollowing = following;
+                if (gazeLogs++ < 6)
+                    Plugin.MyLog.LogInfo(following
+                        ? $"[Foveated] eye gaze tracked: the sharp circle ({gazeInnerRadiusSetting.Value:0.00}) follows it (looking {GazeAngles()})"
+                        : $"[Foveated] eye gaze lost for {gazeHoldTime:0.0} s: back to the lens centres ({innerRadiusSetting.Value:0.00})");
+            }
+        }
+
+        private static bool ReadGaze()
+        {
+            if (!gazeDevice.isValid)
+            {
+                if (Time.unscaledTime < nextGazeLookup)
+                    return false;
+                nextGazeLookup = Time.unscaledTime + 2f;
+                InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.EyeTracking, eyeDevices);
+                if (eyeDevices.Count == 0)
+                    return false;
+                gazeDevice = eyeDevices[0];
+                if (!loggedGazeDevice)
+                {
+                    loggedGazeDevice = true;
+                    gazeUsages.Clear();
+                    gazeDevice.TryGetFeatureUsages(gazeUsages);
+                    Plugin.MyLog.LogInfo($"[Foveated] eye tracking device '{gazeDevice.name}' ({gazeDevice.characteristics}): {string.Join(", ", gazeUsages.ConvertAll(usage => usage.name))}");
+                }
+            }
+            if (!gazeDevice.TryGetFeatureValue(GazeRotationUsage, out Quaternion gaze) && !gazeDevice.TryGetFeatureValue(CommonUsages.deviceRotation, out gaze))
+                return false;
+            if (gazeDevice.TryGetFeatureValue(CommonUsages.isTracked, out bool tracked) && !tracked)
+                return false;
+            if (gaze.x == 0f && gaze.y == 0f && gaze.z == 0f && gaze.w == 0f)
+                return false;
+            // Gaze and headset in the same tracking space (both from Unity's XR devices)
+            if (!HeadTracking.RawHmdPose(out _, out Quaternion head))
+                return false;
+            Vector3 direction = Quaternion.Inverse(head) * gaze * Vector3.forward;
+            // Not ahead of the face: a bad sample
+            if (direction.z < 0.1f)
+                return false;
+            gazeInHead = direction.normalized;
+            return true;
+        }
+
+        private static string GazeAngles()
+        {
+            float right = Mathf.Atan2(gazeInHead.x, gazeInHead.z) * Mathf.Rad2Deg, up = Mathf.Atan2(gazeInHead.y, gazeInHead.z) * Mathf.Rad2Deg;
+            return $"{right:0} deg right, {up:0} deg up";
+        }
+
+        // A direction in the headset's frame, taken at infinity, in this eye's GPU NDC. Camera space is +z forward, Unity's view matrices
+        // -z; the eye's own view turns it if its display is canted.
+        private static bool DirectionToNdc(Camera camera, Camera.StereoscopicEye eye, Matrix4x4 gpuProjection, Vector3 inHead, out Vector2 ndc)
+        {
+            Vector3 centreView = new Vector3(inHead.x, inHead.y, -inHead.z);
+            Vector3 eyeView = (camera.GetStereoViewMatrix(eye) * camera.worldToCameraMatrix.inverse).MultiplyVector(centreView);
+            Vector4 clip = gpuProjection * new Vector4(eyeView.x, eyeView.y, eyeView.z, 0f);
+            if (clip.w <= 1e-4f)
+            {
+                ndc = Vector2.zero;
+                return false;
+            }
+            ndc = new Vector2(Mathf.Clamp(clip.x / clip.w, -1.5f, 1.5f), Mathf.Clamp(clip.y / clip.w, -1.5f, 1.5f));
+            return true;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
