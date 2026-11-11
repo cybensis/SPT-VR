@@ -570,7 +570,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             // Parts sit where they are on the door as it is now
             doorBody.root.transform.SetPositionAndRotation(door.transform.position, door.transform.rotation);
-            GameObject part = CopyCollider(source, gameObject.layer);
+            GameObject part = CopyDoorPart(source, gameObject.layer);
             if (part == null)
                 return;
             part.transform.SetParent(doorBody.root.transform, worldPositionStays: true);
@@ -592,6 +592,28 @@ namespace TarkovVR.Source.Player.Interactions
             // It turns about its hinge (the door's origin)
             doorBody.body.centerOfMass = Vector3.zero;
             doorBody.body.mass = doorMass;
+        }
+
+        // A piece of a door for its body. A mesh becomes the box of its bounds: Unity drops a non-convex mesh from a body that can
+        // move (a pushable door), and an unreadable one can't be cooked convex. Doors are slabs, so the box fits.
+        private GameObject CopyDoorPart(Collider source, int layer)
+        {
+            if (!(source is MeshCollider meshCollider))
+                return source is TerrainCollider ? null : CopyCollider(source, layer);
+            if (meshCollider.sharedMesh == null)
+                return null;
+            Bounds bounds = meshCollider.sharedMesh.bounds;
+            Transform sourceTransform = source.transform;
+            GameObject part = new GameObject("wc_door_part") { layer = layer };
+            SceneManager.MoveGameObjectToScene(part, sandbox);
+            // (a mirrored door's negative scale is the same box about its centre)
+            Vector3 scale = sourceTransform.lossyScale;
+            part.transform.SetPositionAndRotation(sourceTransform.TransformPoint(bounds.center), sourceTransform.rotation);
+            part.transform.localScale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+            BoxCollider box = part.AddComponent<BoxCollider>();
+            box.size = bounds.size;
+            part.AddComponent<ProxyColliderSource>().source = source;
+            return part;
         }
 
         private void RemoveDoorBody(int doorId)
