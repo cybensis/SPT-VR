@@ -32,12 +32,21 @@ namespace TarkovVR.Source.Graphics
         private static ConfigEntry<bool> alternateSetting;
         // Fog / AO / SSR / FSR read the depth texture: point it at the filled copy. false = they read the masked blocks' near depth.
         public static bool redirectDepthTexture = true;
+        // With a temporal upscaler on (FSR's jitter running) the masked blocks swap every frame: its history then gets a real sample at
+        // every pixel and the checkerboard averages out. Without one, swapping would flicker (Alternate Pattern forces it).
+        public static bool alternateWithUpscaler = true;
+        // NDC beyond the inner radius over which the masked blocks join in gradually (a dither), instead of a hard ring. 0 = hard.
+        public static float bandWidth = 0.15f;
+        // A masked pixel from the nearest rendered pixels along both axes (weighted by distance, the axis across a depth edge
+        // counting less). false = the average of the two pixels 2 px away along one axis.
+        public static bool interpolatedFill = true;
 
         private const string ShaderName = "Hidden/SPTVR/FoveatedMask";
         private const int PassMask = 0, PassDepthFill = 1, PassGBufferFill = 2, PassColorFill = 3;
         private static readonly int FoveaId = Shader.PropertyToID("_SptvrFovea");
         private static readonly int FoveaSizeId = Shader.PropertyToID("_SptvrFoveaSize");
         private static readonly int FoveaTintId = Shader.PropertyToID("_SptvrFoveaTint");
+        private static readonly int FoveaBandId = Shader.PropertyToID("_SptvrFoveaBand");
         private static readonly int FoveaDepthId = Shader.PropertyToID("_SptvrFoveaDepth");
         private static readonly int Gb0Id = Shader.PropertyToID("_SptvrFoveaGb0");
         private static readonly int Gb1Id = Shader.PropertyToID("_SptvrFoveaGb1");
@@ -51,7 +60,8 @@ namespace TarkovVR.Source.Graphics
         private static CommandBuffer maskBuffer, fillBuffer, colorBuffer;
         private static RenderTexture depthCopy;
         private static bool builtShowHoles, builtRedirect;
-        private static bool loggedAttach, loggedRedirectCheck;
+        private static bool loggedAttach, loggedRedirectCheck, loggedAlternate;
+        private static int lastJitterFrame = -1000;
         // Off for this session after an error (never written to the config: the setting stays the user's)
         private static bool faulted;
 
@@ -94,6 +104,14 @@ namespace TarkovVR.Source.Graphics
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+        // SPT-VR's upscaler jitter ran recently (FSR2/3, the FSR4 Bridge): a temporal upscaler is integrating the frames
+        private static bool UpscalerJittering()
+        {
+            if (TarkovVR.Patches.Upscalers.VRJitterComponent.CurrentJitter != Vector2.zero)
+                lastJitterFrame = Time.frameCount;
+            return Time.frameCount - lastJitterFrame < 30;
+        }
+
         // Every camera, before it renders (once per eye in multi-pass): keep the buffers on the headset camera, then this eye's centre
         private static void OnPreRender(Camera camera)
         {
@@ -123,9 +141,16 @@ namespace TarkovVR.Source.Graphics
                 if (gazeWeight > 0f && DirectionToNdc(camera, eye, gpuProjection, gazeInHead, out Vector2 gazeCentre))
                     centre = Vector2.Lerp(centre, gazeCentre, gazeWeight);
                 float radius = Mathf.Lerp(innerRadiusSetting.Value, gazeInnerRadiusSetting.Value, gazeWeight);
-                float parity = alternateSetting.Value ? (Time.frameCount & 1) : 0f;
+                bool alternate = alternateSetting.Value || (alternateWithUpscaler && UpscalerJittering());
+                float parity = alternate ? (Time.frameCount & 1) : 0f;
+                if (alternate && !loggedAlternate)
+                {
+                    loggedAlternate = true;
+                    Plugin.MyLog.LogInfo($"[Foveated] the masked blocks swap every frame ({(alternateSetting.Value ? "Alternate Pattern" : "the upscaler's jitter is on")})");
+                }
                 Shader.SetGlobalVector(FoveaId, new Vector4(centre.x, centre.y, radius, parity));
                 Shader.SetGlobalVector(FoveaSizeId, new Vector4(width, height, 0f, 0f));
+                Shader.SetGlobalVector(FoveaBandId, new Vector4(Mathf.Max(bandWidth, 0f), interpolatedFill ? 1f : 0f, 0f, 0f));
                 Shader.SetGlobalVector(FoveaTintId, tintSetting.Value ? new Vector4(1.6f, 0.35f, 0.35f, 1f) : Vector4.one);
 
                 if (!loggedAttach)
