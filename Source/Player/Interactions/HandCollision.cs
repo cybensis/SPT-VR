@@ -33,7 +33,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static readonly HandState right = new HandState();
         private static readonly HandState left = new HandState();
-        private static readonly RaycastHit[] castHits = new RaycastHit[16];
+        private static readonly RaycastHit[] castHits = new RaycastHit[64];
 
         public static void Apply()
         {
@@ -177,8 +177,8 @@ namespace TarkovVR.Source.Player.Interactions
             state.inContact = contactNow;
         }
 
-        // Same world/filter rules as the gun's barrel cast: solid-world mask (+ glass), trigger hits only
-        // on the glass layer, own body ignored. startBlocked = the cast began already in contact.
+        // The gun's world (CollisionWorld: trunks not branches, triggers only for glass), own body ignored.
+        // startBlocked = the cast began already in contact.
         private static bool SweepSphere(Vector3 origin, Vector3 direction, float distance, out RaycastHit best,
             out bool startBlocked)
         {
@@ -186,11 +186,12 @@ namespace TarkovVR.Source.Player.Interactions
             startBlocked = false;
             float bestDist = float.MaxValue;
             int hitCount = Physics.SphereCastNonAlloc(origin, handRadius * 0.8f, direction, castHits, distance,
-                WeaponCollision.GetOcclusionMask(), QueryTriggerInteraction.Collide);
+                CollisionWorld.Mask(WeaponCollision.GetOcclusionMask()), QueryTriggerInteraction.Collide);
             for (int i = 0; i < hitCount; i++)
             {
                 RaycastHit hit = castHits[i];
-                if (hit.collider.isTrigger && hit.collider.gameObject.layer != WeaponCollision.GlassLayer)
+                // Branches, triggers (glass excepted), window blockers: the gun's world (CollisionWorld)
+                if (!CollisionWorld.Solid(hit.collider))
                     continue;
                 if (hit.collider.transform.IsChildOf(VRGlobals.player.Transform.Original))
                     continue;
@@ -210,15 +211,18 @@ namespace TarkovVR.Source.Player.Interactions
             return bestDist < float.MaxValue;
         }
 
-        private static readonly Collider[] overlapBuf = new Collider[8];
+        private static readonly Collider[] overlapBuf = new Collider[32];
 
         private static bool OverlappingWorld(Vector3 position, float radius)
         {
             int overlapCount = Physics.OverlapSphereNonAlloc(position, radius, overlapBuf,
-                WeaponCollision.GetOcclusionMask(), QueryTriggerInteraction.Ignore);
+                CollisionWorld.Mask(WeaponCollision.GetOcclusionMask()), QueryTriggerInteraction.Ignore);
+            // (a full buffer may have missed something solid)
+            if (overlapCount >= overlapBuf.Length)
+                return true;
             for (int i = 0; i < overlapCount; i++)
             {
-                if (overlapBuf[i].transform.IsChildOf(VRGlobals.player.Transform.Original))
+                if (overlapBuf[i].transform.IsChildOf(VRGlobals.player.Transform.Original) || !CollisionWorld.Solid(overlapBuf[i]))
                     continue;
                 return true;
             }

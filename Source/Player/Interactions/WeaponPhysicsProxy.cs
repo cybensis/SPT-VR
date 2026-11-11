@@ -10,8 +10,7 @@ namespace TarkovVR.Source.Player.Interactions
     // nearby world colliders. Tarkov runs autoSimulation off and Physics.Simulate() would step the whole default scene
     // (double-steps loot/ragdolls), so the proxy steps only its sandbox. The sandbox is tiny, so it can afford fine substepping,
     // which is what catches a fast rotational swing tunnelling a thin wall (PhysX CCD is blind to rotation).
-    // The world it holds: the bullet geometry (HighPolyCollider) + terrain + glass, minus each tree's bullet mesh (every branch:
-    // "LOD0Collider") for the tree's movement capsule (the trunk). Not the movement layer as a whole: it blocks window openings.
+    // The world it holds: the bullet geometry + terrain + glass, trunks not branches (CollisionWorld).
     // Doors the hand can move (PhysicalDoors) are hinged bodies here: the gun pushes a free one, a held / latched / locked one
     // moves with the real door. Copies of unreadable meshes work (Tarkov's meshes nearly all are), at a one-time cook cost.
     public class WeaponPhysicsProxy : MonoBehaviour
@@ -36,7 +35,6 @@ namespace TarkovVR.Source.Player.Interactions
         public static float proxyMass = 10f;             // kg; only matters against a door body: heavier = the gun shoves doors more easily
         public static float doorMass = 1f;               // kg of a door in the sandbox
         public static float doorJumpDegrees = 10f;       // a held / latched door that moved more than this since it was last simulated is placed, not swept
-        public static string treeBranchesName = "LOD0Collider";
         public static float worldClearDelay = 5f;        // s out of a raid before the copies go (they hold the map's meshes)
 
         private Rigidbody rb;
@@ -53,7 +51,6 @@ namespace TarkovVR.Source.Player.Interactions
         private PhysicsScene sandboxPhysics;
         private int worldMask;
         private int queryMask;
-        private int highPolyLayer = -1, lowPolyLayer = -1;
         private int staticCopyLayer;                 // a layer apart from the proxy's, so door bodies can leave the static copies alone
         private bool separateStaticLayer;
         private readonly Dictionary<int, GameObject> colliderCopies = new Dictionary<int, GameObject>(256);
@@ -124,11 +121,9 @@ namespace TarkovVR.Source.Player.Interactions
             GameObject proxyObject = new GameObject("WeaponPhysicsProxy");
             var proxy = proxyObject.AddComponent<WeaponPhysicsProxy>();
             proxy.worldMask = worldMask;
-            proxy.highPolyLayer = LayerMask.NameToLayer("HighPolyCollider");
-            proxy.lowPolyLayer = LayerMask.NameToLayer("LowPolyCollider");
             int doorLayer = LayerMask.NameToLayer("DoorLowPolyCollider");
-            // + the movement layer (tree trunks) and the doors' own colliders
-            proxy.queryMask = worldMask | (proxy.lowPolyLayer >= 0 ? 1 << proxy.lowPolyLayer : 0) | (doorLayer >= 0 ? 1 << doorLayer : 0);
+            // + the movement layer (tree trunks: CollisionWorld) and the doors' own colliders
+            proxy.queryMask = CollisionWorld.Mask(worldMask) | (doorLayer >= 0 ? 1 << doorLayer : 0);
 
             proxy.rb = proxyObject.AddComponent<Rigidbody>();
             proxy.rb.useGravity = false;
@@ -348,15 +343,8 @@ namespace TarkovVR.Source.Player.Interactions
         private ColliderUse Classify(Collider collider, out Door door)
         {
             door = null;
-            int layer = collider.gameObject.layer;
-            // A trigger isn't solid (a glass pane can be one)
-            if (collider.isTrigger && layer != WeaponCollision.GlassLayer)
-                return ColliderUse.Ignore;
-            // A tree's bullet mesh has every branch: the gun goes through those, its trunk (below) stops it
-            if (layer == highPolyLayer && collider.name == treeBranchesName)
-                return ColliderUse.Ignore;
-            // The movement layer gives only the trunks (and poles): it also closes window openings
-            if (layer == lowPolyLayer && !(collider is CapsuleCollider))
+            // Branches, triggers, window blockers
+            if (!CollisionWorld.Solid(collider))
                 return ColliderUse.Ignore;
             Door owner = collider.GetComponentInParent<Door>();
             if (owner != null && PhysicalDoors.Supports(owner))
