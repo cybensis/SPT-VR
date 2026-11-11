@@ -26,7 +26,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float keyholeRadius = 0.035f;     // m the key's tip may be off the keyway's line...
         public static float keyholeAxialReach = 0.07f;  // ...and along it from the lock (either face of the door)
         public static float keyInsertAngle = 40f;       // deg the key may be off the keyway
-        public static float keyInsertDepth = 0.012f;    // m the tip goes in past the door's face
+        public static float keyInsertDepth = 0.03f;     // m the tip goes in past the door's face
         public static float keyInsertTime = 0.08f;      // s the hand takes onto the lock
         public static float keyUnlockTurn = 60f;        // deg of wrist turn about the keyway that unlocks
         public static float keyMaxTurn = 90f;
@@ -87,6 +87,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static readonly bool[] triggerPressed = new bool[2];      // this frame's press
         private static readonly HashSet<string> measuredKeys = new HashSet<string>();
         private static readonly HashSet<string> noKeyLogged = new HashSet<string>();
+        private static readonly HashSet<string> seatLogged = new HashSet<string>();
         private static readonly RaycastHit[] keyholeHits = new RaycastHit[16];
         private static Door unlockingByHand;
         private static HandsInteractionController keyHands;
@@ -472,7 +473,14 @@ namespace TarkovVR.Source.Player.Interactions
             Door door = keyHold.door;
 
             // In at the door's face along the keyway, the blade on edge: its flat across the hinge's axis, the nearer way up
-            keyHold.seatedTip = (DoorFaceAlong(door, lockPoint, inward, out Vector3 face) ? face : lockPoint) + inward * keyInsertDepth;
+            bool faceFound = DoorFaceAlong(door, lockPoint, inward, out Vector3 face);
+            keyHold.seatedTip = (faceFound ? face : lockPoint) + inward * keyInsertDepth;
+            if (logGrabs && seatLogged.Add(door.Id ?? door.name))
+            {
+                Plugin.MyLog.LogInfo($"[Doors] key seated in '{door.name}': "
+                    + (faceFound ? $"the face {Vector3.Dot(lockPoint - face, inward) * 100f:0.0} cm before the lock's pivot along the keyway" : "no face found (at the lock's pivot)")
+                    + $", tip {keyInsertDepth * 100f:0.0} cm in, the key {Vector3.Distance(propTransform.TransformPoint(keyHold.gripLocal), propTransform.TransformPoint(keyHold.tipLocal)) * 100f:0.0} cm grip to tip");
+            }
             keyHold.inward = inward;
             Vector3 widthNow = propTransform.TransformDirection(keyHold.widthLocal);
             Vector3 up = Vector3.ProjectOnPlane(HingeAxis(door), inward);

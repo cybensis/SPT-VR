@@ -41,7 +41,12 @@ namespace TarkovVR.Source.Player.Interactions
         // The release swing from the hand's own tracked velocity as the grip opens (like a grenade throw), not the door's smoothed speed,
         // which lags and drops as the hand slows letting go. false = the smoothed speed.
         public static bool releaseFromHandVelocity = true;
-        public static float swingDamping = 3f;          // 1/s
+        // The let-go registers 20-70 ms after the hand starts opening (OpenXRInput's grip), the hand already slowing: the swing takes the
+        // hand's fastest over this window before it
+        public static float releasePeakWindow = 0.08f;  // s
+        // A door let go of coasts on its hinges: their friction (a steady slowdown) and the air's drag (growing with the speed squared)
+        public static float swingFriction = 45f;        // deg/s^2
+        public static float swingDrag = 0.0005f;        // deg/s^2 per (deg/s)^2
         public static float swingStopSpeed = 8f;        // deg/s
         public static float slamSpeed = 180f;           // deg/s that shuts it at full volume
         public static float handReleaseTime = 0.12f;    // s the hand takes back to the controller
@@ -83,6 +88,11 @@ namespace TarkovVR.Source.Player.Interactions
             public float grabTime;
             public Vector3 latchBaseLocal;              // where it took hold, in what it holds
             public Vector3 latchSnapLocal;              // onto the handle's surface from there
+            // The hand's swing speed (deg/s) at the held point, the last frames it moved the door
+            public readonly float[] swingSpeeds = new float[16];
+            public readonly float[] swingTimes = new float[16];
+            public int swingSamples;
+            public int nextSwingSample;
         }
 
         // A door a hand moves, or that still swings / has its handle springing back
@@ -586,12 +596,19 @@ namespace TarkovVR.Source.Player.Interactions
                             run.door.CurrentAngle = run.door.CloseAngle;    // the give of a latched door back
                         else
                         {
-                            if (releaseFromHandVelocity && TryReleaseSpeed(hold, run.door, out float releaseSpeed))
-                                run.angularVelocity = releaseSpeed;
+                            float releaseSpeed = 0f;
+                            if (releaseFromHandVelocity && TryReleaseSpeed(hold, run.door, out releaseSpeed))
+                                run.angularVelocity = FastestRecentSwing(hold, releaseSpeed);
                             if (Mathf.Abs(run.angularVelocity) >= flingMinSpeed)
                                 run.swinging = true;
                             else
                                 run.angularVelocity = 0f;
+                            if (logGrabs && releaseLogs < 20)
+                            {
+                                releaseLogs++;
+                                Plugin.MyLog.LogInfo($"[Doors] let go of '{run.door.name}': {run.angularVelocity:0} deg/s (the hand at the let-go "
+                                    + $"{(releaseFromHandVelocity ? $"{releaseSpeed:0}" : "-")}), coasts about {CoastDegrees(Mathf.Abs(run.angularVelocity)):0} deg");
+                            }
                         }
                     }
                 }
@@ -632,6 +649,41 @@ namespace TarkovVR.Source.Player.Interactions
             degreesPerSecond = Mathf.Clamp(degreesPerSecond, -maxSwingSpeed, maxSwingSpeed);
             return true;
         }
+
+        // The hand's swing speed with the most in it over releasePeakWindow, the let-go's own included
+        private static float FastestRecentSwing(Hold hold, float atLetGo)
+        {
+            float fastest = atLetGo;
+            for (int i = 0; i < hold.swingSamples; i++)
+            {
+                if (Time.time - hold.swingTimes[i] <= releasePeakWindow && Mathf.Abs(hold.swingSpeeds[i]) > Mathf.Abs(fastest))
+                    fastest = hold.swingSpeeds[i];
+            }
+            hold.swingSamples = 0;
+            return fastest;
+        }
+
+        private static void RememberSwing(Hold hold, Door door)
+        {
+            if (!TryReleaseSpeed(hold, door, out float speed))
+                return;
+            hold.swingSpeeds[hold.nextSwingSample] = speed;
+            hold.swingTimes[hold.nextSwingSample] = Time.time;
+            hold.nextSwingSample = (hold.nextSwingSample + 1) % hold.swingSpeeds.Length;
+            hold.swingSamples = Mathf.Min(hold.swingSamples + 1, hold.swingSpeeds.Length);
+        }
+
+        // How far a door let go of at this speed coasts (friction + drag, no stop in the way)
+        private static float CoastDegrees(float speed)
+        {
+            if (swingFriction <= 0f)
+                return float.PositiveInfinity;
+            if (swingDrag <= 0f)
+                return speed * speed / (2f * swingFriction);
+            return Mathf.Log(1f + swingDrag * speed * speed / swingFriction) / (2f * swingDrag);
+        }
+
+        private static int releaseLogs;
 
         private static Hold OtherHold(Hold hold, bool onHandle)
         {
@@ -836,6 +888,7 @@ namespace TarkovVR.Source.Player.Interactions
             float current = door.CurrentAngle;
             float openness = Openness(door, current);
             Vector3 target = hold.heldPointAtGrab + (ControllerPoint(hold) - hold.controllerAtGrab);
+            RememberSwing(hold, door);
 
             // Pulled away (the door at its stop, walked off): the hand slips off
             Vector3 heldNow = door.transform.TransformPoint(hold.heldPointInDoor);
@@ -901,8 +954,10 @@ namespace TarkovVR.Source.Player.Interactions
             door.CurrentAngle = AngleAt(door, next);
             if (run.swinging)
             {
-                run.angularVelocity *= Mathf.Exp(-swingDamping * deltaTime);
-                if (Mathf.Abs(run.angularVelocity) < swingStopSpeed)
+                float speed = Mathf.Abs(run.angularVelocity);
+                speed = Mathf.Max(0f, speed - (swingFriction + swingDrag * speed * speed) * deltaTime);
+                run.angularVelocity = Mathf.Sign(run.angularVelocity) * speed;
+                if (speed < swingStopSpeed)
                 {
                     run.swinging = false;
                     run.angularVelocity = 0f;
