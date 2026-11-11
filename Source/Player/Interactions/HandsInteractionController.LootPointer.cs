@@ -252,6 +252,9 @@ namespace TarkovVR.Source.Player.Interactions
                 if (!DominantHandFree() || rightCorpseTapArmed)
                     return;
             }
+            // A hand on a door (PhysicalDoors) points at nothing
+            if (PhysicalDoors.HoldsDoor(dominant))
+                return;
             else
             {
                 // Off hand: not near the foregrip trigger, nor holding / reaching for a magazine. Nor with the gun in the left

@@ -82,8 +82,10 @@ namespace SptVrFikaSync
             DownedDragApply.ResetState();
             FingerSyncApply.ResetState();
             ReloadSyncApply.ResetState();
+            DoorSyncApply.ResetState();
             if (ev.Manager is FikaServer server)
             {
+                server.RegisterPacket<VRDoorPacket, NetPeer>(OnDoorServer);
                 server.RegisterPacket<VRReloadPacket, NetPeer>(OnReloadServer);
                 server.RegisterPacket<VRReloadSoundPacket, NetPeer>(OnReloadSoundServer);
                 server.RegisterPacket<VRArmsPacket, NetPeer>(OnArmsServer);
@@ -98,6 +100,7 @@ namespace SptVrFikaSync
             }
             else if (ev.Manager is FikaClient client)
             {
+                client.RegisterPacket<VRDoorPacket>(OnDoorClient);
                 client.RegisterPacket<VRReloadPacket>(OnReloadClient);
                 client.RegisterPacket<VRReloadSoundPacket>(OnReloadSoundClient);
                 client.RegisterPacket<VRArmsPacket>(OnArmsClient);
@@ -210,6 +213,37 @@ namespace SptVrFikaSync
         {
             try { MeleeHitApply.Apply(p); }
             catch (Exception e) { LogOnce(ref _meleeErr, "melee recv", e); }
+        }
+
+        // ===== DOORS BY HAND (the angle and the handle; FIKA syncs open / shut) =====
+        public static bool enableDoorSync = true;
+
+        // SPT-VR's PhysicalDoors: true while the local VR player's hand moves that door (theirs wins on this machine)
+        public static Func<WorldInteractiveObject, bool> isDoorDrivenLocally;
+
+        public static void SendDoor(string doorId, float angle, float handleTurn, bool final)
+        {
+            if (!enableDoorSync || string.IsNullOrEmpty(doorId))
+                return;
+            VRDoorPacket p = default;
+            p.DoorId = doorId; p.Angle = angle; p.HandleTurn = handleTurn; p.Final = final;
+            if (final)
+                SendReliableBroadcast(ref p);
+            else
+                SendUnreliableBroadcast(ref p);
+        }
+
+        private static void OnDoorServer(VRDoorPacket p, NetPeer sender)
+        {
+            try { DoorSyncApply.Apply(p); }
+            catch (Exception e) { LogOnce(ref _doorErr, "door recv", e); }
+            Singleton<FikaServer>.Instance?.SendData(ref p, p.Final ? DeliveryMethod.ReliableOrdered : DeliveryMethod.Unreliable, sender);
+        }
+
+        private static void OnDoorClient(VRDoorPacket p)
+        {
+            try { DoorSyncApply.Apply(p); }
+            catch (Exception e) { LogOnce(ref _doorErr, "door recv", e); }
         }
 
         // ===== MANUAL EATING (food props ride the synced hands) =====
@@ -662,7 +696,7 @@ namespace SptVrFikaSync
                 Singleton<FikaClient>.Instance?.SendData(ref p, DeliveryMethod.ReliableOrdered, broadcast: true);
         }
 
-        private static bool _armErr, _bodyErr, _meleeErr, _eatErr, _reloadErr;
+        private static bool _armErr, _bodyErr, _meleeErr, _eatErr, _reloadErr, _doorErr;
         private static void LogOnce(ref bool latch, string what, Exception e)
         {
             if (latch)

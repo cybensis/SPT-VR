@@ -13,7 +13,9 @@ namespace SptVrFikaSync
     // off, and FIKA holds that player's trigger until it ends.
     // 2.1.4 (ArmSyncApply.gunOnWeaponRoot): no packet change. An older peer draws a VR player's gun pulled toward its third-person hold
     // spot, off the hands with the gun in the left hand.
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.1.4")]
+    // 2.2.0 adds a packet type (VRDoorPacket, doors moved by hand): every peer needs 2.2.0 or newer, or FIKA's packet loop throws
+    // on it.
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.2.0")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module; when present, a dragged corpse's loot waypoint is
     // relocated here (SPT-VR.dll doesn't run on a headless). The dep only guarantees ORBIT is in the registry checked below.

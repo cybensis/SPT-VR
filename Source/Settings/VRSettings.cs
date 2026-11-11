@@ -101,6 +101,8 @@ namespace TarkovVR.Source.Settings
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
+            // Doors by hand (PhysicalDoors): turn the handle, swing the door. Off = the grip opens / closes them as before.
+            public bool physicalDoors { get; set; }
             // The guns' body spots placed by hand (GunSpots), per slot: the grip point x, y, z and the Weapon_root rotation x, y, z, w in
             // the body's frame. null = the default spot. Plain floats: Newtonsoft can't write a Vector3 (its normalized loops).
             public float[] gunSpotChest { get; set; }
@@ -171,6 +173,7 @@ namespace TarkovVR.Source.Settings
                 heldItemWeight = false;
                 virtualStock = true;
                 chestSling = true;
+                physicalDoors = true;
                 manualReload = false;
                 opticRenderResolution = 1024;
                 viveWandCrouchTrackpadThreshold = 0.7f;
@@ -197,6 +200,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle weaponWeightToggle;
         private static SettingToggle virtualStockToggle;
         private static SettingToggle chestSlingToggle;
+        private static SettingToggle physicalDoorsToggle;
         private static SettingToggle resetGunSpotsToggle;
         private static SettingToggle manualReloadToggle;
         private static SettingToggle weaponInertiaToggle;
@@ -516,6 +520,13 @@ namespace TarkovVR.Source.Settings
             chestSlingToggle.Toggle._onValueChanged = SetChestSlingOn;
             chestSlingToggle.Text.localizationKey = "Turn On Chest Sling";
             chestSlingToggle.Toggle.UpdateValue(settings.chestSling);
+
+            // Doors by hand (PhysicalDoors): grip the handle, turn it, swing the door. Off = the grip opens / closes them.
+            physicalDoorsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            physicalDoorsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            physicalDoorsToggle.Toggle._onValueChanged = SetPhysicalDoorsOn;
+            physicalDoorsToggle.Text.localizationKey = "Turn On Physical Doors";
+            physicalDoorsToggle.Toggle.UpdateValue(settings.physicalDoors);
 
             // The gun spots placed by hand (GunSpots: hold the trigger on a gun at its spot, move it, let go) all back to where they
             // start. A one-shot: it turns itself back off.
@@ -1064,6 +1075,15 @@ namespace TarkovVR.Source.Settings
         public static bool GetChestSlingOn()
         {
             return settings.chestSling;
+        }
+
+        private static void SetPhysicalDoorsOn(bool turnOn)
+        {
+            settings.physicalDoors = turnOn;
+        }
+        public static bool GetPhysicalDoorsOn()
+        {
+            return settings.physicalDoors;
         }
 
         // A gun spot placed by hand (GunSpots; index 0 the chest sling, 1 the shoulder, 2 the hip): its grip point and Weapon_root

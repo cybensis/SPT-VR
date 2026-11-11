@@ -323,6 +323,16 @@ namespace TarkovVR
                 {
                     MyLog.LogError($"SPT-VR-FikaSync.dll missing or failed to bind ({exception.Message}). Install it next to SPT-VR.dll for co-op sync.");
                 }
+                // Its own call: an older module (before 2.2.0) has no door sync, and the rest still binds
+                try
+                {
+                    BindFikaDoorHook();
+                }
+                catch (Exception exception)
+                {
+                    Source.Player.Interactions.PhysicalDoors.syncBroken = true;
+                    MyLog.LogError($"SPT-VR-FikaSync.dll is older than 2.2.0 ({exception.Message}): doors moved by hand aren't synced.");
+                }
             }
             InstalledMods.DynamicMapsInstalled = ApplyModSupport("com.mpstark.dynamicmaps", "DynamicMaps", "TarkovVR.ModSupport.DynamicMaps");
             InstalledMods.WeaponCustomizerInstalled = ApplyModSupport("com.tyfon.weaponcustomizer", "WeaponCustomizer", "TarkovVR.ModSupport.WeaponCustomizer");
@@ -383,6 +393,13 @@ namespace TarkovVR
             SptVrFikaSync.FikaVrSync.onYieldBodyDrag = () => VRGlobals.handsInteractionController?.RelinquishBodyDrag();
             // Corpse loot-AI sync runs inside the companion (on the headless/host, where ORBIT lives; SPT-VR.dll does not). The VR mod
             // only sends the grab/settle markers via FikaVrSync.SendCorpseLoot* from HandsInteractionController: no callback needed here.
+        }
+
+        // A door our hand moves (PhysicalDoors): another VR player's packets for it are left alone here
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void BindFikaDoorHook()
+        {
+            SptVrFikaSync.FikaVrSync.isDoorDrivenLocally = door => Source.Player.Interactions.PhysicalDoors.DrivesDoor(door);
         }
 
         private void ApplyPatches(string @namespace)

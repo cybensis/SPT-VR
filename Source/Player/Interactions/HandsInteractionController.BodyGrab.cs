@@ -207,7 +207,8 @@ namespace TarkovVR.Source.Player.Interactions
             // Not with the gun in the left hand: the off hand is the RIGHT one then, and this grab is built on the left palm (on the gun).
             // Nor at the gun hand's grip: that press takes the gun into this hand (ChestHang)
             if (heldItem != null || isSummoningLoot || VRGlobals.usingItem
-                || EatingInteractionController.ManualActive || NearForegrip() || Handedness.GunInLeftHand || ChestHang.OffHandAtGunGrip)
+                || EatingInteractionController.ManualActive || NearForegrip() || Handedness.GunInLeftHand || ChestHang.OffHandAtGunGrip
+                || PhysicalDoors.HoldsDoor(false))
                 return;
 
             Vector3 palm = PalmOrigin(false);   // body grab stays on the off hand

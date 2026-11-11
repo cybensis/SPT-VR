@@ -319,6 +319,10 @@ namespace TarkovVR.Source.Player.Interactions
             if (VRGlobals.inGame && VRGlobals.vrPlayer != null)
                 VRReloadController.Tick();
 
+            // Doors by hand: before the bail too (a held door lets go itself on menus and sprint), and before the loot pointer, the
+            // body grab and the corpse tap, which leave a grip it took alone
+            UpdatePhysicalDoors();
+
             if (!VRGlobals.inGame || VRGlobals.vrPlayer.isSupporting ||
                 (VRGlobals.player && VRGlobals.player.IsSprintEnabled) || VRGlobals.menuOpen)
             {
@@ -707,7 +711,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            if (primaryHandGrip.stateDown && rightHandState.corpse != null)
+            if (primaryHandGrip.stateDown && rightHandState.corpse != null && !PhysicalDoors.HoldsDoor(true))
             {
                 rightCorpseTapArmed = true;
                 rightCorpseTapCorpse = rightHandState.corpse;
@@ -898,7 +902,8 @@ namespace TarkovVR.Source.Player.Interactions
                     VRGlobals.player.TryInteractionCallback(container);
                 });
             }
-            else if (state.door != null)
+            // Doors by hand take their own grip (PhysicalDoors); the grip opens / closes the doors it doesn't move
+            else if (state.door != null && !(PhysicalDoors.Active && PhysicalDoors.Supports(state.door)))
             {
                 var door = state.door;
                 InteractionContextHelper.CG_GetAvailableActions15 doorInteractionClass = new InteractionContextHelper.CG_GetAvailableActions15();

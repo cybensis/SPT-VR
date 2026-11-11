@@ -468,4 +468,30 @@ namespace SptVrFikaSync
                 RestPos = reader.GetUnmanaged<Vector3>();
         }
     }
+
+    // A door a VR player's hand moves (SPT-VR's PhysicalDoors), by its Id: its angle and its handle's turn (0 rest .. 1 down).
+    // FIKA syncs the door's state only (open / shut). Final = the last one of a move (sent reliable).
+    internal struct VRDoorPacket : INetSerializable
+    {
+        public string DoorId;
+        public float Angle;
+        public float HandleTurn;
+        public bool Final;
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(DoorId ?? string.Empty);
+            writer.Put(Angle);
+            writer.Put(HandleTurn);
+            writer.Put(Final);
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            DoorId = reader.GetString();
+            Angle = reader.GetFloat();
+            HandleTurn = reader.GetFloat();
+            Final = reader.GetBool();
+        }
+    }
 }

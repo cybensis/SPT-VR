@@ -53,10 +53,30 @@ namespace TarkovVR.Source.Player.Interactions
             // clamping it from here races GunInteractionController's anchor read (Update order is
             // nondeterministic). The support hand is exempt while gripping: its physical position drives
             // two-handed aim, and clamping it would steer the aim near walls.
-            ClampHand(right, VRGlobals.vrPlayer.RightHand ? VRGlobals.vrPlayer.RightHand.transform : null,
-                !firearm && !eating, physRight: !leftHanded);
-            ClampHand(left, VRGlobals.vrPlayer.LeftHand ? VRGlobals.vrPlayer.LeftHand.transform : null,
-                !eating && (!firearm || !VRGlobals.vrPlayer.isSupporting), physRight: leftHanded);
+            // A hand on a door (PhysicalDoors) isn't clamped either: the controller pushes it through where the door is
+            Transform rightHand = VRGlobals.vrPlayer.RightHand ? VRGlobals.vrPlayer.RightHand.transform : null;
+            Transform leftHand = VRGlobals.vrPlayer.LeftHand ? VRGlobals.vrPlayer.LeftHand.transform : null;
+            ClampHand(right, rightHand, !firearm && !eating && !PhysicalDoors.HoldsRig(rightHand), physRight: !leftHanded);
+            ClampHand(left, leftHand, !eating && (!firearm || !VRGlobals.vrPlayer.isSupporting) && !PhysicalDoors.HoldsRig(leftHand),
+                physRight: leftHanded);
+        }
+
+        // A rig hand's position as the controller has it, this frame's clamp left out (whichever ran first this frame)
+        internal static Vector3 RawPosition(Transform hand)
+        {
+            if (hand == null)
+                return Vector3.zero;
+            HandState state = null;
+            if (VRGlobals.vrPlayer != null)
+            {
+                if (VRGlobals.vrPlayer.RightHand && hand == VRGlobals.vrPlayer.RightHand.transform)
+                    state = right;
+                else if (VRGlobals.vrPlayer.LeftHand && hand == VRGlobals.vrPlayer.LeftHand.transform)
+                    state = left;
+            }
+            if (state != null && state.enacted && hand.parent != null && (hand.localPosition - state.lastEnactLocal).sqrMagnitude < 1e-10f)
+                return hand.parent.TransformPoint(state.preEnactLocal);
+            return hand.position;
         }
 
         public static void ResetAll()
