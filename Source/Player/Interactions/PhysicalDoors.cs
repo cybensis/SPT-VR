@@ -175,6 +175,15 @@ namespace TarkovVR.Source.Player.Interactions
             return Mathf.Abs(Mathf.DeltaAngle(door.CloseAngle, door.OpenAngle)) > 5f;
         }
 
+        // "Disable Door Context Menu": no gaze menu for a door a hand works - not a keycard door (its card is used from the menu), nor a
+        // locked door with no lock or handle for a key
+        internal static bool HidesMenu(Door door)
+        {
+            if (!Active || !VRSettings.GetDisableDoorContextMenu() || door is KeycardDoor || !Supports(door))
+                return false;
+            return door.DoorState != EDoorState.Locked || door.LockHandle != null || door._handle != null;
+        }
+
         internal static bool SkipsSwing(WorldInteractiveObject door) => door != null && door == interactionInProgress;
 
         // The state Tarkov's swing would leave the door in, at once (DoorSwingPatches)

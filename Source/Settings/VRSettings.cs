@@ -103,6 +103,8 @@ namespace TarkovVR.Source.Settings
             public bool chestSling { get; set; }
             // Doors by hand (PhysicalDoors): turn the handle, swing the door. Off = the grip opens / closes them as before.
             public bool physicalDoors { get; set; }
+            // The gaze menu (open / breach / unlock...) hidden for the doors a hand works (PhysicalDoors.HidesMenu)
+            public bool disableDoorContextMenu { get; set; }
             // The guns' body spots placed by hand (GunSpots), per slot: the grip point x, y, z and the Weapon_root rotation x, y, z, w in
             // the body's frame. null = the default spot. Plain floats: Newtonsoft can't write a Vector3 (its normalized loops).
             public float[] gunSpotChest { get; set; }
@@ -174,6 +176,7 @@ namespace TarkovVR.Source.Settings
                 virtualStock = true;
                 chestSling = true;
                 physicalDoors = true;
+                disableDoorContextMenu = false;
                 manualReload = false;
                 opticRenderResolution = 1024;
                 viveWandCrouchTrackpadThreshold = 0.7f;
@@ -201,6 +204,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle virtualStockToggle;
         private static SettingToggle chestSlingToggle;
         private static SettingToggle physicalDoorsToggle;
+        private static SettingToggle disableDoorContextMenuToggle;
         private static SettingToggle resetGunSpotsToggle;
         private static SettingToggle manualReloadToggle;
         private static SettingToggle weaponInertiaToggle;
@@ -527,6 +531,13 @@ namespace TarkovVR.Source.Settings
             physicalDoorsToggle.Toggle._onValueChanged = SetPhysicalDoorsOn;
             physicalDoorsToggle.Text.localizationKey = "Turn On Physical Doors";
             physicalDoorsToggle.Toggle.UpdateValue(settings.physicalDoors);
+
+            // The doors' gaze menu off for the doors a hand works (with Physical Doors on); keycard doors and doors no hand can open keep it
+            disableDoorContextMenuToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
+            disableDoorContextMenuToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            disableDoorContextMenuToggle.Toggle._onValueChanged = SetDisableDoorContextMenu;
+            disableDoorContextMenuToggle.Text.localizationKey = "Disable Door Context Menu";
+            disableDoorContextMenuToggle.Toggle.UpdateValue(settings.disableDoorContextMenu);
 
             // The gun spots placed by hand (GunSpots: hold the trigger on a gun at its spot, move it, let go) all back to where they
             // start. A one-shot: it turns itself back off.
@@ -1084,6 +1095,14 @@ namespace TarkovVR.Source.Settings
         public static bool GetPhysicalDoorsOn()
         {
             return settings.physicalDoors;
+        }
+        private static void SetDisableDoorContextMenu(bool turnOn)
+        {
+            settings.disableDoorContextMenu = turnOn;
+        }
+        public static bool GetDisableDoorContextMenu()
+        {
+            return settings.disableDoorContextMenu;
         }
 
         // A gun spot placed by hand (GunSpots; index 0 the chest sling, 1 the shoulder, 2 the hip): its grip point and Weapon_root

@@ -710,6 +710,11 @@ namespace TarkovVR.Patches.UI
                         __instance._nextCastHasForceEvent = true;
                     }
                 }
+                // "Disable Door Context Menu": a door the hands work has no gaze menu
+                else if (worldInteractiveObject is Door door && PhysicalDoors.HidesMenu(door))
+                {
+                    interactableObject = null;
+                }
                 else
                 {
                     EDoorState doorState = worldInteractiveObject.DoorState;
