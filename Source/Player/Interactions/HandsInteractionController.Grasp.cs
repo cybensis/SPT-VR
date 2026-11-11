@@ -46,7 +46,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         private sealed class GraspHand
         {
-            public LootItem item;
+            public Component item;                              // the loot item, or the door / door handle (PhysicalDoors)
+            public Transform rig;                               // what this hand's arm reaches for while it holds it
             public GraspShape shape;
             public bool ownsShape;                              // false = the other hand's (two hands on one item share it)
             public bool pinch;
@@ -75,6 +76,7 @@ namespace TarkovVR.Source.Player.Interactions
                 shape = null;
                 ownsShape = false;
                 item = null;
+                rig = null;
                 pinch = false;
                 blend = 0f;
                 released = false;
@@ -95,7 +97,7 @@ namespace TarkovVR.Source.Player.Interactions
         // The grab
 
         // sharedShape: the other hand's, when this one takes hold of an item that hand already holds (it stays that hand's to dispose)
-        private void BeginGrasp(GraspHand hand, LootItem item, GraspShape sharedShape = null)
+        private void BeginGrasp(GraspHand hand, Component item, GraspShape sharedShape = null)
         {
             hand.Clear();
             hand.item = item;
@@ -240,17 +242,34 @@ namespace TarkovVR.Source.Player.Interactions
         private void ApplyGrasp(bool dominant, Transform[][] fingers, bool[] thumbs, float curlSign, float weight)
         {
             GraspHand hand = graspHands[dominant ? 1 : 0];
-            bool holdingHere = graspItems && HoldsLoot(dominant) && GraspRig(dominant) != null && HeldItemAlive();
-            // A hold that didn't come through BeginSummon, or the second hand on it (HandsInteractionController.TwoHanded)
-            if (holdingHere && hand.item != heldItem)
+            // What this hand holds: a loot item, or a door's handle / the door itself (PhysicalDoors)
+            bool lootHere = graspItems && HoldsLoot(dominant) && GraspRig(dominant) != null && HeldItemAlive();
+            Component holding = null;
+            Transform holdingRig = null;
+            if (lootHere)
+            {
+                holding = heldItem;
+                holdingRig = GraspRig(dominant);
+            }
+            else if (graspItems && PhysicalDoors.GraspTarget(dominant, out Component doorPart, out Transform doorLatch))
+            {
+                holding = doorPart;
+                holdingRig = doorLatch;
+            }
+            bool holdingHere = holding != null;
+            // A hold that didn't come through BeginSummon, or the second hand on it (HandsInteractionController.TwoHanded). A door's
+            // shape isn't shared: either hand may let go first.
+            if (holdingHere && hand.item != holding)
             {
                 GraspHand otherHand = graspHands[dominant ? 0 : 1];
-                BeginGrasp(hand, heldItem, dominant != heldInDominantHand && otherHand.item == heldItem ? otherHand.shape : null);
+                BeginGrasp(hand, holding, lootHere && dominant != heldInDominantHand && otherHand.item == heldItem ? otherHand.shape : null);
             }
+            if (holdingHere)
+                hand.rig = holdingRig;
             if (hand.item == null)
                 return;
             hand.released = !holdingHere;
-            float closed = !holdingHere ? 0f : isSummoningLoot && dominant == heldInDominantHand ? Mathf.InverseLerp(0.5f, 1f, summonT) : 1f;
+            float closed = !holdingHere ? 0f : lootHere && isSummoningLoot && dominant == heldInDominantHand ? Mathf.InverseLerp(0.5f, 1f, summonT) : 1f;
             hand.blend = Mathf.MoveTowards(hand.blend, closed, Time.deltaTime / Mathf.Max(0.01f, closed >= hand.blend ? graspCloseTime : graspOpenTime));
             if (hand.released && hand.blend <= 0f)
             {
@@ -305,23 +324,24 @@ namespace TarkovVR.Source.Player.Interactions
             if (palm == null)
                 return;
             hand.palm = palm;
-            // The item in the frame of what this hand's arm reaches for (its rig hand, or the second hand's grip on the item): where the
-            // summon will put it, or where it is
-            Transform rig = GraspRig(dominant);
-            if (rig == null)
+            // The item in the frame of what this hand's arm reaches for (its rig hand, the second hand's grip on the item, the latch on a
+            // door): where the summon will put it, or where it is
+            Transform rig = hand.rig;
+            if (rig == null || hand.item == null)
                 return;
+            Transform item = hand.item.transform;
             Vector3 itemInRigPosition;
             Quaternion itemInRigRotation;
             Quaternion rigInverse = Quaternion.Inverse(rig.rotation);
-            if (isSummoningLoot && rig == cachedHand)
+            if (isSummoningLoot && rig == cachedHand && hand.item == heldItem)
             {
                 itemInRigPosition = rigInverse * (cachedHand.TransformPoint(summonRestOffset) - cachedHand.position);
                 itemInRigRotation = cachedGrabRotation;
             }
             else
             {
-                itemInRigPosition = rigInverse * (heldItem.transform.position - rig.position);
-                itemInRigRotation = rigInverse * heldItem.transform.rotation;
+                itemInRigPosition = rigInverse * (item.position - rig.position);
+                itemInRigRotation = rigInverse * item.rotation;
             }
             // ...and in the palm's: through the arm IK's last result, or taking the palm to be on the rig hand (the IK's target)
             bool captured = hand.rigInPalmTime >= 0f && Time.time - hand.rigInPalmTime < 0.5f;
@@ -540,13 +560,13 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void CaptureRigInPalm(LimbIK armIk)
         {
-            if (this == null || armIk == null || armIk.solver == null || armIk.solver.bone3 == null || heldItem == null)
+            if (this == null || armIk == null || armIk.solver == null || armIk.solver.bone3 == null)
                 return;
             Transform bone = armIk.solver.bone3.transform;
             for (int handIndex = 0; handIndex < graspHands.Length; handIndex++)
             {
                 GraspHand hand = graspHands[handIndex];
-                Transform rig = GraspRig(handIndex == 1);
+                Transform rig = hand.rig;
                 if (bone == null || rig == null || hand.item == null || hand.palm != bone)
                     continue;
                 Quaternion boneInverse = Quaternion.Inverse(bone.rotation);

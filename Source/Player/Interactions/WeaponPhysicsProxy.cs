@@ -538,6 +538,7 @@ namespace TarkovVR.Source.Player.Interactions
             colliderDoors.Clear();
             ownColliders.Clear();
             ignoredColliders.Clear();
+            CollisionWorld.Clear();
             lastQueryCenter = new Vector3(1e9f, 1e9f, 1e9f);
         }
 
@@ -643,7 +644,7 @@ namespace TarkovVR.Source.Player.Interactions
                 doorBody.lastSimulatedFrame = frame;
                 doorBody.angle = door.CurrentAngle;
                 doorBody.hitSpeed = 0f;
-                bool pushable = PhysicalDoors.GunMayPush(door);
+                bool pushable = PhysicalDoors.MayBePushed(door);
                 if (pushable)
                 {
                     // Moved by something else since (the hand, its swing, another player), or newly free: start from the real door
@@ -732,7 +733,7 @@ namespace TarkovVR.Source.Player.Interactions
                 bool moved = Mathf.Abs(Mathf.DeltaAngle(door.CurrentAngle, doorBody.angle)) > 1e-3f
                     || Mathf.Abs(doorBody.angularSpeed) > 0.5f || doorBody.hitSpeed > 0f;
                 if (moved)
-                    PhysicalDoors.MovedByGun(door, doorBody.angle, doorBody.angularSpeed, doorBody.hitSpeed);
+                    PhysicalDoors.Pushed(door, doorBody.angle, doorBody.angularSpeed, doorBody.hitSpeed);
                 // (refused - the door was taken meanwhile: next frame starts from the real door)
                 doorBody.writtenAngle = Mathf.Abs(Mathf.DeltaAngle(door.CurrentAngle, doorBody.angle)) < 0.01f ? door.CurrentAngle : float.NaN;
             }

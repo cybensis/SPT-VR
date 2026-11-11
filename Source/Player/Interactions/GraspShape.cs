@@ -58,7 +58,8 @@ namespace TarkovVR.Source.Player.Interactions
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        public static GraspShape Build(LootItem item)
+        // A held thing's shape, in its own frame: a loot item, a door's handle
+        public static GraspShape Build(Component item)
         {
             GraspShape shape = new GraspShape(item.name);
             Transform root = item.transform;
@@ -138,7 +139,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // What's drawn of the item: its renderers, less a LOD group's lower LODs (Unity culls those without disabling them)
-        private static List<Renderer> VisibleRenderers(LootItem item)
+        private static List<Renderer> VisibleRenderers(Component item)
         {
             var lowerLods = new HashSet<Renderer>();
             foreach (LODGroup group in item.GetComponentsInChildren<LODGroup>(true))

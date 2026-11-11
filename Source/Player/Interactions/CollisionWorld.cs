@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using EFT.Interactive;
 using UnityEngine;
 
 namespace TarkovVR.Source.Player.Interactions
@@ -11,8 +12,9 @@ namespace TarkovVR.Source.Player.Interactions
     {
         public static string treeBranchesName = "LOD0Collider";
 
-        private static int highPolyLayer = -2, lowPolyLayer = -2;
+        private static int highPolyLayer = -2, lowPolyLayer = -2, doorLayer = -2;
         private static readonly Dictionary<int, bool> solid = new Dictionary<int, bool>(1024);
+        private static readonly Dictionary<int, Door> doors = new Dictionary<int, Door>(256);
         private static float solidClearTime;
 
         private static void ResolveLayers()
@@ -21,23 +23,51 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             highPolyLayer = LayerMask.NameToLayer("HighPolyCollider");
             lowPolyLayer = LayerMask.NameToLayer("LowPolyCollider");
+            doorLayer = LayerMask.NameToLayer("DoorLowPolyCollider");
         }
 
-        // A world mask + the movement layer, for the trunks
+        // A world mask + the movement layer (for the trunks) + the doors' own colliders
         internal static int Mask(int worldMask)
         {
             ResolveLayers();
-            return lowPolyLayer >= 0 ? worldMask | (1 << lowPolyLayer) : worldMask;
+            return worldMask | (lowPolyLayer >= 0 ? 1 << lowPolyLayer : 0) | (doorLayer >= 0 ? 1 << doorLayer : 0);
+        }
+
+        // The door a collider is part of, if the hands move it (PhysicalDoors.Supports); null otherwise
+        internal static Door DoorOf(Collider collider)
+        {
+            ClearCachesNow();
+            int id = collider.GetInstanceID();
+            if (!doors.TryGetValue(id, out Door door))
+            {
+                door = collider.GetComponentInParent<Door>();
+                if (door != null && !PhysicalDoors.Supports(door))
+                    door = null;
+                doors[id] = door;
+            }
+            return door;
+        }
+
+        // Out of a raid (WeaponPhysicsProxy): the doors held here would keep the map's doors alive
+        internal static void Clear()
+        {
+            solid.Clear();
+            doors.Clear();
+        }
+
+        private static void ClearCachesNow()
+        {
+            if (Time.time <= solidClearTime)
+                return;
+            solid.Clear();
+            doors.Clear();
+            solidClearTime = Time.time + 10f;
         }
 
         // Cached by instance id (a collider's name and kind don't change; reading a name allocates)
         internal static bool Solid(Collider collider)
         {
-            if (Time.time > solidClearTime)
-            {
-                solid.Clear();
-                solidClearTime = Time.time + 10f;
-            }
+            ClearCachesNow();
             int id = collider.GetInstanceID();
             if (solid.TryGetValue(id, out bool isSolid))
                 return isSolid;

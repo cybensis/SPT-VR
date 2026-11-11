@@ -1,3 +1,4 @@
+using EFT.Interactive;
 using TarkovVR.Patches.Core.Player;
 using TarkovVR.Source.Settings;
 using UnityEngine;
@@ -34,6 +35,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static readonly HandState right = new HandState();
         private static readonly HandState left = new HandState();
         private static readonly RaycastHit[] castHits = new RaycastHit[64];
+        private static Door ignoredDoor;                    // the door this hand pushed this frame: the rest of its move goes past it
 
         public static void Apply()
         {
@@ -53,10 +55,12 @@ namespace TarkovVR.Source.Player.Interactions
             // clamping it from here races GunInteractionController's anchor read (Update order is
             // nondeterministic). The support hand is exempt while gripping: its physical position drives
             // two-handed aim, and clamping it would steer the aim near walls.
-            // A hand on a door (PhysicalDoors) isn't clamped either: the controller pushes it through where the door is
+            // A hand on a door (PhysicalDoors) isn't clamped either: the controller pushes it through where the door is.
+            // The gun hand is free (clamped) while the gun is slung or held by the support hand alone (ChestHang.Detached).
             Transform rightHand = VRGlobals.vrPlayer.RightHand ? VRGlobals.vrPlayer.RightHand.transform : null;
             Transform leftHand = VRGlobals.vrPlayer.LeftHand ? VRGlobals.vrPlayer.LeftHand.transform : null;
-            ClampHand(right, rightHand, !firearm && !eating && !PhysicalDoors.HoldsRig(rightHand), physRight: !leftHanded);
+            bool gunInRightHand = firearm && !ChestHang.Detached;
+            ClampHand(right, rightHand, !gunInRightHand && !eating && !PhysicalDoors.HoldsRig(rightHand), physRight: !leftHanded);
             ClampHand(left, leftHand, !eating && (!firearm || !VRGlobals.vrPlayer.isSupporting) && !PhysicalDoors.HoldsRig(leftHand),
                 physRight: leftHanded);
         }
@@ -125,8 +129,10 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 move = desired - resolved;
             Vector3 intended = move;
             bool hitAny = false;
+            bool pushedDoor = false;
             float approach = 0f;
             float deltaTime = Mathf.Max(Time.deltaTime, 1e-4f);
+            ignoredDoor = null;
             for (int iter = 0; iter < 3; iter++)
             {
                 float distance = move.magnitude;
@@ -142,8 +148,16 @@ namespace TarkovVR.Source.Player.Interactions
                     resolved += move;
                     break;
                 }
-                hitAny = true;
                 approach = Mathf.Max(approach, Vector3.Dot(direction, -hit.normal) * distance / deltaTime);
+                // A door free to move swings out of the way (PhysicalDoors), and the same move goes on past it
+                Door door = ignoredDoor == null ? CollisionWorld.DoorOf(hit.collider) : null;
+                if (door != null && PhysicalDoors.PushedBy(door, hit.point, direction * (distance - hit.distance), deltaTime))
+                {
+                    ignoredDoor = door;
+                    pushedDoor = true;
+                    continue;
+                }
+                hitAny = true;
                 // Shrunk cast (0.8 r) stopping 0.2 r short: the cast sphere never starts a frame
                 // overlapping a collider (start-overlapped colliders are silently omitted by casts).
                 float safe = Mathf.Max(0f, hit.distance - handRadius * 0.2f);
@@ -164,7 +178,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
 
             // One light tick on first contact (edge + re-arm), nothing while pressing.
-            bool contactNow = hitAny && offset.sqrMagnitude > 1e-8f;
+            bool contactNow = (hitAny && offset.sqrMagnitude > 1e-8f) || pushedDoor;
             if (!contactNow && state.inContact)
                 state.contactEndStamp = Time.time;
             if (contactNow && !state.inContact && contactHaptics && Time.time - state.contactEndStamp > 0.2f)
@@ -192,6 +206,8 @@ namespace TarkovVR.Source.Player.Interactions
                 RaycastHit hit = castHits[i];
                 // Branches, triggers (glass excepted), window blockers: the gun's world (CollisionWorld)
                 if (!CollisionWorld.Solid(hit.collider))
+                    continue;
+                if (ignoredDoor != null && hit.collider.transform.IsChildOf(ignoredDoor.transform))
                     continue;
                 if (hit.collider.transform.IsChildOf(VRGlobals.player.Transform.Original))
                     continue;
@@ -222,7 +238,8 @@ namespace TarkovVR.Source.Player.Interactions
                 return true;
             for (int i = 0; i < overlapCount; i++)
             {
-                if (overlapBuf[i].transform.IsChildOf(VRGlobals.player.Transform.Original) || !CollisionWorld.Solid(overlapBuf[i]))
+                if (overlapBuf[i].transform.IsChildOf(VRGlobals.player.Transform.Original) || !CollisionWorld.Solid(overlapBuf[i])
+                    || (ignoredDoor != null && overlapBuf[i].transform.IsChildOf(ignoredDoor.transform)))
                     continue;
                 return true;
             }

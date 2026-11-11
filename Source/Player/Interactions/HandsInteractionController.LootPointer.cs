@@ -879,7 +879,7 @@ namespace TarkovVR.Source.Player.Interactions
                     // Index controllers curl the fingers from the baked pose (with the left's flex/spread deltas, as in
                     // ReplayRestPose); everything else replays the baked pose. Holding a loot item in this hand suppresses
                     // the skeletal curls: the grip squeeze would clench the fist through the item.
-                    bool holdingInThisHand = HoldsLoot(false);
+                    bool holdingInThisHand = HoldsLoot(false) || PhysicalDoors.HoldsDoor(false);
                     if (holdingInThisHand
                         || !(SkeletalActive(false) && ApplySkeletalCurls(false, leftFingerJoints, leftFingerIsThumb, basePose, leftCurlSign, handWeightBlend, leftDeltas: !mirrored)))
                         ReplayRestPose(basePose, staticDeltas: !mirrored);

@@ -79,7 +79,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // Index controllers curl the real fingers from the baked pose; everything else replays the baked/procedural
                 // open pose. Holding a loot item in this hand suppresses skeletal (the grip squeeze would clench the fist
                 // through the item).
-                bool holdingInThisHand = HoldsLoot(true);
+                bool holdingInThisHand = HoldsLoot(true) || PhysicalDoors.HoldsDoor(true);
                 if (!holdingInThisHand
                     && SkeletalActive(true) && ApplySkeletalCurls(true, rightFingerJoints, rightFingerIsThumb, rightRestPoseEuler, rightCurlSign, rightHandWeightBlend, leftDeltas: false))
                 {
