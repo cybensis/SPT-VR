@@ -81,6 +81,8 @@ namespace TarkovVR
             gameObject.AddComponent<TarkovVR.Source.Graphics.DesktopMirror>();
             // VR Graphics "Disable Hideout Shadows"
             gameObject.AddComponent<TarkovVR.Source.Graphics.HideoutShadows>();
+            // Software foveated rendering on the headset camera (BepInEx config "Foveated Masking")
+            TarkovVR.Source.Graphics.FoveatedMask.Init(Config);
 
             if (OpenXRBootstrap.Active)
             {
