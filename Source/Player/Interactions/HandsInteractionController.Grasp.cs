@@ -256,6 +256,14 @@ namespace TarkovVR.Source.Player.Interactions
                 holding = doorPart;
                 holdingRig = doorLatch;
             }
+            bool keyHere = false;
+            if (holding == null && graspItems && PhysicalDoors.KeyGraspTarget(dominant, out Component key))
+            {
+                // It rides the palm bone itself (PhysicalDoors.SpawnKey)
+                holding = key;
+                holdingRig = key.transform.parent;
+                keyHere = true;
+            }
             bool holdingHere = holding != null;
             // A hold that didn't come through BeginSummon, or the second hand on it (HandsInteractionController.TwoHanded). A door's
             // shape isn't shared: either hand may let go first.
@@ -263,6 +271,9 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 GraspHand otherHand = graspHands[dominant ? 0 : 1];
                 BeginGrasp(hand, holding, lootHere && dominant != heldInDominantHand && otherHand.item == heldItem ? otherHand.shape : null);
+                // A key is pinched whatever its size: Tarkov holds it on the index
+                if (keyHere)
+                    hand.pinch = graspPinch && hand.shape != null;
             }
             if (holdingHere)
                 hand.rig = holdingRig;
@@ -574,6 +585,17 @@ namespace TarkovVR.Source.Player.Interactions
                 hand.rigInPalmRotation = boneInverse * rig.rotation;
                 hand.rigInPalmTime = Time.time;
             }
+        }
+
+        // The palm bone a hand's fingers hang from (PhysicalDoors' key rides it)
+        internal Transform PalmBone(bool dominant)
+        {
+            if (dominant)
+            {
+                if (!rightFingersResolved) ResolveRightFingers();
+            }
+            else if (!fingersResolved) ResolveLeftFingers();
+            return FingersPalm(dominant ? rightFingerJoints : leftFingerJoints);
         }
 
         private static Transform FingersPalm(Transform[][] fingers)

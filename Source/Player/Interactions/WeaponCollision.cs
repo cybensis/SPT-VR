@@ -325,6 +325,9 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (glassBreak && approach >= glassBreakMinSpeed)
                 TryBreakGlass(col, point, normal, barrelDir);
+            Door door = CollisionWorld.DoorOf(col);
+            if (door != null)
+                PhysicalDoors.GunHit(door, point, normal, approach);
         }
 
         // The gun's own surface-aware drop bank (what vanilla plays when a weapon hits the ground), played at the contact

@@ -18,8 +18,8 @@ namespace TarkovVR.Source.Player.Interactions
     // itself moves an open door, or a door without a turnable handle. A locked door's handle stops short and the door only rattles
     // in its frame. Tarkov's own Open / Close run when the door leaves / reaches its frame, so FIKA, bots, quests and sound occlusion
     // follow the state; only their automatic swing is skipped (DoorSwingPatches). FIKA syncs the state only: the angle and the
-    // handle go to the other players through SPT-VR-FikaSync.
-    internal static class PhysicalDoors
+    // handle go to the other players through SPT-VR-FikaSync. Breaching with the gun: PhysicalDoors.Breach; keys: PhysicalDoors.Keys.
+    internal static partial class PhysicalDoors
     {
         public static bool enabled = true;
         public static float handleReach = 0.09f;        // m from the palm to the handle's meshes that takes the handle
@@ -126,8 +126,8 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // For the rest of the mod
 
-        // A hand holds a door: its grip is taken (the loot pointer, the body grab and the corpse tap skip it)
-        internal static bool HoldsDoor(bool dominant) => holds[dominant ? 1 : 0].held;
+        // A hand holds a door, or a key out for one: its grip is taken (the loot pointer, the body grab and the corpse tap skip it)
+        internal static bool HoldsDoor(bool dominant) => holds[dominant ? 1 : 0].held || HoldsKey(dominant ? 1 : 0);
 
         // The fingers close on this (HandsInteractionController.Grasp): the handle, or the door taken by its panel
         internal static bool GraspTarget(bool dominant, out Component target, out Transform latch)
@@ -150,7 +150,7 @@ namespace TarkovVR.Source.Player.Interactions
             for (int i = 0; i < holds.Length; i++)
                 if ((holds[i].held || holds[i].releasing) && holds[i].rig == rig)
                     return true;
-            return false;
+            return KeyHoldsRig(rig);
         }
 
         // The doors this mod moves by hand (the rest keep the vanilla grip: open / close)
@@ -203,6 +203,8 @@ namespace TarkovVR.Source.Player.Interactions
                     LogCensus();
             }
 
+            keyHands = hands;
+            ReadTriggers();
             bool canHold = Active && !VRGlobals.menuOpen && !VRGlobals.player.IsSprintEnabled;
             UpdateHand(hands, holds[0], canHold && offHandFree, Handedness.OffHandGrip);
             UpdateHand(hands, holds[1], canHold && dominantHandFree, Handedness.GunHandGrip);
@@ -219,14 +221,29 @@ namespace TarkovVR.Source.Player.Interactions
 
             for (int i = 0; i < holds.Length; i++)
                 UpdateLatch(holds[i]);
+            for (int i = 0; i < keyHolds.Length; i++)
+            {
+                UpdateKeyLatch(keyHolds[i]);
+                if (!keyDebugViz || keyHolds[i].state != KeyState.InHand)
+                    HideKeyViz(keyHolds[i]);
+            }
         }
 
         private static void UpdateHand(HandsInteractionController hands, Hold hold, bool free, VRBoolean grip)
         {
+            // A key out in this hand has it
+            KeyHold keyHold = keyHolds[hold.dominant ? 1 : 0];
+            if (keyHold.state != KeyState.None)
+            {
+                UpdateKey(keyHold, hold, free, grip);
+                return;
+            }
             if (hold.held)
             {
                 if (!free || grip == null || !grip.state || !StillHeld(hold))
                     Release(hold);
+                else if (triggerPressed[hold.dominant ? 1 : 0])
+                    TryTakeKey(hold);
                 return;
             }
             if (free && grip != null && grip.stateDown && hands != null)
@@ -238,8 +255,8 @@ namespace TarkovVR.Source.Player.Interactions
             Door door = hold.door;
             if (door == null || !door.isActiveAndEnabled || hold.rig == null || hold.armIk == null || hold.latch == null)
                 return false;
-            // Someone else's interaction (a bot, another player, the gaze menu) has the door now
-            return door.DoorState != EDoorState.Interacting && door.DoorState != EDoorState.Breaching;
+            // Someone else's interaction (a bot, another player, the gaze menu) has the door now; not our key unlocking it
+            return (door.DoorState != EDoorState.Interacting || UnlockingWithKey(door)) && door.DoorState != EDoorState.Breaching;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -681,6 +698,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             runs.Clear();
             interactionInProgress = null;
+            ResetKeys();
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
