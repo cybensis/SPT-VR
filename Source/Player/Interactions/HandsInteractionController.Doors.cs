@@ -13,7 +13,7 @@ namespace TarkovVR.Source.Player.Interactions
             // (out of a raid it lets go of everything)
             if (!VRGlobals.inGame || VRGlobals.vrPlayer == null || VRGlobals.player == null)
             {
-                PhysicalDoors.Tick(this, false, false);
+                PhysicalDoors.Tick(this, false, false, false, false);
                 return;
             }
             bool armsBusy = VRGlobals.usingItem || EatingInteractionController.ManualActive || WeaponPatches.grenadeEquipped;
@@ -22,7 +22,12 @@ namespace TarkovVR.Source.Player.Interactions
                 && !leftHandState.inScope && !leftHandState.inBackpack && !leftHandState.inHeadGear;
             bool dominantHandFree = !armsBusy && !HoldsLoot(true) && !(isSummoningLoot && heldInDominantHand)
                 && SecondHandFree(true) && !VRReloadController.GunHandHolds;
-            PhysicalDoors.Tick(this, offHandFree, dominantHandFree);
+            // A key out (PhysicalDoors.Keys) stays through the reach zones; it goes away when the hand takes something
+            bool offHandKeepsKey = !armsBusy && !VRGlobals.vrPlayer.isSupporting && !HoldsLoot(false) && !(isSummoningLoot && !heldInDominantHand)
+                && !VRReloadController.OwnsOffHand && !Handedness.GunInLeftHand && !isDraggingBody;
+            bool dominantHandKeepsKey = !armsBusy && !HoldsLoot(true) && !(isSummoningLoot && heldInDominantHand)
+                && (ChestHang.Detached || VRGlobals.player.HandsIsEmpty) && !VRReloadController.GunHandHolds && !VRReloadController.HandleInGunHand;
+            PhysicalDoors.Tick(this, offHandFree, dominantHandFree, offHandKeepsKey, dominantHandKeepsKey);
         }
     }
 }

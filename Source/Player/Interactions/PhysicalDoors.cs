@@ -187,7 +187,9 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Per frame (HandsInteractionController.Update, before its bail)
 
-        public static void Tick(HandsInteractionController hands, bool offHandFree, bool dominantHandFree)
+        // free: the hand may take a door; keepsKey: a key out in it stays (only the hand taking something else puts it away, not
+        // passing a reach zone)
+        public static void Tick(HandsInteractionController hands, bool offHandFree, bool dominantHandFree, bool offHandKeepsKey, bool dominantHandKeepsKey)
         {
             if (!VRGlobals.inGame || VRGlobals.player == null || VRGlobals.vrPlayer == null || VRGlobals.ikManager == null)
             {
@@ -206,8 +208,8 @@ namespace TarkovVR.Source.Player.Interactions
             keyHands = hands;
             ReadTriggers();
             bool canHold = Active && !VRGlobals.menuOpen && !VRGlobals.player.IsSprintEnabled;
-            UpdateHand(hands, holds[0], canHold && offHandFree, Handedness.OffHandGrip);
-            UpdateHand(hands, holds[1], canHold && dominantHandFree, Handedness.GunHandGrip);
+            UpdateHand(hands, holds[0], canHold && offHandFree, canHold && offHandKeepsKey, Handedness.OffHandGrip);
+            UpdateHand(hands, holds[1], canHold && dominantHandFree, canHold && dominantHandKeepsKey, Handedness.GunHandGrip);
 
             float deltaTime = Time.deltaTime;
             finishedRuns.Clear();
@@ -229,13 +231,13 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        private static void UpdateHand(HandsInteractionController hands, Hold hold, bool free, VRBoolean grip)
+        private static void UpdateHand(HandsInteractionController hands, Hold hold, bool free, bool keepsKey, VRBoolean grip)
         {
             // A key out in this hand has it
             KeyHold keyHold = keyHolds[hold.dominant ? 1 : 0];
             if (keyHold.state != KeyState.None)
             {
-                UpdateKey(keyHold, hold, free, grip);
+                UpdateKey(keyHold, hold, keepsKey);
                 return;
             }
             if (hold.held)

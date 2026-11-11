@@ -18,7 +18,7 @@ namespace TarkovVR.Source.Player.Interactions
     // into it, held the way Tarkov's own unlock holds it (the key's "pivot" on the index's first bone). Its tip into the lock (the lock
     // handle's pivot, else the door handle's) seats it, the hand on it; a wrist turn of keyUnlockTurn about the keyway, either way, unlocks
     // the door through Tarkov's own unlock (the key's uses, FIKA's packet) without its walk-up and animation (DoorKeyPatches). The trigger
-    // again, or opening the grip, puts the key away. Keycard doors stay vanilla.
+    // again puts the key away; not the grip (a hand pinching a key reads as letting go: OpenXRInput's fast-open). Keycard doors stay vanilla.
     internal static partial class PhysicalDoors
     {
         public static bool keysByHand = true;
@@ -38,6 +38,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static Vector3 keyHoldOffsetPosition = Vector3.zero;   // m, the index bone's frame: a nudge on Tarkov's hold
         public static Vector3 keyHoldOffsetEuler = Vector3.zero;
         public static bool keyTipFlip = false;          // the blade at the other end of the key (one whose grip point is on its blade)
+        // Tarkov holds keys in the left hand only: the right gets that hold mirrored. false = Tarkov's alignment on the right bone as is.
+        public static bool mirrorKeyInRightHand = true;
         public static float triggerPressLevel = 0.7f, triggerReleaseLevel = 0.3f;
         public static bool keyDebugViz = false;         // spheres: the keyhole (blue, its radius), the key's tip (yellow; green when it can seat)
 
@@ -56,7 +58,9 @@ namespace TarkovVR.Source.Player.Interactions
             public Vector3 tipLocal;                    // the prop's frame: the blade's end...
             public Vector3 axisLocal;                   // ...the way to it from the grip...
             public Vector3 widthLocal;                  // ...across the blade's flat...
-            public Vector3 gripLocal;                   // ...and the grip point (Tarkov's pivot)
+            public Vector3 gripLocal;                   // ...the grip point (Tarkov's pivot)...
+            public Vector3 centerLocal;                 // ...and the middle of its box
+            public int flatAxis;                        // the prop's axis through the blade's flat (its thinnest)
             // In the lock
             public Transform rig;
             public LimbIK armIk;
@@ -193,13 +197,14 @@ namespace TarkovVR.Source.Player.Interactions
             return playerOwner;
         }
 
-        // A hand with a key out (UpdateHand leaves the hand to it). Opening the grip, the trigger again or the door gone puts it away.
-        private static void UpdateKey(KeyHold keyHold, Hold hold, bool free, VRBoolean grip)
+        // A hand with a key out (UpdateHand leaves the hand to it). The trigger again, the hand taking something else (keepsKey) or the
+        // door gone puts it away.
+        private static void UpdateKey(KeyHold keyHold, Hold hold, bool keepsKey)
         {
             Door door = keyHold.door;
             bool doorThere = door != null && door.isActiveAndEnabled && (door.DoorState == EDoorState.Locked || keyHold.state == KeyState.Unlocked);
             bool cancelled = triggerPressed[keyHold.dominant ? 1 : 0] && keyHold.state != KeyState.Unlocked;
-            if (!free || grip == null || !grip.state || !doorThere || cancelled || keyHands == null)
+            if (!keepsKey || !doorThere || cancelled || keyHands == null)
             {
                 StowKey(keyHold);
                 return;
@@ -266,28 +271,41 @@ namespace TarkovVR.Source.Player.Interactions
             // last frame's, the fingers open (the door's grasp let go).
             Transform propTransform = prop.transform;
             Transform pivot = FindDescendant(propTransform, "pivot", suffix: false);
+            MeasureKey(keyHold, pivot);
             Transform anchor = FindDescendant(palm, "Digit21", suffix: true) ?? palm;
             propTransform.SetParent(anchor, worldPositionStays: false);
-            propTransform.localPosition = Vector3.zero;
-            propTransform.localRotation = Quaternion.identity;
-            Quaternion targetRotation = anchor.rotation * Quaternion.Euler(keyHoldOffsetEuler);
-            Vector3 targetPosition = anchor.TransformPoint(keyHoldOffsetPosition);
-            if (pivot != null)
-            {
-                Quaternion pivotInProp = Quaternion.Inverse(propTransform.rotation) * pivot.rotation;
-                propTransform.rotation = targetRotation * Quaternion.Inverse(pivotInProp);
-                propTransform.position += targetPosition - pivot.position;
-            }
-            else
-                propTransform.SetPositionAndRotation(targetPosition, targetRotation);
+            Vector3 scale = propTransform.localScale;
+            Quaternion pivotInProp = pivot != null ? Quaternion.Inverse(propTransform.rotation) * pivot.rotation : Quaternion.identity;
+            Quaternion keyInBone = Quaternion.Euler(keyHoldOffsetEuler) * Quaternion.Inverse(pivotInProp);
+            Vector3 keyInBonePosition = keyHoldOffsetPosition - keyInBone * Vector3.Scale(keyHold.gripLocal, scale);
+            if (mirrorKeyInRightHand && anchor.name.IndexOf("HumanR", StringComparison.OrdinalIgnoreCase) >= 0)
+                MirrorHold(keyHold, scale, ref keyInBone, ref keyInBonePosition);
+            propTransform.localRotation = keyInBone;
+            propTransform.localPosition = keyInBonePosition;
             // It rides the palm, not the index: the index curls onto it as the fingers close
             propTransform.SetParent(palm, worldPositionStays: true);
 
-            MeasureKey(keyHold, pivot);
             SetKeyState(keyHold, KeyState.InHand);
             PlayKeySound(keyHold, keySoundVolume);
             PulseHand(keyHold.dominant, 0.2f, 0.03f, 120f, 0f);
             return true;
+        }
+
+        // The left hand's hold in the right hand. The right hand's bones are the left's mirrored with their local z turned round (the
+        // fingers of both point down -x and curl about +z; the rest poses bear it out), so the mirror in a bone's frame is z -> -z. The
+        // key mirrored too would be a reflection: it's also turned over through the middle of its flat (the same key to the eye), which
+        // makes the two a rotation.
+        private static void MirrorHold(KeyHold keyHold, Vector3 scale, ref Quaternion keyInBone, ref Vector3 keyInBonePosition)
+        {
+            Vector3 flatAxis = Vector3.zero;
+            flatAxis[keyHold.flatAxis] = 1f;
+            Vector3 overFlat = Vector3.one;
+            overFlat[keyHold.flatAxis] = -1f;
+            Matrix4x4 boneMirror = Matrix4x4.Scale(new Vector3(1f, 1f, -1f));
+            Matrix4x4 rotation = boneMirror * Matrix4x4.Rotate(keyInBone) * Matrix4x4.Scale(overFlat);
+            Vector3 throughMiddle = keyInBone * (flatAxis * (2f * keyHold.centerLocal[keyHold.flatAxis] * scale[keyHold.flatAxis]));
+            keyInBonePosition = boneMirror.MultiplyPoint3x4(keyInBonePosition + throughMiddle);
+            keyInBone = Quaternion.LookRotation(rotation.GetColumn(2), rotation.GetColumn(1));
         }
 
         // The key's blade from its meshes' local boxes, in the prop's frame: the long way, from the grip point to the far end
@@ -336,6 +354,8 @@ namespace TarkovVR.Source.Player.Interactions
             keyHold.axisLocal = axis;
             keyHold.widthLocal = width;
             keyHold.gripLocal = grip;
+            keyHold.centerLocal = center;
+            keyHold.flatAxis = thinnest;
             if (logGrabs && measuredKeys.Add(keyHold.prop.name))
             {
                 Vector3 scaled = Vector3.Scale(size, propTransform.lossyScale) * 100f;
