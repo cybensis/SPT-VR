@@ -37,7 +37,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float maxSwingSpeed = 720f;       // deg/s the hand can swing it
         public static float minHingeRadius = 0.08f;     // m: a hold closer to the hinge than this doesn't swing it
         public static float breakDistance = 0.35f;      // m the controller may get from the held point before the hand slips off
-        public static float flingMinSpeed = 40f;        // deg/s at the release that keeps it swinging
+        public static float flingMinSpeed = 15f;        // deg/s at the release that keeps it swinging
+        // The release swing from the hand's own tracked velocity as the grip opens (like a grenade throw), not the door's smoothed speed,
+        // which lags and drops as the hand slows letting go. false = the smoothed speed.
+        public static bool releaseFromHandVelocity = true;
         public static float swingDamping = 3f;          // 1/s
         public static float swingStopSpeed = 8f;        // deg/s
         public static float slamSpeed = 180f;           // deg/s that shuts it at full volume
@@ -562,10 +565,15 @@ namespace TarkovVR.Source.Player.Interactions
                     {
                         if (run.latched)
                             run.door.CurrentAngle = run.door.CloseAngle;    // the give of a latched door back
-                        else if (Mathf.Abs(run.angularVelocity) >= flingMinSpeed)
-                            run.swinging = true;
                         else
-                            run.angularVelocity = 0f;
+                        {
+                            if (releaseFromHandVelocity && TryReleaseSpeed(hold, run.door, out float releaseSpeed))
+                                run.angularVelocity = releaseSpeed;
+                            if (Mathf.Abs(run.angularVelocity) >= flingMinSpeed)
+                                run.swinging = true;
+                            else
+                                run.angularVelocity = 0f;
+                        }
                     }
                 }
             }
@@ -582,6 +590,28 @@ namespace TarkovVR.Source.Player.Interactions
             else
                 EndRelease(hold);
             hold.door = null;
+        }
+
+        // The door's speed (deg/s) from the hand's velocity at the point it held, as the tracking runtime reports it this frame (the
+        // grenade's throw velocity: OpenXR's palm, else SteamVR's controller), along the door's swing there
+        private static bool TryReleaseSpeed(Hold hold, Door door, out float degreesPerSecond)
+        {
+            degreesPerSecond = 0f;
+            if (door == null || VRGlobals.vrOffsetter == null)
+                return false;
+            SteamVR_Input_Sources source = hold.dominant ? Handedness.GunHandSource : Handedness.OffHandSource;
+            Vector3 trackingVelocity = VRInput.UsingOpenXR
+                ? OpenXRInput.GetGripVelocity(source == SteamVR_Input_Sources.LeftHand ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND)
+                : ControllerVelocity.GetSteamVRVelocity(source);
+            Vector3 velocity = VRGlobals.vrOffsetter.transform.TransformDirection(trackingVelocity);
+            Vector3 axis = HingeAxis(door);
+            Vector3 lever = Vector3.ProjectOnPlane(door.transform.TransformPoint(hold.heldPointInDoor) - door.transform.position, axis);
+            float radius = lever.magnitude;
+            if (radius < minHingeRadius || float.IsNaN(velocity.x))
+                return false;
+            degreesPerSecond = Vector3.Dot(velocity, Vector3.Cross(axis, lever) / radius) / radius * Mathf.Rad2Deg;
+            degreesPerSecond = Mathf.Clamp(degreesPerSecond, -maxSwingSpeed, maxSwingSpeed);
+            return true;
         }
 
         private static Hold OtherHold(Hold hold, bool onHandle)
