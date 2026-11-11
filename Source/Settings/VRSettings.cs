@@ -720,12 +720,12 @@ namespace TarkovVR.Source.Settings
             foveatedToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
             foveatedToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
             foveatedToggle.Toggle._onValueChanged = TarkovVR.Source.Graphics.FoveatedMask.SetEnabled;
-            foveatedToggle.Text.localizationKey = "Foveated Rendering (Saves FPS, Softer Edges)";
+            foveatedToggle.Text.localizationKey = "Foveated Rendering";
             foveatedToggle.Toggle.UpdateValue(TarkovVR.Source.Graphics.FoveatedMask.IsEnabled);
 
             foveatedRadiusSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
             foveatedRadiusSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            foveatedRadiusSlider.Text.localizationKey = "Foveated Inner Radius (Smaller = More FPS):";
+            foveatedRadiusSlider.Text.localizationKey = "Foveated Inner Radius:";
             MakeSliderSmooth(foveatedRadiusSlider, 0.2f, 1.2f, () => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius,
                 (value) => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius = value, (v) => v.ToString("0.00"));
 
