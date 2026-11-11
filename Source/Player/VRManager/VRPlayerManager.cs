@@ -1161,7 +1161,8 @@ namespace TarkovVR.Source.Player.VRManager
 
                 // The grip holds the foregrip: closed at it takes it (handLock, then isSupporting the frame after), open lets go at once.
                 // While held, the hand stays on however far the controller strays.
-                if (withinDistance || handLock)
+                // (not a hand holding a door or a key: PhysicalDoors - pulling a door in toward the chest passes the foregrip)
+                if ((withinDistance || handLock) && !PhysicalDoors.HoldsDoor(false))
                 {
                     if (!isSupporting && handLock)
                     {

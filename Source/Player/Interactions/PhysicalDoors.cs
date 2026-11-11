@@ -36,10 +36,9 @@ namespace TarkovVR.Source.Player.Interactions
         public static float rattleVolume = 0.15f;
         public static float maxSwingSpeed = 720f;       // deg/s the hand can swing it
         public static float minHingeRadius = 0.08f;     // m: a hold closer to the hinge than this doesn't swing it
-        // The hand slips off a door out of the arm's reach: the shoulder further from where it holds than this x the arm's length (the
-        // arm IK's bones; a little over 1 = the arm stretched a bit). Walking back while pulling keeps it: the door swings after you.
-        public static float armReachSlack = 1.15f;
-        public static float breakDistance = 0.35f;      // m the controller may get from the held point (only without the arm's bones)
+        // m the controller's palm may get from where the hand holds the door before it's pulled off. Walking back while pulling stays well
+        // within it: the door swings after the hand, only the hand's distance from the hinge grows.
+        public static float breakDistance = 0.45f;
         public static float flingMinSpeed = 15f;        // deg/s at the release that keeps it swinging
         // The release swing from the hand's own tracked velocity as the grip opens (like a grenade throw), not the door's smoothed speed,
         // which lags and drops as the hand slows letting go. false = the smoothed speed.
@@ -215,9 +214,9 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Per frame (HandsInteractionController.Update, before its bail)
 
-        // free: the hand may take a door; keepsKey: a key out in it stays (only the hand taking something else puts it away, not
-        // passing a reach zone)
-        public static void Tick(HandsInteractionController hands, bool offHandFree, bool dominantHandFree, bool offHandKeepsKey, bool dominantHandKeepsKey)
+        // free: the hand may take a door. takenBy: what took the hand, null = a door or key it holds stays (only the hand taking something
+        // else lets go, not the hand passing a reach zone: the slung gun's grip, the holsters, the foregrip's reach by the chest)
+        public static void Tick(HandsInteractionController hands, bool offHandFree, bool dominantHandFree, string offHandTakenBy, string dominantHandTakenBy)
         {
             if (!VRGlobals.inGame || VRGlobals.player == null || VRGlobals.vrPlayer == null || VRGlobals.ikManager == null)
             {
@@ -235,9 +234,9 @@ namespace TarkovVR.Source.Player.Interactions
 
             keyHands = hands;
             ReadTriggers();
-            bool canHold = Active && !VRGlobals.menuOpen && !VRGlobals.player.IsSprintEnabled;
-            UpdateHand(hands, holds[0], canHold && offHandFree, canHold && offHandKeepsKey, Handedness.OffHandGrip);
-            UpdateHand(hands, holds[1], canHold && dominantHandFree, canHold && dominantHandKeepsKey, Handedness.GunHandGrip);
+            string cantHold = !Active ? "physical doors off" : VRGlobals.menuOpen ? "a menu" : VRGlobals.player.IsSprintEnabled ? "sprinting" : null;
+            UpdateHand(hands, holds[0], cantHold == null && offHandFree, cantHold ?? offHandTakenBy, Handedness.OffHandGrip);
+            UpdateHand(hands, holds[1], cantHold == null && dominantHandFree, cantHold ?? dominantHandTakenBy, Handedness.GunHandGrip);
 
             float deltaTime = Time.deltaTime;
             finishedRuns.Clear();
@@ -259,19 +258,22 @@ namespace TarkovVR.Source.Player.Interactions
             }
         }
 
-        private static void UpdateHand(HandsInteractionController hands, Hold hold, bool free, bool keepsKey, VRBoolean grip)
+        private static void UpdateHand(HandsInteractionController hands, Hold hold, bool free, string takenBy, VRBoolean grip)
         {
             // A key out in this hand has it
             KeyHold keyHold = keyHolds[hold.dominant ? 1 : 0];
             if (keyHold.state != KeyState.None)
             {
-                UpdateKey(keyHold, hold, keepsKey);
+                UpdateKey(keyHold, hold, takenBy == null);
                 return;
             }
             if (hold.held)
             {
-                if (!free || !GripHolds(hold, grip) || !StillHeld(hold))
-                    Release(hold);
+                string letGo = takenBy != null ? $"the hand was taken ({takenBy})"
+                    : !GripHolds(hold, grip) ? GripOpened(hold)
+                    : !StillHeld(hold) ? "someone else's interaction has the door" : null;
+                if (letGo != null)
+                    Release(hold, letGo);
                 else if (triggerPressed[hold.dominant ? 1 : 0])
                     TryTakeKey(hold);
                 return;
@@ -289,6 +291,15 @@ namespace TarkovVR.Source.Player.Interactions
             SteamVR_Input_Sources source = hold.dominant ? Handedness.GunHandSource : Handedness.OffHandSource;
             int hand = source == SteamVR_Input_Sources.LeftHand ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND;
             return OpenXRInput.IsIndex(hand) && OpenXRInput.GetGripValue(hand) >= doorGripReleaseWrap;
+        }
+
+        private static string GripOpened(Hold hold)
+        {
+            if (!VRInput.UsingOpenXR)
+                return "the grip let go";
+            SteamVR_Input_Sources source = hold.dominant ? Handedness.GunHandSource : Handedness.OffHandSource;
+            int hand = source == SteamVR_Input_Sources.LeftHand ? OpenXRInput.LEFT_HAND : OpenXRInput.RIGHT_HAND;
+            return $"the hand opened (grip {OpenXRInput.GetGripValue(hand):0.00})";
         }
 
         private static bool StillHeld(Hold hold)
@@ -613,10 +624,15 @@ namespace TarkovVR.Source.Player.Interactions
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Letting go
 
-        private static void Release(Hold hold)
+        private static void Release(Hold hold, string reason)
         {
             if (!hold.held)
                 return;
+            if (logGrabs && releaseReasonLogs < 40 && hold.door != null)
+            {
+                releaseReasonLogs++;
+                Plugin.MyLog.LogInfo($"[Doors] {(hold.dominant ? "gun" : "off")} hand let go of '{hold.door.name}': {reason}");
+            }
             hold.held = false;
             if (hold.door != null && runs.TryGetValue(hold.door, out DoorRun run))
             {
@@ -719,6 +735,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         private static int releaseLogs;
+        private static int releaseReasonLogs;
         private static int panelGrabLogs;
 
         private static Hold OtherHold(Hold hold, bool onHandle)
@@ -926,10 +943,10 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 target = hold.heldPointAtGrab + (ControllerPoint(hold) - hold.controllerAtGrab);
             RememberSwing(hold, door);
 
-            // Out of the arm's reach (walked off, pulled on past the door's stop): the hand slips off
-            if (!InReach(hold, door, target))
+            // Pulled off (walked off, pulled on past the door's stop or the body)
+            if (!StillOnTheHand(hold, door, target))
             {
-                Release(hold);
+                Release(hold, "pulled off");
                 return;
             }
 
@@ -1030,25 +1047,20 @@ namespace TarkovVR.Source.Player.Interactions
             return player != null && player.CharacterController != null ? player.CharacterController.GetCollider() : null;
         }
 
-        private static bool InReach(Hold hold, Door door, Vector3 target)
+        // The controller's palm within breakDistance of where the hand holds the door. Not the arm's reach from the shoulder: the shoulders
+        // are placed from the headset, and a real shoulder comes forward reaching out, so a hand on a handle at a comfortable stretch reads
+        // at the arm's full length already.
+        private static bool StillOnTheHand(Hold hold, Door door, Vector3 target)
         {
-            Transform shoulder = hold.armIk.solver.bone1 != null ? hold.armIk.solver.bone1.transform : null;
-            Transform elbow = hold.armIk.solver.bone2 != null ? hold.armIk.solver.bone2.transform : null;
-            Transform wrist = hold.armIk.solver.bone3 != null ? hold.armIk.solver.bone3.transform : null;
-            if (shoulder == null || elbow == null || wrist == null || hold.latch == null)
-            {
-                Vector3 heldNow = door.transform.TransformPoint(hold.heldPointInDoor);
-                return (target - heldNow).sqrMagnitude <= breakDistance * breakDistance;
-            }
-            float armLength = Vector3.Distance(shoulder.position, elbow.position) + Vector3.Distance(elbow.position, wrist.position);
-            float reach = Vector3.Distance(shoulder.position, hold.latch.position);
-            if (reach <= armLength * armReachSlack)
+            Vector3 heldNow = door.transform.TransformPoint(hold.heldPointInDoor);
+            float apart = Vector3.Distance(target, heldNow);
+            if (apart <= breakDistance)
                 return true;
             if (logGrabs && releaseLogs < 20)
             {
                 releaseLogs++;
-                Plugin.MyLog.LogInfo($"[Doors] hand slipped off '{door.name}': the shoulder {reach * 100f:0} cm from the hold, the arm {armLength * 100f:0} cm "
-                    + $"(x{armReachSlack:0.00} = {armLength * armReachSlack * 100f:0}), the door at {Openness(door, door.CurrentAngle) * 100f:0}% open");
+                Plugin.MyLog.LogInfo($"[Doors] hand pulled off '{door.name}': the controller {apart * 100f:0} cm from where it holds (lets go past "
+                    + $"{breakDistance * 100f:0}), the door at {Openness(door, door.CurrentAngle) * 100f:0}% open");
             }
             return false;
         }

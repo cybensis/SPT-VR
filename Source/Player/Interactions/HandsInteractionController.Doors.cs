@@ -13,7 +13,7 @@ namespace TarkovVR.Source.Player.Interactions
             // (out of a raid it lets go of everything)
             if (!VRGlobals.inGame || VRGlobals.vrPlayer == null || VRGlobals.player == null)
             {
-                PhysicalDoors.Tick(this, false, false, false, false);
+                PhysicalDoors.Tick(this, false, false, "out of a raid", "out of a raid");
                 return;
             }
             bool armsBusy = VRGlobals.usingItem || EatingInteractionController.ManualActive || WeaponPatches.grenadeEquipped;
@@ -22,12 +22,18 @@ namespace TarkovVR.Source.Player.Interactions
                 && !leftHandState.inScope && !leftHandState.inBackpack && !leftHandState.inHeadGear;
             bool dominantHandFree = !armsBusy && !HoldsLoot(true) && !(isSummoningLoot && heldInDominantHand)
                 && SecondHandFree(true) && !VRReloadController.GunHandHolds;
-            // A key out (PhysicalDoors.Keys) stays through the reach zones; it goes away when the hand takes something
-            bool offHandKeepsKey = !armsBusy && !VRGlobals.vrPlayer.isSupporting && !HoldsLoot(false) && !(isSummoningLoot && !heldInDominantHand)
-                && !VRReloadController.OwnsOffHand && !Handedness.GunInLeftHand && !isDraggingBody;
-            bool dominantHandKeepsKey = !armsBusy && !HoldsLoot(true) && !(isSummoningLoot && heldInDominantHand)
-                && (ChestHang.Detached || VRGlobals.player.HandsIsEmpty) && !VRReloadController.GunHandHolds && !VRReloadController.HandleInGunHand;
-            PhysicalDoors.Tick(this, offHandFree, dominantHandFree, offHandKeepsKey, dominantHandKeepsKey);
+            // A door or key a hand holds stays through the reach zones; it goes when the hand takes something (null = nothing did)
+            string offHandTakenBy = armsBusy ? "an item, food or a grenade"
+                : VRGlobals.vrPlayer.isSupporting ? "the foregrip"
+                : HoldsLoot(false) || (isSummoningLoot && !heldInDominantHand) ? "loot"
+                : VRReloadController.OwnsOffHand ? "the reload"
+                : Handedness.GunInLeftHand ? "the gun"
+                : isDraggingBody ? "a body" : null;
+            string dominantHandTakenBy = armsBusy ? "an item, food or a grenade"
+                : HoldsLoot(true) || (isSummoningLoot && heldInDominantHand) ? "loot"
+                : !(ChestHang.Detached || VRGlobals.player.HandsIsEmpty) || VRReloadController.GunHandHolds || VRReloadController.HandleInGunHand ? "the gun"
+                : null;
+            PhysicalDoors.Tick(this, offHandFree, dominantHandFree, offHandTakenBy, dominantHandTakenBy);
         }
     }
 }

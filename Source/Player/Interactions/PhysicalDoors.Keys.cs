@@ -189,7 +189,7 @@ namespace TarkovVR.Source.Player.Interactions
             keyHold.door = door;
             keyHold.key = key;
             SetKeyState(keyHold, KeyState.Coming);
-            Release(hold);
+            Release(hold, "the key comes out");
         }
 
         private static GamePlayerOwner Owner()
