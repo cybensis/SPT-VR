@@ -43,6 +43,11 @@ namespace SptVrFikaSync
         // the hand goes). Like the local rig's _elbowBends, each arm's IK bend goal is aimed at a world pole below + out from the
         // body; not the auto-"Arm" modifier, which reads EFT's skeleton wrong. Offsets are body-local (X out, Y down, Z back).
         // useElbowPole=false -> leave EFT's animation bend.
+        // The gun model on the synced WeaponRoot. The third-person pass (PlayerBones.ShiftWeaponRoot) pulls Weapon_root_anim - the
+        // gun model and its hand markers - toward the body's own weapon bone (Weapon_Root_Third), so moving WeaponRoot alone left the
+        // gun that far off the VR player's pose (off the hands placed from it, the gun in the left hand). The VR player's own game
+        // keeps it on WeaponRoot (SPT-VR's GunInteractionController zeroes GunBaseTransform). false = Tarkov's third-person pull.
+        public static bool gunOnWeaponRoot = true;
         public static bool useElbowPole = true;
         public static float elbowPoleWeight = 1f;
         public static Vector3 leftElbowPoleOffset = new Vector3(-1f, -2f, -0.8f);
@@ -194,6 +199,12 @@ namespace SptVrFikaSync
             Vector3 gunPos = chest.TransformPoint(w.pos) + fwdOffset;
             gunPos = ExtendWeaponReach(limbs, gunPos);
             wr.SetPositionAndRotation(gunPos, chest.rotation * w.rot);
+            // Before the markers are read below: they ride Weapon_root_anim
+            if (gunOnWeaponRoot && p.HandsController is Player.FirearmController firearm && firearm.GunBaseTransform != null)
+            {
+                firearm.GunBaseTransform.localPosition = Vector3.zero;
+                firearm.GunBaseTransform.localRotation = Quaternion.identity;
+            }
 
             if (limbs == null || limbs.Length < 2)
                 return;

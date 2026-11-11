@@ -11,7 +11,9 @@ namespace SptVrFikaSync
     // 2.1.2 (BoltRoundSync): on an older host, tube-shotgun shells loaded by hand stay in the VR player's pouch.
     // 2.1.3 (ReloadSyncApply.SkipTarkovReload): an older host plays Tarkov's reload clip for by-hand magazine moves with Manual Reload
     // off, and FIKA holds that player's trigger until it ends.
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.1.3")]
+    // 2.1.4 (ArmSyncApply.gunOnWeaponRoot): no packet change. An older peer draws a VR player's gun pulled toward its third-person hold
+    // spot, off the hands with the gun in the left hand.
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.1.4")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module; when present, a dragged corpse's loot waypoint is
     // relocated here (SPT-VR.dll doesn't run on a headless). The dep only guarantees ORBIT is in the registry checked below.
