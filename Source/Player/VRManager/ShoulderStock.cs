@@ -38,7 +38,7 @@ namespace TarkovVR.Source.Player.VRManager
         public static float integralStockMinLength = 0.12f; // m behind the grip for a gun without a stock slot to count as stocked
         public static float stockLengthFallback = 0.17f;    // m grip -> buttplate when the measurement finds nothing
         public static float braceStiffness = 1.6f;   // WeaponWeightFeel spring x this at full influence (braced = tighter)
-        public static bool seatHaptic = true;        // a thunk on the hands on the gun when the stock is fully on
+        public static bool seatHaptic = false;       // a thunk on the hands on the gun when the stock is fully on
         public static bool debugLog = false;         // 1/sec state line
         public static bool debugViz = false;         // spheres: full-influence zone (blue), the gun's butt (yellow), the resting pivot (green)
 
