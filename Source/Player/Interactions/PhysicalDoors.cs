@@ -36,7 +36,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float rattleVolume = 0.15f;
         public static float maxSwingSpeed = 720f;       // deg/s the hand can swing it
         public static float minHingeRadius = 0.08f;     // m: a hold closer to the hinge than this doesn't swing it
-        public static float breakDistance = 0.35f;      // m the controller may get from the held point before the hand slips off
+        // The hand slips off a door out of the arm's reach: the shoulder further from where it holds than this x the arm's length (the
+        // arm IK's bones; a little over 1 = the arm stretched a bit). Walking back while pulling keeps it: the door swings after you.
+        public static float armReachSlack = 1.15f;
+        public static float breakDistance = 0.35f;      // m the controller may get from the held point (only without the arm's bones)
         public static float flingMinSpeed = 15f;        // deg/s at the release that keeps it swinging
         // The release swing from the hand's own tracked velocity as the grip opens (like a grenade throw), not the door's smoothed speed,
         // which lags and drops as the hand slows letting go. false = the smoothed speed.
@@ -899,9 +902,8 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 target = hold.heldPointAtGrab + (ControllerPoint(hold) - hold.controllerAtGrab);
             RememberSwing(hold, door);
 
-            // Pulled away (the door at its stop, walked off): the hand slips off
-            Vector3 heldNow = door.transform.TransformPoint(hold.heldPointInDoor);
-            if ((target - heldNow).sqrMagnitude > breakDistance * breakDistance)
+            // Out of the arm's reach (walked off, pulled on past the door's stop): the hand slips off
+            if (!InReach(hold, door, target))
             {
                 Release(hold);
                 return;
@@ -941,6 +943,29 @@ namespace TarkovVR.Source.Player.Interactions
                 run.rattleAtStop = atStop;
             }
             SetAngle(run, AngleAt(door, newOpenness), deltaTime);
+        }
+
+        private static bool InReach(Hold hold, Door door, Vector3 target)
+        {
+            Transform shoulder = hold.armIk.solver.bone1 != null ? hold.armIk.solver.bone1.transform : null;
+            Transform elbow = hold.armIk.solver.bone2 != null ? hold.armIk.solver.bone2.transform : null;
+            Transform wrist = hold.armIk.solver.bone3 != null ? hold.armIk.solver.bone3.transform : null;
+            if (shoulder == null || elbow == null || wrist == null || hold.latch == null)
+            {
+                Vector3 heldNow = door.transform.TransformPoint(hold.heldPointInDoor);
+                return (target - heldNow).sqrMagnitude <= breakDistance * breakDistance;
+            }
+            float armLength = Vector3.Distance(shoulder.position, elbow.position) + Vector3.Distance(elbow.position, wrist.position);
+            float reach = Vector3.Distance(shoulder.position, hold.latch.position);
+            if (reach <= armLength * armReachSlack)
+                return true;
+            if (logGrabs && releaseLogs < 20)
+            {
+                releaseLogs++;
+                Plugin.MyLog.LogInfo($"[Doors] hand slipped off '{door.name}': the shoulder {reach * 100f:0} cm from the hold, the arm {armLength * 100f:0} cm "
+                    + $"(x{armReachSlack:0.00} = {armLength * armReachSlack * 100f:0}), the door at {Openness(door, door.CurrentAngle) * 100f:0}% open");
+            }
+            return false;
         }
 
         // Let go of while moving: it carries on, slowing down
