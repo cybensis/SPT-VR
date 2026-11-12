@@ -1332,34 +1332,74 @@ namespace TarkovVR.Source.Weapons
             FirearmController firearmController = VRGlobals.firearmController;
             if (portShellProp != null && (firearmController == null || firearmController != portShellFor || !WaitingForRack(firearmController.Item)))
                 ReturnPortShell();
-            if (firearmController == null || firearmController.Item == null || !pumpStates.TryGetValue(firearmController.Item, out PumpState state))
-                return;
-            if (!ManualShotgunOn(firearmController, out ShotgunData data) || !PumpMode(firearmController.Item, data))
-                return;
-            if (!(firearmController.CurrentOperation is FirearmController.Idling) && expectedOperation != ExpectedOperation.Rechamber)
-                return;
-            Transform frame = ShotgunFrame(firearmController);
-            if (frame == null)
+            if (!PumpWorkedNow(firearmController, out ShotgunData data, out PumpState state, out Transform frame))
                 return;
             PlacePortShell(frame, state.open);
-            // Closed it's the animator's; held back by Tarkov's catch with no hand on it, the animator's catch pose shows it open
-            bool animatorHoldsIt = state.open >= 1f && !PumpHeld && firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch();
-            if (state.open <= 0f || animatorHoldsIt || !EnsurePumpBones(firearmController, data, frame))
+            if (!PumpPoseShown(firearmController, data, state, frame))
                 return;
-            int keyCount = data.pumpPositions[0].Length;
-            if (keyCount < 2)
-                return;
-            float scaled = Mathf.Clamp01(state.open) * (keyCount - 1);
-            int index = Mathf.Min(Mathf.FloorToInt(scaled), keyCount - 2);
-            float blend = scaled - index;
             for (int bone = 0; bone < pumpBones.Length; bone++)
             {
                 Transform transform = pumpBones[bone];
-                if (transform == null || data.pumpPositions[bone].Length != keyCount)
-                    continue;
-                transform.localPosition = Vector3.Lerp(data.pumpPositions[bone][index], data.pumpPositions[bone][index + 1], blend);
-                transform.localRotation = Quaternion.Slerp(data.pumpRotations[bone][index], data.pumpRotations[bone][index + 1], blend);
+                if (transform != null && PumpBonePose(data, bone, state.open, out Vector3 position, out Quaternion rotation))
+                {
+                    transform.localPosition = position;
+                    transform.localRotation = rotation;
+                }
             }
+        }
+
+        // Co-op (TryBuildSync): the pump's bones as ApplyShotgunBeforeIk writes them this frame. The values, not the bones: the sync can be
+        // built before that runs, with the animator's closed pose still on them.
+        private static void AddPumpParts(FirearmController firearmController, Transform weaponRoot)
+        {
+            if (!PumpWorkedNow(firearmController, out ShotgunData data, out PumpState state, out Transform frame) || !PumpPoseShown(firearmController, data, state, frame))
+                return;
+            for (int bone = 0; bone < pumpBones.Length; bone++)
+            {
+                Transform transform = pumpBones[bone];
+                if (transform != null && PumpBonePose(data, bone, state.open, out Vector3 position, out Quaternion rotation))
+                    AddPartPose(weaponRoot, transform, position, rotation, transform.gameObject.activeSelf);
+            }
+        }
+
+        // Our pump gun with its action ours to draw: idle, or Tarkov's rechamber we started
+        private static bool PumpWorkedNow(FirearmController firearmController, out ShotgunData data, out PumpState state, out Transform frame)
+        {
+            data = null;
+            state = null;
+            frame = null;
+            if (firearmController == null || firearmController.Item == null || !pumpStates.TryGetValue(firearmController.Item, out state))
+                return false;
+            if (!ManualShotgunOn(firearmController, out data) || !PumpMode(firearmController.Item, data))
+                return false;
+            if (!(firearmController.CurrentOperation is FirearmController.Idling) && expectedOperation != ExpectedOperation.Rechamber)
+                return false;
+            frame = ShotgunFrame(firearmController);
+            return frame != null;
+        }
+
+        // Off its closed pose and ours: closed it's the animator's; held back by Tarkov's catch with no hand on it, the animator's catch
+        // pose shows it open
+        private static bool PumpPoseShown(FirearmController firearmController, ShotgunData data, PumpState state, Transform frame)
+        {
+            bool animatorHoldsIt = state.open >= 1f && !PumpHeld && firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch();
+            return state.open > 0f && !animatorHoldsIt && EnsurePumpBones(firearmController, data, frame) && data.pumpPositions[0].Length >= 2;
+        }
+
+        // A pump bone between the stroke's keys at that much open
+        private static bool PumpBonePose(ShotgunData data, int bone, float open, out Vector3 position, out Quaternion rotation)
+        {
+            int keyCount = data.pumpPositions[0].Length;
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (data.pumpPositions[bone].Length != keyCount)
+                return false;
+            float scaled = Mathf.Clamp01(open) * (keyCount - 1);
+            int index = Mathf.Min(Mathf.FloorToInt(scaled), keyCount - 2);
+            float blend = scaled - index;
+            position = Vector3.Lerp(data.pumpPositions[bone][index], data.pumpPositions[bone][index + 1], blend);
+            rotation = Quaternion.Slerp(data.pumpRotations[bone][index], data.pumpRotations[bone][index + 1], blend);
+            return true;
         }
     }
 }

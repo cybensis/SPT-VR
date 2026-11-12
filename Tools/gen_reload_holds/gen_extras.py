@@ -110,7 +110,9 @@ def meshPartBox(folder,container,frameLeaf,partLeaf):
 # A knob sticking out of the carrier where the clip's palm bone is far off it (AVT/SVT: the left hand reaches over the top, its palm
 # 15 cm from the knob; the fingertips on it): the grab zone on the knob itself, the centre of the bone's mesh vertices within 1 cm of
 # its furthest point to that side, in the bone's frame. (axis, sign): the AVT/SVT knob is the carrier's +x, (4.5,-4.6,-1.5) cm.
-HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1)}
+# The RFB's forward handle is a rod running back into the gun with the knob out its -x (left) side, (-4.8,-2.9,0.8) cm: its furthest
+# point back (the runtime's default zone) is 14 cm behind the knob on the gun's centre line.
+HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1),'kel_tec_rfb':(0,-1)}
 # The gun hand's hold from Tarkov's own right-hand rack where ridingHold turns it down: the AVT/SVT's charge_0/1 and rechamber rack with
 # the RIGHT hand (index 2-3 cm off the knob all the way back; charge_2 is the left-hand one), 10 cm in 4 frames with the palm pivoting
 # ~2 cm about the fingers - over the 1.5 cm limit, so it fell to jam_hardslide (8.1 cm, a stuck slide). Headset 2026-11-07, a picture of

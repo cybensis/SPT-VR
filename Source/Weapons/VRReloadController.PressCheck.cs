@@ -482,16 +482,32 @@ namespace TarkovVR.Source.Weapons
         {
             if (pressCheckFor == null || pressCheckSlide == null)
                 return;
-            pressCheckSlide.localPosition = pressCheckSlideRest + pressCheckSlideAxis * pressCheckPull;
+            pressCheckSlide.localPosition = PressCheckSlidePosition;
             if (pressCheckChamber == null)
                 return;
-            bool open = pressCheckPull > 0.002f;
-            pressCheckChamber.gameObject.SetActive(open || pressCheckChamberWasActive);
-            if (pressCheckRound != null && pressCheckRound.parent == pressCheckChamber)
-            {
-                Vector3 ride = pressCheckRoundRides ? pressCheckChamber.InverseTransformVector(pressCheckFor.WeaponRoot.up * pressCheckPull) : Vector3.zero;
-                pressCheckRound.localPosition = pressCheckRoundRest + ride;
-            }
+            pressCheckChamber.gameObject.SetActive(PressCheckChamberShown);
+            if (RoundInPressCheckChamber)
+                pressCheckRound.localPosition = PressCheckRoundPosition;
+        }
+
+        private static Vector3 PressCheckSlidePosition => pressCheckSlideRest + pressCheckSlideAxis * pressCheckPull;
+        private static bool PressCheckChamberShown => pressCheckPull > 0.002f || pressCheckChamberWasActive;
+        private static bool RoundInPressCheckChamber => pressCheckChamber != null && pressCheckRound != null && pressCheckRound.parent == pressCheckChamber;
+        private static Vector3 PressCheckRoundPosition => pressCheckRoundRest
+            + (pressCheckRoundRides ? pressCheckChamber.InverseTransformVector(pressCheckFor.WeaponRoot.up * pressCheckPull) : Vector3.zero);
+
+        // Co-op (TryBuildSync): the slide, chamber and round as ApplyPressCheck leaves them. It runs in HandsInteractionController.LateUpdate,
+        // maybe after the sync is built: the values, not the bones.
+        private static void AddPressCheckParts(FirearmController firearmController, Transform weaponRoot)
+        {
+            if (pressCheckFor != firearmController || pressCheckSlide == null)
+                return;
+            AddPartPose(weaponRoot, pressCheckSlide, PressCheckSlidePosition, pressCheckSlide.localRotation, pressCheckSlide.gameObject.activeSelf);
+            if (pressCheckChamber == null)
+                return;
+            AddPartPose(weaponRoot, pressCheckChamber, pressCheckChamber.localPosition, pressCheckChamber.localRotation, PressCheckChamberShown);
+            if (RoundInPressCheckChamber)
+                AddPartPose(weaponRoot, pressCheckRound, PressCheckRoundPosition, pressCheckRound.localRotation, pressCheckRound.gameObject.activeSelf);
         }
     }
 }

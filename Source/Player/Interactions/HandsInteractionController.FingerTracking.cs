@@ -2,6 +2,7 @@ using UnityEngine;
 using Valve.VR;
 using TarkovVR.Source.Settings;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Weapons;
 
 namespace TarkovVR.Source.Player.Interactions
 {
@@ -113,8 +114,11 @@ namespace TarkovVR.Source.Player.Interactions
 
         private void SampleFingerSync()
         {
-            syncLeftFingersActive = handWeightBlend >= 0.01f && leftFingerJoints != null;
-            syncRightFingersActive = rightHandWeightBlend >= 0.01f && rightFingerJoints != null;
+            // A press check's fingers on the slide (PressCheckHook) go too: the gun hand's, the left one's with the gun in the left hand
+            bool pressCheck = VRReloadController.PressCheckProgress > 0f;
+            bool pressCheckLeft = pressCheck && VRReloadController.PressCheckOnLeftHand;
+            syncLeftFingersActive = (handWeightBlend >= 0.01f || pressCheckLeft) && leftFingerJoints != null;
+            syncRightFingersActive = (rightHandWeightBlend >= 0.01f || (pressCheck && !pressCheckLeft)) && rightFingerJoints != null;
             if (syncLeftFingersActive)
                 PackFingerEulers(leftFingerJoints, syncLeftFingerEuler);
             if (syncRightFingersActive)

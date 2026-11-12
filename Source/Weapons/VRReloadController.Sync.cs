@@ -73,9 +73,10 @@ namespace TarkovVR.Source.Weapons
 
             // The gun hand on the grip and the support hand on the foregrip are welded onto the gun's markers there; any other hand
             // (off the gun, on a part, holding the gun from the left) goes where it's drawn here
+            // (the support hand riding an open pump and the gun hand in a press check are off those markers too)
             bool gunInLeftHand = Handedness.GunInLeftHand;
-            syncDriveRight = gunInLeftHand || ChestHang.Detached;
-            syncDriveLeft = !(VRGlobals.vrPlayer.isSupporting && !gunInLeftHand);
+            syncDriveRight = gunInLeftHand || ChestHang.Detached || PressCheckActive;
+            syncDriveLeft = !(VRGlobals.vrPlayer.isSupporting && !gunInLeftHand) || pumpHandDriving;
             EnsureWristHooks();
             SyncWrist(0, VRGlobals.ikManager.leftArmIk, weaponRoot, out syncLeftPosition, out syncLeftRotation);
             SyncWrist(1, VRGlobals.ikManager.rightArmIk, weaponRoot, out syncRightPosition, out syncRightRotation);
@@ -131,6 +132,9 @@ namespace TarkovVR.Source.Weapons
                 AddPart(weaponRoot, partlyOutView);
             AddPart(weaponRoot, hiddenGunMagazineView);
             AddPart(weaponRoot, pendingHiddenView);
+            // A pump gun's pump off its closed pose, a pistol's slide in a press check
+            AddPumpParts(firearmController, weaponRoot);
+            AddPressCheckParts(firearmController, weaponRoot);
 
             if (hiddenRenderersOf != null && hiddenRenderersOf.Item != null)
                 syncHiddenGroundItem = hiddenRenderersOf.Item.Id.ToString();
@@ -232,15 +236,20 @@ namespace TarkovVR.Source.Weapons
 
         private static void AddPart(Transform weaponRoot, Transform part)
         {
-            if (part == null)
-                return;
+            if (part != null)
+                AddPartPose(weaponRoot, part, part.localPosition, part.localRotation, part.gameObject.activeSelf);
+        }
+
+        // A part with the pose it's drawn with this frame, where that's written after the sync may be built
+        private static void AddPartPose(Transform weaponRoot, Transform part, Vector3 localPosition, Quaternion localRotation, bool shown)
+        {
             string path = PathUnder(weaponRoot, part);
             if (path == null)
                 return;
             syncPartPaths.Add(path);
-            syncPartPositions.Add(part.localPosition);
-            syncPartRotations.Add(part.localRotation);
-            syncPartShown.Add(part.gameObject.activeSelf);
+            syncPartPositions.Add(localPosition);
+            syncPartRotations.Add(localRotation);
+            syncPartShown.Add(shown);
         }
 
         // The names from under the gun's root down to the part, joined by '/' (the other side's copy of the gun is built from the same
