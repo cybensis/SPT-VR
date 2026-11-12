@@ -30,6 +30,7 @@ public class GunInteractionController : MonoBehaviour
     // Reach the support hand to a weapon part to select it; the off-hand trigger executes (InteractHandler).
     // The legacy dominant-grip + gaze activation can't work with the sling: the grip is always held while holding the gun.
     public static bool offHandInteract = true;        // false = legacy grip + gaze (A/B only)
+    public static float maxAnchorDistance = 5f;       // m: the right marker further from the holder than this isn't anchored to
     public static float interactReachRadius = 0.14f;  // m off-palm to a part to select it (nearest part wins inside it)
     public static float interactProbeForward = 0.08f; // m wrist->palm along the off controller forward
     private GamePlayerOwner playerOwner;
@@ -501,6 +502,18 @@ public class GunInteractionController : MonoBehaviour
         if (VRGlobals.weaponHolder == null || VRGlobals.player == null)
             return;
 
+        // Empty hands Tarkov didn't spawn (FIKA rolling back a hands change the host refused): the right marker and arm still on the gun
+        // that left, its model back in the pool far away. What EmptyHandsController.Spawn's patch does, now.
+        if (VRGlobals.player.HandsController is EFT.Player.EmptyHandsController emptyHandsController && VRGlobals.vrPlayer != null
+            && VRGlobals.vrPlayer.RightHand != null && VRGlobals.player._markers.Length > 1
+            && VRGlobals.player._markers[1] != VRGlobals.vrPlayer.RightHand.transform)
+        {
+            Plugin.MyLog.LogWarning($"[Hands] empty hands without their spawn (the right marker on '{(VRGlobals.player._markers[1] != null ? VRGlobals.player._markers[1].name : "nothing")}'): "
+                + "the markers and arms put back on the VR hands");
+            WeaponPatches.ResetWeaponOnEquipHands(emptyHandsController);
+            return;
+        }
+
         // Strip last frame's collision offsets so the anchor below measures the pristine pose
         // (they are re-resolved and re-applied fresh by WeaponCollision.Apply after the anchor).
         TarkovVR.Source.Player.Interactions.WeaponCollision.PreAnchor();
@@ -545,11 +558,15 @@ public class GunInteractionController : MonoBehaviour
             if (!mirroredGrenade && WeaponPatches.grenadeEquipped && Handedness.GunInLeftHand && RealLeftHandedPatches.GunPlane(out Vector3 planePoint, out Vector3 planeNormal))
                 anchor = RealLeftHandedPatches.ReflectPoint(anchor, planePoint, planeNormal);
             Vector3 differenceBetweenHands = anchor - VRGlobals.weaponHolder.transform.position;
-            differenceBetweenHands = (mirroredGrenade ? cachedRightHandPositioner.InverseTransformVector(differenceBetweenHands)
-                : cachedRightHandPositioner.InverseTransformDirection(differenceBetweenHands)) * -1;
-            VRGlobals.weaponHolder.transform.localPosition = differenceBetweenHands + CalculateRightHandPosOffset();
-            if (!VRGunController.IsTarkovAnimatingTheGun())
-                VRGunController.RememberGunPosition(VRGlobals.weaponHolder.transform);
+            // A marker metres off is a gun model gone back to the pool, not one in the hand: the holder would follow it there
+            if (differenceBetweenHands.sqrMagnitude < maxAnchorDistance * maxAnchorDistance)
+            {
+                differenceBetweenHands = (mirroredGrenade ? cachedRightHandPositioner.InverseTransformVector(differenceBetweenHands)
+                    : cachedRightHandPositioner.InverseTransformDirection(differenceBetweenHands)) * -1;
+                VRGlobals.weaponHolder.transform.localPosition = differenceBetweenHands + CalculateRightHandPosOffset();
+                if (!VRGunController.IsTarkovAnimatingTheGun())
+                    VRGunController.RememberGunPosition(VRGlobals.weaponHolder.transform);
+            }
         }
 
         // A press check with the gun in the left hand: the gun moved so the left hand (the marker's mirror image) stays on the left controller

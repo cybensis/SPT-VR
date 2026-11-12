@@ -84,13 +84,15 @@ namespace TarkovVR.Patches.Core.Player
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Spawn")]
-        private static void ResetWeaponOnEquipHands(EFT.Player.EmptyHandsController __instance)
-        {         
+        internal static void ResetWeaponOnEquipHands(EFT.Player.EmptyHandsController __instance)
+        {
             if (!__instance._player.IsYourPlayer)
                 return;
             VRGlobals.firearmController = null;
-            VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
-            if (Handedness.MirrorLeftHanded)
+            // (GunInteractionController calls this for empty hands that never spawned: their object may not be there)
+            if (__instance.ControllerGameObject != null)
+                VRGlobals.emptyHands = __instance.ControllerGameObject.transform;
+            if (Handedness.MirrorLeftHanded && VRGlobals.emptyHands != null)
                 VRGlobals.emptyHands.localScale = new Vector3(-1, 1, 1);
             VRGlobals.player = __instance._player;
 
