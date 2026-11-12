@@ -17,7 +17,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>SPT-VR-FikaSync</AssemblyName>
     <Description>FIKA co-op sync companion for the SPT-VR mod (arm + body-drag packets)</Description>
-    <Version>2.2.0</Version>
+    <Version>2.3.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RootNamespace>SptVrFikaSync</RootNamespace>
@@ -79,6 +79,11 @@
   <!-- What a dragged corpse carries from its old ORBIT waypoint to the new one: one copy, shared with SPT-VR.dll -->
   <ItemGroup>
     <Compile Include="..\ModSupport\OrbitCorpseCarry.cs" Link="OrbitCorpseCarry.cs" />
+  </ItemGroup>
+
+  <!-- The upper body that follows a tracked head: the same solve as the VR player's own body (HeadSyncApply) -->
+  <ItemGroup>
+    <Compile Include="..\Source\Player\Body\UpperBodySolver.cs" Link="UpperBodySolver.cs" />
   </ItemGroup>
 
 </Project>

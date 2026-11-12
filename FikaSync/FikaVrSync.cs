@@ -83,8 +83,10 @@ namespace SptVrFikaSync
             FingerSyncApply.ResetState();
             ReloadSyncApply.ResetState();
             DoorSyncApply.ResetState();
+            HeadSyncApply.ResetState();
             if (ev.Manager is FikaServer server)
             {
+                server.RegisterPacket<VRHeadPacket, NetPeer>(OnHeadServer);
                 server.RegisterPacket<VRDoorPacket, NetPeer>(OnDoorServer);
                 server.RegisterPacket<VRReloadPacket, NetPeer>(OnReloadServer);
                 server.RegisterPacket<VRReloadSoundPacket, NetPeer>(OnReloadSoundServer);
@@ -100,6 +102,7 @@ namespace SptVrFikaSync
             }
             else if (ev.Manager is FikaClient client)
             {
+                client.RegisterPacket<VRHeadPacket>(OnHeadClient);
                 client.RegisterPacket<VRDoorPacket>(OnDoorClient);
                 client.RegisterPacket<VRReloadPacket>(OnReloadClient);
                 client.RegisterPacket<VRReloadSoundPacket>(OnReloadSoundClient);
@@ -113,6 +116,34 @@ namespace SptVrFikaSync
                 client.RegisterPacket<DownedDragPacket>(OnDownedDragClient);
                 client.RegisterPacket<CorpseLootPacket>(OnCorpseLootClient);
             }
+        }
+
+        // ===== HEAD (the headset: the observers' copy turns and bends its upper body and head to it) =====
+        public static bool enableHeadSync = true;
+
+        public static void SendHeadPose(int netId, bool active, Vector3 position, Quaternion rotation)
+        {
+            if (!enableHeadSync)
+                return;
+            VRHeadPacket p = default;
+            p.NetId = netId;
+            p.Active = active;
+            p.Position = position;
+            p.Rotation = rotation;
+            SendUnreliableBroadcast(ref p);
+        }
+
+        private static void OnHeadServer(VRHeadPacket p, NetPeer sender)
+        {
+            try { HeadSyncApply.Store(p); }
+            catch (Exception e) { LogOnce(ref _headErr, "head recv", e); }
+            Singleton<FikaServer>.Instance?.SendData(ref p, DeliveryMethod.Unreliable, sender);
+        }
+
+        private static void OnHeadClient(VRHeadPacket p)
+        {
+            try { HeadSyncApply.Store(p); }
+            catch (Exception e) { LogOnce(ref _headErr, "head recv", e); }
         }
 
         // ===== ARM SYNC =====
@@ -696,7 +727,7 @@ namespace SptVrFikaSync
                 Singleton<FikaClient>.Instance?.SendData(ref p, DeliveryMethod.ReliableOrdered, broadcast: true);
         }
 
-        private static bool _armErr, _bodyErr, _meleeErr, _eatErr, _reloadErr, _doorErr;
+        private static bool _armErr, _bodyErr, _meleeErr, _eatErr, _reloadErr, _doorErr, _headErr;
         private static void LogOnce(ref bool latch, string what, Exception e)
         {
             if (latch)

@@ -30,6 +30,32 @@ namespace SptVrFikaSync
         }
     }
 
+    // One VR player's head (the headset) in their body's frame (Player.Transform), keyed by NetId: the observers turn and bend their copy's
+    // upper body to it and turn its head (HeadSyncApply). Active false = not tracked now.
+    internal struct VRHeadPacket : INetSerializable
+    {
+        public int NetId;
+        public bool Active;
+        public Vector3 Position;
+        public Quaternion Rotation;
+
+        public void Serialize(NetDataWriter writer)
+        {
+            writer.Put(NetId);
+            writer.Put(Active);
+            writer.PutUnmanaged(Position);
+            writer.PutUnmanaged(Rotation);
+        }
+
+        public void Deserialize(NetDataReader reader)
+        {
+            NetId = reader.GetInt();
+            Active = reader.GetBool();
+            Position = reader.GetUnmanaged<Vector3>();
+            Rotation = reader.GetUnmanaged<Quaternion>();
+        }
+    }
+
     // One VR player's held weapon pose (the gun's WeaponRoot transform) in their own chest frame,
     // keyed by NetId. Sent instead of the arm packet while a firearm is held: the remote overrides the
     // observed weapon to this pose and re-IKs the hands onto it, so the gun aims where the controller

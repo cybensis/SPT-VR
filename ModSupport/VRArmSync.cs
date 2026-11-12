@@ -21,8 +21,11 @@ namespace TarkovVR.ModSupport.FIKA
         public static bool sendReloadState = true;    // send the manual reload (hands on parts, magazines, bolt / handle) with the weapon pose
         public static float sendInterval = 0.05f;     // ~20/s
         public static float fingerSendInterval = 0.05f; // finger cadence (own timer - the shared throttle belongs to the arm/weapon packets)
+        public static bool sendHeadPose = true;       // the headset in the body's frame: the observers' upper body and head follow it
 
         private static float lastSendTime;
+        private static float lastHeadSend;
+        private static bool headSyncBroken;           // SPT-VR-FikaSync older than 2.3.0: no head packet to send
         private static float lastFingerSend;
         private static bool fingersWereActive;
         private static bool wasEating;
@@ -74,13 +77,30 @@ namespace TarkovVR.ModSupport.FIKA
                 }
             }
 
+            // The head: its own cadence, whatever the hands hold. Its own method: with an older module the missing method throws there,
+            // not in this one (the arms would go with it).
+            if (sendHeadPose && !headSyncBroken && local != null && Time.time - lastHeadSend >= sendInterval)
+            {
+                lastHeadSend = Time.time;
+                try
+                {
+                    SendHead(local);
+                }
+                catch (System.Exception exception)
+                {
+                    headSyncBroken = true;
+                    Plugin.MyLog.LogError($"[VRArmSync] no head sync with this SPT-VR-FikaSync.dll (2.3.0 or newer needed): {exception.Message}");
+                }
+            }
+
             if (Time.time - lastSendTime < sendInterval)
                 return;
 
             VRPlayerManager rig = VRGlobals.vrPlayer;
             if (local == null || rig == null)
                 return;
-            Transform chest = local.PlayerBones?.Ribcage?.Original;
+            // The chest as the upper body solve left it (LocalUpperBody), which the observers' copy matches
+            Transform chest = Source.Player.Body.LocalUpperBody.SyncChest(local) ?? local.PlayerBones?.Ribcage?.Original;
             if (chest == null)
                 return;
 
@@ -134,6 +154,20 @@ namespace TarkovVR.ModSupport.FIKA
         {
             if (controller is Fika.Core.Main.ClientClasses.HandsControllers.FikaClientFirearmController fikaController)
                 fikaController.SendBoltActionReloadPacket();
+        }
+
+        // The headset in the body's frame (Player.Transform), rotation-only like the observers' placing of it
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void SendHead(FikaPlayer local)
+        {
+            Transform root = local.Transform != null ? local.Transform.Original : null;
+            Camera headset = VRGlobals.VRCam;
+            if (root == null || headset == null)
+                return;
+            Quaternion rootInverse = Quaternion.Inverse(root.rotation);
+            bool alive = local.HealthController != null && local.HealthController.IsAlive;
+            FikaVrSync.SendHeadPose(local.NetId, alive && !VRGlobals.menuOpen,
+                rootInverse * (headset.transform.position - root.position), rootInverse * headset.transform.rotation);
         }
 
         private static void DispatchHeldOrEmpty(FikaPlayer local, VRPlayerManager rig, Transform chest)
