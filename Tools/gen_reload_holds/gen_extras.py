@@ -63,7 +63,8 @@ HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghin
                   # mod_charge, but every one of its racks is a two-frame yank gen_holds' riding test can't read: the fast-yank rule below
                   # (the left thumb and index stay 2 cm off the handle's knob through the pull)
                   'howa_type20':'mod_charge'}
-HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier'}
+# (the SR-2M's knob bone rides weapon_bolt_carrier, 9.9 cm back with it: moving the knob alone left the carrier and bolt behind)
+HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier','tochmash_sr2m':'weapon_bolt_carrier'}
 # (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's hand is too)
 HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12')
 # Ambidextrous: a knob on each side (the MDR's: a rod running back into the gun, a folding paddle each side at its front, on bones of
@@ -123,6 +124,53 @@ HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1),'kel_tec_rfb':(0,-1),'no
 # ~2 cm about the fingers - over the 1.5 cm limit, so it fell to jam_hardslide (8.1 cm, a stuck slide). Headset 2026-11-07, a picture of
 # the SVT's rack: that pose. Read at full pull (fullBackTime: the middle of the frames within 2 mm of all the way back).
 GUN_HAND_HOLD_CLIP={'toz_avt_40':'avt40_charge_1','toz_svt_40':'avt40_charge_1'}
+# A knob the clips' hand never quite reaches (the SR-2M's, 2.5 cm long: every rack clip has the thumb and index 2-8 cm off it, so the hold
+# floated beside it): the hold moved so the point between the thumb and index tips lands on the knob's middle, the pose as it is.
+PINCH_ON_KNOB=('tochmash_sr2m',)
+# A bone's meshes in its own frame, with the container's dependency bundles (Windows.json) where the meshes live there
+def boneMeshPoints(folder,container,boneLeaf):
+    from UnityPy.helpers.MeshHelper import MeshHandler
+    key='assets/content/weapons/'+folder+'/'+container
+    manifest=json.load(open(GAME_BUNDLES+'Windows.json',encoding='utf-8'))
+    deps=[x for x in manifest.get(key,{}).get('Dependencies',[]) if x.endswith('.bundle') and not re.search('audio|animations|textures|physics|hands',x) and os.path.exists(GAME_BUNDLES+x)]
+    env=UnityPy.load(ROOT+folder+'/'+container,*[GAME_BUNDLES+x for x in deps])
+    def toParent(t,p):
+        s=t.m_LocalScale; r=t.m_LocalRotation; a=t.m_LocalPosition; q=np.array([r.x,r.y,r.z,r.w]); v=p*np.array([s.x,s.y,s.z])
+        return v+2*np.cross(q[:3],np.cross(q[:3],v)+q[3]*v)+np.array([a.x,a.y,a.z])
+    best=[]
+    for o in env.objects:
+        if o.type.name!='Transform': continue
+        t=o.read()
+        if t.m_GameObject.read().m_Name!=boneLeaf: continue
+        points=[]
+        def walk(tr,chain):
+            name=tr.m_GameObject.read().m_Name
+            for c in tr.m_GameObject.read().m_Components:
+                ptr=c.component if hasattr(c,'component') else c
+                try: comp=ptr.read()
+                except Exception: continue
+                if type(comp).__name__!='MeshFilter' or ('LOD' in name and 'LOD0' not in name): continue
+                try:
+                    h=MeshHandler(comp.m_Mesh.read()); h.process()
+                except Exception: continue
+                for p in np.array(h.m_Vertices,float).reshape(-1,3):
+                    for link in chain: p=toParent(link,p)
+                    points.append(p)
+            for ch in tr.m_Children:
+                c=ch.read(); walk(c,[c]+chain)
+        walk(t,[])
+        if len(points)>len(best): best=points
+    return np.array(best) if best else None
+# The hold's palm moved so the thumb and index tips' midpoint, at the hold's moment in its clip, sits on the knob's middle (handle frame)
+def pinchOnKnob(hold,g,P,charge,side,knob):
+    J=fingerPaths(P,side); c={}; t=hold['t']
+    cp,cr,_=g['worldAt'](charge,t,c); tips=[]
+    for finger in (0,1):
+        last,_,_=g['worldAt'](J[1+finger*3+2],t,c); before,_,_=g['worldAt'](J[1+finger*3+1],t,c)
+        tips.append(g['rotate'](conj(cr),last+(last-before)*0.8-cp))
+    shift=knob-(tips[0]+tips[1])/2
+    hold['position']=[round(float(x),4) for x in np.array(hold['position'])+shift]
+    return shift
 def holdAtFullBack(g,charge,wp,side):
     P=g['prefabLocal']; palm=bone(P,f'/Base Human{side}Palm'); t,top=fullBackTime(g,charge,wp); c={}
     cp,cr,_=g['worldAt'](charge,t,c); pp,pr,_=g['worldAt'](palm,t,c)
@@ -209,6 +257,11 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
             if moved>=0.03 and (best is None or (rank,-moved)<best[0]):
                 h['clip']=n; h['leftHandMoved']=round(moved,3); best=((rank,-moved),h)
     if best: extraHandles[family]=best[1]
+    if rig in PINCH_ON_KNOB and family in extraHandles and 't' in extraHandles[family]:
+        knobPoints=boneMeshPoints(folder,container,boneName)
+        if knobPoints is not None:
+            shift=pinchOnKnob(extraHandles[family],setup(tree,clips[extraHandles[family]['clip']]),P,charge,'L',knobPoints.mean(0))
+            print(f'{family} hold moved {np.round(shift*100,1)} cm so the thumb and index pinch the knob',flush=True)
     best=None
     for n in sorted(names):
         rank=rackClipRank(n[len(prefix)+1:])
