@@ -7,9 +7,13 @@ namespace TarkovVR.Source.Player.Body
     // (SPT-VR-FikaSync's HeadSyncApply - this file is linked into it, one copy of the maths for both). On the pose the animator gave this
     // frame, the hips where they are: the chest turns part of the way to the head's yaw, the neck takes a share of the head's turn off the
     // chest, the spine bends (CCD, a weight and a limit per bone) so the head's pivot comes to where the tracked head's is, and the head
-    // turns to the tracked head. The eyes and the look are the player's LootRaycastOrigin (Tarkov's interaction ray), a child of the head.
+    // turns to the tracked head. The face is the head bone's own axes nearest the body's forward and up (not LootRaycastOrigin: that's the
+    // first-person camera point on the ribcage rig), the eyes eyeForward / eyeUp off its pivot.
     internal static class UpperBodySolver
     {
+        // The eyes off the head bone's pivot, m (the mod's neck point under the headset, HeadTracking.neckLocalOffset, the other way)
+        public static float eyeForward = 0.08f;
+        public static float eyeUp = 0.075f;
         public static int iterations = 3;
         public static float[] spineWeights = { 0.3f, 0.35f, 0.4f, 0.45f };  // per spine bone from the hips up; more bones take the last
         public static float spineMaxTurn = 20f;     // deg a spine bone may turn off its animated pose (twist and bend; the 4 bones: 80 at most)
@@ -43,15 +47,9 @@ namespace TarkovVR.Source.Player.Body
             Transform pelvis = bones != null && bones.Pelvis != null ? bones.Pelvis.Original : null;
             Transform ribcage = bones != null && bones.Ribcage != null ? bones.Ribcage.Original : null;
             Transform head = bones != null && bones.Head != null ? bones.Head.Original : null;
-            Transform look = bones != null ? bones.LootRaycastOrigin : null;
-            if (root == null || pelvis == null || ribcage == null || head == null || look == null)
+            if (root == null || pelvis == null || ribcage == null || head == null)
             {
                 rig.description = "bones missing";
-                return rig;
-            }
-            if (!look.IsChildOf(head))
-            {
-                rig.description = $"the look origin '{look.name}' isn't on the head (under '{(look.parent != null ? look.parent.name : "-")}')";
                 return rig;
             }
             if (!head.IsChildOf(ribcage) || !ribcage.IsChildOf(pelvis))
@@ -66,14 +64,14 @@ namespace TarkovVR.Source.Player.Body
             rig.neck = bones.Neck != null && head.IsChildOf(bones.Neck) && bones.Neck.IsChildOf(ribcage) ? bones.Neck : null;
             rig.head = head;
 
-            Quaternion headInverse = Quaternion.Inverse(head.rotation);
-            rig.eyeInHead = headInverse * (look.position - head.position);
-            // The look's own up, unless it's rolled off the body's (then the body's up, square to the look)
-            Quaternion lookFrame = Vector3.Dot(look.up, root.up) > 0.8f ? look.rotation
-                : Quaternion.LookRotation(look.forward, Vector3.ProjectOnPlane(root.up, look.forward));
-            rig.lookInHead = headInverse * lookFrame;
-            Vector3 face = Vector3.ProjectOnPlane(look.forward, root.up);
-            rig.chestForwardLocal = Quaternion.Inverse(ribcage.rotation) * (face.sqrMagnitude > 1e-4f ? face.normalized : root.forward);
+            // The bones' own axes, not this frame's pose: the skeleton is built square to the body, so the nearest axis holds whatever the
+            // animator has it doing now - and it's the same on every peer (the hands are synced in the solved chest's frame)
+            Vector3 faceAxis = NearestAxis(head, root.forward, Vector3.zero, out float faceOff);
+            Vector3 upAxis = NearestAxis(head, root.up, faceAxis, out float upOff);
+            Vector3 chestAxis = NearestAxis(ribcage, root.forward, Vector3.zero, out float chestOff);
+            rig.eyeInHead = faceAxis * eyeForward + upAxis * eyeUp;
+            rig.lookInHead = Quaternion.LookRotation(faceAxis, upAxis);
+            rig.chestForwardLocal = chestAxis;
 
             int count = rig.spine.Length + (rig.neck != null ? 1 : 0) + 1;
             rig.posed = new Transform[count];
@@ -89,8 +87,42 @@ namespace TarkovVR.Source.Player.Body
             var names = new System.Text.StringBuilder();
             foreach (Transform bone in rig.posed)
                 names.Append(names.Length > 0 ? " > " : "").Append(bone.name);
-            rig.description = rig.valid ? $"{names}, eyes {(rig.eyeInHead * 100f).ToString("F0")} cm off the head" : "no spine bones";
+            rig.description = rig.valid
+                ? $"{names}; face = the head's {AxisName(faceAxis)} ({faceOff:F0} deg off the body's forward now), up {AxisName(upAxis)} ({upOff:F0} deg), chest = the ribcage's {AxisName(chestAxis)} ({chestOff:F0} deg)"
+                : "no spine bones";
             return rig;
+        }
+
+        private static readonly Vector3[] AXES = { Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back };
+
+        // The bone's local axis nearest a world direction (not one along notAlong); off = the angle between them now
+        private static Vector3 NearestAxis(Transform bone, Vector3 worldDirection, Vector3 notAlong, out float off)
+        {
+            Vector3 local = Quaternion.Inverse(bone.rotation) * worldDirection.normalized;
+            Vector3 best = Vector3.forward;
+            float bestDot = -2f;
+            foreach (Vector3 axis in AXES)
+            {
+                if (Mathf.Abs(Vector3.Dot(axis, notAlong)) > 0.5f)
+                    continue;
+                float dot = Vector3.Dot(axis, local);
+                if (dot > bestDot)
+                {
+                    bestDot = dot;
+                    best = axis;
+                }
+            }
+            off = Mathf.Acos(Mathf.Clamp(bestDot, -1f, 1f)) * Mathf.Rad2Deg;
+            return best;
+        }
+
+        private static string AxisName(Vector3 axis)
+        {
+            if (axis.x != 0f)
+                return axis.x > 0f ? "+x" : "-x";
+            if (axis.y != 0f)
+                return axis.y > 0f ? "+y" : "-y";
+            return axis.z > 0f ? "+z" : "-z";
         }
 
         // eyePosition / eyeRotation: the tracked head (the headset), world. weight 0..1 (0 = the animator's pose, nothing written).
