@@ -123,10 +123,14 @@ HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1),'kel_tec_rfb':(0,-1),'no
 # the RIGHT hand (index 2-3 cm off the knob all the way back; charge_2 is the left-hand one), 10 cm in 4 frames with the palm pivoting
 # ~2 cm about the fingers - over the 1.5 cm limit, so it fell to jam_hardslide (8.1 cm, a stuck slide). Headset 2026-11-07, a picture of
 # the SVT's rack: that pose. Read at full pull (fullBackTime: the middle of the frames within 2 mm of all the way back).
-GUN_HAND_HOLD_CLIP={'toz_avt_40':'avt40_charge_1','toz_svt_40':'avt40_charge_1'}
-# A knob the clips' hand never quite reaches (the SR-2M's, 2.5 cm long: every rack clip has the thumb and index 2-8 cm off it, so the hold
-# floated beside it): the hold moved so the point between the thumb and index tips lands on the knob's middle, the pose as it is.
+# The SR-2M's: its chambering clip (sr2m_load_one, the handle held back while the round goes in), the right hand on the knob; its racks
+# are all the left's.
+GUN_HAND_HOLD_CLIP={'toz_avt_40':'avt40_charge_1','toz_svt_40':'avt40_charge_1','tochmash_sr2m':'sr2m_load_one'}
+# A knob the clips' hand never quite reaches (the SR-2M's, 2.5 cm long: the hand 2-8 cm off it in every clip, so the hold floated beside
+# it): the hold moved onto it, the pose as it is. The off hand's (its clip has the knob between the thumb and index): their tips' midpoint
+# on the knob's middle. The gun hand's (every finger hooked in front of the knob, 3-5 cm ahead): the index tip on the knob's face.
 PINCH_ON_KNOB=('tochmash_sr2m',)
+HOOK_ON_KNOB=('tochmash_sr2m',)
 # A bone's meshes in its own frame, with the container's dependency bundles (Windows.json) where the meshes live there
 def boneMeshPoints(folder,container,boneLeaf):
     from UnityPy.helpers.MeshHelper import MeshHandler
@@ -161,14 +165,18 @@ def boneMeshPoints(folder,container,boneLeaf):
         walk(t,[])
         if len(points)>len(best): best=points
     return np.array(best) if best else None
-# The hold's palm moved so the thumb and index tips' midpoint, at the hold's moment in its clip, sits on the knob's middle (handle frame)
-def pinchOnKnob(hold,g,P,charge,side,knob):
+# The hold's palm moved onto the knob (its mesh points, handle frame), from the fingertips at the hold's moment in its clip: pinch = the
+# thumb and index tips' midpoint on the knob's middle, hook = the index tip on the knob's nearest point
+def holdOntoKnob(hold,g,P,charge,side,knob,mode):
     J=fingerPaths(P,side); c={}; t=hold['t']
     cp,cr,_=g['worldAt'](charge,t,c); tips=[]
     for finger in (0,1):
         last,_,_=g['worldAt'](J[1+finger*3+2],t,c); before,_,_=g['worldAt'](J[1+finger*3+1],t,c)
         tips.append(g['rotate'](conj(cr),last+(last-before)*0.8-cp))
-    shift=knob-(tips[0]+tips[1])/2
+    if mode=='pinch':
+        shift=knob.mean(0)-(tips[0]+tips[1])/2
+    else:
+        shift=knob[np.linalg.norm(knob-tips[1],axis=1).argmin()]-tips[1]
     hold['position']=[round(float(x),4) for x in np.array(hold['position'])+shift]
     return shift
 def holdAtFullBack(g,charge,wp,side):
@@ -260,8 +268,8 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     if rig in PINCH_ON_KNOB and family in extraHandles and 't' in extraHandles[family]:
         knobPoints=boneMeshPoints(folder,container,boneName)
         if knobPoints is not None:
-            shift=pinchOnKnob(extraHandles[family],setup(tree,clips[extraHandles[family]['clip']]),P,charge,'L',knobPoints.mean(0))
-            print(f'{family} hold moved {np.round(shift*100,1)} cm so the thumb and index pinch the knob',flush=True)
+            shift=holdOntoKnob(extraHandles[family],setup(tree,clips[extraHandles[family]['clip']]),P,charge,'L',knobPoints,'pinch')
+            print(f'{family} off-hand hold moved {np.round(shift*100,1)} cm: the knob between the thumb and index',flush=True)
     best=None
     for n in sorted(names):
         rank=rackClipRank(n[len(prefix)+1:])
@@ -272,6 +280,11 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     if best: extraGunHandHandles[family]=best[1]
     if rig in GUN_HAND_HOLD_CLIP:
         h=holdAtFullBack(setup(tree,clips[GUN_HAND_HOLD_CLIP[rig]]),charge,wp,'R'); h['clip']=GUN_HAND_HOLD_CLIP[rig]; extraGunHandHandles[family]=h
+        if rig in HOOK_ON_KNOB:
+            knobPoints=boneMeshPoints(folder,container,boneName)
+            if knobPoints is not None:
+                shift=holdOntoKnob(h,setup(tree,clips[h['clip']]),P,charge,'R',knobPoints,'hook')
+                print(f'{family} gun-hand hold moved {np.round(shift*100,1)} cm: the index on the knob',flush=True)
     # The locked-back pose moves the handle too (gen_holds' handleMovesWithBolt test)
     g=setup(tree,clips[next(n for n in names if '_mag_in' in n)]); c={}
     restAt,_,_=g['worldAt'](charge,0.0,c); gunAt,gunRotation,_=g['worldAt'](wp,0.0,c); restInGun=g['rotate'](conj(gunRotation),restAt-gunAt)
