@@ -344,6 +344,8 @@ namespace TarkovVR.Source.Settings
         private enum Category { Movement, Weapons, HandsAndBody, Interaction, Graphics, DesktopView }
         private static readonly string[] CATEGORY_NAMES = { "Movement", "Weapons", "Hands & Body", "Interaction", "Graphics", "Desktop View" };
         private const int EVERY_CATEGORY = -1;
+        // Adds its own settings tab to this screen (a registered group, shown by SettingsScreen.ShowScreen - which hides ours)
+        private const string INTEGRATED_CONFIGURATION_MANAGER_ID = "com.sage.integratedconfigurationmanager";
 
         private static readonly string[] MOVEMENT_MODES = { "Head-based", "Controller-based", "Joystick only" };
         private static readonly string[] ROTATION_MODES = { "Smooth Turn", "Snap Turn" };
@@ -374,6 +376,11 @@ namespace TarkovVR.Source.Settings
             vrSettingsButton.transform.localRotation = Quaternion.identity;
             vrSettingsButton.transform.localPosition = Vector3.zero;
             vrSettingsButton.name = "vrSettingsToggle";
+            // Straight after the game's own tabs, whichever runs first: another mod's tab added at the end of the row (Integrated
+            // Configuration Manager's PLUGINS) then sits next to VR
+            vrSettingsButton.transform.SetSiblingIndex(settingsUi._controlsButton.transform.GetSiblingIndex() + 1);
+            if (BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(INTEGRATED_CONFIGURATION_MANAGER_ID))
+                Plugin.MyLog.LogInfo("[VRSettings] Integrated Configuration Manager found: its tab goes after the VR tab");
 
             if (vrSettingsButton.GetComponent<UIAnimatedToggleSpawner>())
             {
