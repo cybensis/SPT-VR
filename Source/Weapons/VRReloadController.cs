@@ -44,9 +44,11 @@ namespace TarkovVR.Source.Weapons
         public static float handReleaseTime = 0.16f;
         public static bool snapHandToGrip = true;           // grabbing the gun's magazine moves the hand onto it where the animation holds it
         public static float handSnapTime = 0.12f;           // s a hand takes to move onto a part's grip, eased in and out
-        // deg a hand locked on a part of the gun (the handle, a slide, the bolt, a magazine on the track, the MDR's deflector) turns with
-        // the controller, about the point it holds. Capped: those holds have the fingers shaped around the part. 0 = rigid.
-        public static float handWiggleDegrees = 15f;
+        // A hand locked on a part of the gun (the handle, a slide, the bolt, a magazine on the track, the MDR's deflector) starts on the
+        // animation's pose and turns with the controller about the point it holds by a share of the controller's turn since the grab,
+        // easing toward a ceiling rather than stopping at it: the fingers are shaped around the part. Ceiling 0 = rigid.
+        public static float handWiggleDegrees = 6f;         // deg the ceiling
+        public static float handWiggleShare = 0.4f;         // of the controller's turn, while it's small
         public static float gripEaseRate = 10f;             // 1/s a free magazine settles into the animation's grip
         public static Vector3 chestPouchOffset = new Vector3(0f, -0.40f, 0.03f);    // chest pouch zone center, from the eyes looking level, body frame (neck anchored)
         public static float chestPouchRadius = 0.16f;       // m palm to the chest pouch center
@@ -1628,8 +1630,8 @@ namespace TarkovVR.Source.Weapons
             latchPivotInHolder = holder.InverseTransformPoint(pivotWorld);
         }
 
-        // The controller's turn since the grab, in the holder's frame (so the gun turning doesn't count), capped at handWiggleDegrees, turns
-        // the latched hand about the point it holds
+        // The controller's turn since the grab, in the holder's frame (so the gun turning doesn't count), handWiggleShare of it eased toward
+        // handWiggleDegrees, turns the latched hand about the point it holds
         private static void ApplyLatchWiggle()
         {
             Transform holder = handLatch.parent;
@@ -1640,7 +1642,14 @@ namespace TarkovVR.Source.Weapons
             if (controller == null)
                 return;
             Quaternion turnInHolder = Quaternion.Inverse(holder.rotation) * controller.rotation * Quaternion.Inverse(latchControllerAtGrabInHolder);
-            turnInHolder = Quaternion.RotateTowards(Quaternion.identity, turnInHolder, handWiggleDegrees);
+            turnInHolder.ToAngleAxis(out float turnAngle, out Vector3 turnAxis);
+            if (turnAngle > 180f)
+            {
+                turnAngle = 360f - turnAngle;
+                turnAxis = -turnAxis;
+            }
+            float shownAngle = handWiggleDegrees * (1f - Mathf.Exp(-Mathf.Max(handWiggleShare, 0f) * turnAngle / handWiggleDegrees));
+            turnInHolder = Quaternion.AngleAxis(shownAngle, turnAxis);
             Quaternion wiggle = holder.rotation * turnInHolder * Quaternion.Inverse(holder.rotation);
             Vector3 pivot = holder.TransformPoint(latchPivotInHolder);
             // The pivot in the hand's own frame, from the unwiggled pose: what a rebase starts from if the latch is moved on

@@ -119,7 +119,7 @@ namespace TarkovVR.Source.Player.Interactions
         // controller's turn since the grab (measured against the holding hand), capped at latchWiggleDegrees. Tilt opens keep
         // pullWiggleDeg about the wrist: their gesture is the hand's turn. false = the latch jumps on and snaps off.
         public static bool reloadStyleLatch = true;
-        public static float latchWiggleDegrees = 15f;   // = VRReloadController.handWiggleDegrees
+        public static float latchWiggleDegrees = 15f;   // deg at most, one to one with the controller's turn
         public static float latchSnapTime = 0.06f;      // s onto the authored pose (= handSnapTime)
         public static float latchReleaseTime = 0.08f;   // s back onto the controller (= handReleaseTime)
 
