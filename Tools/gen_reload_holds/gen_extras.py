@@ -59,7 +59,10 @@ HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghin
                   'kbp_9a91':'weapon_bolt_charge','ckib_ash_12':'weapon_charging_handle','hk_g36':'weapon_charge_handle',
                   'zmz_pp-9':'weapon_bolt','zis_ppsh41':'weapon_bolt','iwi_uzi_pro':'weapon_bolt','vepr_hunter_vpo-101':'weapon_bolt',
                   'toz_avt_40':'weapon_bolt_carrier','toz_svt_40':'weapon_bolt_carrier',
-                  'nb_val_mod4':'weapon_charge','norinco_qbz191':'weapon_bolt_carrier'}
+                  'nb_val_mod4':'weapon_charge','norinco_qbz191':'weapon_bolt_carrier',
+                  # mod_charge, but every one of its racks is a two-frame yank gen_holds' riding test can't read: the fast-yank rule below
+                  # (the left thumb and index stay 2 cm off the handle's knob through the pull)
+                  'howa_type20':'mod_charge'}
 HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier'}
 # (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's hand is too)
 HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12')
