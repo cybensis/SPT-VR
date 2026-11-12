@@ -25,7 +25,7 @@ def loadFolder(folder):
             try:
                 c=o.read(); clips[c.m_Name]=c
             except Exception: pass
-    for name in list(clips): clips.setdefault(magClipName(folder,name),clips[name])
+    renameMagClips(folder,clips)
     for c in sorted(os.listdir(d)):
         if c.endswith('_container.bundle') and c.startswith('weapon_'):
             tree=loadTree(d+c)

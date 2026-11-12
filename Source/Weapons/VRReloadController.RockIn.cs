@@ -40,8 +40,9 @@ namespace TarkovVR.Source.Weapons
         public static bool offHandThumbCatches = true;      // false = the gun hand's finger and button, like an M4
         private static readonly Dictionary<string, Vector3[]> thumbCatches = new Dictionary<string, Vector3[]>();
 
-        // The off hand works these guns' catch though their clips don't put the thumb on it (the AUG's release behind the magazine)
-        private static readonly HashSet<string> offHandCatchGuns = new HashSet<string> { "aug" };
+        // The off hand works these guns' catch though their clips don't put the thumb on it (the AUG's release behind the magazine, the
+        // P90's on the magazine's back end: the hand lifting it squeezes it; its model has no release part)
+        private static readonly HashSet<string> offHandCatchGuns = new HashSet<string> { "aug", "p90" };
 
         // Who presses each gun's release in its own mag_out clip (Tools/gen_reload_holds/gen_release.py): the hand, the finger, and
         // that finger's joints on it. A gun with no clear press isn't listed and keeps the M4's: the gun hand's index.
@@ -72,9 +73,9 @@ namespace TarkovVR.Source.Weapons
         }
 
         // These guns' catch answers either hand's button: the gun hand's, as on an M4, or the off controller's with that hand on the
-        // magazine, as on a thumb catch. Ahead of the rock-in's off-thumb-only rule (the Mk47 rocks its AK magazines in too).
+        // magazine, as on a thumb catch. Ahead of the rock-in's off-thumb-only rule (the Mk47 and SA58 rock their magazines in too).
         public static bool eitherHandCatches = true;
-        private static readonly HashSet<string> eitherHandCatchGuns = new HashSet<string> { "mk47" };
+        private static readonly HashSet<string> eitherHandCatchGuns = new HashSet<string> { "mk47", "sa58" };
 
         private static bool EitherHandWorksCatch(FirearmController firearmController)
         {

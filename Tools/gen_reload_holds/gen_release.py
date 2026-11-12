@@ -7,6 +7,7 @@ sys.path.insert(0, '.')
 exec(open('gen_holds.py', encoding='utf-8').read().split("if __name__=='__main__':")[0])
 census = json.load(open('clip_census.json'))
 FINGERS = ('thumb', 'index', 'middle', 'ring', 'pinky')
+PISTOL_FOLDERS = {g['folder'] for g in json.load(open('guns.json')) if g['cls'] == 'pistol'}
 
 def isReleasePart(name):
     return (re.search('release|mag_catch', name, re.I) is not None) and not re.search('bolt|slide', name, re.I) and 'LOD' not in name
@@ -53,6 +54,36 @@ def tipsAt(g, P, t, cache):
             out[(side, f)] = tip
     return out
 
+# When the magazine leaves the well in this clip (3 mm off its seat, in the gun's frame); None = it never does
+def magazineLeaves(g, P, stop):
+    mag, gun = bone(P, '/mod_magazine'), bone(P, 'Weapon_root_anim/weapon')
+    seat = None
+    for i in range(int(stop * 30) + 1):
+        t = i / 30; c = {}
+        mp, _, _ = g['worldAt'](mag, t, c); gp, gr, _ = g['worldAt'](gun, t, c)
+        inGun = g['rotate'](conj(gr), mp - gp)
+        if seat is None:
+            seat = inGun
+        elif np.linalg.norm(inGun - seat) > 0.003:
+            return t
+    return None
+
+# Who's at a release part the moment the magazine comes free: the press that let it go, for the guns whose clips don't key their button
+# (M9, P226, the PM's heel catch). Fingers by their distance then, the off hand's only with its palm on the gun.
+def touchAtRelease(g, P, parts, t):
+    c = {}
+    tips = tipsAt(g, P, t, c)
+    Lpalm, _, _ = g['worldAt'](bone(P, '/Base HumanLPalm'), t, c); Lmk, _, _ = g['worldAt'](bone(P, '/weapon_L_IK_marker'), t, c)
+    leftOnGun = float(np.linalg.norm(Lpalm - Lmk)) <= 0.05
+    touches = []
+    for part in parts:
+        partAt, _, _ = g['worldAt'](part, t, c)
+        for (side, f), tip in tips.items():
+            if side == 'L' and not leftOnGun:
+                continue
+            touches.append((float(np.linalg.norm(tip - partAt)), side, f, part))
+    return sorted(touches)
+
 FILTER = set(sys.argv[1:])
 results = {}
 done = set()
@@ -71,8 +102,7 @@ for folder, v in sorted(census.items()):
                     c = o.read(); clips[c.m_Name] = c
                 except Exception:
                     pass
-        for name in list(clips):
-            clips.setdefault(magClipName(folder, name), clips[name])
+        renameMagClips(folder, clips)
     except Exception as e:
         print(folder, 'ERR clips', repr(e)[:80], flush=True); continue
     for prefix in prefixes:
@@ -108,8 +138,22 @@ for folder, v in sorted(census.items()):
                         found = (clipName, part, peakT, peak, g, onset)
                 if found:
                     break
+            # The touch at the release, for the press below when no part moves or nobody is by the one that does
+            touch = None
+            for clipName in outs:
+                g = setup(tree, clips[clipName])
+                leaves = magazineLeaves(g, P, float(clips[clipName].m_MuscleClip.m_StopTime))
+                if leaves is None or not parts:
+                    continue
+                touches = touchAtRelease(g, P, parts, leaves)
+                if touches:
+                    touch = dict(clip=clipName, t=round(leaves, 3), touches=[(round(d, 4), s, f, part.split('/')[-1],
+                                 eulerList([np.array(g['localAt'](fingerPaths(P, s)[1 + f * 3 + k], leaves)[1], float) for k in range(3)]))
+                                 for d, s, f, part in touches])
+                    break
             if not found:
-                results[family] = dict(container=container, parts=[p.split('/')[-1] for p in parts], note='no mag_out clip moves a release part')
+                results[family] = dict(container=container, parts=[p.split('/')[-1] for p in parts], note='no mag_out clip moves a release part', touch=touch,
+                                       pistol=folder in PISTOL_FOLDERS)
                 print(family, 'no release press', [p.split('/')[-1] for p in parts], flush=True); continue
             clipName, part, t, peak, g, onset = found
             c = {}
@@ -122,7 +166,7 @@ for folder, v in sorted(census.items()):
             best = ranked[0]
             J = fingerPaths(P, best[1])
             joints = eulerList([np.array(g['localAt'](J[1 + best[2] * 3 + k], t)[1], float) for k in range(3)])
-            results[family] = dict(container=container, part=part.split('/')[-1], clip=clipName, t=round(t, 3),
+            results[family] = dict(container=container, part=part.split('/')[-1], clip=clipName, t=round(t, 3), touch=touch, pistol=folder in PISTOL_FOLDERS,
                                    hand=best[1], finger=best[2], distance=round(best[0], 3),
                                    next=[(s, FINGERS[f], round(dd, 3)) for dd, s, f in ranked[1:4]],
                                    palmOffL=round(float(np.linalg.norm(Lpalm - Lmk)), 3), palmOffR=round(rightPalmOff(g, P, t, {}), 3), joints=joints)
@@ -146,10 +190,17 @@ for family, r in sorted(results.items()):
     moving = [f for f in fingers if f['distance'] <= NEAR and f['approach'] >= MOVES]
     reach = [f for f in fingers if f['distance'] <= REACH]
     chosen = min(moving, key=lambda f: f['distance']) if moving else (min(reach, key=lambda f: f['distance']) if reach else None)
+    # Nobody by a moving part: the finger at a release part as the magazine comes free, within REACH. A pistol's is a thumb (every pistol
+    # whose clip keys its button presses it with one; an M9's wrapped middle finger lies as close to it).
+    touches = [touch for touch in (r.get('touch') or {}).get('touches', []) if touch[0] <= REACH and (not r.get('pistol') or touch[2] == 0)]
     if chosen:
         press[family] = dict(hand='gun' if chosen['hand'] == 'R' else 'off', finger=chosen['finger'], joints=chosen['joints'],
                              distance=chosen['distance'], clip=r['clip'], part=r['part'])
         print(f"{family:14s} -> {press[family]['hand']} {FINGERS[chosen['finger']]} ({chosen['distance']*100:.1f} cm, {'moves with it' if moving else 'nearest'})", flush=True)
+    elif touches:
+        distance, side, finger, part, joints = touches[0]
+        press[family] = dict(hand='gun' if side == 'R' else 'off', finger=finger, joints=joints, distance=distance, clip=r['touch']['clip'], part=part, by='touch')
+        print(f"{family:14s} -> {press[family]['hand']} {FINGERS[finger]} ({distance*100:.1f} cm off {part} as the magazine comes free, {r['touch']['clip']} t={r['touch']['t']:.2f})", flush=True)
     else:
         print(f'{family:14s} -> nobody', flush=True)
 if not FILTER:

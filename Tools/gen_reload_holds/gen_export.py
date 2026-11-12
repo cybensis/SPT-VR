@@ -15,6 +15,31 @@ for folder,v in census.items():
     for c in v.get('clips',[]):
         m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,c))
         if m: famFolder[m.group(1).lower()]=folder
+# gen_gun_families.py: each gun's animator clips in order. A gun's animation set as the runtime picks it (VRReloadController.AnimationFamily:
+# the first magazine-in clip's, else the first reload_in one's), and which set's clip each magazine type plays on that gun.
+gunClips=json.load(open('gun_families.json')) if os.path.exists('gun_families.json') else {}
+def runtimeFamily(clips):
+    for reloadNamed in (False,True):
+        for clip in clips:
+            if not clip: continue
+            name=clip.lower()
+            end=name.find('_reload_in') if reloadNamed else (name.find('_mag_in') if '_mag_in' in name else name.find('_magin'))
+            if end>0: return name[:end]
+    return None
+gunFamily={g['name']:runtimeFamily(gunClips[g['name']]['clips']) for g in guns if (gunClips.get(g['name']) or {}).get('clips')}
+def clipSetsByType(gunName):
+    sets={}
+    for clip in (gunClips.get(gunName) or {}).get('clips') or []:
+        m=re.match(r'(.+?)_mag_in(?:_(\d+))?$',magClipName('',clip)) if clip else None
+        if m: sets.setdefault(int(m.group(2) or 0),set()).add(m.group(1).lower())
+    return sets
+def magazinesByType(gun):
+    byType={}
+    for slot in items[gun['id']]['_props'].get('Slots',[]):
+        if slot['_name']!='mod_magazine': continue
+        for i in slot['_props']['filters'][0]['Filter']:
+            if i in items: byType.setdefault(items[i]['_props'].get('magAnimationIndex',0),set()).add(i)
+    return byType
 lengthCache={}
 def magLength(templateId):
     if templateId in lengthCache: return lengthCache[templateId]
@@ -29,10 +54,11 @@ def magLength(templateId):
     except Exception: pass
     lengthCache[templateId]=length
     return length
+# The family's own guns' magazines first: guns in one folder can take others (the X-17 AR-10 magazines, the Mk16 STANAGs)
 def lengthFor(family,typ):
     folder=famFolder.get(family)
-    for g in guns:
-        if g['folder']!=folder: continue
+    own=[g for g in guns if gunFamily.get(g['name'])==family]
+    for g in own+[g for g in guns if g['folder']==folder and g not in own]:
         slot=[s for s in items[g['id']]['_props'].get('Slots',[]) if s['_name']=='mod_magazine']
         if not slot: continue
         for i in slot[0]['_props']['filters'][0]['Filter']:
@@ -61,6 +87,47 @@ for k,v in sorted(R['grips'].items()):
             dropped.append((k,half,h['palmOff'],h['frames'])); continue
         e[half]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],magazineLength=lengthFor(family,typ))
     if e: out['grips'][f'{family}|{typ}']=e
+# A magazine type a set has no hold of its own for (or only one half of): the hold of the set whose clip the gun's own animator plays for
+# that type (an AK-74M's drum is ak100_mag_in_5), else that of a set whose guns take the same magazines (the G36's PMAG D-60 is the M4's),
+# most magazines in common first (of that type, then of all). A hold is the magazine in the hand, so it carries over between guns; it keeps its own magazine's length.
+ownGrips={k:dict(v) for k,v in out['grips'].items()}
+setGuns={}
+for g in guns:
+    if g['mode']=='ExternalMagazine' and gunFamily.get(g['name']): setGuns.setdefault(gunFamily[g['name']],[]).append(g)
+setMagazines={}
+for family,members in setGuns.items():
+    for g in members:
+        for typ,ids in magazinesByType(g).items(): setMagazines.setdefault((family,typ),set()).update(ids)
+def allInCommon(family,other):
+    return sum(len(ids&setMagazines.get((other,t),set())) for (f,t),ids in setMagazines.items() if f==family)
+filled=[]
+for family,members in sorted(setGuns.items()):
+    for typ in sorted({t for (f,t) in setMagazines if f==family}):
+        key=f'{family}|{typ}'
+        missing=[half for half in ('pull','insert') if half not in out['grips'].get(key,{})]
+        if not missing: continue
+        # One magazine type, one set of clips: that clip plays it, whatever it's numbered (the P90's magazine is type 5, its clip p90_mag_in_0)
+        ownTypes={int(k.split('|')[1]) for k in ownGrips if k.split('|')[0]==family}
+        if len(ownTypes)==1 and len({t for (f,t) in setMagazines if f==family})==1:
+            only=f'{family}|{next(iter(ownTypes))}'
+            for half in missing:
+                if half in ownGrips[only]:
+                    out['grips'].setdefault(key,{})[half]=dict(ownGrips[only][half],magazineLength=lengthFor(family,typ))
+                    filled.append((key,half,only))
+            continue
+        playing=set()
+        for g in members:
+            if typ in magazinesByType(g): playing|=clipSetsByType(g['name']).get(typ,set())
+        candidates=[s for s in sorted(playing) if s!=family and len(playing)==1]
+        common=sorted(((len(setMagazines[(family,typ)]&ids),other) for (other,t),ids in setMagazines.items()
+                       if t==typ and other!=family and setMagazines[(family,typ)]&ids),key=lambda c:(-c[0],-allInCommon(family,c[1]),c[1]))
+        candidates+=[other for _,other in common if other not in candidates]
+        for half in missing:
+            source=next((c for c in candidates if half in ownGrips.get(f'{c}|{typ}',{})),None)
+            if source is None: continue
+            out['grips'].setdefault(key,{})[half]=dict(ownGrips[f'{source}|{typ}'][half])
+            filled.append((key,half,source))
+print('holds from another set:',filled)
 # Handle travel: the clip's, scaled like the M4's (its clip shows 10.1 cm, tuned to 8 in the headset). Not where a gun came up short
 # at that (headset, MDR: "it doesn't pull far back enough"): those keep their clip's whole travel.
 FULL_HANDLE_TRAVEL=('mdr','mdr_308')
@@ -205,8 +272,9 @@ for f in T_HANDLE_FROM_M4:
     out['handles'][f]=dict(position=position,rotation=m4Grip['rotation'],fingers=m4Grip['fingers'],travel=round(own['travel']*0.08/0.101,3) if own else m4Grip['travel'])
 print('T handle grips from the M4:',{f:out['handles'][f] for f in T_HANDLE_FROM_M4 if f in out['handles']})
 # Rocked in like an AK though the gun's own clips only tilt the magazine 9 deg (headset, Mk47: "mag should tilt in like an AK"): it takes
-# AK magazines, and its seated magazine bone sits in the gun like the AKM's (both square to the gun), so the AKM's rock carries over as is
-ROCK_IN_FROM={'mk47':'akm'}
+# AK magazines, and its seated magazine bone sits in the gun like the AKM's (both square to the gun), so the AKM's rock carries over as is.
+# The SA58 too: a FAL magazine hooks at the front and rocks back (its clip tilts it only 9 deg), its bone square to the gun like the AKM's.
+ROCK_IN_FROM={'mk47':'akm','sa58':'akm'}
 for f,source in ROCK_IN_FROM.items():
     if source in out['rockIn']: out['rockIn'][f]=out['rockIn'][source]
 # gen_extras.py: bolts the handle moves itself, and side handles. A side handle's travel is scaled like the others, and its slider's lag with it.
@@ -225,6 +293,9 @@ out['handleOverTop']={f:dict(h,travel=out['handles'][f]['travel'] if f in out['h
 out['rockIn'].update(extras.get('rockIn',{}))
 # gen_release.py: who presses each gun's release in its own mag_out clip. Not where a rock-in or thumb catch already says (the off thumb)
 release=json.load(open('release.json')) if os.path.exists('release.json') else {}
+# (a press found by the touch as the magazine comes free, not on the belt guns: their box latch is the lmgs data's)
+lmgFamilies=set(json.load(open('lmgs.json')).get('lmgs',{})) if os.path.exists('lmgs.json') else set()
+release={f:p for f,p in release.items() if not (p.get('by')=='touch' and f in lmgFamilies)}
 out['releasePress']={f:dict(hand=p['hand'],finger=p['finger'],joints=p['joints']) for f,p in sorted(release.items())
                      if f not in out['rockIn'] and f not in R['thumbCatches']}
 print('release presses:',{f:(p['hand'],p['finger']) for f,p in out['releasePress'].items()})

@@ -338,6 +338,19 @@ namespace TarkovVR.Source.Weapons
             return nameEnd >= 0 ? nameEnd : clipName.IndexOf(goingIn ? "_magin" : "_magout", StringComparison.OrdinalIgnoreCase);
         }
 
+        // The sets whose magazine clips are their reload_in / reload_out ones (sr2m_reload_in_0; the MPX's own mpx_mag_in_1..4 never move
+        // the magazine). Tools/gen_reload_holds clip_names.py has the same list.
+        private static readonly string[] reloadNamedMagazineSets = { "sr2m", "scar_x17", "mpx" };
+
+        // A clip that shows a magazine going in or out, by either naming
+        private static bool IsMagazineClip(string clipName, bool goingIn)
+        {
+            if (MagazineClipNameEnd(clipName, goingIn) >= 0)
+                return true;
+            int nameEnd = clipName.IndexOf(goingIn ? "_reload_in" : "_reload_out", StringComparison.OrdinalIgnoreCase);
+            return nameEnd > 0 && Array.IndexOf(reloadNamedMagazineSets, clipName.Substring(0, nameEnd).ToLowerInvariant()) >= 0;
+        }
+
         // The name the gun's reload clips start with (m4a1_mag_in_0 = m4a1). No magazine clips: its own template id.
         private static string AnimationFamily(FirearmController firearmController)
         {
