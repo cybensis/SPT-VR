@@ -39,6 +39,7 @@ namespace TarkovVR.Source.Weapons
         public static float pistolCatchReach = 0.11f;       // m below seated the track catches it: about its tip at the bottom of the grip
         public static float pistolCatchRadius = 0.05f;      // m off the track that still catches it
         public static float railExitMargin = 0.02f;         // m past the top of the track before a magazine being put in comes off it
+        public static bool magwellDepthTracks = true;       // a gun with a deeper magwell than the M4's gets a longer track (false = railLength on all)
         public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
         // s the rendered hand takes to go from a part of the gun back to the controller, eased in and out
         public static float handReleaseTime = 0.16f;
@@ -156,7 +157,7 @@ namespace TarkovVR.Source.Weapons
         private static bool grabbedWithRelease;             // taken from the support grip by pressing B: letting go of B gives it back
         private static float railCatchClearance;            // how far from the well it has to get first, on top of leaving the catch zone
         private static bool railCatchArmed;                 // a magazine that just came off the track must leave the catch zone first
-        private static bool railPullingOut;                 // started seated (the gun's own magazine): comes free at railLength
+        private static bool railPullingOut;                 // started seated (the gun's own magazine): comes free at TrackLength
         private static float railPosition;                  // m out from seated
         private static float railPositionAtStart;
         private static Vector3 handAtRailStartInWell;       // the controller (LeftHand), not the rendered hand
@@ -1135,7 +1136,7 @@ namespace TarkovVR.Source.Weapons
             Quaternion caughtRotation = heldRockIn != null ? RockRotation(railLength) * seatedLocalRotation : seatedLocalRotation;
             float angle = Quaternion.Angle(propTransform.rotation, magazineWell.rotation * caughtRotation);
             bool pistolTrack = heldRockIn == null && VRGlobals.vrPlayer.isWeapPistol;
-            float catchReach = pistolTrack ? pistolCatchReach : railLength + railExitMargin;
+            float catchReach = pistolTrack ? pistolCatchReach : (heldRockIn != null ? railLength : TrackLength) + railExitMargin;
             float catchRadius = pistolTrack ? pistolCatchRadius : railCaptureRadius;
             bool inCatchZone = alongTrack >= -0.005f && alongTrack <= catchReach && offTrack <= catchRadius && angle <= railCaptureAngle;
             // A belt box on its hinge: caught hooked (where its well point sits at the full rock, off the well). Before the arming below: a box
@@ -1159,7 +1160,33 @@ namespace TarkovVR.Source.Weapons
         }
 
         // How far a magazine going in is from seated when it starts on the track
-        private static float InsertTrackLength => heldRockIn == null && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol ? pistolInsertStart : railLength;
+        private static float InsertTrackLength => heldRockIn == null && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol ? pistolInsertStart : TrackLength;
+
+        // By animation set: how far below its seat the gun's own mag-in clip starts pushing the magazine straight up the well, i.e. where
+        // its magwell's mouth is (Tools/gen_reload_holds gen_magwells.py): the SR-2M's, the Uzi's, the MP9's 11-13 cm, the M4's 7
+        private static readonly Dictionary<string, float> magwellDepths = new Dictionary<string, float>();
+        private static FirearmController trackLengthFor;
+        private static float trackLengthOfGun;
+
+        // A straight track's length on this gun: caught railExitMargin past its top, so its top railExitMargin short of the magwell's
+        // mouth; never shorter than railLength (the M4's, which this gives it too). Rock-in guns keep railLength: their track is the rock.
+        private static float TrackLength
+        {
+            get
+            {
+                FirearmController firearmController = VRGlobals.firearmController;
+                if (!magwellDepthTracks || heldRockIn != null || firearmController == null)
+                    return railLength;
+                if (trackLengthFor != firearmController)
+                {
+                    trackLengthFor = firearmController;
+                    LoadRecordedGrips();
+                    trackLengthOfGun = RockInOf(firearmController) == null && magwellDepths.TryGetValue(AnimationFamily(firearmController), out float depth)
+                        ? Mathf.Max(railLength, depth - railExitMargin) : railLength;
+                }
+                return trackLengthOfGun;
+            }
+        }
 
         // On the track: the controller's travel along the well's axis moves the magazine; sideways it can't go
         private static void UpdateRail(bool gripReleased, bool releaseLetGo)
@@ -1187,7 +1214,7 @@ namespace TarkovVR.Source.Weapons
             {
                 // Manual Reload: the mag catch holds it seated until B is down; once past the catch it slides freely
                 bool heldByCatch = VRSettings.GetManualReloadOn() && !magazineCatchPassed && !MagazineReleaseHeld();
-                float pullLength = railStartedPartlyOut ? partlyOutDistance + partlyOutPullLeft : railLength;
+                float pullLength = railStartedPartlyOut ? partlyOutDistance + partlyOutPullLeft : (heldRockIn != null ? railLength : TrackLength);
                 railPosition = Mathf.Clamp(trackPosition, 0f, heldByCatch ? 0f : pullLength);
                 if (railPosition >= magazineCatchDistance)
                     magazineCatchPassed = true;

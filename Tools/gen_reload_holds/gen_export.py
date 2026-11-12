@@ -325,6 +325,8 @@ for f,h in lmg.get('lmgHandles',{}).items():
     if h.get('gunHand'): out['gunHandHandles'][f]=h['gunHand']
     if h.get('offHand'): out['handles'][f]=h['offHand']
 out['handleTravels']={f:h['travel'] for f,h in lmg.get('lmgHandles',{}).items() if h.get('travel')}
+# gen_magwells.py: how far below the seat each set's own mag-in clip starts its straight push up the well (the runtime's track length)
+out['magwellDepths']=json.load(open('magwells.json')) if os.path.exists('magwells.json') else {}
 print('lmgs:',{f:(g['cover']['bone'] if g.get('cover') else None,bool(g.get('latch')),g['belt']['anchor'] if g.get('belt') else None) for f,g in out['lmgs'].items()})
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]

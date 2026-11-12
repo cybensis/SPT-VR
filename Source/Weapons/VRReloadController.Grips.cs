@@ -157,6 +157,7 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedShotgun> shotguns;
             public Dictionary<string, SavedLmg> lmgs;
             public Dictionary<string, float> handleTravels;
+            public Dictionary<string, float> magwellDepths;
         }
 
         // A belt-fed machine gun (gen_lmgs.py), by its clips' family: the feed cover and the scope mount's latch as hinges (bone, axis in its
@@ -841,6 +842,11 @@ namespace TarkovVR.Source.Weapons
                 {
                     foreach (KeyValuePair<string, float> entry in generated.handleTravels)
                         handleTravels[entry.Key] = entry.Value;
+                }
+                if (generated.magwellDepths != null)
+                {
+                    foreach (KeyValuePair<string, float> entry in generated.magwellDepths)
+                        magwellDepths[entry.Key] = entry.Value;
                 }
                 if (generated.sideHandles != null)
                 {
