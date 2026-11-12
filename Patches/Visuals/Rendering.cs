@@ -617,8 +617,8 @@ namespace TarkovVR.Patches.Visuals
         // eye, so dropping renderers saves CPU twice. 0 = no extra cull (the camera far clip).
         // Structural layers (Default world geometry, Terrain, Water, Player, PlayerRenderers, Sky, LevelBorder) stay at 0 so
         // buildings/terrain/other players never pop in/out; the win comes from the high-count clutter layers.
-        // useLayerCullDistances is live (UnityExplorer); cullDistanceMultiplier follows the VR Graphics
-        // "Per-Layer Cull Distance" slider. Either change rebuilds + re-applies next frame. Log: "[CullDist]".
+        // useLayerCullDistances is live (UnityExplorer); cullDistanceMultiplier follows the VR menu's
+        // "Clutter Draw Distance" slider (Graphics). Either change rebuilds + re-applies next frame. Log: "[CullDist]".
         public static bool useLayerCullDistances = true;   // master toggle
         public static float cullDistanceMultiplier = 1f;   // scales the whole table; <1 = more aggressive (set from the slider)
 
@@ -655,7 +655,7 @@ namespace TarkovVR.Patches.Visuals
             if (cam == null)
                 return;
 
-            // Driven by the "Per-Layer Cull Distance" slider (VR Graphics); a change rebuilds the table below.
+            // Driven by the VR menu's "Clutter Draw Distance" slider (Graphics); a change rebuilds the table below.
             cullDistanceMultiplier = TarkovVR.Source.Settings.VRSettings.GetCullDistance();
 
             if (!useLayerCullDistances)

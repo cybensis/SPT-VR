@@ -65,7 +65,7 @@ namespace TarkovVR.Source.Graphics
         // Off for this session after an error (never written to the config: the setting stays the user's)
         private static bool faulted;
 
-        // The VR Graphics tab's toggle and slider
+        // The VR menu's toggle and slider (Graphics)
         public static bool IsEnabled => enabledSetting != null && enabledSetting.Value;
         public static void SetEnabled(bool on)
         {
@@ -80,7 +80,7 @@ namespace TarkovVR.Source.Graphics
 
         public static void Init(ConfigFile config)
         {
-            // Shown in the VR Graphics tab (VRSettings), not F12. Still BepInEx entries: SixBench A/Bs "Enabled" through them.
+            // Shown in the VR menu (VRSettings, Graphics), not F12. Still BepInEx entries: SixBench A/Bs "Enabled" through them.
             enabledSetting = config.Bind("Foveated Masking", "Enabled", true,
                 new ConfigDescription("Shade every other 2x2 pixel block outside the middle of each eye from its neighbours instead (saves GPU time, softer edges).",
                     null, new TarkovVR.Source.Settings.ConfigurationManagerAttributes { Browsable = false }));

@@ -1604,8 +1604,6 @@ namespace TarkovVR.Patches.Misc
         {
             if (toggle.name == "vrSettingsToggle")
                 VRSettings.ShowVRSettings();
-            else if (toggle.name == "vrGraphicsToggle")
-                VRSettings.ShowVRGraphicsSettings();
 
             Camera.main.useOcclusionCulling = false;
             //Camera.main.useOcclusionCulling = true;          

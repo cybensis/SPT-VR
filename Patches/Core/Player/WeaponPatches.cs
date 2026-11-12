@@ -1095,7 +1095,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(OpticCameraManager), "SetResolution")]
         private static void ScaleOpticResolution(ref int resolution)
         {
-            // The "Scope Render Resolution" VR Graphics setting: same target object, just smaller (grass-safe)
+            // The VR menu's "Scope Render Resolution" (Graphics): same target object, just smaller (grass-safe)
             int res = VRSettings.GetOpticRenderResolution();
             if (res > 0)
                 resolution = Mathf.Clamp(res, 256, 1024);

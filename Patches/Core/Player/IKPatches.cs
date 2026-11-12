@@ -132,7 +132,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(WalkEffector), "Process")]
         private static bool DisableWalkEffector(WalkEffector __instance, float deltaTime)
         {
-            // VR setting "Turn On EFT Weapon Walk Effector": on = the original runs (weapon walk bob), off = skipped (default)
+            // VR setting "EFT Walk Bobbing": on = the original runs (weapon walk bob), off = skipped (default)
             return VRSettings.GetWalkEffectorOn();
         }
 

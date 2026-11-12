@@ -187,7 +187,6 @@ namespace TarkovVR.Source.Settings
 
         private static SettingsScreen settingsUi;
         public static GameObject vrSettingsObject;
-        public static GameObject vrGraphicsObject;
 
         //private static SettingSelectSlider leftStickDriftSlider;
         //private static SettingSelectSlider rightStickDriftSlider;
@@ -251,7 +250,6 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle useVRKeyboardToggle;
         private static SettingToggle heldItemWeightToggle;
 
-        private static SettingSelectSlider emptySpacingSlider;
 
 
         private static ModSettings settings;
@@ -339,6 +337,34 @@ namespace TarkovVR.Source.Settings
                 cfg.Apply();
         }
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The "VR" tab: one panel, a category picker on top and that category's rows under it (the other categories' rows hidden). A row
+        // that only matters with another option on (Row.shownWhen) is hidden while it's off; RefreshRows after every change.
+
+        private enum Category { Movement, Weapons, HandsAndBody, Interaction, Graphics, DesktopView }
+        private static readonly string[] CATEGORY_NAMES = { "Movement", "Weapons", "Hands & Body", "Interaction", "Graphics", "Desktop View" };
+        private const int EVERY_CATEGORY = -1;
+
+        private static readonly string[] MOVEMENT_MODES = { "Head-based", "Controller-based", "Joystick only" };
+        private static readonly string[] ROTATION_MODES = { "Smooth Turn", "Snap Turn" };
+        private static readonly string[] SNAP_TURN_ANGLES = { "30", "45", "90" };
+        private static readonly string[] SHADOW_OPTIONS = { "Normal", "Disable Near Shadows", "Distant Shadows (FPS Hit)" };
+        private static readonly string[] OPTIC_RESOLUTIONS = { "256", "512", "768", "1024 (Vanilla)" };
+
+        private sealed class Row
+        {
+            public GameObject gameObject;
+            public int category;            // a Category, or EVERY_CATEGORY
+            public Func<bool> shownWhen;    // null = always (in its category)
+        }
+
+        private static readonly List<Row> rows = new List<Row>();
+        private static int shownCategory;               // kept while the game runs, not saved
+        private static SettingDropDown categoryDropDown;
+        private static SoundSettingsTab rowBuilder;     // the cloned tab, while its rows are built (null after)
+        private static Transform rowsPanel;
+        private static ScrollRect _vrSettingsScroll;
+
         public static void initVrSettings(SettingsScreen settingsUi)
         {
             VRSettings.settingsUi = settingsUi;
@@ -356,21 +382,6 @@ namespace TarkovVR.Source.Settings
                 settingsController._localizationSubscription = ShowVRSettings;
             }
 
-            // Second custom tab: "VR Graphics" (sits next to "VR")
-            GameObject vrGraphicsButton = UnityEngine.Object.Instantiate(settingsUi._controlsButton.gameObject);
-            vrGraphicsButton.transform.parent = settingsUi._controlsButton.transform.parent;
-            vrGraphicsButton.transform.localScale = Vector3.one;
-            vrGraphicsButton.transform.localRotation = Quaternion.identity;
-            vrGraphicsButton.transform.localPosition = Vector3.zero;
-            vrGraphicsButton.name = "vrGraphicsToggle";
-
-            if (vrGraphicsButton.GetComponent<UIAnimatedToggleSpawner>())
-            {
-                UIAnimatedToggleSpawner graphicsController = vrGraphicsButton.GetComponent<UIAnimatedToggleSpawner>();
-                graphicsController.SpawnableToggle._headerLabel.text = "VR More";
-                graphicsController._localizationSubscription = ShowVRGraphicsSettings;
-            }
-
             GameObject vrSettings = UnityEngine.Object.Instantiate(settingsUi._soundSettingsScreen.gameObject);
             vrSettings.transform.parent = settingsUi._soundSettingsScreen.transform.parent;
             vrSettings.transform.localScale = Vector3.one;
@@ -378,497 +389,291 @@ namespace TarkovVR.Source.Settings
             vrSettings.transform.localPosition = new Vector3(0, -71.5f, 0);
             vrSettings.transform.GetChild(0).localPosition = new Vector3(10, 433.5f, 0);
 
-
             SoundSettingsTab newSoundSettings = vrSettings.GetComponent<SoundSettingsTab>();
             Transform slidersPanel = newSoundSettings._slidersSection;
             for (int i = 0; i < slidersPanel.childCount; i++)
-            {
                 UnityEngine.Object.Destroy(slidersPanel.GetChild(i).gameObject);
-            }
             GameObject.Destroy(newSoundSettings._togglesSection.gameObject);
             GameObject.Destroy(newSoundSettings._slidersSection.parent.FindChild("VoipSection").gameObject);
-            ReadOnlyCollection<string> movementMethods = new ReadOnlyCollection<string>(new List<string> { "Head-based movement", "Wand-based movement", "JoyStick only movement" });
-            movementMethod = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
-            movementMethod.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, movementMethods, (x) => !(x == "Head-based movement") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
-            movementMethod.Text.localizationKey = "Movement method: ";
-            if (settings.movementType == MovementMode.HeadBased)
-                movementMethod.DropDown.SetLabelText("Head-based movement");
-            else if (settings.movementType == MovementMode.WandBased)
-                movementMethod.DropDown.SetLabelText("Wand-based movement");
-            else
-                movementMethod.DropDown.SetLabelText("JoyStick only movement");
 
-            movementMethod.DropDown._onValueChanged._onChange = ChangeMovementMode;
-
-            ReadOnlyCollection<string> rotationsModes = new ReadOnlyCollection<string>(new List<string> { "Smooth Turn", "Snap Turn" });
-            rotationMethod = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
-            rotationMethod.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, rotationsModes, (x) => !(x == "Smooth Turn") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
-            rotationMethod.Text.localizationKey = "Rotation method: ";
-            if (settings.rotationType == RotationMode.Smooth)
-                rotationMethod.DropDown.SetLabelText("Smooth Turn");
-            else
-                rotationMethod.DropDown.SetLabelText("Snap Turn");
-
-            rotationMethod.DropDown._onValueChanged._onChange = ChangeRotationType;
-
-            
-
-            ReadOnlyCollection<string> snapTurnMethods = new ReadOnlyCollection<string>(new List<string> { "30", "45", "90" });
-            snapTurnAmountDropDown = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, slidersPanel);
-            snapTurnAmountDropDown.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, snapTurnMethods, (x) => !(x == "45") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
-            snapTurnAmountDropDown.Text.localizationKey = "Snap turn Amount: ";
-            if (settings.snapTurnAmount == SnapTurnAmount.thirty)
-                snapTurnAmountDropDown.DropDown.SetLabelText("30");
-            else if (settings.snapTurnAmount == SnapTurnAmount.fourtyFive)
-                snapTurnAmountDropDown.DropDown.SetLabelText("45");
-            else
-                snapTurnAmountDropDown.DropDown.SetLabelText("90");
-
-
-            snapTurnAmountDropDown.DropDown._onValueChanged._onChange = ChangeSnapAmount;
-
-
-            sensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            sensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            sensitivitySlider.Text.localizationKey = "Rotation Sensitivity:";
-            MakeSliderSmooth(sensitivitySlider, 0.5f, 20f, () => settings.rotationSensitivity,
-                (v) => settings.rotationSensitivity = v, (v) => Remap(v, 0.5f, 20f, 0f, 10f).ToString("0"));
-            //leftStickDriftSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            //leftStickDriftSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            //leftStickDriftSlider.Slider.action_0 = ChangeLeftStickDriftSensitivity;
-            //leftStickDriftSlider.Text.localizationKey = "Left Stick Drift Sensitivity: ";
-            //leftStickDriftSlider.Slider.UpdateValue((int) settings.leftStickDriftSensitivity * 10);
-            //leftStickDriftSlider.transform.localPosition = new Vector3(0, -70, 0);
-
-            //rightStickDriftSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            //rightStickDriftSlider.BindIndexTo(settingsUi._soundSettingsScreen.gclass957_0.OverallVolume, settingsUi._soundSettingsScreen.readOnlyCollection_0, (x) => x.ToString());
-            //rightStickDriftSlider.Slider.action_0 = ChangeRightStickDriftSensitivity;
-            //rightStickDriftSlider.Text.localizationKey = "Right Stick Drift Sensitivity: ";
-            //rightStickDriftSlider.Slider.UpdateValue((int) settings.rightStickDriftSensitivity * 10);
-            //rightStickDriftSlider.transform.localPosition = new Vector3(0, -120, 0);
-
-
-            
-            emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            emptySpacingSlider.Slider.gameObject.SetActive(false);
-            emptySpacingSlider.Text.gameObject.SetActive(false);
-            
-
-            seatedModeToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            seatedModeToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            seatedModeToggle.Toggle._onValueChanged = SetSeatedMode;
-            seatedModeToggle.Text.localizationKey = "Seated Mode - Reset your height after setting";
-            seatedModeToggle.Toggle.UpdateValue(settings.seatedMode);
-
-            leftHandedMode = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            leftHandedMode.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            leftHandedMode.Toggle._onValueChanged = SetLeftHandedMode;
-            leftHandedMode.Text.localizationKey = "Laser Pointer In Left Hand";
-            leftHandedMode.Toggle.UpdateValue(settings.leftHandedMode);
-
-            swapSticksToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            swapSticksToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            swapSticksToggle.Toggle._onValueChanged = SetSwapSticks;
-            swapSticksToggle.Text.localizationKey = "Swap Sticks (move with the right, turn with the left)";
-            swapSticksToggle.Toggle.UpdateValue(settings.swapSticks);
-
-            scopeSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            scopeSmoothingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            scopeSmoothingToggle.Toggle._onValueChanged = ToggleScopeSmoothingSensitivity;
-            scopeSmoothingToggle.Text.localizationKey = "Turn On Hold Breath Sensitivity ";
-            scopeSmoothingToggle.Toggle.UpdateValue(settings.scopeAimSmoothing);
-
-            aimSmoothingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            aimSmoothingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            aimSmoothingToggle.Toggle._onValueChanged = ToggleSmoothingSensitivity;
-            aimSmoothingToggle.Text.localizationKey = "Turn On Weapon Smoothing ";
-            aimSmoothingToggle.Toggle.UpdateValue(settings.weaponAimSmoothing);
-
-            weaponWeightToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            weaponWeightToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            weaponWeightToggle.Toggle._onValueChanged = SetWeaponWeightOn;
-            weaponWeightToggle.Text.localizationKey = "Turn On Weapon Weight";
-            weaponWeightToggle.Toggle.UpdateValue(settings.weaponWeight);
-
-            weaponInertiaToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            weaponInertiaToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            weaponInertiaToggle.Toggle._onValueChanged = SetWeaponInertiaOn;
-            weaponInertiaToggle.Text.localizationKey = "Turn On EFT Weapon Inertia";
-            weaponInertiaToggle.Toggle.UpdateValue(settings.weaponInertia);
-
-            walkEffectorToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            walkEffectorToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            walkEffectorToggle.Toggle._onValueChanged = SetWalkEffectorOn;
-            walkEffectorToggle.Text.localizationKey = "Turn On EFT Weapon Walk Bobbing";
-            walkEffectorToggle.Toggle.UpdateValue(settings.walkEffector);
-
-            heldItemWeightToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            heldItemWeightToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            heldItemWeightToggle.Toggle._onValueChanged = SetHeldItemWeight;
-            heldItemWeightToggle.Text.localizationKey = "Turn On Held Item Adds To Carry Weight";
-            heldItemWeightToggle.Toggle.UpdateValue(settings.heldItemWeight);
-
-            // Virtual gunstock (shouldering): raise the rifle into an aim-like posture to seat the stock and stabilize aim.
-            // Activation is angle-based (like ADS detection), so no per-body position sliders are needed.
-            virtualStockToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            virtualStockToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            virtualStockToggle.Toggle._onValueChanged = SetVirtualStockOn;
-            virtualStockToggle.Text.localizationKey = "Turn On Virtual Gunstock (Shouldering)";
-            virtualStockToggle.Toggle.UpdateValue(settings.virtualStock);
-
-            // Chest sling (ChestHang): opening the dominant hand lets go of the gun - onto the support
-            // hand if it holds the foregrip, else onto the chest. Off = the gun stays in the hand.
-            chestSlingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            chestSlingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            chestSlingToggle.Toggle._onValueChanged = SetChestSlingOn;
-            chestSlingToggle.Text.localizationKey = "Turn On Chest Sling";
-            chestSlingToggle.Toggle.UpdateValue(settings.chestSling);
-
-            // Doors by hand (PhysicalDoors): grip the handle, turn it, swing the door. Off = the grip opens / closes them.
-            physicalDoorsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            physicalDoorsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            physicalDoorsToggle.Toggle._onValueChanged = SetPhysicalDoorsOn;
-            physicalDoorsToggle.Text.localizationKey = "Turn On Physical Doors";
-            physicalDoorsToggle.Toggle.UpdateValue(settings.physicalDoors);
-
-            // The doors' gaze menu off for the doors a hand works (with Physical Doors on); keycard doors and doors no hand can open keep it
-            disableDoorContextMenuToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            disableDoorContextMenuToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            disableDoorContextMenuToggle.Toggle._onValueChanged = SetDisableDoorContextMenu;
-            disableDoorContextMenuToggle.Text.localizationKey = "Disable Door Context Menu";
-            disableDoorContextMenuToggle.Toggle.UpdateValue(settings.disableDoorContextMenu);
-
-            // The gun spots placed by hand (GunSpots: hold the trigger on a gun at its spot, move it, let go) all back to where they
-            // start. A one-shot: it turns itself back off.
-            resetGunSpotsToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            resetGunSpotsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            resetGunSpotsToggle.Toggle._onValueChanged = ResetGunSpots;
-            resetGunSpotsToggle.Text.localizationKey = "Reset Placed Gun Spots";
-            resetGunSpotsToggle.Toggle.UpdateValue(false);
-
-            // Manual reload (VRReloadController): on guns with detachable magazines B stops running Tarkov's
-            // reload; a press drops the magazine, hold it so the off hand can pull it out.
-            manualReloadToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            manualReloadToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            manualReloadToggle.Toggle._onValueChanged = SetManualReloadOn;
-            manualReloadToggle.Text.localizationKey = "Turn On Manual Reload";
-            manualReloadToggle.Toggle.UpdateValue(settings.manualReload);
-
-            aimSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            aimSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            // smoothingSensitivity is the slerp factor used as `smoothingFactor`: lower = heavier smoothing,
-            // 50 = the special "no smoothing" value.
-            aimSmoothingSlider.Text.localizationKey = "Weapon Smoothing (lower = smoother):";
-            MakeSliderSmooth(aimSmoothingSlider, 0f, 50f, () => settings.smoothingSensitivity,
-                (v) => settings.smoothingSensitivity = v, (v) => Remap(v, 0f, 50f, 0f, 10f).ToString("0"));
-
-            scopeSmoothingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            scopeSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            scopeSmoothingSlider.Text.localizationKey = "Hold Breath Sensitivity:";
-            MakeSliderSmooth(scopeSmoothingSlider, 0f, 20f, () => settings.scopeSmoothingSensitivity,
-                (v) => settings.scopeSmoothingSensitivity = v, (v) => Remap(v, 0f, 20f, 0f, 10f).ToString("0"));
-
-            
-            variableZoomSensitivitySlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            variableZoomSensitivitySlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            variableZoomSensitivitySlider.Text.localizationKey = "Variable Zoom Sensitivity:";
-            MakeSliderSmooth(variableZoomSensitivitySlider, 0f, 2f, () => settings.variableZoomSensitivity,
-                (v) => settings.variableZoomSensitivity = v, (v) => Remap(v, 0f, 2f, 0f, 10f).ToString("0"));
-            
-
-            rightHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            rightHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            // Vertical hand offsets pivot around 50 in CalculateRightHandPosOffset (>=50 positive, <50 negative):
-            // keep 50 as the centre of the range.
-            rightHandVerticalAngleSlider.Text.localizationKey = "Right hand vertical rot offset:";
-            MakeSliderSmooth(rightHandVerticalAngleSlider, -30f, 130f, () => settings.rightHandVerticalAngle,
-                (v) => settings.rightHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
-
-
-            rightHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            rightHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            rightHandHorizontalAngleSlider.Text.localizationKey = "Right hand horizontal rot offset:";
-            MakeSliderSmooth(rightHandHorizontalAngleSlider, -90f, 90f, () => settings.rightHandHorizontalAngle,
-                (v) => settings.rightHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
-
-            leftHandVerticalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            leftHandVerticalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            leftHandVerticalAngleSlider.Text.localizationKey = "Left hand vertical rot offset:";
-            MakeSliderSmooth(leftHandVerticalAngleSlider, -30f, 130f, () => settings.leftHandVerticalAngle,
-                (v) => settings.leftHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
-
-            leftHandHorizontalAngleSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            leftHandHorizontalAngleSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            leftHandHorizontalAngleSlider.Text.localizationKey = "Left hand horizontal rot offset:";
-            MakeSliderSmooth(leftHandHorizontalAngleSlider, -90f, 90f, () => settings.leftHandHorizontalAngle,
-                (v) => settings.leftHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
-
-            handPosOffsetSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            handPosOffsetSlider.BindIndexTo(
-                settingsUi._soundSettingsScreen._soundSettings.OverallVolume,
-                settingsUi._soundSettingsScreen._variants,
-                (sliderIndex) =>
-                {
-                    float normalizedValue = sliderIndex / 100f; // Convert to 0-1 range
-                    float displayValue = (normalizedValue * 0.20f) - 0.10f; // Map to -0.10 to 0.10
-                    return displayValue.ToString("F2"); // Format to 2 decimal places
-                }
-            );
-            handPosOffsetSlider.Text.localizationKey = "Hand position offset (up/down):";
-            MakeSliderSmooth(handPosOffsetSlider, -0.25f, 0.25f, () => settings.handPosOffset,
-                (v) => settings.handPosOffset = v, (v) => Remap(v, -0.25f, 0.25f, -1f, 1f).ToString("0.0"));
-
-            emptySpacingSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            emptySpacingSlider.Slider.gameObject.SetActive(false);
-            emptySpacingSlider.Text.gameObject.SetActive(false);
-
-            disableRunAnimationToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            disableRunAnimationToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            disableRunAnimationToggle.Toggle._onValueChanged = SetDisableRunAnim;
-            disableRunAnimationToggle.Text.localizationKey = "Disable Run Animation";
-            disableRunAnimationToggle.Toggle.UpdateValue(settings.disableRunAnimation);
-
-            stepToSprintToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            stepToSprintToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            stepToSprintToggle.Toggle._onValueChanged = SetStepToSprint;
-            stepToSprintToggle.Text.localizationKey = "Step Or Lean Forward To Sprint";
-            stepToSprintToggle.Toggle.UpdateValue(settings.stepToSprint);
-
-
-            /*
-            sharpenToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            sharpenToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            sharpenToggle.Toggle.action_0 = SetSharpen;
-            sharpenToggle.Text.localizationKey = "Enable Sharpen ";
-            sharpenToggle.Toggle.UpdateValue(settings.enableSharpen);
-            */
-            useVRKeyboardToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            useVRKeyboardToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            useVRKeyboardToggle.Toggle._onValueChanged = SetUseVRKeyboard;
-            useVRKeyboardToggle.Text.localizationKey = "Use In-Game VR Keyboard";
-            useVRKeyboardToggle.Toggle.UpdateValue(settings.useVRKeyboard);
-
-            // Vive Wand-specific settings — only shown when Vive controllers are detected
-            if (VRGlobals.vrControllerType == "vive")
+            rows.Clear();
+            rowBuilder = newSoundSettings;
+            rowsPanel = slidersPanel;
+            try
             {
-                viveWandCrouchThresholdSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-                viveWandCrouchThresholdSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, new ReadOnlyCollection<float>(ViveWandCrouchThresholdValues),
-                    (x) => x.ToString("F1"));
-                viveWandCrouchThresholdSlider.Text.localizationKey = "Crouch/Prone Trackpad Threshold (Vive):";
-                MakeSliderSmooth(viveWandCrouchThresholdSlider, 0.2f, 0.95f, () => settings.viveWandCrouchTrackpadThreshold,
-                    (v) => settings.viveWandCrouchTrackpadThreshold = v, (v) => Remap(v, 0.2f, 0.95f, 0f, 10f).ToString("0"));
-
-                viveWandVaultHoldTimeSlider = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, slidersPanel);
-                viveWandVaultHoldTimeSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, new ReadOnlyCollection<float>(ViveWandVaultTimeValues),
-                    (x) => x.ToString("F1") + "s");
-                viveWandVaultHoldTimeSlider.Text.localizationKey = "Vault/Jump Hold Time (Vive):";
-                MakeSliderSmooth(viveWandVaultHoldTimeSlider, 0.05f, 1.5f, () => settings.viveWandVaultHoldTime,
-                    (v) => settings.viveWandVaultHoldTime = v, (v) => v.ToString("0.0") + "s");
+                categoryDropDown = AddDropDown(EVERY_CATEGORY, "Settings Category", CATEGORY_NAMES, CATEGORY_NAMES[shownCategory], ShowCategory,
+                    tooltip: "Which of the VR settings to show");
+                AddSpacer(EVERY_CATEGORY);
+                AddMovementRows();
+                AddWeaponRows();
+                AddHandsAndBodyRows();
+                AddInteractionRows();
+                AddGraphicsRows();
+                AddDesktopViewRows();
             }
+            finally
+            {
+                rowBuilder = null;
+            }
+            RefreshRows();
 
-            /*
-            occCullingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            occCullingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            occCullingToggle.Toggle.action_0 = SetOccCulling;
-            occCullingToggle.Text.localizationKey = "Disable Occlusion Culling ";
-            occCullingToggle.Toggle.UpdateValue(settings.disableOccCulling);
-
-            frusCullingToggle = newSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, slidersPanel);
-            frusCullingToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            frusCullingToggle.Toggle.action_0 = SetFrusCulling;
-            frusCullingToggle.Text.localizationKey = "Disable Frustum Culling ";
-            frusCullingToggle.Toggle.UpdateValue(settings.disableFrusCulling);
-            */
             _vrSettingsScroll = SetupScrollbar(vrSettings);
             vrSettingsObject = newSoundSettings.gameObject;
             UnityEngine.Object.Destroy(newSoundSettings);
             vrSettingsObject.active = false;
-
-            // ============================ VR More tab (graphics/interactions ============================
-            GameObject vrGraphics = UnityEngine.Object.Instantiate(settingsUi._soundSettingsScreen.gameObject);
-            vrGraphics.transform.parent = settingsUi._soundSettingsScreen.transform.parent;
-            vrGraphics.transform.localScale = Vector3.one;
-            vrGraphics.transform.localRotation = Quaternion.identity;
-            vrGraphics.transform.localPosition = new Vector3(0, -71.5f, 0);
-            vrGraphics.transform.GetChild(0).localPosition = new Vector3(10, 433.5f, 0);
-
-            SoundSettingsTab gSoundSettings = vrGraphics.GetComponent<SoundSettingsTab>();
-            Transform gPanel = gSoundSettings._slidersSection;
-            for (int i = 0; i < gPanel.childCount; i++)
-                UnityEngine.Object.Destroy(gPanel.GetChild(i).gameObject);
-            GameObject.Destroy(gSoundSettings._togglesSection.gameObject);
-            GameObject.Destroy(gSoundSettings._slidersSection.parent.FindChild("VoipSection").gameObject);
-
-            // Scope render resolution
-            ReadOnlyCollection<string> opticResOpts = new ReadOnlyCollection<string>(new List<string> { "256", "512", "768", "1024 (Vanilla)" });
-            opticResolutionDropDown = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, gPanel);
-            opticResolutionDropDown.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, opticResOpts, (x) => !(x == "512") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
-            opticResolutionDropDown.Text.localizationKey = "Scope Render Resolution: ";
-            opticResolutionDropDown.DropDown.SetLabelText(OpticResLabel(settings.opticRenderResolution));
-            opticResolutionDropDown.DropDown._onValueChanged._onChange = ChangeOpticResolution;
-
-            // Native AA (DLAA-style): render at native and use FSR/DLSS purely as anti-aliasing (max quality,
-            // no upscaling artifacts). Needs an FSR/DLSS mode selected so the upscaler runs; GPU headroom.
-            nativeAAToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            nativeAAToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            nativeAAToggle.Toggle._onValueChanged = SetNativeAA;
-            nativeAAToggle.Text.localizationKey = "Native AA (max quality, no upscale)";
-            nativeAAToggle.Toggle.UpdateValue(settings.nativeAA);
-
-            // Shadows
-            ReadOnlyCollection<string> gShadowOpts = new ReadOnlyCollection<string>(new List<string> { "Normal", "Disable Near Shadows", "Distant Shadows (FPS hit)" });
-            shadowOptsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, gPanel);
-            shadowOptsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, gShadowOpts, (x) => !(x == "Normal") && !(x == "Settings/UnavailablePressType") ? x : x.Localized());
-            shadowOptsToggle.Text.localizationKey = "Shadows Settings: ";
-            if (settings.shadowOpt == ShadowOpt.Normal)
-                shadowOptsToggle.DropDown.SetLabelText("Normal");
-            else if (settings.shadowOpt == ShadowOpt.DisableNearShadows)
-                shadowOptsToggle.DropDown.SetLabelText("Disable Near Shadows");
-            else
-                shadowOptsToggle.DropDown.SetLabelText("Distant Shadows (FPS hit)");
-            shadowOptsToggle.DropDown._onValueChanged._onChange = ChangeShadowOpts;
-
-            // No realtime shadows in the hideout (HideoutShadows): its ~100 shadowed lights are most of its frame time
-            hideoutShadowsOffToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            hideoutShadowsOffToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            hideoutShadowsOffToggle.Toggle._onValueChanged = SetHideoutShadowsOff;
-            hideoutShadowsOffToggle.Text.localizationKey = "Disable Hideout Shadows (Saves FPS)";
-            hideoutShadowsOffToggle.Toggle.UpdateValue(settings.hideoutShadowsOff);
-
-            // Software foveated rendering (FoveatedMask). Its values are BepInEx config entries (SixBench A/Bs them), not ModSettings;
-            // its debug options stay in F12.
-            foveatedToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            foveatedToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            foveatedToggle.Toggle._onValueChanged = TarkovVR.Source.Graphics.FoveatedMask.SetEnabled;
-            foveatedToggle.Text.localizationKey = "Foveated Rendering";
-            foveatedToggle.Toggle.UpdateValue(TarkovVR.Source.Graphics.FoveatedMask.IsEnabled);
-
-            foveatedRadiusSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            foveatedRadiusSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            foveatedRadiusSlider.Text.localizationKey = "Foveated Inner Radius:";
-            MakeSliderSmooth(foveatedRadiusSlider, 0.2f, 1.2f, () => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius,
-                (value) => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius = value, (v) => v.ToString("0.00"));
-
-            lodBiasSlider =gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            lodBiasSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            lodBiasSlider.Text.localizationKey = "LOD Bias Factor (FPS Hit):";
-            MakeSliderSmooth(lodBiasSlider, 0.5f, 2f, () => settings.lodBias,
-                (v) => settings.lodBias = v, (v) => v.ToString("0.00"));
-
-            // Scales Rendering's per-layer clutter cull table (loot, casings, bodies, bushes, rain, grass);
-            // structural layers stay uncapped. Read every frame, so it applies live.
-            cullDistanceSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            cullDistanceSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            cullDistanceSlider.Text.localizationKey = "Per-Layer Cull Distance (FPS Hit):";
-            MakeSliderSmooth(cullDistanceSlider, 0.5f, 3f, () => settings.cullDistance,
-                (value) => settings.cullDistance = value, (v) => v.ToString("0.00"));
-
-            emptySpacingSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            emptySpacingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            emptySpacingSlider.Slider.gameObject.SetActive(false);
-            emptySpacingSlider.Text.gameObject.SetActive(false);
-
-            // Prism effects
-            /*
-            disablePrismEffectsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            disablePrismEffectsToggle.BindTo(settingsUi._soundSettingsScreen.soundSettingsControllerClass.MusicOnRaidEnd);
-            disablePrismEffectsToggle.Toggle.action_0 = SetDisablePrismEffects;
-            disablePrismEffectsToggle.Text.localizationKey = "Disable Prism Effects";
-            disablePrismEffectsToggle.Toggle.UpdateValue(settings.disablePrismEffects);
-            */
-            // Fog
-            disableFogToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            disableFogToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            disableFogToggle.Toggle._onValueChanged = SetDisableFog;
-            disableFogToggle.Text.localizationKey = "Disable Fog - Worse aliasing if enabled";
-            disableFogToggle.Toggle.UpdateValue(settings.disablePrismFog);
-
-            // Hide arms
-            hideArmsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            hideArmsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            hideArmsToggle.Toggle._onValueChanged = SetHideArms;
-            hideArmsToggle.Text.localizationKey = "Hide Arms";
-            hideArmsToggle.Toggle.UpdateValue(settings.hideArms);
-
-            // Hide legs
-            hideLegsToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            hideLegsToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            hideLegsToggle.Toggle._onValueChanged = SetHideLegs;
-            hideLegsToggle.Text.localizationKey = "Hide Legs";
-            hideLegsToggle.Toggle.UpdateValue(settings.hideLegs);
-
-            // The desktop window: Unity's plain mirror of the eye image instead of the stabilised view (no window camera = less CPU)
-            desktopViewPlainMirrorToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            desktopViewPlainMirrorToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            desktopViewPlainMirrorToggle.Toggle._onValueChanged = SetDesktopViewPlainMirror;
-            desktopViewPlainMirrorToggle.Text.localizationKey = "Plain Desktop Mirror (Saves CPU)";
-            desktopViewPlainMirrorToggle.Toggle.UpdateValue(settings.desktopViewPlainMirror);
-
-            // The desktop window (DesktopMirror): which eye it shows, off = the left
-            desktopViewRightEyeToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            desktopViewRightEyeToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            desktopViewRightEyeToggle.Toggle._onValueChanged = SetDesktopViewRightEye;
-            desktopViewRightEyeToggle.Text.localizationKey = "Desktop View Uses Right Eye";
-            desktopViewRightEyeToggle.Toggle.UpdateValue(settings.desktopViewRightEye);
-
-            // How wide the desktop window sees (degrees across), and how long its view takes to catch up with a head turn (0 = off)
-            desktopViewFieldOfViewSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            desktopViewFieldOfViewSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            desktopViewFieldOfViewSlider.Text.localizationKey = "Desktop View Field Of View:";
-            MakeSliderSmooth(desktopViewFieldOfViewSlider, 50f, 110f, () => settings.desktopViewFieldOfView,
-                (v) => settings.desktopViewFieldOfView = v, (v) => v.ToString("0"));
-
-            desktopViewSmoothingSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            desktopViewSmoothingSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            desktopViewSmoothingSlider.Text.localizationKey = "Desktop View Smoothing (0 = off):";
-            MakeSliderSmooth(desktopViewSmoothingSlider, 0f, 0.5f, () => settings.desktopViewSmoothing,
-                (v) => settings.desktopViewSmoothing = v, (v) => Remap(v, 0f, 0.5f, 0f, 10f).ToString("0.0"));
-
-            // Up-down on its own (0 = from the window's shape; anything else squashes the picture to fit), and the view aimed lower
-            desktopViewVerticalFieldOfViewSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            desktopViewVerticalFieldOfViewSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            desktopViewVerticalFieldOfViewSlider.Text.localizationKey = "Desktop View Vertical Field Of View (0 = auto):";
-            MakeSliderSmooth(desktopViewVerticalFieldOfViewSlider, 0f, 100f, () => settings.desktopViewVerticalFieldOfView,
-                (v) => settings.desktopViewVerticalFieldOfView = v, (v) => v < 1f ? "Auto" : v.ToString("0"));
-
-            desktopViewTiltDownSlider = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, gPanel);
-            desktopViewTiltDownSlider.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
-            desktopViewTiltDownSlider.Text.localizationKey = "Desktop View Tilt Down:";
-            MakeSliderSmooth(desktopViewTiltDownSlider, -20f, 30f, () => settings.desktopViewTiltDown,
-                (v) => settings.desktopViewTiltDown = v, (v) => v.ToString("0"));
-
-            // Manual eating
-            manualEatingToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            manualEatingToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            manualEatingToggle.Toggle._onValueChanged = SetManualEating;
-            manualEatingToggle.Text.localizationKey = "Manual Eating";
-            manualEatingToggle.Toggle.UpdateValue(settings.manualEating);
-
-            // Disable mouse input
-            disableMouseInput = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            disableMouseInput.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            disableMouseInput.Toggle._onValueChanged = SetDisableMouseInput;
-            disableMouseInput.Text.localizationKey = "Disable Mouse Input";
-            disableMouseInput.Toggle.UpdateValue(settings.disableMouseInput);
-
-            // Disable corpse context menu: the loose-loot pointer suppresses the gaze "Take" menu for all world LootItems,
-            // and a Corpse is a LootItem. On (default) keeps it hidden for bodies too; off brings it back for them.
-            disableCorpseContextMenuToggle = gSoundSettings.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, gPanel);
-            disableCorpseContextMenuToggle.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
-            disableCorpseContextMenuToggle.Toggle._onValueChanged = SetDisableCorpseContextMenu;
-            disableCorpseContextMenuToggle.Text.localizationKey = "Disable Corpse Context Menu: ";
-            disableCorpseContextMenuToggle.Toggle.UpdateValue(settings.disableCorpseContextMenu);
-
-            _vrGraphicsScroll = SetupScrollbar(vrGraphics);
-            vrGraphicsObject = gSoundSettings.gameObject;
-            UnityEngine.Object.Destroy(gSoundSettings);
-            vrGraphicsObject.active = false;
         }
 
-        private static ScrollRect _vrSettingsScroll;
-        private static ScrollRect _vrGraphicsScroll;
+        private static void AddMovementRows()
+        {
+            int movement = (int)Category.Movement;
+            movementMethod = AddDropDown(movement, "Movement Method", MOVEMENT_MODES, MOVEMENT_MODES[Mathf.Clamp((int)settings.movementType, 0, 2)],
+                ChangeMovementMode, tooltip: "Which way the stick moves you: where you look, where the controller points, or the stick alone");
+            rotationMethod = AddDropDown(movement, "Turning", ROTATION_MODES, ROTATION_MODES[settings.rotationType == RotationMode.Snap ? 1 : 0],
+                ChangeRotationType);
+            snapTurnAmountDropDown = AddDropDown(movement, "Snap Turn Angle", SNAP_TURN_ANGLES, SNAP_TURN_ANGLES[SnapTurnIndex(settings.snapTurnAmount)],
+                ChangeSnapAmount, shownWhen: () => settings.rotationType == RotationMode.Snap, tooltip: "Degrees per snap");
+            sensitivitySlider = AddSlider(movement, "Rotation Sensitivity", 0.5f, 20f, () => settings.rotationSensitivity,
+                (v) => settings.rotationSensitivity = v, (v) => Remap(v, 0.5f, 20f, 0f, 10f).ToString("0"));
+            swapSticksToggle = AddToggle(movement, "Swap Sticks", settings.swapSticks, SetSwapSticks,
+                tooltip: "Move with the right stick, turn with the left");
+            disableRunAnimationToggle = AddToggle(movement, "Disable Run Animation", settings.disableRunAnimation, SetDisableRunAnim,
+                tooltip: "The gun stays in your hands while sprinting, so you can fire on the run");
+            stepToSprintToggle = AddToggle(movement, "Step Or Lean Forward To Sprint", settings.stepToSprint, SetStepToSprint,
+                tooltip: "A quick step or lean forward starts a sprint, a step back stops it");
+            seatedModeToggle = AddToggle(movement, "Seated Mode (Reset Your Height After)", settings.seatedMode, SetSeatedMode);
+
+            // Vive wands only: their trackpads crouch and jump
+            if (VRGlobals.vrControllerType == "vive")
+            {
+                viveWandCrouchThresholdSlider = AddSlider(movement, "Crouch / Prone Trackpad Threshold", 0.2f, 0.95f,
+                    () => settings.viveWandCrouchTrackpadThreshold, (v) => settings.viveWandCrouchTrackpadThreshold = v,
+                    (v) => Remap(v, 0.2f, 0.95f, 0f, 10f).ToString("0"));
+                viveWandVaultHoldTimeSlider = AddSlider(movement, "Vault / Jump Hold Time", 0.05f, 1.5f,
+                    () => settings.viveWandVaultHoldTime, (v) => settings.viveWandVaultHoldTime = v, (v) => v.ToString("0.0") + "s");
+            }
+        }
+
+        private static void AddWeaponRows()
+        {
+            int weapons = (int)Category.Weapons;
+            aimSmoothingToggle = AddToggle(weapons, "Weapon Smoothing", settings.weaponAimSmoothing, ToggleSmoothingSensitivity,
+                tooltip: "Smooths out hand shake on the gun's aim");
+            // smoothingSensitivity is the slerp factor (smoothingFactor): lower = heavier smoothing
+            aimSmoothingSlider = AddSlider(weapons, "Weapon Smoothing Amount (Lower = Smoother)", 0f, 50f, () => settings.smoothingSensitivity,
+                (v) => settings.smoothingSensitivity = v, (v) => Remap(v, 0f, 50f, 0f, 10f).ToString("0"), shownWhen: () => settings.weaponAimSmoothing);
+            scopeSmoothingToggle = AddToggle(weapons, "Hold Breath Smoothing", settings.scopeAimSmoothing, ToggleScopeSmoothingSensitivity,
+                tooltip: "Steadies the aim while you hold your breath");
+            scopeSmoothingSlider = AddSlider(weapons, "Hold Breath Sensitivity", 0f, 20f, () => settings.scopeSmoothingSensitivity,
+                (v) => settings.scopeSmoothingSensitivity = v, (v) => Remap(v, 0f, 20f, 0f, 10f).ToString("0"), shownWhen: () => settings.scopeAimSmoothing);
+            variableZoomSensitivitySlider = AddSlider(weapons, "Variable Zoom Sensitivity", 0f, 2f, () => settings.variableZoomSensitivity,
+                (v) => settings.variableZoomSensitivity = v, (v) => Remap(v, 0f, 2f, 0f, 10f).ToString("0"),
+                tooltip: "How fast the stick zooms a variable scope");
+            weaponWeightToggle = AddToggle(weapons, "Weapon Weight", settings.weaponWeight, SetWeaponWeightOn,
+                tooltip: "Heavier guns swing and settle with their weight");
+            virtualStockToggle = AddToggle(weapons, "Virtual Gunstock (Shouldering)", settings.virtualStock, SetVirtualStockOn,
+                tooltip: "Bring a stocked gun to your shoulder to steady the aim");
+            chestSlingToggle = AddToggle(weapons, "Chest Sling", settings.chestSling, SetChestSlingOn,
+                tooltip: "Open your gun hand to let go of the gun: it stays on the foregrip hand, or hangs on your chest. Off = it stays in your hand");
+            manualReloadToggle = AddToggle(weapons, "Manual Reload", settings.manualReload, SetManualReloadOn,
+                tooltip: "B drops the magazine instead of running the game's reload; hold B to pull it out with the other hand");
+            weaponInertiaToggle = AddToggle(weapons, "EFT Weapon Inertia", settings.weaponInertia, SetWeaponInertiaOn);
+            walkEffectorToggle = AddToggle(weapons, "EFT Walk Bobbing", settings.walkEffector, SetWalkEffectorOn);
+            // A button, not a setting: ResetGunSpots turns it back off
+            resetGunSpotsToggle = AddToggle(weapons, "Reset Placed Gun Spots", false, ResetGunSpots,
+                tooltip: "Puts the gun and grenade spots you placed by hand back where they start");
+        }
+
+        private static void AddHandsAndBodyRows()
+        {
+            int hands = (int)Category.HandsAndBody;
+            leftHandedMode = AddToggle(hands, "Laser Pointer In Left Hand", settings.leftHandedMode, SetLeftHandedMode);
+            // The vertical offsets pivot around 50 in CalculateRightHandPosOffset (>= 50 positive, < 50 negative): 50 stays the centre
+            rightHandVerticalAngleSlider = AddSlider(hands, "Right Hand Angle (Up / Down)", -30f, 130f, () => settings.rightHandVerticalAngle,
+                (v) => settings.rightHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
+            rightHandHorizontalAngleSlider = AddSlider(hands, "Right Hand Angle (Left / Right)", -90f, 90f, () => settings.rightHandHorizontalAngle,
+                (v) => settings.rightHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
+            leftHandVerticalAngleSlider = AddSlider(hands, "Left Hand Angle (Up / Down)", -30f, 130f, () => settings.leftHandVerticalAngle,
+                (v) => settings.leftHandVerticalAngle = v, (v) => Remap(v, -30f, 130f, -1f, 1f).ToString("0.0"));
+            leftHandHorizontalAngleSlider = AddSlider(hands, "Left Hand Angle (Left / Right)", -90f, 90f, () => settings.leftHandHorizontalAngle,
+                (v) => settings.leftHandHorizontalAngle = v, (v) => Remap(v, -90f, 90f, -1f, 1f).ToString("0.0"));
+            handPosOffsetSlider = AddSlider(hands, "Hand Height Offset", -0.25f, 0.25f, () => settings.handPosOffset,
+                (v) => settings.handPosOffset = v, (v) => Remap(v, -0.25f, 0.25f, -1f, 1f).ToString("0.0"));
+            hideArmsToggle = AddToggle(hands, "Hide Arms", settings.hideArms, SetHideArms, tooltip: "Shows only your hands");
+            hideLegsToggle = AddToggle(hands, "Hide Legs", settings.hideLegs, SetHideLegs);
+        }
+
+        private static void AddInteractionRows()
+        {
+            int interaction = (int)Category.Interaction;
+            physicalDoorsToggle = AddToggle(interaction, "Physical Doors", settings.physicalDoors, SetPhysicalDoorsOn,
+                tooltip: "Grip a door's handle, turn it and swing the door by hand. Off = a grip opens and closes them");
+            // HidesMenu needs Physical Doors on
+            disableDoorContextMenuToggle = AddToggle(interaction, "Disable Door Context Menu", settings.disableDoorContextMenu, SetDisableDoorContextMenu,
+                shownWhen: () => settings.physicalDoors, tooltip: "No look-at menu on the doors you can open by hand (keycard doors keep it)");
+            disableCorpseContextMenuToggle = AddToggle(interaction, "Disable Corpse Context Menu", settings.disableCorpseContextMenu,
+                SetDisableCorpseContextMenu);
+            manualEatingToggle = AddToggle(interaction, "Manual Eating", settings.manualEating, SetManualEating,
+                tooltip: "Open, eat and drink food with your hands");
+            heldItemWeightToggle = AddToggle(interaction, "Held Item Adds To Carry Weight", settings.heldItemWeight, SetHeldItemWeight);
+            useVRKeyboardToggle = AddToggle(interaction, "Use In-Game VR Keyboard", settings.useVRKeyboard, SetUseVRKeyboard);
+            disableMouseInput = AddToggle(interaction, "Disable Mouse Input", settings.disableMouseInput, SetDisableMouseInput);
+        }
+
+        private static void AddGraphicsRows()
+        {
+            int graphics = (int)Category.Graphics;
+            opticResolutionDropDown = AddDropDown(graphics, "Scope Render Resolution", OPTIC_RESOLUTIONS, OpticResLabel(settings.opticRenderResolution),
+                ChangeOpticResolution, tooltip: "Lower = faster scopes, a blurrier picture through them");
+            // Render at native and use FSR/DLSS purely as anti-aliasing: needs an FSR/DLSS mode picked so the upscaler runs
+            nativeAAToggle = AddToggle(graphics, "Native AA (Max Quality, No Upscale)", settings.nativeAA, SetNativeAA,
+                tooltip: "Full resolution, FSR/DLSS used only as anti-aliasing. Needs an FSR/DLSS mode picked in Graphics");
+            shadowOptsToggle = AddDropDown(graphics, "Shadows", SHADOW_OPTIONS, SHADOW_OPTIONS[Mathf.Clamp((int)settings.shadowOpt, 0, 2)], ChangeShadowOpts);
+            // The hideout's ~100 shadowed lights are most of its frame time
+            hideoutShadowsOffToggle = AddToggle(graphics, "Disable Hideout Shadows (Saves FPS)", settings.hideoutShadowsOff, SetHideoutShadowsOff);
+            // FoveatedMask's values are BepInEx config entries (SixBench A/Bs them), not ModSettings; its debug options stay in F12
+            foveatedToggle = AddToggle(graphics, "Foveated Rendering", TarkovVR.Source.Graphics.FoveatedMask.IsEnabled,
+                TarkovVR.Source.Graphics.FoveatedMask.SetEnabled, tooltip: "Less detail toward the edges of each lens, for GPU time");
+            foveatedRadiusSlider = AddSlider(graphics, "Foveated Inner Radius", 0.2f, 1.2f, () => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius,
+                (value) => TarkovVR.Source.Graphics.FoveatedMask.InnerRadius = value, (v) => v.ToString("0.00"),
+                shownWhen: () => TarkovVR.Source.Graphics.FoveatedMask.IsEnabled, tooltip: "How much of the middle of each lens keeps full detail");
+            lodBiasSlider = AddSlider(graphics, "LOD Bias (FPS Hit)", 0.5f, 2f, () => settings.lodBias,
+                (v) => settings.lodBias = v, (v) => v.ToString("0.00"), tooltip: "Higher = full-detail models further away");
+            // Scales Rendering's per-layer clutter cull table; structural layers stay uncapped. Read every frame: applies live.
+            cullDistanceSlider = AddSlider(graphics, "Clutter Draw Distance (FPS Hit)", 0.5f, 3f, () => settings.cullDistance,
+                (value) => settings.cullDistance = value, (v) => v.ToString("0.00"),
+                tooltip: "How far loot, casings, bodies, bushes, rain and grass are drawn");
+            disableFogToggle = AddToggle(graphics, "Disable Fog (Worse Aliasing)", settings.disablePrismFog, SetDisableFog);
+        }
+
+        private static void AddDesktopViewRows()
+        {
+            int desktop = (int)Category.DesktopView;
+            // The plain mirror has no window camera: none of the view's own settings below apply to it
+            Func<bool> steadiedView = () => !settings.desktopViewPlainMirror;
+            desktopViewPlainMirrorToggle = AddToggle(desktop, "Plain Mirror (Saves CPU)", settings.desktopViewPlainMirror, SetDesktopViewPlainMirror,
+                tooltip: "The headset's eye image as it is: no steadied view, field of view, tilt or smoothing");
+            desktopViewRightEyeToggle = AddToggle(desktop, "Show The Right Eye", settings.desktopViewRightEye, SetDesktopViewRightEye,
+                tooltip: "Off = the left eye");
+            desktopViewFieldOfViewSlider = AddSlider(desktop, "Field Of View", 50f, 110f, () => settings.desktopViewFieldOfView,
+                (v) => settings.desktopViewFieldOfView = v, (v) => v.ToString("0"), shownWhen: steadiedView, tooltip: "Degrees across the window");
+            // 0 = from the window's shape; anything else squashes the picture to fit
+            desktopViewVerticalFieldOfViewSlider = AddSlider(desktop, "Vertical Field Of View", 0f, 100f, () => settings.desktopViewVerticalFieldOfView,
+                (v) => settings.desktopViewVerticalFieldOfView = v, (v) => v < 1f ? "Auto" : v.ToString("0"), shownWhen: steadiedView,
+                tooltip: "Auto = from the window's shape; anything else squashes the picture to fit");
+            desktopViewTiltDownSlider = AddSlider(desktop, "Tilt Down", -20f, 30f, () => settings.desktopViewTiltDown,
+                (v) => settings.desktopViewTiltDown = v, (v) => v.ToString("0"), shownWhen: steadiedView,
+                tooltip: "Degrees the window looks below where your head looks");
+            desktopViewSmoothingSlider = AddSlider(desktop, "Smoothing (0 = Off)", 0f, 0.5f, () => settings.desktopViewSmoothing,
+                (v) => settings.desktopViewSmoothing = v, (v) => Remap(v, 0f, 0.5f, 0f, 10f).ToString("0.0"), shownWhen: steadiedView,
+                tooltip: "How long the window's view takes to catch up with a head turn");
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // Rows. Each control is built off a real game setting (BindTo / BindIndexTo make the control); its change action is replaced, so
+        // nothing is ever written to that setting (a slider: MakeSliderSmooth cuts it).
+
+        private static SettingToggle AddToggle(int category, string label, bool value, Action<bool> onChange, Func<bool> shownWhen = null,
+                                               string tooltip = null)
+        {
+            SettingToggle control = rowBuilder.CreateControl(settingsUi._soundSettingsScreen._togglePrefab, rowsPanel);
+            control.BindTo(settingsUi._soundSettingsScreen._soundSettings.MusicOnRaidEnd);
+            control.Toggle._onValueChanged = (on) =>
+            {
+                onChange(on);
+                RefreshRows();
+            };
+            control.Text.localizationKey = label;
+            control.Toggle.UpdateValue(value);
+            AddRow(control, category, shownWhen, tooltip);
+            return control;
+        }
+
+        private static SettingDropDown AddDropDown(int category, string label, string[] options, string current, Action<int> onChange,
+                                                   Func<bool> shownWhen = null, string tooltip = null)
+        {
+            SettingDropDown control = rowBuilder.CreateControl(settingsUi._soundSettingsScreen._dropDownPrefab, rowsPanel);
+            control.BindTo(settingsUi._soundSettingsScreen._soundSettings.VoipDevice, new ReadOnlyCollection<string>(options),
+                (option) => option == "Settings/UnavailablePressType" ? option.Localized() : option);
+            control.Text.localizationKey = label;
+            control.DropDown.SetLabelText(current);
+            control.DropDown._onValueChanged._onChange = (index) =>
+            {
+                onChange(index);
+                RefreshRows();
+            };
+            AddRow(control, category, shownWhen, tooltip);
+            return control;
+        }
+
+        private static SettingSelectSlider AddSlider(int category, string label, float min, float max, Func<float> getValue, Action<float> onChange,
+                                                     Func<float, string> format, Func<bool> shownWhen = null, string tooltip = null)
+        {
+            SettingSelectSlider control = rowBuilder.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, rowsPanel);
+            control.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
+            control.Text.localizationKey = label;
+            MakeSliderSmooth(control, min, max, getValue, onChange, format);
+            AddRow(control, category, shownWhen, tooltip);
+            return control;
+        }
+
+        // An empty row: a slider with its parts hidden
+        private static void AddSpacer(int category)
+        {
+            SettingSelectSlider control = rowBuilder.CreateControl(settingsUi._soundSettingsScreen._selectSliderPrefab, rowsPanel);
+            control.BindIndexTo(settingsUi._soundSettingsScreen._soundSettings.OverallVolume, settingsUi._soundSettingsScreen._variants, (x) => x.ToString());
+            // (it's bound to the master volume, which a save applies)
+            control.Slider._onValueChanged = null;
+            control.Slider.gameObject.SetActive(false);
+            control.Text.gameObject.SetActive(false);
+            AddRow(control, category, null, null);
+        }
+
+        private static void AddRow(SettingControl control, int category, Func<bool> shownWhen, string tooltip)
+        {
+            rows.Add(new Row { gameObject = control.gameObject, category = category, shownWhen = shownWhen });
+            if (string.IsNullOrEmpty(tooltip))
+                return;
+            try
+            {
+                control.GetOrCreateTooltip().SetMessageText(tooltip, rawText: true);
+            }
+            catch (Exception e)
+            {
+                Plugin.MyLog.LogWarning($"[VRSettings] no tooltip on '{control.Text.localizationKey}': {e.Message}");
+            }
+        }
+
+        // Each row shown or hidden for the picked category and its own condition
+        private static void RefreshRows()
+        {
+            if (rowBuilder != null)
+                return;
+            foreach (Row row in rows)
+            {
+                if (row.gameObject == null)
+                    continue;
+                bool shown = (row.category == EVERY_CATEGORY || row.category == shownCategory) && (row.shownWhen == null || row.shownWhen());
+                if (row.gameObject.activeSelf != shown)
+                    row.gameObject.SetActive(shown);
+            }
+            if (_vrSettingsScroll != null && _vrSettingsScroll.content != null && _vrSettingsScroll.gameObject.activeInHierarchy)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(_vrSettingsScroll.content);
+        }
+
+        private static void ShowCategory(int index)
+        {
+            shownCategory = Mathf.Clamp(index, 0, CATEGORY_NAMES.Length - 1);
+            if (categoryDropDown != null)
+                categoryDropDown.DropDown.SetLabelText(CATEGORY_NAMES[shownCategory]);
+            RefreshRows();
+            if (_vrSettingsScroll != null)
+                _vrSettingsScroll.verticalNormalizedPosition = 1f;
+        }
+
+        private static int SnapTurnIndex(SnapTurnAmount amount)
+        {
+            return amount == SnapTurnAmount.thirty ? 0 : amount == SnapTurnAmount.ninety ? 2 : 1;
+        }
 
         private static ScrollRect SetupScrollbar(GameObject vrSettings)
         {
@@ -978,53 +783,28 @@ namespace TarkovVR.Source.Settings
 
         private static void ChangeMovementMode(int mode)
         {
-            settings.movementType = (MovementMode)mode;
-            if (settings.movementType == MovementMode.HeadBased)
-                movementMethod.DropDown.SetLabelText("Head-based movement");
-            else if (settings.movementType == MovementMode.WandBased)
-                movementMethod.DropDown.SetLabelText("Wand-based movement");
-            else
-                movementMethod.DropDown.SetLabelText("JoyStick only movement");
+            settings.movementType = (MovementMode)Mathf.Clamp(mode, 0, 2);
+            movementMethod.DropDown.SetLabelText(MOVEMENT_MODES[(int)settings.movementType]);
         }
 
         public static void ShowVRSettings()
         {
-            if (settingsUi != null)
-            {
-                settingsUi._currentTab.gameObject.active = false;
-                if (vrGraphicsObject)
-                    vrGraphicsObject.active = false;
-                if (vrSettingsObject)
-                {
-                    vrSettingsObject.active = true;
-                    if (_vrSettingsScroll != null)
-                        _vrSettingsScroll.verticalNormalizedPosition = 1f;
-                }
-            }
-        }
-
-        public static void ShowVRGraphicsSettings()
-        {
-            if (settingsUi != null)
-            {
-                settingsUi._currentTab.gameObject.active = false;
-                if (vrSettingsObject)
-                    vrSettingsObject.active = false;
-                if (vrGraphicsObject)
-                {
-                    vrGraphicsObject.active = true;
-                    if (_vrGraphicsScroll != null)
-                        _vrGraphicsScroll.verticalNormalizedPosition = 1f;
-                }
-            }
+            if (settingsUi == null || !vrSettingsObject)
+                return;
+            settingsUi._currentTab.gameObject.active = false;
+            vrSettingsObject.active = true;
+            // (its value is a BepInEx config entry, which F12 can change while the menu is shut)
+            if (foveatedToggle != null)
+                foveatedToggle.Toggle.UpdateValue(TarkovVR.Source.Graphics.FoveatedMask.IsEnabled, sendCallback: false);
+            RefreshRows();
+            if (_vrSettingsScroll != null)
+                _vrSettingsScroll.verticalNormalizedPosition = 1f;
         }
 
         public static void CloseVRSettings()
         {
             if (vrSettingsObject)
                 vrSettingsObject.active = false;
-            if (vrGraphicsObject)
-                vrGraphicsObject.active = false;
         }
 
         public static float GetRotationSensitivity() {
@@ -1508,14 +1288,8 @@ namespace TarkovVR.Source.Settings
 
         private static void ChangeShadowOpts(int mode)
         {
-            settings.shadowOpt = (ShadowOpt)mode;
-            if (settings.shadowOpt == ShadowOpt.Normal) { 
-                shadowOptsToggle.DropDown.SetLabelText("Normal");
-            }
-            else if (settings.shadowOpt == ShadowOpt.DisableNearShadows)
-                shadowOptsToggle.DropDown.SetLabelText("Disable Near Shadows");
-            else
-                shadowOptsToggle.DropDown.SetLabelText("Distant Shadows (FPS hit)");
+            settings.shadowOpt = (ShadowOpt)Mathf.Clamp(mode, 0, 2);
+            shadowOptsToggle.DropDown.SetLabelText(SHADOW_OPTIONS[(int)settings.shadowOpt]);
 
             if (!VisualPatches.distantShadow)
                 return;
@@ -1558,7 +1332,7 @@ namespace TarkovVR.Source.Settings
         private static void ChangeOpticResolution(int index)
         {
             int[] opts = { 256, 512, 768, 1024 };
-            int res = (index >= 0 && index < opts.Length) ? opts[index] : 512;
+            int res = (index >= 0 && index < opts.Length) ? opts[index] : 512;  // (OPTIC_RESOLUTIONS' order)
             settings.opticRenderResolution = res;
             if (opticResolutionDropDown != null)
                 opticResolutionDropDown.DropDown.SetLabelText(OpticResLabel(res));
@@ -1576,11 +1350,8 @@ namespace TarkovVR.Source.Settings
 
         private static void ChangeRotationType(int mode)
         {
-            settings.rotationType = (RotationMode)mode;
-            if (settings.rotationType == RotationMode.Smooth)
-                rotationMethod.DropDown.SetLabelText("Smooth Turn");
-            else
-                rotationMethod.DropDown.SetLabelText("Snap Turn");
+            settings.rotationType = mode == 1 ? RotationMode.Snap : RotationMode.Smooth;
+            rotationMethod.DropDown.SetLabelText(ROTATION_MODES[(int)settings.rotationType]);
         }
         public static RotationMode GetRotationType()
         {
@@ -1589,20 +1360,8 @@ namespace TarkovVR.Source.Settings
 
         private static void ChangeSnapAmount(int mode)
         {
-            if (mode == 0)
-            {
-                settings.snapTurnAmount = SnapTurnAmount.thirty;
-                snapTurnAmountDropDown.DropDown.SetLabelText("30");
-            }
-            else if (mode == 1)
-            {
-                settings.snapTurnAmount = SnapTurnAmount.fourtyFive;
-                snapTurnAmountDropDown.DropDown.SetLabelText("45");
-            }
-            else { 
-                settings.snapTurnAmount = SnapTurnAmount.ninety;
-                snapTurnAmountDropDown.DropDown.SetLabelText("90");
-            }
+            settings.snapTurnAmount = mode == 0 ? SnapTurnAmount.thirty : mode == 2 ? SnapTurnAmount.ninety : SnapTurnAmount.fourtyFive;
+            snapTurnAmountDropDown.DropDown.SetLabelText(SNAP_TURN_ANGLES[SnapTurnIndex(settings.snapTurnAmount)]);
         }
         public static SnapTurnAmount GetSnapTurnAmount()
         {

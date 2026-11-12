@@ -7,18 +7,18 @@ using UnityEngine.XR;
 
 namespace TarkovVR.Source.Graphics
 {
-    // The desktop window, for recording: one eye's finished image (VR Graphics: "Desktop View Uses Right Eye"), cropped to the
+    // The desktop window, for recording: one eye's finished image (VR menu, Desktop View: "Show The Right Eye"), cropped to the
     // window's shape and stabilised (Unity's own mirror copies the whole eye texture: nearly square, lens corners, every head
     // movement). A virtual camera at the eye follows the head's turning smoothed (capped lag, never so far that the window reaches
     // the lens mask), and every window point is looked up in the eye image through that eye's own view and projection. Rotation
-    // only. Field of view (across, and up if set apart from the window's shape), smoothing and a downward tilt: VR Graphics sliders.
+    // only. Field of view (across, and up if set apart from the window's shape), smoothing and a downward tilt: VR menu sliders (Desktop View).
     // Drawn after the eyes and before the screen overlays (UnityExplorer's canvases, BepInEx's F12 menu): where the chosen eye's
     // picture is finished (drawAfterEyes, see there), or by a camera of our own that renders nothing and comes last
     // (drawAfterEyes = false). A frame neither drew is drawn at the very end of the frame instead, over the overlays.
     public class DesktopMirror : MonoBehaviour
     {
         public static bool stabilized = true;           // false = Unity's own mirror of the eye texture (also set when drawing fails)
-        // The VR Graphics setting "Plain Desktop Mirror": Unity's own mirror, and the window camera off (its ~0.45 ms of the main thread)
+        // The VR menu's "Plain Mirror" (Desktop View): Unity's own mirror, and the window camera off (its ~0.45 ms of the main thread)
         internal static void LogDetail(string message) { if (logDetails) Plugin.MyLog.LogInfo(message); }
         private static bool Wanted => stabilized && !VRSettings.GetDesktopViewPlainMirror();
         public static float maxLagDegrees = 12f;        // how far it can trail the head (more = smoother, but the crop nears the eye image's edge)
