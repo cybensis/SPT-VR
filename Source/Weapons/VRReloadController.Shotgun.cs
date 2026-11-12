@@ -37,6 +37,11 @@ namespace TarkovVR.Source.Weapons
         // while the pump is open the left arm aims at our point on the pump instead
         public static bool pumpHandFollows = true;
         public static float pumpFullBack = 0.92f;           // share of the stroke that counts as all the way back
+        // The action lock: closed on a cocked hammer the pump stays shut until a shot or a dry fire drops the hammer, or the slide release
+        // (the mag release button, B on the gun hand) frees it - so a live shell isn't pumped out by accident. Shoot, pump, shoot needs no
+        // button. false = the pump is always free.
+        public static bool pumpActionLock = true;
+        public static float pumpLockFeel = 0.01f;           // m past the deadzone the hand pulls against the lock before it's felt
         // A semi-auto's shell into the tube with the bolt closed on an empty chamber stays in the tube until the bolt handle is racked
         // (WaitingForRack, like a magazine put in on a closed bolt). false = it goes straight into the chamber.
         public static bool semiShellWaitsForHandle = true;
@@ -815,6 +820,7 @@ namespace TarkovVR.Source.Weapons
             public bool roundShown;         // Tarkov's rechamber already showed the next shell
             public bool spentCase;          // fired, the pump not worked since (pumpAfterShotByHand)
             public bool malfunctionRacked;  // all the way back on a malfunction this stroke: closing it clears it
+            public bool locked = true;      // the action lock holds it shut (pumpActionLock)
         }
         private static readonly Dictionary<Weapon, PumpState> pumpStates = new Dictionary<Weapon, PumpState>();
         private static float pumpRestDistance;              // the two controllers' distance with the pump closed
@@ -835,6 +841,10 @@ namespace TarkovVR.Source.Weapons
         private static void TickShotgun()
         {
             pumpHandWanted = false;
+            // The slide release: B (Y left-handed) on the gun hand, where a magazine gun has its mag release (not just out of a menu: B
+            // backed out of it)
+            if (Handedness.GunHandUpperButton.GetStateDown(Valve.VR.SteamVR_Input_Sources.Any) && !MenuExitButtonWait.Blocks && !VRGlobals.menuOpen)
+                PumpReleasePressed(VRGlobals.firearmController);
             TickPump();
             // Nothing measuring the pull (the off hand holds the gun alone, or Tarkov's rechamber is under way) but the pump left open:
             // the hand stays on it
@@ -981,6 +991,22 @@ namespace TarkovVR.Source.Weapons
             else if (state.open <= 0f && pull < pumpDeadzone)
                 pumpRestDistance = Mathf.Lerp(pumpRestDistance, distance, 1f - Mathf.Exp(-Time.deltaTime / Mathf.Max(pumpRestFollowTime, 0.01f)));
             float back = Mathf.Max(pull - pumpDeadzone, 0f);
+            // The action lock holds it shut: felt once per pull against it (a malfunction's hammer is down, nothing locked)
+            if (pumpActionLock && state.locked && state.open <= 0f && !malfunction)
+            {
+                if (back > pumpLockFeel && !pumpLockFelt)
+                {
+                    pumpLockFelt = true;
+                    Pulse(SoundHand.OffHand, 0.35f, 0.03f);
+                    if (shotgunDebugLog)
+                        Plugin.MyLog.LogInfo("[VRShotgun] pump locked (a cocked hammer): fire, dry fire or the slide release (the mag release button) frees it");
+                }
+                else if (back <= 0f)
+                    pumpLockFelt = false;
+                PumpMalfunctionPose(firearmController, state);
+                DrivePumpHand(firearmController, data, state);
+                return;
+            }
             if (malfunction)
                 back = StuckPull(firearmController, back, SoundHand.OffHand);
             MovePump(firearmController, state, Mathf.Clamp01(back / span));
@@ -1009,6 +1035,7 @@ namespace TarkovVR.Source.Weapons
 
         // The stroke sounds are the whole stroke (the M870's pump back 0.34 s, the M3's 0.77): each plays as its stroke starts, once
         private static bool pumpBackSounded, pumpForwardSounded;
+        private static bool pumpLockFelt;
         private static float pumpPeak;
 
         private static void MovePump(FirearmController firearmController, PumpState state, float open)
@@ -1113,6 +1140,8 @@ namespace TarkovVR.Source.Weapons
             ReturnPortShell();
             state.backThisStroke = false;
             state.roundShown = false;
+            // Into battery on a cocked hammer: the action lock holds it
+            state.locked = true;
             if (shotgunDebugLog)
                 Plugin.MyLog.LogInfo($"[VRShotgun] pump closed, chamber {weapon.ChamberAmmoCount}, tube {weapon.GetCurrentMagazine()?.Count}");
         }
@@ -1121,6 +1150,8 @@ namespace TarkovVR.Source.Weapons
         private static void ResetPump(PumpState state)
         {
             PumpHeld = false;
+            // (Tarkov's reload leaves the action closed and cocked)
+            state.locked = true;
             if (state.open <= 0f && !state.backThisStroke)
                 return;
             state.open = 0f;
@@ -1142,12 +1173,65 @@ namespace TarkovVR.Source.Weapons
             state.spentCase = true;
             state.backThisStroke = false;
             state.roundShown = false;
+            // The hammer fell: the action lock let go
+            state.locked = false;
             // Its last shell: Tarkov's catch would hold the pump back, which the skipped pump never did - closed, the fired shell in
             if (firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch())
                 firearmController.FirearmsAnimator.SetBoltCatch(false);
             if (shotgunDebugLog)
                 Plugin.MyLog.LogInfo($"[VRShotgun] shot: the fired shell stays in until the pump, chamber {firearmController.Item.ChamberAmmoCount}");
             return true;
+        }
+
+        // B is the slide release on this gun (InputHandlers' reload handler leaves B alone: no Tarkov reload)
+        public static bool GunHandButtonIsSlideRelease(FirearmController firearmController)
+        {
+            return pumpActionLock && VRGlobals.inGame && ManualShotgunOn(firearmController, out ShotgunData data) && PumpMode(firearmController.Item, data);
+        }
+
+        // The slide release pressed (TickShotgun). The action lock lets go until the pump next closes; pulled against it already, the pump
+        // moves from where the hand is.
+        private static readonly string[] PUMP_RELEASE_SOUNDS = { "ButtonRelease", "SlideRelease", "CatchSlider", "OffBoltCatch", "Button" };
+        private static readonly HashSet<string> pumpSoundsLogged = new HashSet<string>();
+
+        private static bool PumpReleasePressed(FirearmController firearmController)
+        {
+            if (!pumpActionLock || !ManualShotgunOn(firearmController, out ShotgunData data) || !PumpMode(firearmController.Item, data))
+                return false;
+            PumpState state = PumpStateOf(firearmController.Item);
+            bool sounded = PlayFirstGunSound(firearmController, SoundHand.GunHand, PUMP_RELEASE_SOUNDS);
+            PulseGunHand(0.25f, 0.03f);
+            if (shotgunDebugLog && pumpSoundsLogged.Add(firearmController.Item.TemplateId.ToString()))
+            {
+                BaseSoundPlayer soundPlayer = GunSoundPlayerOf(firearmController);
+                string names = soundPlayer != null ? string.Join(", ", soundPlayer.AdditionalSounds.ConvertAll(sound => sound.EventName)) : "no sound player";
+                Plugin.MyLog.LogInfo($"[VRShotgun] {firearmController.Item.ShortName.Localized()}'s sounds (slide release {(sounded ? "played" : "none of " + string.Join("/", PUMP_RELEASE_SOUNDS))}): {names}");
+            }
+            if (state.locked)
+            {
+                state.locked = false;
+                pumpLockFelt = false;
+                if (PumpHeld && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.LeftHand != null && VRGlobals.vrPlayer.RightHand != null)
+                    pumpRestDistance = Vector3.Distance(VRGlobals.vrPlayer.LeftHand.transform.position, VRGlobals.vrPlayer.RightHand.transform.position) + pumpDeadzone;
+                if (shotgunDebugLog)
+                    Plugin.MyLog.LogInfo("[VRShotgun] slide release: the pump is free");
+            }
+            return true;
+        }
+
+        // A dry fire (FirearmController.DryShot, ShotgunPatches): the hammer fell on an empty chamber, the action lock let go
+        public static void PumpDryFired(FirearmController firearmController)
+        {
+            if (!pumpActionLock || firearmController != VRGlobals.firearmController || !ManualShotgunOn(firearmController, out ShotgunData data)
+                || !PumpMode(firearmController.Item, data))
+                return;
+            PumpState state = PumpStateOf(firearmController.Item);
+            if (!state.locked)
+                return;
+            state.locked = false;
+            pumpLockFelt = false;
+            if (shotgunDebugLog)
+                Plugin.MyLog.LogInfo("[VRShotgun] dry fire: the pump is free");
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -18,5 +18,15 @@ namespace TarkovVR.Patches.Core.Player
             // A belt gun's cover, scope latch and belt (VRReloadController.Belt): the same window, the hand on the cover rides it
             VRReloadController.ApplyBeltGunBeforeIk();
         }
+
+        // A dry fire drops the hammer: a pump gun's action lock lets go (VRReloadController.PumpDryFired)
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player.FirearmController), nameof(EFT.Player.FirearmController.DryShot))]
+        private static void DryFireFreesPump(EFT.Player.FirearmController __instance)
+        {
+            if (__instance == null || __instance._player == null || !__instance._player.IsYourPlayer)
+                return;
+            VRReloadController.PumpDryFired(__instance);
+        }
     }
 }

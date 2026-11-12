@@ -324,6 +324,14 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
+                // A pump gun the hands work: B is its slide release (VRReloadController.Shotgun), never Tarkov's reload
+                if (VRReloadController.GunHandButtonIsSlideRelease(VRGlobals.firearmController))
+                {
+                    waitingForSecondTap = false;
+                    reloadTriggered = false;
+                    return;
+                }
+
                 // Manual reload on a gun with a detachable magazine: B is only the mag release (VRReloadController:
                 // a press drops the magazine, held it lets the off hand pull it out), never Tarkov's reload
                 bool manualReload = VRReloadController.ManualReloadActive();
