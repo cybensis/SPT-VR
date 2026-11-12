@@ -93,8 +93,9 @@ def avgQ(run):
 
 def eulerList(qs): return [x for q in qs for x in toUnityEuler(q)]
 
-# The tightest moment isn't the grip on these guns (headset, SCAR: the fingers don't hold the magazine), the carrying part of the clip is
-CARRYING_GRIP_GUNS=('scar_16','scar_17')
+# The tightest moment isn't the grip on these guns (headset, SCAR: the fingers don't hold the magazine), the carrying part of the clip is:
+# their clips clench the hand as they bring it back, the magazine still on it (the X-17 and the backport's Type 20 are cut the same way)
+CARRYING_GRIP_GUNS=('scar_16','scar_17','scar_x17','type20')
 
 # A pistol's insert: the last frame of the hold is the hand already opening to let the magazine go (headset, Glock: "he doesn't seem to be
 # holding it", fingertips 1-2.5 cm off it), so the grip is the middle of the longest stretch where the fingers keep still
