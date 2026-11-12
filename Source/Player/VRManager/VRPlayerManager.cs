@@ -100,7 +100,7 @@ namespace TarkovVR.Source.Player.VRManager
         public Transform scopeUiPosition;
         public bool isWeapPistol = false;
         public int framesAfterSwitching = 0;
-        private bool hapticTriggered = false;
+        private readonly TarkovVR.Source.Misc.ZoneEntryBlip supportZoneBlip = new TarkovVR.Source.Misc.ZoneEntryBlip();   // the foregrip's reach
 
         private bool cachedLeftHandedMode;
         private int leftHandedModeCheckFrame = -1;
@@ -1095,7 +1095,7 @@ namespace TarkovVR.Source.Player.VRManager
                 || VRReloadController.OwnsOffHand || VRReloadController.ShellInOffHand || TarkovVR.Source.Player.Interactions.ChestHang.Hanging)
             {
                 handLock = false;
-                hapticTriggered = false;
+                supportZoneBlip.Rearm();
                 if (isSupporting)
                 {
                     isSupporting = false;
@@ -1148,16 +1148,9 @@ namespace TarkovVR.Source.Player.VRManager
                 Vector3 supportGripPoint = SupportGripPoint();
                 bool withinDistance = Vector3.Distance(LeftHand.transform.position, supportGripPoint) < 0.1f;
 
-                if (withinDistance)
-                {
-                    if (!hapticTriggered)
-                    {
-                        hapticTriggered = true;
-                        VRInput.Haptic.Execute(0, 0.25f, 1, 0.4f, Handedness.OffHandSource);                       
-                    }
-                }
-                else if (!isSupporting)
-                    hapticTriggered = false;
+                // (held, the hand off the foregrip's reach still counts as in it: letting go out there doesn't blip on the way back)
+                if ((withinDistance || !isSupporting) && supportZoneBlip.Enter(withinDistance))
+                    VRInput.Haptic.Execute(0, 0.25f, 1, 0.4f, Handedness.OffHandSource);
 
                 // The grip holds the foregrip: closed at it takes it (handLock, then isSupporting the frame after), open lets go at once.
                 // While held, the hand stays on however far the controller strays.
@@ -1315,7 +1308,7 @@ namespace TarkovVR.Source.Player.VRManager
             initialRightHandRotation = rawRightHand.transform.rotation;
             isSupporting = true;
             handLock = true;
-            hapticTriggered = true;
+            supportZoneBlip.MarkInside();
             if (UIPatches.stancePanel)
             {
                 UIPatches.stancePanel.AnimatedHide();

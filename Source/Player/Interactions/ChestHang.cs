@@ -71,7 +71,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool OffHandAtGunGrip { get; private set; } // the off hand where a grip press takes the gun into it (the off-hand loot pointer and body grab yield)
         private static bool prevOffGrip;
         private static bool prevOffGripWasLeft = true;  // which controller that was: the off hand changes sides with the gun
-        private static bool swapZoneIn;
+        private static readonly TarkovVR.Source.Misc.ZoneEntryBlip swapZoneBlip = new TarkovVR.Source.Misc.ZoneEntryBlip();
 
         private static bool gripSeen;                   // welded like vanilla until the first grip press on this controller
         private static int ignoredPressFrame = -1;      // a grip press BodyWeapons took (a gun off the body), not a regrab
@@ -447,9 +447,8 @@ namespace TarkovVR.Source.Player.Interactions
                 atGrip = false;
             OffHandAtGunGrip = atGrip;
             // A light blip on the off hand coming into reach of the grip (as the regrab zone's): only where a press would swap
-            if (atGrip && !swapZoneIn && hangHaptics)
+            if (swapZoneBlip.Enter(atGrip) && hangHaptics)
                 HapticMixer.PlayPulse(Handedness.OffHandSource, 0.25f, 0.07f, 95f);
-            swapZoneIn = atGrip;
             if (magazineNearer && offGripPressed)
                 GripPressLeftToMagazineFrame = Time.frameCount;
             if (!atGrip || !offGripPressed)
@@ -523,7 +522,7 @@ namespace TarkovVR.Source.Player.Interactions
             prevOffGrip = Handedness.OffHandGrip.state;
             prevOffGripWasLeft = !Handedness.GunHandIsLeft;
             // The old gun hand is at the grip: no blip until it leaves and comes back
-            swapZoneIn = true;
+            swapZoneBlip.MarkInside();
             OffHandAtGunGrip = false;
             if (hangHaptics)
                 Pulse(0.45f, throughGun: true);
@@ -622,7 +621,7 @@ namespace TarkovVR.Source.Player.Interactions
             gripSeen = false;
             // The hand is AT the gun the instant it lets go - start the zone flag "in" so the
             // in-reach blip only fires after leaving and coming back.
-            regrabZoneIn = true;
+            regrabZoneBlip.MarkInside();
         }
 
         // EFT solves the gun-hand arm onto _markers[1] (the gun's weapon_R_IK_marker) itself every LateUpdate (Player.IkProcess/IkApply),
@@ -685,12 +684,11 @@ namespace TarkovVR.Source.Player.Interactions
 
         // A light blip when the dominant hand comes into regrab reach of the detached gun (mirrors the
         // support hand's snap-zone haptic), so you can find the grip without looking.
-        private static bool regrabZoneIn;
+        private static readonly TarkovVR.Source.Misc.ZoneEntryBlip regrabZoneBlip = new TarkovVR.Source.Misc.ZoneEntryBlip();
         private static void RegrabZonePulse(bool near)
         {
-            if (near && !regrabZoneIn && hangHaptics)
+            if (regrabZoneBlip.Enter(near) && hangHaptics)
                 Pulse(0.3f);
-            regrabZoneIn = near;
         }
 
         // Back to the dominant hand (restore = true), or just clear state because something else owns
