@@ -340,7 +340,21 @@ namespace TarkovVR.Source.Weapons
 
         // The sets whose magazine clips are their reload_in / reload_out ones (sr2m_reload_in_0; the MPX's own mpx_mag_in_1..4 never move
         // the magazine). Tools/gen_reload_holds clip_names.py has the same list.
-        private static readonly string[] reloadNamedMagazineSets = { "sr2m", "scar_x17", "mpx" };
+        private static readonly string[] reloadNamedMagazineSets = { "sr2m", "scar_x17", "mpx", "ak308" };
+
+        // A clip's own name. A content mod's re-exported clips come wrapped as "<root>_<root>_<name>_<layer>" (the backport's
+        // Armature_Armature_m4a1_mag_in_0_1_Base Layer): every set and part is found by the name inside.
+        internal static string ClipName(AnimationClip clip)
+        {
+            string name = clip.name;
+            int rootEnd = name.IndexOf('_');
+            int layerStart = name.LastIndexOf('_');
+            if (rootEnd <= 0 || !name.EndsWith(" Layer", StringComparison.Ordinal))
+                return name;
+            string root = name.Substring(0, rootEnd + 1);
+            int nameStart = root.Length * 2;
+            return name.StartsWith(root + root, StringComparison.Ordinal) && layerStart > nameStart ? name.Substring(nameStart, layerStart - nameStart) : name;
+        }
 
         // A clip that shows a magazine going in or out, by either naming
         private static bool IsMagazineClip(string clipName, bool goingIn)
@@ -370,11 +384,12 @@ namespace TarkovVR.Source.Weapons
                 {
                     foreach (AnimationClip clip in animatorController.animationClips)
                     {
-                        int nameEnd = clip == null ? -1
-                            : pass == 0 ? MagazineClipNameEnd(clip.name, goingIn: true) : clip.name.IndexOf("_reload_in", StringComparison.OrdinalIgnoreCase);
+                        string clipName = clip != null ? ClipName(clip) : null;
+                        int nameEnd = clipName == null ? -1
+                            : pass == 0 ? MagazineClipNameEnd(clipName, goingIn: true) : clipName.IndexOf("_reload_in", StringComparison.OrdinalIgnoreCase);
                         if (nameEnd > 0)
                         {
-                            family = clip.name.Substring(0, nameEnd).ToLowerInvariant();
+                            family = clipName.Substring(0, nameEnd).ToLowerInvariant();
                             break;
                         }
                     }
@@ -389,7 +404,7 @@ namespace TarkovVR.Source.Weapons
                             continue;
                         foreach (string known in shotgunGuns.Keys)
                         {
-                            if (clip.name.StartsWith(known + "_", StringComparison.OrdinalIgnoreCase))
+                            if (ClipName(clip).StartsWith(known + "_", StringComparison.OrdinalIgnoreCase))
                             {
                                 family = known;
                                 break;

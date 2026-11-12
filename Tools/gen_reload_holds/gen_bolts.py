@@ -6,7 +6,8 @@
 import sys, os, re, json, zlib
 exec(open('gen_holds.py',encoding='utf-8').read().split("if __name__=='__main__':")[0])
 
-CHARGES='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/items/mods/charges/'
+from game_paths import BUNDLES as GAME_BUNDLES
+CHARGES=GAME_BUNDLES+'assets/content/items/mods/charges/'
 # folder, bolt clip, the bolt part in mod_charge when the gun's own rig has none (its bones then carry the part's names)
 GUNS=[('mosin','mosin_fire_chambering_0',None),('mosin','mosin_inf_fire_chambering_0',None),('sv98','sv98_fire_chambering_0',None),
       ('m700','m700_fire_chambering_0',None),('t5000','t5000_fire_chambering_0',None),('dvl-10','dvl_10_fire_chambering_0',None),

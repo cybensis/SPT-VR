@@ -33,8 +33,9 @@ def setup(tree,clip):
     g['localAt']=localAt
     return g
 
-MAGAZINES='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/items/mods/magazines/'
-ITEMS=json.load(open('F:/SPT4.1/SPT_Runtime/SPT_Data/database/templates/items.json',encoding='utf-8'))
+from game_paths import BUNDLES as GAME_BUNDLES, ITEMS as ITEMS_PATH
+MAGAZINES=GAME_BUNDLES+'assets/content/items/mods/magazines/'
+ITEMS=json.load(open(ITEMS_PATH,encoding='utf-8'))
 # family: rig folder, container (cover + belt), container with the latch, box, idle clip, cover clip, latch clip (None: no latch), box insert
 # clip, charge clip (None: the handle's data comes from elsewhere), other families sharing it, box-out clip, the handle's knob
 GUNS={

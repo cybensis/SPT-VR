@@ -23,7 +23,7 @@ def toUnityEuler(q):
 def ang(a,b): return math.degrees(2*math.acos(min(1,abs(float(np.dot(a,b))))))
 def angleOf(q): return math.degrees(2*math.acos(min(1,abs(float(q[3])))))
 
-ROOT='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/weapons/'
+from game_paths import WEAPONS as ROOT, CONTAINER_CLIPS
 
 def loadTree(path):
     env=UnityPy.load(path); trs={o.path_id:o.read() for o in env.objects if o.type.name=="Transform"}
@@ -329,22 +329,30 @@ def palmHold(g,J,old,new):
 
 from clip_names import magClipName, renameMagClips
 
+# A folder's clips by name, renamed: its client_assets bundle's, then (CONTAINER_CLIPS) the ones its containers carry themselves
+def folderClips(folder):
+    d=ROOT+folder+'/'
+    bundles=['client_assets.bundle'] if os.path.isfile(d+'client_assets.bundle') else []
+    if CONTAINER_CLIPS: bundles+=sorted(c for c in os.listdir(d) if c.endswith('_container.bundle') and c.startswith('weapon_'))
+    clips={}
+    for b in bundles:
+        for o in UnityPy.load(d+b).objects:
+            if o.type.name=="AnimationClip":
+                try:
+                    c=o.read(); clips.setdefault(c.m_Name,c)
+                except Exception: pass
+    renameMagClips(folder,clips)
+    return clips
+
 def run(folders,outFile=None):
     result=dict(grips={},handles={},gunHandHandles={},handleAlternates={},gunHandHandleAlternates={},handleMovesWithBolt=[],handleNotches={},thumbCatches={},wellAxes={},slides={},slideBoneInGun={},slideGrips={},rockIn={},palms={}); report=[]
     boneInGun={}; otherGrips={}
     for folder in folders:
         d=ROOT+folder+'/'
-        if not os.path.isfile(d+'client_assets.bundle'): continue
-        clips={}
-        try:
-            for o in UnityPy.load(d+'client_assets.bundle').objects:
-                if o.type.name=="AnimationClip":
-                    try:
-                        c=o.read(); clips[c.m_Name]=c
-                    except Exception: pass
+        if not os.path.isdir(d): continue
+        try: clips=folderClips(folder)
         except Exception as e:
             report.append((folder,'ERR load',repr(e)[:80])); continue
-        renameMagClips(folder,clips)
         prefixes=sorted(set(m.group(1) for m in (re.match(r'(.+?)_mag_in(?:_\d+)?$',n) for n in clips) if m))
         if not prefixes: continue
         trees={}

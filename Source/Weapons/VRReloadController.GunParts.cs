@@ -431,7 +431,7 @@ namespace TarkovVR.Source.Weapons
                 int measured = 0;
                 foreach (AnimationClip clip in animatorController.animationClips)
                 {
-                    if (clip == null || !IsMagazineClip(clip.name, goingIn: true))
+                    if (clip == null || !IsMagazineClip(ClipName(clip), goingIn: true))
                         continue;
                     MagazineReleaseMotion motion = MeasureReleaseInClip(clip, sampler, sampledParts, sampledWell, gunName);
                     if (motion != null)
@@ -609,7 +609,7 @@ namespace TarkovVR.Source.Weapons
                 int measured = 0;
                 foreach (AnimationClip clip in animatorController.animationClips)
                 {
-                    if (clip == null || !IsMagazineClip(clip.name, goingIn: false))
+                    if (clip == null || !IsMagazineClip(ClipName(clip), goingIn: false))
                         continue;
                     clip.SampleAnimation(sampler, 0f);
                     for (int part = 0; part < partCount; part++)

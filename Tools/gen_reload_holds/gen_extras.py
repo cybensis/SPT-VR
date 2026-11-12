@@ -16,16 +16,16 @@ for folder,v in census.items():
     for c in v.get('clips',[]):
         m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,c))
         if m: famFolder[m.group(1).lower()]=folder
-ITEM_BUNDLES='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/items/mods/'
+# A content mod's containers' own clips (gen_census with CONTAINER_CLIPS): only sets the game's clips don't have
+for folder,v in census.items():
+    for c in v.get('containerClips',[]):
+        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,c))
+        if m: famFolder.setdefault(m.group(1).lower(),folder)
+from game_paths import BUNDLES as GAME_BUNDLES
+ITEM_BUNDLES=GAME_BUNDLES+'assets/content/items/mods/'
 
 def loadFolder(folder):
-    d=ROOT+folder+'/'; clips={}
-    for o in UnityPy.load(d+'client_assets.bundle').objects:
-        if o.type.name=='AnimationClip':
-            try:
-                c=o.read(); clips[c.m_Name]=c
-            except Exception: pass
-    renameMagClips(folder,clips)
+    d=ROOT+folder+'/'; clips=folderClips(folder)
     for c in sorted(os.listdir(d)):
         if c.endswith('_container.bundle') and c.startswith('weapon_'):
             tree=loadTree(d+c)
@@ -58,7 +58,8 @@ HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghin
                   'tochmash_sr2m':'weapon_charging_handle','mps_aa_12':'weapon_charge','dt_mdr':'weapon_charge_000','springfield_m1a':'weapon_bolthandle',
                   'kbp_9a91':'weapon_bolt_charge','ckib_ash_12':'weapon_charging_handle','hk_g36':'weapon_charge_handle',
                   'zmz_pp-9':'weapon_bolt','zis_ppsh41':'weapon_bolt','iwi_uzi_pro':'weapon_bolt','vepr_hunter_vpo-101':'weapon_bolt',
-                  'toz_avt_40':'weapon_bolt_carrier','toz_svt_40':'weapon_bolt_carrier'}
+                  'toz_avt_40':'weapon_bolt_carrier','toz_svt_40':'weapon_bolt_carrier',
+                  'nb_val_mod4':'weapon_charge','norinco_qbz191':'weapon_bolt_carrier'}
 HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier'}
 # (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's hand is too)
 HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12')
@@ -161,7 +162,7 @@ for folder,v in census.items():
     if not os.path.isdir(ROOT+folder): continue
     containers=[c for c in sorted(os.listdir(ROOT+folder)) if c.endswith('_container.bundle') and c.startswith('weapon_')]
     matching=[(c,b,k) for c in containers for k,b in HANDLE_BONE_RIGS.items() if k in c]
-    for clip in v.get('clips',[]):
+    for clip in v.get('clips',[])+v.get('containerClips',[]):
         m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,clip))
         if matching and m:
             family=m.group(1).lower()

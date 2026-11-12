@@ -226,7 +226,7 @@ namespace TarkovVR.Source.Weapons
                         continue;
                     foreach (string known in shotgunGuns.Keys)
                     {
-                        if (clip.name.StartsWith(known + "_", System.StringComparison.OrdinalIgnoreCase))
+                        if (ClipName(clip).StartsWith(known + "_", System.StringComparison.OrdinalIgnoreCase))
                         {
                             family = known;
                             break;

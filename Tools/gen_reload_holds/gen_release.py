@@ -90,19 +90,12 @@ done = set()
 for folder, v in sorted(census.items()):
     if not os.path.isdir(ROOT + folder):
         continue
-    names = [magClipName(folder, n) for n in v.get('clips', [])]
+    names = [magClipName(folder, n) for n in v.get('clips', []) + v.get('containerClips', [])]
     prefixes = sorted({re.match(r'(.+?)_mag_in(?:_\d+)?$', n).group(1) for n in names if re.match(r'(.+?)_mag_in(?:_\d+)?$', n)})
     if not prefixes:
         continue
-    clips = {}
     try:
-        for o in UnityPy.load(ROOT + folder + '/client_assets.bundle').objects:
-            if o.type.name == 'AnimationClip':
-                try:
-                    c = o.read(); clips[c.m_Name] = c
-                except Exception:
-                    pass
-        renameMagClips(folder, clips)
+        clips = folderClips(folder)
     except Exception as e:
         print(folder, 'ERR clips', repr(e)[:80], flush=True); continue
     for prefix in prefixes:

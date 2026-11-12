@@ -2,15 +2,17 @@
 # gun_families.json): the runtime picks a gun's animation set from that order (VRReloadController.AnimationFamily), and the clip a
 # magazine type plays can come from another set (the AK-102's controller: ak101_mag_in_0, ak100_mag_in_1..5, ak103_mag_in_6).
 # The controller is the WeaponPrefab's _originalAnimatorController: in the gun's container, or another gun's (matched by path id); an
-# AnimatorOverrideController is its base's clips with its overrides. Clips sit in the folders' client_assets bundles (named by CAB + path id).
+# AnimatorOverrideController is its base's clips with its overrides. Clips sit in the folders' client_assets bundles, or in the gun's own
+# container (a content mod's guns), named by CAB + path id.
 import json, os, sys
 import UnityPy
 
-BUNDLES = 'F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/'
+from game_paths import BUNDLES
 guns = json.load(open('guns.json'))
 controllers = {}
 controllerOfGun = {}
 readingFile = {}
+clipNames = {}
 
 def clipReference(pointer):
     assetsFile = readingFile['file']
@@ -40,6 +42,11 @@ for gun in guns:
         continue
     for assetObject in environment.objects:
         readingFile['file'] = assetObject.assets_file
+        if assetObject.type.name == 'AnimationClip':
+            try:
+                clipNames[(assetObject.assets_file.name.lower(), assetObject.path_id)] = assetObject.peek_name()
+            except Exception:
+                pass
         if assetObject.type.name in ('AnimatorController', 'AnimatorOverrideController') and assetObject.path_id not in controllers:
             try:
                 controllers[assetObject.path_id] = readController(assetObject)
@@ -69,7 +76,6 @@ def resolve(pathId, depth=0):
         return entry.get('name'), None
     return entry['name'], [entry['overrides'].get(clip, clip) for clip in baseClips]
 
-clipNames = {}
 for folder, _, files in os.walk(BUNDLES + 'assets/content/weapons'):
     for fileName in files:
         if not fileName.endswith('.bundle') or '_container' in fileName:

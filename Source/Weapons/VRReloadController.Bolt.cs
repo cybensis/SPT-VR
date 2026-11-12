@@ -128,12 +128,13 @@ namespace TarkovVR.Source.Weapons
                 {
                     if (clip == null)
                         continue;
-                    int end = clip.name.IndexOf("_fire_chambering_0", System.StringComparison.OrdinalIgnoreCase);
+                    string clipName = ClipName(clip);
+                    int end = clipName.IndexOf("_fire_chambering_0", System.StringComparison.OrdinalIgnoreCase);
                     if (end < 0)
-                        end = clip.name.IndexOf("_rechamber_0", System.StringComparison.OrdinalIgnoreCase);
+                        end = clipName.IndexOf("_rechamber_0", System.StringComparison.OrdinalIgnoreCase);
                     if (end > 0)
                     {
-                        family = clip.name.Substring(0, end).ToLowerInvariant();
+                        family = clipName.Substring(0, end).ToLowerInvariant();
                         break;
                     }
                 }

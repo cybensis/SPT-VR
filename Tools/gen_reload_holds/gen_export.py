@@ -1,9 +1,8 @@
 # Filters the generated holds, adds each magazine type's length (for borrowing a hold) and writes the file the mod loads.
 import json, math, os, re, sys
 import numpy as np, UnityPy
-from clip_names import magClipName
-ITEMS='F:/SPT4.1/SPT_Runtime/SPT_Data/database/templates/items.json'
-BUNDLES='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/'
+from clip_names import magClipName, unwrapClipName
+from game_paths import BUNDLES, ITEMS, WEAPONS
 gen=json.load(open('gen_all.json')); R=gen['result']
 # gen_extras.py: bolts the handle moves, side handles, low rocks, handles on bones not named mod_charge (merged into gen_holds' own here)
 extras=json.load(open('extras.json')) if os.path.exists('extras.json') else dict(boltBones={},sideHandles={})
@@ -15,6 +14,11 @@ for folder,v in census.items():
     for c in v.get('clips',[]):
         m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,c))
         if m: famFolder[m.group(1).lower()]=folder
+# A content mod's containers' own clips (gen_census with CONTAINER_CLIPS): only sets the game's clips don't have
+for folder,v in census.items():
+    for c in v.get('containerClips',[]):
+        m=re.match(r'(.+?)_mag_in(?:_\d+)?$',magClipName(folder,c))
+        if m: famFolder.setdefault(m.group(1).lower(),folder)
 # gen_gun_families.py: each gun's animator clips in order. A gun's animation set as the runtime picks it (VRReloadController.AnimationFamily:
 # the first magazine-in clip's, else the first reload_in one's), and which set's clip each magazine type plays on that gun.
 gunClips=json.load(open('gun_families.json')) if os.path.exists('gun_families.json') else {}
@@ -22,7 +26,7 @@ def runtimeFamily(clips):
     for reloadNamed in (False,True):
         for clip in clips:
             if not clip: continue
-            name=clip.lower()
+            name=unwrapClipName(clip).lower()
             end=name.find('_reload_in') if reloadNamed else (name.find('_mag_in') if '_mag_in' in name else name.find('_magin'))
             if end>0: return name[:end]
     return None
@@ -235,7 +239,7 @@ def slideBack(family,boneName):
     if fittedSlide and slide.get('slotOffset'):
         back=turn(np.array(slide['slotRotation'],float),back)+np.array(slide['slotOffset'],float)
     return back
-ROOT_WEAPONS='F:/SPT4.1/EscapeFromTarkov_Data/StreamingAssets/Windows/assets/content/weapons/'
+ROOT_WEAPONS=WEAPONS
 backs={f:slideBack(f,h['bone']) for f,h in R['slides'].items() if f in out['slides']}
 sourceBacks={k:slideBack(v['family'],R['slides'][v['family']]['bone']) for k,v in R['slideGrips'].items()}
 print('slide back and top, cm:',{f:(None if b is None else [round(float(b[1])*100,1),round(float(b[2])*100,1)]) for f,b in backs.items()})
@@ -274,7 +278,8 @@ print('T handle grips from the M4:',{f:out['handles'][f] for f in T_HANDLE_FROM_
 # Rocked in like an AK though the gun's own clips only tilt the magazine 9 deg (headset, Mk47: "mag should tilt in like an AK"): it takes
 # AK magazines, and its seated magazine bone sits in the gun like the AKM's (both square to the gun), so the AKM's rock carries over as is.
 # The SA58 too: a FAL magazine hooks at the front and rocks back (its clip tilts it only 9 deg), its bone square to the gun like the AKM's.
-ROCK_IN_FROM={'mk47':'akm','sa58':'akm'}
+# The backport's NL545 takes AK-74 magazines (an AK magazine's front lug has to hook first), its clips push them straight; bone as the AK-74M's.
+ROCK_IN_FROM={'mk47':'akm','sa58':'akm','nl545_di':'ak74m'}
 for f,source in ROCK_IN_FROM.items():
     if source in out['rockIn']: out['rockIn'][f]=out['rockIn'][source]
 # gen_extras.py: bolts the handle moves itself, and side handles. A side handle's travel is scaled like the others, and its slider's lag with it.
