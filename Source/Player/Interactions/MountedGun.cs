@@ -20,7 +20,7 @@ namespace TarkovVR.Source.Player.Interactions
     // and every frame turns that gun about the world Hinge to MovementContext.Rotation, clamped to the mount's limits
     // (MovementContext.UtesRotationFunction / AGSRotationFunction); the world gun follows it (StationaryWeapon.ManualUpdate). FIKA syncs
     // Occupy / Leave (FikaPlayer.OperateStationaryWeapon) and the rotation is your look rotation.
-    // Ours: both grips closed on its handles takes it (both hands free: empty, or the gun on the sling); the hands turn it about the
+    // Ours: both grips closed on its handles takes it, the Utyos's right alone (both hands free: empty, or the gun on the sling); the hands turn it about the
     // hinge; a holding hand's trigger fires it; the eye at its sight aims it; both hands open lets go of it, back to what you had.
     // The view is the headset's throughout, still in the world while Tarkov moves the body onto the gun.
     internal static class MountedGun
@@ -28,6 +28,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool enabled = true;
         public static float grabRadius = 0.13f;     // m controller wrist to a handle for its grip to take the gun
         public static float regrabRadius = 0.18f;   // m on the gun: a hand that let go takes its handle again
+        // The Utyos: the right grip on its handle alone takes it, the left joins on its handle when it grips there. false = both grips.
+        public static bool utesRightHandTakes = true;
         public static float leaveDelay = 0.3f;      // s both hands open before you let go of the gun
         public static float takeTimeout = 8f;       // s a take may take before it's called off (Tarkov's walk onto it is 1.5 s at most)
         // Co-op as a client: s on the gun before letting go takes effect. The host's copy of you gets onto it later than you (its walk onto
@@ -214,22 +216,27 @@ namespace TarkovVR.Source.Player.Interactions
                 takeArmed = false;
                 return false;
             }
-            bool bothHeld = leftAt && rightAt && leftGrip && rightGrip;
-            if (bothHeld && (leftPressed || rightPressed))
+            bool rightHandTakes = RightHandTakes(nearest);
+            bool leftOn = leftAt && leftGrip;
+            bool held = rightAt && rightGrip && (rightHandTakes || leftOn);
+            if (held && (rightPressed || (!rightHandTakes && leftPressed)))
                 takeArmed = true;
-            else if (!bothHeld)
+            else if (!held)
                 takeArmed = false;
             // A FIKA client waits on the host's answer to its last hands change (FikaPlayer refuses the Occupy meanwhile)
             if (takeArmed && !CoopHost.StillAnswering)
             {
                 takeArmed = false;
-                Take(player, nearest);
+                Take(player, nearest, leftOn);
             }
             // A hand on a handle: its grip is the gun's, not the loot pointer's or a door's
             return true;
         }
 
-        private static void Take(EFT.Player player, StationaryWeapon stationaryWeapon)
+        private static bool RightHandTakes(StationaryWeapon stationaryWeapon) =>
+            utesRightHandTakes && stationaryWeapon.Animation != StationaryWeapon.EStationaryAnimationType.AGS_17;
+
+        private static void Take(EFT.Player player, StationaryWeapon stationaryWeapon, bool leftOn)
         {
             if (!stationaryWeapon.IsAvailable(player.ProfileId) || player.IsInPronePose)
                 return;
@@ -244,13 +251,15 @@ namespace TarkovVR.Source.Player.Interactions
             gun = stationaryWeapon;
             stage = Stage.Taking;
             takenAt = Time.time;
-            holding[LEFT] = holding[RIGHT] = true;
+            holding[LEFT] = leftOn;
+            holding[RIGHT] = true;
             allOpenSince = -1f;
             aimBased = false;
-            HapticMixer.PlayPulse(SteamVR_Input_Sources.LeftHand, 0.45f, 0.06f, 90f);
+            if (leftOn)
+                HapticMixer.PlayPulse(SteamVR_Input_Sources.LeftHand, 0.45f, 0.06f, 90f);
             HapticMixer.PlayPulse(SteamVR_Input_Sources.RightHand, 0.45f, 0.06f, 90f);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[MountedGun] taking {stationaryWeapon.Item.LocalizedShortName()} ({stationaryWeapon.Animation}), from {(cameFromEmptyHands ? "empty hands" : "the sling")}");
+                Plugin.MyLog.LogInfo($"[MountedGun] taking {stationaryWeapon.Item.LocalizedShortName()} ({stationaryWeapon.Animation}), from {(cameFromEmptyHands ? "empty hands" : "the sling")}, {(leftOn ? "both hands" : "the right hand")}");
         }
 
         private static void TickOnGun(EFT.Player player, bool leftGrip, bool rightGrip, bool leftPressed, bool rightPressed)
@@ -292,14 +301,23 @@ namespace TarkovVR.Source.Player.Interactions
 
             bool[] grips = { leftGrip, rightGrip };
             bool[] pressed = { leftPressed, rightPressed };
+            bool zonesKnown = gun != null && gun.WeaponTransform != null;
+            Vector3 leftZone = Vector3.zero, rightZone = Vector3.zero;
+            if (zonesKnown)
+                HandlePoints(gun, out leftZone, out rightZone);
             for (int hand = LEFT; hand <= RIGHT; hand++)
             {
                 if (holding[hand] && !grips[hand])
                     holding[hand] = false;
                 else if (!holding[hand] && pressed[hand])
                 {
+                    // Off its live marker or its zone (the Utyos's left marker is 13 cm off where a VR wrist sits)
+                    Vector3 wrist = Wrist(hand == LEFT);
                     Transform handle = LiveHandle(firearmController, hand == LEFT);
-                    if (handle != null && (Wrist(hand == LEFT) - handle.position).sqrMagnitude < regrabRadius * regrabRadius)
+                    float reach = handle != null ? (wrist - handle.position).sqrMagnitude : float.PositiveInfinity;
+                    if (zonesKnown)
+                        reach = Mathf.Min(reach, (wrist - (hand == LEFT ? leftZone : rightZone)).sqrMagnitude);
+                    if (reach < regrabRadius * regrabRadius)
                     {
                         holding[hand] = true;
                         HapticMixer.PlayPulse(hand == LEFT ? SteamVR_Input_Sources.LeftHand : SteamVR_Input_Sources.RightHand, 0.3f, 0.05f, 90f);
