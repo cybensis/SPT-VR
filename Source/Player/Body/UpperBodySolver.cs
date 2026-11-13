@@ -7,8 +7,8 @@ namespace TarkovVR.Source.Player.Body
     // (SPT-VR-FikaSync's HeadSyncApply - this file is linked into it, one copy of the maths for both). On the pose the animator gave this
     // frame, the hips where they are: the chest turns part of the way to the head's yaw, the neck takes a share of the head's turn off the
     // chest, the spine bends (CCD, a weight and a limit per bone) so the head's pivot comes to where the tracked head's is, and the head
-    // turns to the tracked head. The face is the head bone's own axes nearest the body's forward and up (not LootRaycastOrigin: that's the
-    // first-person camera point on the ribcage rig), the eyes eyeForward / eyeUp off its pivot.
+    // turns to the tracked head. The face is the head bone's rest-pose forward and up (not LootRaycastOrigin: that's the first-person
+    // camera point on the ribcage rig), the eyes eyeForward / eyeUp off its pivot.
     internal static class UpperBodySolver
     {
         // The eyes off the head bone's pivot, m (the mod's neck point under the headset, HeadTracking.neckLocalOffset, the other way)
@@ -72,11 +72,12 @@ namespace TarkovVR.Source.Player.Body
             rig.chest = ribcage;
             rig.head = head;
 
-            // The bones' own axes, not this frame's pose: the skeleton is built square to the body, so the nearest axis holds whatever the
-            // animator has it doing now - and it's the same on every peer (the hands are synced in the solved chest's frame)
-            Vector3 faceAxis = NearestAxis(head, root.forward, Vector3.zero, out float faceOff);
-            Vector3 upAxis = NearestAxis(head, root.up, faceAxis, out float upOff);
-            Vector3 chestAxis = NearestAxis(ribcage, root.forward, Vector3.zero, out float chestOff);
+            // The bones' axes in Tarkov's rest pose, not the nearest to this frame's: the rifle stance turns the ribcage ~40 deg off the
+            // body, where the nearest axis flips - each peer picked its own
+            Vector3 faceAxis = HEAD_FACE, upAxis = HEAD_UP, chestAxis = RIBCAGE_FACE;
+            float faceOff = Vector3.Angle(head.rotation * faceAxis, root.forward);
+            float upOff = Vector3.Angle(head.rotation * upAxis, root.up);
+            float chestOff = Vector3.Angle(ribcage.rotation * chestAxis, root.forward);
             rig.eyeInHead = faceAxis * eyeForward + upAxis * eyeUp;
             rig.lookInHead = Quaternion.LookRotation(faceAxis, upAxis);
             rig.chestForwardLocal = chestAxis;
@@ -101,28 +102,10 @@ namespace TarkovVR.Source.Player.Body
             return rig;
         }
 
-        private static readonly Vector3[] AXES = { Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back };
-
-        // The bone's local axis nearest a world direction (not one along notAlong); off = the angle between them now
-        private static Vector3 NearestAxis(Transform bone, Vector3 worldDirection, Vector3 notAlong, out float off)
-        {
-            Vector3 local = Quaternion.Inverse(bone.rotation) * worldDirection.normalized;
-            Vector3 best = Vector3.forward;
-            float bestDot = -2f;
-            foreach (Vector3 axis in AXES)
-            {
-                if (Mathf.Abs(Vector3.Dot(axis, notAlong)) > 0.5f)
-                    continue;
-                float dot = Vector3.Dot(axis, local);
-                if (dot > bestDot)
-                {
-                    bestDot = dot;
-                    best = axis;
-                }
-            }
-            off = Mathf.Acos(Mathf.Clamp(bestDot, -1f, 1f)) * Mathf.Rad2Deg;
-            return best;
-        }
+        // Base HumanHead / Base HumanRibcage axes along the body's forward and up in the rest pose (playersuperior.bundle, exact)
+        private static readonly Vector3 HEAD_FACE = Vector3.up;
+        private static readonly Vector3 HEAD_UP = Vector3.left;
+        private static readonly Vector3 RIBCAGE_FACE = Vector3.forward;
 
         private static string AxisName(Vector3 axis)
         {
@@ -187,16 +170,6 @@ namespace TarkovVR.Source.Player.Body
             for (int i = 0; i < rig.posed.Length; i++)
                 rig.written[i] = rig.posed[i].localRotation;
             rig.haveWritten = true;
-        }
-
-        // Back to the animator's pose of this frame (after a Solve that was only measured)
-        public static void Restore(Rig rig)
-        {
-            if (rig == null || !rig.valid || !rig.haveWritten)
-                return;
-            for (int i = 0; i < rig.posed.Length; i++)
-                rig.posed[i].localRotation = rig.animated[i];
-            rig.haveWritten = false;
         }
 
         private static float SpineWeight(int index)

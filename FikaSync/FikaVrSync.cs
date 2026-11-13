@@ -302,7 +302,7 @@ namespace SptVrFikaSync
         private static float[] _eaTime = new float[0];
 
         // Send the local eater's wrist poses + food-animator layer states + prop poses/visibility.
-        // names/pos/rot/vis are parallel (chest-local), count props taken; animHashes/animTimes are
+        // names/pos/rot/vis are parallel (body-local), count props taken; animHashes/animTimes are
         // parallel per layer. Capped at 255 props / 8 anim layers.
         public static void SendEatingPose(int netId,
             Vector3 lPos, Quaternion lRot, Vector3 rPos, Quaternion rRot,

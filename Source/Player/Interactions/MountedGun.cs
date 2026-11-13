@@ -48,7 +48,9 @@ namespace TarkovVR.Source.Player.Interactions
 
         // Each gun's hands in its idle hold (weapon_L_IK_marker / weapon_R_IK_marker, utes_idle / ags_idle), in its 'weapon' bone's frame:
         // StationaryWeapon.WeaponTransform is that bone in the world (ManualUpdate keeps it there). The hands' IK target is the wrist.
-        private static readonly Vector3 utesLeftHandle = new Vector3(-0.105f, -0.157f, -0.112f);
+        // The Utyos's left: where a VR wrist sits holding it (the mean of 5 two-handed grabs, all within 5 cm of it): Tarkov's left hand holds
+        // that handle turned round, fingers back toward the stock, so its marker is 13 cm off a hand held the usual way.
+        private static readonly Vector3 utesLeftHandle = new Vector3(-0.067f, -0.024f, -0.044f);
         private static readonly Vector3 utesRightHandle = new Vector3(0.062f, -0.197f, -0.158f);
         private static readonly Vector3 agsLeftHandle = new Vector3(-0.27f, -0.285f, -0.267f);
         private static readonly Vector3 agsRightHandle = new Vector3(0.092f, -0.288f, -0.276f);

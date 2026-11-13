@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace TarkovVR.ModSupport.FIKA
 {
-    // Send side of VR arm sync: reads the local VR rig hands and feeds chest-relative poses to the FikaSync module
+    // Send side of VR arm sync: reads the local VR rig hands and feeds body-relative poses (Player.Transform) to the FikaSync module
     // (SPT-VR-FikaSync.dll), which owns the packet, registration, relay and rendering, so a flatscreen/headless peer
     // with only the module can render too. Apply-side tuning lives on the module's ArmSyncApply.
     // FikaVrSync.enableArmSync is the master gate (send + apply).
@@ -101,9 +101,11 @@ namespace TarkovVR.ModSupport.FIKA
             VRPlayerManager rig = VRGlobals.vrPlayer;
             if (local == null || rig == null)
                 return;
-            // The chest as the upper body solve left it (LocalUpperBody), which the observers' copy matches
-            Transform chest = Source.Player.Body.LocalUpperBody.SyncChest(local) ?? local.PlayerBones?.Ribcage?.Original;
-            if (chest == null)
+            // Everything in the body's frame (Player.Transform), like the headset: the observers place it on their copy's root, which FIKA
+            // keeps where yours is. Not the chest: theirs is solved again from the head on their machine and never quite matches, and
+            // every degree it's off turned the gun that much off your aim.
+            Transform frame = local.Transform != null ? local.Transform.Original : null;
+            if (frame == null)
                 return;
 
             // Manual eating: stream the rendered wrist poses (the module drives the observed arms like empty hands) + every live
@@ -111,7 +113,7 @@ namespace TarkovVR.ModSupport.FIKA
             if (eatingNow && local.HandsController is Player.MedsController)
             {
                 if (Source.Player.Interactions.EatingInteractionController.TryBuildSync(
-                        chest, out Vector3 elPos, out Quaternion elRot, out Vector3 erPos, out Quaternion erRot))
+                        frame, out Vector3 elPos, out Quaternion elRot, out Vector3 erPos, out Quaternion erRot))
                 {
                     lastSendTime = Time.time;
                     wasEating = true;
@@ -128,7 +130,7 @@ namespace TarkovVR.ModSupport.FIKA
                 return;
             }
 
-            DispatchHeldOrEmpty(local, rig, chest);
+            DispatchHeldOrEmpty(local, rig, frame);
         }
 
         // Forward one eat sound the local eater played (by event name) so observers replay it. Lives here so FIKA types only
@@ -172,7 +174,7 @@ namespace TarkovVR.ModSupport.FIKA
                 rootInverse * (headset.transform.position - root.position), rootInverse * headset.transform.rotation);
         }
 
-        private static void DispatchHeldOrEmpty(FikaPlayer local, VRPlayerManager rig, Transform chest)
+        private static void DispatchHeldOrEmpty(FikaPlayer local, VRPlayerManager rig, Transform frame)
         {
             var hc = local.HandsController;
             bool isFirearm = hc is Player.FirearmController;
@@ -188,14 +190,14 @@ namespace TarkovVR.ModSupport.FIKA
                     return;
                 lastSendTime = Time.time;
                 Transform weaponRoot = hc.WeaponRoot;
-                Vector3 wPos = chest.InverseTransformPoint(weaponRoot.position);
-                Quaternion wRot = Quaternion.Inverse(chest.rotation) * weaponRoot.rotation;
+                Vector3 wPos = frame.InverseTransformPoint(weaponRoot.position);
+                Quaternion wRot = Quaternion.Inverse(frame.rotation) * weaponRoot.rotation;
                 bool leftOnGrip = isFirearm && rig.isSupporting;
                 Vector3 lPos = Vector3.zero; Quaternion lRot = Quaternion.identity;
                 if (rig.LeftHand != null)
                 {
-                    lPos = chest.InverseTransformPoint(rig.LeftHand.transform.position);
-                    lRot = Quaternion.Inverse(chest.rotation) * rig.LeftHand.transform.rotation;
+                    lPos = frame.InverseTransformPoint(rig.LeftHand.transform.position);
+                    lRot = Quaternion.Inverse(frame.rotation) * rig.LeftHand.transform.rotation;
                 }
                 FikaVrSync.SendWeaponPose(local.NetId, wPos, wRot, leftOnGrip, lPos, lRot);
                 // The manual reload on top (the module draws it on the observed gun the pose above just placed). A bad frame is
@@ -235,10 +237,10 @@ namespace TarkovVR.ModSupport.FIKA
                 if (rig.LeftHand == null || rig.RightHand == null)
                     return;
                 lastSendTime = Time.time;
-                Vector3 lPos = chest.InverseTransformPoint(rig.LeftHand.transform.position);
-                Quaternion lRot = Quaternion.Inverse(chest.rotation) * rig.LeftHand.transform.rotation;
-                Vector3 rPos = chest.InverseTransformPoint(rig.RightHand.transform.position);
-                Quaternion rRot = Quaternion.Inverse(chest.rotation) * rig.RightHand.transform.rotation;
+                Vector3 lPos = frame.InverseTransformPoint(rig.LeftHand.transform.position);
+                Quaternion lRot = Quaternion.Inverse(frame.rotation) * rig.LeftHand.transform.rotation;
+                Vector3 rPos = frame.InverseTransformPoint(rig.RightHand.transform.position);
+                Quaternion rRot = Quaternion.Inverse(frame.rotation) * rig.RightHand.transform.rotation;
                 FikaVrSync.SendArmPose(local.NetId, lPos, lRot, rPos, rRot);
             }
         }

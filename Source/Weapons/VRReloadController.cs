@@ -2244,6 +2244,11 @@ namespace TarkovVR.Source.Weapons
             }
             if (!forceAtOperationStart)
                 return;
+            // Not the rechamber: its start runs inside the move's OutProcess, before the move takes the round out of the chamber, so the
+            // skip's ThrowPatronAsLoot would fail (GameWorld.RegisterLoot: the round's owner is still our inventory controller) = no
+            // round on our screen. Finished at our next tick, after the start has returned, like hosting.
+            if (operation is FirearmController.RechamberOperation)
+                return;
             forcingAtStart = true;
             try
             {

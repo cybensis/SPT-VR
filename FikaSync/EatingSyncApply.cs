@@ -19,7 +19,7 @@ namespace SptVrFikaSync
     internal static class EatingSyncApply
     {
         // ---- live tunables ----
-        public static float smoothRate = 18f;       // chest-local pose smoothing (0 = snap). Matches arm/weapon sync.
+        public static float smoothRate = 18f;       // body-local pose smoothing (0 = snap). Matches arm/weapon sync.
         public static float staleTimeout = 0.6f;    // no packet this long -> restore + stop (disconnect/finish safety)
         // Freeze the observed food animator while synced, like the local controller does at spawn. Without it FIKA's
         // observed-meds animation runs free: the food's own bones and its clip sound events loop. false = leave it looping.
@@ -36,7 +36,7 @@ namespace SptVrFikaSync
         {
             public bool active;
             public float recvTime;
-            // latest received (chest-local)
+            // latest received (body-local)
             public Vector3 lPos, rPos; public Quaternion lRot, rRot;
             public int animLayerCount; public int[] animHashes; public float[] animTimes; // food animator per-layer seek targets
             public readonly Dictionary<int, PropPose> latest = new Dictionary<int, PropPose>();
@@ -120,8 +120,8 @@ namespace SptVrFikaSync
                     Deactivate(s);
                     return;
                 }
-                Transform chest = __instance.PlayerBones?.Ribcage?.Original;
-                if (chest == null)
+                Transform frame = __instance.Transform?.Original;
+                if (frame == null)
                     return;
                 GameObject co = meds.ControllerGameObject;
                 if (co == null)
@@ -165,8 +165,8 @@ namespace SptVrFikaSync
                     catch { }
                 }
 
-                DriveArms(__instance, s, chest);
-                DriveProps(s, co.transform, chest);
+                DriveArms(__instance, s, frame);
+                DriveProps(s, co.transform, frame);
                 DrainSounds(s);
             }
             catch (Exception e) { LogOnce(e); }
@@ -174,7 +174,7 @@ namespace SptVrFikaSync
 
         // Drives both observed arm IKs to the synced (smoothed) wrist poses, like empty-hands sync; the held food piece
         // is placed separately.
-        private static void DriveArms(ObservedPlayer p, EatState s, Transform chest)
+        private static void DriveArms(ObservedPlayer p, EatState s, Transform frame)
         {
             LimbIK[] limbs = p._limbs;
             if (limbs == null || limbs.Length < 2)
@@ -183,16 +183,16 @@ namespace SptVrFikaSync
             if (!s.hasDisp) { s.dl = s.lPos; s.dlr = s.lRot; s.dr = s.rPos; s.drr = s.rRot; s.hasDisp = true; }
             s.dl = Vector3.Lerp(s.dl, s.lPos, t); s.dlr = Quaternion.Slerp(s.dlr, s.lRot, t);
             s.dr = Vector3.Lerp(s.dr, s.rPos, t); s.drr = Quaternion.Slerp(s.drr, s.rRot, t);
-            Quaternion lr = chest.rotation * s.dlr * Quaternion.Euler(ArmSyncApply.leftHandRotOffsetEuler);
-            Quaternion rr = chest.rotation * s.drr * Quaternion.Euler(ArmSyncApply.rightHandRotOffsetEuler);
-            ArmSyncApply.DriveArm(limbs[0], chest.TransformPoint(s.dl), lr);
-            ArmSyncApply.DriveArm(limbs[1], chest.TransformPoint(s.dr), rr);
+            Quaternion lr = frame.rotation * s.dlr * Quaternion.Euler(ArmSyncApply.leftHandRotOffsetEuler);
+            Quaternion rr = frame.rotation * s.drr * Quaternion.Euler(ArmSyncApply.rightHandRotOffsetEuler);
+            ArmSyncApply.DriveArm(limbs[0], frame.TransformPoint(s.dl), lr);
+            ArmSyncApply.DriveArm(limbs[1], frame.TransformPoint(s.dr), rr);
         }
 
         private static readonly List<KeyValuePair<int, Transform>> _ordered = new List<KeyValuePair<int, Transform>>();
         private static readonly HashSet<Renderer> _claimed = new HashSet<Renderer>();
 
-        private static void DriveProps(EatState s, Transform root, Transform chest)
+        private static void DriveProps(EatState s, Transform root, Transform frame)
         {
             float t = smoothRate > 0f ? 1f - Mathf.Exp(-smoothRate * Time.deltaTime) : 1f;
 
@@ -217,7 +217,7 @@ namespace SptVrFikaSync
                 d.rot = Quaternion.Slerp(d.rot, target.rot, t);
                 d.vis = target.vis;
                 s.disp[hash] = d;
-                tf.SetPositionAndRotation(chest.TransformPoint(d.pos), chest.rotation * d.rot);
+                tf.SetPositionAndRotation(frame.TransformPoint(d.pos), frame.rotation * d.rot);
             }
 
             // Visibility: deep-first claiming, so a piece owns its mesh before its container (whose GetComponentInChildren

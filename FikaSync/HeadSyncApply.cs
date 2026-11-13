@@ -10,7 +10,7 @@ namespace SptVrFikaSync
     // A VR player's head and upper body on the other players' screens: the headset pose in their body's frame (VRHeadPacket) through the
     // same solve the VR player's own body runs (UpperBodySolver, linked in from SPT-VR): the chest turns toward the head, the spine bends to
     // put the head where theirs is, the head turns to the headset. First among the ObservedPlayer.LateUpdate postfixes: the arm, weapon and
-    // eating drives after it place the hands on the bent chest (their poses come in that chest's frame).
+    // eating drives after it reach the arms from the bent shoulders (their poses come in the body's frame, like the head's).
     [HarmonyPatch]
     internal static class HeadSyncApply
     {

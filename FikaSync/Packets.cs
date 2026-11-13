@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace SptVrFikaSync
 {
-    // One VR player's two hand poses in their own chest frame, keyed by NetId. Internal: the VR mod
+    // One VR player's two hand poses in their own body frame (Player.Transform), keyed by NetId. Internal: the VR mod
     // never touches the packet type, it just calls FikaVrSync.SendArmPose(...) with the components.
     internal struct VRArmsPacket : INetSerializable
     {
@@ -56,16 +56,16 @@ namespace SptVrFikaSync
         }
     }
 
-    // One VR player's held weapon pose (the gun's WeaponRoot transform) in their own chest frame,
+    // One VR player's held weapon pose (the gun's WeaponRoot transform) in their own body frame (Player.Transform),
     // keyed by NetId. Sent instead of the arm packet while a firearm is held: the remote overrides the
     // observed weapon to this pose and re-IKs the hands onto it, so the gun aims where the controller
     // points (not where FIKA aims it from the head rotation).
     internal struct VRWeaponPacket : INetSerializable
     {
         public int NetId;
-        public Vector3 Pos;   public Quaternion Rot;      // WeaponRoot pose (chest-local)
+        public Vector3 Pos;   public Quaternion Rot;      // WeaponRoot pose (body-local)
         public bool LeftOnGrip;                            // off hand on the foregrip?
-        public Vector3 LeftPos;   public Quaternion LeftRot; // off hand pose (chest-local), used when free
+        public Vector3 LeftPos;   public Quaternion LeftRot; // off hand pose (body-local), used when free
 
         public void Serialize(NetDataWriter writer)
         {
@@ -163,7 +163,7 @@ namespace SptVrFikaSync
     }
 
     // One VR player's manual-eating state: the two rendered wrist poses (so observers drive the
-    // arms like empty hands) plus every live food prop's pose + visibility, all chest-local. The
+    // arms like empty hands) plus every live food prop's pose + visibility, all body-local. The
     // props are matched on the observer by a stable hash of the prop transform's name (same prefab
     // -> same bone names), and their world poses overridden after the observed meds animator, so the
     // food rides the synced hands. Active=false is a one-shot stop (restore hidden renderers + drop
@@ -172,8 +172,8 @@ namespace SptVrFikaSync
     {
         public int NetId;
         public bool Active;                                   // false = stop (restore + clear)
-        public Vector3 LeftPos;   public Quaternion LeftRot;  // rendered left wrist, chest-local
-        public Vector3 RightPos;  public Quaternion RightRot; // rendered right wrist, chest-local
+        public Vector3 LeftPos;   public Quaternion LeftRot;  // rendered left wrist, body-local
+        public Vector3 RightPos;  public Quaternion RightRot; // rendered right wrist, body-local
         // Food animator (ObjectInHandsAnimator) state per layer, mirrored so the observer's food shows
         // the same skinned deformation (lid bone, bag rip, chew squash): a seek, not a play, so it never
         // loops. All layers, because a food's eat can live on any of them.
@@ -182,8 +182,8 @@ namespace SptVrFikaSync
         public float[] AnimTimes;
         public byte PropCount;
         public int[] NameHashes;        // stable hash of each prop transform's name
-        public Vector3[] Positions;     // chest-local
-        public Quaternion[] Rotations;  // chest-local
+        public Vector3[] Positions;     // body-local
+        public Quaternion[] Rotations;  // body-local
         public bool[] Visible;          // mirror the local renderer-enabled state
 
         public void Serialize(NetDataWriter writer)

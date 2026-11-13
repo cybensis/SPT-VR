@@ -4,7 +4,7 @@ using UnityEngine;
 namespace TarkovVR.Source.Player.Interactions
 {
     // FIKA co-op eating sync, send-side data gathering. No FIKA/module types here (it JITs without FIKA): fills buffers with the
-    // rendered wrist poses + every live prop's pose/visibility in the local chest frame. VRArmSync (FIKA-gated) ships them via the
+    // rendered wrist poses + every live prop's pose/visibility in the local body frame (Player.Transform). VRArmSync (FIKA-gated) ships them via the
     // module, which finds the matching prop on each observer's copy of the food model and overrides its world pose.
     internal static partial class EatingInteractionController
     {
@@ -19,22 +19,22 @@ namespace TarkovVR.Source.Player.Interactions
         // Log the eater's per-layer food-animator state (~1/s), so a food whose eat lives on an unexpected layer is visible
         public static bool debugEatSync = false;
 
-        // Fills the buffers from the current eat, in `chest`'s frame. False when not eating or the rig isn't ready (the caller
+        // Fills the buffers from the current eat, relative to `frame` (the body). False when not eating or the rig isn't ready (the caller
         // sends nothing / a stop). Wrists are the rendered IK hand bones, not the raw controllers, so a pull-latched hand is
         // carried correctly. Visibility mirrors the local renderer state (un-taken pieces / un-poured crackers stay hidden).
-        public static bool TryBuildSync(Transform chest,
+        public static bool TryBuildSync(Transform frame,
             out Vector3 lPos, out Quaternion lRot, out Vector3 rPos, out Quaternion rRot)
         {
             lPos = rPos = Vector3.zero; lRot = rRot = Quaternion.identity;
             syncAnimHashes.Clear(); syncAnimTimes.Clear();
-            if (!ManualActive || chest == null) return false;
+            if (!ManualActive || frame == null) return false;
             Transform lw = VRGlobals.ikManager?.leftArmIk?.solver?.bone3?.transform;
             Transform rw = VRGlobals.ikManager?.rightArmIk?.solver?.bone3?.transform;
             if (lw == null || rw == null) return false;
 
-            Quaternion invChest = Quaternion.Inverse(chest.rotation);
-            lPos = chest.InverseTransformPoint(lw.position); lRot = invChest * lw.rotation;
-            rPos = chest.InverseTransformPoint(rw.position); rRot = invChest * rw.rotation;
+            Quaternion invFrame = Quaternion.Inverse(frame.rotation);
+            lPos = frame.InverseTransformPoint(lw.position); lRot = invFrame * lw.rotation;
+            rPos = frame.InverseTransformPoint(rw.position); rRot = invFrame * rw.rotation;
 
             // The food animator's state on every layer (hash + normalized time), which drives the food's skinned deformation.
             // Observers seek their copy to these so the lid/rip/chew matches. All layers: a food's eat can live on any of them.
@@ -63,28 +63,28 @@ namespace TarkovVR.Source.Player.Interactions
             syncNames.Clear(); syncPos.Clear(); syncRot.Clear(); syncVis.Clear();
             // baseT/cover/wrapper are never hidden locally; the piece props carry their live renderer state. Order doesn't
             // matter (the observer depth-sorts).
-            AddProp(chest, invChest, baseT, true);
-            AddProp(chest, invChest, spoonT, spoonR == null || spoonR.enabled);
-            AddProp(chest, invChest, foodT, foodR == null || foodR.enabled);
-            AddProp(chest, invChest, foodT2, foodR2 == null || foodR2.enabled);
-            AddProp(chest, invChest, capT, capR == null || capR.enabled);
-            AddProp(chest, invChest, coverT, true);
-            AddProp(chest, invChest, wrapperT, true);
+            AddProp(frame, invFrame, baseT, true);
+            AddProp(frame, invFrame, spoonT, spoonR == null || spoonR.enabled);
+            AddProp(frame, invFrame, foodT, foodR == null || foodR.enabled);
+            AddProp(frame, invFrame, foodT2, foodR2 == null || foodR2.enabled);
+            AddProp(frame, invFrame, capT, capR == null || capR.enabled);
+            AddProp(frame, invFrame, coverT, true);
+            AddProp(frame, invFrame, wrapperT, true);
             if (crackerT != null)
                 for (int i = 0; i < crackerT.Length; i++)
                 {
                     bool vis = crackerR != null && i < crackerR.Length && crackerR[i] != null ? crackerR[i].enabled : true;
-                    AddProp(chest, invChest, crackerT[i], vis);
+                    AddProp(frame, invFrame, crackerT[i], vis);
                 }
             return true;
         }
 
-        private static void AddProp(Transform chest, Quaternion invChest, Transform t, bool vis)
+        private static void AddProp(Transform frame, Quaternion invFrame, Transform t, bool vis)
         {
             if (t == null) return;
             syncNames.Add(t.name);
-            syncPos.Add(chest.InverseTransformPoint(t.position));
-            syncRot.Add(invChest * t.rotation);
+            syncPos.Add(frame.InverseTransformPoint(t.position));
+            syncRot.Add(invFrame * t.rotation);
             syncVis.Add(vis);
         }
 

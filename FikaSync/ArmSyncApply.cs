@@ -25,8 +25,8 @@ namespace SptVrFikaSync
         public static bool driveHandRotation = true;      // false = position-only (palm keeps anim rot)
         public static Vector3 leftHandRotOffsetEuler = Vector3.zero;
         public static Vector3 rightHandRotOffsetEuler = Vector3.zero;
-        // Exponential smoothing of the chest-local poses, to hide the ~20 Hz packet stepping. 0 = off. Only the hand/weapon offset
-        // from the chest is smoothed: ~1/rate s of latency, no body lag.
+        // Exponential smoothing of the body-local poses, to hide the ~20 Hz packet stepping. 0 = off. Only the hand/weapon offset
+        // from the body is smoothed: ~1/rate s of latency, no body lag.
         public static float smoothRate = 18f;
         public static float staleTimeout = 0.4f;          // stop driving arms if no packet for this long
         public static bool debugWeaponSync = false;       // log the weapon-root / marker hierarchy once
@@ -55,7 +55,7 @@ namespace SptVrFikaSync
 
         private struct RemoteArms
         {
-            public Vector3 leftPos;   public Quaternion leftRot;    // both chest-local
+            public Vector3 leftPos;   public Quaternion leftRot;    // both body-local (Player.Transform)
             public Vector3 rightPos;  public Quaternion rightRot;
             public float recvTime;                                  // Time.time when last received
         }
@@ -64,9 +64,9 @@ namespace SptVrFikaSync
 
         private struct RemoteWeapon
         {
-            public Vector3 pos;       public Quaternion rot;        // WeaponRoot, chest-local
+            public Vector3 pos;       public Quaternion rot;        // WeaponRoot, body-local
             public bool leftOnGrip;                                  // is the off hand on the foregrip?
-            public Vector3 leftPos;   public Quaternion leftRot;    // off hand chest-local (used when free)
+            public Vector3 leftPos;   public Quaternion leftRot;    // off hand body-local (used when free)
         }
         private static readonly Dictionary<int, RemoteWeapon> weaponRemote = new Dictionary<int, RemoteWeapon>();
         private static readonly Dictionary<int, RemoteWeapon> displayedWeapon = new Dictionary<int, RemoteWeapon>();
@@ -157,16 +157,16 @@ namespace SptVrFikaSync
             LimbIK[] limbs = p._limbs;
             if (limbs == null || limbs.Length < 2)
                 return;
-            Transform chest = p.PlayerBones?.Ribcage?.Original;
-            if (chest == null)
+            Transform frame = p.Transform?.Original;
+            if (frame == null)
                 return;
 
             RemoteArms a = smoothRate > 0f ? SmoothArms(p.NetId, raw) : raw;
-            Quaternion leftRot = chest.rotation * a.leftRot * Quaternion.Euler(leftHandRotOffsetEuler);
-            Quaternion rightRot = chest.rotation * a.rightRot * Quaternion.Euler(rightHandRotOffsetEuler);
+            Quaternion leftRot = frame.rotation * a.leftRot * Quaternion.Euler(leftHandRotOffsetEuler);
+            Quaternion rightRot = frame.rotation * a.rightRot * Quaternion.Euler(rightHandRotOffsetEuler);
             SetElbowPoles(p, limbs);
-            DriveArm(limbs[0], chest.TransformPoint(a.leftPos),  leftRot);
-            DriveArm(limbs[1], chest.TransformPoint(a.rightPos), rightRot);
+            DriveArm(limbs[0], frame.TransformPoint(a.leftPos),  leftRot);
+            DriveArm(limbs[1], frame.TransformPoint(a.rightPos), rightRot);
         }
 
         // Armed: place the observed gun where the VR player aims it, then weld the hands. Right hand rides the gun's right grip
@@ -174,8 +174,8 @@ namespace SptVrFikaSync
         // EFT's weights (EFT drops them during reload so the hands can leave the gun).
         private static void DriveRemoteWeapon(ObservedPlayer p, Transform wr, RemoteWeapon raw, bool forceHeldHandWeight)
         {
-            Transform chest = p.PlayerBones?.Ribcage?.Original;
-            if (wr == null || chest == null)
+            Transform frame = p.Transform?.Original;
+            if (wr == null || frame == null)
                 return;
 
             RemoteWeapon w = smoothRate > 0f ? SmoothWeapon(p.NetId, raw) : raw;
@@ -184,8 +184,7 @@ namespace SptVrFikaSync
             Vector3 fwdOffset = Vector3.zero;
             if (weaponForwardOffset != 0f)
             {
-                Transform body = p.Transform?.Original;
-                Vector3 fwd = body != null ? body.forward : chest.forward;
+                Vector3 fwd = frame.forward;
                 fwd.y = 0f;
                 if (fwd.sqrMagnitude > 1e-4f)
                     fwdOffset = fwd.normalized * weaponForwardOffset;
@@ -196,9 +195,9 @@ namespace SptVrFikaSync
 
             // Place the gun: synced pose + forward nudge, then extended along the held shoulder->gun line (no-op if the limbs
             // aren't ready).
-            Vector3 gunPos = chest.TransformPoint(w.pos) + fwdOffset;
+            Vector3 gunPos = frame.TransformPoint(w.pos) + fwdOffset;
             gunPos = ExtendWeaponReach(limbs, gunPos);
-            wr.SetPositionAndRotation(gunPos, chest.rotation * w.rot);
+            wr.SetPositionAndRotation(gunPos, frame.rotation * w.rot);
             // Before the markers are read below: they ride Weapon_root_anim
             if (gunOnWeaponRoot && p.HandsController is Player.FirearmController firearm && firearm.GunBaseTransform != null)
             {
@@ -230,8 +229,8 @@ namespace SptVrFikaSync
                 else
                 {
                     // Free off hand: same forward nudge as the gun, so it stays out front with the weapon
-                    Quaternion lr = chest.rotation * w.leftRot * Quaternion.Euler(leftHandRotOffsetEuler);
-                    DriveArm(limbs[0], chest.TransformPoint(w.leftPos) + fwdOffset, lr);
+                    Quaternion lr = frame.rotation * w.leftRot * Quaternion.Euler(leftHandRotOffsetEuler);
+                    DriveArm(limbs[0], frame.TransformPoint(w.leftPos) + fwdOffset, lr);
                 }
             }
 
@@ -308,7 +307,7 @@ namespace SptVrFikaSync
             limb.solver.Update();
         }
 
-        // ---- smoothing (lerp the displayed chest-local pose toward the latest packet) ----
+        // ---- smoothing (lerp the displayed body-local pose toward the latest packet) ----
         private static RemoteArms SmoothArms(int netId, RemoteArms target)
         {
             float t = 1f - Mathf.Exp(-smoothRate * Time.deltaTime);
