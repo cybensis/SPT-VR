@@ -38,6 +38,11 @@ namespace TarkovVR.Source.Player.Interactions
         public static float aimEyeAngle = 25f;      // deg headset forward off the barrel to aim through it
         public static float aimExitReach = 0.28f;   // m / deg out of the aim again (wider: no flicker on the edge)
         public static float aimExitAngle = 35f;
+        // The turn the hands give it, filtered (One Euro: tracking noise held still at rest, a fast swing followed closely). false = raw.
+        public static bool aimFilter = true;
+        public static float aimMinCutoff = 2f;          // Hz at rest: lower = steadier, more lag starting a turn
+        public static float aimSpeedCutoff = 0.05f;     // Hz added per deg/s of turn
+        public static float aimDerivativeCutoff = 1f;   // Hz, the turn speed's own smoothing
         public static bool debugLog = true;         // a line per take / mount / let-go, plus the live handles against the zones
         public static bool debugViz = false;        // the handle zones as spheres
 
@@ -66,8 +71,22 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool aimBased;
         private static int aimBaseHands;
         private static Vector3 aimBaseLever;
+        private static Vector3 aimPivot;                                  // the hinge where the base was taken: the hands' lever off it
         private static Vector2 aimBaseRotation;
         private static float lastAimToggle;
+        private static float nextAimLog;
+
+        // The hands sampled once a frame, after the rig is final (PinRig, LateUpdate): the turn reads the same moment every frame
+        private static readonly Vector3[] sampledWrist = new Vector3[2];
+        private static bool wristsSampled;
+
+        private static bool aimFiltered;
+        private static Vector2 filteredAim;
+        private static Vector2 previousRawAim;
+        private static Vector2 aimSpeed;
+        private static int filteredFrame = -1;
+
+        private static float nextReachLog;
 
         // The view held still in the world: the rig anchor's moves taken out of the offsetter
         private static bool rigPinned;
@@ -165,7 +184,13 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static bool TickReach(EFT.Player player, bool draggingBody, bool leftGrip, bool rightGrip, bool leftPressed, bool rightPressed)
         {
-            StationaryWeapon nearest = HandsFree(player, draggingBody) ? NearestGun(player) : null;
+            StationaryWeapon near = NearestGun(player);
+            string busy = near != null ? HandsBusy(player, draggingBody) : null;
+            if (near != null && busy == null && !near.IsAvailable(player.ProfileId))
+                busy = "someone else's (in use, or locked to its operator)";
+            StationaryWeapon nearest = busy == null ? near : null;
+            if (near != null && debugLog && (leftPressed || rightPressed) && Time.time >= nextReachLog)
+                LogReach(near, busy);
             if (nearest == null)
             {
                 handleBlips[LEFT].Enter(false);
@@ -341,29 +366,77 @@ namespace TarkovVR.Source.Player.Interactions
                 return true;
             int hands = (holding[LEFT] ? 1 : 0) | (holding[RIGHT] ? 2 : 0);
             if (hands == 0)
+            {
+                aimFiltered = false;
                 return true;   // let go: the gun stays where it was
-            Vector3 grip = hands == 3 ? (Wrist(true) + Wrist(false)) * 0.5f : Wrist(hands == 1);
-            Vector3 lever = grip - gun.Hinge.position;
-            if (lever.sqrMagnitude < 1e-4f)
-                return true;
-            // A new base whenever the hands on it change, so a hand letting go or coming back doesn't jump the gun
+            }
+            if (!wristsSampled)
+                SampleWrists();
+            Vector3 grip = hands == 3 ? (sampledWrist[LEFT] + sampledWrist[RIGHT]) * 0.5f : sampledWrist[hands == 1 ? LEFT : RIGHT];
+            // A new base whenever the hands on it change, so a hand letting go or coming back doesn't jump the gun. The pivot is the hinge
+            // as it was then: if the live hinge moves as the gun turns, a lever off it feeds the gun's own turn back into the aim.
             if (!aimBased || hands != aimBaseHands)
             {
+                aimPivot = gun.Hinge.position;
+                Vector3 baseLever = grip - aimPivot;
+                if (baseLever.sqrMagnitude < 1e-4f)
+                    return true;
                 aimBased = true;
                 aimBaseHands = hands;
-                aimBaseLever = lever;
+                aimBaseLever = baseLever;
                 aimBaseRotation = movementContext.Rotation;
+                aimFiltered = false;
             }
+            Vector3 lever = grip - aimPivot;
+            if (lever.sqrMagnitude < 1e-4f)
+                return true;
             // A rigid turn about the hinge: the handles swing about the vertical by as much as the muzzle does, and rise by as much as
             // it dips (pitch is positive down)
             float yaw = aimBaseRotation.x + Mathf.DeltaAngle(YawOf(aimBaseLever), YawOf(lever));
             float pitch = aimBaseRotation.y + (ElevationOf(lever) - ElevationOf(aimBaseLever));
-            movementContext.Rotation = new Vector2(yaw, pitch);
+            movementContext.Rotation = FilterAim(movementContext, new Vector2(yaw, pitch));
             return true;
         }
 
         private static float YawOf(Vector3 direction) => Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
         private static float ElevationOf(Vector3 direction) => Mathf.Asin(Mathf.Clamp(direction.y / direction.magnitude, -1f, 1f)) * Mathf.Rad2Deg;
+
+        // One Euro filter on yaw (wrapped) and pitch; kept inside the mount's limits so it never trails behind a stop
+        private static Vector2 FilterAim(MovementContext movementContext, Vector2 raw)
+        {
+            if (!aimFilter || !aimFiltered)
+            {
+                aimFiltered = true;
+                filteredAim = raw;
+                previousRawAim = raw;
+                aimSpeed = Vector2.zero;
+                filteredFrame = Time.frameCount;
+                return raw;
+            }
+            if (filteredFrame == Time.frameCount)
+                return filteredAim;
+            filteredFrame = Time.frameCount;
+            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
+            Vector2 rawStep = new Vector2(Mathf.DeltaAngle(previousRawAim.x, raw.x), raw.y - previousRawAim.y);
+            previousRawAim = raw;
+            aimSpeed = Vector2.Lerp(aimSpeed, rawStep / dt, FilterAlpha(aimDerivativeCutoff, dt));
+            float alpha = FilterAlpha(aimMinCutoff + aimSpeedCutoff * aimSpeed.magnitude, dt);
+            filteredAim = movementContext.ClampRotation(new Vector2(filteredAim.x + Mathf.DeltaAngle(filteredAim.x, raw.x) * alpha, Mathf.Lerp(filteredAim.y, raw.y, alpha)));
+            return filteredAim;
+        }
+
+        private static float FilterAlpha(float cutoff, float dt)
+        {
+            float tau = 1f / (2f * Mathf.PI * Mathf.Max(cutoff, 0.01f));
+            return 1f / (1f + tau / dt);
+        }
+
+        private static void SampleWrists()
+        {
+            sampledWrist[LEFT] = Wrist(true);
+            sampledWrist[RIGHT] = Wrist(false);
+            wristsSampled = true;
+        }
 
         //---------------------------------------------------------------------------------------------------------
         // Fire and aim (InputHandlers.FireHandler / AimHandler)
@@ -381,12 +454,23 @@ namespace TarkovVR.Source.Player.Interactions
             EFT.Animations.ProceduralWeaponAnimation animation = player.ProceduralWeaponAnimation;
             Transform sight = animation != null && animation.ScopeAimTransforms != null && animation.ScopeAimTransforms.Count > 0 && animation.CurrentScope != null
                 ? animation.CurrentScope.Bone : null;
+            // The barrel the way Tarkov's own PAG-17 code takes it (ProceduralWeaponAnimation.AdjustOpticsPAG17): the fireport's -up
+            Transform fireport = animation != null && animation.HandsContainer != null ? animation.HandsContainer.Fireport : null;
             Transform weapon = firearmController.HandsHierarchy.GetTransform(ECharacterWeaponBones.weapon);
-            if (sight == null || weapon == null)
+            Vector3 barrel = fireport != null ? -fireport.up : weapon != null ? -weapon.up : Vector3.zero;
+            bool aiming = firearmController.IsAiming;
+            if (debugLog && Time.time >= nextAimLog)
+            {
+                nextAimLog = Time.time + 1f;
+                Plugin.MyLog.LogInfo($"[MountedGun] sight: {(sight != null ? $"'{sight.name}' {Vector3.Distance(headset.transform.position, sight.position):F2} m from the eye" : "none")} "
+                    + $"(of {(animation != null && animation.ScopeAimTransforms != null ? animation.ScopeAimTransforms.Count : 0)}, optic {(animation != null && animation.CurrentScope != null && animation.CurrentScope.IsOptic)}), "
+                    + $"look {(barrel != Vector3.zero ? Vector3.Angle(headset.transform.forward, barrel).ToString("F0") : "-")} deg off the barrel ({(fireport != null ? "fireport" : "weapon bone")}), "
+                    + $"barrel {Vector3.Angle(barrel, weapon != null ? -weapon.up : barrel):F0} deg off the weapon bone's -up, aiming {aiming}");
+            }
+            if (sight == null || barrel == Vector3.zero)
                 return;
             float reach = Vector3.Distance(headset.transform.position, sight.position);
-            float angle = Vector3.Angle(headset.transform.forward, -weapon.up);
-            bool aiming = firearmController.IsAiming;
+            float angle = Vector3.Angle(headset.transform.forward, barrel);
             if (!aiming && reach <= aimEyeReach && angle <= aimEyeAngle)
             {
                 command = ECommand.ToggleAlternativeShooting;
@@ -456,6 +540,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!Active)
             {
                 rigPinned = false;
+                wristsSampled = false;
                 return;
             }
             EFT.Player player = VRGlobals.player;
@@ -476,19 +561,45 @@ namespace TarkovVR.Source.Player.Interactions
             VRGlobals.camRoot.transform.position = anchor;
             lastAnchor = anchor;
             rigPinned = true;
+            SampleWrists();
         }
 
         //---------------------------------------------------------------------------------------------------------
         // Helpers
 
-        private static bool HandsFree(EFT.Player player, bool draggingBody)
+        // null = both hands free for a mounted gun, else why not
+        private static string HandsBusy(EFT.Player player, bool draggingBody)
         {
-            if (player.IsInPronePose || player.IsSprintEnabled || VRGlobals.usingItem || draggingBody || HandsInteractionController.HoldingLoot
-                || EatingInteractionController.ManualActive || WeaponPatches.grenadeEquipped)
-                return false;
+            if (player.IsInPronePose)
+                return "prone";
+            if (player.IsSprintEnabled)
+                return "sprinting";
+            if (VRGlobals.usingItem || EatingInteractionController.ManualActive)
+                return "using an item";
+            if (draggingBody)
+                return "dragging a body";
+            if (HandsInteractionController.HoldingLoot)
+                return "holding loot";
+            if (WeaponPatches.grenadeEquipped)
+                return "a grenade in hand";
             if (PhysicalDoors.HoldsRig(RigHand(true)) || PhysicalDoors.HoldsRig(RigHand(false)))
-                return false;
-            return player.HandsIsEmpty || (ChestHang.Hanging && player.HandsController is FirearmController);
+                return "a hand on a door";
+            if (player.HandsIsEmpty || (ChestHang.Hanging && player.HandsController is FirearmController))
+                return null;
+            return $"{player.HandsController?.GetType().Name ?? "nothing"} in the hands{(player.HandsController is FirearmController ? " (not on the sling)" : "")}";
+        }
+
+        // A grip closing near a mounted gun that didn't take it: why (hands busy, or where each hand was off its handle)
+        private static void LogReach(StationaryWeapon stationaryWeapon, string busy)
+        {
+            nextReachLog = Time.time + 0.5f;
+            Transform weapon = stationaryWeapon.WeaponTransform;
+            HandlePoints(stationaryWeapon, out Vector3 leftHandle, out Vector3 rightHandle);
+            string Local(Vector3 point) => (Quaternion.Inverse(weapon.rotation) * (point - weapon.position)).ToString("F3");
+            Plugin.MyLog.LogInfo($"[MountedGun] grip near {stationaryWeapon.Item.LocalizedShortName()} ({stationaryWeapon.Animation}, '{weapon.name}' under '{(weapon.parent != null ? weapon.parent.name : "-")}')"
+                + $"{(busy != null ? $", hands not free: {busy}" : "")}: left wrist {Local(Wrist(true))} ({Vector3.Distance(Wrist(true), leftHandle):F2} m off its zone), "
+                + $"right wrist {Local(Wrist(false))} ({Vector3.Distance(Wrist(false), rightHandle):F2} m off), grips {VRInput.LeftGrip.state}/{VRInput.RightGrip.state}, "
+                + $"available {stationaryWeapon.IsAvailable(VRGlobals.player.ProfileId)}, locked {stationaryWeapon.Locked}");
         }
 
         // The nearest mounted gun in reach of the hands (the mounted guns found once per map)
@@ -516,8 +627,7 @@ namespace TarkovVR.Source.Player.Interactions
             float nearestDistance = 2.5f * 2.5f;
             foreach (StationaryWeapon stationaryWeapon in guns)
             {
-                if (stationaryWeapon == null || stationaryWeapon.WeaponTransform == null || stationaryWeapon.Item == null || !stationaryWeapon.gameObject.activeInHierarchy
-                    || !stationaryWeapon.IsAvailable(player.ProfileId))
+                if (stationaryWeapon == null || stationaryWeapon.WeaponTransform == null || stationaryWeapon.Item == null || !stationaryWeapon.gameObject.activeInHierarchy)
                     continue;
                 float distance = (stationaryWeapon.WeaponTransform.position - head).sqrMagnitude;
                 if (distance < nearestDistance)

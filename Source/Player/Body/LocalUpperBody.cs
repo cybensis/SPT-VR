@@ -45,7 +45,7 @@ namespace TarkovVR.Source.Player.Body
             UpperBodySolver.Solve(rig, headset.transform.position, headset.transform.rotation, weight);
             if (weight > 0f && rig.valid)
             {
-                Transform chest = rig.spine[rig.spine.Length - 1];
+                Transform chest = rig.chest;
                 Quaternion rootInverse = Quaternion.Inverse(root.rotation);
                 chestInRootPosition = rootInverse * (chest.position - root.position);
                 chestInRootRotation = rootInverse * chest.rotation;

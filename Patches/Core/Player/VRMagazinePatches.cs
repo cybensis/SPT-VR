@@ -22,6 +22,17 @@ namespace TarkovVR.Patches.Core.Player
             VRReloadController.PlaceDroppedMagazine(item, __result);
         }
 
+        // A round our rechamber threw out (Firearms.ThrowPatronAsLoot: the 9-argument overload, syncable false)
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameWorld), nameof(GameWorld.ThrowItem),
+            new[] { typeof(Item), typeof(IPlayer), typeof(Vector3), typeof(Quaternion), typeof(Vector3), typeof(Vector3), typeof(bool), typeof(bool), typeof(float) })]
+        private static void ProbeEjectedRound(Item item, IPlayer player, Vector3 velocity, bool syncable, LootItem __result)
+        {
+            if (player == null || !player.IsYourPlayer || syncable || !(item is Ammo))
+                return;
+            EjectedRoundProbe.Attach(__result, velocity);
+        }
+
         // Tarkov's magazine and rechamber operations as they start (each after InitiateOperation made it current). As a FIKA client our
         // moves land whenever the host answers; VRReloadController finishes ours right here (only on a co-op client, only the local
         // player's controller: it checks both)

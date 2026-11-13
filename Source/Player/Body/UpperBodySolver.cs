@@ -27,8 +27,9 @@ namespace TarkovVR.Source.Player.Body
         {
             public PlayerBones bones;
             public Transform root;
-            public Transform[] spine;               // from the hips up, the pelvis not in it
-            public Transform neck;                  // null = none between the ribcage and the head
+            public Transform[] spine;               // from the hips up to the head's branch, the pelvis not in it
+            public Transform chest;                 // the ribcage: the arms hang from it (on the spine, or a branch off it)
+            public Transform neck;                  // null = none between the spine and the head
             public Transform head;
             public Vector3 eyeInHead;               // the eyes off the head bone, in its rotation's frame (world scale)
             public Quaternion lookInHead;           // the look's rotation in the head's frame
@@ -52,16 +53,23 @@ namespace TarkovVR.Source.Player.Body
                 rig.description = "bones missing";
                 return rig;
             }
-            if (!head.IsChildOf(ribcage) || !ribcage.IsChildOf(pelvis))
+            // Tarkov's skeleton forks at Spine3: Ribcage (collarbones, arms) on one side, Neck > Head on the other
+            if (!head.IsChildOf(pelvis) || !ribcage.IsChildOf(pelvis))
             {
-                rig.description = "the head isn't under the ribcage, or the ribcage under the pelvis";
+                rig.description = "the head or the ribcage isn't under the pelvis";
                 return rig;
             }
+            rig.neck = bones.Neck != null && bones.Neck != head && head.IsChildOf(bones.Neck) && bones.Neck.IsChildOf(pelvis) ? bones.Neck : null;
             var chain = new System.Collections.Generic.List<Transform>();
-            for (Transform bone = ribcage; bone != null && bone != pelvis; bone = bone.parent)
+            for (Transform bone = (rig.neck != null ? rig.neck : head).parent; bone != null && bone != pelvis; bone = bone.parent)
                 chain.Insert(0, bone);
             rig.spine = chain.ToArray();
-            rig.neck = bones.Neck != null && head.IsChildOf(bones.Neck) && bones.Neck.IsChildOf(ribcage) ? bones.Neck : null;
+            if (rig.spine.Length == 0 || !ribcage.IsChildOf(rig.spine[0]))
+            {
+                rig.description = "the ribcage isn't on the spine the head hangs from";
+                return rig;
+            }
+            rig.chest = ribcage;
             rig.head = head;
 
             // The bones' own axes, not this frame's pose: the skeleton is built square to the body, so the nearest axis holds whatever the
@@ -88,7 +96,7 @@ namespace TarkovVR.Source.Player.Body
             foreach (Transform bone in rig.posed)
                 names.Append(names.Length > 0 ? " > " : "").Append(bone.name);
             rig.description = rig.valid
-                ? $"{names}; face = the head's {AxisName(faceAxis)} ({faceOff:F0} deg off the body's forward now), up {AxisName(upAxis)} ({upOff:F0} deg), chest = the ribcage's {AxisName(chestAxis)} ({chestOff:F0} deg)"
+                ? $"{names} (chest {ribcage.name}); face = the head's {AxisName(faceAxis)} ({faceOff:F0} deg off the body's forward now), up {AxisName(upAxis)} ({upOff:F0} deg), chest = the ribcage's {AxisName(chestAxis)} ({chestOff:F0} deg)"
                 : "no spine bones";
             return rig;
         }
@@ -143,7 +151,7 @@ namespace TarkovVR.Source.Player.Body
 
             // The chest part of the way round to the head's yaw
             Vector3 lookFlat = Vector3.ProjectOnPlane(eyeRotation * Vector3.forward, up);
-            Vector3 chestFlat = Vector3.ProjectOnPlane(rig.spine[spineCount - 1].rotation * rig.chestForwardLocal, up);
+            Vector3 chestFlat = Vector3.ProjectOnPlane(rig.chest.rotation * rig.chestForwardLocal, up);
             if (lookFlat.sqrMagnitude > 1e-4f && chestFlat.sqrMagnitude > 1e-4f)
             {
                 float yaw = Vector3.SignedAngle(chestFlat, lookFlat, up);
