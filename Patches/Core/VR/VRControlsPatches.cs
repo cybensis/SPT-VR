@@ -113,8 +113,10 @@ namespace TarkovVR.Patches.Core.VR
 
             bool disableTurn = (WeaponPatches.currentGunInteractController && 
                                WeaponPatches.currentGunInteractController.highlightingMesh) || 
-                               Mathf.Abs(VRInput.RightJoystick.axis.y) >= JUMP_OR_STAND_CLAMP_RANGE || 
-                               VRGlobals.blockRightJoystick;
+                               Mathf.Abs(VRInput.RightJoystick.axis.y) >= JUMP_OR_STAND_CLAMP_RANGE ||
+                               VRGlobals.blockRightJoystick ||
+                               // on a mounted gun the hands turn it, the body stays on it
+                               Source.Player.Interactions.MountedGun.Active;
             
             if (disableTurn)
             {
@@ -160,6 +162,12 @@ namespace TarkovVR.Patches.Core.VR
         {
             if (VRGlobals.blockLeftJoystick)
             {
+                return;
+            }
+            // On a mounted gun you don't walk (getting off is letting go of it)
+            if (Source.Player.Interactions.MountedGun.Active)
+            {
+                axis[axisIndex] = 0f;
                 return;
             }
             

@@ -756,16 +756,10 @@ namespace TarkovVR.Patches.UI
                     interactableObject = null;
                 }
             }
-            else if (interactableObject is StationaryWeapon stationaryWeapon)
+            // A mounted gun has no gaze menu: its handles take it (MountedGun)
+            else if (interactableObject is StationaryWeapon)
             {
-                if (stationaryWeapon.Locked)
-                {
-                    interactableObject = null;
-                }
-                else if (interactableObject == __instance.InteractableObject && __instance._lastInteractionState != stationaryWeapon.State)
-                {
-                    __instance._nextCastHasForceEvent = true;
-                }
+                interactableObject = null;
             }
             else if (interactableObject != null)
             {

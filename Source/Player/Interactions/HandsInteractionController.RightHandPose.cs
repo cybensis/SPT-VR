@@ -57,7 +57,9 @@ namespace TarkovVR.Source.Player.Interactions
                         // (not while it holds the gun alone by the foregrip, the gun in the left hand: HandMirror's foregrip pose then)
                         && ((ChestHang.Detached && !TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld) || emptyHands
                             // the gun in the LEFT hand and this one off the foregrip (HandMirror puts the mirrored foregrip pose on it there)
-                            || (TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active && !VRGlobals.vrPlayer.isSupporting));
+                            || (TarkovVR.Patches.Core.Player.RealLeftHandedPatches.Active && !VRGlobals.vrPlayer.isSupporting)
+                            // off a mounted gun's handle while still on the gun
+                            || (MountedGun.Mounted && !MountedGun.HandOnHandle(left: false)));
 
             float k = 1f - Mathf.Exp(-handOpenLerp * Time.deltaTime);
             rightHandWeightBlend = Mathf.Lerp(rightHandWeightBlend, free ? Mathf.Clamp01(handPoseWeight) : 0f, k);

@@ -403,6 +403,12 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
+                // A mounted gun: aimed with the eye at its sight (MountedGun)
+                if (TarkovVR.Source.Player.Interactions.MountedGun.Mounted)
+                {
+                    TarkovVR.Source.Player.Interactions.MountedGun.UpdateAim(ref command);
+                    return;
+                }
                 if (VRGlobals.firearmController == null && !WeaponPatches.rangeFinder)
                     return;
 
@@ -579,6 +585,23 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
+                // A mounted gun: the trigger of a hand on its handle (MountedGun)
+                if (TarkovVR.Source.Player.Interactions.MountedGun.Mounted)
+                {
+                    bool pulled = TarkovVR.Source.Player.Interactions.MountedGun.TriggerPulled;
+                    if (!isShooting && pulled)
+                    {
+                        command = ECommand.ToggleShooting;
+                        isShooting = true;
+                    }
+                    else if (isShooting && !pulled)
+                    {
+                        command = ECommand.EndShooting;
+                        isShooting = false;
+                    }
+                    return;
+                }
+
                 if (WeaponPatches.grenadeEquipped || VRGlobals.switchingWeapon)
                     return;
 
@@ -959,6 +982,12 @@ namespace TarkovVR.Source.Controls
 
             public void UpdateCommand(ref ECommand command)
             {
+                // On a mounted gun the interact key is Tarkov's way off it: letting go of it is ours (MountedGun)
+                if (TarkovVR.Source.Player.Interactions.MountedGun.Active)
+                {
+                    offTriggerWasDown = false;
+                    return;
+                }
                 bool interactButtonUp = Handedness.GunHandLowerButton.GetStateDown(SteamVR_Input_Sources.Any);
                 bool interactButtonDown = Handedness.GunHandLowerButton.GetStateUp(SteamVR_Input_Sources.Any);
 

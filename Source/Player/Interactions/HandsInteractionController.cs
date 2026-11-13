@@ -288,6 +288,13 @@ namespace TarkovVR.Source.Player.Interactions
             if (VRGlobals.inGame && pendingUseLoot != null)
                 UpdatePendingUseLoot();
 
+            // A mounted gun: a hand on its handle, or on the gun, owns the hands (MountedGun)
+            if (VRGlobals.inGame && !VRGlobals.menuOpen && VRGlobals.vrPlayer != null && MountedGun.Tick(isDraggingBody))
+            {
+                ClearDots();
+                return;
+            }
+
             // Chest sling / support-hold input must run before the bail below: the bail skips the update while
             // isSupporting, which is exactly when the dominant hand comes off a gun the left still holds (the SupportOnly
             // machine lives there too). Runs while sprinting; menus skip (an open hand in the inventory must not sling).

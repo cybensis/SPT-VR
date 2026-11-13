@@ -359,7 +359,9 @@ namespace TarkovVR.Source.Player.VRManager
                 UIPatches.opticUi.transform.position += (scopeUiPosition.right * 0.05f) + (scopeUiPosition.forward * -0.01f);
             }
 
-            if (VRGlobals.player != null && VRGlobals.player.HandsController != null && VRGlobals.player.HandsController.ControllerGameObject != null && VRGlobals.player.PlayerBones != null && VRGlobals.player.PlayerBones.Ribcage != null && VRGlobals.player.PlayerBones.Ribcage.Original != null)
+            // (not on a mounted gun: Tarkov places the hands object on the mount, and the pose is the seat's)
+            if (VRGlobals.player != null && VRGlobals.player.HandsController != null && VRGlobals.player.HandsController.ControllerGameObject != null && VRGlobals.player.PlayerBones != null && VRGlobals.player.PlayerBones.Ribcage != null && VRGlobals.player.PlayerBones.Ribcage.Original != null
+                && !Interactions.MountedGun.Active)
             {
                 handsRotation = VRGlobals.player.HandsRotation;
                 VRGlobals.player.HandsController.ControllerGameObject.transform.SetPositionAndRotation(VRGlobals.player.PlayerBones.Ribcage.Original.position, handsRotation);
@@ -583,6 +585,8 @@ namespace TarkovVR.Source.Player.VRManager
             {
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);
             }
+            // On a mounted gun: the rig on the body, the view on the headset alone (after the pin above, which it overrides)
+            Interactions.MountedGun.PinRig();
 
             bool cleanEmpty = reassertRightArmIkWhenEmpty
                 && VRGlobals.player != null && VRGlobals.player.HandsIsEmpty

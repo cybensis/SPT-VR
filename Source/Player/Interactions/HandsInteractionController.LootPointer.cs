@@ -843,7 +843,9 @@ namespace TarkovVR.Source.Player.Interactions
                         && VRGlobals.vrPlayer != null
                         // supporting = this hand on the foregrip, except with the gun in the left hand held by the right alone (free then)
                         && (!VRGlobals.vrPlayer.isSupporting || TarkovVR.Patches.Core.Player.RealLeftHandedPatches.SupportHeld)
-                        && !leftHandAnimating;
+                        && !leftHandAnimating
+                        // on a mounted gun's handle: the gun's grip pose
+                        && !MountedGun.HandOnHandle(left: true);
 
             float wTarget = free ? Mathf.Clamp01(handPoseWeight) : 0f;
             float k = 1f - Mathf.Exp(-handOpenLerp * Time.deltaTime);

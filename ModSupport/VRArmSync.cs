@@ -51,7 +51,9 @@ namespace TarkovVR.ModSupport.FIKA
 
             // Reload state stop (once, not throttled): no gun in hands, or sprinting with it (the weapon pose isn't sent then either),
             // so observers put their copy of the gun back the moment it ends
-            bool reloadNow = sendReloadState && local != null && local.HandsController is Player.FirearmController && !local.IsSprintEnabled;
+            // On a mounted gun the observers' copy of you is Tarkov's own (FIKA syncs taking it and its aim): nothing of ours is sent
+            bool onMountedGun = Source.Player.Interactions.MountedGun.Active;
+            bool reloadNow = sendReloadState && local != null && local.HandsController is Player.FirearmController && !local.IsSprintEnabled && !onMountedGun;
             if (wasSendingReload && !reloadNow)
             {
                 if (local != null) FikaVrSync.SendReloadStop(local.NetId);
@@ -84,7 +86,7 @@ namespace TarkovVR.ModSupport.FIKA
                 lastHeadSend = Time.time;
                 try
                 {
-                    SendHead(local);
+                    SendHead(local, onMountedGun);
                 }
                 catch (System.Exception exception)
                 {
@@ -93,7 +95,7 @@ namespace TarkovVR.ModSupport.FIKA
                 }
             }
 
-            if (Time.time - lastSendTime < sendInterval)
+            if (Time.time - lastSendTime < sendInterval || onMountedGun)
                 return;
 
             VRPlayerManager rig = VRGlobals.vrPlayer;
@@ -158,7 +160,7 @@ namespace TarkovVR.ModSupport.FIKA
 
         // The headset in the body's frame (Player.Transform), rotation-only like the observers' placing of it
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void SendHead(FikaPlayer local)
+        private static void SendHead(FikaPlayer local, bool onMountedGun)
         {
             Transform root = local.Transform != null ? local.Transform.Original : null;
             Camera headset = VRGlobals.VRCam;
@@ -166,7 +168,7 @@ namespace TarkovVR.ModSupport.FIKA
                 return;
             Quaternion rootInverse = Quaternion.Inverse(root.rotation);
             bool alive = local.HealthController != null && local.HealthController.IsAlive;
-            FikaVrSync.SendHeadPose(local.NetId, alive && !VRGlobals.menuOpen,
+            FikaVrSync.SendHeadPose(local.NetId, alive && !VRGlobals.menuOpen && !onMountedGun,
                 rootInverse * (headset.transform.position - root.position), rootInverse * headset.transform.rotation);
         }
 

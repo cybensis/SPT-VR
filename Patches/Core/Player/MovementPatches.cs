@@ -65,8 +65,12 @@ namespace TarkovVR.Patches.Core.Player
             if (VRGlobals.menuOpen || !VRGlobals.inGame)
                 return true;
 
+            // A mounted gun: the hands turn it, and Tarkov turns you onto it (MountedGun)
+            if (Source.Player.Interactions.MountedGun.DriveRotation(__instance))
+                return false;
+
             TurnBodyWithHead(__instance.MovementContext, ref deltaRotation);
-           
+
             return false;
         }
 

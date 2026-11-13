@@ -91,6 +91,9 @@ namespace TarkovVR.Source.Weapons
             float kick = Mathf.Lerp(recoilLightest, recoilHeaviest, Mathf.InverseLerp(recoilSoftForce, recoilHardForce, force));
             if (recoilDebugLog)
                 Plugin.MyLog.LogInfo($"[GunHaptics] shot: {weapon.LocalizedShortName()} RecoilForceBack {force:0}, kick {kick:0.00}, grip hand {GunHandOnBody}, support hand {OffHandOnBody}");
+            // A mounted gun: the hands on its handles
+            if (TarkovVR.Source.Player.Interactions.MountedGun.Recoil(kick))
+                return;
             if (GunHandOnBody)
                 Kick(Handedness.GunHandSource, kick);
             if (OffHandOnBody)

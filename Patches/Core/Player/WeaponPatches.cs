@@ -15,6 +15,7 @@ using TarkovVR.Source.Settings;
 using Comfort.Common;
 using Valve.VR;
 using TarkovVR.Source.Controls;
+using TarkovVR.Source.Player.Interactions;
 using static EFT.Player.FirearmController;
 using static PhysicsExtensions;
 
@@ -356,8 +357,8 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "IEventsConsumerOnWeapIn")]
         private static void FinishMovingWeaponToVrHands(EFT.Player.FirearmController __instance)
         {
-            if (!__instance._player.IsYourPlayer)
-                return;               
+            if (!__instance._player.IsYourPlayer || MountedGun.IsMountedGun(__instance))
+                return;
             if (VRGlobals.menuOpen)
             {
                 if (WeaponPatches.currentGunInteractController != null)
@@ -489,7 +490,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(FirearmController), "method_49")]
         private static void AddNewMagToInteractionController(FirearmController __instance)
         {
-            if (!__instance._player.IsYourPlayer)
+            if (!__instance._player.IsYourPlayer || MountedGun.IsMountedGun(__instance))
                 return;
 
             if (VRGlobals.menuOpen)
@@ -550,7 +551,7 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(FirearmController), "method_46")]
         public static void AddNewTacDeviceToInteractionController(FirearmController __instance)
         {
-            if (!__instance._player.IsYourPlayer || __instance.Firearms == null)
+            if (!__instance._player.IsYourPlayer || __instance.Firearms == null || MountedGun.IsMountedGun(__instance))
                 return;
 
             if (VRGlobals.menuOpen)
@@ -819,6 +820,12 @@ namespace TarkovVR.Patches.Core.Player
 
             if (!__instance._player.IsYourPlayer || __instance._player == null)
                 return;
+            // A mounted gun: Tarkov keeps it on its mount, none of the held-gun setup (MountedGun)
+            if (MountedGun.IsMountedGun(__instance))
+            {
+                MountedGun.OnGunInHands(__instance);
+                return;
+            }
             if (VRGlobals.menuOpen)
             {
                 if (WeaponPatches.currentGunInteractController != null)
@@ -1332,13 +1339,6 @@ namespace TarkovVR.Patches.Core.Player
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(InteractionContextHelper.CG_Class1750), "method_0")]
-        private static bool PreventUsingStationaryWeapon(InteractionContextHelper.CG_Class1750 __instance)
-        {
-            return false;
-        }
-        
         // Tarkov's physics-stop coroutine breaks physically held items: don't start it until the held item is dropped
         [HarmonyPrefix]
         [HarmonyPatch(typeof(LootItem), "StartPhysics")]

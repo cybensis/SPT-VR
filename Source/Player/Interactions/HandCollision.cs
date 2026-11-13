@@ -49,6 +49,12 @@ namespace TarkovVR.Source.Player.Interactions
 
             bool firearm = VRGlobals.firearmController != null && !WeaponPatches.grenadeEquipped;
             bool eating = EatingInteractionController.ManualActive;
+            // On a mounted gun the hands hold its handles: its own colliders would keep them off
+            if (MountedGun.Active)
+            {
+                ResetAll();
+                return;
+            }
             bool leftHanded = VRSettings.GetLeftHandedMode();
 
             // With a firearm up, the gun hand is constrained inside the gun pipeline (WeaponCollision):

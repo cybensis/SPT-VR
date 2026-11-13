@@ -747,8 +747,12 @@ namespace TarkovVR.Patches.Core.Player
         {
             if (!__instance.IsYourPlayer)
                 return true;
+            // A mounted gun: the hands on its handles, or on their controllers (MountedGun); none of the sprint / air hold below
+            bool onMountedGun = Source.Player.Interactions.MountedGun.DriveArms(__instance);
             if (__instance.HandsIsEmpty)
                 return false;
+            if (onMountedGun)
+                return true;
 
             bool trulyInAir = airborneFreefallTime > 0f &&
                               (__instance.MovementContext.FreefallTime > airborneFreefallTime ||

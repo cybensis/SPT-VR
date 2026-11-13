@@ -37,7 +37,7 @@ namespace TarkovVR.Source.Player.Body
             }
             MovementContext movement = player.MovementContext;
             bool wanted = enabled && rig.valid && VRGlobals.inGame && headset != null && player.HealthController != null && player.HealthController.IsAlive
-                && movement != null && !movement.IsInPronePose && !movement.IsInMountedState
+                && movement != null && !movement.IsInPronePose && !movement.IsInMountedState && movement.StationaryWeapon == null
                 && !(player.IsSprintEnabled && !VRSettings.GetDisableRunAnim());
             weight = Mathf.MoveTowards(weight, wanted ? 1f : 0f, Time.deltaTime / Mathf.Max(blendTime, 0.01f));
             if (headset == null)

@@ -62,7 +62,8 @@ namespace TarkovVR.Source.Player.VR
 
         public void MatchLegsToArms()
         {
-            if (VRGlobals.vrPlayer.initPos.y == 0)
+            // On a mounted gun the body stays where Tarkov sat it (Interactions.MountedGun)
+            if (VRGlobals.vrPlayer.initPos.y == 0 || Interactions.MountedGun.Active)
                 return;
 
             if (VRGlobals.inGame && VRGlobals.player &&
