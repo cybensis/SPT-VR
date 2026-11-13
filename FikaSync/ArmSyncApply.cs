@@ -67,6 +67,7 @@ namespace SptVrFikaSync
             public Vector3 pos;       public Quaternion rot;        // WeaponRoot, body-local
             public bool leftOnGrip;                                  // is the off hand on the foregrip?
             public Vector3 leftPos;   public Quaternion leftRot;    // off hand body-local (used when free)
+            public float recvTime;
         }
         private static readonly Dictionary<int, RemoteWeapon> weaponRemote = new Dictionary<int, RemoteWeapon>();
         private static readonly Dictionary<int, RemoteWeapon> displayedWeapon = new Dictionary<int, RemoteWeapon>();
@@ -93,6 +94,7 @@ namespace SptVrFikaSync
             {
                 pos = p.Pos, rot = p.Rot,
                 leftOnGrip = p.LeftOnGrip, leftPos = p.LeftPos, leftRot = p.LeftRot,
+                recvTime = Time.time,
             };
         }
 
@@ -125,10 +127,19 @@ namespace SptVrFikaSync
                         return;
                     if (hc.WeaponRoot == null)
                         return;
-                    if (weaponRemote.TryGetValue(__instance.NetId, out RemoteWeapon w))
-                        // A gun's held hand drops IK weight during reload (preserve it); a knife/grenade is always held in that
-                        // hand, so force the weight (the grenade pin-pull throw-ready state drops it otherwise).
-                        DriveRemoteWeapon(__instance, hc.WeaponRoot, w, forceHeldHandWeight: !(hc is Player.FirearmController));
+                    if (!weaponRemote.TryGetValue(__instance.NetId, out RemoteWeapon w))
+                        return;
+                    // On a mounted gun the hands item is that gun, held by Tarkov's own pose (the VR player sends nothing then): the
+                    // last pose received would put it in their hand. A pose gone quiet isn't driven either.
+                    bool onMountedGun = __instance.MovementContext != null && __instance.MovementContext.StationaryWeapon != null;
+                    if (onMountedGun || Time.time - w.recvTime > staleTimeout)
+                    {
+                        displayedWeapon.Remove(__instance.NetId);
+                        return;
+                    }
+                    // A gun's held hand drops IK weight during reload (preserve it); a knife/grenade is always held in that
+                    // hand, so force the weight (the grenade pin-pull throw-ready state drops it otherwise).
+                    DriveRemoteWeapon(__instance, hc.WeaponRoot, w, forceHeldHandWeight: !(hc is Player.FirearmController));
                     return;
                 }
 

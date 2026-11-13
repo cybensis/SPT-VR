@@ -18,7 +18,8 @@ namespace SptVrFikaSync
     // 2.3.0 adds a packet type (VRHeadPacket): every peer needs it. 2.3.1: the upper body solve runs (Tarkov's skeleton forks at Spine3).
     // 2.4.0: hands, gun and eating poses in the body's frame (Player.Transform), not the ribcage's. Pairs with an SPT-VR that sends them
     // so; either side older = the hands drawn off by the chest's pose.
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.0")]
+    // 2.4.1 (ArmSyncApply): no packet change. An older observer puts a VR player's mounted gun in their hand at their last held gun's pose.
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.1")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module; when present, a dragged corpse's loot waypoint is
     // relocated here (SPT-VR.dll doesn't run on a headless). The dep only guarantees ORBIT is in the registry checked below.

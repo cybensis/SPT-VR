@@ -21,7 +21,8 @@ namespace SptVrFikaSync
             if (!disableObservedAds || !FikaVrSync.enableWeaponSync || !value)
                 return;
             ObservedPlayer op = __instance._observedPlayer;
-            if (op != null && ArmSyncApply.IsWeaponSynced(op.NetId))
+            // Not on a mounted gun: no synced pose holds that one (Tarkov's own aim does)
+            if (op != null && ArmSyncApply.IsWeaponSynced(op.NetId) && (op.MovementContext == null || op.MovementContext.StationaryWeapon == null))
                 value = false; // never enters the ADS animation; the synced WeaponRoot drives the gun
         }
     }
