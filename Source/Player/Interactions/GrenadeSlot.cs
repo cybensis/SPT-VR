@@ -34,6 +34,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static float switchTimeout = 3f;     // s before a grab whose switch never lands is given up
         public static float rehangSeconds = 3f;     // s a gun that hung before the grenade has, once it's back in the hands, to hang again
         public static float throwReturnTimeout = 8f;    // s after a throw Tarkov's draw of the gun that hung before still counts as its return
+        public static float returnRetryDelay = 1f;      // co-op client: s between asks for a gun's return the host refused (once it's free)
+        public static int returnRetries = 4;
         public static bool debugLog = true;         // one line per grab / pick / placement
 
         private sealed class Hand
@@ -93,6 +95,8 @@ namespace TarkovVR.Source.Player.Interactions
         private static bool returningHangs;
         private static float returnStarted;
         private static float returnTimeout;
+        private static int returnTries;
+        private static float lastReturnTry;
         // The gun that hung on its spot when this grenade came into the hands (the grab saw it, or ChestHang still said so at its spawn)
         private static Item hungGun;
 
@@ -130,6 +134,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             SkipPutAway();
             UpdatePendingReturn();
+            RetryRefusedReturn();
             if (grabbedItem != null && !GrabbedInHands && !IsSwitching())
             {
                 grabbedItem = null;
@@ -205,7 +210,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         private static void RefreshPick()
         {
-            if (Time.time < nextPickTime && (picked == null || picked.Parent != null))
+            if (Time.time < nextPickTime && (picked == null || InInventory(picked)))
                 return;
             nextPickTime = Time.time + 0.5f;
             InventoryController inventory = VRGlobals.player.InventoryController;
@@ -246,10 +251,10 @@ namespace TarkovVR.Source.Player.Interactions
             // What Tarkov draws after the throw (the item before the grenade): its draw skipped, as after a put-back - straight into the
             // hand, or back on its spot if it hung
             Item back = afterThrowItem ?? hungGun;
-            if (back != null && back.Parent != null)
+            if (InInventory(back))
                 ExpectGunBack(back, hangs: back == hungGun, throwReturnTimeout);
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeSlot] {item?.LocalizedShortName()} thrown: {(back != null && back.Parent != null ? $"{back.LocalizedShortName()} back next, its draw skipped{(back == hungGun ? ", hung on its spot" : ", in the hand")}" : "empty hands next")}");
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] {item?.LocalizedShortName()} thrown: {(InInventory(back) ? $"{back.LocalizedShortName()} back next, its draw skipped{(back == hungGun ? ", hung on its spot" : ", in the hand")}" : "empty hands next")}");
             if (item != null)
                 lastThrownTemplate = item.TemplateId;
             if (item == picked)
@@ -295,6 +300,7 @@ namespace TarkovVR.Source.Player.Interactions
         {
             if (WeaponPatches.grenadeEquipped) return "a grenade in hand already";
             if (CoopHost.StillAnswering) return "co-op: the host hasn't answered your last move yet";
+            if (ReturnRefused) return "co-op: the host refused the gun's return, asking again";
             if (VRReloadController.HoldingMagazine || VRReloadController.HoldingChargingHandle) return "the reload has a hand";
             if (VRGlobals.player.InventoryController.IsChangingWeapon) return "switching weapons";
             object hands = VRGlobals.player.HandsController;
@@ -477,7 +483,7 @@ namespace TarkovVR.Source.Player.Interactions
             Item back = fromHere ? handsBefore : VRGlobals.player.LastEquippedWeaponOrKnifeItem;
             puttingAway = grenade;
             putAwayStarted = Time.time;
-            if (back != null && back.Parent != null && BodyWeapons.SlotOf(back, out EquipmentSlot slot))
+            if (InInventory(back) && BodyWeapons.SlotOf(back, out EquipmentSlot slot))
             {
                 ExpectGunBack(back, back == hungGun, switchTimeout);
                 VRInputManager.ForceCommand(BodyWeapons.SelectCommand(slot));
@@ -487,7 +493,7 @@ namespace TarkovVR.Source.Player.Interactions
                 VRGlobals.player.SetEmptyHands(delegate { });
             }
             if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade?.Item?.LocalizedShortName()} back on the slot, hands back to {(back != null && back.Parent != null ? back.LocalizedShortName() : "empty")}{(back != null && back == hungGun ? " (hanging)" : "")}");
+                Plugin.MyLog.LogInfo($"[GrenadeSlot] {grenade?.Item?.LocalizedShortName()} back on the slot, hands back to {(InInventory(back) ? back.LocalizedShortName() : "empty")}{(back != null && back == hungGun ? " (hanging)" : "")}");
             // grabbedItem stays until it's out of the hands (UpdateInput): a left-hand grenade stays left for its put-away
             grabbedByHold = false;
         }
@@ -527,6 +533,35 @@ namespace TarkovVR.Source.Player.Interactions
             returningHangs = hangs;
             returnStarted = Time.time;
             returnTimeout = timeout;
+            returnTries = 0;
+            lastReturnTry = Time.time;
+        }
+
+        // Still in the inventory. Item.Parent throws for an item that's in none: a thrown grenade, the empty hands' own item (what FIKA
+        // leaves in the hands after a refused hands change)
+        private static bool InInventory(Item item) => item != null && item.CurrentAddress != null;
+
+        // Co-op as a client: the host refused the gun's return (its copy of you still playing a move at full length: "Default Inventory
+        // is currently being modified") and FIKA left the hands empty without Tarkov's empty-hands spawn
+        private static bool ReturnRefused => returningGun != null && CoopHost.IsClient && VRGlobals.player != null
+            && VRGlobals.player.HandsController is EFT.Player.EmptyHandsController;
+
+        // ...asked again once the host has answered everything, a few times; no grab meanwhile (it would take those broken hands)
+        private static void RetryRefusedReturn()
+        {
+            if (!ReturnRefused || CoopHost.StillAnswering || Time.time - lastReturnTry < returnRetryDelay)
+                return;
+            if (returnTries >= returnRetries || !InInventory(returningGun) || !BodyWeapons.SlotOf(returningGun, out EquipmentSlot slot))
+            {
+                Plugin.MyLog.LogWarning($"[GrenadeSlot] {returningGun.LocalizedShortName()} not coming back after {returnTries} tries: left in empty hands");
+                returningGun = null;
+                return;
+            }
+            returnTries++;
+            lastReturnTry = Time.time;
+            returnStarted = Time.time;
+            Plugin.MyLog.LogWarning($"[GrenadeSlot] the host refused {returningGun.LocalizedShortName()}'s return: asking again ({returnTries} of {returnRetries})");
+            VRInputManager.ForceCommand(BodyWeapons.SelectCommand(slot));
         }
 
         // FirearmController.Spawn (BodyWeaponPatches.SkipDraw): that gun, its draw skipped as it starts; one that hung goes back on its spot

@@ -20,6 +20,21 @@ namespace TarkovVR.ModSupport
         // The host hasn't answered your last move yet, or is still playing one it doesn't answer
         internal static bool StillAnswering => IsClient && (Time.time < busyUntil || FIKA.FikaHostWait.WaitingForHost(VRGlobals.player));
 
+        // A grenade as the host's copy of you throws it: its pin pull from when we sent it (once the host had answered the take), then the
+        // throw, each at full length and after the one before (the clips: *_idle_to_out 1.5 s, *_fire1 0.9 s). The network delay drops out:
+        // our next move crosses it like the moves before it did. A quick throw leaves the host busy well past throwSettle.
+        public static float hostPinPull = 1.5f;
+        public static float hostThrow = 0.9f;
+        public static float hostThrowMargin = 1f;   // s on top (the host's frames, its end of the throw); inferred, not measured
+
+        internal static void GrenadeThrown(float pinSentAt)
+        {
+            float settle = throwSettle;
+            if (pinSentAt >= 0f)
+                settle = Mathf.Max(settle, Mathf.Max(pinSentAt + hostPinPull, Time.time) + hostThrow + hostThrowMargin - Time.time);
+            HostBusyFor(settle);
+        }
+
         // A move the host plays out for this long without an answer to wait on
         internal static void HostBusyFor(float seconds)
         {

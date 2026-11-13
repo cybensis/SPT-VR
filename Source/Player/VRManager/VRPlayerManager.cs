@@ -587,6 +587,9 @@ namespace TarkovVR.Source.Player.VRManager
             }
             // On a mounted gun: the rig on the body, the view on the headset alone (after the pin above, which it overrides)
             Interactions.MountedGun.PinRig();
+            // Empty hands FIKA left after a refused hands change: back on the VR hands (with no gun in them, nothing else would)
+            if (VRGlobals.inGame && !VRGlobals.menuOpen)
+                WeaponPatches.RepairUnspawnedEmptyHands();
 
             bool cleanEmpty = reassertRightArmIkWhenEmpty
                 && VRGlobals.player != null && VRGlobals.player.HandsIsEmpty

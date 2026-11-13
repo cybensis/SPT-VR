@@ -297,7 +297,7 @@ namespace TarkovVR.Patches.Core.VR
             activeGrenadeController = __instance;
             releasedAt = Time.time;
             // Co-op client: the hands' way back (and any grab) waits for the host's copy to finish this throw
-            CoopHost.HostBusyFor(CoopHost.throwSettle);
+            CoopHost.GrenadeThrown(TarkovVR.Source.Weapons.GrenadeHold.PinSentAt);
 
             if (throwVelocity.magnitude > 0.1f)
             {

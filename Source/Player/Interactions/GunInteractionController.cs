@@ -502,17 +502,9 @@ public class GunInteractionController : MonoBehaviour
         if (VRGlobals.weaponHolder == null || VRGlobals.player == null)
             return;
 
-        // Empty hands Tarkov didn't spawn (FIKA rolling back a hands change the host refused): the right marker and arm still on the gun
-        // that left, its model back in the pool far away. What EmptyHandsController.Spawn's patch does, now.
-        if (VRGlobals.player.HandsController is EFT.Player.EmptyHandsController emptyHandsController && VRGlobals.vrPlayer != null
-            && VRGlobals.vrPlayer.RightHand != null && VRGlobals.player._markers.Length > 1
-            && VRGlobals.player._markers[1] != VRGlobals.vrPlayer.RightHand.transform)
-        {
-            Plugin.MyLog.LogWarning($"[Hands] empty hands without their spawn (the right marker on '{(VRGlobals.player._markers[1] != null ? VRGlobals.player._markers[1].name : "nothing")}'): "
-                + "the markers and arms put back on the VR hands");
-            WeaponPatches.ResetWeaponOnEquipHands(emptyHandsController);
+        // Empty hands Tarkov didn't spawn: the holder isn't the gun's any more (WeaponPatches.RepairUnspawnedEmptyHands)
+        if (WeaponPatches.RepairUnspawnedEmptyHands())
             return;
-        }
 
         // Strip last frame's collision offsets so the anchor below measures the pristine pose
         // (they are re-resolved and re-applied fresh by WeaponCollision.Apply after the anchor).

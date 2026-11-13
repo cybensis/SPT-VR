@@ -135,6 +135,22 @@ namespace TarkovVR.Patches.Core.Player
             }
         }
 
+        // Empty hands Tarkov didn't spawn (FIKA rolling back a hands change the host refused): the right marker and arm still on the item
+        // that left, its model back in the pool far away = the right hand stuck. What EmptyHandsController.Spawn's patch does, now. Every
+        // frame (VRPlayerManager.LateUpdate) and from the gun's own update; true = repaired.
+        internal static bool RepairUnspawnedEmptyHands()
+        {
+            EFT.Player player = VRGlobals.player;
+            if (player == null || !(player.HandsController is EFT.Player.EmptyHandsController emptyHandsController) || VRGlobals.vrPlayer == null
+                || VRGlobals.vrPlayer.RightHand == null || player._markers.Length < 2 || player._markers[1] == VRGlobals.vrPlayer.RightHand.transform
+                || MountedGun.Active)
+                return false;
+            Plugin.MyLog.LogWarning($"[Hands] empty hands without their spawn (the right marker on '{(player._markers[1] != null ? player._markers[1].name : "nothing")}'): "
+                + "the markers and arms put back on the VR hands");
+            ResetWeaponOnEquipHands(emptyHandsController);
+            return true;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.EmptyHandsController), "Drop")]
         private static void ResetIKOnExitHands(EFT.Player.EmptyHandsController __instance)

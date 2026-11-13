@@ -298,6 +298,9 @@ namespace TarkovVR.Source.Weapons
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // Arming and letting go
 
+        // When Tarkov's pin pull was sent for the grenade in hand (-1: not yet): the host's copy pulls it from then on (CoopHost.GrenadeThrown)
+        internal static float PinSentAt => controller != null && armCommandSent ? armCommandAt : -1f;
+
         private static void RequestArm(string why)
         {
             armRequested = true;
@@ -453,7 +456,15 @@ namespace TarkovVR.Source.Weapons
         private static void Throw()
         {
             thrown = true;
-            GrenadeSlot.NoteThrown(controller.Item);
+            // Bookkeeping only: it must never stop the throw (thrown is set: a throw that didn't happen leaves the grenade in the hand)
+            try
+            {
+                GrenadeSlot.NoteThrown(controller.Item);
+            }
+            catch (System.Exception exception)
+            {
+                Plugin.MyLog.LogError($"[GrenadeHold] noting the throw failed (thrown anyway): {exception}");
+            }
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[GrenadeHold] thrown from the {(Handedness.GunInLeftHand ? "left" : "right")} hand"
                     + (keepHandTurn ? (markerAtRestSeen ? $" (its hand kept its turn: the armed hold turned the grip up to {keptTurnMax:0} deg)" : " (no resting turn seen to keep)") : "")
