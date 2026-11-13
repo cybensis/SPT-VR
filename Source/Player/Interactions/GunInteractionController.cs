@@ -548,7 +548,10 @@ public class GunInteractionController : MonoBehaviour
         // VRGunController keeps the gun where it was in your hand instead of following that marker
         if (!VRGunController.TryHoldGunInHand(VRGlobals.weaponHolder.transform))
         {
-            Vector3 anchor = VRGlobals.player._markers[1].transform.position;
+            // The grip where it would be without the recoil on your hand, so the recoil shows on top (RecoilPose.kickShare)
+            Vector3 anchor = !WeaponPatches.grenadeEquipped && VRGlobals.firearmController != null
+                ? TarkovVR.Source.Weapons.RecoilPose.GripAnchor(VRGlobals.player._markers[1].transform)
+                : VRGlobals.player._markers[1].transform.position;
             // A grenade in the left hand is held where the right grip mirrors to across the grenade's own centre plane
             // (RealLeftHandedPatches.GunPlane), so that mirrored grip lands on the controller. A gun's grip sits on its centre plane;
             // a grenade's is 11-12 cm off it.

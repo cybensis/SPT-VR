@@ -772,6 +772,8 @@ namespace TarkovVR.Patches.Core.Player
                 var ik = gunRightMarker.parent.parent;
                 ik.localPosition = Vector3.zero;
                 ik.localEulerAngles = Vector3.zero;
+                // The jump / run animation gone, not the gun's recoil (Tarkov put it on this same bone earlier in the pass)
+                TarkovVR.Source.Weapons.RecoilPose.PutBackOnZeroed(ik);
             }
 
             // Hold both arms at their pre-sprint grip pose so the run animation's wrist twist / arm swing
