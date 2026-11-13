@@ -1024,6 +1024,29 @@ namespace TarkovVR.Patches.Misc
             return false;
         }
 
+        // The sorting table window: Tarkov keeps it on screen with RectTransform.CorrectPositionResolution (its
+        // OnRectTransformDimensionsChange, and its drag component's OnEnable), which compares the WORLD position with Screen.width /
+        // height in pixels and drops z - on our world-space canvas that throws it off the canvas. Placed on the canvas a frame after
+        // it opens (after the OnEnable clamp), like GridWindow, and the resize clamp skipped.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SortingTableWindow), nameof(SortingTableWindow.Show), new Type[] { typeof(ItemContext), typeof(SortingTable), typeof(BackEndInventoryController), typeof(ItemUiContext) })]
+        private static void PositionSortingTableWindow(SortingTableWindow __instance)
+        {
+            __instance.transform.localPosition = Vector3.zero;
+            __instance.WaitOneFrame(delegate
+            {
+                if (__instance != null)
+                    __instance.transform.localPosition = Vector3.zero;
+            });
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SortingTableWindow), nameof(SortingTableWindow.OnRectTransformDimensionsChange))]
+        private static bool KeepSortingTableOnCanvas()
+        {
+            return false;
+        }
+
         //Dunno what this is for
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Window<WindowContext>), "Show")]
