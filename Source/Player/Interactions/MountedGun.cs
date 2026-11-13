@@ -30,6 +30,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float regrabRadius = 0.18f;   // m on the gun: a hand that let go takes its handle again
         public static float leaveDelay = 0.3f;      // s both hands open before you let go of the gun
         public static float takeTimeout = 8f;       // s a take may take before it's called off (Tarkov's walk onto it is 1.5 s at most)
+        // Co-op as a client: s on the gun before letting go takes effect. The host's copy of you gets onto it later than you (its walk onto
+        // it, then the gun's spawn from your packets); let go before it's on, it never finishes the hands change off it and every later
+        // move waits on an answer that doesn't come (no shooting, no reload). Open hands before then leave once the time's up.
+        public static float coopMinMounted = 2.5f;
         public static float aimEyeReach = 0.2f;     // m headset to the sight to aim through it
         public static float aimEyeAngle = 25f;      // deg headset forward off the barrel to aim through it
         public static float aimExitReach = 0.28f;   // m / deg out of the aim again (wider: no flicker on the edge)
@@ -51,6 +55,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static StationaryWeapon gun;
         private static bool cameFromEmptyHands;
         private static float takenAt;
+        private static float mountedAt;
         private static bool takeArmed;                                    // both grips closed on the handles: taken once the host is free
         private static readonly bool[] holding = new bool[2];
         private static readonly bool[] previousGrip = new bool[2];
@@ -252,6 +257,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (stage == Stage.Taking)
             {
                 stage = Stage.Mounted;
+                mountedAt = Time.time;
                 aimBased = false;
                 if (debugLog)
                     LogHandles(firearmController);
@@ -281,7 +287,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (allOpenSince < 0f)
                 allOpenSince = Time.time;
-            if (Time.time - allOpenSince >= leaveDelay)
+            if (Time.time - allOpenSince >= leaveDelay && (!CoopHost.IsClient || Time.time - mountedAt >= coopMinMounted))
                 LetGo(player);
         }
 
