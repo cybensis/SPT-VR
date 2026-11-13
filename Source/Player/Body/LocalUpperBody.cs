@@ -4,13 +4,17 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.Body
 {
-    // The local VR player's upper body follows the headset (UpperBodySolver), run right before the shoulders are placed
-    // (UpperBodyPatches: PlayerBones.SetShoulders), so the shoulders and the arm IK build on the turned and bent torso. Off while prone, in
-    // a run with the run animation and on a mounted gun (their animations pose the body). The solved chest is kept in the body's frame:
-    // the co-op sync sends the hands in it (VRArmSync.SyncChest), whenever in the frame that runs.
+    // The local VR player's upper body solved to the headset (UpperBodySolver), right before the shoulders are placed (UpperBodyPatches:
+    // PlayerBones.SetShoulders). Off while prone, in a run with the run animation and on a mounted gun (their animations pose the body).
+    // The solved chest is kept in the body's frame: the co-op sync sends the hands in it (VRArmSync.SyncChest), whenever in the frame that
+    // runs, and the other players' copy of you is bent the same way (HeadSyncApply). Your own bones keep it only with poseLocalBody.
     internal static class LocalUpperBody
     {
         public static bool enabled = true;
+        // true = your own skeleton keeps the solved pose (shadow + hitboxes follow the head). In first person the body sits behind the
+        // camera, so it bends far forward, and Tarkov hangs its hands container (PlayerSpring) and the body gun spots off the ribcage:
+        // the held and slung gun move out in front. false = solved only for the co-op sync's chest frame, the bones put back.
+        public static bool poseLocalBody = false;
         public static float blendTime = 0.25f;      // s it eases in and out
         public static bool logRig = true;           // one line per rig: the bones it turns, or why it can't
 
@@ -52,6 +56,8 @@ namespace TarkovVR.Source.Player.Body
                 chestScale = chest.lossyScale;
                 solvedFrame = Time.frameCount;
             }
+            if (!poseLocalBody)
+                UpperBodySolver.Restore(rig);
         }
 
         // The chest to send the hands in: the solved one, carried with the body to now (null = not solved lately: the live one)

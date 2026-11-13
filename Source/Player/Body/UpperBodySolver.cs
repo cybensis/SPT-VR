@@ -189,6 +189,16 @@ namespace TarkovVR.Source.Player.Body
             rig.haveWritten = true;
         }
 
+        // Back to the animator's pose of this frame (after a Solve that was only measured)
+        public static void Restore(Rig rig)
+        {
+            if (rig == null || !rig.valid || !rig.haveWritten)
+                return;
+            for (int i = 0; i < rig.posed.Length; i++)
+                rig.posed[i].localRotation = rig.animated[i];
+            rig.haveWritten = false;
+        }
+
         private static float SpineWeight(int index)
         {
             if (spineWeights == null || spineWeights.Length == 0)
