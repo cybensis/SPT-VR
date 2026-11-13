@@ -19,5 +19,13 @@ namespace TarkovVR.Patches.Core.Player
             __instance.SetEmptyHands(result => { });
             return false;
         }
+
+        // On the gun: the body faces the aim and stands under your head, no step clips (MountedGun.MoveBody)
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(StationaryPlayerState), nameof(StationaryPlayerState.ManualAnimatorMoveUpdate))]
+        private static bool BodyUnderTheHead(StationaryPlayerState __instance, float deltaTime)
+        {
+            return !MountedGun.MoveBody(__instance, deltaTime);
+        }
     }
 }

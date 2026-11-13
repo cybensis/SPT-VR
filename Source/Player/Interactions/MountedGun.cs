@@ -20,7 +20,8 @@ namespace TarkovVR.Source.Player.Interactions
     // and every frame turns that gun about the world Hinge to MovementContext.Rotation, clamped to the mount's limits
     // (MovementContext.UtesRotationFunction / AGSRotationFunction); the world gun follows it (StationaryWeapon.ManualUpdate). FIKA syncs
     // Occupy / Leave (FikaPlayer.OperateStationaryWeapon) and the rotation is your look rotation.
-    // Ours: both grips closed on its handles takes it, the Utyos's right alone (both hands free: empty, or the gun on the sling); the hands turn it about the
+    // Ours: both grips closed on its handles takes it, the Utyos's right alone (both hands free: empty, or the gun on the sling); the body
+    // faces the aim and stays under your head (no step clips); the hands turn it about the
     // hinge; a holding hand's trigger fires it; the eye at its sight aims it; both hands open lets go of it, back to what you had.
     // The view is the headset's throughout, still in the world while Tarkov moves the body onto the gun.
     internal static class MountedGun
@@ -28,8 +29,14 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool enabled = true;
         public static float grabRadius = 0.13f;     // m controller wrist to a handle for its grip to take the gun
         public static float regrabRadius = 0.18f;   // m on the gun: a hand that let go takes its handle again
-        // The Utyos: the right grip on its handle alone takes it, the left joins on its handle when it grips there. false = both grips.
-        public static bool utesRightHandTakes = true;
+        // The Utyos is held by its right handle alone (Tarkov's left hand only rests on its stock): the left hand stays on your controller.
+        // false = the left takes a handle too, both grips to take it, like the AGS.
+        public static bool utesOneHanded = true;
+        // The body on the gun faces its aim (Tarkov's step clips play off the aim turning away from the body, so none play) and stands
+        // under your head instead of where its steps take it. false = Tarkov's steps.
+        public static bool bodyFollowsHead = true;
+        public static float bodyFollowDeadZone = 0.2f;  // m your head may be off the body's own head before the body moves (leaning)
+        public static float bodyFollowTime = 0.12f;     // s the body takes to catch up past that
         public static float leaveDelay = 0.3f;      // s both hands open before you let go of the gun
         public static float takeTimeout = 8f;       // s a take may take before it's called off (Tarkov's walk onto it is 1.5 s at most)
         // Co-op as a client: s on the gun before letting go takes effect. The host's copy of you gets onto it later than you (its walk onto
@@ -204,8 +211,9 @@ namespace TarkovVR.Source.Player.Interactions
                 return false;
             }
             HandlePoints(nearest, out Vector3 leftHandle, out Vector3 rightHandle);
-            ShowZones(debugViz, leftHandle, rightHandle);
-            bool leftAt = (Wrist(true) - leftHandle).sqrMagnitude < grabRadius * grabRadius;
+            bool oneHanded = OneHanded(nearest);
+            ShowZones(debugViz, leftHandle, rightHandle, showLeft: !oneHanded);
+            bool leftAt = !oneHanded && (Wrist(true) - leftHandle).sqrMagnitude < grabRadius * grabRadius;
             bool rightAt = (Wrist(false) - rightHandle).sqrMagnitude < grabRadius * grabRadius;
             if (handleBlips[LEFT].Enter(leftAt))
                 HapticMixer.PlayPulse(SteamVR_Input_Sources.LeftHand, 0.2f, 0.04f, 120f);
@@ -216,10 +224,9 @@ namespace TarkovVR.Source.Player.Interactions
                 takeArmed = false;
                 return false;
             }
-            bool rightHandTakes = RightHandTakes(nearest);
             bool leftOn = leftAt && leftGrip;
-            bool held = rightAt && rightGrip && (rightHandTakes || leftOn);
-            if (held && (rightPressed || (!rightHandTakes && leftPressed)))
+            bool held = rightAt && rightGrip && (oneHanded || leftOn);
+            if (held && (rightPressed || (!oneHanded && leftPressed)))
                 takeArmed = true;
             else if (!held)
                 takeArmed = false;
@@ -233,8 +240,8 @@ namespace TarkovVR.Source.Player.Interactions
             return true;
         }
 
-        private static bool RightHandTakes(StationaryWeapon stationaryWeapon) =>
-            utesRightHandTakes && stationaryWeapon.Animation != StationaryWeapon.EStationaryAnimationType.AGS_17;
+        private static bool OneHanded(StationaryWeapon stationaryWeapon) =>
+            utesOneHanded && stationaryWeapon != null && stationaryWeapon.Animation != StationaryWeapon.EStationaryAnimationType.AGS_17;
 
         private static void Take(EFT.Player player, StationaryWeapon stationaryWeapon, bool leftOn)
         {
@@ -271,7 +278,7 @@ namespace TarkovVR.Source.Player.Interactions
                 stage = Stage.Taking;
                 takenAt = Time.time;
                 cameFromEmptyHands = true;
-                holding[LEFT] = leftGrip;
+                holding[LEFT] = leftGrip && !OneHanded(gun);
                 holding[RIGHT] = rightGrip;
             }
             FirearmController firearmController = MountedController(player);
@@ -305,7 +312,7 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 leftZone = Vector3.zero, rightZone = Vector3.zero;
             if (zonesKnown)
                 HandlePoints(gun, out leftZone, out rightZone);
-            for (int hand = LEFT; hand <= RIGHT; hand++)
+            for (int hand = OneHanded(gun) ? RIGHT : LEFT; hand <= RIGHT; hand++)
             {
                 if (holding[hand] && !grips[hand])
                     holding[hand] = false;
@@ -415,6 +422,41 @@ namespace TarkovVR.Source.Player.Interactions
             float yaw = aimBaseRotation.x + Mathf.DeltaAngle(YawOf(aimBaseLever), YawOf(lever));
             float pitch = aimBaseRotation.y + (ElevationOf(lever) - ElevationOf(aimBaseLever));
             movementContext.Rotation = FilterAim(movementContext, new Vector2(yaw, pitch));
+            return true;
+        }
+
+        //---------------------------------------------------------------------------------------------------------
+        // The body (MountedGunPatches: StationaryPlayerState.ManualAnimatorMoveUpdate prefix): true = moved here, Tarkov's skipped.
+        // Tarkov never turns the body on the gun: the aim's turn off it (UpdateStationaryDeltaAngle) picks a step clip, and the clip's
+        // root motion walks the body round. Facing it along the aim leaves no turn to step through. Its range check is in Enter only.
+
+        internal static bool MoveBody(StationaryPlayerState state, float deltaTime)
+        {
+            MovementContext movementContext = state.MovementContext;
+            EFT.Player player = movementContext != null ? movementContext._player : null;
+            if (!enabled || !bodyFollowsHead || player == null || !player.IsYourPlayer || player != VRGlobals.player
+                || state.Stage != StationaryPlayerState.EStationaryStage.Main)
+                return false;
+            Camera headset = VRGlobals.VRCam;
+            Transform head = player.PlayerBones != null && player.PlayerBones.Head != null ? player.PlayerBones.Head.Original : null;
+            if (headset == null || head == null)
+                return false;
+            if (state._denied)
+                state.DropStationary();
+            movementContext.ApplyRotation(Quaternion.Euler(0f, movementContext.Yaw, 0f));
+            // The body's own head (standing or sat, as its pose has it) under the headset once it's past the dead zone. Moving the
+            // body moves its head as much, so this is the body's motion.
+            Vector3 offHead = headset.transform.position - head.position;
+            offHead.y = 0f;
+            float distance = offHead.magnitude;
+            Vector3 motion = Vector3.zero;
+            if (distance > bodyFollowDeadZone)
+            {
+                float catchUp = bodyFollowTime > 0f ? 1f - Mathf.Exp(-deltaTime / bodyFollowTime) : 1f;
+                motion = offHead * ((distance - bodyFollowDeadZone) / distance * catchUp);
+            }
+            movementContext.ApplyApproachMotion(motion, deltaTime);
+            movementContext.UpdateStationaryDeltaAngle();
             return true;
         }
 
@@ -696,9 +738,9 @@ namespace TarkovVR.Source.Player.Interactions
                 + $" / {(gun.Animation == StationaryWeapon.EStationaryAnimationType.AGS_17 ? agsRightHandle : utesRightHandle).ToString("F3")}), rotation {VRGlobals.player.MovementContext.Rotation}");
         }
 
-        private static void ShowZones(bool show, Vector3 left, Vector3 right)
+        private static void ShowZones(bool show, Vector3 left, Vector3 right, bool showLeft = true)
         {
-            DebugShapes.Sphere(ref leftZoneSphere, "MountedGunLeftZone", show, left, grabRadius, new Color(0.2f, 0.5f, 1f, 0.35f));
+            DebugShapes.Sphere(ref leftZoneSphere, "MountedGunLeftZone", show && showLeft, left, grabRadius, new Color(0.2f, 0.5f, 1f, 0.35f));
             DebugShapes.Sphere(ref rightZoneSphere, "MountedGunRightZone", show, right, grabRadius, new Color(1f, 0.5f, 0.2f, 0.35f));
         }
     }
