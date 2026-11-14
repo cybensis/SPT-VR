@@ -42,6 +42,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool glassBreak = true;              // whack a window hard enough and it shatters
         public static float glassBreakMinSpeed = 2.0f;     // m/s approach needed to break
         public static float glassBreakDamage = 30f;        // melee damage carried by the synthetic hit (~knife slash)
+        public static bool leftoverGlassAtTouch = true;    // what's left of a broken window breaks at any touch (false = it needs the whack too)
 
         public static int proxyLayerOverride = -1;         // force the proxy/sandbox layer (UnityExplorer) if the auto-pick misbehaves
 
@@ -301,16 +302,22 @@ namespace TarkovVR.Source.Player.Interactions
         {
             bool fresh = Time.time - contactEndStamp > freshContactGap;
             contactEndStamp = Time.time;
-            if (col == null || !fresh)
+            if (col == null)
+                return;
+            Vector3 barrelDir = VRGlobals.firearmController?.WeaponRoot != null
+                ? -VRGlobals.firearmController.WeaponRoot.up : -normal;
+            // What's left of a broken window gives at a touch (vanilla: walking into it breaks it). Every piece is its own collider,
+            // so pushing on into the next one is a new contact.
+            bool leftoverGlass = glassBreak && leftoverGlassAtTouch && IsLeftoverGlass(col);
+            if (leftoverGlass)
+                TryBreakGlass(col, point, normal, barrelDir);
+            if (!fresh)
                 return;
 
             // How fast the hand brings that point of the gun into the surface. Not the contact's relative velocity: that is the
             // proxy's catch-up toward a hand already inside the wall, large whenever the gun is pressed in, however gently.
             Vector3 pointVelocity = targetVelocity + Vector3.Cross(targetAngularVelocity, point - targetGrip);
             float approach = Mathf.Max(0f, Vector3.Dot(pointVelocity, -normal));
-
-            Vector3 barrelDir = VRGlobals.firearmController?.WeaponRoot != null
-                ? -VRGlobals.firearmController.WeaponRoot.up : -normal;
             if (haptics)
             {
                 float amplitude = Mathf.Clamp01(approach / 2.5f) * impactHapticStrength;
@@ -323,7 +330,7 @@ namespace TarkovVR.Source.Player.Interactions
                 lastImpactSoundStamp = Time.time;
                 PlayImpactSound(col, point, approach);
             }
-            if (glassBreak && approach >= glassBreakMinSpeed)
+            if (glassBreak && !leftoverGlass && approach >= glassBreakMinSpeed)
                 TryBreakGlass(col, point, normal, barrelDir);
             Door door = CollisionWorld.DoorOf(col);
             if (door != null)
@@ -379,6 +386,12 @@ namespace TarkovVR.Source.Player.Interactions
             GameWorld gameWorld = Singleton<GameWorld>.Instance;
             if (gameWorld == null)
                 return;
+            // Our copy of glass that's already gone (a fallen piece, a shot-out pane): only the copy goes
+            if (!ballisticCollider.enabled || !hitCollider.enabled || !hitCollider.gameObject.activeInHierarchy)
+            {
+                DropBrokenCopies(hitCollider);
+                return;
+            }
 
             DamageInfo damageInfo = default;
             damageInfo.DamageType = EDamageType.Melee;
@@ -394,12 +407,36 @@ namespace TarkovVR.Source.Player.Interactions
                 damageInfo.Player = gameWorld.GetEverExistedBridgeByProfileID(gameWorld.MainPlayer.ProfileId);
             gameWorld.HackShot(damageInfo);
 
-            // The real pane's collider is gone: drop the sandbox copy too, or the gun keeps colliding with a phantom
-            // window until you walk more than retainDistance away and back.
-            proxy?.ForgetCollider(hitCollider.GetInstanceID());
+            DropBrokenCopies(hitCollider);
 
             if (InstalledMods.FIKAInstalled)
                 FikaSendGunSurfaceHit(point, normal, barrelDir, glassBreakDamage);
+        }
+
+        // A piece still stuck in a broken window. Tarkov makes them at the break (WindowBreaker.UpdateToStuck): a pooled object
+        // under the window, a convex mesh + the window's glass BallisticCollider, a BrokenWindowPieceCollider trigger child (the
+        // player walking into it breaks it). A hit or a fall turns its BallisticCollider off.
+        private static bool IsLeftoverGlass(Collider collider)
+        {
+            if (collider.gameObject.layer != glassLayer || !IsWindowPiece(collider))
+                return false;
+            WindowBreaker window = collider.GetComponentInParent<WindowBreaker>();
+            BallisticCollider ballistic = collider.GetComponent<BallisticCollider>();
+            return window != null && window.IsDamaged && ballistic != null && ballistic.enabled;
+        }
+
+        private static bool IsWindowPiece(Collider collider) => collider.GetComponentInChildren<BrokenWindowPieceCollider>(true) != null;
+
+        // The real colliders are gone: the sandbox copies go too, or the gun keeps hitting a phantom window until you walk more
+        // than retainDistance away and back. A piece's hit knocks out the pieces around it as well, and pieces are pooled (other
+        // windows reuse them): those copies go, not blacklisted. A pane is blacklisted.
+        private static void DropBrokenCopies(Collider hitCollider)
+        {
+            WindowBreaker window = hitCollider.GetComponentInParent<WindowBreaker>();
+            if (window != null && IsWindowPiece(hitCollider))
+                proxy?.DropDisabledCopiesUnder(window.transform);
+            else
+                proxy?.ForgetCollider(hitCollider.GetInstanceID());
         }
 
         // Companion-DLL isolation (like VRMeleeController.FikaSendMeleeHit): NoInlining so the cross-assembly reference

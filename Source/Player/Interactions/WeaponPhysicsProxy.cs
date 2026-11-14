@@ -385,11 +385,15 @@ namespace TarkovVR.Source.Player.Interactions
                     AddDoorPart(source, door);
                     continue;
                 }
-                if (colliderCopies.TryGetValue(id, out GameObject existing))
+                // (a pooled window piece back in another window has another mesh: cooked again)
+                if (colliderCopies.TryGetValue(id, out GameObject existing) && existing != null && source is MeshCollider sourceMesh
+                    && existing.GetComponent<MeshCollider>() is MeshCollider copyMesh && copyMesh.sharedMesh != sourceMesh.sharedMesh)
                 {
-                    if (existing != null)
-                        existing.transform.SetPositionAndRotation(source.transform.position, source.transform.rotation);
+                    DropCopy(id);
+                    existing = null;
                 }
+                if (existing != null)
+                    existing.transform.SetPositionAndRotation(source.transform.position, source.transform.rotation);
                 else
                 {
                     GameObject copy = CopyCollider(source, staticCopyLayer);
@@ -411,7 +415,9 @@ namespace TarkovVR.Source.Player.Interactions
                 Collider copyCollider = copyObject.GetComponent<Collider>();
                 float distanceSquared = copyCollider != null ? copyCollider.bounds.SqrDistance(rb.position)
                                        : (copyObject.transform.position - rb.position).sqrMagnitude;
-                if (distanceSquared > retainDistanceSquared)
+                // Far off, or its real collider is gone or off (glass shot out, a window piece fallen)
+                Collider source = copyObject.GetComponent<ProxyColliderSource>()?.source;
+                if (distanceSquared > retainDistanceSquared || source == null || !source.enabled || !source.gameObject.activeInHierarchy)
                     staleKeys.Add(entry.Key);
             }
             for (int i = 0; i < staleKeys.Count; i++)
@@ -507,6 +513,34 @@ namespace TarkovVR.Source.Player.Interactions
                     copyCollider.enabled = false;   // immediate: stop colliding this frame too (Destroy is deferred to end of frame)
                 Destroy(copy);
             }
+        }
+
+        // The pieces a hit knocked out of a broken window (their colliders are off now): their copies go at once. Not blacklisted:
+        // Tarkov pools the pieces and puts them in other windows later.
+        private readonly List<Collider> windowColliders = new List<Collider>(64);
+        public void DropDisabledCopiesUnder(Transform window)
+        {
+            window.GetComponentsInChildren(true, windowColliders);
+            for (int i = 0; i < windowColliders.Count; i++)
+            {
+                Collider source = windowColliders[i];
+                if (source != null && (!source.enabled || !source.gameObject.activeInHierarchy))
+                    DropCopy(source.GetInstanceID());
+            }
+            windowColliders.Clear();
+        }
+
+        private void DropCopy(int instanceId)
+        {
+            if (!colliderCopies.TryGetValue(instanceId, out GameObject copy))
+                return;
+            colliderCopies.Remove(instanceId);
+            if (copy == null)
+                return;
+            Collider copyCollider = copy.GetComponent<Collider>();
+            if (copyCollider != null)
+                copyCollider.enabled = false;   // stop colliding this frame too (Destroy is deferred to end of frame)
+            Destroy(copy);
         }
 
         // Out of a raid for a while: the copies go (they hold the map's meshes, which would stay loaded past the raid)
