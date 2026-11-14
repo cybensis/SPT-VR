@@ -116,6 +116,12 @@ namespace TarkovVR.Source.Player.Body
         private static readonly Vector3 RIBCAGE_FACE = Vector3.forward;
         private static readonly Vector3 PELVIS_FACE = Vector3.up;
 
+        // The body's eyes, world: off the head bone by the rest-pose face and up (BodyFollow keeps these under the headset)
+        internal static Vector3 EyesOf(Transform head)
+        {
+            return head.position + head.rotation * (HEAD_FACE * eyeForward + HEAD_UP * eyeUp);
+        }
+
         private static string AxisName(Vector3 axis)
         {
             if (axis.x != 0f)
