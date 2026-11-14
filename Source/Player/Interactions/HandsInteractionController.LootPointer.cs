@@ -225,15 +225,27 @@ namespace TarkovVR.Source.Player.Interactions
         // The dominant hand is free for world interactions (loot pointing, doors, containers, corpse taps) when it's off the
         // gun (empty hands / gun slung or support-held), not holding a grenade, outside the holster zones (their grip
         // gestures own the hand there) and not reaching for the slung gun's regrab.
-        private bool DominantHandFree()
+        private bool DominantHandFree() => DominantHandBusy() == null;
+
+        // null = free, else what has the hand
+        private string DominantHandBusy()
         {
-            bool handFree = ChestHang.Detached || (VRGlobals.player != null && VRGlobals.player.HandsIsEmpty);
-            // (not on the charging handle: off the grip, but holding the gun by it through a magazine swap, ChestHang.HandleHeld)
-            return handFree && !TarkovVR.Source.Weapons.VRReloadController.HandleInGunHand
-                && !TarkovVR.Patches.Core.Player.WeaponPatches.grenadeEquipped
-                && !rightHandState.inBackHolster && !rightHandState.inSidearmHolster
-                && !ChestHang.HandInRegrabZone
-                && !BodyWeapons.HandAtBodyGun && !BodyWeapons.Switching && !BodyWeapons.GrabbedThisPress;
+            if (!ChestHang.Detached && !(VRGlobals.player != null && VRGlobals.player.HandsIsEmpty))
+                return "holding the gun";
+            // (on the charging handle: off the grip, but holding the gun by it through a magazine swap, ChestHang.HandleHeld)
+            if (TarkovVR.Source.Weapons.VRReloadController.HandleInGunHand)
+                return "on the charging handle";
+            if (TarkovVR.Patches.Core.Player.WeaponPatches.grenadeEquipped)
+                return "a grenade in hand";
+            if (rightHandState.inBackHolster)
+                return "in the back holster zone";
+            if (rightHandState.inSidearmHolster)
+                return "in the hip holster zone";
+            if (ChestHang.HandInRegrabZone)
+                return "at the slung gun's grip";
+            if (BodyWeapons.HandAtBodyGun || BodyWeapons.Switching || BodyWeapons.GrabbedThisPress)
+                return "at a gun on the body";
+            return null;
         }
 
         // One hand's full pointer pass: eligibility -> cone -> candidates -> main -> dots/haptic -> grip = summon (to that hand).
@@ -246,12 +258,12 @@ namespace TarkovVR.Source.Player.Interactions
             if (hand == null)
                 return;
 
-            if (dominant)
-            {
-                // Only when the hand is free (DominantHandFree) and no corpse tap owns its grip.
-                if (!DominantHandFree() || rightCorpseTapArmed)
-                    return;
-            }
+            // Not a hand whose grip a body has (the body grab / tap runs first this frame)
+            if (bodyInteractionArmed && bodyGrabDominant == dominant)
+                return;
+            // The dominant hand only when it's free (DominantHandFree)
+            if (dominant && !DominantHandFree())
+                return;
             // A hand on a door (PhysicalDoors) points at nothing
             if (PhysicalDoors.HoldsDoor(dominant))
                 return;

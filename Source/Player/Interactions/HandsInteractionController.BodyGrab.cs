@@ -10,11 +10,12 @@ using TarkovVR.ModSupport;
 using TarkovVR.ModSupport.ORBIT;
 using TarkovVR.Source.Controls;
 using UnityEngine;
+using Valve.VR;
 
 namespace TarkovVR.Source.Player.Interactions
 {
-    // Physical grab-and-drag for dead bodies (ragdolls): off-hand palm on a body part + grip. Hold = drag, quick tap = open
-    // the corpse loot grid. No pointer / white dot.
+    // Physical grab-and-drag for dead bodies (ragdolls): a free hand's palm on a body part + grip (either hand, one body at a time).
+    // Hold = drag, quick tap = open the corpse loot grid. No pointer / white dot.
     //
     // A dead body is an EFT `Corpse` whose ragdoll is a set of `RigidbodySpawner` bone rigidbodies. Once it settles, EFT
     // freezes every bone kinematic, and after it leaves the camera view tears the rigidbodies down (keepRigidbody:false).
@@ -114,7 +115,7 @@ namespace TarkovVR.Source.Player.Interactions
         private float bodyInteractionStartTime;
         private Vector3 bodyInteractionStartHandPos;
 
-        private readonly Collider[] bodyOverlap = new Collider[16];
+        private readonly Collider[] bodyOverlap = new Collider[48];
 
         // Bodies we let go of that are still falling/settling: kept in active physics, then frozen (UpdateReleasedBodies)
         private sealed class ReleasedBody
@@ -165,62 +166,122 @@ namespace TarkovVR.Source.Player.Interactions
 
         private int DeadBodyMask => 1 << DEAD_BODY_LAYER;
 
-        //--- Per-frame entry (called from Update, before the loot pointer) ------------
+        // A grip on a body that didn't take (a gate, or a press too long or moved for a tap): one line each, with the reason
+        public static bool logBodyGrips = true;
+
+        // The hand the body interaction belongs to (one at a time): false = the off hand, true = the dominant one
+        private bool bodyGrabDominant;
+
+        private VRBoolean BodyGrip(bool dominant) => dominant ? primaryHandGrip : secondaryHandGrip;
+        private SteamVR_Input_Sources BodyHandSource(bool dominant) => dominant ? primaryInputSource : secondaryInputSource;
+
+        private static Transform BodyHand(bool dominant)
+        {
+            var rig = VRGlobals.vrPlayer;
+            GameObject hand = rig == null ? null : dominant ? rig.RightHand : rig.LeftHand;
+            return hand != null ? hand.transform : null;
+        }
+
+        // Called from Update, before the loot pointer: either free hand's palm on a body part + grip, hold = drag, quick tap = loot
         private void UpdateBodyGrab()
         {
-            Transform hand = VRGlobals.vrPlayer != null ? VRGlobals.vrPlayer.LeftHand?.transform : null;
-            if (hand == null)
+            if (bodyInteractionArmed)
             {
-                if (isDraggingBody) ReleaseBody();
-                bodyInteractionArmed = false;
+                TickArmedBodyInteraction();
                 return;
             }
+            if (!TryArmBodyInteraction(dominant: false))
+                TryArmBodyInteraction(dominant: true);
+        }
 
-            // Grip released: end the drag and/or fire a tap-to-loot.
-            if (bodyInteractionArmed && secondaryHandGrip.stateUp)
+        private void TickArmedBodyInteraction()
+        {
+            Transform hand = BodyHand(bodyGrabDominant);
+            VRBoolean grip = BodyGrip(bodyGrabDominant);
+            if (hand == null || grip == null)
             {
-                bool wasTap = (Time.time - bodyInteractionStartTime) <= bodyTapMaxTime
-                              && (hand.position - bodyInteractionStartHandPos).sqrMagnitude <= bodyTapMaxMove * bodyTapMaxMove;
-                Corpse tapCorpse = bodyInteractionCorpse;
                 if (isDraggingBody) ReleaseBody();
-                bodyInteractionArmed = false;
-                bodyInteractionCorpse = null;
+                ResetBodyInteraction();
+                return;
+            }
+            // Grip released: end the drag and/or fire a tap-to-loot
+            if (grip.stateUp)
+            {
+                float heldFor = Time.time - bodyInteractionStartTime;
+                float moved = (hand.position - bodyInteractionStartHandPos).magnitude;
+                bool wasTap = heldFor <= bodyTapMaxTime && moved <= bodyTapMaxMove;
+                Corpse tapCorpse = bodyInteractionCorpse;
+                if (!wasTap && logBodyGrips && heldFor < 0.6f)
+                    Plugin.MyLog.LogInfo($"[BodyGrab] {(bodyGrabDominant ? "dominant" : "off")} hand's grip on a body wasn't a tap: held {heldFor:F2} s (a tap: {bodyTapMaxTime:F2}), moved {moved * 100f:F0} cm ({bodyTapMaxMove * 100f:F0})");
+                if (isDraggingBody) ReleaseBody();
+                ResetBodyInteraction();
                 if (wasTap)
                     OpenCorpseLoot(tapCorpse);
                 return;
             }
-
-            // Lost the grip without a clean stateUp (state simply went false) — release safely.
-            if (isDraggingBody && !secondaryHandGrip.state)
+            // Lost the grip without a clean stateUp: let go
+            if (!grip.state)
             {
-                ReleaseBody();
-                bodyInteractionArmed = false;
-                return;
+                if (isDraggingBody) ReleaseBody();
+                ResetBodyInteraction();
             }
+            // Else FixedUpdate drives the drag
+        }
 
-            if (isDraggingBody)
-                return; // FixedUpdate drives the drag
+        private void ResetBodyInteraction()
+        {
+            bodyInteractionArmed = false;
+            bodyInteractionCorpse = null;
+        }
 
-            // New grab on grip-down with a free off-hand.
-            if (!secondaryHandGrip.stateDown)
-                return;
-            // Not with the gun in the left hand: the off hand is the RIGHT one then, and this grab is built on the left palm (on the gun).
-            // Nor at the gun hand's grip: that press takes the gun into this hand (ChestHang)
-            if (heldItem != null || isSummoningLoot || VRGlobals.usingItem
-                || EatingInteractionController.ManualActive || NearForegrip() || Handedness.GunInLeftHand || ChestHang.OffHandAtGunGrip
-                || PhysicalDoors.HoldsDoor(false))
-                return;
-
-            Vector3 palm = PalmOrigin(false);   // body grab stays on the off hand
-            if (TryFindBodyBone(palm, out RigidbodySpawner bone, out Corpse corpse, out CorpseRagdoll ragdoll, out MonoBehaviour reviveInteractable))
+        // A press of that hand's grip with its palm on a body: armed (and the part under it grabbed). True = this press is the body's.
+        private bool TryArmBodyInteraction(bool dominant)
+        {
+            VRBoolean grip = BodyGrip(dominant);
+            Transform hand = BodyHand(dominant);
+            if (grip == null || hand == null || !grip.stateDown)
+                return false;
+            if (!TryFindBodyBone(PalmOrigin(dominant), out RigidbodySpawner bone, out Corpse corpse, out CorpseRagdoll ragdoll, out MonoBehaviour reviveInteractable))
+                return false;
+            string busy = BodyHandBusy(dominant);
+            if (busy != null)
             {
-                bodyInteractionArmed = true;
-                bodyInteractionCorpse = corpse;
-                bodyInteractionStartTime = Time.time;
-                bodyInteractionStartHandPos = hand.position;
-                if (bone != null && ragdoll != null)
-                    BeginBodyGrab(bone, corpse, ragdoll, reviveInteractable, hand);
+                if (logBodyGrips)
+                    Plugin.MyLog.LogInfo($"[BodyGrab] {(dominant ? "dominant" : "off")} hand's grip on a body not taken: {busy}");
+                return false;
             }
+            bodyGrabDominant = dominant;
+            bodyInteractionArmed = true;
+            bodyInteractionCorpse = corpse;
+            bodyInteractionStartTime = Time.time;
+            bodyInteractionStartHandPos = hand.position;
+            if (bone != null && ragdoll != null)
+                BeginBodyGrab(bone, corpse, ragdoll, reviveInteractable, hand);
+            return true;
+        }
+
+        // null = that hand is free to take a body, else what it's doing
+        private string BodyHandBusy(bool dominant)
+        {
+            if (heldItem != null)
+                return "holding loot";
+            if (isSummoningLoot)
+                return "loot coming to the hand";
+            if (VRGlobals.usingItem || EatingInteractionController.ManualActive)
+                return "using an item";
+            if (PhysicalDoors.HoldsDoor(dominant))
+                return "on a door";
+            // The gun in the left hand: the free hand is the right one, drawn by the other arm than these grabs are built on
+            if (Handedness.GunInLeftHand)
+                return "the gun is in the left hand";
+            if (dominant)
+                return DominantHandBusy();
+            if (NearForegrip())
+                return "at the gun's foregrip";
+            // That press takes the gun into this hand (ChestHang)
+            if (ChestHang.OffHandAtGunGrip)
+                return "at the gun's grip";
+            return null;
         }
 
         //--- Detection ---------------------------------------------------------------
@@ -236,11 +297,12 @@ namespace TarkovVR.Source.Player.Interactions
             reviveInteractable = null;
 
             int count = Physics.OverlapSphereNonAlloc(palm, bodyGrabRadius, bodyOverlap, DeadBodyMask, QueryTriggerInteraction.Ignore);
+            Transform ownRoot = VRGlobals.player != null && VRGlobals.player.Transform != null ? VRGlobals.player.Transform.Original.root : null;
             float best = float.MaxValue;
             for (int i = 0; i < count; i++)
             {
                 Collider col = bodyOverlap[i];
-                if (col == null) continue;
+                if (col == null || (ownRoot != null && col.transform.root == ownRoot)) continue;
 
                 // Owner of this Deadbody collider: a Corpse, or a FIKA downed teammate (a Fika.Core type, so resolved through
                 // the FikaSync bridge as a MonoBehaviour + its RagdollClass)
@@ -367,7 +429,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (!grabbedIsDownedPlayer && grabbedCorpse != null && InstalledMods.FIKAInstalled)
                 FikaSendCorpseLootGrab(grabbedCorpse.PlayerProfileID);
 
-            VRInput.Haptic.Execute(0, 0.08f, 1, 0.5f, secondaryInputSource);
+            VRInput.Haptic.Execute(0, 0.08f, 1, 0.5f, BodyHandSource(bodyGrabDominant));
             if (debugBodyGrab)
                 Plugin.MyLog.LogInfo($"[BodyGrab] grabbed {bone.name} on {(corpse != null ? corpse.name : "?")} netId={localDraggedCorpseNetId}");
         }
@@ -478,7 +540,7 @@ namespace TarkovVR.Source.Player.Interactions
                 // teammate: they are placed, not thrown.
                 if (!grabbedIsDownedPlayer)
                 {
-                    Vector3 v = ControllerVelocity.GetSteamVRVelocity(secondaryInputSource) * bodyThrowVelocityScale;
+                    Vector3 v = ControllerVelocity.GetSteamVRVelocity(BodyHandSource(bodyGrabDominant)) * bodyThrowVelocityScale;
                     if (v.sqrMagnitude > 0.0001f)
                         grabbedBodyRb.velocity = Vector3.ClampMagnitude(v, bodyMaxThrowSpeed);
                 }
@@ -488,7 +550,7 @@ namespace TarkovVR.Source.Player.Interactions
                 PhysicsExtensions.UpdateController.SupportRigidbody(grabbedBodyRb, 0f);
                 grabbedBodyRb.WakeUp();
 
-                VRInput.Haptic.Execute(0, 0.05f, 1, 0.3f, secondaryInputSource);
+                VRInput.Haptic.Execute(0, 0.05f, 1, 0.3f, BodyHandSource(bodyGrabDominant));
             }
 
             // Physics back on for the whole ragdoll so it falls, then the release-settle manager takes it (land -> rest ->
@@ -693,10 +755,9 @@ namespace TarkovVR.Source.Player.Interactions
             if (!isDraggingBody)
                 return;
             RestoreRagdollCollision();
-            VRInput.Haptic.Execute(0, 0.1f, 1, 0.6f, secondaryInputSource);
+            VRInput.Haptic.Execute(0, 0.1f, 1, 0.6f, BodyHandSource(bodyGrabDominant));
             ResetBodyGrabState();
-            bodyInteractionArmed = false;
-            bodyInteractionCorpse = null;
+            ResetBodyInteraction();
         }
 
         // Reverse lookup of a corpse's network id (GameWorld.ObservedPlayersCorpses is keyed by the dead player's NetId).

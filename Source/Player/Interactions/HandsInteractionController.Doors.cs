@@ -28,10 +28,11 @@ namespace TarkovVR.Source.Player.Interactions
                 : HoldsLoot(false) || (isSummoningLoot && !heldInDominantHand) ? "loot"
                 : VRReloadController.OwnsOffHand ? "the reload"
                 : Handedness.GunInLeftHand ? "the gun"
-                : isDraggingBody ? "a body" : null;
+                : bodyInteractionArmed && !bodyGrabDominant ? "a body" : null;
             string dominantHandTakenBy = armsBusy ? "an item, food or a grenade"
                 : HoldsLoot(true) || (isSummoningLoot && heldInDominantHand) ? "loot"
                 : !(ChestHang.Detached || VRGlobals.player.HandsIsEmpty) || VRReloadController.GunHandHolds || VRReloadController.HandleInGunHand ? "the gun"
+                : bodyInteractionArmed && bodyGrabDominant ? "a body"
                 : null;
             PhysicalDoors.Tick(this, offHandFree, dominantHandFree, offHandTakenBy, dominantHandTakenBy);
         }

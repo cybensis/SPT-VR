@@ -515,6 +515,11 @@ namespace TarkovVR.Source.Weapons
                 else if (gripPressed && inPouchZone)
                     GrabFromPouch(firearmController, weapon, magazineSlot);
             }
+            // A gun loaded round by round (a tube shotgun, a bolt-action through its bolt) takes its rounds from the same pouch, and has
+            // no magazine for the branch above: the off hand there is reaching for one too, so a grip in the hand swap's reach of a gun
+            // held close isn't the swap's (ChestHang.TryGrabFromGunHand, next frame)
+            if (!handBusy && !reaching && OffHandAtRoundPouch())
+                reaching = true;
             // The gun hand off the grip, the off hand holding the gun up (ChestHang's support hold): that hand can take the handle, or a
             // case stuck in the port (its trigger: its grip there would take the gun's grip back)
             GunHandAtBox = false;
@@ -779,6 +784,16 @@ namespace TarkovVR.Source.Weapons
             }
             magazineBottom = magazineCenter + magazineView.ItemView.TransformDirection(magazineShapeAxis).normalized * (magazineShapeLength * 0.5f);
             return true;
+        }
+
+        // The off hand in the chest pouch zone, the gun in hand loaded from it round by round (TryTakeRoundFromPouch's off-hand rule)
+        private static bool OffHandAtRoundPouch()
+        {
+            if (VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.isSupporting || ChestHang.Detached || GrenadeSlot.OffHandAtSlot)
+                return false;
+            if (!CanLoadShells(out _, out _, out _, out _) && !CanLoadRounds(out _, out _, out _))
+                return false;
+            return InChestPouchZone(OffHandPalm());
         }
 
         private static bool InChestPouchZone(Vector3 palm)

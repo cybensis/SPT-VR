@@ -91,10 +91,11 @@ namespace TarkovVR.Source.Player.Interactions
         // The hand is on nothing else that takes its grip (the same gates the loot pointer uses for that hand)
         private bool SecondHandFree(bool dominant)
         {
+            if (bodyInteractionArmed && bodyGrabDominant == dominant)
+                return false;
             if (dominant)
-                return DominantHandFree() && !rightCorpseTapArmed;
-            return !NearForegrip() && !VRReloadController.OwnsOffHand && !Handedness.GunInLeftHand && !ChestHang.OffHandAtGunGrip
-                && !isDraggingBody && !bodyInteractionArmed;
+                return DominantHandFree();
+            return !NearForegrip() && !VRReloadController.OwnsOffHand && !Handedness.GunInLeftHand && !ChestHang.OffHandAtGunGrip;
         }
 
         private void BeginSecondHand(bool secondDominant, GraspShape shape)

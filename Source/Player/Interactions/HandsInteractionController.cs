@@ -354,9 +354,8 @@ namespace TarkovVR.Source.Player.Interactions
             }
             */
 
-            // Body grab/drag: off hand on a dead-body part with the grip held latches that ragdoll bone to the hand; a quick
-            // grip tap opens the corpse loot grid instead. Runs first so the loot pointer and corpse loot-open see the
-            // dragging/armed state this frame.
+            // Body grab/drag: a free hand on a dead-body part with the grip held latches that ragdoll bone to the hand; a quick
+            // grip tap opens the corpse loot grid instead. Runs first so the loot pointer sees the armed state this frame.
             UpdateBodyGrab();
 
             ProcessInputStates();
@@ -584,8 +583,6 @@ namespace TarkovVR.Source.Player.Interactions
                 ProcessInteractiveObjects(false);
             if (rightHandState.inInteractiveCollider)
                 ProcessInteractiveObjects(true);
-
-            UpdateRightCorpseTap();
         }
         // The hand holding the gun and the other one, as Handedness has them: the left-handed setting, or the gun in the left hand
         // (the rig's hands, which leftHandState / rightHandState are read from, follow the controllers the same way). Every frame:
@@ -698,50 +695,6 @@ namespace TarkovVR.Source.Player.Interactions
                 hasEnteredBackHolster = false;
             if (previousState.inSidearmHolster && !rightHandState.inSidearmHolster)
                 hasEnteredSidearmHolster = false;
-        }
-
-        // A grip tap on a corpse with the free dominant hand opens its loot grid (like the off hand's tap-to-loot;
-        // body dragging stays on the off hand).
-        private bool rightCorpseTapArmed;
-        private Corpse rightCorpseTapCorpse;
-        private float rightCorpseTapTime;
-        private Vector3 rightCorpseTapPos;
-
-        private void UpdateRightCorpseTap()
-        {
-            Transform hand = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.RightHand != null
-                ? VRGlobals.vrPlayer.RightHand.transform : null;
-            if (hand == null || !DominantHandFree() || heldItem != null || isSummoningLoot)
-            {
-                rightCorpseTapArmed = false;
-                rightCorpseTapCorpse = null;
-                return;
-            }
-
-            if (primaryHandGrip.stateDown && rightHandState.corpse != null && !PhysicalDoors.HoldsDoor(true))
-            {
-                rightCorpseTapArmed = true;
-                rightCorpseTapCorpse = rightHandState.corpse;
-                rightCorpseTapTime = Time.time;
-                rightCorpseTapPos = hand.position;
-                return;
-            }
-
-            if (rightCorpseTapArmed && primaryHandGrip.stateUp)
-            {
-                bool wasTap = (Time.time - rightCorpseTapTime) <= bodyTapMaxTime
-                              && (hand.position - rightCorpseTapPos).sqrMagnitude <= bodyTapMaxMove * bodyTapMaxMove;
-                Corpse corpse = rightCorpseTapCorpse;
-                rightCorpseTapArmed = false;
-                rightCorpseTapCorpse = null;
-                if (wasTap)
-                    OpenCorpseLoot(corpse);
-            }
-            else if (rightCorpseTapArmed && !primaryHandGrip.state)
-            {
-                rightCorpseTapArmed = false;   // lost the grip without a clean stateUp
-                rightCorpseTapCorpse = null;
-            }
         }
 
         private void UpdateLeftHandCollisions()
