@@ -30,7 +30,7 @@ namespace TarkovVR.Source.Player.Body
         public static float followTime = 0.08f;         // s the body takes to take up the overshoot (0 = at once: as shaky as your head)
         public static bool blockedByWalls = false;      // the body's capsule swept along each move: a wall stops it, your head goes on
         public static float wallSkin = 0.02f;           // m kept off a wall
-        public static bool debugLog = true;             // a [BodyFollow] line a second: the measured stance, your eyes off it, the room
+        public static bool debugLog = false;            // a [BodyFollow] line a second: the measured stance, your eyes off it, the room
 
         private static int steppedFrame = -1;
         private static EFT.Player stateFor;
