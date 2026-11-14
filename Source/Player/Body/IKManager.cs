@@ -60,6 +60,34 @@ namespace TarkovVR.Source.Player.VR
             
         }
 
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The body under the head (FollowHead). The neck point (HeadTracking.neckLocalOffset off the headset: still under head turns and
+        // nods) has lean room around where it sits over the standing body: inside it the body stays (lean out, peek, duck), past it the
+        // body takes only the overshoot, so the head is never further off than the room. The room is measured along where you look,
+        // shrinks while the movement stick is pushed (the body walks under you) and grows back when it's let go. One step a frame,
+        // whoever calls first (the hands states each call it).
+
+        public static bool legacyBodyFollow = false;    // the old dead-zone / three-mode follow (AdaptiveBodySync), for an A/B
+        public static float neckAheadOfBody = 0.12f;    // m the neck point sits ahead of the body's root standing straight, along its facing
+        public static float neckAheadWalking = 0.02f;   // the same walking (Tarkov's idle stands the legs further back than its walk)
+        public static float leanRoomForward = 0.20f;    // m the neck may lean off that before the body follows: forward, back, sideways
+        public static float leanRoomBack = 0.20f;
+        public static float leanRoomSide = 0.40f;
+        public static float movingRoomScale = 0.1f;     // the room while the movement stick is pushed, of the above
+        public static float roomBlendTime = 0.3f;       // s the room takes to shrink / grow back
+        public static float stickDeadZone = 0.15f;      // the movement stick past this = walking
+        public static float followTime = 0.08f;         // s the body takes to take up the overshoot (0 = at once: as jittery as the head)
+        public static bool blockedByWalls = false;      // the body's capsule swept along each move: a wall stops it, the head goes on
+        public static float wallSkin = 0.02f;           // m kept off a wall
+        public static bool debugLog = false;            // a line a second: the neck's offset, the room, the overshoot
+
+        private int followedFrame = -1;
+        private float roomScale = 1f;
+        private float nextFollowLog;
+        private int sweepMaskLayer = -1;
+        private int sweepMask;
+        private static readonly RaycastHit[] sweepHits = new RaycastHit[16];
+
         public void MatchLegsToArms()
         {
             // On a mounted gun the body stays where Tarkov sat it (Interactions.MountedGun)
@@ -70,12 +98,123 @@ namespace TarkovVR.Source.Player.VR
                 VRGlobals.player.PointOfView == EPointOfView.FirstPerson &&
                 name == "Base HumanSpine3")
             {
-                AdaptiveBodySync();
+                if (legacyBodyFollow)
+                    AdaptiveBodySync();
+                else
+                    FollowHead();
             }
             else
             {
                 transform.localPosition = Vector3.zero;
             }
+        }
+
+        private void FollowHead()
+        {
+            if (followedFrame == Time.frameCount)
+                return;
+            followedFrame = Time.frameCount;
+            Camera headset = VRGlobals.VRCam;
+            Transform body = transform.root;
+            if (headset == null || body == null || VRGlobals.vrOffsetter == null || VRGlobals.vrOffsetter.transform.parent == null || VRGlobals.camRoot == null)
+                return;
+
+            float deltaTime = Time.deltaTime;
+            bool walking = VRInput.LeftJoystick.axis.sqrMagnitude > stickDeadZone * stickDeadZone;
+            roomScale = Mathf.MoveTowards(roomScale, walking ? movingRoomScale : 1f, deltaTime / Mathf.Max(roomBlendTime, 0.01f));
+
+            Transform head = headset.transform;
+            Vector3 bodyForward = FlattenVector(body.forward);
+            if (bodyForward.sqrMagnitude < 1e-4f)
+                return;
+            bodyForward.Normalize();
+            Vector3 neck = head.position + head.rotation * TarkovVR.Source.Player.VRManager.HeadTracking.neckLocalOffset;
+            float standing = movingRoomScale < 1f ? Mathf.Clamp01((roomScale - movingRoomScale) / (1f - movingRoomScale)) : 1f;
+            Vector3 offset = FlattenVector(neck - body.position) - bodyForward * Mathf.Lerp(neckAheadWalking, neckAheadOfBody, standing);
+
+            // Along where you look (straight down, the top of the head points that way)
+            Vector3 lookForward = FlattenVector(head.forward);
+            if (lookForward.sqrMagnitude < 0.01f)
+                lookForward = FlattenVector(head.up);
+            if (lookForward.sqrMagnitude < 1e-4f)
+                lookForward = bodyForward;
+            lookForward.Normalize();
+            Vector3 lookRight = Vector3.Cross(Vector3.up, lookForward);
+            float along = Vector3.Dot(offset, lookForward);
+            float across = Vector3.Dot(offset, lookRight);
+            float roomAlong = Mathf.Max(0.01f, (along >= 0f ? leanRoomForward : leanRoomBack) * roomScale);
+            float roomAcross = Mathf.Max(0.01f, leanRoomSide * roomScale);
+            // How far out of the room, 1 = on its edge: the overshoot is what's past the edge along the same line
+            float outside = Mathf.Sqrt(along * along / (roomAlong * roomAlong) + across * across / (roomAcross * roomAcross));
+            Vector3 overshoot = outside > 1f ? offset * (1f - 1f / outside) : Vector3.zero;
+            Vector3 move = followTime > 0f ? overshoot * (1f - Mathf.Exp(-deltaTime / followTime)) : overshoot;
+            if (blockedByWalls && move.sqrMagnitude > 1e-10f)
+                move = SweptMove(move);
+
+            if (debugLog && Time.time >= nextFollowLog)
+            {
+                nextFollowLog = Time.time + 1f;
+                Plugin.MyLog.LogInfo($"[BodyFollow] neck off the body {along * 100f:0} cm along the look, {across * 100f:0} across; room {roomAlong * 100f:0} / {roomAcross * 100f:0} cm"
+                    + $"{(walking ? " (walking)" : "")}; overshoot {overshoot.magnitude * 100f:0.0} cm, moved {move.magnitude * 100f:0.00} cm this frame");
+            }
+            if (move.sqrMagnitude < 1e-10f)
+                return;
+            MoveBody(body, move);
+        }
+
+        // The body moves, the rig the other way at once (not at the next camRoot pin / offsetter update): the head and the hands stay
+        // where they are in the world this frame, whichever runs first
+        private static void MoveBody(Transform body, Vector3 move)
+        {
+            body.position += move;
+            Transform offsetter = VRGlobals.vrOffsetter.transform;
+            Vector3 localMove = offsetter.parent.InverseTransformVector(move);
+            localMove.y = 0f;
+            VRGlobals.vrPlayer.initPos += localMove;
+            VRGlobals.camRoot.transform.position += move;
+            offsetter.localPosition -= localMove;
+        }
+
+        // How far the body's capsule gets along the move before a wall: raised by the step height, so floors, steps and kerbs don't stop it.
+        // The layers are the ones the character controller collides with.
+        private Vector3 SweptMove(Vector3 move)
+        {
+            EFT.Player player = VRGlobals.player;
+            ICharacterController controller = player != null ? player.CharacterController : null;
+            Collider capsule = controller != null ? controller.GetCollider() : null;
+            if (capsule == null)
+                return move;
+            if (sweepMaskLayer != capsule.gameObject.layer)
+            {
+                sweepMaskLayer = capsule.gameObject.layer;
+                sweepMask = 0;
+                for (int layer = 0; layer < 32; layer++)
+                {
+                    if (!Physics.GetIgnoreLayerCollision(sweepMaskLayer, layer))
+                        sweepMask |= 1 << layer;
+                }
+            }
+            Transform capsuleTransform = capsule.transform;
+            float radius = controller.radius;
+            float half = Mathf.Max(0f, controller.height * 0.5f - radius);
+            Vector3 top = capsuleTransform.TransformPoint(controller.center + Vector3.up * half);
+            Vector3 bottom = capsuleTransform.TransformPoint(controller.center - Vector3.up * half) + Vector3.up * controller.stepOffset;
+            if (bottom.y > top.y)
+                bottom = top;
+            float distance = move.magnitude;
+            Vector3 direction = move / distance;
+            int count = Physics.CapsuleCastNonAlloc(bottom, top, radius * 0.95f, direction, sweepHits, distance + wallSkin, sweepMask, QueryTriggerInteraction.Ignore);
+            float allowed = distance;
+            Transform own = player.Transform != null ? player.Transform.Original : null;
+            for (int i = 0; i < count; i++)
+            {
+                RaycastHit hit = sweepHits[i];
+                // (distance 0 = already touching at the start: not in the way of this move)
+                if (hit.distance <= 0f || hit.collider == null || (own != null && hit.collider.transform.IsChildOf(own)))
+                    continue;
+                allowed = Mathf.Min(allowed, Mathf.Max(0f, hit.distance - wallSkin));
+            }
+            return direction * allowed;
         }
 
         private void AdaptiveBodySync()
@@ -257,7 +396,8 @@ namespace TarkovVR.Source.Player.VR
             if (rightUpperArm)
                 rightUpperArm.localPosition = upperArmPos;
             
-            if (!VRGlobals.emptyHands || VRGlobals.player.HandsIsEmpty)
+            // (the new follow every frame in every hands state: the others' calls in the same frame are no-ops)
+            if (!legacyBodyFollow || !VRGlobals.emptyHands || VRGlobals.player.HandsIsEmpty)
             {
                 MatchLegsToArms();
             }

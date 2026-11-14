@@ -104,7 +104,6 @@ namespace TarkovVR.Source.Player.VRManager
 
         private bool cachedLeftHandedMode;
         private int leftHandedModeCheckFrame = -1;
-        private Vector3 lastLocalPos = Vector3.zero;
         private GunInteractionController cachedCurrentGunController;
         private int gunControllerCacheFrame = -1;
         private Transform cachedAmmoFireModeUi;
@@ -291,11 +290,8 @@ namespace TarkovVR.Source.Player.VRManager
             newLocalPos.y -= displayedCrouchHeightDiff;
             */
 
-            if (Vector3.Distance(newLocalPos, lastLocalPos) > 0.001f)
-            {
-                VRGlobals.vrOffsetter.transform.localPosition = newLocalPos;
-                lastLocalPos = newLocalPos;
-            }
+            // Every frame (a gate on small changes lands a slow body follow's compensation, initPos, in steps)
+            VRGlobals.vrOffsetter.transform.localPosition = newLocalPos;
 
             bool currentInteractMenuOpen = (interactionUi && interactionUi.GetChild(3) && interactionUi.GetChild(3).gameObject.active);
 
