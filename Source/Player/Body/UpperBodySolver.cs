@@ -5,7 +5,7 @@ namespace TarkovVR.Source.Player.Body
 {
     // An upper body that follows a tracked head: the local VR player's (LocalUpperBody) and the other players' copy of a VR player
     // (SPT-VR-FikaSync's HeadSyncApply - this file is linked into it, one copy of the maths for both). On the pose the animator gave this
-    // frame, the hips where they are (or part of the way round to the head's yaw, where the caller says): the chest turns part of the way to the head's yaw, the neck takes a share of the head's turn off the
+    // frame, the hips where they are (or squared to the body's facing, where the caller says): the chest turns part of the way to the head's yaw, the neck takes a share of the head's turn off the
     // chest, the spine bends (CCD, a weight and a limit per bone) so the head's pivot comes to where the tracked head's is, and the head
     // turns to the tracked head. The face is the head bone's rest-pose forward and up (not LootRaycastOrigin: that's the first-person
     // camera point on the ribcage rig), the eyes eyeForward / eyeUp off its pivot.
@@ -22,10 +22,10 @@ namespace TarkovVR.Source.Player.Body
         public static float twistShare = 0.6f;      // of the head's yaw off the chest the chest takes
         public static float maxTwist = 45f;         // deg, the whole spine
         public static float neckLookShare = 0.35f;  // of the head's turn off the chest the neck takes
-        // The hips (and the legs under them) part of the way round to the head's yaw, where the caller lets them (Solve's hipWeight:
-        // standing still - a walk's legs go the way you walk). Tarkov's rifle stance stands side-on to where you look.
-        public static float hipShare = 0.5f;        // of the head's yaw off the hips the hips take (the chest's twist then shares what's left)
-        public static float maxHipTurn = 45f;       // deg off their animated pose
+        // The hips (and the legs under them) squared to the body's facing, where the caller lets them (Solve's hipWeight: standing still -
+        // a walk's legs go the way you walk). Tarkov's rifle stance stands side-on to where you look; the body's facing follows the head.
+        public static float hipShare = 0.25f;       // of the head's yaw off the body's facing the hips turn on top (a glance; the chest takes the rest)
+        public static float maxHipTurn = 60f;       // deg off their animated pose
 
         internal sealed class Rig
         {
@@ -45,6 +45,8 @@ namespace TarkovVR.Source.Player.Body
             public bool haveWritten;
             public bool valid;
             public string description;
+            public float hipsOffBody;               // deg the animation had the hips off the body's facing, last solve that turned them
+            public float hipsTurned;                // deg they were turned
         }
 
         public static Rig Build(PlayerBones bones, Transform root)
@@ -149,14 +151,20 @@ namespace TarkovVR.Source.Player.Body
             int neckIndex = rig.neck != null ? spineCount : -1;
 
             Vector3 lookFlat = Vector3.ProjectOnPlane(eyeRotation * Vector3.forward, up);
-            // The hips part of the way round first (everything above turns with them: the chest's twist below measures from there)
-            if (hipWeight > 0f && hipShare > 0f && rig.pelvis != null && lookFlat.sqrMagnitude > 1e-4f)
+            // The hips first (everything above turns with them: the chest's twist below measures from there): squared to the body's facing,
+            // which follows the head, then hipShare of the head's yaw off it
+            Vector3 bodyFlat = Vector3.ProjectOnPlane(rig.root.forward, up);
+            if (hipWeight > 0f && rig.pelvis != null && bodyFlat.sqrMagnitude > 1e-4f)
             {
                 Vector3 hipsFlat = Vector3.ProjectOnPlane(rig.pelvis.rotation * PELVIS_FACE, up);
                 if (hipsFlat.sqrMagnitude > 1e-4f)
                 {
-                    float hipYaw = Mathf.Clamp(Vector3.SignedAngle(hipsFlat, lookFlat, up) * hipShare, -maxHipTurn, maxHipTurn) * weight * Mathf.Clamp01(hipWeight);
+                    float hipsOffBody = Vector3.SignedAngle(hipsFlat, bodyFlat, up);
+                    float lookOffBody = lookFlat.sqrMagnitude > 1e-4f ? Vector3.SignedAngle(bodyFlat, lookFlat, up) : 0f;
+                    float hipYaw = Mathf.Clamp(hipsOffBody + lookOffBody * hipShare, -maxHipTurn, maxHipTurn) * weight * Mathf.Clamp01(hipWeight);
                     rig.pelvis.rotation = Quaternion.AngleAxis(hipYaw, up) * rig.pelvis.rotation;
+                    rig.hipsOffBody = hipsOffBody;
+                    rig.hipsTurned = hipYaw;
                 }
             }
 

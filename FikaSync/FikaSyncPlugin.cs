@@ -20,7 +20,8 @@ namespace SptVrFikaSync
     // so; either side older = the hands drawn off by the chest's pose.
     // 2.4.1 (ArmSyncApply): no packet change. An older observer puts a VR player's mounted gun in their hand at their last held gun's pose.
     // 2.4.2 (HeadSyncApply, UpperBodySolver): no packet change. An older observer keeps a VR player's hips as animated (side-on).
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.2")]
+    // 2.4.3 (UpperBodySolver): no packet change. The hips square to the body's facing (2.4.2 turned them half way to the look).
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.3")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module; when present, a dragged corpse's loot waypoint is
     // relocated here (SPT-VR.dll doesn't run on a headless). The dep only guarantees ORBIT is in the registry checked below.

@@ -20,7 +20,7 @@ namespace SptVrFikaSync
         public static float blendTime = 0.25f;      // s it eases in and out
         public static float maxDistance = 80f;      // m from the camera past which the body stays as animated
         public static bool logRig = true;           // one line per player's rig: the bones it turns, or why it can't
-        // The hips turn toward the head standing still only (UpperBodySolver.hipShare): full up to hipStillSpeed, none from hipMovingSpeed
+        // The hips square to the body (its facing follows the head) standing still only (UpperBodySolver.hipShare): full up to hipStillSpeed, none from hipMovingSpeed
         // (m/s across the ground; a walk's legs go the way you walk), eased over hipBlendTime. Not prone, on a mounted gun or sprinting.
         public static bool turnHips = true;
         public static float hipStillSpeed = 0.3f;
@@ -38,6 +38,7 @@ namespace SptVrFikaSync
             public Quaternion shownRotation;
             public float weight;
             public float hipWeight;
+            public bool loggedHips;
             public Vector3 lastRootPosition;
             public bool haveRootPosition;
             public UpperBodySolver.Rig rig;
@@ -76,6 +77,7 @@ namespace SptVrFikaSync
                 if (remote.rig == null || remote.rig.bones != __instance.PlayerBones || remote.rig.root != root)
                 {
                     remote.rig = UpperBodySolver.Build(__instance.PlayerBones, root);
+                    remote.loggedHips = false;
                     if (logRig)
                         FikaSyncPlugin.Log?.LogInfo($"[HeadSync] {__instance.Profile?.Nickname}: {(remote.rig.valid ? "head and upper body follow their headset" : "off")}: {remote.rig.description}");
                 }
@@ -110,6 +112,11 @@ namespace SptVrFikaSync
                     remote.shownRotation = Quaternion.Slerp(remote.shownRotation, remote.rotation, follow);
                 }
                 UpperBodySolver.Solve(remote.rig, root.position + root.rotation * remote.shownPosition, root.rotation * remote.shownRotation, remote.weight, remote.hipWeight);
+                if (logRig && !remote.loggedHips && remote.rig.valid && remote.weight >= 1f && remote.hipWeight >= 1f)
+                {
+                    remote.loggedHips = true;
+                    FikaSyncPlugin.Log?.LogInfo($"[HeadSync] {__instance.Profile?.Nickname}: hips squared to their body standing: the animation had them {remote.rig.hipsOffBody:F0} deg off it, turned {remote.rig.hipsTurned:F0}");
+                }
             }
             catch (Exception e)
             {
