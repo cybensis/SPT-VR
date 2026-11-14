@@ -407,6 +407,7 @@ namespace TarkovVR.Source.Weapons
             Vector3 knobUp = KnobInFrame(upPosition, upRotation, bolt);
             float distance = bolt.travel.magnitude;
             float along = distance > 0f ? Vector3.Dot(wanted - knobUp, bolt.travel / distance) / distance : 0f;
+            boltPush.Track(along * distance);
             if ((state.slide > 0f || state.turn >= boltTurnedUp) && along > 0f)
             {
                 state.turn = 1f;
@@ -450,7 +451,10 @@ namespace TarkovVR.Source.Weapons
                 BoltAllTheWayBack(boltForFirearm, state);
             }
             if (previousSlide > 0f && state.slide <= 0f)
+            {
                 PulseBoltHand(0.3f, 0.03f);
+                Jolt(boltForFirearm, GunJolt.Kind.BoltClose, GunJolt.PushStrength(boltPush.Speed));
+            }
             if (!wasClosed && state.Closed)
                 BoltClosed(boltForFirearm, state);
 

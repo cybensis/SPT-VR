@@ -400,8 +400,9 @@ namespace TarkovVR.Source.Player.Interactions
 
             // Must run before SaveHolderOnce: strip any live collision enact off the holder. Else releasing the grip while the
             // gun is pressed against something (prone: the ground) saves the enacted pose, and every restore re-applies the
-            // collision offset, compounding per sling cycle. Reset also clears the rig-motion tracking.
+            // collision offset, compounding per sling cycle. Reset also clears the rig-motion tracking. The same for a reload jolt.
             WeaponCollision.Reset();
+            TarkovVR.Source.Weapons.GunJolt.Reset();
 
             VRGlobals.vrPlayer.ForceUnlockHand();      // two-handing can't survive letting go
             SaveHolderOnce();
@@ -519,6 +520,7 @@ namespace TarkovVR.Source.Player.Interactions
             // The holder in its clean pose (the left hand's hold is read off it once, VRPlayerManager.CacheGunInHand: a collision nudge
             // left on it would feed back) and the collision's rig-motion tracking re-primed (the gun jumps hands)
             WeaponCollision.Reset();
+            TarkovVR.Source.Weapons.GunJolt.Reset();
             bool toLeft = !Handedness.GunInLeftHand;
             // A pistol's support hand is its gun hand from here
             VRGlobals.vrPlayer.ForceUnlockHand();
@@ -556,6 +558,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
 
             WeaponCollision.Reset();   // strip any live collision enact BEFORE saving (see BeginHang)
+            TarkovVR.Source.Weapons.GunJolt.Reset();
             SaveHolderOnce();
             // Rigid attach to the support controller at the current relative pose (the left hand already grips the gun).
             // Rotation comes from the raw pose action, not LeftHand.transform: while isSupporting, UpdateLeftHand only

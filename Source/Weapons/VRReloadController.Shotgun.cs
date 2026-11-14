@@ -1009,6 +1009,7 @@ namespace TarkovVR.Source.Weapons
             }
             if (malfunction)
                 back = StuckPull(firearmController, back, SoundHand.OffHand);
+            pumpPush.Track(back);
             MovePump(firearmController, state, Mathf.Clamp01(back / span));
             PumpMalfunctionPose(firearmController, state);
             DrivePumpHand(firearmController, data, state);
@@ -1121,6 +1122,7 @@ namespace TarkovVR.Source.Weapons
         {
             Weapon weapon = firearmController.Item;
             Pulse(SoundHand.OffHand.Seating, 0.6f, 0.05f);
+            Jolt(firearmController, GunJolt.Kind.Pump, GunJolt.PushStrength(pumpPush.Speed));
             if (firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch())
                 firearmController.FirearmsAnimator.SetBoltCatch(false);
             bool clearsMalfunction = state.backThisStroke && state.malfunctionRacked && MalfunctionClearsByHand(firearmController);

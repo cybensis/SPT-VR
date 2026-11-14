@@ -509,6 +509,8 @@ public class GunInteractionController : MonoBehaviour
         // Strip last frame's collision offsets so the anchor below measures the pristine pose
         // (they are re-resolved and re-applied fresh by WeaponCollision.Apply after the anchor).
         TarkovVR.Source.Player.Interactions.WeaponCollision.PreAnchor();
+        // Then last frame's reload jolt (it went on before the collision offset)
+        TarkovVR.Source.Weapons.GunJolt.PreAnchor();
         // A press check turns the gun in the hand about the thumb's knuckle (VRReloadController.PressCheck): before the anchor, which
         // then lands the hand's marker on the turned gun at your hand
         TarkovVR.Source.Weapons.VRReloadController.ApplyPressCheckGunTurn(VRGlobals.weaponHolder.transform);
@@ -566,6 +568,10 @@ public class GunInteractionController : MonoBehaviour
 
         // A press check with the gun in the left hand: the gun moved so the left hand (the marker's mirror image) stays on the left controller
         TarkovVR.Source.Weapons.VRReloadController.HoldPressCheckLeftHand(VRGlobals.weaponHolder.transform);
+
+        // A reload jolt from the gun's clips (a magazine seated, a bolt slammed home) on top of the anchor, before the collision so
+        // the gun's physics has it
+        TarkovVR.Source.Weapons.GunJolt.Apply(VRGlobals.weaponHolder.transform);
 
         // Physical weapon collision, after the marker anchor: the last holder write of the frame, so the anchor math can't cancel it
         TarkovVR.Source.Player.Interactions.WeaponCollision.Apply();

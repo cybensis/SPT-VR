@@ -873,6 +873,9 @@ namespace TarkovVR.Source.Weapons
 
         private static void LetGoOfChargingHandle(bool snapForward)
         {
+            // How hard the spring takes it home (the jolt of the slam below): from where it's let go
+            float fullPull = heldHandleTravel * handleFullPull;
+            handleSlamStrength = Mathf.Lerp(GunJolt.minStrength, 1f, fullPull > 1e-4f ? Mathf.Clamp01(handlePull / fullPull) : 1f);
             // The hand first, where it is, so it doesn't snap forward with the handle (pinned: its own pin, the latch is the other hand's)
             if (handleHandPinned)
                 UnpinGunHand();
@@ -1094,6 +1097,7 @@ namespace TarkovVR.Source.Weapons
                 PlayFirstGunSound(firearmController, SoundHand.GunBody, "BoltIn", "SlideIn");
             PlayGunSound(firearmController, "HandleIn", SoundHand.GunBody);
             Pulse(SoundHand.GunBody, heldOnCatch ? 0.4f : 0.8f, 0.06f);
+            Jolt(firearmController, GunJolt.Kind.Slam, heldOnCatch ? handleSlamStrength * heldOnCatchJolt : handleSlamStrength);
             // A tube shotgun's shell has no model in the chamber until it's shown (the load put it there in the inventory only)
             if (BoltStripsRound(weapon) && HandsLoadShotgun(firearmController) && firearmController.Firearms != null && !firearmController.Firearms.HasPatronInWeapon())
                 ShowChamberedRound(firearmController);
