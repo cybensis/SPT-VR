@@ -49,6 +49,9 @@ namespace SptVrFikaSync
 
         public static void ResetState() => remotes.Clear();
 
+        // A player that sends its headset pose = a VR player
+        internal static bool IsVrPlayer(int netId) => remotes.ContainsKey(netId);
+
         public static void Store(VRHeadPacket p)
         {
             if (!remotes.TryGetValue(p.NetId, out Remote remote))

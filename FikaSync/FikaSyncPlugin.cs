@@ -21,7 +21,9 @@ namespace SptVrFikaSync
     // 2.4.1 (ArmSyncApply): no packet change. An older observer puts a VR player's mounted gun in their hand at their last held gun's pose.
     // 2.4.2 (HeadSyncApply, UpperBodySolver): no packet change. An older observer keeps a VR player's hips as animated (side-on).
     // 2.4.3 (UpperBodySolver): no packet change. The hips square to the body's facing (2.4.2 turned them half way to the look).
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.3")]
+    // 2.4.4 (DoorSyncApply, BreachReplay): no packet change. An older observer: a door moved by hand steps at the packet rate, its
+    // shut sound is missing, and a VR player's gun breach can stay shut (the kick swing skipped or dropped).
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.4")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module; when present, a dragged corpse's loot waypoint is
     // relocated here (SPT-VR.dll doesn't run on a headless). The dep only guarantees ORBIT is in the registry checked below.
@@ -54,12 +56,18 @@ namespace SptVrFikaSync
         }
 
         private bool _bodyRenderErr;
+        private bool _doorTickErr;
         private void LateUpdate()
         {
             try { BodyDragApply.RenderSmoothing(); DownedDragApply.RenderSmoothing(); }
             catch (System.Exception e)
             {
                 if (!_bodyRenderErr) { _bodyRenderErr = true; Log.LogError($"[FikaSync] body render smoothing error: {e}"); }
+            }
+            try { DoorSyncApply.Tick(); }
+            catch (System.Exception e)
+            {
+                if (!_doorTickErr) { _doorTickErr = true; Log.LogError($"[FikaSync] door smoothing error: {e}"); }
             }
         }
     }

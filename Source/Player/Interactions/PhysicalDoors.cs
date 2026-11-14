@@ -1246,8 +1246,9 @@ namespace TarkovVR.Source.Player.Interactions
         private static void Sync(DoorRun run, bool final)
         {
             Door door = run.door;
+            // (not while Tarkov's own swing moves it - a kick, someone's Open: FIKA's event plays that swing on the others)
             if (!InstalledMods.FIKAInstalled || syncBroken || door.ForceLocalInteraction || door.DoorState == EDoorState.Locked
-                || string.IsNullOrEmpty(door.Id))
+                || door.DoorState == EDoorState.Interacting || door.DoorState == EDoorState.Breaching || string.IsNullOrEmpty(door.Id))
                 return;
             float angle = door.CurrentAngle;
             if (final)
