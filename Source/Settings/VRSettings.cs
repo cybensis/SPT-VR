@@ -101,6 +101,8 @@ namespace TarkovVR.Source.Settings
             public bool useOpenXR { get; set; }
             public bool virtualStock { get; set; }
             public bool chestSling { get; set; }
+            // Guns only (the gun's grip, the foregrip, a mounted gun): a grip press takes hold, the next press lets go
+            public bool gunGripToggle { get; set; }
             // Doors by hand (PhysicalDoors): turn the handle, swing the door. Off = the grip opens / closes them as before.
             public bool physicalDoors { get; set; }
             // The gaze menu (open / breach / unlock...) hidden for the doors a hand works (PhysicalDoors.HidesMenu)
@@ -175,6 +177,7 @@ namespace TarkovVR.Source.Settings
                 heldItemWeight = false;
                 virtualStock = true;
                 chestSling = true;
+                gunGripToggle = false;
                 physicalDoors = true;
                 disableDoorContextMenu = false;
                 manualReload = false;
@@ -202,6 +205,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle weaponWeightToggle;
         private static SettingToggle virtualStockToggle;
         private static SettingToggle chestSlingToggle;
+        private static SettingToggle gunGripToggleToggle;
         private static SettingToggle physicalDoorsToggle;
         private static SettingToggle disableDoorContextMenuToggle;
         private static SettingToggle resetGunSpotsToggle;
@@ -481,6 +485,8 @@ namespace TarkovVR.Source.Settings
                 tooltip: "Bring a stocked gun to your shoulder to steady the aim");
             chestSlingToggle = AddToggle(weapons, "Chest Sling", settings.chestSling, SetChestSlingOn,
                 tooltip: "Open your gun hand to let go of the gun: it stays on the foregrip hand, or hangs on your chest. Off = it stays in your hand");
+            gunGripToggleToggle = AddToggle(weapons, "Toggle Gun Grip", settings.gunGripToggle, SetGunGripToggleOn,
+                tooltip: "Guns only (grip, foregrip, mounted guns): press the grip to take hold, press it again to let go, instead of holding it down. The pistol press check needs the grip held, so it's off in this mode");
             manualReloadToggle = AddToggle(weapons, "Manual Reload", settings.manualReload, SetManualReloadOn,
                 tooltip: "B drops the magazine instead of running the game's reload; hold B to pull it out with the other hand");
             weaponInertiaToggle = AddToggle(weapons, "EFT Weapon Inertia", settings.weaponInertia, SetWeaponInertiaOn);
@@ -873,6 +879,15 @@ namespace TarkovVR.Source.Settings
         public static bool GetChestSlingOn()
         {
             return settings.chestSling;
+        }
+
+        private static void SetGunGripToggleOn(bool turnOn)
+        {
+            settings.gunGripToggle = turnOn;
+        }
+        public static bool GetGunGripToggle()
+        {
+            return settings != null && settings.gunGripToggle;
         }
 
         private static void SetPhysicalDoorsOn(bool turnOn)

@@ -109,7 +109,8 @@ namespace TarkovVR.Source.Weapons
             get
             {
                 // (the gun in the left hand works mirrored; left-handed mode, the whole body mirrored, isn't worked out)
-                if (!pressCheck || !enabled || Handedness.LeftHanded)
+                // (the gesture is the grip let go: on "Toggle Gun Grip" the grip is up through every hold)
+                if (!pressCheck || !enabled || Handedness.LeftHanded || TarkovVR.Source.Settings.VRSettings.GetGunGripToggle())
                     return false;
                 if (!Handedness.TryGetGunHandThumbTouch(out bool thumbOn) || !thumbOn)
                     return false;

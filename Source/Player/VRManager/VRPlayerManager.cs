@@ -240,7 +240,7 @@ namespace TarkovVR.Source.Player.VRManager
         {
             VRInput.RightHandPose.RemoveAllListeners(SteamVR_Input_Sources.RightHand);
             VRInput.LeftHandPose.RemoveAllListeners(SteamVR_Input_Sources.LeftHand);
-            HeldGunDetail.ReleaseAll();
+            HeldGunDetail.Teardown();
         }
         
         public void OnEnable()
@@ -1159,7 +1159,8 @@ namespace TarkovVR.Source.Player.VRManager
                 if ((withinDistance || !isSupporting) && supportZoneBlip.Enter(withinDistance))
                     VRInput.Haptic.Execute(0, 0.25f, 1, 0.4f, Handedness.OffHandSource);
 
-                // The grip holds the foregrip: closed at it takes it (handLock, then isSupporting the frame after), open lets go at once.
+                // The grip holds the foregrip: closed at it takes it (handLock, then isSupporting the frame after), open lets go at once
+                // (or a press each way: ForegripGrip).
                 // While held, the hand stays on however far the controller strays.
                 // (not a hand holding a door or a key: PhysicalDoors - pulling a door in toward the chest passes the foregrip)
                 if ((withinDistance || handLock) && !PhysicalDoors.HoldsDoor(false))
@@ -1182,7 +1183,7 @@ namespace TarkovVR.Source.Player.VRManager
                         if (UIPatches.extractionTimerUi)
                             UIPatches.extractionTimerUi.Hide();
                     }
-                    handLock = secondaryGripState.state;
+                    handLock = ForegripGrip(secondaryGripState, handLock);
                 }
 
                 if (isSupporting && handLock)
@@ -1275,6 +1276,19 @@ namespace TarkovVR.Source.Player.VRManager
                 }
             }
         }
+
+        // The foregrip held: the grip button down, or with "Toggle Gun Grip" a press takes it and the next press lets go.
+        // (once per frame: the pose callback can run twice)
+        private bool ForegripGrip(VRBoolean grip, bool holding)
+        {
+            if (!VRSettings.GetGunGripToggle())
+                return grip.state;
+            if (!grip.stateDown || foregripPressFrame == Time.frameCount)
+                return holding;
+            foregripPressFrame = Time.frameCount;
+            return !holding;
+        }
+        private int foregripPressFrame = -1;
 
         public void ForceUnlockHand()
         {

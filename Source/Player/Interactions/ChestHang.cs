@@ -17,6 +17,8 @@ namespace TarkovVR.Source.Player.Interactions
     // (SupportOnly, rigid on the support controller), else hangs it rigidly at its body spot; a grip press at the gun takes it back.
     // Game-side the gun never leaves the hands (no inventory op); firing is gated while detached.
     // A freshly equipped gun stays welded like vanilla until the first grip press on that controller.
+    // "Toggle Gun Grip" (VRSettings.GetGunGripToggle): a press lets go instead of the open hand (the foregrip in
+    // VRPlayerManager.ForegripGrip and a mounted gun in MountedGun the same).
     public static class ChestHang
     {
         public static bool enabled = true;
@@ -77,6 +79,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static int ignoredPressFrame = -1;      // a grip press BodyWeapons took (a gun off the body), not a regrab
         private static Item gripSeenFor;                // taken off the body with the grip closed: grip-bound from the moment it's in hands
         private static bool prevGrip;
+        private static bool toggleModeSeen;             // the "Toggle Gun Grip" setting as the last frame held it
         private static bool prevSupporting;             // for the foregrip-grab foley edge
         private static float releaseTimer;
         private static int lastTickFrame = -10;
@@ -330,7 +333,22 @@ namespace TarkovVR.Source.Player.Interactions
 
             GiveGunArmBack();
 
-            if (grip)
+            // Switching between hold and toggle: held as it is until the next press (else hold mode drops a gun held with the button up)
+            bool toggle = VRSettings.GetGunGripToggle();
+            if (toggle != toggleModeSeen)
+            {
+                toggleModeSeen = toggle;
+                gripSeen = false;
+            }
+
+            // Toggle: a press lets go, the button up holds. Hold: the grip open for slingDelay lets go.
+            bool letGo = false;
+            if (toggle)
+            {
+                releaseTimer = 0f;
+                letGo = pressed && !gripOwnedElsewhere;
+            }
+            else if (grip)
             {
                 gripSeen = true;   // gun is now grip-bound: open the hand and it lets go
                 releaseTimer = 0f;
@@ -338,27 +356,28 @@ namespace TarkovVR.Source.Player.Interactions
             else if (gripSeen && !gripOwnedElsewhere)
             {
                 releaseTimer += Time.deltaTime;
-                if (releaseTimer >= slingDelay)
-                {
-                    releaseTimer = 0f;
-                    // A pistol two-handed: the support hand becomes its gun hand (its support grip cups the gun hand, nothing to hold up)
-                    if (supporting && PistolSwapsOnRelease())
-                    {
-                        SwapHands();
-                        return;
-                    }
-                    // the support hand still on it - hand the gun to that hand. With the gun in the left hand that's the right hand:
-                    // GunInLeftHand stays on (the rig's LeftHand, the support pose and isSupporting all follow the right controller
-                    // then, so the hold below is the same), RealLeftHandedPatches.SupportHeld draws the arms
-                    if (supporting)
-                        BeginSupportHold(firearmController);
-                    else
-                        BeginHang(firearmController);
-                }
+                letGo = releaseTimer >= slingDelay;
             }
             else
             {
                 releaseTimer = 0f;
+            }
+            if (letGo)
+            {
+                releaseTimer = 0f;
+                // A pistol two-handed: the support hand becomes its gun hand (its support grip cups the gun hand, nothing to hold up)
+                if (supporting && PistolSwapsOnRelease())
+                {
+                    SwapHands();
+                    return;
+                }
+                // the support hand still on it - hand the gun to that hand. With the gun in the left hand that's the right hand:
+                // GunInLeftHand stays on (the rig's LeftHand, the support pose and isSupporting all follow the right controller
+                // then, so the hold below is the same), RealLeftHandedPatches.SupportHeld draws the arms
+                if (supporting)
+                    BeginSupportHold(firearmController);
+                else
+                    BeginHang(firearmController);
             }
             prevGrip = grip;
         }

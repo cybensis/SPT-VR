@@ -22,6 +22,7 @@ namespace TarkovVR.Source.Weapons
         private static readonly HashSet<LODGroup> forced = new HashSet<LODGroup>();
         private static readonly List<LODGroup> scan = new List<LODGroup>();
         private static readonly List<LODGroup> released = new List<LODGroup>();
+        private static readonly HashSet<LODGroup> waitingRelease = new HashSet<LODGroup>();
 
         // From the rig's Update (raid + hideout)
         internal static void Tick()
@@ -35,16 +36,20 @@ namespace TarkovVR.Source.Weapons
                 heldRoot = root;
                 nextScan = 0f;
             }
-            if (root == null || Time.unscaledTime < nextScan)
+            if (Time.unscaledTime < nextScan)
                 return;
             nextScan = Time.unscaledTime + rescanInterval;
+            ReleaseWaiting();
+            if (root == null)
+                return;
 
             scan.Clear();
             root.GetComponentsInChildren(true, scan);
             int added = 0;
             foreach (LODGroup group in scan)
             {
-                if (forced.Add(group))
+                // (a hidden part is forced once it shows, on a later scan)
+                if (Showing(group) && forced.Add(group))
                 {
                     group.ForceLOD(0);
                     added++;
@@ -58,8 +63,7 @@ namespace TarkovVR.Source.Weapons
             }
             foreach (LODGroup group in released)
             {
-                if (group != null)
-                    group.ForceLOD(-1);
+                Release(group);
                 forced.Remove(group);
             }
             if (debugLog && (added > 0 || released.Count > 0))
@@ -67,15 +71,47 @@ namespace TarkovVR.Source.Weapons
         }
 
         // Rig torn down (raid end, menu): back to Unity's choice, and no references kept past the raid
-        internal static void ReleaseAll()
+        internal static void Teardown()
+        {
+            ReleaseAll();
+            waitingRelease.Clear();
+        }
+
+        private static void ReleaseAll()
         {
             foreach (LODGroup group in forced)
-            {
-                if (group != null)
-                    group.ForceLOD(-1);
-            }
+                Release(group);
             forced.Clear();
             heldRoot = null;
         }
-    }
+
+        // Unity refuses (and warns about) a forced LOD on a disabled or hidden group: one hidden now is let go once it shows
+        private static bool Showing(LODGroup group) => group != null && group.enabled && group.gameObject.activeInHierarchy;
+
+        private static void Release(LODGroup group)
+        {
+            if (Showing(group))
+                group.ForceLOD(-1);
+            else if (group != null)
+                waitingRelease.Add(group);
+        }
+
+        private static void ReleaseWaiting()
+        {
+            if (waitingRelease.Count == 0)
+                return;
+            released.Clear();
+            foreach (LODGroup group in waitingRelease)
+            {
+                if (group == null || forced.Contains(group))
+                    released.Add(group);
+                else if (Showing(group))
+                {
+                    group.ForceLOD(-1);
+                    released.Add(group);
+                }
+            }
+            foreach (LODGroup group in released)
+                waitingRelease.Remove(group);
+        }    }
 }

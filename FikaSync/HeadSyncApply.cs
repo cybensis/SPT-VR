@@ -8,7 +8,7 @@ using UnityEngine;
 namespace SptVrFikaSync
 {
     // A VR player's head and upper body on the other players' screens: the headset pose in their body's frame (VRHeadPacket) through the
-    // same solve the VR player's own body runs (UpperBodySolver, linked in from SPT-VR): the chest turns toward the head, the spine bends to
+    // same solve the VR player's own body runs (UpperBodySolver, linked in from SPT-VR): the chest (and standing still, the hips) turns toward the head, the spine bends to
     // put the head where theirs is, the head turns to the headset. First among the ObservedPlayer.LateUpdate postfixes: the arm, weapon and
     // eating drives after it reach the arms from the bent shoulders (their poses come in the body's frame, like the head's).
     [HarmonyPatch]
@@ -20,6 +20,12 @@ namespace SptVrFikaSync
         public static float blendTime = 0.25f;      // s it eases in and out
         public static float maxDistance = 80f;      // m from the camera past which the body stays as animated
         public static bool logRig = true;           // one line per player's rig: the bones it turns, or why it can't
+        // The hips turn toward the head standing still only (UpperBodySolver.hipShare): full up to hipStillSpeed, none from hipMovingSpeed
+        // (m/s across the ground; a walk's legs go the way you walk), eased over hipBlendTime. Not prone, on a mounted gun or sprinting.
+        public static bool turnHips = true;
+        public static float hipStillSpeed = 0.3f;
+        public static float hipMovingSpeed = 1.0f;
+        public static float hipBlendTime = 0.3f;
 
         private sealed class Remote
         {
@@ -31,6 +37,9 @@ namespace SptVrFikaSync
             public Vector3 shownPosition;
             public Quaternion shownRotation;
             public float weight;
+            public float hipWeight;
+            public Vector3 lastRootPosition;
+            public bool haveRootPosition;
             public UpperBodySolver.Rig rig;
         }
 
@@ -79,6 +88,15 @@ namespace SptVrFikaSync
                     && movement != null && !movement.IsInPronePose && !movement.IsInMountedState && !__instance.IsSprintEnabled;
                 remote.weight = Mathf.MoveTowards(remote.weight, wanted ? 1f : 0f, Time.deltaTime / Mathf.Max(blendTime, 0.01f));
 
+                Vector3 moved = remote.haveRootPosition ? root.position - remote.lastRootPosition : Vector3.zero;
+                moved.y = 0f;
+                remote.lastRootPosition = root.position;
+                remote.haveRootPosition = true;
+                float speed = Time.deltaTime > 1e-4f ? moved.magnitude / Time.deltaTime : 0f;
+                float hipsWanted = turnHips && wanted && movement.StationaryWeapon == null
+                    ? 1f - Mathf.InverseLerp(hipStillSpeed, Mathf.Max(hipMovingSpeed, hipStillSpeed + 0.01f), speed) : 0f;
+                remote.hipWeight = Mathf.MoveTowards(remote.hipWeight, hipsWanted, Time.deltaTime / Mathf.Max(hipBlendTime, 0.01f));
+
                 float follow = smoothRate > 0f ? 1f - Mathf.Exp(-smoothRate * Time.deltaTime) : 1f;
                 if (!remote.shown)
                 {
@@ -91,7 +109,7 @@ namespace SptVrFikaSync
                     remote.shownPosition = Vector3.Lerp(remote.shownPosition, remote.position, follow);
                     remote.shownRotation = Quaternion.Slerp(remote.shownRotation, remote.rotation, follow);
                 }
-                UpperBodySolver.Solve(remote.rig, root.position + root.rotation * remote.shownPosition, root.rotation * remote.shownRotation, remote.weight);
+                UpperBodySolver.Solve(remote.rig, root.position + root.rotation * remote.shownPosition, root.rotation * remote.shownRotation, remote.weight, remote.hipWeight);
             }
             catch (Exception e)
             {

@@ -238,6 +238,9 @@ namespace TarkovVR.Source.Weapons
 
         private static bool TryGetChargingHandle(FirearmController firearmController, Weapon weapon)
         {
+            // (the gun's model goes before its controller at a raid's end: no views to look in)
+            if (weapon == null || firearmController == null || firearmController.Firearms == null || firearmController.Firearms.ContainerCollectionView == null)
+                return false;
             if (handleSlotFor != firearmController || Time.time > handleSlotLookupTime)
             {
                 handleSlotFor = firearmController;
@@ -983,7 +986,8 @@ namespace TarkovVR.Source.Weapons
         // Every part of the gun, and where it sits in the chamber bone's frame with the bolt closed (the grab's first frame).
         // The chamber frame, not the gun's root: the receiver sways against the root with the idle breathing and the chamber
         // sways with it, so only the bolt's own travel is left (against the root the round bobs).
-        // Left out: the handle and the round (we move those) and the gun's own arm and camera bones.
+        // Left out: the handle and the round (we move those), the gun's own arm and camera bones, and its hand markers and elbow
+        // goals (every clip moves those, the walk too: the round would follow a hand).
         private static void RecordBoltParts(Transform weaponRoot)
         {
             Transform[] parts = weaponRoot.GetComponentsInChildren<Transform>();
@@ -991,7 +995,7 @@ namespace TarkovVR.Source.Weapons
             for (int index = 0; index < parts.Length; index++)
             {
                 Transform part = parts[index];
-                if (part == weaponRoot || part.IsChildOf(handleView) || part.IsChildOf(chamberBone) || part.name.Contains("Human") || part.name.Contains("Camera"))
+                if (part == weaponRoot || part.IsChildOf(handleView) || part.IsChildOf(chamberBone) || !MayBeTheBolt(part.name))
                     continue;
                 parts[kept++] = part;
             }
@@ -1004,9 +1008,27 @@ namespace TarkovVR.Source.Weapons
             }
         }
 
-        // The bolt = the part that has come furthest back along the barrel (the locked-back pose moves the whole bolt
-        // group together); followed on its own once it's clearly moving. In the chamber bone's frame, = the round's.
+        private static bool MayBeTheBolt(string name)
+        {
+            return name.IndexOf("human", System.StringComparison.OrdinalIgnoreCase) < 0
+                && name.IndexOf("camera", System.StringComparison.OrdinalIgnoreCase) < 0
+                && name.IndexOf("marker", System.StringComparison.OrdinalIgnoreCase) < 0
+                && name.IndexOf("bend_goal", System.StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        // How far the round comes back: the bolt's travel along the bore only (a round in the chamber can't move any other way),
+        // and none before the handle moves. In the chamber bone's frame, = the round's.
         private static Vector3 BoltMovementInChamber(Vector3 backWorld)
+        {
+            if (handlePull <= 0f)
+                return Vector3.zero;
+            Vector3 boreBack = chamberBone.InverseTransformVector(backWorld).normalized;
+            return boreBack * Mathf.Max(0f, Vector3.Dot(BoltPartMovement(backWorld), boreBack));
+        }
+
+        // The bolt = the part that has come furthest back along the barrel (the locked-back pose moves the whole bolt
+        // group together); followed on its own once it's clearly moving.
+        private static Vector3 BoltPartMovement(Vector3 backWorld)
         {
             if (boltPart == null)
             {

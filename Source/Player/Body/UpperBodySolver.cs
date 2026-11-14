@@ -5,7 +5,7 @@ namespace TarkovVR.Source.Player.Body
 {
     // An upper body that follows a tracked head: the local VR player's (LocalUpperBody) and the other players' copy of a VR player
     // (SPT-VR-FikaSync's HeadSyncApply - this file is linked into it, one copy of the maths for both). On the pose the animator gave this
-    // frame, the hips where they are: the chest turns part of the way to the head's yaw, the neck takes a share of the head's turn off the
+    // frame, the hips where they are (or part of the way round to the head's yaw, where the caller says): the chest turns part of the way to the head's yaw, the neck takes a share of the head's turn off the
     // chest, the spine bends (CCD, a weight and a limit per bone) so the head's pivot comes to where the tracked head's is, and the head
     // turns to the tracked head. The face is the head bone's rest-pose forward and up (not LootRaycastOrigin: that's the first-person
     // camera point on the ribcage rig), the eyes eyeForward / eyeUp off its pivot.
@@ -22,11 +22,16 @@ namespace TarkovVR.Source.Player.Body
         public static float twistShare = 0.6f;      // of the head's yaw off the chest the chest takes
         public static float maxTwist = 45f;         // deg, the whole spine
         public static float neckLookShare = 0.35f;  // of the head's turn off the chest the neck takes
+        // The hips (and the legs under them) part of the way round to the head's yaw, where the caller lets them (Solve's hipWeight:
+        // standing still - a walk's legs go the way you walk). Tarkov's rifle stance stands side-on to where you look.
+        public static float hipShare = 0.5f;        // of the head's yaw off the hips the hips take (the chest's twist then shares what's left)
+        public static float maxHipTurn = 45f;       // deg off their animated pose
 
         internal sealed class Rig
         {
             public PlayerBones bones;
             public Transform root;
+            public Transform pelvis;
             public Transform[] spine;               // from the hips up to the head's branch, the pelvis not in it
             public Transform chest;                 // the ribcage: the arms hang from it (on the spine, or a branch off it)
             public Transform neck;                  // null = none between the spine and the head
@@ -34,7 +39,7 @@ namespace TarkovVR.Source.Player.Body
             public Vector3 eyeInHead;               // the eyes off the head bone, in its rotation's frame (world scale)
             public Quaternion lookInHead;           // the look's rotation in the head's frame
             public Vector3 chestForwardLocal;       // the way the chest faces, in the ribcage's frame
-            public Transform[] posed;               // every bone the solve turns: the spine, the neck, the head
+            public Transform[] posed;               // every bone the solve turns: the spine, the neck, the head, the pelvis
             public Quaternion[] animated;
             public Quaternion[] written;
             public bool haveWritten;
@@ -71,6 +76,7 @@ namespace TarkovVR.Source.Player.Body
             }
             rig.chest = ribcage;
             rig.head = head;
+            rig.pelvis = pelvis;
 
             // The bones' axes in Tarkov's rest pose, not the nearest to this frame's: the rifle stance turns the ribcage ~40 deg off the
             // body, where the nearest axis flips - each peer picked its own
@@ -82,30 +88,33 @@ namespace TarkovVR.Source.Player.Body
             rig.lookInHead = Quaternion.LookRotation(faceAxis, upAxis);
             rig.chestForwardLocal = chestAxis;
 
-            int count = rig.spine.Length + (rig.neck != null ? 1 : 0) + 1;
+            int count = rig.spine.Length + (rig.neck != null ? 1 : 0) + 2;
             rig.posed = new Transform[count];
             for (int i = 0; i < rig.spine.Length; i++)
                 rig.posed[i] = rig.spine[i];
             if (rig.neck != null)
                 rig.posed[rig.spine.Length] = rig.neck;
-            rig.posed[count - 1] = head;
+            rig.posed[count - 2] = head;
+            rig.posed[count - 1] = pelvis;
             rig.animated = new Quaternion[count];
             rig.written = new Quaternion[count];
             rig.valid = rig.spine.Length > 0;
 
             var names = new System.Text.StringBuilder();
-            foreach (Transform bone in rig.posed)
-                names.Append(names.Length > 0 ? " > " : "").Append(bone.name);
+            for (int i = 0; i < count - 1; i++)
+                names.Append(names.Length > 0 ? " > " : "").Append(rig.posed[i].name);
             rig.description = rig.valid
                 ? $"{names} (chest {ribcage.name}); face = the head's {AxisName(faceAxis)} ({faceOff:F0} deg off the body's forward now), up {AxisName(upAxis)} ({upOff:F0} deg), chest = the ribcage's {AxisName(chestAxis)} ({chestOff:F0} deg)"
                 : "no spine bones";
             return rig;
         }
 
-        // Base HumanHead / Base HumanRibcage axes along the body's forward and up in the rest pose (playersuperior.bundle, exact)
+        // Base HumanHead / Base HumanRibcage / Base HumanPelvis axes along the body's forward and up in the rest pose (playersuperior.bundle,
+        // exact; the pelvis 0.2 deg off)
         private static readonly Vector3 HEAD_FACE = Vector3.up;
         private static readonly Vector3 HEAD_UP = Vector3.left;
         private static readonly Vector3 RIBCAGE_FACE = Vector3.forward;
+        private static readonly Vector3 PELVIS_FACE = Vector3.up;
 
         private static string AxisName(Vector3 axis)
         {
@@ -117,7 +126,8 @@ namespace TarkovVR.Source.Player.Body
         }
 
         // eyePosition / eyeRotation: the tracked head (the headset), world. weight 0..1 (0 = the animator's pose, nothing written).
-        public static void Solve(Rig rig, Vector3 eyePosition, Quaternion eyeRotation, float weight)
+        // hipWeight 0..1: how much the hips turn too (0 = as animated).
+        public static void Solve(Rig rig, Vector3 eyePosition, Quaternion eyeRotation, float weight, float hipWeight = 0f)
         {
             if (rig == null || !rig.valid)
                 return;
@@ -132,8 +142,19 @@ namespace TarkovVR.Source.Player.Body
             int spineCount = rig.spine.Length;
             int neckIndex = rig.neck != null ? spineCount : -1;
 
-            // The chest part of the way round to the head's yaw
             Vector3 lookFlat = Vector3.ProjectOnPlane(eyeRotation * Vector3.forward, up);
+            // The hips part of the way round first (everything above turns with them: the chest's twist below measures from there)
+            if (hipWeight > 0f && hipShare > 0f && rig.pelvis != null && lookFlat.sqrMagnitude > 1e-4f)
+            {
+                Vector3 hipsFlat = Vector3.ProjectOnPlane(rig.pelvis.rotation * PELVIS_FACE, up);
+                if (hipsFlat.sqrMagnitude > 1e-4f)
+                {
+                    float hipYaw = Mathf.Clamp(Vector3.SignedAngle(hipsFlat, lookFlat, up) * hipShare, -maxHipTurn, maxHipTurn) * weight * Mathf.Clamp01(hipWeight);
+                    rig.pelvis.rotation = Quaternion.AngleAxis(hipYaw, up) * rig.pelvis.rotation;
+                }
+            }
+
+            // The chest part of the way round to the head's yaw
             Vector3 chestFlat = Vector3.ProjectOnPlane(rig.chest.rotation * rig.chestForwardLocal, up);
             if (lookFlat.sqrMagnitude > 1e-4f && chestFlat.sqrMagnitude > 1e-4f)
             {

@@ -106,6 +106,7 @@ namespace TarkovVR.Source.Player.Interactions
         private static readonly List<StationaryWeapon> guns = new List<StationaryWeapon>();
         private static object gunsFor;
         private static float nextGunScan;
+        private static int loggedGunCount = -1;
         private static GameObject leftZoneSphere, rightZoneSphere;
 
         //---------------------------------------------------------------------------------------------------------
@@ -224,8 +225,10 @@ namespace TarkovVR.Source.Player.Interactions
                 takeArmed = false;
                 return false;
             }
-            bool leftOn = leftAt && leftGrip;
-            bool held = rightAt && rightGrip && (oneHanded || leftOn);
+            // "Toggle Gun Grip": the press with the hands at the handles takes it, the grips may open after
+            bool toggle = VRSettings.GetGunGripToggle();
+            bool leftOn = leftAt && (leftGrip || toggle);
+            bool held = rightAt && (rightGrip || toggle) && (oneHanded || leftOn);
             if (held && (rightPressed || (!oneHanded && leftPressed)))
                 takeArmed = true;
             else if (!held)
@@ -278,8 +281,9 @@ namespace TarkovVR.Source.Player.Interactions
                 stage = Stage.Taking;
                 takenAt = Time.time;
                 cameFromEmptyHands = true;
-                holding[LEFT] = leftGrip && !OneHanded(gun);
-                holding[RIGHT] = rightGrip;
+                bool toggleHolds = VRSettings.GetGunGripToggle();
+                holding[LEFT] = (leftGrip || toggleHolds) && !OneHanded(gun);
+                holding[RIGHT] = rightGrip || toggleHolds;
             }
             FirearmController firearmController = MountedController(player);
             if (firearmController == null)
@@ -312,9 +316,11 @@ namespace TarkovVR.Source.Player.Interactions
             Vector3 leftZone = Vector3.zero, rightZone = Vector3.zero;
             if (zonesKnown)
                 HandlePoints(gun, out leftZone, out rightZone);
+            bool toggle = VRSettings.GetGunGripToggle();
             for (int hand = OneHanded(gun) ? RIGHT : LEFT; hand <= RIGHT; hand++)
             {
-                if (holding[hand] && !grips[hand])
+                // Hold: the grip open lets go. Toggle: a press does.
+                if (holding[hand] && (toggle ? pressed[hand] : !grips[hand]))
                     holding[hand] = false;
                 else if (!holding[hand] && pressed[hand])
                 {
@@ -670,6 +676,8 @@ namespace TarkovVR.Source.Player.Interactions
             GameWorld world = Comfort.Common.Singleton<GameWorld>.Instantiated ? Comfort.Common.Singleton<GameWorld>.Instance : null;
             if (!ReferenceEquals(world, gunsFor) || (guns.Count == 0 && Time.time >= nextGunScan))
             {
+                if (!ReferenceEquals(world, gunsFor))
+                    loggedGunCount = -1;
                 guns.Clear();
                 gunsFor = world;
                 nextGunScan = Time.time + 10f;
@@ -680,8 +688,10 @@ namespace TarkovVR.Source.Player.Interactions
                         if (stationaryWeapon != null)
                             guns.Add(stationaryWeapon);
                     }
-                    if (debugLog)
+                    // (a map without any is looked at again every 10 s: said once)
+                    if (debugLog && guns.Count != loggedGunCount)
                         Plugin.MyLog.LogInfo($"[MountedGun] {guns.Count} mounted guns on this map");
+                    loggedGunCount = guns.Count;
                 }
             }
             Vector3 head = VRGlobals.VRCam != null ? VRGlobals.VRCam.transform.position : player.Position;
