@@ -35,7 +35,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float keyUnlockTurn = 60f;        // deg of wrist turn about the keyway that unlocks
         public static float keyMaxTurn = 90f;
         public static float keyTurnTickDegrees = 15f;   // a light pulse every this much of turn
-        public static float keyPullOutDistance = 0.1f;  // m the controller may get from where it seated the key before it comes out
+        // In the lock the key stays on the keyway: it comes out only pulled back out along it, or the hand gone far from it any other way
+        // (turning it swings the controller's grip on it round in an arc, and the arm sways)
+        public static float keyPullOutDistance = 0.1f;  // m the controller pulls back out along the keyway from where it seated the key
+        public static float keyLetGoDistance = 0.25f;   // m the controller may get from there any way
         public static float keyReseatDelay = 0.3f;      // s after it comes out before it seats again
         public static float keyStowDelay = 0.5f;        // s the key stays turned in the unlocked lock before it goes away
         public static float keySoundVolume = 0.6f;
@@ -554,16 +557,30 @@ namespace TarkovVR.Source.Player.Interactions
             return rig.TransformPoint(keyHold.gripInRig) - rig.position + HandCollision.RawPosition(rig);
         }
 
-        private static bool PulledOut(KeyHold keyHold)
+        private static bool PulledOut(KeyHold keyHold) => PulledOut(keyHold, out _, out _);
+
+        // back: m out along the keyway, off: m from the seat any way
+        private static bool PulledOut(KeyHold keyHold, out float back, out float off)
         {
-            return keyHold.rig == null || (ControllerGrip(keyHold) - keyHold.gripAtSeat).sqrMagnitude > keyPullOutDistance * keyPullOutDistance;
+            back = off = 0f;
+            if (keyHold.rig == null)
+                return true;
+            Vector3 moved = ControllerGrip(keyHold) - keyHold.gripAtSeat;
+            back = -Vector3.Dot(moved, keyHold.inward);
+            off = moved.magnitude;
+            return back > keyPullOutDistance || off > keyLetGoDistance;
         }
 
         // The wrist's turn about the keyway since it seated turns the key; far enough, the lock gives
         private static void UpdateSeated(KeyHold keyHold)
         {
-            if (keyHold.armIk == null || keyHold.prop == null || PulledOut(keyHold))
+            bool lost = keyHold.armIk == null || keyHold.prop == null;
+            float back = 0f, off = 0f;
+            if (lost || PulledOut(keyHold, out back, out off))
             {
+                if (logGrabs && !lost && keyHold.door != null)
+                    Plugin.MyLog.LogInfo($"[Doors] key out of '{keyHold.door.name}' at {keyHold.turn:0} deg of turn: the controller {back * 100f:0} cm back out along the keyway, "
+                        + $"{off * 100f:0} cm from where it seated it (out at {keyPullOutDistance * 100f:0} back / {keyLetGoDistance * 100f:0} any way)");
                 Unseat(keyHold);
                 return;
             }
