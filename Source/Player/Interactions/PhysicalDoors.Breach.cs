@@ -6,8 +6,8 @@ using UnityEngine;
 namespace TarkovVR.Source.Player.Interactions
 {
     // A hard hit with the gun breaks a shut door open: Tarkov's own breach (its kick-open swing, the broken lock, bots hearing it, FIKA's
-    // packet) without the kick. Only a door its latch holds shut, hit the way it opens; a locked door never gives (it needs its key), it
-    // only thuds.
+    // packet) without the kick. A door its latch holds shut, hit the way it opens; a locked door only where Tarkov's own kick breaks it (a
+    // breach door, from the side it swings away from) - one with a key only thuds, as the kick does.
     internal static partial class PhysicalDoors
     {
         public static bool gunBreach = true;
@@ -31,12 +31,14 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             if (door.DoorState == EDoorState.Locked)
             {
-                if (approach >= lockedHitMinSpeed && Time.time - lastLockedHitTime > lockedHitRetrigger)
-                {
-                    lastLockedHitTime = Time.time;
-                    LockedHit(door, point, approach);
-                    LogGunHit(door, approach, "locked, it needs its key (the thud and dust are Tarkov's failed kick)");
-                }
+                if (approach < lockedHitMinSpeed || Time.time - lastLockedHitTime <= lockedHitRetrigger)
+                    return;
+                lastLockedHitTime = Time.time;
+                string kickRefused = WhyLockedHolds(door, approach, player);
+                if (kickRefused == null && Breach(door, approach))
+                    return;
+                LockedHit(door, point, approach);
+                LogGunHit(door, approach, kickRefused ?? "Tarkov didn't take the breach");
                 return;
             }
             string refused = WhyNoBreach(door, point, normal, approach, player);
@@ -47,6 +49,24 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
             Breach(door, approach);
+        }
+
+        // A locked door breaks as Tarkov's kick breaks it (MovementContext.StartDoorBreak): Door.BreachSuccessRoll from the kick spot on your
+        // side = a breach door (CanBeBreached), kicked from the side it swings away from. A door with a key isn't one: the kick only thuds.
+        private static string WhyLockedHolds(Door door, float approach, EFT.Player player)
+        {
+            if (approach < breachMinSpeed)
+                return $"locked, too soft for a kick (needs {breachMinSpeed:0.0} m/s)";
+            if (!door.CanInteractWithBreach)
+                return "locked, Tarkov offers no kick on it";
+            if (!door.BreachSuccessRoll(door.GetBreakInPosition(player.MovementContext.TransformPosition)))
+                return door.CanBeBreached && door.Operatable ? "locked, kicked from the side it doesn't break open from"
+                    : "locked, Tarkov's kick doesn't open it (it takes its key)";
+            if (runs.TryGetValue(door, out DoorRun run) && (run.driver != null || run.turner != null))
+                return "a hand holds it";
+            if (player.MovementContext.IsInPronePose)
+                return "prone";
+            return null;
         }
 
         private static string WhyNoBreach(Door door, Vector3 point, Vector3 normal, float approach, EFT.Player player)
@@ -95,9 +115,11 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         // The Execute stage (FIKA sends it) of Tarkov's breach, without the hands' clip. Not interactionInProgress: its kick-open swing plays.
-        private static void Breach(Door door, float approach)
+        // false = Tarkov didn't take it.
+        private static bool Breach(Door door, float approach)
         {
             EFT.Player player = VRGlobals.player;
+            EDoorState startState = door.DoorState;
             player.MovementContext.ResetCanUsePropState();
             Option<InteractionResult> option = Door.Interact(player, EInteractionType.Breach);
             if (!option.Succeeded)
@@ -107,7 +129,7 @@ namespace TarkovVR.Source.Player.Interactions
                     refusalsLogged++;
                     Plugin.MyLog.LogWarning($"[Doors] can't breach '{door.name}' now: {option.Error}");
                 }
-                return;
+                return false;
             }
             bool withoutAnimation = door.interactWithoutAnimation;
             door.interactWithoutAnimation = true;
@@ -119,19 +141,22 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 door.interactWithoutAnimation = withoutAnimation;
             }
-            if (door.DoorState == EDoorState.Shut)
+            if (door.DoorState == startState)
             {
                 if (refusalsLogged < 10)
                 {
                     refusalsLogged++;
                     Plugin.MyLog.LogWarning($"[Doors] Tarkov didn't take the breach of '{door.name}': door {door.DoorState}");
                 }
-                return;
+                return false;
             }
-            // Bots hear it, and it costs a kick's stamina
+            // Bots hear it, and it costs a kick's stamina; a locked door broken = Tarkov's door experience (BreachDoorState.Exit)
             player.MovementContext.OnBreach();
+            if (startState == EDoorState.Locked)
+                player.MovementContext.LockedDoorOpened(breached: true);
             if (logGrabs)
-                Plugin.MyLog.LogInfo($"[Doors] the gun breached '{door.name}' ({door.Id}) at {approach:0.0} m/s");
+                Plugin.MyLog.LogInfo($"[Doors] the gun breached '{door.name}' ({door.Id}, was {startState}) at {approach:0.0} m/s");
+            return true;
         }
 
         // A locked door holds: Tarkov's failed-kick thud and dust (not FailBreach: it puts back a state from an interaction that never ran)
