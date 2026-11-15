@@ -443,6 +443,13 @@ namespace TarkovVR.Source.Weapons
                     fingers = grip.insert.fingers, rightHand = grip.pull.rightHand };
                 pullSource += ", the insert's fingers";
             }
+            if (fourFingersFrom.TryGetValue(family, out string donorKey) && reloadGrips.TryGetValue(donorKey, out ReloadGrip donor) && donor.insert?.fingers != null)
+            {
+                grip.pull = WithFourFingers(grip.pull, donor.insert.fingers);
+                grip.insert = WithFourFingers(grip.insert, donor.insert.fingers);
+                pullSource += $", {donorKey}'s fingers";
+                insertSource += $", {donorKey}'s fingers";
+            }
             if (family == "g28" && g28HoldLower != 0f && length > 0f)
             {
                 grip.pull = LowerOnMagazine(grip.pull, lengthAxis, g28HoldLower);
@@ -472,6 +479,20 @@ namespace TarkovVR.Source.Weapons
         // pull and insert hold it the same way, and the insert's fingers fit
         private static readonly HashSet<string> pullFingersFromInsert = new HashSet<string>
             { "ak100|4", "ak74m|4", "ak74n|4", "aks74n|4", "aks74u|4", "rpk16|4", "nl545_di|4" };
+
+        // Sets whose clips barely close the four fingers on the magazine (the SA58's: a hand shaped for a drum): those fingers taken from the
+        // closest magazine's hold (the SR-25's 7.62x51 double stack, the same spread, closed), the thumb kept
+        private static readonly Dictionary<string, string> fourFingersFrom = new Dictionary<string, string> { { "sa58", "sr25|0" } };
+
+        private static MagazineHold WithFourFingers(MagazineHold hold, Vector3[] donor)
+        {
+            if (hold?.fingers == null || donor == null)
+                return hold;
+            Vector3[] fingers = (Vector3[])hold.fingers.Clone();
+            for (int bone = LAST_THUMB_BONE + 1; bone < fingers.Length && bone < donor.Length; bone++)
+                fingers[bone] = donor[bone];
+            return new MagazineHold { position = hold.position, rotation = hold.rotation, magazineLength = hold.magazineLength, fingers = fingers, rightHand = hold.rightHand };
+        }
 
         // The G28's own clips hold its magazines high, near the well: the palm ~3.5 cm closer to the top than the SR-25's / RSASS's on the
         // same length of 7.62 magazine. Its holds slid down the magazine by this (m)

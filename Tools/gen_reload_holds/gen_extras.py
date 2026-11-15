@@ -118,7 +118,7 @@ def meshPartBox(folder,container,frameLeaf,partLeaf):
 # The RFB's forward handle is a rod running back into the gun with the knob out its -x (left) side, (-4.8,-2.9,0.8) cm: its furthest
 # point back (the runtime's default zone) is 14 cm behind the knob on the gun's centre line.
 # The backport's QBZ-191: its handle is the carrier's knob out the +x (right) side, (4.1,-4.0,-0.1) cm; its back end is 16 cm behind it.
-HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1),'kel_tec_rfb':(0,-1),'norinco_qbz191':(0,1)}
+HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1),'kel_tec_rfb':(0,-1),'dsa_sa58':(0,-1),'norinco_qbz191':(0,1)}
 # The gun hand's hold from Tarkov's own right-hand rack where ridingHold turns it down: the AVT/SVT's charge_0/1 and rechamber rack with
 # the RIGHT hand (index 2-3 cm off the knob all the way back; charge_2 is the left-hand one), 10 cm in 4 frames with the palm pivoting
 # ~2 cm about the fingers - over the 1.5 cm limit, so it fell to jam_hardslide (8.1 cm, a stuck slide). Headset 2026-11-07, a picture of
