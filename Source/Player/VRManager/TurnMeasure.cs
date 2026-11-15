@@ -24,6 +24,9 @@ namespace TarkovVR.Source.Player.VRManager
             public float targetOffController;            // deg: the hand target's yaw off the controller's rig hand (the weight / aim filters)
             public Vector3 handInView, gripInView;       // m, in the camera's frame
             public Vector3 palmInHand;                   // the rendered wrist (arm IK bone3) in the hand target's frame, m
+            // In the rig (vrOffsetter: a stick turn rotates its parent, so turning drops out): the gun's aim, the aim it would have on the
+            // controller's rig hand (RightHand, before the weight / aim filters), and the head
+            public float rigGunYaw, rigControllerGunYaw, rigHeadYaw;
         }
 
         private static Sample placed, beforeIk, afterIk, drawn, lastDrawn;
@@ -108,6 +111,11 @@ namespace TarkovVR.Source.Player.VRManager
             Transform palm = VRGlobals.ikManager != null && VRGlobals.ikManager.rightArmIk != null && VRGlobals.ikManager.rightArmIk.solver != null
                 && VRGlobals.ikManager.rightArmIk.solver.bone3 != null ? VRGlobals.ikManager.rightArmIk.solver.bone3.transform : null;
             sample.palmInHand = palm != null ? toHand * (palm.position - hand.position) : Vector3.zero;
+            Transform rig = VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform : null;
+            Quaternion toRig = rig != null ? Quaternion.Inverse(rig.rotation) : Quaternion.identity;
+            sample.rigGunYaw = Yaw(toRig * barrel);
+            sample.rigControllerGunYaw = VRGlobals.vrPlayer.RightHand != null ? Yaw(toRig * (VRGlobals.vrPlayer.RightHand.transform.rotation * barrelInHand)) : sample.rigGunYaw;
+            sample.rigHeadYaw = Yaw(toRig * camera.forward);
             sample.valid = true;
             return true;
         }
@@ -159,6 +167,9 @@ namespace TarkovVR.Source.Player.VRManager
                 + $" gun yaw {drawn.gunYawInView:+0.00;-0.00} (frame {Mathf.DeltaAngle(lastDrawn.gunYawInView, drawn.gunYawInView):+0.00;-0.00}),"
                 + $" hand moved {(drawn.handInView - lastDrawn.handInView).magnitude * 100f:0.00} cm, grip moved {(drawn.gripInView - lastDrawn.gripInView).magnitude * 100f:0.00} cm");
             line.Append($" | hand target off the controller yaw {drawn.targetOffController:+0.00;-0.00}");
+            line.Append($" | in the rig: gun yaw {drawn.rigGunYaw:+0.00;-0.00} (frame {Mathf.DeltaAngle(lastDrawn.rigGunYaw, drawn.rigGunYaw):+0.00;-0.00}),"
+                + $" on the controller {drawn.rigControllerGunYaw:+0.00;-0.00} (frame {Mathf.DeltaAngle(lastDrawn.rigControllerGunYaw, drawn.rigControllerGunYaw):+0.00;-0.00}),"
+                + $" head {drawn.rigHeadYaw:+0.00;-0.00} (frame {Mathf.DeltaAngle(lastDrawn.rigHeadYaw, drawn.rigHeadYaw):+0.00;-0.00})");
             line.Append($" | rendered wrist off the hand target {drawn.palmInHand.magnitude * 100f:0.0} cm"
                 + (haveAfterIk ? $" (after IK {afterIk.palmInHand.magnitude * 100f:0.0})" : ""));
             Plugin.MyLog.LogInfo(line.ToString());
