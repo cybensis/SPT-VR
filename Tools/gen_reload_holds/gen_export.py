@@ -91,6 +91,34 @@ for k,v in sorted(R['grips'].items()):
             dropped.append((k,half,h['palmOff'],h['frames'])); continue
         e[half]=dict(position=h['position'],rotation=h['rotation'],fingers=h['fingers'],magazineLength=lengthFor(family,typ))
     if e: out['grips'][f'{family}|{typ}']=e
+# Above, a clip's number is its type. The guns' animators say which clip each type plays (gen_gun_families magazineTypes): the SA58's 30 round
+# magazine (2) plays sa58_mag_in_0 and its drum (3) _2, the G28's 10 / 20 round (0 / 1) _1 / _2. A set any of whose guns' animators say so
+# gets that half's holds from that, its numbered ones dropped; the pull from the magazine-out clip, the insert from the magazine-in.
+clipHolds={k:dict(v) for k,v in out['grips'].items()}
+typedHolds={}; typedConflicts=[]
+for g in guns:
+    family=gunFamily.get(g['name']); played=(gunClips.get(g['name']) or {}).get('magazineTypes') or {}
+    if not family or g['mode']!='ExternalMagazine': continue
+    for direction,half in (('in','insert'),('out','pull')):
+        for typ,clipList in (played.get(direction) or {}).items():
+            for clip in clipList:
+                m=re.match(r'(.+?)_mag_'+direction+r'(?:_(\d+))?$',magClipName('',clip))
+                if not m: continue
+                source=f'{m.group(1).lower()}|{gripType(m.group(1).lower(),int(m.group(2) or 0))}'
+                chosen=typedHolds.setdefault(family,{}).setdefault((int(typ),half),source)
+                if chosen!=source: typedConflicts.append((g['name'],family,typ,half,chosen,source))
+                break
+for family,picks in sorted(typedHolds.items()):
+    for half in {h for (_,h) in picks}:
+        for key in [k for k in out['grips'] if k.split('|')[0]==family and half in out['grips'][k]]:
+            del out['grips'][key][half]
+            if not out['grips'][key]: del out['grips'][key]
+    for (typ,half),source in sorted(picks.items()):
+        hold=clipHolds.get(source,{}).get(half)
+        if hold: out['grips'].setdefault(f'{family}|{typ}',{})[half]=dict(hold,magazineLength=lengthFor(family,typ))
+moved=sorted(f'{f}|{t} {h} <- {s}' for f,p in typedHolds.items() for (t,h),s in p.items() if s!=f'{f}|{t}')
+print('holds the animators play for another type than the clip number:',moved)
+print('animators that disagree within a set:',typedConflicts)
 # A magazine type a set has no hold of its own for (or only one half of): the hold of the set whose clip the gun's own animator plays for
 # that type (an AK-74M's drum is ak100_mag_in_5), else that of a set whose guns take the same magazines (the G36's PMAG D-60 is the M4's),
 # most magazines in common first (of that type, then of all). A hold is the magazine in the hand, so it carries over between guns; it keeps its own magazine's length.

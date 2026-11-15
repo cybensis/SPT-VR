@@ -105,7 +105,7 @@ def steadyFingers(run):
     for end in range(len(run)):
         while abs(run[end]['curl']-run[start]['curl'])>run[start]['curl']*0.1: start+=1
         if end-start>best[1]-best[0]: best=(start,end)
-    return run[(best[0]+best[1])//2]['qs']
+    return run[(best[0]+best[1])//2]
 
 def magHold(g,J,mag,pull,family=None):
     S=sample(g,mag,J)
@@ -113,8 +113,9 @@ def magHold(g,J,mag,pull,family=None):
     run=stillRun(S,lambda s:np.linalg.norm(s['inGun']-seat)>=0.03 and np.linalg.norm(s['rel'])<=0.35)
     if not run: return None
     pos=np.mean([r['rel'] for r in run],axis=0)
-    qs=list(run[-1]['qs'])
-    if not pull and family in PISTOLS: qs=list(steadyFingers(run))
+    moment=run[-1]
+    if not pull and family in PISTOLS: moment=steadyFingers(run)
+    qs=list(moment['qs'])
     if pull:
         # The grip: the most closed moment in this hold before the hand opens to let go of the magazine (late in the clip it
         # closes again, empty, with the bone still at the hold). The thumb is that moment's too. A drum keeps the hand far more open than
@@ -128,8 +129,9 @@ def magHold(g,J,mag,pull,family=None):
             if tightest is None or f['curl']>tightest['curl']: tightest=f
             if index<=farthest: carrying=tightest
         if carrying is not None and (carrying['curl']<tightest['curl']*0.75 or family in CARRYING_GRIP_GUNS): tightest=carrying
-        if tightest is not None: qs=list(tightest['qs'])
-    return dict(position=[round(float(x),4) for x in pos],rotation=toUnityEuler(avgQ(run)),fingers=eulerList(qs),frames=len(run),palmOff=round(float(np.mean([r['palmOff'] for r in run])),3))
+        if tightest is not None: moment=tightest; qs=list(tightest['qs'])
+    # time = the clip moment the fingers are from (hold_fit.py measures the hand there)
+    return dict(position=[round(float(x),4) for x in pos],rotation=toUnityEuler(avgQ(run)),fingers=eulerList(qs),frames=len(run),palmOff=round(float(np.mean([r['palmOff'] for r in run])),3),time=round(float(moment['t']),3))
 
 def handleHold(g,J,charge):
     S=sample(g,charge,J)
