@@ -16,6 +16,15 @@ namespace TarkovVR.Patches.Core.VR
         
         private static bool _snapTurned = false;
 
+        // Looking through a scope that zooms on the turning stick (VRPlayerManager.ScopeZoomOwnsStick): it turns only pushed nearly straight
+        // sideways, and not at all after a zoom push until the stick is back near the centre (a zoom push drifting sideways turned you)
+        public static bool scopeTurnGuard = true;
+        public static float scopeTurnMaxAngle = 25f;    // deg off straight sideways the stick may point and still turn
+        public static float scopeTurnDeadzone = 0.5f;   // sideways push below which it doesn't turn; smooth turning ramps up from here
+        public static float scopeZoomPush = 0.3f;       // an up / down push past this is a zoom
+        public static float stickCentre = 0.2f;         // back within this of the centre, it may turn again
+        private static bool zoomPushSeen;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InputPreset), "UpdateInput")]
         private static bool MasterVRControls(InputPreset __instance, ref List<ECommand> commands, ref float[] axis, ref float deltaTime)
@@ -124,9 +133,31 @@ namespace TarkovVR.Patches.Core.VR
                 return;
             }
 
+            float turnScale = 1f;
+            Vector2 stick = VRInput.RightJoystick.axis;
+            if (scopeTurnGuard && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.ScopeZoomOwnsStick)
+            {
+                if (Mathf.Abs(stick.y) > scopeZoomPush)
+                    zoomPushSeen = true;
+                else if (stick.magnitude < stickCentre)
+                    zoomPushSeen = false;
+                float sideways = Mathf.Abs(stick.x);
+                float offSideways = Mathf.Atan2(Mathf.Abs(stick.y), sideways) * Mathf.Rad2Deg;
+                if (zoomPushSeen || offSideways > scopeTurnMaxAngle || sideways <= scopeTurnDeadzone)
+                {
+                    axis[axisIndex] = 0;
+                    return;
+                }
+                turnScale = (sideways - scopeTurnDeadzone) / Mathf.Max(1f - scopeTurnDeadzone, 1e-3f) / sideways;
+            }
+            else
+            {
+                zoomPushSeen = false;
+            }
+
             if (VRSettings.GetRotationType() == VRSettings.RotationMode.Smooth)
             {
-                axis[axisIndex] = VRInput.RightJoystick.axis.x * VRSettings.GetRotationSensitivity();
+                axis[axisIndex] = VRInput.RightJoystick.axis.x * VRSettings.GetRotationSensitivity() * turnScale;
             }
             else
             {
