@@ -1165,7 +1165,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 Vector3 barrel = supportSmoothedRot * Vector3.down;   // current muzzle dir (WeaponRoot -up)
                 supportSmoothedRot = WeaponWeightFeel.SupportHold.Step(supportSmoothedRot, target, barrel,
-                    firearmController.ErgonomicWeight, false, Time.deltaTime);
+                    firearmController.ErgonomicWeight, false, Time.deltaTime, VRGlobals.vrOffsetter != null ? VRGlobals.vrOffsetter.transform : null);
             }
             else
             {

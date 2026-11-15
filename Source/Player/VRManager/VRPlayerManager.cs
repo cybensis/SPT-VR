@@ -951,7 +951,7 @@ namespace TarkovVR.Source.Player.VRManager
                 {
                     rawRightHand.transform.rotation = WeaponWeightFeel.Main.Step(rawRightHand.transform.rotation,
                         RightHand.transform.rotation, BarrelDir(), VRGlobals.firearmController.ErgonomicWeight,
-                        true, Time.deltaTime);
+                        true, Time.deltaTime, rawRightHand.transform.parent);
                 }
                 else if (smoothingFactor != 50)
                 {
@@ -965,7 +965,8 @@ namespace TarkovVR.Source.Player.VRManager
 
                 PlaceRightHandForGun(fromAction);
 
-                if (smoothingFactor != 50)
+                // (the physical weight is the gun's turn about the grip: the grip stays on the hand)
+                if (smoothingFactor != 50 && !(weightFeel && WeaponWeightFeel.physicsWeight))
                 {
                     Vector3 position = rawRightHand.transform.position - (inertiaVelocity / inertiaDamping);
                     rawRightHand.transform.position = Vector3.Slerp(position, RightHand.transform.position, smoothingFactor * Time.deltaTime);
@@ -1017,7 +1018,7 @@ namespace TarkovVR.Source.Player.VRManager
                 {
                     rawRightHand.transform.rotation = WeaponWeightFeel.Main.Step(rawRightHand.transform.rotation,
                         RightHand.transform.rotation, BarrelDir(), VRGlobals.firearmController.ErgonomicWeight,
-                        isSupporting, Time.deltaTime);
+                        isSupporting, Time.deltaTime, rawRightHand.transform.parent);
                 }
                 else if (smoothingFactor != 50)
                 {
@@ -1028,7 +1029,7 @@ namespace TarkovVR.Source.Player.VRManager
                     rawRightHand.transform.rotation = RightHand.transform.rotation;
                 }
 
-                if (smoothingFactor != 50)
+                if (smoothingFactor != 50 && !(weightFeel && WeaponWeightFeel.physicsWeight))
                 {
                     rawRightHand.transform.position = Vector3.Slerp(rawRightHand.transform.position, RightHand.transform.position, smoothingFactor * Time.deltaTime);
                 }

@@ -2,14 +2,33 @@ using UnityEngine;
 
 namespace TarkovVR.Source.Player.VRManager
 {
-    // Weapon weight as a filter on rawRightHand's rotation (the marker anchor keeps the gun in the hand). Real rigid-body
-    // weight is a dead end: the rendered hand rides the marker-anchored gun, so any simulated divergence looks like the hand detaching.
+    // Weapon weight on rawRightHand's rotation (the marker anchor keeps the gun in the hand; the position stays the hand's).
+    // physicsWeight (default): the held gun as a rigid body your grip holds stiffly - inside your strength it is exactly where your hand
+    // is, so aiming is crisp - and the weight is the strength: the arm can only turn it so hard about the grip (wristStrength, +
+    // supportForce x the hands' spread two-handed, x the stock's bracing), against its real mass and length, so a fast swing of a heavy,
+    // long gun trails and carries through and a pistol never does. Braking takes more (brakeStrength: you brace against a moving gun),
+    // the grip tightens as the gun falls behind (catchBoost), and the push never outruns what can still stop at your hand. Its weight sags
+    // the muzzle against the hold's give (wristStiffness / supportHoldStiffness). In the rig's frame: turning or moving the rig isn't the
+    // hand moving. Not a free simulation (that read as the gun leaving the hand): a strength-limited tracker of the hand, lag capped.
+    // physicsWeight = false: the older spring -
     //  - swing/twist split about the barrel: rolling the gun (twist) is light, swinging the muzzle (swing) carries the weight.
     //  - the swing is a second-order spring-damper: the velocity state is momentum, so heavy guns follow through on stops.
     //  - one-handed, a constant droop torque sags the muzzle; two-handing stiffens the spring and drops the droop.
     //  - swing lag is hard-capped (maxLagDegrees): the gun resists but never falls far behind the hand.
     public class WeaponWeightFeel
     {
+        public static bool physicsWeight = true;
+        public static float holdFrequency = 14f;          // Hz the grip tracks the hand at, inside the strength
+        public static float wristStrength = 15f;          // N m the gun hand alone can turn the gun with
+        public static float supportForce = 120f;          // N the support hand adds, at its distance from the gun hand
+        public static float brakeStrength = 3f;           // x the strength while stopping the gun
+        public static float catchBoost = 8f;              // the strength x (1 + this x (lag / maxLagDegrees)^2): the grip tightens as it falls behind
+        public static float wristStiffness = 40f;         // N m/rad: the one-handed hold's give under the gun's weight (the sag)
+        public static float supportHoldStiffness = 600f;  // N m/rad two-handed
+        public static float stockBehindGrip = 0.25f;      // m: the gun as a rod from its stock to the muzzle (pistols: from the grip)
+        public static float boreRadius = 0.05f;           // m radius of gyration about the bore (rolling the gun is easy)
+        public static float handSpinSmoothing = 0.015f;   // s the hand's own turn rate is smoothed over (tracking noise)
+        public static bool physicsDebugLog = false;       // a line a second: the gun's mass and inertia, the strength, how far behind it is
         public static float springBase = 350f;        // spring stiffness before ErgonomicWeight divides it; higher = lighter feel overall
         public static float dampingRatio = 0.95f;     // 1 = settles with no overshoot; lower = more follow-through on stops
         public static float supportStiffness = 2.5f;  // two-handed spring multiplier (the second hand's leverage)
@@ -56,13 +75,19 @@ namespace TarkovVR.Source.Player.VRManager
 
         // Filters `current` (last frame's filtered rotation) toward `target` for this frame. barrelDir =
         // the gun's current muzzle direction (world). All rotation deltas are world-frame pre-multiplies.
+        // frame = what the filtered rotation rides (the rig): its own turns aren't the hand's. Null = world.
         public Quaternion Step(Quaternion current, Quaternion target, Vector3 barrelDir,
-                               float ergoWeight, bool twoHanded, float dt)
+                               float ergoWeight, bool twoHanded, float dt, Transform frame = null)
         {
             if (Time.time - lastStepTime > 0.25f)
+            {
                 swingVel = Vector3.zero;              // weapon was away (holster/eat/menu) - drop stale momentum
+                havePhysicsState = false;
+            }
             lastStepTime = Time.time;
             dt = Mathf.Clamp(dt, 1e-4f, 0.033f);
+            if (physicsWeight && VRGlobals.firearmController != null)
+                return PhysicsStep(current, target, barrelDir, twoHanded, dt, frame);
 
             Quaternion error = target * Quaternion.Inverse(current);
             if (error.w < 0f)                           // shortest arc
@@ -134,6 +159,178 @@ namespace TarkovVR.Source.Player.VRManager
                 current = Quaternion.Slerp(target, current, maxLagDegrees / resAng);
 
             return current;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------
+        // The held gun as a rigid body (physicsWeight)
+
+        private bool havePhysicsState;
+        private Quaternion localOrientation = Quaternion.identity;  // the gun, in the frame's
+        private Vector3 localSpin;                                  // rad/s, the frame's axes
+        private Quaternion lastLocalTarget = Quaternion.identity;
+        private Vector3 handSpin;                                   // rad/s, the hand's own turn rate (smoothed)
+        private Quaternion lastWorldOutput = Quaternion.identity;
+        private float nextPhysicsLog;
+
+        private Quaternion PhysicsStep(Quaternion current, Quaternion target, Vector3 barrelDir, bool twoHanded, float dt, Transform frame)
+        {
+            Quaternion frameRotation = frame != null ? frame.rotation : Quaternion.identity;
+            Quaternion toLocal = Quaternion.Inverse(frameRotation);
+            Quaternion localTarget = toLocal * target;
+            // Where the gun is: our own state when the caller gave back what we gave it (as it was, or carried along by the frame), else
+            // what it set (a snap onto the hand)
+            if (havePhysicsState && Quaternion.Angle(current, frameRotation * localOrientation) > 0.05f && Quaternion.Angle(current, lastWorldOutput) > 0.05f)
+                havePhysicsState = false;
+            if (!havePhysicsState)
+            {
+                localOrientation = toLocal * current;
+                localSpin = Vector3.zero;
+                lastLocalTarget = localTarget;
+                handSpin = Vector3.zero;
+                havePhysicsState = true;
+            }
+            Vector3 handSpinNow = RotationVector(localTarget * Quaternion.Inverse(lastLocalTarget)) / dt;
+            handSpin = Vector3.Lerp(handSpin, handSpinNow, 1f - Mathf.Exp(-dt / Mathf.Max(handSpinSmoothing, 1e-3f)));
+
+            // The gun: its mass, as a rod along the bore from the stock (pistols: the grip) to the muzzle, turned about the grip
+            GunBody(barrelDir, out float mass, out float muzzleReach);
+            bool pistol = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol;
+            float length = muzzleReach + (pistol ? 0f : stockBehindGrip);
+            float centreAhead = muzzleReach - length * 0.5f;
+            float acrossInertia = Mathf.Max(mass * (length * length / 12f + centreAhead * centreAhead), 1e-4f);
+            float boreInertia = Mathf.Max(mass * boreRadius * boreRadius, 1e-5f);
+            Vector3 bore = (toLocal * barrelDir).normalized;
+            Vector3 down = toLocal * Vector3.down;
+
+            // Its weight about the grip (none falling freely), and a push-off or landing as a jolt of it
+            UpdateBody();
+            Vector3 weightTorque = frameWeightless ? Vector3.zero : Vector3.Cross(bore * centreAhead, down * (mass * GRAVITY));
+            if (jumpInertia && frameSpeedChange > 0f && lastJumpDipFrame != Time.frameCount)
+            {
+                lastJumpDipFrame = Time.frameCount;
+                Vector3 jolt = Vector3.Cross(bore * centreAhead, down * (mass * frameSpeedChange)) * jumpInertiaScale;
+                localSpin += InverseInertia(jolt, bore, acrossInertia, boreInertia);
+            }
+
+            float strength = (wristStrength + (twoHanded ? supportForce * SupportLever() : 0f)) * ShoulderStock.SpringMult;
+            // The sag: the weight against the hold's give
+            float give = twoHanded ? wristStiffness + supportHoldStiffness : wristStiffness;
+            float sagDegrees = Mathf.Min(weightTorque.magnitude / Mathf.Max(give, 1f) * Mathf.Rad2Deg, maxDroop);
+            Vector3 sagAxis = Vector3.Cross(bore, down);
+            Quaternion sag = sagDegrees > 1e-3f && sagAxis.sqrMagnitude > 1e-6f ? Quaternion.AngleAxis(sagDegrees, sagAxis.normalized) : Quaternion.identity;
+
+            float omega = 2f * Mathf.PI * Mathf.Max(holdFrequency, 1f);
+            float capRadians = Mathf.Max(maxLagDegrees, 1f) * Mathf.Deg2Rad;
+            float weightSize = weightTorque.magnitude;
+            // (stiff: small steps, the hand's move spread over them)
+            int steps = Mathf.Clamp(Mathf.CeilToInt(dt / 0.001f), 1, 40);
+            float stepTime = dt / steps;
+            for (int i = 0; i < steps; i++)
+            {
+                Quaternion goal = sag * Quaternion.Slerp(lastLocalTarget, localTarget, (i + 1f) / steps);
+                Vector3 error = RotationVector(goal * Quaternion.Inverse(localOrientation));
+                float errorSize = error.magnitude;
+                Vector3 errorDirection = errorSize > 1e-7f ? error / errorSize : Vector3.zero;
+                float grip = 1f + catchBoost * (errorSize / capRadians) * (errorSize / capRadians);
+                // Toward the hand no faster than it can still stop there
+                float stopping = Mathf.Max(strength * brakeStrength * grip - weightSize, 1e-3f) / Mathf.Max(InertiaAbout(errorDirection, bore, acrossInertia, boreInertia), 1e-5f);
+                float closing = Mathf.Min(omega * errorSize, Mathf.Sqrt(2f * stopping * errorSize));
+                Vector3 wantedAcceleration = 2f * omega * (handSpin + errorDirection * closing - localSpin);
+                Vector3 accelerationTorque = Inertia(wantedAcceleration, bore, acrossInertia, boreInertia);
+                Vector3 armTorque = accelerationTorque - weightTorque;
+                float limit = strength * grip * (Vector3.Dot(accelerationTorque, localSpin) < 0f ? brakeStrength : 1f);
+                float armSize = armTorque.magnitude;
+                if (armSize > limit)
+                    armTorque *= limit / armSize;
+                localSpin += InverseInertia(armTorque + weightTorque, bore, acrossInertia, boreInertia) * stepTime;
+                float spinSize = localSpin.magnitude;
+                if (spinSize > maxSwingVel)
+                    localSpin *= maxSwingVel / spinSize;
+                float stepDegrees = localSpin.magnitude * stepTime * Mathf.Rad2Deg;
+                if (stepDegrees > 1e-6f)
+                    localOrientation = Quaternion.AngleAxis(stepDegrees, localSpin.normalized) * localOrientation;
+            }
+            lastLocalTarget = localTarget;
+
+            // Never further than maxLagDegrees off the hand: there it's carried along
+            float lag = Quaternion.Angle(localOrientation, localTarget);
+            if (lag > maxLagDegrees)
+            {
+                localOrientation = Quaternion.Slerp(localTarget, localOrientation, maxLagDegrees / lag);
+                localSpin = handSpin;
+            }
+            if (physicsDebugLog && Time.time >= nextPhysicsLog)
+            {
+                nextPhysicsLog = Time.time + 1f;
+                Plugin.MyLog.LogInfo($"[WeaponWeight] {mass:0.0} kg, {length * 100f:0} cm, inertia {acrossInertia:0.000} kg m2, weight {weightSize:0.0} N m, strength {strength:0} N m"
+                    + $" ({(twoHanded ? $"two-handed, hands {SupportLever() * 100f:0} cm apart" : "one hand")}), sag {sagDegrees:0.0} deg, {lag:0.0} deg behind the hand");
+            }
+            lastWorldOutput = frameRotation * localOrientation;
+            return lastWorldOutput;
+        }
+
+        private static Vector3 Inertia(Vector3 vector, Vector3 bore, float across, float aboutBore)
+        {
+            Vector3 along = bore * Vector3.Dot(bore, vector);
+            return (vector - along) * across + along * aboutBore;
+        }
+
+        private static Vector3 InverseInertia(Vector3 torque, Vector3 bore, float across, float aboutBore)
+        {
+            Vector3 along = bore * Vector3.Dot(bore, torque);
+            return (torque - along) / across + along / aboutBore;
+        }
+
+        private static float InertiaAbout(Vector3 axis, Vector3 bore, float across, float aboutBore)
+        {
+            float alongBore = Vector3.Dot(axis, bore);
+            return across * (1f - alongBore * alongBore) + aboutBore * alongBore * alongBore;
+        }
+
+        // A rotation as its axis times its angle, rad (the shortest way round)
+        private static Vector3 RotationVector(Quaternion rotation)
+        {
+            if (rotation.w < 0f)
+                rotation = new Quaternion(-rotation.x, -rotation.y, -rotation.z, -rotation.w);
+            rotation.ToAngleAxis(out float degrees, out Vector3 axis);
+            if (degrees > 180f)
+                degrees -= 360f;
+            if (Mathf.Abs(degrees) < 1e-6f || float.IsInfinity(axis.x) || float.IsNaN(axis.x))
+                return Vector3.zero;
+            return axis.normalized * (degrees * Mathf.Deg2Rad);
+        }
+
+        // The support hand's lever on the gun: how far apart the hands are
+        private static float SupportLever()
+        {
+            if (VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null || VRGlobals.vrPlayer.RightHand == null)
+                return 0.3f;
+            return Mathf.Clamp(Vector3.Distance(VRGlobals.vrPlayer.LeftHand.transform.position, VRGlobals.vrPlayer.RightHand.transform.position), 0.1f, 0.9f);
+        }
+
+        // The held gun's mass (mods, magazine and rounds in it) and how far its muzzle is ahead of the grip along the bore, read once a second
+        private static EFT.Player.FirearmController gunBodyOf;
+        private static float gunBodyReadTime = -10f;
+        private static float gunMass = 3f;
+        private static float gunMuzzleReach = 0.5f;
+
+        private static void GunBody(Vector3 barrelDir, out float mass, out float muzzleReach)
+        {
+            EFT.Player.FirearmController firearmController = VRGlobals.firearmController;
+            if (firearmController != gunBodyOf || Time.time - gunBodyReadTime > 1f)
+            {
+                gunBodyOf = firearmController;
+                gunBodyReadTime = Time.time;
+                try { gunMass = Mathf.Clamp(firearmController.Item.TotalWeight, 0.3f, 20f); }
+                catch { gunMass = 3f; }
+                Transform muzzle = firearmController.CurrentFireport?.Original;
+                Transform grip = VRGlobals.player != null && VRGlobals.player._markers != null && VRGlobals.player._markers.Length > 1 && VRGlobals.player._markers[1] != null
+                    ? VRGlobals.player._markers[1].transform : null;
+                if (muzzle != null && grip != null)
+                    gunMuzzleReach = Mathf.Clamp(Vector3.Dot(muzzle.position - grip.position, barrelDir.normalized), 0.05f, 1.5f);
+            }
+            mass = gunMass;
+            muzzleReach = gunMuzzleReach;
         }
 
         // Once a frame: the body's vertical speed from its position, and from it this frame's push-off / landing and whether it's falling
