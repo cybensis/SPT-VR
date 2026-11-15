@@ -3,13 +3,13 @@ using UnityEngine;
 namespace TarkovVR.Source.Player.VRManager
 {
     // Weapon weight on rawRightHand's rotation (the marker anchor keeps the gun in the hand; the position stays the hand's).
-    // physicsWeight (default): the held gun as a rigid body your grip holds stiffly - inside your strength it is exactly where your hand
-    // is, so aiming is crisp - and the weight is the strength: the arm can only turn it so hard about the grip (wristStrength, +
-    // supportForce x the hands' spread two-handed, x the stock's bracing), against its real mass and length, so a fast swing of a heavy,
-    // long gun trails and carries through and a pistol never does. Braking takes more (brakeStrength: you brace against a moving gun),
-    // the grip tightens as the gun falls behind (catchBoost), and the push never outruns what can still stop at your hand. Its weight sags
-    // the muzzle against the hold's give (wristStiffness / supportHoldStiffness). In the rig's frame: turning or moving the rig isn't the
-    // hand moving. Not a free simulation (that read as the gun leaving the hand): a strength-limited tracker of the hand, lag capped.
+    // physicsWeight (default): the held gun as a rigid body (its mass, a rod from the stock to the muzzle) held at the grip by a spring:
+    // the gun hand's (wristGripStiffness) + two-handed the support hand's at its distance (supportGripStiffness), x the stock's bracing.
+    // Against the gun's own inertia that sets how fast it follows (a pistol ~10 Hz, a rifle one-handed ~2 Hz, two-handed ~5 Hz); the
+    // hand's turn rate is fed forward, so a still hand or a steady pan has the gun exactly on it and only speeding up / slowing down
+    // shows the weight (it trails a move's start, carries past its end). Its weight sags the muzzle against the same spring. The arm's
+    // torque is capped (wristStrength + supportForce x the spread; brakeStrength to stop it, catchBoost as it falls behind). In the
+    // rig's frame: turning or moving the rig isn't the hand moving. Not a free simulation (that read as the gun leaving the hand), lag capped.
     // physicsWeight = false: the older spring -
     //  - swing/twist split about the barrel: rolling the gun (twist) is light, swinging the muzzle (swing) carries the weight.
     //  - the swing is a second-order spring-damper: the velocity state is momentum, so heavy guns follow through on stops.
@@ -18,13 +18,19 @@ namespace TarkovVR.Source.Player.VRManager
     public class WeaponWeightFeel
     {
         public static bool physicsWeight = true;
-        public static float holdFrequency = 14f;          // Hz the grip tracks the hand at, inside the strength
+        // The hold's stiffness: against the gun's inertia about the grip it's how quickly the gun follows the hand speeding up and
+        // slowing down (a heavy, long gun trails a move's start and carries a little past its end; a steady pan or a still hand it sits on),
+        // and against its weight the sag
+        public static float wristGripStiffness = 30f;     // N m/rad the gun hand alone (an M4 one-handed: ~8 deg of sag, ~2 Hz)
+        public static float supportGripStiffness = 1500f; // N/m the support hand, at its distance from the gun hand (x that distance squared)
+        public static float maxSag = 15f;                 // deg
+        public static float holdDamping = 1f;             // 1 = it settles without swinging back; lower = a heavy gun rocks on a stop
+        public static float minHoldFrequency = 1.5f;      // Hz: the softest the hold gets (an LMG one-handed)
+        public static float maxHoldFrequency = 25f;       // Hz: the stiffest (a pistol; rolling any gun about its bore)
         public static float wristStrength = 15f;          // N m the gun hand alone can turn the gun with
         public static float supportForce = 120f;          // N the support hand adds, at its distance from the gun hand
         public static float brakeStrength = 3f;           // x the strength while stopping the gun
         public static float catchBoost = 8f;              // the strength x (1 + this x (lag / maxLagDegrees)^2): the grip tightens as it falls behind
-        public static float wristStiffness = 40f;         // N m/rad: the one-handed hold's give under the gun's weight (the sag)
-        public static float supportHoldStiffness = 600f;  // N m/rad two-handed
         public static float stockBehindGrip = 0.25f;      // m: the gun as a rod from its stock to the muzzle (pistols: from the grip)
         public static float boreRadius = 0.05f;           // m radius of gyration about the bore (rolling the gun is easy)
         public static float handSpinSmoothing = 0.015f;   // s the hand's own turn rate is smoothed over (tracking noise)
@@ -212,14 +218,20 @@ namespace TarkovVR.Source.Player.VRManager
                 localSpin += InverseInertia(jolt, bore, acrossInertia, boreInertia);
             }
 
-            float strength = (wristStrength + (twoHanded ? supportForce * SupportLever() : 0f)) * ShoulderStock.SpringMult;
-            // The sag: the weight against the hold's give
-            float give = twoHanded ? wristStiffness + supportHoldStiffness : wristStiffness;
-            float sagDegrees = Mathf.Min(weightTorque.magnitude / Mathf.Max(give, 1f) * Mathf.Rad2Deg, maxDroop);
+            float lever = SupportLever();
+            float strength = (wristStrength + (twoHanded ? supportForce * lever : 0f)) * ShoulderStock.SpringMult;
+            float stiffness = (wristGripStiffness + (twoHanded ? supportGripStiffness * lever * lever : 0f)) * ShoulderStock.SpringMult;
+            // The sag: the weight against the hold
+            float sagDegrees = Mathf.Min(weightTorque.magnitude / Mathf.Max(stiffness, 1f) * Mathf.Rad2Deg, maxSag);
             Vector3 sagAxis = Vector3.Cross(bore, down);
             Quaternion sag = sagDegrees > 1e-3f && sagAxis.sqrMagnitude > 1e-6f ? Quaternion.AngleAxis(sagDegrees, sagAxis.normalized) : Quaternion.identity;
 
-            float omega = 2f * Mathf.PI * Mathf.Max(holdFrequency, 1f);
+            // How quickly it follows: the hold against its inertia, across the bore and about it
+            float softest = 2f * Mathf.PI * Mathf.Max(minHoldFrequency, 0.1f);
+            float stiffest = 2f * Mathf.PI * Mathf.Max(maxHoldFrequency, minHoldFrequency);
+            float acrossOmega = Mathf.Clamp(Mathf.Sqrt(stiffness / acrossInertia), softest, stiffest);
+            float boreOmega = Mathf.Clamp(Mathf.Sqrt(stiffness / boreInertia), softest, stiffest);
+            float damping = Mathf.Max(holdDamping, 0.1f);
             float capRadians = Mathf.Max(maxLagDegrees, 1f) * Mathf.Deg2Rad;
             float weightSize = weightTorque.magnitude;
             // (stiff: small steps, the hand's move spread over them)
@@ -230,12 +242,15 @@ namespace TarkovVR.Source.Player.VRManager
                 Quaternion goal = sag * Quaternion.Slerp(lastLocalTarget, localTarget, (i + 1f) / steps);
                 Vector3 error = RotationVector(goal * Quaternion.Inverse(localOrientation));
                 float errorSize = error.magnitude;
-                Vector3 errorDirection = errorSize > 1e-7f ? error / errorSize : Vector3.zero;
                 float grip = 1f + catchBoost * (errorSize / capRadians) * (errorSize / capRadians);
-                // Toward the hand no faster than it can still stop there
-                float stopping = Mathf.Max(strength * brakeStrength * grip - weightSize, 1e-3f) / Mathf.Max(InertiaAbout(errorDirection, bore, acrossInertia, boreInertia), 1e-5f);
-                float closing = Mathf.Min(omega * errorSize, Mathf.Sqrt(2f * stopping * errorSize));
-                Vector3 wantedAcceleration = 2f * omega * (handSpin + errorDirection * closing - localSpin);
+                // Toward the hand no faster than it can still stop there, across the bore and about it
+                float spare = Mathf.Max(strength * brakeStrength * grip - weightSize, 1e-3f);
+                Vector3 errorAlong = bore * Vector3.Dot(bore, error);
+                Vector3 handAlong = bore * Vector3.Dot(bore, handSpin);
+                Vector3 spinAlong = bore * Vector3.Dot(bore, localSpin);
+                Vector3 wantedAcceleration =
+                    Follow(error - errorAlong, handSpin - handAlong, localSpin - spinAlong, acrossOmega, damping, spare / acrossInertia)
+                    + Follow(errorAlong, handAlong, spinAlong, boreOmega, damping, spare / boreInertia);
                 Vector3 accelerationTorque = Inertia(wantedAcceleration, bore, acrossInertia, boreInertia);
                 Vector3 armTorque = accelerationTorque - weightTorque;
                 float limit = strength * grip * (Vector3.Dot(accelerationTorque, localSpin) < 0f ? brakeStrength : 1f);
@@ -262,11 +277,22 @@ namespace TarkovVR.Source.Player.VRManager
             if (physicsDebugLog && Time.time >= nextPhysicsLog)
             {
                 nextPhysicsLog = Time.time + 1f;
-                Plugin.MyLog.LogInfo($"[WeaponWeight] {mass:0.0} kg, {length * 100f:0} cm, inertia {acrossInertia:0.000} kg m2, weight {weightSize:0.0} N m, strength {strength:0} N m"
-                    + $" ({(twoHanded ? $"two-handed, hands {SupportLever() * 100f:0} cm apart" : "one hand")}), sag {sagDegrees:0.0} deg, {lag:0.0} deg behind the hand");
+                Plugin.MyLog.LogInfo($"[WeaponWeight] {mass:0.0} kg, {length * 100f:0} cm ({muzzleReach * 100f:0} ahead of the grip), inertia {acrossInertia:0.000} kg m2, weight {weightSize:0.0} N m,"
+                    + $" hold {stiffness:0} N m/rad = {acrossOmega / (2f * Mathf.PI):0.0} Hz, strength {strength:0} N m"
+                    + $" ({(twoHanded ? $"two-handed, hands {lever * 100f:0} cm apart" : "one hand")}), sag {sagDegrees:0.0} deg, {lag:0.0} deg behind the hand");
             }
             lastWorldOutput = frameRotation * localOrientation;
             return lastWorldOutput;
+        }
+
+        // A damped spring toward the hand carrying the hand's own turn rate (omega = the hold against the inertia, damping its ratio),
+        // closing no faster than it can stop there with stoppingAcceleration
+        private static Vector3 Follow(Vector3 error, Vector3 handSpin, Vector3 spin, float omega, float damping, float stoppingAcceleration)
+        {
+            float errorSize = error.magnitude;
+            Vector3 errorDirection = errorSize > 1e-7f ? error / errorSize : Vector3.zero;
+            float closing = Mathf.Min(omega / (2f * damping) * errorSize, Mathf.Sqrt(2f * stoppingAcceleration * errorSize));
+            return 2f * damping * omega * (handSpin + errorDirection * closing - spin);
         }
 
         private static Vector3 Inertia(Vector3 vector, Vector3 bore, float across, float aboutBore)
