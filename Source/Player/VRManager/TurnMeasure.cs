@@ -8,7 +8,7 @@ namespace TarkovVR.Source.Player.VRManager
     // them. One line a frame while the turn stick is pushed or the stance is changing (and afterTime after), else one a second.
     public static class TurnMeasure
     {
-        public static bool enabled = true;
+        public static bool enabled = false;
         public static float stickThreshold = 0.15f;
         public static float afterTime = 0.3f;       // s of per-frame lines after the turn / stance change stops
         public static float idleLogInterval = 1f;   // s between lines otherwise
