@@ -19,12 +19,36 @@ namespace TarkovVR.Patches.Visuals
         public static Vector2 lastWindDirection = new Vector2(1f, 0f);
 
 
-        //Tarkov Clouds dont render correctly in VR so disable them
+        // Tarkov's clouds (CloudController + CloudLayerRenderer, a port of HDRP's Cloud Layer) are a full-screen pass at
+        // AfterForwardOpaque whose only view input is _PixelCoordToViewDirWS (pixel -> sky direction; the shader reads no camera
+        // position and no depth). Vanilla builds it from the camera's mono projection with a centred lens: in VR each eye's
+        // frustum is off-centre, so both eyes got one pixel -> direction map = the clouds in a different place per eye. Rebuilt
+        // per eye below (OnPreRenderCamera runs once per eye in MultiPass). CloudSix skips RenderClouds itself.
+        public static bool vanillaClouds = true;    // false = Tarkov's clouds not drawn (their shadow cookie stays)
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(CloudLayerRenderer), "RenderClouds")]
-        private static bool DisableClouds(CloudLayerRenderer __instance)
+        private static bool ShowVanillaClouds()
         {
-            return false;
+            return vanillaClouds;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(CloudController), "UpdateParameters")]
+        private static void CloudDirectionsPerEye(BuiltinSkyParameters parameters, Camera cam)
+        {
+            if (cam == null || !cam.stereoEnabled || cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Mono)
+                return;
+            Camera.StereoscopicEye eye = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left;
+            Matrix4x4 projection = cam.GetStereoProjectionMatrix(eye);
+            Matrix4x4 view = cam.GetStereoViewMatrix(eye);
+            // The eye's frustum the way the helper takes it: vertical FOV, aspect and the off-centre lens shift (m02 / m12 = 2 x shift)
+            float verticalFov = 2f * Mathf.Atan(1f / projection.m11);
+            float aspect = projection.m11 / projection.m00;
+            Vector2 lensShift = new Vector2(projection.m02 * 0.5f, projection.m12 * 0.5f);
+            parameters.PixelCoordToViewDirMatrix = RenderingUtils.ComputePixelCoordToWorldSpaceViewDirectionMatrix(
+                verticalFov, lensShift, parameters.ScreenSize, view, false, aspect);
+            parameters.ViewMatrix = view;
         }
 
         [HarmonyPrefix]
