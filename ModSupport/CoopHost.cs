@@ -47,5 +47,21 @@ namespace TarkovVR.ModSupport
         {
             return StillAnswering && Time.time - since < waitLimit;
         }
+
+        // The host refused a hands change of yours (FikaRefusals: FikaPlayer.HandleCallbackResponse with an error)
+        private static float lastRefusalAt = -1f;
+        internal static string LastRefusal { get; private set; }
+
+        internal static void NoteRefused(string error)
+        {
+            lastRefusalAt = Time.time;
+            LastRefusal = error;
+        }
+
+        // A refusal came in at or after 'since' (Time.time)
+        internal static bool RefusedSince(float since)
+        {
+            return IsClient && lastRefusalAt >= 0f && lastRefusalAt >= since;
+        }
     }
 }

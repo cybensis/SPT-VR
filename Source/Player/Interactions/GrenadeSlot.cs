@@ -36,6 +36,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float throwReturnTimeout = 8f;    // s after a throw Tarkov's draw of the gun that hung before still counts as its return
         public static float returnRetryDelay = 1f;      // co-op client: s between asks for a gun's return the host refused (once it's free)
         public static int returnRetries = 4;
+        public static float refusedTakeHold = 2f;       // co-op client: s the slot waits after the host refused a take
         public static bool debugLog = true;         // one line per grab / pick / placement
 
         private sealed class Hand
@@ -78,6 +79,9 @@ namespace TarkovVR.Source.Player.Interactions
         private static Quaternion inHandRotation = Quaternion.identity;
         private static Item handsBefore;
         private static bool gunHungBefore;
+        // Co-op as a client: when the last take was asked for (until the host has had time to answer it), and the wait after a refusal
+        private static float takeAskedAt = -1f;
+        private static float takeRefusedUntil = -1f;
         // What Tarkov draws once the grenade in hand is thrown: the item before it (PlayerOwner.PreviousItem as it came in), the one before
         // the first through picker swaps
         private static Item afterThrowItem;
@@ -134,6 +138,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             SkipPutAway();
             UpdatePendingReturn();
+            UpdateTakeAnswer();
             RetryRefusedReturn();
             if (grabbedItem != null && !GrabbedInHands && !IsSwitching())
             {
@@ -251,6 +256,7 @@ namespace TarkovVR.Source.Player.Interactions
             // What Tarkov draws after the throw (the item before the grenade): its draw skipped, as after a put-back - straight into the
             // hand, or back on its spot if it hung
             Item back = afterThrowItem ?? hungGun;
+            takeAskedAt = -1f;
             if (InInventory(back))
                 ExpectGunBack(back, hangs: back == hungGun, throwReturnTimeout);
             if (debugLog)
@@ -293,7 +299,47 @@ namespace TarkovVR.Source.Player.Interactions
             Haptic(hand, 0.35f, 0.04f);
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[GrenadeSlot] {(hand.left ? "left" : "right")} hand takes {picked.LocalizedShortName()}, in hands before: {handsBefore?.LocalizedShortName() ?? "nothing"}{(gunHungBefore ? " (hanging)" : "")}");
+            takeAskedAt = Time.time;
             VRGlobals.player.SetItemInHands(picked, delegate { });
+        }
+
+        // Co-op as a client: the host's answer to the last take. FIKA asks it once the grenade is in the hand here, and a refusal puts it
+        // away again into empty hands: the hands go back to what they held (a gun that hung hangs again), and the slot waits a moment.
+        private static void UpdateTakeAnswer()
+        {
+            if (takeAskedAt < 0f)
+                return;
+            if (CoopHost.RefusedSince(takeAskedAt))
+            {
+                OnTakeRefused();
+                return;
+            }
+            if (Time.time - takeAskedAt > CoopHost.waitLimit && !CoopHost.StillAnswering)
+                takeAskedAt = -1f;
+        }
+
+        private static void OnTakeRefused()
+        {
+            Item grenade = takenFromSlot ?? switchingTo;
+            takeAskedAt = -1f;
+            takeRefusedUntil = Time.time + refusedTakeHold;
+            EndSwitch();
+            grabbedItem = null;
+            takenFromSlot = null;
+            grabbedLeft = false;
+            grabbedByHold = false;
+            bool goesBack = false;
+            EquipmentSlot slot = EquipmentSlot.FirstPrimaryWeapon;
+            if (InInventory(handsBefore) && BodyWeapons.SlotOf(handsBefore, out slot))
+                goesBack = true;
+            Plugin.MyLog.LogWarning($"[GrenadeSlot] the host refused {grenade?.LocalizedShortName()} ({CoopHost.LastRefusal}): "
+                + (goesBack ? $"hands back to {handsBefore.LocalizedShortName()}{(gunHungBefore ? " (hanging)" : "")}" : "hands left empty") + $", the slot waits {refusedTakeHold:0.#} s");
+            if (!goesBack)
+                return;
+            ExpectGunBack(handsBefore, gunHungBefore, switchTimeout);
+            // Asked now if FIKA has already left empty hands; else RetryRefusedReturn asks once it has
+            if (ReturnRefused && !CoopHost.StillAnswering)
+                VRInputManager.ForceCommand(BodyWeapons.SelectCommand(slot));
         }
 
         private static string WhyNotSwitch(Hand hand)
@@ -301,6 +347,7 @@ namespace TarkovVR.Source.Player.Interactions
             if (WeaponPatches.grenadeEquipped) return "a grenade in hand already";
             if (CoopHost.StillAnswering) return "co-op: the host hasn't answered your last move yet";
             if (ReturnRefused) return "co-op: the host refused the gun's return, asking again";
+            if (Time.time < takeRefusedUntil) return "co-op: the host refused the last take";
             if (VRReloadController.HoldingMagazine || VRReloadController.HoldingChargingHandle) return "the reload has a hand";
             if (VRGlobals.player.InventoryController.IsChangingWeapon) return "switching weapons";
             object hands = VRGlobals.player.HandsController;
@@ -373,6 +420,7 @@ namespace TarkovVR.Source.Player.Interactions
             EFT.PlayerOwner owner = VRGlobals.player.GetComponent<EFT.PlayerOwner>();
             if (owner != null)
                 owner.PreviousItem = afterThrowItem;
+            takeAskedAt = -1f;
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[GrenadeSlot] {current.Item.LocalizedShortName()} swapped for {next.LocalizedShortName()} ({(left ? "left" : "right")} hand), after its throw: {afterThrowItem?.LocalizedShortName() ?? "empty hands"}{(owner == null ? " (NO PlayerOwner - Tarkov's own pick)" : "")}");
             VRGlobals.player.SetItemInHands(next, delegate { });
@@ -481,6 +529,7 @@ namespace TarkovVR.Source.Player.Interactions
             // Taken here: what the hands held before. Drawn another way (the radial menu): Tarkov's own last weapon.
             bool fromHere = grenade != null && grenade.Item == takenFromSlot;
             Item back = fromHere ? handsBefore : VRGlobals.player.LastEquippedWeaponOrKnifeItem;
+            takeAskedAt = -1f;
             puttingAway = grenade;
             putAwayStarted = Time.time;
             if (InInventory(back) && BodyWeapons.SlotOf(back, out EquipmentSlot slot))
