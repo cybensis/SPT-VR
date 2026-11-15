@@ -31,7 +31,8 @@ namespace TarkovVR.Source.Player.Interactions
         public static float grabRadius = 0.13f;         // m RightHand rig to a body gun's grip, as ChestHang.regrabRadius
         public static float gunGrabRadius = 0.06f;      // m any point of the hand (palm, fingertips) off a gun's barrel line: anywhere on it takes it
         public static float switchTimeout = 3f;         // s before a switch that never lands is given up
-        public static bool debugLog = false;            // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
+        public static bool debugLog = true;             // every dominant grip press: the zones, each slot's gun and grip distance, why it did or didn't take one
+        public static bool leftHandTakes = true;        // right-handed mode: the left hand takes a gun off the body too, and holds it left-handed
         // The gun a grab switches to: its draw skipped the moment Tarkov starts it (BodyWeaponPatches.SkipDraw), before the animator plays a
         // frame of it. UpdateSwitch's skip comes a frame later: the draw's swing-up and sound have started by then.
         public static bool skipDrawAtSpawn = true;
@@ -57,13 +58,25 @@ namespace TarkovVR.Source.Player.Interactions
         private static GameObject standIn;
         private static Vector3 standInInHandPosition;
         private static Quaternion standInInHandRotation;
+        private static bool standInInLeftHand;
         private static float switchStarted;
+        // The gun the left hand took, held left-handed once it spawns (Handedness.GunInLeftHand); ChestHang keeps it there through the switch
+        private static Item takenLeftItem;
+        private static float takenLeftUntil;
+        private static bool prevLeftGrip;
 
         public static bool Switching => switchingTo != null;
         // From a grab until the grip opens: the old holster zones and the radial menu leave that press alone
         public static bool GrabbedThisPress { get; private set; }
+        // ...the left grip's, for a gun the left hand took (the quick-slot radial behind the shoulder leaves it alone)
+        public static bool LeftGrabbedThisPress { get; private set; }
         // The dominant hand within reach of a gun on the body (the loot pointer yields there, as at the hanging gun's regrab zone)
         public static bool HandAtBodyGun { get; private set; }
+        // The left hand within reach of one it may take (the off-hand loot pointer and body grab yield there)
+        public static bool OffHandAtBodyGun { get; private set; }
+        // A gun the left hand took is coming into, or just came into, the hands: ChestHang leaves it in the left hand
+        public static bool KeepsLeftHand => takenLeftItem != null && Time.time < takenLeftUntil
+            && (switchingTo == takenLeftItem || HandsItem() == takenLeftItem);
         // The holster zones' own swaps are this system's job now; the pistol's only where Tarkov draws it on the body (a holster)
         public static bool ReplacesBackZone => Active;
         public static bool ReplacesHipZone => Active && ViewOf(EquipmentSlot.Holster) != null;
@@ -92,11 +105,17 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (!grip)
                 GrabbedThisPress = false;
+            bool leftGrip = VRInput.LeftGrip.state;
+            bool leftGripPressed = leftGrip && !prevLeftGrip;
+            prevLeftGrip = leftGrip;
+            if (!leftGrip)
+                LeftGrabbedThisPress = false;
             if (switchTrace && lastSwitchItem != null && Time.time - switchStarted <= switchTraceTime)
                 TraceSwitchFrame();
             if (Switching)
             {
                 HandAtBodyGun = false;
+                OffHandAtBodyGun = false;
                 UpdateSwitch();
                 return;
             }
@@ -105,7 +124,118 @@ namespace TarkovVR.Source.Player.Interactions
                 LogGripPress();
             // Not a press the grenade on the chest took (GrenadeSlot, just before)
             if (gripPressed && HandAtBodyGun && !GrenadeSlot.TookPress)
+            {
                 TryGrab();
+                if (Switching)
+                {
+                    OffHandAtBodyGun = false;
+                    return;
+                }
+            }
+            OffHandAtBodyGun = Active && LeftHandMayTake() && NearestBodyGunToLeftHand(out _, out _, out _, out _);
+            if (leftGripPressed && debugLog && Active)
+                LogLeftGripPress();
+            if (leftGripPressed && OffHandAtBodyGun && !GrenadeSlot.TookPress)
+                TryGrabLeft();
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The left hand (right-handed mode): a gun off the body into it, held the way the left hand holds the slung gun it takes
+        // (ChestHang). Not the knife (no left-handed hold for it).
+
+        private static readonly List<Vector3> leftTouchPoints = new List<Vector3>();
+
+        private static string WhyLeftHandMayNot()
+        {
+            if (!leftHandTakes) return "off (leftHandTakes)";
+            if (Handedness.LeftHanded) return "left-handed mode";
+            if (Handedness.GunInLeftHand) return "a gun in the left hand already";
+            if (VRGlobals.vrPlayer == null || VRGlobals.vrPlayer.LeftHand == null || VRGlobals.handsInteractionController == null) return "no left hand";
+            if (VRGlobals.vrPlayer.isSupporting) return "on the foregrip";
+            if (VRReloadController.OwnsOffHand) return "on a reload part or in its zone";
+            if (HandsInteractionController.HoldingLoot) return "holding loot";
+            if (GrenadeSlot.OffHandAtSlot) return "at the grenade";
+            if (PhysicalDoors.HoldsDoor(false)) return "on a door";
+            // At the slung gun's grip: that press takes the slung gun into the left hand (ChestHang)
+            if (ChestHang.LeftHandAtHangingGrip()) return "at the slung gun's grip";
+            return null;
+        }
+
+        private static bool LeftHandMayTake() => WhyLeftHandMayNot() == null;
+
+        private static bool NearestBodyGunToLeftHand(out Item takenItem, out GameObject takenModel, out EquipmentSlot takenSlot, out float nearest)
+        {
+            takenItem = null;
+            takenModel = null;
+            takenSlot = EquipmentSlot.FirstPrimaryWeapon;
+            nearest = 1f;
+            Item inHands = HandsItem();
+            VRGlobals.handsInteractionController.GetHandTouchPoints(false, leftTouchPoints);
+            foreach (EquipmentSlot slot in bodySlots)
+            {
+                if (slot == EquipmentSlot.Scabbard)
+                    continue;
+                GameObject model = ViewOf(slot)?.Model;
+                Item item = SlotItem(slot);
+                if (model == null || !model.activeInHierarchy || item == null || item == inHands || GripMarkerOf(model) == null)
+                    continue;
+                float score = HandReach(WeaponRootOf(model), model.transform, GrabPoint(model), leftTouchPoints);
+                if (score < nearest)
+                {
+                    nearest = score;
+                    takenItem = item;
+                    takenModel = model;
+                    takenSlot = slot;
+                }
+            }
+            return takenModel != null;
+        }
+
+        private static void TryGrabLeft()
+        {
+            string whyNot = WhyNotSwitch();
+            if (!Active || whyNot != null)
+            {
+                if (debugLog)
+                    Plugin.MyLog.LogInfo($"[BodyWeapons] left hand: no switch now ({whyNot})");
+                return;
+            }
+            Item inHands = HandsItem();
+            if (!NearestBodyGunToLeftHand(out Item takenItem, out GameObject takenModel, out EquipmentSlot takenSlot, out float nearest))
+                return;
+            switchingTo = takenItem;
+            lastSwitchItem = takenItem;
+            standIn = takenModel;
+            standInInLeftHand = true;
+            Transform handTransform = VRGlobals.vrPlayer.LeftHand.transform;
+            standInInHandRotation = Quaternion.Inverse(handTransform.rotation) * takenModel.transform.rotation;
+            standInInHandPosition = Quaternion.Inverse(handTransform.rotation) * (takenModel.transform.position - handTransform.position);
+            switchStarted = Time.time;
+            takenLeftItem = takenItem;
+            takenLeftUntil = Time.time + switchTimeout + 1f;
+            LeftGrabbedThisPress = true;
+            ChestHang.TakenFromBody(takenItem);
+            VRInputManager.ForceCommand(SelectCommand(takenSlot));
+            HapticMixer.PlayPulse(Valve.VR.SteamVR_Input_Sources.LeftHand, 0.35f, 0.07f, 95f);
+            if (debugLog)
+                Plugin.MyLog.LogInfo($"[BodyWeapons] left hand took {takenItem.LocalizedShortName()} from {takenSlot} (reach {nearest:0.00}), in hands: {inHands?.LocalizedShortName() ?? "nothing"}");
+        }
+
+        private static void LogLeftGripPress()
+        {
+            var line = new System.Text.StringBuilder($"[BodyWeapons] left grip press: {WhyLeftHandMayNot() ?? "free"}, can switch: {WhyNotSwitch() ?? "yes"}");
+            if (VRGlobals.handsInteractionController != null)
+            {
+                VRGlobals.handsInteractionController.GetHandTouchPoints(false, leftTouchPoints);
+                foreach (EquipmentSlot slot in bodySlots)
+                {
+                    GameObject model = ViewOf(slot)?.Model;
+                    if (slot == EquipmentSlot.Scabbard || model == null || !model.activeInHierarchy)
+                        continue;
+                    line.Append($" | {slot}: {SlotItem(slot)?.LocalizedShortName() ?? "empty"}, reach {HandReach(WeaponRootOf(model), model.transform, GrabPoint(model), leftTouchPoints):0.00}");
+                }
+            }
+            Plugin.MyLog.LogInfo(line.ToString());
         }
 
         // The gun the dominant hand takes: the shoulder or hip zone's own while the hand is in that zone (the guns sit there,
@@ -290,6 +420,8 @@ namespace TarkovVR.Source.Player.Interactions
             switchingTo = takenItem;
             lastSwitchItem = takenItem;
             standIn = takenModel;
+            standInInLeftHand = false;
+            takenLeftItem = null;
             Transform handTransform = VRGlobals.vrPlayer.RightHand.transform;
             standInInHandRotation = Quaternion.Inverse(handTransform.rotation) * takenModel.transform.rotation;
             standInInHandPosition = Quaternion.Inverse(handTransform.rotation) * (takenModel.transform.position - handTransform.position);
@@ -378,6 +510,14 @@ namespace TarkovVR.Source.Player.Interactions
         {
             try
             {
+                // Taken by the left hand: held by it from its first frame (before ChestHang sees the switch, which keeps it: KeepsLeftHand)
+                if (firearmController != null && firearmController._player != null && firearmController._player.IsYourPlayer
+                    && takenLeftItem != null && firearmController.Item == takenLeftItem && Time.time < takenLeftUntil)
+                {
+                    Handedness.SetGunInLeftHand(true);
+                    if (debugLog)
+                        Plugin.MyLog.LogInfo($"[BodyWeapons] {takenLeftItem.LocalizedShortName()} spawning in the left hand");
+                }
                 if (!skipDrawAtSpawn || !fastSwitch || !Active || firearmController == null || firearmController._player == null || !firearmController._player.IsYourPlayer)
                     return;
                 if (lastSwitchItem == null || firearmController.Item != lastSwitchItem || Time.time - switchStarted > switchTimeout)
@@ -489,7 +629,9 @@ namespace TarkovVR.Source.Player.Interactions
                 // stay), and the gun in hands, whose body model Tarkov doesn't always drop (the range's hands item doesn't
                 // reach the body)
                 Item slotItem = SlotItem(slot);
-                bool hidden = slotItem == null || (inHandsItem != null && slotItem == inHandsItem && !(Switching && model == standIn));
+                // (a gun the left hand took: until it's held left-handed, then Tarkov's own gun is in that hand)
+                bool riding = Switching && model == standIn && !(standInInLeftHand && Handedness.GunInLeftHand);
+                bool hidden = slotItem == null || (inHandsItem != null && slotItem == inHandsItem && !riding);
                 foreach (Renderer renderer in view.Renderers)
                 {
                     if (renderer != null && renderer.enabled == hidden)
@@ -497,9 +639,9 @@ namespace TarkovVR.Source.Player.Interactions
                 }
                 if (hidden)
                     continue;
-                if (Switching && model == standIn)
+                if (riding)
                 {
-                    Transform hand = VRGlobals.vrPlayer.RightHand.transform;
+                    Transform hand = (standInInLeftHand ? VRGlobals.vrPlayer.LeftHand : VRGlobals.vrPlayer.RightHand).transform;
                     model.transform.SetPositionAndRotation(hand.position + hand.rotation * standInInHandPosition, hand.rotation * standInInHandRotation);
                 }
                 // The guns to our spots (Tarkov's thigh holster and back bones turn with the body); the knife stays on

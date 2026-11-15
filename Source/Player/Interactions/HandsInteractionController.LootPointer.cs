@@ -271,8 +271,8 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 // Off hand: not near the foregrip trigger, nor holding / reaching for a magazine. Nor with the gun in the left
                 // hand: the off hand is the right one then, and this pointer is built on the left palm (the hand on the gun).
-                // Nor at the gun hand's grip: a grip press there takes the gun into this hand (ChestHang)
-                if (NearForegrip() || VRReloadController.OwnsOffHand || Handedness.GunInLeftHand || ChestHang.OffHandAtGunGrip)
+                // Nor at the gun hand's grip, or a gun on the body: a grip press there takes that gun into this hand (ChestHang, BodyWeapons)
+                if (NearForegrip() || VRReloadController.OwnsOffHand || Handedness.GunInLeftHand || ChestHang.OffHandAtGunGrip || BodyWeapons.OffHandAtBodyGun)
                     return;
             }
 

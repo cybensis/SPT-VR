@@ -281,6 +281,9 @@ namespace TarkovVR.Source.Player.Interactions
             // That press takes the gun into this hand (ChestHang)
             if (ChestHang.OffHandAtGunGrip)
                 return "at the gun's grip";
+            // ...or a gun on the body (BodyWeapons)
+            if (BodyWeapons.OffHandAtBodyGun)
+                return "at a gun on the body";
             return null;
         }
 

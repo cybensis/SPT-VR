@@ -506,7 +506,7 @@ namespace TarkovVR.Source.Player.Interactions
 
             if (leftHandState.inBackpack)
             {
-                if (UIPatches.quickSlotUi && secondaryHandGrip.stateDown)
+                if (UIPatches.quickSlotUi && secondaryHandGrip.stateDown && !BodyWeapons.LeftGrabbedThisPress)
                 {
                     UIPatches.quickSlotUi.CreateQuickSlotUi();
                     UIPatches.quickSlotUi.gameObject.SetActive(true);

@@ -168,8 +168,9 @@ namespace TarkovVR.Source.Player.Interactions
                 releaseTimer = 0f;
                 prevGrip = grip;
                 Reattach(restore: false);
-                // A new gun (or none) starts in the right hand; a grenade the left hand took off the chest stays in it (GrenadeSlot)
-                if (!GrenadeSlot.KeepsLeftHand)
+                // A new gun (or none) starts in the right hand; a grenade the left hand took off the chest stays in it (GrenadeSlot), and
+                // so does a gun it took off the body (BodyWeapons)
+                if (!GrenadeSlot.KeepsLeftHand && !BodyWeapons.KeepsLeftHand)
                     Handedness.SetGunInLeftHand(false);
             }
 
@@ -177,7 +178,7 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 releaseTimer = 0f;
                 Reattach(restore: false);
-                if (!GrenadeSlot.KeepsLeftHand)
+                if (!GrenadeSlot.KeepsLeftHand && !BodyWeapons.KeepsLeftHand)
                     Handedness.SetGunInLeftHand(false);
                 return;
             }
@@ -446,6 +447,12 @@ namespace TarkovVR.Source.Player.Interactions
         }
         private static readonly System.Collections.Generic.List<Vector3> leftTouchPoints = new System.Collections.Generic.List<Vector3>();
         private static bool prevLeftGrip;
+
+        // The left hand where a grip press takes the slung gun into it (BodyWeapons' left-hand take yields there)
+        internal static bool LeftHandAtHangingGrip()
+        {
+            return enabled && Hanging && VRGlobals.firearmController != null && LeftHandAtGrip(VRGlobals.firearmController);
+        }
 
         // ---- the gun from one hand into the other ----
 

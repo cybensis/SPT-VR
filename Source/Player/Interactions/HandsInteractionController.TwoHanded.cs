@@ -95,7 +95,7 @@ namespace TarkovVR.Source.Player.Interactions
                 return false;
             if (dominant)
                 return DominantHandFree();
-            return !NearForegrip() && !VRReloadController.OwnsOffHand && !Handedness.GunInLeftHand && !ChestHang.OffHandAtGunGrip;
+            return !NearForegrip() && !VRReloadController.OwnsOffHand && !Handedness.GunInLeftHand && !ChestHang.OffHandAtGunGrip && !BodyWeapons.OffHandAtBodyGun;
         }
 
         private void BeginSecondHand(bool secondDominant, GraspShape shape)
