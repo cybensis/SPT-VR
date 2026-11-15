@@ -52,6 +52,13 @@ namespace TarkovVR.Source.Player.Interactions
         // The player's body blocks a door a hand moves or that coasts: it stops against the body. Tarkov's character controller pushes
         // the body out of a door's colliders at any speed, which dragged the shoulder off the held handle.
         public static bool bodyBlocksDoors = true;
+        // The body walking into a door that's free to swing (not latched, not locked, no hand on it) pushes it out of the way, as the gun
+        // and the free hands do. A latched or locked one still stops the body.
+        public static bool bodyPushesDoors = true;
+        // m ahead of the body's step the door already gives: the character controller stops the body at a door's surface, so it never
+        // sinks into one walking with the stick
+        public static float bodyContactMargin = 0.03f;
+        public static float bodyPushMaxTurn = 30f;      // deg a door turns for the body in one frame at most
         // A door let go of coasts on its hinges: their friction (a steady slowdown) and the air's drag (growing with the speed squared)
         public static float swingFriction = 45f;        // deg/s^2
         public static float swingDrag = 0.0005f;        // deg/s^2 per (deg/s)^2
@@ -234,6 +241,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             keyHands = hands;
             ReadTriggers();
+            // (walked into one in the room: the body follow puts the body in it without the character controller)
+            BodyPush(Vector3.zero, Time.deltaTime);
             string cantHold = !Active ? "physical doors off" : VRGlobals.menuOpen ? "a menu" : VRGlobals.player.IsSprintEnabled ? "sprinting" : null;
             UpdateHand(hands, holds[0], cantHold == null && offHandFree, cantHold ?? offHandTakenBy, Handedness.OffHandGrip);
             UpdateHand(hands, holds[1], cantHold == null && dominantHandFree, cantHold ?? dominantHandTakenBy, Handedness.GunHandGrip);
@@ -1020,7 +1029,10 @@ namespace TarkovVR.Source.Player.Interactions
 
         // How deep the door at this angle is in the body: its colliders that collide with players (Door.CollisionColliders), turned
         // there about the hinge (the setter only turns the door about its origin)
-        private static float DepthInBody(Door door, float angle, Collider body)
+        private static float DepthInBody(Door door, float angle, Collider body) => DepthInBody(door, angle, body, body.transform.position);
+
+        // ...with the body at bodyPosition (where its next step takes it)
+        private static float DepthInBody(Door door, float angle, Collider body, Vector3 bodyPosition)
         {
             Vector3 hinge = door.transform.position;
             Quaternion turn = Quaternion.AngleAxis(Mathf.DeltaAngle(door.CurrentAngle, angle), HingeAxis(door));
@@ -1035,10 +1047,98 @@ namespace TarkovVR.Source.Player.Interactions
                 Transform colliderTransform = collider.transform;
                 Vector3 position = hinge + turn * (colliderTransform.position - hinge);
                 Quaternion rotation = turn * colliderTransform.rotation;
-                if (Physics.ComputePenetration(collider, position, rotation, body, bodyTransform.position, bodyTransform.rotation, out _, out float depth))
+                if (Physics.ComputePenetration(collider, position, rotation, body, bodyPosition, bodyTransform.rotation, out _, out float depth))
                     deepest = Mathf.Max(deepest, depth);
             }
             return deepest;
+        }
+
+        // The body about to walk into a door that's free to swing: the door turned just clear of it, through the push the gun and hands use
+        // (its coast after, the state, the sounds and the co-op sync follow). intendedMove = this frame's step before the character
+        // controller's collision (MovementState.ApplyMotion), zero for the room-scale walk.
+        internal static void BodyPush(Vector3 intendedMove, float deltaTime)
+        {
+            if (!bodyPushesDoors || !Active || VRGlobals.player == null || VRGlobals.menuOpen)
+                return;
+            Collider body = PlayerBody();
+            if (body == null)
+                return;
+            Vector3 step = new Vector3(intendedMove.x, 0f, intendedMove.z);
+            Vector3 offset = step.sqrMagnitude > 1e-8f ? step + step.normalized * bodyContactMargin : Vector3.zero;
+            Vector3 bodyPosition = body.transform.position + offset;
+            Bounds bounds = body.bounds;
+            int count = Physics.OverlapSphereNonAlloc(bounds.center + offset, bounds.extents.magnitude + bodyContactMargin, bodyOverlaps, ~0, QueryTriggerInteraction.Ignore);
+            doorsAtBody.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                Door door = DoorOf(bodyOverlaps[i]);
+                if (door != null && !doorsAtBody.Contains(door))
+                    doorsAtBody.Add(door);
+            }
+            for (int i = 0; i < doorsAtBody.Count; i++)
+                PushOutOfBody(doorsAtBody[i], body, bodyPosition, deltaTime);
+            doorsAtBody.Clear();
+        }
+
+        private static void PushOutOfBody(Door door, Collider body, Vector3 bodyPosition, float deltaTime)
+        {
+            if (!MayBePushed(door))
+                return;
+            float current = door.CurrentAngle;
+            if (DepthInBody(door, current, body, bodyPosition) <= 0f)
+                return;
+            // The way that frees it
+            const float probe = 2f;
+            float opening = DepthInBody(door, current + probe, body, bodyPosition);
+            float closing = DepthInBody(door, current - probe, body, bodyPosition);
+            if (Mathf.Approximately(opening, closing))
+                return;
+            float direction = opening < closing ? 1f : -1f;
+            float clearAt = -1f;
+            for (float turn = probe; turn <= bodyPushMaxTurn; turn += probe)
+            {
+                if (DepthInBody(door, current + direction * turn, body, bodyPosition) <= 0f)
+                {
+                    clearAt = turn;
+                    break;
+                }
+            }
+            if (clearAt < 0f)
+                return;
+            float stillIn = clearAt - probe, clear = clearAt;
+            for (int i = 0; i < 6; i++)
+            {
+                float middle = (stillIn + clear) * 0.5f;
+                if (DepthInBody(door, current + direction * middle, body, bodyPosition) > 0f)
+                    stillIn = middle;
+                else
+                    clear = middle;
+            }
+            float degrees = direction * (clear + pushLeadDegrees);
+            float speed = degrees / Mathf.Max(deltaTime, 1e-4f);
+            float pushedSpeed = speed;
+            float angle = ClampToRange(door, current, current + degrees, ref pushedSpeed, out bool atStop);
+            float smoothed = Mathf.Lerp(AngularVelocityOf(door), pushedSpeed, 1f - Mathf.Exp(-Mathf.Max(deltaTime, 1e-4f) * 20f));
+            Pushed(door, angle, smoothed, atStop ? Mathf.Abs(speed) : 0f);
+        }
+
+        private static readonly Collider[] bodyOverlaps = new Collider[64];
+        private static readonly List<Door> doorsAtBody = new List<Door>();
+        private static readonly Dictionary<int, Door> doorOfCollider = new Dictionary<int, Door>();
+
+        private static Door DoorOf(Collider collider)
+        {
+            if (collider == null)
+                return null;
+            int id = collider.GetInstanceID();
+            if (!doorOfCollider.TryGetValue(id, out Door door))
+            {
+                door = collider.GetComponentInParent<Door>();
+                if (doorOfCollider.Count > 4096)
+                    doorOfCollider.Clear();
+                doorOfCollider[id] = door;
+            }
+            return door;
         }
 
         private static Collider PlayerBody()
