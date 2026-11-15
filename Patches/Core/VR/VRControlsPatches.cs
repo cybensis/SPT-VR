@@ -22,8 +22,24 @@ namespace TarkovVR.Patches.Core.VR
         public static float scopeTurnMaxAngle = 45f;    // deg off straight sideways the stick may point and still turn
         public static float scopeTurnDeadzone = 0.15f;  // sideways push below which it doesn't turn; smooth turning ramps up from here
         public static float scopeZoomPush = 0.3f;       // an up / down push past this, more up / down than sideways, is a zoom
-        public static float stickCentre = 0.2f;         // back within this of the centre, it may turn again
+        public static float stickCentre = 0.2f;         // back within this of the centre, it may turn / zoom again
+        public static float scopeTurnPush = 0.3f;       // a sideways push past this, more sideways than up / down, is a turn: no zoom until centred
         private static bool zoomPushSeen;
+        private static bool turnPushSeen;
+
+        // VROpticController's joystick zoom: the turning stick's up / down, only pushed more up / down than sideways and not after a turn push
+        // until the stick is back near the centre
+        internal static float ScopeZoomAxis()
+        {
+            Vector2 stick = VRInput.RightJoystick.axis;
+            if (!scopeTurnGuard)
+                return stick.y;
+            if (Mathf.Abs(stick.x) > scopeTurnPush && Mathf.Abs(stick.x) > Mathf.Abs(stick.y))
+                turnPushSeen = true;
+            else if (stick.magnitude < stickCentre)
+                turnPushSeen = false;
+            return turnPushSeen || Mathf.Abs(stick.y) < Mathf.Abs(stick.x) ? 0f : stick.y;
+        }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(InputPreset), "UpdateInput")]

@@ -233,7 +233,7 @@ namespace TarkovVR.Source.Weapons
             if (!scopeCamera) return;
 
             // The turning stick: its up / down is free while in the scope (jump / crouch pause), the moving stick's never is
-            float input = VRInput.RightJoystick.axis.y;
+            float input = TarkovVR.Patches.Core.VR.VRControlsPatches.ScopeZoomAxis();
 
             if (VRGlobals.scopes.Any(s => s != null && s.parent != null
                                            && s.parent.name.Contains("scope_all_eotech_hhs_1")))
