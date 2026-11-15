@@ -9,6 +9,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using TarkovVR.Patches.Upscalers;
 using TarkovVR.Patches.Visuals;
+using TarkovVR.Source.Player.VRManager;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -63,6 +64,7 @@ namespace TarkovVR.Source.Settings
             public float scopeSmoothingSensitivity { get; set; }
             public float variableZoomSensitivity { get; set; }
             public bool scopeAimSmoothing { get; set; }
+            public float aimSteadyStrength { get; set; }
             public bool enableSharpen { get; set; }
             public float rightHandVerticalAngle { get; set; }
             public float rightHandHorizontalAngle { get; set; }
@@ -141,6 +143,7 @@ namespace TarkovVR.Source.Settings
                 smoothingSensitivity = 1;
                 variableZoomSensitivity = 0.5f;
                 scopeSmoothingSensitivity = 5;
+                aimSteadyStrength = 1f;
                 rightHandVerticalAngle = 50;
                 rightHandHorizontalAngle = 20; 
                 leftHandHorizontalAngle = 50;
@@ -214,6 +217,7 @@ namespace TarkovVR.Source.Settings
         private static SettingToggle walkEffectorToggle;
         private static SettingSelectSlider aimSmoothingSlider;
         private static SettingSelectSlider scopeSmoothingSlider;
+        private static SettingSelectSlider aimSteadySlider;
         private static SettingToggle scopeSmoothingToggle;
         private static SettingSelectSlider rightHandVerticalAngleSlider;
         private static SettingSelectSlider rightHandHorizontalAngleSlider;
@@ -472,10 +476,14 @@ namespace TarkovVR.Source.Settings
             // smoothingSensitivity is the slerp factor (smoothingFactor): lower = heavier smoothing
             aimSmoothingSlider = AddSlider(weapons, "Weapon Smoothing Amount (Lower = Smoother)", 0f, 50f, () => settings.smoothingSensitivity,
                 (v) => settings.smoothingSensitivity = v, (v) => Remap(v, 0f, 50f, 0f, 10f).ToString("0"), shownWhen: () => settings.weaponAimSmoothing);
-            scopeSmoothingToggle = AddToggle(weapons, "Hold Breath Smoothing", settings.scopeAimSmoothing, ToggleScopeSmoothingSensitivity,
-                tooltip: "Steadies the aim while you hold your breath");
+            scopeSmoothingToggle = AddToggle(weapons, "Aim Steadying", settings.scopeAimSmoothing, ToggleScopeSmoothingSensitivity,
+                tooltip: "While aiming down sights, smooths out hand shake while your hand is nearly still but not while it moves. Stronger the more the scope zooms, and much stronger while you hold your breath (it fades as your lungs run out)");
+            aimSteadySlider = AddSlider(weapons, "Aim Steadying Strength", 0f, 2f, () => settings.aimSteadyStrength,
+                (v) => settings.aimSteadyStrength = v, (v) => Remap(v, 0f, 2f, 0f, 10f).ToString("0"),
+                shownWhen: () => settings.scopeAimSmoothing && AimSteady.enabled);
             scopeSmoothingSlider = AddSlider(weapons, "Hold Breath Sensitivity", 0f, 20f, () => settings.scopeSmoothingSensitivity,
-                (v) => settings.scopeSmoothingSensitivity = v, (v) => Remap(v, 0f, 20f, 0f, 10f).ToString("0"), shownWhen: () => settings.scopeAimSmoothing);
+                (v) => settings.scopeSmoothingSensitivity = v, (v) => Remap(v, 0f, 20f, 0f, 10f).ToString("0"),
+                shownWhen: () => settings.scopeAimSmoothing && !AimSteady.enabled);
             variableZoomSensitivitySlider = AddSlider(weapons, "Variable Zoom Sensitivity", 0f, 2f, () => settings.variableZoomSensitivity,
                 (v) => settings.variableZoomSensitivity = v, (v) => Remap(v, 0f, 2f, 0f, 10f).ToString("0"),
                 tooltip: "How fast the stick zooms a variable scope");
@@ -840,6 +848,10 @@ namespace TarkovVR.Source.Settings
         public static float GetScopeSensitivity()
         {
             return settings.scopeSmoothingSensitivity;
+        }
+        public static float GetAimSteadyStrength()
+        {
+            return settings.scopeAimSmoothing ? Mathf.Max(settings.aimSteadyStrength, 0f) : 0f;
         }
         public static float GetVariableZoomSensitivity()
         {

@@ -842,13 +842,13 @@ namespace TarkovVR.Source.Player.VRManager
             Plugin.MyLog.LogInfo(line);
         }
 
-        // How much the aim is smoothed this frame (smoothingFactor, 50 = none): the scope's hold-breath steadying first, else the
-        // gun's weight (weightFeel: its rotation goes through the WeaponWeightFeel spring, the factor still drives the position),
-        // else the Smooth Weapon Aim setting.
+        // How much the aim is smoothed this frame (smoothingFactor, 50 = none): the old hold-breath slerp first (only without AimSteady,
+        // which steadies the target before any of these), else the gun's weight (weightFeel: its rotation goes through
+        // WeaponWeightFeel, the factor still drives the position), else the Smooth Weapon Aim setting.
         private void ChooseAimSmoothing(out bool weightFeel)
         {
             weightFeel = false;
-            if (InputHandlers.BreathingHandler.isHoldingBreath && VRSettings.SmoothScopeAim())
+            if (InputHandlers.BreathingHandler.isHoldingBreath && VRSettings.SmoothScopeAim() && !AimSteady.enabled)
             {
                 if (VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10) > 0)
                     smoothingFactor = VRGlobals.scopeSensitivity * (VRSettings.GetScopeSensitivity() * 10);
@@ -946,16 +946,21 @@ namespace TarkovVR.Source.Player.VRManager
                 RightHand.transform.localRotation *= rightHandRotationOffset;
 
                 ChooseAimSmoothing(out bool weightFeel);
+                Quaternion aimTarget = AimSteady.Filter(RightHand.transform.rotation, rawRightHand.transform.parent, Time.deltaTime);
 
                 if (weightFeel)
                 {
                     rawRightHand.transform.rotation = WeaponWeightFeel.Main.Step(rawRightHand.transform.rotation,
-                        RightHand.transform.rotation, BarrelDir(), VRGlobals.firearmController.ErgonomicWeight,
+                        aimTarget, BarrelDir(), VRGlobals.firearmController.ErgonomicWeight,
                         true, Time.deltaTime, rawRightHand.transform.parent);
                 }
                 else if (smoothingFactor != 50)
                 {
-                    rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothingFactor * Time.deltaTime);
+                    rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, aimTarget, smoothingFactor * Time.deltaTime);
+                }
+                else if (aimTarget != RightHand.transform.rotation)
+                {
+                    rawRightHand.transform.rotation = aimTarget;
                 }
                 else
                 {
@@ -1013,20 +1018,21 @@ namespace TarkovVR.Source.Player.VRManager
                 PlaceRightHandForGun(fromAction);
 
                 ChooseAimSmoothing(out bool weightFeel);
+                Quaternion aimTarget = AimSteady.Filter(RightHand.transform.rotation, rawRightHand.transform.parent, Time.deltaTime);
 
                 if (weightFeel)
                 {
                     rawRightHand.transform.rotation = WeaponWeightFeel.Main.Step(rawRightHand.transform.rotation,
-                        RightHand.transform.rotation, BarrelDir(), VRGlobals.firearmController.ErgonomicWeight,
+                        aimTarget, BarrelDir(), VRGlobals.firearmController.ErgonomicWeight,
                         isSupporting, Time.deltaTime, rawRightHand.transform.parent);
                 }
                 else if (smoothingFactor != 50)
                 {
-                    rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, RightHand.transform.rotation, smoothingFactor * Time.deltaTime);
+                    rawRightHand.transform.rotation = Quaternion.Slerp(rawRightHand.transform.rotation, aimTarget, smoothingFactor * Time.deltaTime);
                 }
                 else
                 {
-                    rawRightHand.transform.rotation = RightHand.transform.rotation;
+                    rawRightHand.transform.rotation = aimTarget;
                 }
 
                 if (smoothingFactor != 50 && !(weightFeel && WeaponWeightFeel.physicsWeight))
