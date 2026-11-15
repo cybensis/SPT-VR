@@ -25,6 +25,8 @@ namespace TarkovVR
                 gunRotation = Source.Player.VRManager.RunSway.Offset(gunRotation) * gunRotation;
             this.transform.rotation = gunRotation;
             Source.Player.VRManager.TurnMeasure.AtPlacement(this.transform);
+            // Tarkov moves this one's parent again before the arm IK, and the rig gets its pin after it: put back on the hand there
+            Source.Player.VRManager.LateGunPlacement.Note(this.transform);
             // A gun held by the support hand alone or slung is stamped in world space under this: put it back after the move
             Source.Player.Interactions.ChestHang.RestampDetached();
 
@@ -43,7 +45,8 @@ namespace TarkovVR
             if (!VRGlobals.vrPlayer || !VRGlobals.inGame || VRGlobals.menuOpen)
                 return;
 
-            if (VRGlobals.emptyHands != null)
+            // Already pinned this frame, before the arm IK (LateGunPlacement): the gun is on the hand at that rig pose
+            if (VRGlobals.emptyHands != null && Source.Player.VRManager.LateGunPlacement.PinnedFrame != Time.frameCount)
             {
                 VRGlobals.emptyHands.rotation = VRGlobals.vrPlayer.handsRotation;
                 VRGlobals.camRoot.transform.position = new Vector3(VRGlobals.emptyHands.position.x, VRGlobals.player.Transform.position.y + 1.5f, VRGlobals.emptyHands.position.z);

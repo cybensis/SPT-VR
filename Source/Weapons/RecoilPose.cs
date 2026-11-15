@@ -84,6 +84,16 @@ namespace TarkovVR.Source.Weapons
             return Vector3.LerpUnclamped(marker.position, freeMarker, kickShare);
         }
 
+        // A bone's frame without its recoil (its own frame when it isn't the one Tarkov puts the recoil on, or the step is stale)
+        public static Matrix4x4 FreeFrame(Transform root)
+        {
+            if (root == null)
+                return Matrix4x4.identity;
+            if (root != stepRoot || Time.frameCount - stepFrame > 2)
+                return root.localToWorldMatrix;
+            return root.localToWorldMatrix * stepToFree;
+        }
+
         // This frame's recoil as Tarkov applies it: the kick (bone-parent frame), the climb (Euler, taken through the pose) and its pivot (bone frame)
         private static void Read(ProceduralWeaponAnimation animation, out Vector3 positionRecoil, out Vector3 rotationRecoil, out Vector3 pivotInRoot)
         {
