@@ -1,23 +1,30 @@
+using EFT.InventoryLogic;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
 
 namespace TarkovVR.Source.Weapons
 {
-    // The gun's own jolt from its clips as a part the hands work hits its stop (GunJolt), and how hard it got there
+    // A part the hands work hitting its stop jolts the gun (GunJolt): its momentum, the part's mass by how fast it got there
     public static partial class VRReloadController
     {
-        public static float pushSpeedSmoothing = 0.03f;     // s the push speed a jolt is scaled by is smoothed over
+        // The parts' masses, of the gun's own weight (its template's, without the mods on it)
+        public static float boltMassShare = 0.1f;           // a rifle's bolt carrier / a bolt-action's bolt
+        public static float slideMassShare = 0.2f;          // a pistol's slide
+        public static float pumpMassShare = 0.08f;          // a pump gun's forend and action bars
+        public static float boltSlamSpeed = 4f;             // m/s the spring takes a bolt or slide home at from all the way back
+        public static float chamberAheadOfGrip = 0.06f;     // m along the bore from the grip: where a bolt hits home
+        public static float pushSpeedSmoothing = 0.03f;     // s the push speed of a magazine / bolt / pump is smoothed over
         // s: a jolt takes the hardest push in this window before the stop. A magazine seats only once it has eased onto the track, by
         // when a fast push has already stopped.
         public static float pushPeakWindow = 0.25f;
         // s: the charging handle's let-go takes how far back it was in this window before (the trigger's let-go registers late, the
         // handle following the hand forward meanwhile)
         public static float handleLetGoWindow = 0.15f;
-        public static float heldOnCatchJolt = 0.35f;        // of the slam's jolt when an empty magazine's follower stops the bolt on the catch
-        public static float partPullSoundMin = 0.15f;       // of a full pull: a handle let go from part way back this far or more springs home (sound, jolt)
+        public static float heldOnCatchJolt = 0.35f;        // of the slam when an empty magazine's follower stops the bolt on the catch
+        public static float partPullSoundMin = 0.15f;       // of a full pull: a handle let go from this far back or more springs home (sound, jolt)
 
-        // The charging handle let go: how far back it still was, 1 = all the way (the spring slams the bolt home), ridden forward first = soft
-        private static float handleSlamStrength = 1f;
+        // The charging handle let go: how far back it still was, 1 = all the way (the carrier follows the handle: ridden forward = soft)
+        private static float handleSlamFraction = 1f;
         private static float handlePullPeak;
         private static float handlePullPeakTime = -10f;
 
@@ -33,10 +40,52 @@ namespace TarkovVR.Source.Weapons
 
         private static float HandlePullAtLetGo(float pull) => Time.time - handlePullPeakTime <= handleLetGoWindow ? Mathf.Max(pull, handlePullPeak) : pull;
 
-        private static void Jolt(FirearmController firearmController, GunJolt.Kind kind, float strength, int magazineType = 0)
+        private static float GunOwnWeight(FirearmController firearmController)
         {
-            if (firearmController != null && firearmController == VRGlobals.firearmController && firearmController.Item != null)
-                GunJolt.Play(firearmController, AnimationFamily(firearmController), kind, magazineType, strength);
+            try { return Mathf.Clamp(firearmController.Item.Template.Weight, 0.3f, 15f); }
+            catch { return GunJolt.GunMass(firearmController) * 0.8f; }
+        }
+
+        private static float BoltMass(FirearmController firearmController)
+        {
+            bool pistol = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol;
+            return Mathf.Clamp(GunOwnWeight(firearmController) * (pistol ? slideMassShare : boltMassShare), 0.05f, 0.8f);
+        }
+
+        // A bolt or slide the spring slams home (the charging handle let go, the catch hit): fraction = how far back it ran from
+        private static void BoltSlamJolt(FirearmController firearmController, float fraction, string what)
+        {
+            if (fraction <= 0f || !GunJolt.ChamberPoint(firearmController, chamberAheadOfGrip, out Vector3 chamber, out Vector3 bore))
+                return;
+            GunJolt.Hit(firearmController, chamber, bore * (BoltMass(firearmController) * boltSlamSpeed * Mathf.Clamp01(fraction)), what);
+        }
+
+        // A bolt-action's bolt pushed home by the hand
+        private static void BoltPushJolt(FirearmController firearmController, float speed)
+        {
+            if (speed <= 0f || !GunJolt.ChamberPoint(firearmController, chamberAheadOfGrip, out Vector3 chamber, out Vector3 bore))
+                return;
+            GunJolt.Hit(firearmController, chamber, bore * (BoltMass(firearmController) * speed), "bolt pushed home");
+        }
+
+        // A magazine seated: its momentum up the well, at the well
+        private static void MagazineSeatJolt(FirearmController firearmController, Magazine magazine, Transform well, Vector3 insertDirection, float speed)
+        {
+            if (magazine == null || well == null || speed <= 0f || insertDirection.sqrMagnitude < 1e-6f)
+                return;
+            float mass = 0.4f;
+            try { mass = magazine.TotalWeight; }
+            catch { }
+            GunJolt.Hit(firearmController, well.position, insertDirection.normalized * (Mathf.Clamp(mass, 0.05f, 5f) * speed), "magazine seated");
+        }
+
+        // A pump closed by the hand on it: the forend's momentum forward, at the hand
+        private static void PumpJolt(FirearmController firearmController, float speed)
+        {
+            if (speed <= 0f || !GunJolt.ChamberPoint(firearmController, chamberAheadOfGrip, out Vector3 chamber, out Vector3 bore))
+                return;
+            Transform hand = HandRig(gunHand: false);
+            GunJolt.Hit(firearmController, hand != null ? hand.position : chamber, bore * (GunOwnWeight(firearmController) * pumpMassShare * speed), "pump closed");
         }
 
         // How fast a part is pushed home: its distance from home (m) each frame -> m/s toward it

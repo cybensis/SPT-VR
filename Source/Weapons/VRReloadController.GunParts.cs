@@ -898,7 +898,7 @@ namespace TarkovVR.Source.Weapons
                 boltReleaseFor = null;
                 RestoreBoltPose(firearmController);
                 // Home: the spring's slam, however the catch was let go
-                Jolt(firearmController, GunJolt.Kind.Catch, 1f);
+                BoltSlamJolt(firearmController, 1f, "bolt catch let go");
                 return;
             }
             // The spring drives it: it picks up speed as it goes

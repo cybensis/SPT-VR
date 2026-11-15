@@ -220,7 +220,7 @@ namespace TarkovVR.Source.Weapons
                 PlayFirstGunSound(firearmController, SoundHand.GunBody, "BoltIn", "SlideIn");
             PlayGunSound(firearmController, "HandleIn", SoundHand.GunBody);
             Pulse(SoundHand.GunBody, caughtBack ? 0.4f : 0.8f, 0.06f);
-            Jolt(firearmController, GunJolt.Kind.Slam, caughtBack ? handleSlamStrength * heldOnCatchJolt : handleSlamStrength);
+            BoltSlamJolt(firearmController, caughtBack ? handleSlamFraction * heldOnCatchJolt : handleSlamFraction, "malfunction racked clear");
         }
 
         // The stuck case taken out by hand: that clears it, but nothing cycled the bolt. Tarkov's repair chambered the next round anyway; it

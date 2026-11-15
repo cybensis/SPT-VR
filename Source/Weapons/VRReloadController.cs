@@ -1279,9 +1279,10 @@ namespace TarkovVR.Source.Weapons
                 // Seated with the grip still held, the hand stays on it (the bolt release is under it)
                 Transform well = magazineWell;
                 FirearmController firearmController = heldForFirearm;
-                // The gun's jolt as it seats, as hard as it was pushed in
-                int magazineType = heldMagazine != null ? heldMagazine.magAnimationIndex : 0;
-                float seatStrength = GunJolt.PushStrength(magazinePush.Peak);
+                // The gun's jolt as it seats: the magazine's momentum up the well
+                Magazine seatingMagazine = heldMagazine;
+                float seatSpeed = magazinePush.Peak;
+                Vector3 insertDirection = -RailAxisWorld();
                 // The seated hold is the off hand's (it reads the left controller, rides the two-handed hold): a box the gun hand seated is let go
                 bool holdSeated = !gripReleased && !magazineInGunHand;
                 if (heldSource == HeldMagazineSource.FromGun)
@@ -1289,7 +1290,7 @@ namespace TarkovVR.Source.Weapons
                     // The gun's own magazine pushed back in: nothing changed in the inventory
                     PlayFirstGunSound(heldForFirearm, MagazineHand.Seating, MAG_IN_SOUNDS);
                     Pulse(MagazineHand.Seating, 0.6f, 0.06f);
-                    Jolt(firearmController, GunJolt.Kind.Magazine, seatStrength, magazineType);
+                    MagazineSeatJolt(firearmController, seatingMagazine, well, insertDirection, seatSpeed);
                     CancelHold();
                     if (holdSeated)
                         BeginSeatedHold(firearmController, well);
@@ -1298,7 +1299,7 @@ namespace TarkovVR.Source.Weapons
                 if (heldForFirearm.Item.GetCurrentMagazine() == null && heldForFirearm.CurrentOperation is FirearmController.Idling
                     && GroundMagazineMoveReady() && TryInsert())
                 {
-                    Jolt(firearmController, GunJolt.Kind.Magazine, seatStrength, magazineType);
+                    MagazineSeatJolt(firearmController, seatingMagazine, well, insertDirection, seatSpeed);
                     if (holdSeated)
                         BeginSeatedHold(firearmController, well);
                     return;

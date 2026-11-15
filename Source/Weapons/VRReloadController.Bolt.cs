@@ -453,7 +453,7 @@ namespace TarkovVR.Source.Weapons
             if (previousSlide > 0f && state.slide <= 0f)
             {
                 PulseBoltHand(0.3f, 0.03f);
-                Jolt(boltForFirearm, GunJolt.Kind.BoltClose, GunJolt.PushStrength(boltPush.Peak));
+                BoltPushJolt(boltForFirearm, boltPush.Peak);
             }
             if (!wasClosed && state.Closed)
                 BoltClosed(boltForFirearm, state);

@@ -877,7 +877,7 @@ namespace TarkovVR.Source.Weapons
             // How hard the spring takes it home (the jolt of the slam below): from where it's let go
             float fullPull = heldHandleTravel * handleFullPull;
             float letGoPull = fullPull > 1e-4f ? Mathf.Clamp01(HandlePullAtLetGo(handlePull) / fullPull) : 1f;
-            handleSlamStrength = Mathf.Lerp(GunJolt.minStrength, 1f, letGoPull);
+            handleSlamFraction = letGoPull;
             // The hand first, where it is, so it doesn't snap forward with the handle (pinned: its own pin, the latch is the other hand's)
             if (handleHandPinned)
                 UnpinGunHand();
@@ -928,7 +928,7 @@ namespace TarkovVR.Source.Weapons
                 if (!PlayFirstGunSound(firearmController, HandleSoundHand, "HandleIn", "SlideIn") && cameBack)
                     PlayFirstGunSound(firearmController, HandleSoundHand, "BoltIn");
                 if (cameBack)
-                    Jolt(firearmController, GunJolt.Kind.Slam, handleSlamStrength);
+                    BoltSlamJolt(firearmController, handleSlamFraction, "handle let go part way");
             }
             RestoreBoltPose(firearmController);
             EndMalfunctionGrab(firearmController);
@@ -1107,7 +1107,7 @@ namespace TarkovVR.Source.Weapons
                 PlayFirstGunSound(firearmController, SoundHand.GunBody, "BoltIn", "SlideIn");
             PlayGunSound(firearmController, "HandleIn", SoundHand.GunBody);
             Pulse(SoundHand.GunBody, heldOnCatch ? 0.4f : 0.8f, 0.06f);
-            Jolt(firearmController, GunJolt.Kind.Slam, heldOnCatch ? handleSlamStrength * heldOnCatchJolt : handleSlamStrength);
+            BoltSlamJolt(firearmController, heldOnCatch ? handleSlamFraction * heldOnCatchJolt : handleSlamFraction, heldOnCatch ? "bolt onto the catch" : "bolt slammed home");
             // A tube shotgun's shell has no model in the chamber until it's shown (the load put it there in the inventory only)
             if (BoltStripsRound(weapon) && HandsLoadShotgun(firearmController) && firearmController.Firearms != null && !firearmController.Firearms.HasPatronInWeapon())
                 ShowChamberedRound(firearmController);
