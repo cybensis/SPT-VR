@@ -7,10 +7,15 @@ namespace TarkovVR.Source.Weapons
     // A part the hands work hitting its stop jolts the gun (GunJolt): its momentum, the part's mass by how fast it got there
     public static partial class VRReloadController
     {
-        // The parts' masses, of the gun's own weight (its template's, without the mods on it)
-        public static float boltMassShare = 0.1f;           // a rifle's bolt carrier / a bolt-action's bolt
-        public static float slideMassShare = 0.2f;          // a pistol's slide
-        public static float pumpMassShare = 0.08f;          // a pump gun's forend and action bars
+        // The parts' masses. Not from the gun's template weight: on a modular gun that's its lower alone (a Spear's 0.4 kg, a Glock's
+        // 0.23). A self-loading action is built for its cartridge, so its bolt carrier / slide goes by the default round's momentum
+        // (an M4's carrier 0.3 kg, an AKM's 0.45, a 9 mm slide 0.17); Tarkov's shot weighs nothing real, so shotguns get a fixed one.
+        public static float boltMassPerMomentum = 0.08f;    // kg per N s of the default round's momentum (bullet mass x muzzle speed)
+        public static float minBoltMass = 0.12f;
+        public static float maxBoltMass = 0.7f;
+        public static float shotgunBoltMass = 0.4f;         // kg a self-loading shotgun's carrier
+        public static float boltActionBoltMass = 0.3f;      // kg a bolt-action's bolt
+        public static float pumpMass = 0.25f;               // kg a pump gun's forend and action bars
         public static float boltSlamSpeed = 4f;             // m/s the spring takes a bolt or slide home at from all the way back
         public static float chamberAheadOfGrip = 0.06f;     // m along the bore from the grip: where a bolt hits home
         public static float pushSpeedSmoothing = 0.03f;     // s the push speed of a magazine / bolt / pump is smoothed over
@@ -40,16 +45,21 @@ namespace TarkovVR.Source.Weapons
 
         private static float HandlePullAtLetGo(float pull) => Time.time - handlePullPeakTime <= handleLetGoWindow ? Mathf.Max(pull, handlePullPeak) : pull;
 
-        private static float GunOwnWeight(FirearmController firearmController)
-        {
-            try { return Mathf.Clamp(firearmController.Item.Template.Weight, 0.3f, 15f); }
-            catch { return GunJolt.GunMass(firearmController) * 0.8f; }
-        }
-
+        // A self-loading gun's bolt carrier or slide
         private static float BoltMass(FirearmController firearmController)
         {
-            bool pistol = VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.isWeapPistol;
-            return Mathf.Clamp(GunOwnWeight(firearmController) * (pistol ? slideMassShare : boltMassShare), 0.05f, 0.8f);
+            try
+            {
+                Weapon weapon = firearmController.Item;
+                string caliber = weapon.AmmoCaliber ?? "";
+                if (caliber.Contains("12g") || caliber.Contains("20g") || caliber.Contains("23x75"))
+                    return shotgunBoltMass;
+                AmmoTemplate round = weapon.Template.DefAmmoTemplate;
+                if (round != null && round.BulletMassGram > 0f && round.InitialSpeed > 0f)
+                    return Mathf.Clamp(boltMassPerMomentum * round.BulletMassGram * 0.001f * round.InitialSpeed, minBoltMass, Mathf.Max(maxBoltMass, minBoltMass));
+            }
+            catch { }
+            return 0.3f;
         }
 
         // A bolt or slide the spring slams home (the charging handle let go, the catch hit): fraction = how far back it ran from
@@ -57,7 +67,8 @@ namespace TarkovVR.Source.Weapons
         {
             if (fraction <= 0f || !GunJolt.ChamberPoint(firearmController, chamberAheadOfGrip, out Vector3 chamber, out Vector3 bore))
                 return;
-            GunJolt.Hit(firearmController, chamber, bore * (BoltMass(firearmController) * boltSlamSpeed * Mathf.Clamp01(fraction)), what);
+            float mass = BoltMass(firearmController);
+            GunJolt.Hit(firearmController, chamber, bore * (mass * boltSlamSpeed * Mathf.Clamp01(fraction)), $"{what} ({mass:0.00} kg bolt, from {Mathf.Clamp01(fraction) * 100f:0}% back)");
         }
 
         // A bolt-action's bolt pushed home by the hand
@@ -65,7 +76,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (speed <= 0f || !GunJolt.ChamberPoint(firearmController, chamberAheadOfGrip, out Vector3 chamber, out Vector3 bore))
                 return;
-            GunJolt.Hit(firearmController, chamber, bore * (BoltMass(firearmController) * speed), "bolt pushed home");
+            GunJolt.Hit(firearmController, chamber, bore * (boltActionBoltMass * speed), "bolt pushed home");
         }
 
         // A magazine seated: its momentum up the well, at the well
@@ -85,7 +96,7 @@ namespace TarkovVR.Source.Weapons
             if (speed <= 0f || !GunJolt.ChamberPoint(firearmController, chamberAheadOfGrip, out Vector3 chamber, out Vector3 bore))
                 return;
             Transform hand = HandRig(gunHand: false);
-            GunJolt.Hit(firearmController, hand != null ? hand.position : chamber, bore * (GunOwnWeight(firearmController) * pumpMassShare * speed), "pump closed");
+            GunJolt.Hit(firearmController, hand != null ? hand.position : chamber, bore * (pumpMass * speed), "pump closed");
         }
 
         // How fast a part is pushed home: its distance from home (m) each frame -> m/s toward it

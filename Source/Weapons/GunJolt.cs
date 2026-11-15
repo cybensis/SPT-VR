@@ -12,11 +12,13 @@ namespace TarkovVR.Source.Weapons
     {
         public static bool enabled = true;
         public static float joltGain = 1f;              // of the physical response: 1 = the masses and speeds as they are
-        // The hand's hold: how stiffly it keeps the gun where the controller has it, moving and turning about the grip
-        public static float holdFrequency = 3.5f;       // Hz
+        // The hand's hold: how stiffly it keeps the gun where the controller has it, moving and turning about the grip. A stiffness, so a
+        // light gun comes back quicker and moves less for the same knock (a 3.5 kg rifle: 3.5 Hz, and 3 Hz turning)
+        public static float holdStiffness = 1700f;      // N/m
         public static float holdDamping = 0.45f;        // damping ratio (1 = it comes straight back, lower = it rocks)
-        public static float turnFrequency = 3f;         // Hz
+        public static float turnStiffness = 90f;        // N m/rad, about the grip across the bore
         public static float turnDamping = 0.45f;
+        public static float maxHoldFrequency = 25f;     // Hz: the stiffest either gets (a pistol's turn)
         // The gun as a rod along its bore: how far its stock runs behind the grip, and how hard it is to roll about the bore
         public static float stockBehindGrip = 0.25f;    // m (pistols: none)
         public static float boreRadius = 0.05f;         // m, the radius of gyration about the bore
@@ -29,6 +31,8 @@ namespace TarkovVR.Source.Weapons
         private static Vector3 offset, velocity;            // m, m/s
         private static Vector3 turn, turnVelocity;          // rad, rad/s
         private static bool moving;
+        private static float holdOmega = 22f;               // rad/s, from the held gun's mass and inertia (Hit)
+        private static float turnOmega = 19f;
 
         private static Transform gunBoneOf;
         private static Transform gunBone;
@@ -55,6 +59,9 @@ namespace TarkovVR.Source.Weapons
             float centreAhead = muzzleReach - length * 0.5f;
             float acrossInertia = mass * (length * length / 12f + centreAhead * centreAhead);
             float boreInertia = mass * boreRadius * boreRadius;
+            float stiffest = 2f * Mathf.PI * Mathf.Max(maxHoldFrequency, 1f);
+            holdOmega = Mathf.Min(Mathf.Sqrt(Mathf.Max(holdStiffness, 1f) / mass), stiffest);
+            turnOmega = Mathf.Min(Mathf.Sqrt(Mathf.Max(turnStiffness, 0.1f) / Mathf.Max(acrossInertia, 1e-4f)), stiffest);
 
             Vector3 angularImpulse = Vector3.Cross(point - grip, impulse);
             Vector3 aboutBore = Vector3.Project(angularImpulse, bore);
@@ -65,7 +72,8 @@ namespace TarkovVR.Source.Weapons
             moving = true;
             if (debugLog)
                 Plugin.MyLog.LogInfo($"[GunJolt] {what}: {impulse.magnitude:0.00} N s, {Vector3.Distance(point, grip) * 100f:0} cm from the grip; gun {mass:0.0} kg"
-                    + $" -> {deltaVelocity.magnitude:0.00} m/s, {deltaSpin.magnitude * Mathf.Rad2Deg:0} deg/s");
+                    + $" -> {deltaVelocity.magnitude:0.00} m/s, {deltaSpin.magnitude * Mathf.Rad2Deg:0} deg/s; held at {holdOmega / (2f * Mathf.PI):0.0} Hz, turning {turnOmega / (2f * Mathf.PI):0.0} Hz"
+                    + $" = about {deltaVelocity.magnitude / holdOmega * 100f:0.0} cm and {deltaSpin.magnitude / turnOmega * Mathf.Rad2Deg:0.0} deg");
         }
 
         // After the hand anchor, before WeaponCollision.Apply
@@ -123,8 +131,6 @@ namespace TarkovVR.Source.Weapons
         // The hold's springs, in small steps (stiff springs at a render frame's step would gain energy)
         private static void Step(float deltaTime)
         {
-            float holdOmega = 2f * Mathf.PI * Mathf.Max(holdFrequency, 0.1f);
-            float turnOmega = 2f * Mathf.PI * Mathf.Max(turnFrequency, 0.1f);
             int steps = Mathf.Clamp(Mathf.CeilToInt(deltaTime / 0.002f), 1, 50);
             float stepTime = deltaTime / steps;
             for (int i = 0; i < steps; i++)
