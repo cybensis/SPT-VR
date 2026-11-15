@@ -19,9 +19,9 @@ namespace TarkovVR.Patches.Core.VR
         // Looking through a scope that zooms on the turning stick (VRPlayerManager.ScopeZoomOwnsStick): it turns only pushed nearly straight
         // sideways, and not at all after a zoom push until the stick is back near the centre (a zoom push drifting sideways turned you)
         public static bool scopeTurnGuard = true;
-        public static float scopeTurnMaxAngle = 25f;    // deg off straight sideways the stick may point and still turn
-        public static float scopeTurnDeadzone = 0.5f;   // sideways push below which it doesn't turn; smooth turning ramps up from here
-        public static float scopeZoomPush = 0.3f;       // an up / down push past this is a zoom
+        public static float scopeTurnMaxAngle = 45f;    // deg off straight sideways the stick may point and still turn
+        public static float scopeTurnDeadzone = 0.15f;  // sideways push below which it doesn't turn; smooth turning ramps up from here
+        public static float scopeZoomPush = 0.3f;       // an up / down push past this, more up / down than sideways, is a zoom
         public static float stickCentre = 0.2f;         // back within this of the centre, it may turn again
         private static bool zoomPushSeen;
 
@@ -137,7 +137,7 @@ namespace TarkovVR.Patches.Core.VR
             Vector2 stick = VRInput.RightJoystick.axis;
             if (scopeTurnGuard && VRGlobals.vrPlayer != null && VRGlobals.vrPlayer.ScopeZoomOwnsStick)
             {
-                if (Mathf.Abs(stick.y) > scopeZoomPush)
+                if (Mathf.Abs(stick.y) > scopeZoomPush && Mathf.Abs(stick.y) > Mathf.Abs(stick.x))
                     zoomPushSeen = true;
                 else if (stick.magnitude < stickCentre)
                     zoomPushSeen = false;
