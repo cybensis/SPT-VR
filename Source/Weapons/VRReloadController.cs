@@ -1281,7 +1281,7 @@ namespace TarkovVR.Source.Weapons
                 FirearmController firearmController = heldForFirearm;
                 // The gun's jolt as it seats, as hard as it was pushed in
                 int magazineType = heldMagazine != null ? heldMagazine.magAnimationIndex : 0;
-                float seatStrength = GunJolt.PushStrength(magazinePush.Speed);
+                float seatStrength = GunJolt.PushStrength(magazinePush.Peak);
                 // The seated hold is the off hand's (it reads the left controller, rides the two-handed hold): a box the gun hand seated is let go
                 bool holdSeated = !gripReleased && !magazineInGunHand;
                 if (heldSource == HeldMagazineSource.FromGun)

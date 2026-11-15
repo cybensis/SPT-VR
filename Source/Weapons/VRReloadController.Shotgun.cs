@@ -1122,7 +1122,7 @@ namespace TarkovVR.Source.Weapons
         {
             Weapon weapon = firearmController.Item;
             Pulse(SoundHand.OffHand.Seating, 0.6f, 0.05f);
-            Jolt(firearmController, GunJolt.Kind.Pump, GunJolt.PushStrength(pumpPush.Speed));
+            Jolt(firearmController, GunJolt.Kind.Pump, GunJolt.PushStrength(pumpPush.Peak));
             if (firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch())
                 firearmController.FirearmsAnimator.SetBoltCatch(false);
             bool clearsMalfunction = state.backThisStroke && state.malfunctionRacked && MalfunctionClearsByHand(firearmController);

@@ -773,6 +773,7 @@ namespace TarkovVR.Source.Weapons
             float pullGain = handleCarrier != null && handleCarrier != foundHandleBone && !handOnRightArm ? underGunPullGain : 1f;
             // A hard slide holds it until it breaks free (VRReloadController.Malfunctions)
             handlePull = StuckPull(handleForFirearm, Mathf.Clamp(handAlongTrack * pullGain, 0f, heldHandleTravel), HandleSoundHand);
+            TrackHandlePull(handlePull);
             handleView.position = handleBone.TransformPoint(handleRestLocalPosition) + axis * handlePull;
             UpdateHandleNotch();
 
@@ -875,7 +876,8 @@ namespace TarkovVR.Source.Weapons
         {
             // How hard the spring takes it home (the jolt of the slam below): from where it's let go
             float fullPull = heldHandleTravel * handleFullPull;
-            handleSlamStrength = Mathf.Lerp(GunJolt.minStrength, 1f, fullPull > 1e-4f ? Mathf.Clamp01(handlePull / fullPull) : 1f);
+            float letGoPull = fullPull > 1e-4f ? Mathf.Clamp01(HandlePullAtLetGo(handlePull) / fullPull) : 1f;
+            handleSlamStrength = Mathf.Lerp(GunJolt.minStrength, 1f, letGoPull);
             // The hand first, where it is, so it doesn't snap forward with the handle (pinned: its own pin, the latch is the other hand's)
             if (handleHandPinned)
                 UnpinGunHand();
@@ -919,7 +921,15 @@ namespace TarkovVR.Source.Weapons
             else if (snapForward)
                 BoltSlamsForward(firearmController);
             else
-                PlayFirstGunSound(firearmController, HandleSoundHand, "HandleIn", "SlideIn");
+            {
+                // Let go part way: it springs home from there. A gun with no handle sound plays its bolt's (the AK's handle is its carrier),
+                // only when it came back some: a grab let go isn't a bolt hitting home.
+                bool cameBack = letGoPull >= partPullSoundMin;
+                if (!PlayFirstGunSound(firearmController, HandleSoundHand, "HandleIn", "SlideIn") && cameBack)
+                    PlayFirstGunSound(firearmController, HandleSoundHand, "BoltIn");
+                if (cameBack)
+                    Jolt(firearmController, GunJolt.Kind.Slam, handleSlamStrength);
+            }
             RestoreBoltPose(firearmController);
             EndMalfunctionGrab(firearmController);
         }

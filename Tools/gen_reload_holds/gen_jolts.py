@@ -7,7 +7,7 @@
 import sys, os, re, math, json, time
 import numpy as np
 import gen_holds as G
-from clip_names import magClipName
+from clip_names import magClipName, unwrapClipName
 from game_paths import BUNDLES
 
 WINDOW = 0.35           # s after the stop the slow motion is measured to
@@ -22,8 +22,8 @@ PARTS = dict(magazine=['mod_magazine'], slam=['weapon_bolt', 'weapon_slide', 'mo
 # The clips each moment comes from, the first a family has
 def clipCandidates(family, kind):
     if kind == 'slam':
-        return [f'{family}_reload_charge_0', f'{family}_reload_charge', f'{family}_charge_end_0', f'{family}_reload_charge_end', f'{family}_reload_charge_1',
-                f'{family}_reload_charge_2']
+        return [f'{family}_reload_charge_0', f'{family}_reload_charge', f'{family}_charge_end_0', f'{family}_reload_charge_end', f'{family}_charge_0',
+                f'{family}_charge', f'{family}_reload_charge_1', f'{family}_reload_charge_2']
     if kind == 'catch':
         return [f'{family}_reload_catch_0', f'{family}_reload_catch', f'{family}_catch_end_0', f'{family}_reload_catch_end', f'{family}_reload_off_catch',
                 f'{family}_reload_end_catch', f'{family}_reload_catch_1']
@@ -33,13 +33,14 @@ def clipCandidates(family, kind):
         return [f'{family}_fire_0', f'{family}_fire']
     return []
 
-# The pump shotguns' families: gen_shotguns' output, else the mod's own copy of the export
+# The pump shotguns' families: gen_shotguns' output, else the export (the repo's, then the game's)
 def shotgunFamilies():
     if os.path.exists('shotguns.json'):
         return set(json.load(open('shotguns.json')).get('shotguns', {}))
     # (the game folder: three up from StreamingAssets/Windows)
     exported = os.path.join(BUNDLES, '..', '..', '..', 'BepInEx', 'plugins', 'sptvr', 'Assets', 'ReloadHolds.json')
-    for path in ('out/ReloadHolds.json', os.path.normpath(exported)):
+    repo = os.path.join('..', '..', 'Assets', 'ReloadHolds.json')    # (run from Tools/gen_reload_holds, like every generator)
+    for path in ('out/ReloadHolds.json', os.path.normpath(repo), os.path.normpath(exported)):
         if os.path.exists(path):
             return {f for f, g in json.load(open(path)).get('shotguns', {}).items() if g.get('pump')}
     return set()
@@ -143,7 +144,8 @@ def run(folders):
         if not os.path.isdir(d):
             continue
         try:
-            clips = G.folderClips(folder)
+            # (a content mod's re-exported clips: Armature_Armature_<name>_Base Layer)
+            clips = {unwrapClipName(name): clip for name, clip in G.folderClips(folder).items()}
         except Exception as e:
             report.append((folder, 'ERR clips', repr(e)[:80])); continue
         families = set()
@@ -201,7 +203,24 @@ def run(folders):
                                        for k, ev in sorted(folderResult.items())) + f' ({time.time() - started:.0f}s)', flush=True)
     return result, report
 
-if __name__ == '__main__':
+# A content mod's run (its build_overlay bundles, SPTVR_CONTAINER_CLIPS=1) into the game's: the game's as it is, the mod's only where it has
+# what the game's hasn't (a new gun, a moment the game's clips don't have) - like merge_exports.py
+# python gen_jolts.py --merge <game json> <mod json> <out json>
+def merge(gamePath, modPath, outPath):
+    merged = json.load(open(gamePath))
+    added = []
+    for family, events in json.load(open(modPath)).items():
+        own = merged.setdefault(family, {})
+        for kind, curve in events.items():
+            if kind not in own:
+                own[kind] = curve
+                added.append(f'{family}:{kind}')
+    json.dump(merged, open(outPath, 'w'), separators=(',', ':'))
+    print('merged', len(merged), 'families; from the mod:', ' '.join(added))
+
+if __name__ == '__main__' and len(sys.argv) == 5 and sys.argv[1] == '--merge':
+    merge(*sys.argv[2:5])
+elif __name__ == '__main__':
     folders = sys.argv[2:] or sorted(os.listdir(G.ROOT))
     result, report = run(folders)
     os.makedirs('out', exist_ok=True)
