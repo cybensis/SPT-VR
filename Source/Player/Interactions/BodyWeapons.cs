@@ -342,6 +342,13 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 if (meshFilter.sharedMesh == null)
                     continue;
+                // The gun's own drawn parts only: not its muzzle flash's combined mesh (MuzzleJetCombinedMesh, built out in front of the
+                // muzzle - it stretched the line well past it), nor a mesh that isn't drawn
+                if (meshFilter.name.IndexOf("MuzzleJet", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+                MeshRenderer meshRenderer = meshFilter.GetComponent<MeshRenderer>();
+                if (meshRenderer == null || !meshRenderer.enabled)
+                    continue;
                 Bounds bounds = meshFilter.sharedMesh.bounds;
                 for (int corner = 0; corner < 8; corner++)
                 {
@@ -474,7 +481,12 @@ namespace TarkovVR.Source.Player.Interactions
                 Item item = SlotItem(slot);
                 line.Append($" | {slot}: {(item != null ? item.LocalizedShortName() : "empty")}, view {(view != null ? "yes" : "NO")}, model {(model == null ? "NONE" : model.activeInHierarchy ? "active" : "INACTIVE")}");
                 if (model != null)
+                {
                     line.Append($", grip {Vector3.Distance(hand, GrabPoint(model)) * 100f:0} cm, reach {ModelReachScore(model):0.00}");
+                    GunSpan span = GripMarkerOf(model) != null ? SpanOf(WeaponRootOf(model), model.transform) : null;
+                    if (span != null)
+                        line.Append($", gun line {(span.butt - span.muzzle).magnitude * 100f:0} cm");
+                }
             }
             Plugin.MyLog.LogInfo(line.ToString());
         }
