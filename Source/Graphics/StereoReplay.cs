@@ -34,7 +34,7 @@ namespace TarkovVR.Source.Graphics
             CopiedAtRelease, WindowMs, ExecuteMs, ScanMs, CaptureMs,
             ImmediateDrawsOutside, ImmediateListsOutside, WorkTakenBack, RightTakenAtEnd, SameImageTwice,
             EyeDrawsOutside, EyeCopiesOutside, WindowsNoEyeWrite, EndedAtHandBack, EndedEarly,
-            DynamicBuffers, DynamicSegments, DynamicViews, OtherUpdates, Rehooked, Count
+            DynamicBuffers, DynamicSegments, DynamicViews, OtherUpdates, Rehooked, MirrorMs, SwapMs, UploadMs, Count
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
@@ -449,8 +449,9 @@ namespace TarkovVR.Source.Graphics
                 + $"split by a discard {totals[(int)Stat.DynamicSegments]:0} times in all; dynamic buffers read through views, not snapshotted, {totals[(int)Stat.DynamicViews]:0}; "
                 + $"other resources updated in the pass {totals[(int)Stat.OtherUpdates]:0}); left image views swapped {PerWindow(Stat.ViewsSwapped):0}, copies {PerWindow(Stat.CopiesSwapped):0}, unswappable {PerWindow(Stat.LeftUnswappable):0}; "
                 + $"nested command lists {PerWindow(Stat.NestedLists):0}, predication {PerWindow(Stat.Predication):0}; right eye copied at once {totals[(int)Stat.CopiedNow]:0} / at hand-back "
-                + $"{totals[(int)Stat.CopiedAtRelease]:0} (its image already taken at the end of the pass {totals[(int)Stat.RightTakenAtEnd]:0}, the same image twice in a row {totals[(int)Stat.SameImageTwice]:0}); Unity's own right-eye view: up to {unityRightDriftMax * 100f:0.0} cm off the right eye, unchanged frame to frame {unityRightStaleFrames} of {rightFrames}, used {(rightFromLeft ? "no" : "yes")}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms, replay {PerWindow(Stat.ExecuteMs):0.00}, value search {PerWindow(Stat.ScanMs):0.00}, "
-                + $"state copy {PerWindow(Stat.CaptureMs):0.00}; the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "
+                + $"{totals[(int)Stat.CopiedAtRelease]:0} (its image already taken at the end of the pass {totals[(int)Stat.RightTakenAtEnd]:0}, the same image twice in a row {totals[(int)Stat.SameImageTwice]:0}); Unity's own right-eye view: up to {unityRightDriftMax * 100f:0.0} cm off the right eye, unchanged frame to frame {unityRightStaleFrames} of {rightFrames}, used {(rightFromLeft ? "no" : "yes")}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms = copying calls for the right eye {PerWindow(Stat.MirrorMs):0.00} "
+                + $"(of it: constant uploads {PerWindow(Stat.UploadMs):0.00} incl. value search {PerWindow(Stat.ScanMs):0.00}, view checks {PerWindow(Stat.SwapMs):0.00}) + replay {PerWindow(Stat.ExecuteMs):0.00} "
+                + $"+ state copy {PerWindow(Stat.CaptureMs):0.00} + Unity's own work and its calls {PerWindow(Stat.WindowMs) - PerWindow(Stat.MirrorMs) - PerWindow(Stat.ExecuteMs) - PerWindow(Stat.CaptureMs):0.00}; the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "
                 + $"{PerWindow(Stat.ImmediateDrawsOutside):0} draws ({totals[(int)Stat.EyeDrawsOutside]:0} into the left eye, {totals[(int)Stat.EyeCopiesOutside]:0} copies into it), {PerWindow(Stat.ImmediateListsOutside):0} command lists run (ours); replays that never wrote the eye {totals[(int)Stat.WindowsNoEyeWrite]:0}, ended at the hand-back {totals[(int)Stat.EndedAtHandBack]:0}, ended early at an unrecordable call past the headset camera {totals[(int)Stat.EndedEarly]:0}. Values found a replay: {(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");
             unityRightDriftMax = 0f;
             unityRightStaleFrames = 0;

@@ -12,6 +12,7 @@
 // draw reads them as the left eye left them (fine for ring buffers written once a frame, wrong for one rewritten mid-pass).
 #include <windows.h>
 #include <d3d11_4.h>
+#include <intrin.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -59,7 +60,7 @@ enum Stat
     StImmediateDrawsOutside, StImmediateListsOutside, StWorkTakenBack, StRightTakenAtEnd, StSameImageTwice,
     StEyeDrawsOutside, StEyeCopiesOutside, StWindowsNoEyeWrite, StEndedAtHandBack, StEndedEarly,
     StDynamicBuffers, StDynamicSegments, StDynamicViews, StOtherUpdates,
-    StRehooked, StCount
+    StRehooked, StMirrorMs, StSwapMs, StUploadMs, StCount
 };
 static double stats[StCount];
 // written from Unity's job threads too
@@ -73,6 +74,16 @@ static double NowMs()
     QueryPerformanceCounter(&counter);
     return (double)counter.QuadPart * 1000.0 / (double)clockFrequency.QuadPart;
 }
+
+// Render-thread cost split: rdtsc ticks (cheap enough for every call), turned into ms with each window's own tick rate
+static unsigned long long mirrorTicks, swapTicks, uploadTicks, windowStartTicks;
+struct TickTimer
+{
+    unsigned long long& total;
+    unsigned long long start;
+    explicit TickTimer(unsigned long long& into) : total(into), start(__rdtsc()) {}
+    ~TickTimer() { total += __rdtsc() - start; }
+};
 
 //------------------------------------------------------------------------------------------------------------------------------------
 // Device, contexts, hooks
@@ -267,6 +278,26 @@ static FrameSlot frameSlots[kFrameSlots];
 static Pattern active[kMaxPatterns];
 static int activeCount;
 static double patternHits[kMaxPatterns];
+static int byFirst[kMaxPatterns];         // active patterns by their first value
+static float firstValues[kMaxPatterns];   // sorted
+static float widestTolerance;
+
+// The frame's patterns become the active ones, sorted for the search
+static void ActivatePatterns(int slot)
+{
+    activeCount = frameSlots[slot].count;
+    memcpy(active, frameSlots[slot].patterns, sizeof(Pattern) * activeCount);
+    widestTolerance = 0.0f;
+    for (int index = 0; index < activeCount; index++)
+    {
+        byFirst[index] = index;
+        if (active[index].tolerance > widestTolerance)
+            widestTolerance = active[index].tolerance;
+    }
+    std::sort(byFirst, byFirst + activeCount, [](int a, int b) { return active[a].left[0] < active[b].left[0]; });
+    for (int index = 0; index < activeCount; index++)
+        firstValues[index] = active[byFirst[index]].left[0];
+}
 
 static inline bool Near(float value, float wanted, float tolerance)
 {
@@ -282,22 +313,37 @@ static int PatchConstants(float* data, size_t bytes)
     int patched = 0;
     for (size_t at = 0; at + 3 <= floats; at += 4)
     {
-        for (int index = 0; index < activeCount; index++)
+        float value = data[at];
+        if (!isfinite(value))
+            continue;
+        // every first value Near() could accept lies within this (|wanted| is within the tolerance of |value|)
+        float reach = widestTolerance * (fabsf(value) > 1.0f ? fabsf(value) : 1.0f) * 1.01f + 1e-30f;
+        int low = 0, high = activeCount;
+        while (low < high)
         {
+            int middle = (low + high) / 2;
+            if (firstValues[middle] < value - reach) low = middle + 1; else high = middle;
+        }
+        int best = -1;      // the lowest pattern index that matches, as the plain search in pattern order picked
+        for (int sorted = low; sorted < activeCount && firstValues[sorted] <= value + reach; sorted++)
+        {
+            int index = byFirst[sorted];
             const Pattern& pattern = active[index];
-            if (at + pattern.length > floats || !Near(data[at], pattern.left[0], pattern.tolerance))
+            if ((best >= 0 && index > best) || at + pattern.length > floats || !Near(value, pattern.left[0], pattern.tolerance))
                 continue;
             bool match = true;
             for (int element = 1; element < pattern.length && match; element++)
                 match = Near(data[at + element], pattern.left[element], pattern.tolerance);
-            if (!match)
-                continue;
-            memcpy(data + at, pattern.right, pattern.length * sizeof(float));
-            patternHits[index] += 1;
-            patched++;
-            at += ((pattern.length + 3) / 4 - 1) * 4;
-            break;
+            if (match)
+                best = index;
         }
+        if (best < 0)
+            continue;
+        const Pattern& pattern = active[best];
+        memcpy(data + at, pattern.right, pattern.length * sizeof(float));
+        patternHits[best] += 1;
+        patched++;
+        at += ((pattern.length + 3) / 4 - 1) * 4;
     }
     stats[StScanMs] += NowMs() - start;
     return patched;
@@ -410,6 +456,7 @@ static T* const* SwapViews(T* const* views, UINT count, T** scratch, UINT capaci
 {
     if (!views || count == 0 || count > capacity || leftCount == 0)
         return views;
+    TickTimer swapTimer(swapTicks);
     bool changed = false;
     for (UINT index = 0; index < count; index++)
     {
@@ -653,24 +700,24 @@ typedef void (STDMETHODCALLTYPE* PfnSetBuffers1)(Ctx*, UINT, UINT, ID3D11Buffer*
 #define HOOK_BUFFERS(Name) \
     static void STDMETHODCALLTYPE Our##Name(Ctx* self, UINT start, UINT count, ID3D11Buffer* const* buffers) \
     { ORIGINAL(S##Name, PfnSetBuffers)(self, start, count, buffers); \
-      if (Mirroring(self)) { stats[StMirrored] += 1; deferred->Name(start, count, buffers); } }
+      if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->Name(start, count, buffers); } }
 #define HOOK_SAMPLERS(Name) \
     static void STDMETHODCALLTYPE Our##Name(Ctx* self, UINT start, UINT count, ID3D11SamplerState* const* samplers) \
     { ORIGINAL(S##Name, PfnSetSamplers)(self, start, count, samplers); \
-      if (Mirroring(self)) { stats[StMirrored] += 1; deferred->Name(start, count, samplers); } }
+      if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->Name(start, count, samplers); } }
 #define HOOK_VIEWS(Name) \
     static void STDMETHODCALLTYPE Our##Name(Ctx* self, UINT start, UINT count, ID3D11ShaderResourceView* const* views) \
     { ORIGINAL(S##Name, PfnSetViews)(self, start, count, views); \
-      if (Mirroring(self)) { stats[StMirrored] += 1; ID3D11ShaderResourceView* swapped[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]; \
+      if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; ID3D11ShaderResourceView* swapped[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT]; \
         deferred->Name(start, count, SwapViews(views, count, swapped, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, KindSrv)); } }
 #define HOOK_SHADER(Name, Type) \
     static void STDMETHODCALLTYPE Our##Name(Ctx* self, Type* shader, ID3D11ClassInstance* const* instances, UINT instanceCount) \
     { ORIGINAL(S##Name, void (STDMETHODCALLTYPE*)(Ctx*, Type*, ID3D11ClassInstance* const*, UINT))(self, shader, instances, instanceCount); \
-      if (Mirroring(self)) { stats[StMirrored] += 1; deferred->Name(shader, instances, instanceCount); } }
+      if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->Name(shader, instances, instanceCount); } }
 #define HOOK_BUFFERS1(Name) \
     static void STDMETHODCALLTYPE Our##Name(Ctx* self, UINT start, UINT count, ID3D11Buffer* const* buffers, const UINT* first, const UINT* number) \
     { ORIGINAL(S##Name, PfnSetBuffers1)(self, start, count, buffers, first, number); \
-      if (Mirroring(self)) { stats[StMirrored] += 1; deferred->Name(start, count, buffers, first, number); } }
+      if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->Name(start, count, buffers, first, number); } }
 
 HOOK_BUFFERS(VSSetConstantBuffers) HOOK_BUFFERS(PSSetConstantBuffers) HOOK_BUFFERS(GSSetConstantBuffers)
 HOOK_BUFFERS(HSSetConstantBuffers) HOOK_BUFFERS(DSSetConstantBuffers) HOOK_BUFFERS(CSSetConstantBuffers)
@@ -688,68 +735,69 @@ static void STDMETHODCALLTYPE OurDraw(Ctx* self, UINT vertices, UINT first)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDraw, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT))(self, vertices, first);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->Draw(vertices, first); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->Draw(vertices, first); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexed(Ctx* self, UINT indices, UINT first, INT baseVertex)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawIndexed, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, INT))(self, indices, first, baseVertex);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawIndexed(indices, first, baseVertex); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->DrawIndexed(indices, first, baseVertex); }
 }
 static void STDMETHODCALLTYPE OurDrawInstanced(Ctx* self, UINT vertices, UINT instances, UINT first, UINT firstInstance)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, UINT))(self, vertices, instances, first, firstInstance);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawInstanced(vertices, instances, first, firstInstance); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->DrawInstanced(vertices, instances, first, firstInstance); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexedInstanced(Ctx* self, UINT indices, UINT instances, UINT first, INT baseVertex, UINT firstInstance)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawIndexedInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, INT, UINT))(self, indices, instances, first, baseVertex, firstInstance);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawIndexedInstanced(indices, instances, first, baseVertex, firstInstance); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->DrawIndexedInstanced(indices, instances, first, baseVertex, firstInstance); }
 }
 static void STDMETHODCALLTYPE OurDrawAuto(Ctx* self)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawAuto, void (STDMETHODCALLTYPE*)(Ctx*))(self);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawAuto(); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->DrawAuto(); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexedInstancedIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawIndexedInstancedIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawIndexedInstancedIndirect(arguments, offset); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->DrawIndexedInstancedIndirect(arguments, offset); }
 }
 static void STDMETHODCALLTYPE OurDrawInstancedIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawInstancedIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawInstancedIndirect(arguments, offset); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->DrawInstancedIndirect(arguments, offset); }
 }
 static void STDMETHODCALLTYPE OurDispatch(Ctx* self, UINT x, UINT y, UINT z)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDispatch, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT))(self, x, y, z);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->Dispatch(x, y, z); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->Dispatch(x, y, z); }
 }
 static void STDMETHODCALLTYPE OurDispatchIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDispatchIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
-    if (Mirroring(self)) { stats[StDraws] += 1; deferred->DispatchIndirect(arguments, offset); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; deferred->DispatchIndirect(arguments, offset); }
 }
 
 // Input assembler, rasterizer, stream out
 static void STDMETHODCALLTYPE OurIASetInputLayout(Ctx* self, ID3D11InputLayout* layout)
 {
     ORIGINAL(SIASetInputLayout, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11InputLayout*))(self, layout);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->IASetInputLayout(layout); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->IASetInputLayout(layout); }
 }
 static void STDMETHODCALLTYPE OurIASetVertexBuffers(Ctx* self, UINT start, UINT count, ID3D11Buffer* const* buffers, const UINT* strides, const UINT* offsets)
 {
     ORIGINAL(SIASetVertexBuffers, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, ID3D11Buffer* const*, const UINT*, const UINT*))(self, start, count, buffers, strides, offsets);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         ID3D11Buffer* replay[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
         bool fits = buffers && start + count <= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
@@ -769,6 +817,7 @@ static void STDMETHODCALLTYPE OurIASetIndexBuffer(Ctx* self, ID3D11Buffer* buffe
     ORIGINAL(SIASetIndexBuffer, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, DXGI_FORMAT, UINT))(self, buffer, format, offset);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         replayIndex = buffer;
         replayIndexFormat = format;
@@ -779,27 +828,27 @@ static void STDMETHODCALLTYPE OurIASetIndexBuffer(Ctx* self, ID3D11Buffer* buffe
 static void STDMETHODCALLTYPE OurIASetPrimitiveTopology(Ctx* self, D3D11_PRIMITIVE_TOPOLOGY topology)
 {
     ORIGINAL(SIASetPrimitiveTopology, void (STDMETHODCALLTYPE*)(Ctx*, D3D11_PRIMITIVE_TOPOLOGY))(self, topology);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->IASetPrimitiveTopology(topology); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->IASetPrimitiveTopology(topology); }
 }
 static void STDMETHODCALLTYPE OurRSSetState(Ctx* self, ID3D11RasterizerState* state)
 {
     ORIGINAL(SRSSetState, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11RasterizerState*))(self, state);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->RSSetState(state); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->RSSetState(state); }
 }
 static void STDMETHODCALLTYPE OurRSSetViewports(Ctx* self, UINT count, const D3D11_VIEWPORT* viewports)
 {
     ORIGINAL(SRSSetViewports, void (STDMETHODCALLTYPE*)(Ctx*, UINT, const D3D11_VIEWPORT*))(self, count, viewports);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->RSSetViewports(count, viewports); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->RSSetViewports(count, viewports); }
 }
 static void STDMETHODCALLTYPE OurRSSetScissorRects(Ctx* self, UINT count, const D3D11_RECT* rects)
 {
     ORIGINAL(SRSSetScissorRects, void (STDMETHODCALLTYPE*)(Ctx*, UINT, const D3D11_RECT*))(self, count, rects);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->RSSetScissorRects(count, rects); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->RSSetScissorRects(count, rects); }
 }
 static void STDMETHODCALLTYPE OurSOSetTargets(Ctx* self, UINT count, ID3D11Buffer* const* buffers, const UINT* offsets)
 {
     ORIGINAL(SSOSetTargets, void (STDMETHODCALLTYPE*)(Ctx*, UINT, ID3D11Buffer* const*, const UINT*))(self, count, buffers, offsets);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->SOSetTargets(count, buffers, offsets); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->SOSetTargets(count, buffers, offsets); }
 }
 
 // Outside a window: whether any of these targets is the left image
@@ -856,6 +905,7 @@ static void STDMETHODCALLTYPE OurOMSetRenderTargets(Ctx* self, UINT count, ID3D1
     NoteCaptureTarget(self, count, views);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         ID3D11RenderTargetView* swapped[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
         deferred->OMSetRenderTargets(count, SwapViews(views, count, swapped, D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, KindRtv),
@@ -871,6 +921,7 @@ static void STDMETHODCALLTYPE OurOMSetRenderTargetsAndUnorderedAccessViews(Ctx* 
     NoteCaptureTarget(self, rtvCount, rtvs);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         ID3D11RenderTargetView* swappedRtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
         ID3D11UnorderedAccessView* swappedUavs[D3D11_1_UAV_SLOT_COUNT];
@@ -885,18 +936,19 @@ static void STDMETHODCALLTYPE OurOMSetRenderTargetsAndUnorderedAccessViews(Ctx* 
 static void STDMETHODCALLTYPE OurOMSetBlendState(Ctx* self, ID3D11BlendState* state, const FLOAT factor[4], UINT mask)
 {
     ORIGINAL(SOMSetBlendState, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11BlendState*, const FLOAT*, UINT))(self, state, factor, mask);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->OMSetBlendState(state, factor, mask); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->OMSetBlendState(state, factor, mask); }
 }
 static void STDMETHODCALLTYPE OurOMSetDepthStencilState(Ctx* self, ID3D11DepthStencilState* state, UINT reference)
 {
     ORIGINAL(SOMSetDepthStencilState, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11DepthStencilState*, UINT))(self, state, reference);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->OMSetDepthStencilState(state, reference); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->OMSetDepthStencilState(state, reference); }
 }
 static void STDMETHODCALLTYPE OurCSSetUnorderedAccessViews(Ctx* self, UINT start, UINT count, ID3D11UnorderedAccessView* const* views, const UINT* initialCounts)
 {
     ORIGINAL(SCSSetUnorderedAccessViews, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, ID3D11UnorderedAccessView* const*, const UINT*))(self, start, count, views, initialCounts);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         ID3D11UnorderedAccessView* swapped[D3D11_1_UAV_SLOT_COUNT];
         deferred->CSSetUnorderedAccessViews(start, count, SwapViews(views, count, swapped, D3D11_1_UAV_SLOT_COUNT, KindUav), initialCounts);
@@ -909,6 +961,7 @@ static void STDMETHODCALLTYPE OurClearRenderTargetView(Ctx* self, ID3D11RenderTa
     ORIGINAL(SClearRenderTargetView, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11RenderTargetView*, const FLOAT*))(self, view, color);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         ID3D11RenderTargetView* swapped = (ID3D11RenderTargetView*)SwapView(view, KindRtv);
         if (swapped)
@@ -920,6 +973,7 @@ static void STDMETHODCALLTYPE OurClearUnorderedAccessViewUint(Ctx* self, ID3D11U
     ORIGINAL(SClearUnorderedAccessViewUint, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11UnorderedAccessView*, const UINT*))(self, view, values);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         ID3D11UnorderedAccessView* swapped = (ID3D11UnorderedAccessView*)SwapView(view, KindUav);
         if (swapped)
@@ -931,6 +985,7 @@ static void STDMETHODCALLTYPE OurClearUnorderedAccessViewFloat(Ctx* self, ID3D11
     ORIGINAL(SClearUnorderedAccessViewFloat, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11UnorderedAccessView*, const FLOAT*))(self, view, values);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         ID3D11UnorderedAccessView* swapped = (ID3D11UnorderedAccessView*)SwapView(view, KindUav);
         if (swapped)
@@ -940,7 +995,7 @@ static void STDMETHODCALLTYPE OurClearUnorderedAccessViewFloat(Ctx* self, ID3D11
 static void STDMETHODCALLTYPE OurClearDepthStencilView(Ctx* self, ID3D11DepthStencilView* view, UINT flags, FLOAT depth, UINT8 stencil)
 {
     ORIGINAL(SClearDepthStencilView, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11DepthStencilView*, UINT, FLOAT, UINT8))(self, view, flags, depth, stencil);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->ClearDepthStencilView(view, flags, depth, stencil); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->ClearDepthStencilView(view, flags, depth, stencil); }
 }
 static void STDMETHODCALLTYPE OurCopySubresourceRegion(Ctx* self, ID3D11Resource* destination, UINT destinationSub, UINT x, UINT y, UINT z,
     ID3D11Resource* source, UINT sourceSub, const D3D11_BOX* box)
@@ -948,31 +1003,32 @@ static void STDMETHODCALLTYPE OurCopySubresourceRegion(Ctx* self, ID3D11Resource
     ORIGINAL(SCopySubresourceRegion, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT, UINT, UINT, UINT, ID3D11Resource*, UINT, const D3D11_BOX*))(
         self, destination, destinationSub, x, y, z, source, sourceSub, box);
     NoteEyeCopy(self, destination);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->CopySubresourceRegion(SwapResource(destination), destinationSub, x, y, z, SwapResource(source), sourceSub, box); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->CopySubresourceRegion(SwapResource(destination), destinationSub, x, y, z, SwapResource(source), sourceSub, box); }
 }
 static void STDMETHODCALLTYPE OurCopySubresourceRegion1(Ctx* self, ID3D11Resource* destination, UINT destinationSub, UINT x, UINT y, UINT z,
     ID3D11Resource* source, UINT sourceSub, const D3D11_BOX* box, UINT flags)
 {
     ORIGINAL(SCopySubresourceRegion1, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT, UINT, UINT, UINT, ID3D11Resource*, UINT, const D3D11_BOX*, UINT))(
         self, destination, destinationSub, x, y, z, source, sourceSub, box, flags);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->CopySubresourceRegion1(SwapResource(destination), destinationSub, x, y, z, SwapResource(source), sourceSub, box, flags); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->CopySubresourceRegion1(SwapResource(destination), destinationSub, x, y, z, SwapResource(source), sourceSub, box, flags); }
 }
 static void STDMETHODCALLTYPE OurCopyResource(Ctx* self, ID3D11Resource* destination, ID3D11Resource* source)
 {
     ORIGINAL(SCopyResource, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, ID3D11Resource*))(self, destination, source);
     NoteEyeCopy(self, destination);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->CopyResource(SwapResource(destination), SwapResource(source)); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->CopyResource(SwapResource(destination), SwapResource(source)); }
 }
 static void STDMETHODCALLTYPE OurCopyStructureCount(Ctx* self, ID3D11Buffer* destination, UINT offset, ID3D11UnorderedAccessView* source)
 {
     ORIGINAL(SCopyStructureCount, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT, ID3D11UnorderedAccessView*))(self, destination, offset, source);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->CopyStructureCount(destination, offset, (ID3D11UnorderedAccessView*)SwapView(source, KindUav)); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->CopyStructureCount(destination, offset, (ID3D11UnorderedAccessView*)SwapView(source, KindUav)); }
 }
 static void STDMETHODCALLTYPE OurGenerateMips(Ctx* self, ID3D11ShaderResourceView* view)
 {
     ORIGINAL(SGenerateMips, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11ShaderResourceView*))(self, view);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         ID3D11ShaderResourceView* swapped = (ID3D11ShaderResourceView*)SwapView(view, KindSrv);
         if (swapped)
@@ -982,25 +1038,26 @@ static void STDMETHODCALLTYPE OurGenerateMips(Ctx* self, ID3D11ShaderResourceVie
 static void STDMETHODCALLTYPE OurSetResourceMinLOD(Ctx* self, ID3D11Resource* resource, FLOAT lod)
 {
     ORIGINAL(SSetResourceMinLOD, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, FLOAT))(self, resource, lod);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->SetResourceMinLOD(SwapResource(resource), lod); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->SetResourceMinLOD(SwapResource(resource), lod); }
 }
 static void STDMETHODCALLTYPE OurResolveSubresource(Ctx* self, ID3D11Resource* destination, UINT destinationSub, ID3D11Resource* source, UINT sourceSub, DXGI_FORMAT format)
 {
     ORIGINAL(SResolveSubresource, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT, ID3D11Resource*, UINT, DXGI_FORMAT))(self, destination, destinationSub, source, sourceSub, format);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->ResolveSubresource(SwapResource(destination), destinationSub, SwapResource(source), sourceSub, format); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->ResolveSubresource(SwapResource(destination), destinationSub, SwapResource(source), sourceSub, format); }
 }
 static void STDMETHODCALLTYPE OurExecuteCommandList(Ctx* self, ID3D11CommandList* list, BOOL restore)
 {
     ORIGINAL(SExecuteCommandList, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11CommandList*, BOOL))(self, list, restore);
     if (self == immediate && !recording)
         InterlockedIncrement(&drawCounters[StImmediateListsOutside]);
-    if (Mirroring(self)) { stats[StNestedLists] += 1; deferred->ExecuteCommandList(list, restore); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StNestedLists] += 1; deferred->ExecuteCommandList(list, restore); }
 }
 static void STDMETHODCALLTYPE OurClearState(Ctx* self)
 {
     ORIGINAL(SClearState, void (STDMETHODCALLTYPE*)(Ctx*))(self);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         memset(replayVertex, 0, sizeof(replayVertex));
         replayIndex = nullptr;
@@ -1010,13 +1067,14 @@ static void STDMETHODCALLTYPE OurClearState(Ctx* self)
 static void STDMETHODCALLTYPE OurDiscardResource(Ctx* self, ID3D11Resource* resource)
 {
     ORIGINAL(SDiscardResource, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*))(self, resource);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->DiscardResource(SwapResource(resource)); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StMirrored] += 1; deferred->DiscardResource(SwapResource(resource)); }
 }
 static void STDMETHODCALLTYPE OurDiscardView(Ctx* self, ID3D11View* view)
 {
     ORIGINAL(SDiscardView, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11View*))(self, view);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         bool skip;
         ID3D11View* swapped = SwapAnyView(view, &skip);
@@ -1029,6 +1087,7 @@ static void STDMETHODCALLTYPE OurDiscardView1(Ctx* self, ID3D11View* view, const
     ORIGINAL(SDiscardView1, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11View*, const D3D11_RECT*, UINT))(self, view, rects, count);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         bool skip;
         ID3D11View* swapped = SwapAnyView(view, &skip);
@@ -1041,6 +1100,7 @@ static void STDMETHODCALLTYPE OurClearView(Ctx* self, ID3D11View* view, const FL
     ORIGINAL(SClearView, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11View*, const FLOAT*, const D3D11_RECT*, UINT))(self, view, color, rects, count);
     if (Mirroring(self))
     {
+        TickTimer mirrorTimer(mirrorTicks);
         stats[StMirrored] += 1;
         bool skip;
         ID3D11View* swapped = SwapAnyView(view, &skip);
@@ -1169,6 +1229,8 @@ static void STDMETHODCALLTYPE OurUnmap(Ctx* self, ID3D11Resource* resource, UINT
     }
     if (map.kind != 0 || !Mirroring(self))
         return;
+    TickTimer mirrorTimer(mirrorTicks);
+    TickTimer uploadTimer(uploadTicks);
     unsigned char* data = scratch[found].data();
     RememberUpload(resource, data, map.size, true);
     if (PatchConstants((float*)data, map.size) > 0)
@@ -1233,7 +1295,11 @@ static void STDMETHODCALLTYPE OurUpdateSubresource(Ctx* self, ID3D11Resource* re
         self, resource, subresource, box, data, rowPitch, depthPitch);
     CaptureUpdate(self, resource, box, data);
     if (Mirroring(self))
+    {
+        TickTimer mirrorTimer(mirrorTicks);
+        TickTimer uploadTimer(uploadTicks);
         UpdateConstants(resource, subresource, box, data, rowPitch, depthPitch, 0, false);
+    }
 }
 static void STDMETHODCALLTYPE OurUpdateSubresource1(Ctx* self, ID3D11Resource* resource, UINT subresource, const D3D11_BOX* box, const void* data,
     UINT rowPitch, UINT depthPitch, UINT flags)
@@ -1242,7 +1308,11 @@ static void STDMETHODCALLTYPE OurUpdateSubresource1(Ctx* self, ID3D11Resource* r
         self, resource, subresource, box, data, rowPitch, depthPitch, flags);
     CaptureUpdate(self, resource, box, data);
     if (Mirroring(self))
+    {
+        TickTimer mirrorTimer(mirrorTicks);
+        TickTimer uploadTimer(uploadTicks);
         UpdateConstants(resource, subresource, box, data, rowPitch, depthPitch, flags, true);
+    }
 }
 
 // Not recordable: the frame's replay is dropped
@@ -1725,13 +1795,14 @@ static void BeginWindow(int slot)
     int replaced = ReassertHooks();
     if (replaced != 0)
         stats[StRehooked] += replaced > 0 ? replaced : 1;
-    activeCount = frameSlots[slot].count;
+    ActivatePatterns(slot);
     expectedEnd = frameSlots[slot].endEvent;
-    memcpy(active, frameSlots[slot].patterns, sizeof(Pattern) * activeCount);
     memset(viewCache, 0, sizeof(viewCache));
     windowEyeWrites = 0;
     pastHeadsetEnd = false;
     windowStart = NowMs();
+    windowStartTicks = __rdtsc();
+    mirrorTicks = swapTicks = uploadTicks = 0;
     CopyState();
     recording = true;
     aborted = false;
@@ -1786,7 +1857,16 @@ static void EndWindowInto(bool drop, void* rightImage)
     if (viewAcquiredImage && viewAcquiredImage(1))
         stats[StRightTakenAtEnd] += 1;
     stats[StWindows] += 1;
-    stats[StWindowMs] += NowMs() - windowStart;
+    double windowMs = NowMs() - windowStart;
+    stats[StWindowMs] += windowMs;
+    unsigned long long windowTicks = __rdtsc() - windowStartTicks;
+    if (windowTicks > 0)
+    {
+        double msPerTick = windowMs / (double)windowTicks;
+        stats[StMirrorMs] += mirrorTicks * msPerTick;
+        stats[StSwapMs] += swapTicks * msPerTick;
+        stats[StUploadMs] += uploadTicks * msPerTick;
+    }
 }
 
 // XrFrameWatch: an image going back to the runtime
@@ -1944,8 +2024,7 @@ static void CaptureEvent(int id)
     if (id >= kCaptureArm && id < kCaptureArm + kFrameSlots)
     {
         int slot = id - kCaptureArm;
-        activeCount = frameSlots[slot].count;
-        memcpy(active, frameSlots[slot].patterns, sizeof(Pattern) * activeCount);
+        ActivatePatterns(slot);
         capturedUploads.clear();
         capturedData.clear();
         captureReady = 0;
