@@ -40,7 +40,8 @@ enum Slot
     SDiscardView = 118, SVSSetConstantBuffers1 = 119, SHSSetConstantBuffers1 = 120, SDSSetConstantBuffers1 = 121,
     SGSSetConstantBuffers1 = 122, SPSSetConstantBuffers1 = 123, SCSSetConstantBuffers1 = 124, SSwapDeviceContextState = 131,
     SClearView = 132, SDiscardView1 = 133, SUpdateTileMappings = 134, SCopyTileMappings = 135, SCopyTiles = 136, SUpdateTiles = 137,
-    SResizeTilePool = 138, STiledResourceBarrier = 139, SSignal = 147, SWait = 148, VtableSize = 149
+    SResizeTilePool = 138, STiledResourceBarrier = 139, SSignal = 147, SWait = 148, VtableSize = 149,
+    SBegin = 27, SEnd = 28, SGetData = 29, SFlush = 111, SSetMarkerInt = 141, SBeginEventInt = 142, SEndEvent = 143
 };
 
 typedef ID3D11DeviceContext Ctx;
@@ -52,7 +53,7 @@ enum Stat
     StCbNoOverwrite, StOtherDiscards, StViewsSwapped, StCopiesSwapped, StLeftUnswappable, StNestedLists, StPredication, StCopiedNow,
     StCopiedAtRelease, StWindowMs, StExecuteMs, StScanMs, StCaptureMs,
     // where the draws went: the immediate context outside the window, Unity's own deferred contexts (graphics jobs) in and out of it
-    StImmediateDrawsOutside, StImmediateListsOutside, StDeferredDrawsInside, StDeferredDrawsOutside, StDeferredLists,
+    StImmediateDrawsOutside, StImmediateListsOutside, StWorkTakenBack,
     StRehooked, StCount
 };
 static double stats[StCount];
@@ -95,6 +96,7 @@ static int leftCount;
 static ID3D11Texture2D* rightTexture;
 static D3D11_TEXTURE2D_DESC rightDesc;
 static bool pendingCopy;
+static bool copyAtOnce = false;      // true: into the right image at END (anything drawing the right eye later overwrites it)
 
 typedef int (*PFN_ViewImages)(int view, void** out, int max);
 typedef void* (*PFN_ViewAcquiredImage)(int view);
@@ -114,9 +116,36 @@ static void Info(const char* format, ...)
         infoLength += written < (int)sizeof(info) - infoLength ? written : (int)sizeof(info) - infoLength - 1;
 }
 
+// The runtime swaps the work entries (draws, dispatches, copies, clears, uploads) between its own variants as state changes, many
+// times a frame: inside a window they are taken back after every call on the immediate context, the runtime's latest variant being
+// what they call on
+static const int workSlots[] = { SDrawIndexed, SDraw, SDrawIndexedInstanced, SDrawInstanced, SDrawAuto, SDrawIndexedInstancedIndirect,
+    SDrawInstancedIndirect, SDispatch, SDispatchIndirect, SCopySubresourceRegion, SCopyResource, SUpdateSubresource, SCopyStructureCount,
+    SClearRenderTargetView, SClearUnorderedAccessViewUint, SClearUnorderedAccessViewFloat, SClearDepthStencilView, SGenerateMips,
+    SResolveSubresource, SCopySubresourceRegion1, SUpdateSubresource1, SClearView, SCopyTiles, SUpdateTiles };
+static void* workHooks[VtableSize];
+static uintptr_t runtimeStart, runtimeEnd;     // d3d11.dll's image: a variant from anywhere else is not taken as the original
+
+static inline void KeepWorkHooks()
+{
+    for (int slot : workSlots)
+    {
+        void* now = vtable[slot];
+        if (now == workHooks[slot])
+            continue;
+        if ((uintptr_t)now >= runtimeStart && (uintptr_t)now < runtimeEnd)
+            original[slot] = now;
+        vtable[slot] = workHooks[slot];
+        stats[StWorkTakenBack] += 1;
+    }
+}
+
 static inline bool Mirroring(Ctx* self)
 {
-    return self == immediate && recording && !aborted;
+    if (self != immediate || !recording)
+        return false;
+    KeepWorkHooks();
+    return !aborted;
 }
 
 static inline void CountImmediateDraw(Ctx* self)
@@ -755,7 +784,11 @@ static void STDMETHODCALLTYPE OurUnmap(Ctx* self, ID3D11Resource* resource, UINT
     }
     ORIGINAL(SUnmap, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT))(self, resource, subresource);
     if (found < 0)
+    {
+        if (self == immediate && recording)
+            KeepWorkHooks();
         return;
+    }
     PendingMap map = pendingMaps[found];
     pendingMaps[found].resource = nullptr;
     if (!Mirroring(self))
@@ -879,50 +912,25 @@ static void STDMETHODCALLTYPE OurTiledResourceBarrier(Ctx* self, ID3D11DeviceChi
     ORIGINAL(STiledResourceBarrier, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11DeviceChild*, ID3D11DeviceChild*))(self, before, after);
 }
 
-// Unity's own deferred contexts (graphics jobs) run through another vtable: only counted
-static void** deferredVtable;
-static void* deferredOriginal[VtableSize];
-static const UINT SFinishCommandList = 114;
-static inline void CountDeferredDraw(Ctx* self)
+static inline void AfterUnrecorded(Ctx* self)
 {
-    if (self != (Ctx*)deferred)
-        InterlockedIncrement(&drawCounters[recording ? StDeferredDrawsInside : StDeferredDrawsOutside]);
+    if (self == immediate && recording)
+        KeepWorkHooks();
 }
-#define DEFERRED_ORIGINAL(slot, signature) ((signature)deferredOriginal[slot])
-static void STDMETHODCALLTYPE CountDraw(Ctx* self, UINT a, UINT b)
-{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDraw, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT))(self, a, b); }
-static void STDMETHODCALLTYPE CountDrawIndexed(Ctx* self, UINT a, UINT b, INT c)
-{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDrawIndexed, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, INT))(self, a, b, c); }
-static void STDMETHODCALLTYPE CountDrawInstanced(Ctx* self, UINT a, UINT b, UINT c, UINT e)
-{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDrawInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, UINT))(self, a, b, c, e); }
-static void STDMETHODCALLTYPE CountDrawIndexedInstanced(Ctx* self, UINT a, UINT b, UINT c, INT e, UINT f)
-{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDrawIndexedInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, INT, UINT))(self, a, b, c, e, f); }
-static void STDMETHODCALLTYPE CountDispatch(Ctx* self, UINT a, UINT b, UINT c)
-{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDispatch, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT))(self, a, b, c); }
-static HRESULT STDMETHODCALLTYPE CountFinishCommandList(Ctx* self, BOOL restore, ID3D11CommandList** list)
-{
-    if (self != (Ctx*)deferred)
-        InterlockedIncrement(&drawCounters[StDeferredLists]);
-    return DEFERRED_ORIGINAL(SFinishCommandList, HRESULT (STDMETHODCALLTYPE*)(Ctx*, BOOL, ID3D11CommandList**))(self, restore, list);
-}
-struct CountEntry { UINT slot; void* function; };
-static const CountEntry counters[] =
-{
-    { SDraw, (void*)CountDraw }, { SDrawIndexed, (void*)CountDrawIndexed }, { SDrawInstanced, (void*)CountDrawInstanced },
-    { SDrawIndexedInstanced, (void*)CountDrawIndexedInstanced }, { SDispatch, (void*)CountDispatch },
-    { SFinishCommandList, (void*)CountFinishCommandList },
-};
-
-static bool WriteDeferredVtable()
-{
-    DWORD old;
-    if (!VirtualProtect(deferredVtable, sizeof(void*) * VtableSize, PAGE_READWRITE, &old))
-        return false;
-    for (const CountEntry& entry : counters)
-        deferredVtable[entry.slot] = entry.function;
-    VirtualProtect(deferredVtable, sizeof(void*) * VtableSize, old, &old);
-    return true;
-}
+static void STDMETHODCALLTYPE OurBegin(Ctx* self, ID3D11Asynchronous* query)
+{ ORIGINAL(SBegin, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Asynchronous*))(self, query); AfterUnrecorded(self); }
+static void STDMETHODCALLTYPE OurEnd(Ctx* self, ID3D11Asynchronous* query)
+{ ORIGINAL(SEnd, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Asynchronous*))(self, query); AfterUnrecorded(self); }
+static HRESULT STDMETHODCALLTYPE OurGetData(Ctx* self, ID3D11Asynchronous* query, void* data, UINT size, UINT flags)
+{ HRESULT result = ORIGINAL(SGetData, HRESULT (STDMETHODCALLTYPE*)(Ctx*, ID3D11Asynchronous*, void*, UINT, UINT))(self, query, data, size, flags); AfterUnrecorded(self); return result; }
+static void STDMETHODCALLTYPE OurFlush(Ctx* self)
+{ ORIGINAL(SFlush, void (STDMETHODCALLTYPE*)(Ctx*))(self); AfterUnrecorded(self); }
+static void STDMETHODCALLTYPE OurSetMarkerInt(Ctx* self, LPCWSTR label, INT data)
+{ ORIGINAL(SSetMarkerInt, void (STDMETHODCALLTYPE*)(Ctx*, LPCWSTR, INT))(self, label, data); AfterUnrecorded(self); }
+static void STDMETHODCALLTYPE OurBeginEventInt(Ctx* self, LPCWSTR label, INT data)
+{ ORIGINAL(SBeginEventInt, void (STDMETHODCALLTYPE*)(Ctx*, LPCWSTR, INT))(self, label, data); AfterUnrecorded(self); }
+static void STDMETHODCALLTYPE OurEndEvent(Ctx* self)
+{ ORIGINAL(SEndEvent, void (STDMETHODCALLTYPE*)(Ctx*))(self); AfterUnrecorded(self); }
 
 struct HookEntry { int slot; void* function; };
 static const HookEntry hooks[] =
@@ -964,6 +972,8 @@ static const HookEntry hooks[] =
     { SSignal, (void*)OurSignal }, { SWait, (void*)OurWait }, { SUpdateTileMappings, (void*)OurUpdateTileMappings },
     { SCopyTileMappings, (void*)OurCopyTileMappings }, { SCopyTiles, (void*)OurCopyTiles }, { SUpdateTiles, (void*)OurUpdateTiles },
     { SResizeTilePool, (void*)OurResizeTilePool }, { STiledResourceBarrier, (void*)OurTiledResourceBarrier },
+    { SBegin, (void*)OurBegin }, { SEnd, (void*)OurEnd }, { SGetData, (void*)OurGetData }, { SFlush, (void*)OurFlush },
+    { SSetMarkerInt, (void*)OurSetMarkerInt }, { SBeginEventInt, (void*)OurBeginEventInt }, { SEndEvent, (void*)OurEndEvent },
 };
 
 static bool WriteVtable(bool install)
@@ -1331,7 +1341,7 @@ static void EndWindow(bool drop)
     immediate1->ExecuteCommandList(list, TRUE);
     stats[StExecuteMs] += NowMs() - start;
     list->Release();
-    void* right = viewAcquiredImage ? viewAcquiredImage(1) : nullptr;
+    void* right = copyAtOnce && viewAcquiredImage ? viewAcquiredImage(1) : nullptr;
     if (right)
     {
         immediate1->CopyResource((ID3D11Resource*)right, rightTexture);
@@ -1408,11 +1418,23 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
     vtable = *(void***)immediate;
     sharedVtable = *(void***)deferred == vtable;
     memcpy(original, vtable, sizeof(original));
+    for (const HookEntry& hook : hooks)
+        workHooks[hook.slot] = hook.function;
+    HMODULE runtime = GetModuleHandleW(L"d3d11.dll");
+    if (runtime)
+    {
+        const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)runtime;
+        const IMAGE_NT_HEADERS* nt = (const IMAGE_NT_HEADERS*)((const unsigned char*)runtime + dos->e_lfanew);
+        runtimeStart = (uintptr_t)runtime;
+        runtimeEnd = runtimeStart + nt->OptionalHeader.SizeOfImage;
+    }
     if (!WriteVtable(true))
     {
         Info("vtable not writable\n");
         return 0;
     }
+    DWORD previousProtection;
+    VirtualProtect(vtable, sizeof(void*) * VtableSize, PAGE_READWRITE, &previousProtection);
     hooked = true;
     char drawModule[MAX_PATH], drawIndexedModule[MAX_PATH], mapModule[MAX_PATH], targetsModule[MAX_PATH];
     Info("the entries we took were in: Draw %s, DrawIndexed %s, Map %s, OMSetRenderTargets %s\n",
@@ -1427,13 +1449,6 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
             Info(" %02x", code[index]);
         Info("\n");
     }
-    bool countingDeferred = false;
-    if (!sharedVtable)
-    {
-        deferredVtable = *(void***)deferred;
-        memcpy(deferredOriginal, deferredVtable, sizeof(deferredOriginal));
-        countingDeferred = WriteDeferredVtable();
-    }
     HMODULE watch = GetModuleHandleW(L"SPTVRXrFrameWatch.dll");
     if (watch)
     {
@@ -1443,8 +1458,8 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
         if (setReleaseHook)
             setReleaseHook((void*)ReleaseHook);
     }
-    Info("feature level %x, driver command lists %d, UAV slots %u, deferred context shares the vtable %d (deferred draws counted %d), frame watch %s\n",
-        device->GetFeatureLevel(), driverCommandLists ? 1 : 0, uavSlots, sharedVtable ? 1 : 0, countingDeferred ? 1 : 0,
+    Info("feature level %x, driver command lists %d, UAV slots %u, deferred context shares the vtable %d, frame watch %s\n",
+        device->GetFeatureLevel(), driverCommandLists ? 1 : 0, uavSlots, sharedVtable ? 1 : 0,
         viewImages && viewAcquiredImage ? "found" : "MISSING (no eye images: nothing is replayed)");
     return 1;
 }
