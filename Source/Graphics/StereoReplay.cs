@@ -18,6 +18,7 @@ namespace TarkovVR.Source.Graphics
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Init(IntPtr anyD3D11Resource);
         [DllImport("SPTVRStereoReplay")] private static extern void SR_SetEnabled(int on);
         [DllImport("SPTVRStereoReplay")] private static extern void SR_SetPrivateTable(int on);
+        [DllImport("SPTVRStereoReplay")] private static extern void SR_SetEndAtHandBack(int on);
         [DllImport("SPTVRStereoReplay")] private static extern IntPtr SR_GetRenderEventFunc();
         [DllImport("SPTVRStereoReplay")] private static extern void SR_SetFrame(int slot, int count, int endEvent, int[] lengths, float[] tolerances, float[] left, float[] right);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Stats(double[] totals, int max);
@@ -31,7 +32,8 @@ namespace TarkovVR.Source.Graphics
             Windows, Dropped, Unpaired, NoImages, Aborted, FinishFailed, Mirrored, Draws, CbMaps, CbPatched, CbUpdates,
             CbNoOverwrite, OtherDiscards, ViewsSwapped, CopiesSwapped, LeftUnswappable, NestedLists, Predication, CopiedNow,
             CopiedAtRelease, WindowMs, ExecuteMs, ScanMs, CaptureMs,
-            ImmediateDrawsOutside, ImmediateListsOutside, WorkTakenBack, RightTakenAtEnd, SameImageTwice, Rehooked, Count
+            ImmediateDrawsOutside, ImmediateListsOutside, WorkTakenBack, RightTakenAtEnd, SameImageTwice,
+            EyeDrawsOutside, EyeCopiesOutside, WindowsNoEyeWrite, EndedAtHandBack, EndedEarly, Rehooked, Count
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
@@ -47,6 +49,9 @@ namespace TarkovVR.Source.Graphics
         // Before the first Ctrl+F9: the context gets our own copy of its function table (the runtime swaps the draw entries in its
         // own as state changes - patching that one let draws slip past); false = patch the runtime's and take them back after every call
         public static bool privateVtable = true;
+        // The recording ends when the left eye's image goes to the headset (everything drawn into it this frame, later cameras and the UI
+        // included); false = at the headset camera's AfterEverything (anything written into the left eye after that is missing on the right)
+        public static bool endAtHandBack = true;
         public static float logInterval = 2f;            // s
 
         private const int StartEvent = 1000, EndEvent = 2000, FrameSlots = 8, MaxPatterns = 64;
@@ -184,6 +189,7 @@ namespace TarkovVR.Source.Graphics
             havePrevious = false;
             TarkovVR.Source.XR.OpenXRFrameWatch.TakePoseStats();
             TarkovVR.Source.XR.OpenXRFrameWatch.SetFixRightPose(fixRightPose);
+            SR_SetEndAtHandBack(endAtHandBack ? 1 : 0);
             SR_SetEnabled(1);
             SR_Stats(new double[(int)Stat.Count + 1], (int)Stat.Count + 1);
             SR_PatternHits(new double[MaxPatterns], MaxPatterns);
@@ -367,7 +373,7 @@ namespace TarkovVR.Source.Graphics
                 + $"nested command lists {PerWindow(Stat.NestedLists):0}, predication {PerWindow(Stat.Predication):0}; right eye copied at once {totals[(int)Stat.CopiedNow]:0} / at hand-back "
                 + $"{totals[(int)Stat.CopiedAtRelease]:0} (its image already taken at the end of the pass {totals[(int)Stat.RightTakenAtEnd]:0}, the same image twice in a row {totals[(int)Stat.SameImageTwice]:0}); Unity's own right-eye view: up to {unityRightDriftMax * 100f:0.0} cm off the right eye, unchanged frame to frame {unityRightStaleFrames} of {rightFrames}, used {(rightFromLeft ? "no" : "yes")}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms, replay {PerWindow(Stat.ExecuteMs):0.00}, value search {PerWindow(Stat.ScanMs):0.00}, "
                 + $"state copy {PerWindow(Stat.CaptureMs):0.00}; the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "
-                + $"{PerWindow(Stat.ImmediateDrawsOutside):0} draws, {PerWindow(Stat.ImmediateListsOutside):0} command lists run (ours). Values found a replay: {(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");
+                + $"{PerWindow(Stat.ImmediateDrawsOutside):0} draws ({totals[(int)Stat.EyeDrawsOutside]:0} into the left eye, {totals[(int)Stat.EyeCopiesOutside]:0} copies into it), {PerWindow(Stat.ImmediateListsOutside):0} command lists run (ours); replays that never wrote the eye {totals[(int)Stat.WindowsNoEyeWrite]:0}, ended at the hand-back {totals[(int)Stat.EndedAtHandBack]:0}, ended early at an unrecordable call past the headset camera {totals[(int)Stat.EndedEarly]:0}. Values found a replay: {(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");
             unityRightDriftMax = 0f;
             unityRightStaleFrames = 0;
             rightFrames = 0;

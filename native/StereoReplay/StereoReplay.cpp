@@ -54,6 +54,7 @@ enum Stat
     StCopiedAtRelease, StWindowMs, StExecuteMs, StScanMs, StCaptureMs,
     // where the draws went: the immediate context outside the window, Unity's own deferred contexts (graphics jobs) in and out of it
     StImmediateDrawsOutside, StImmediateListsOutside, StWorkTakenBack, StRightTakenAtEnd, StSameImageTwice,
+    StEyeDrawsOutside, StEyeCopiesOutside, StWindowsNoEyeWrite, StEndedAtHandBack, StEndedEarly,
     StRehooked, StCount
 };
 static double stats[StCount];
@@ -103,6 +104,11 @@ static int leftCount;
 static ID3D11Texture2D* rightTexture;
 static D3D11_TEXTURE2D_DESC rightDesc;
 static bool pendingCopy;
+// The window ends when the left eye's image goes back to the runtime (nothing can write it after that), not at the headset camera's
+// AfterEverything: the right eye then gets everything the left one got this frame (later cameras, the UI)
+static bool endAtHandBack = true;
+static bool eyeTargetBound;          // outside a window: the left image is a bound render target
+static int windowEyeWrites;          // in a window: views / copies of the left image swapped
 static bool copyAtOnce = false;      // true: into the right image at END (anything drawing the right eye later overwrites it)
 
 typedef int (*PFN_ViewImages)(int view, void** out, int max);
@@ -186,11 +192,26 @@ static inline bool Mirroring(Ctx* self)
 static inline void CountImmediateDraw(Ctx* self)
 {
     if (self == immediate && !recording)
+    {
         InterlockedIncrement(&drawCounters[StImmediateDrawsOutside]);
+        if (eyeTargetBound)
+            InterlockedIncrement(&drawCounters[StEyeDrawsOutside]);
+    }
 }
 
+static void EndWindowInto(bool drop, void* rightImage);
+static bool pastHeadsetEnd;          // the headset camera's AfterEverything has passed in this window
+
+// A call that can't be recorded: past the headset camera's own pass the window just ends there (the eye is drawn by then); before,
+// the frame's replay is dropped
 static void Abort(int slot)
 {
+    if (recording && !aborted && pastHeadsetEnd)
+    {
+        stats[StEndedEarly] += 1;
+        EndWindowInto(false, viewAcquiredImage ? viewAcquiredImage(1) : nullptr);
+        return;
+    }
     if (recording && !aborted)
     {
         aborted = true;
@@ -266,6 +287,7 @@ static inline ID3D11Resource* SwapResource(ID3D11Resource* resource)
     if (resource && rightTexture && IsLeft(resource))
     {
         stats[StCopiesSwapped] += 1;
+        windowEyeWrites++;
         return rightTexture;
     }
     return resource;
@@ -330,6 +352,7 @@ static void* SwapView(void* view, ViewKind kind)
     {
         value = kind == KindDsv ? nullptr : OurView((ID3D11View*)view, kind);
         stats[value ? StViewsSwapped : StLeftUnswappable] += 1;
+        windowEyeWrites++;
     }
     entry.key = view;
     entry.value = value;
@@ -582,10 +605,35 @@ static void STDMETHODCALLTYPE OurSOSetTargets(Ctx* self, UINT count, ID3D11Buffe
     if (Mirroring(self)) { stats[StMirrored] += 1; deferred->SOSetTargets(count, buffers, offsets); }
 }
 
+// Outside a window: whether any of these targets is the left image
+static void NoteEyeTargets(Ctx* self, UINT count, ID3D11RenderTargetView* const* views)
+{
+    if (self != immediate || recording || leftCount == 0 || count == D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL)
+        return;
+    bool bound = false;
+    for (UINT index = 0; index < count && views && !bound; index++)
+    {
+        if (!views[index])
+            continue;
+        ID3D11Resource* resource = nullptr;
+        views[index]->GetResource(&resource);
+        bound = resource && IsLeft(resource);
+        if (resource)
+            resource->Release();
+    }
+    eyeTargetBound = bound;
+}
+static inline void NoteEyeCopy(Ctx* self, ID3D11Resource* destination)
+{
+    if (self == immediate && !recording && leftCount > 0 && destination && IsLeft(destination))
+        stats[StEyeCopiesOutside] += 1;
+}
+
 // Output merger
 static void STDMETHODCALLTYPE OurOMSetRenderTargets(Ctx* self, UINT count, ID3D11RenderTargetView* const* views, ID3D11DepthStencilView* depth)
 {
     ORIGINAL(SOMSetRenderTargets, void (STDMETHODCALLTYPE*)(Ctx*, UINT, ID3D11RenderTargetView* const*, ID3D11DepthStencilView*))(self, count, views, depth);
+    NoteEyeTargets(self, count, views);
     if (Mirroring(self))
     {
         stats[StMirrored] += 1;
@@ -599,6 +647,7 @@ static void STDMETHODCALLTYPE OurOMSetRenderTargetsAndUnorderedAccessViews(Ctx* 
 {
     ORIGINAL(SOMSetRenderTargetsAndUnorderedAccessViews, void (STDMETHODCALLTYPE*)(Ctx*, UINT, ID3D11RenderTargetView* const*,
         ID3D11DepthStencilView*, UINT, UINT, ID3D11UnorderedAccessView* const*, const UINT*))(self, rtvCount, rtvs, depth, uavStart, uavCount, uavs, initialCounts);
+    NoteEyeTargets(self, rtvCount, rtvs);
     if (Mirroring(self))
     {
         stats[StMirrored] += 1;
@@ -677,6 +726,7 @@ static void STDMETHODCALLTYPE OurCopySubresourceRegion(Ctx* self, ID3D11Resource
 {
     ORIGINAL(SCopySubresourceRegion, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT, UINT, UINT, UINT, ID3D11Resource*, UINT, const D3D11_BOX*))(
         self, destination, destinationSub, x, y, z, source, sourceSub, box);
+    NoteEyeCopy(self, destination);
     if (Mirroring(self)) { stats[StMirrored] += 1; deferred->CopySubresourceRegion(SwapResource(destination), destinationSub, x, y, z, SwapResource(source), sourceSub, box); }
 }
 static void STDMETHODCALLTYPE OurCopySubresourceRegion1(Ctx* self, ID3D11Resource* destination, UINT destinationSub, UINT x, UINT y, UINT z,
@@ -689,6 +739,7 @@ static void STDMETHODCALLTYPE OurCopySubresourceRegion1(Ctx* self, ID3D11Resourc
 static void STDMETHODCALLTYPE OurCopyResource(Ctx* self, ID3D11Resource* destination, ID3D11Resource* source)
 {
     ORIGINAL(SCopyResource, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, ID3D11Resource*))(self, destination, source);
+    NoteEyeCopy(self, destination);
     if (Mirroring(self)) { stats[StMirrored] += 1; deferred->CopyResource(SwapResource(destination), SwapResource(source)); }
 }
 static void STDMETHODCALLTYPE OurCopyStructureCount(Ctx* self, ID3D11Buffer* destination, UINT offset, ID3D11UnorderedAccessView* source)
@@ -1359,17 +1410,27 @@ static void BeginWindow(int slot)
     expectedEnd = frameSlots[slot].endEvent;
     memcpy(active, frameSlots[slot].patterns, sizeof(Pattern) * activeCount);
     memset(viewCache, 0, sizeof(viewCache));
+    windowEyeWrites = 0;
+    pastHeadsetEnd = false;
     windowStart = NowMs();
     CopyState();
     recording = true;
     aborted = false;
 }
 
+static void EndWindowInto(bool drop, void* rightImage);
 static void EndWindow(bool drop)
+{
+    EndWindowInto(drop, copyAtOnce && viewAcquiredImage ? viewAcquiredImage(1) : nullptr);
+}
+
+static void EndWindowInto(bool drop, void* rightImage)
 {
     if (!recording)
         return;
     recording = false;
+    if (windowEyeWrites == 0)
+        stats[StWindowsNoEyeWrite] += 1;
     RestoreUploads();
     ID3D11CommandList* list = nullptr;
     HRESULT result = deferred->FinishCommandList(FALSE, &list);
@@ -1388,7 +1449,7 @@ static void EndWindow(bool drop)
     immediate1->ExecuteCommandList(list, TRUE);
     stats[StExecuteMs] += NowMs() - start;
     list->Release();
-    void* right = copyAtOnce && viewAcquiredImage ? viewAcquiredImage(1) : nullptr;
+    void* right = rightImage;
     if (right)
     {
         immediate1->CopyResource((ID3D11Resource*)right, rightTexture);
@@ -1407,6 +1468,12 @@ static void EndWindow(bool drop)
 static void* lastCopiedImage;
 static void ReleaseHook(int view, void* texture)
 {
+    // the first hand-back of the frame ends the window, the right image (still taken) filled before it goes too
+    if (recording && endAtHandBack)
+    {
+        stats[StEndedAtHandBack] += 1;
+        EndWindowInto(false, view == 1 ? texture : (viewAcquiredImage ? viewAcquiredImage(1) : nullptr));
+    }
     if (view == 1)
     {
         if (texture == lastCopiedImage)
@@ -1427,7 +1494,12 @@ static void __stdcall OnRenderEvent(int id)
     if (id >= kStartEvent && id < kStartEvent + kFrameSlots)
         BeginWindow(id - kStartEvent);
     else if (id >= kEndEvent && id < kEndEvent + kEndEvents && id == expectedEnd)
-        EndWindow(false);
+    {
+        if (endAtHandBack)
+            pastHeadsetEnd = recording;
+        else
+            EndWindow(false);
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------
@@ -1547,6 +1619,12 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
 }
 
 // Before SR_Init: our own vtable for the context (default) or the runtime's patched
+// The window ends at the left image's hand-back (default) or at the headset camera's AfterEverything
+SR_EXPORT void SR_SetEndAtHandBack(int on)
+{
+    endAtHandBack = on != 0;
+}
+
 SR_EXPORT void SR_SetPrivateTable(int on)
 {
     if (!hooked)
