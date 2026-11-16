@@ -50,9 +50,13 @@ enum Stat
 {
     StWindows, StDropped, StUnpaired, StNoImages, StAborted, StFinishFailed, StMirrored, StDraws, StCbMaps, StCbPatched, StCbUpdates,
     StCbNoOverwrite, StOtherDiscards, StViewsSwapped, StCopiesSwapped, StLeftUnswappable, StNestedLists, StPredication, StCopiedNow,
-    StCopiedAtRelease, StWindowMs, StExecuteMs, StScanMs, StCaptureMs, StCount
+    StCopiedAtRelease, StWindowMs, StExecuteMs, StScanMs, StCaptureMs,
+    // where the draws went: the immediate context outside the window, Unity's own deferred contexts (graphics jobs) in and out of it
+    StImmediateDrawsOutside, StImmediateListsOutside, StDeferredDrawsInside, StDeferredDrawsOutside, StDeferredLists, StCount
 };
 static double stats[StCount];
+// written from Unity's job threads too
+static volatile LONG drawCounters[StCount];
 static int lastAbortSlot;
 
 static LARGE_INTEGER clockFrequency;
@@ -112,6 +116,12 @@ static void Info(const char* format, ...)
 static inline bool Mirroring(Ctx* self)
 {
     return self == immediate && recording && !aborted;
+}
+
+static inline void CountImmediateDraw(Ctx* self)
+{
+    if (self == immediate && !recording)
+        InterlockedIncrement(&drawCounters[StImmediateDrawsOutside]);
 }
 
 static void Abort(int slot)
@@ -410,46 +420,55 @@ HOOK_BUFFERS1(HSSetConstantBuffers1) HOOK_BUFFERS1(DSSetConstantBuffers1) HOOK_B
 // Draws and dispatches
 static void STDMETHODCALLTYPE OurDraw(Ctx* self, UINT vertices, UINT first)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDraw, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT))(self, vertices, first);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->Draw(vertices, first); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexed(Ctx* self, UINT indices, UINT first, INT baseVertex)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDrawIndexed, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, INT))(self, indices, first, baseVertex);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawIndexed(indices, first, baseVertex); }
 }
 static void STDMETHODCALLTYPE OurDrawInstanced(Ctx* self, UINT vertices, UINT instances, UINT first, UINT firstInstance)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDrawInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, UINT))(self, vertices, instances, first, firstInstance);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawInstanced(vertices, instances, first, firstInstance); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexedInstanced(Ctx* self, UINT indices, UINT instances, UINT first, INT baseVertex, UINT firstInstance)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDrawIndexedInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, INT, UINT))(self, indices, instances, first, baseVertex, firstInstance);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawIndexedInstanced(indices, instances, first, baseVertex, firstInstance); }
 }
 static void STDMETHODCALLTYPE OurDrawAuto(Ctx* self)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDrawAuto, void (STDMETHODCALLTYPE*)(Ctx*))(self);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawAuto(); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexedInstancedIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDrawIndexedInstancedIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawIndexedInstancedIndirect(arguments, offset); }
 }
 static void STDMETHODCALLTYPE OurDrawInstancedIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDrawInstancedIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->DrawInstancedIndirect(arguments, offset); }
 }
 static void STDMETHODCALLTYPE OurDispatch(Ctx* self, UINT x, UINT y, UINT z)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDispatch, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT))(self, x, y, z);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->Dispatch(x, y, z); }
 }
 static void STDMETHODCALLTYPE OurDispatchIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
+    CountImmediateDraw(self);
     ORIGINAL(SDispatchIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
     if (Mirroring(self)) { stats[StDraws] += 1; deferred->DispatchIndirect(arguments, offset); }
 }
@@ -634,6 +653,8 @@ static void STDMETHODCALLTYPE OurResolveSubresource(Ctx* self, ID3D11Resource* d
 static void STDMETHODCALLTYPE OurExecuteCommandList(Ctx* self, ID3D11CommandList* list, BOOL restore)
 {
     ORIGINAL(SExecuteCommandList, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11CommandList*, BOOL))(self, list, restore);
+    if (self == immediate && !recording)
+        InterlockedIncrement(&drawCounters[StImmediateListsOutside]);
     if (Mirroring(self)) { stats[StNestedLists] += 1; deferred->ExecuteCommandList(list, restore); }
 }
 static void STDMETHODCALLTYPE OurClearState(Ctx* self)
@@ -853,6 +874,51 @@ static void STDMETHODCALLTYPE OurTiledResourceBarrier(Ctx* self, ID3D11DeviceChi
 {
     if (self == immediate) Abort(STiledResourceBarrier);
     ORIGINAL(STiledResourceBarrier, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11DeviceChild*, ID3D11DeviceChild*))(self, before, after);
+}
+
+// Unity's own deferred contexts (graphics jobs) run through another vtable: only counted
+static void** deferredVtable;
+static void* deferredOriginal[VtableSize];
+static const UINT SFinishCommandList = 114;
+static inline void CountDeferredDraw(Ctx* self)
+{
+    if (self != (Ctx*)deferred)
+        InterlockedIncrement(&drawCounters[recording ? StDeferredDrawsInside : StDeferredDrawsOutside]);
+}
+#define DEFERRED_ORIGINAL(slot, signature) ((signature)deferredOriginal[slot])
+static void STDMETHODCALLTYPE CountDraw(Ctx* self, UINT a, UINT b)
+{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDraw, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT))(self, a, b); }
+static void STDMETHODCALLTYPE CountDrawIndexed(Ctx* self, UINT a, UINT b, INT c)
+{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDrawIndexed, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, INT))(self, a, b, c); }
+static void STDMETHODCALLTYPE CountDrawInstanced(Ctx* self, UINT a, UINT b, UINT c, UINT e)
+{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDrawInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, UINT))(self, a, b, c, e); }
+static void STDMETHODCALLTYPE CountDrawIndexedInstanced(Ctx* self, UINT a, UINT b, UINT c, INT e, UINT f)
+{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDrawIndexedInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, INT, UINT))(self, a, b, c, e, f); }
+static void STDMETHODCALLTYPE CountDispatch(Ctx* self, UINT a, UINT b, UINT c)
+{ CountDeferredDraw(self); DEFERRED_ORIGINAL(SDispatch, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT))(self, a, b, c); }
+static HRESULT STDMETHODCALLTYPE CountFinishCommandList(Ctx* self, BOOL restore, ID3D11CommandList** list)
+{
+    if (self != (Ctx*)deferred)
+        InterlockedIncrement(&drawCounters[StDeferredLists]);
+    return DEFERRED_ORIGINAL(SFinishCommandList, HRESULT (STDMETHODCALLTYPE*)(Ctx*, BOOL, ID3D11CommandList**))(self, restore, list);
+}
+struct CountEntry { UINT slot; void* function; };
+static const CountEntry counters[] =
+{
+    { SDraw, (void*)CountDraw }, { SDrawIndexed, (void*)CountDrawIndexed }, { SDrawInstanced, (void*)CountDrawInstanced },
+    { SDrawIndexedInstanced, (void*)CountDrawIndexedInstanced }, { SDispatch, (void*)CountDispatch },
+    { SFinishCommandList, (void*)CountFinishCommandList },
+};
+
+static bool WriteDeferredVtable()
+{
+    DWORD old;
+    if (!VirtualProtect(deferredVtable, sizeof(void*) * VtableSize, PAGE_READWRITE, &old))
+        return false;
+    for (const CountEntry& entry : counters)
+        deferredVtable[entry.slot] = entry.function;
+    VirtualProtect(deferredVtable, sizeof(void*) * VtableSize, old, &old);
+    return true;
 }
 
 struct HookEntry { int slot; void* function; };
@@ -1252,6 +1318,13 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
         return 0;
     }
     hooked = true;
+    bool countingDeferred = false;
+    if (!sharedVtable)
+    {
+        deferredVtable = *(void***)deferred;
+        memcpy(deferredOriginal, deferredVtable, sizeof(deferredOriginal));
+        countingDeferred = WriteDeferredVtable();
+    }
     HMODULE watch = GetModuleHandleW(L"SPTVRXrFrameWatch.dll");
     if (watch)
     {
@@ -1261,8 +1334,8 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
         if (setReleaseHook)
             setReleaseHook((void*)ReleaseHook);
     }
-    Info("feature level %x, driver command lists %d, UAV slots %u, deferred context shares the vtable %d, frame watch %s\n",
-        device->GetFeatureLevel(), driverCommandLists ? 1 : 0, uavSlots, sharedVtable ? 1 : 0,
+    Info("feature level %x, driver command lists %d, UAV slots %u, deferred context shares the vtable %d (deferred draws counted %d), frame watch %s\n",
+        device->GetFeatureLevel(), driverCommandLists ? 1 : 0, uavSlots, sharedVtable ? 1 : 0, countingDeferred ? 1 : 0,
         viewImages && viewAcquiredImage ? "found" : "MISSING (no eye images: nothing is replayed)");
     return 1;
 }
@@ -1300,6 +1373,8 @@ SR_EXPORT int SR_Stats(double* out, int max)
     if (!out || max <= 0)
         return 0;
     int count = max < StCount ? max : StCount;
+    for (int index = 0; index < StCount; index++)
+        stats[index] += (double)InterlockedExchange(&drawCounters[index], 0);
     for (int index = 0; index < count; index++)
         out[index] = stats[index];
     if (max > StCount)

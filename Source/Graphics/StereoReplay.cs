@@ -28,7 +28,8 @@ namespace TarkovVR.Source.Graphics
         {
             Windows, Dropped, Unpaired, NoImages, Aborted, FinishFailed, Mirrored, Draws, CbMaps, CbPatched, CbUpdates,
             CbNoOverwrite, OtherDiscards, ViewsSwapped, CopiesSwapped, LeftUnswappable, NestedLists, Predication, CopiedNow,
-            CopiedAtRelease, WindowMs, ExecuteMs, ScanMs, CaptureMs, Count
+            CopiedAtRelease, WindowMs, ExecuteMs, ScanMs, CaptureMs,
+            ImmediateDrawsOutside, ImmediateListsOutside, DeferredDrawsInside, DeferredDrawsOutside, DeferredLists, Count
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
@@ -325,7 +326,9 @@ namespace TarkovVR.Source.Graphics
                 + $"{PerWindow(Stat.OtherDiscards):0}; left image views swapped {PerWindow(Stat.ViewsSwapped):0}, copies {PerWindow(Stat.CopiesSwapped):0}, unswappable {PerWindow(Stat.LeftUnswappable):0}; "
                 + $"nested command lists {PerWindow(Stat.NestedLists):0}, predication {PerWindow(Stat.Predication):0}; right eye copied at once {totals[(int)Stat.CopiedNow]:0} / at hand-back "
                 + $"{totals[(int)Stat.CopiedAtRelease]:0}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms, replay {PerWindow(Stat.ExecuteMs):0.00}, value search {PerWindow(Stat.ScanMs):0.00}, "
-                + $"state copy {PerWindow(Stat.CaptureMs):0.00}. Values found a replay: {(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");
+                + $"state copy {PerWindow(Stat.CaptureMs):0.00}. Draws a frame elsewhere: main context outside the pass {PerWindow(Stat.ImmediateDrawsOutside):0}, "
+                + $"Unity's job contexts inside the pass {PerWindow(Stat.DeferredDrawsInside):0} / outside {PerWindow(Stat.DeferredDrawsOutside):0}, job command lists "
+                + $"{PerWindow(Stat.DeferredLists):0} made, {PerWindow(Stat.ImmediateListsOutside):0} run outside the pass. Values found a replay:{(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");
         }
     }
 }
