@@ -12,7 +12,7 @@ namespace TarkovVR.Source.Graphics
     // the left eye only; the native layer records that pass's D3D11 calls and replays them into the right eye with the right eye's camera
     // values (found by value in the constant buffers: the patterns sent here each frame). The right eye's image comes from the OpenXR
     // frame watcher, registered at boot when the DLL is there. First test: the hideout, upscaler and the graphics mods off.
-    internal class StereoReplay : MonoBehaviour
+    internal partial class StereoReplay : MonoBehaviour
     {
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)] private static extern IntPtr LoadLibrary(string path);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Init(IntPtr anyD3D11Resource);
@@ -38,6 +38,7 @@ namespace TarkovVR.Source.Graphics
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
+        public static float inverseTolerance = 1e-3f;     // inverses magnify those differences (an effect's own inverse is another float result)
         public static float positionTolerance = 1e-4f;    // m (relative past 1 m): the eyes are 6 cm apart, the centre 3
         public static bool combinedCulling = true;        // the culling frustum covers both eyes (else the right eye's outer edge is culled)
         public static float cullingMarginDegrees = 5f;
@@ -99,6 +100,7 @@ namespace TarkovVR.Source.Graphics
         {
             windowFrames++;
             windowSeconds += Time.unscaledDeltaTime;
+            UpdateEyeDiff();
             if (Input.GetKeyDown(KeyCode.F9) && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)))
             {
                 if (Active) Stop("switched off (Ctrl+F9)");
@@ -248,11 +250,23 @@ namespace TarkovVR.Source.Graphics
             lastUnityRight = unityRight;
             rightFrames++;
 
+            FillPatterns(viewLeft, viewRight, projectionLeft, projectionRight, true);
+
+            SR_SetFrame(frameSlot, patternCount, EndEvent, lengths, tolerances, leftValues, rightValues);
+            if (combinedCulling)
+                culling.cullingMatrix = CombinedCulling(culling, viewLeft, viewRight, projectionLeft, projectionRight);
+            GL.IssuePluginEvent(eventFunction, StartEvent + frameSlot);
+            frameSlot = (frameSlot + 1) % FrameSlots;
+        }
+
+        // The left eye's camera values and the right eye's, in every form Unity or an effect uploads them
+        private static void FillPatterns(Matrix4x4 viewLeft, Matrix4x4 viewRight, Matrix4x4 projectionLeft, Matrix4x4 projectionRight, bool withLaterCameras)
+        {
             patternCount = 0;
             AddMatrix("view", viewLeft, viewRight);
-            AddMatrix("view inverse", viewLeft.inverse, viewRight.inverse);
+            AddMatrix("view inverse", viewLeft.inverse, viewRight.inverse, inverseTolerance);
             AddMatrix("projection", projectionLeft, projectionRight);
-            AddMatrix("projection inverse", projectionLeft.inverse, projectionRight.inverse);
+            AddMatrix("projection inverse", projectionLeft.inverse, projectionRight.inverse, inverseTolerance);
             for (int flip = 0; flip < 2; flip++)
             {
                 string tag = flip == 0 ? " (into texture)" : " (into screen)";
@@ -261,9 +275,9 @@ namespace TarkovVR.Source.Graphics
                 Matrix4x4 viewProjectionLeft = gpuLeft * viewLeft;
                 Matrix4x4 viewProjectionRight = gpuRight * viewRight;
                 AddMatrix("GPU projection" + tag, gpuLeft, gpuRight);
-                AddMatrix("GPU projection inverse" + tag, gpuLeft.inverse, gpuRight.inverse);
+                AddMatrix("GPU projection inverse" + tag, gpuLeft.inverse, gpuRight.inverse, inverseTolerance);
                 AddMatrix("view-projection" + tag, viewProjectionLeft, viewProjectionRight);
-                AddMatrix("view-projection inverse" + tag, viewProjectionLeft.inverse, viewProjectionRight.inverse);
+                AddMatrix("view-projection inverse" + tag, viewProjectionLeft.inverse, viewProjectionRight.inverse, inverseTolerance);
                 if (havePrevious)
                     AddMatrix("last frame's view-projection" + tag, previousLeft[flip], previousRight[flip]);
                 previousLeft[flip] = viewProjectionLeft;
@@ -275,16 +289,13 @@ namespace TarkovVR.Source.Graphics
             Matrix4x4 worldToEyeLeft = flipZ * viewLeft;
             Matrix4x4 worldToEyeRight = flipZ * viewRight;
             AddMatrix("world to eye", worldToEyeLeft, worldToEyeRight);
-            AddMatrix("eye to world", worldToEyeLeft.inverse, worldToEyeRight.inverse);
+            AddMatrix("eye to world", worldToEyeLeft.inverse, worldToEyeRight.inverse, inverseTolerance);
             AddVector("eye position", viewLeft.inverse.GetColumn(3), viewRight.inverse.GetColumn(3));
-            foreach (Camera later in laterEyeCameras)
-                AddLaterCamera(later, viewLeft, projectionLeft);
-
-            SR_SetFrame(frameSlot, patternCount, EndEvent, lengths, tolerances, leftValues, rightValues);
-            if (combinedCulling)
-                culling.cullingMatrix = CombinedCulling(culling, viewLeft, viewRight, projectionLeft, projectionRight);
-            GL.IssuePluginEvent(eventFunction, StartEvent + frameSlot);
-            frameSlot = (frameSlot + 1) % FrameSlots;
+            if (withLaterCameras)
+            {
+                foreach (Camera later in laterEyeCameras)
+                    AddLaterCamera(later, viewLeft, projectionLeft);
+            }
         }
 
         // Disabled ones too (the UI camera is switched off while no UI is in view); only those drawing straight into the eye
@@ -320,7 +331,7 @@ namespace TarkovVR.Source.Graphics
                 AddMatrix("view inverse" + tag, viewLeft.inverse, viewRight.inverse);
             }
             AddMatrix("projection" + tag, projectionLeft, projectionRight);
-            AddMatrix("projection inverse" + tag, projectionLeft.inverse, projectionRight.inverse);
+            AddMatrix("projection inverse" + tag, projectionLeft.inverse, projectionRight.inverse, inverseTolerance);
             for (int flip = 0; flip < 2; flip++)
             {
                 Matrix4x4 gpuLeft = GL.GetGPUProjectionMatrix(projectionLeft, flip == 0);
@@ -341,7 +352,7 @@ namespace TarkovVR.Source.Graphics
         }
 
         // In Unity's memory order (columns) and transposed
-        private static void AddMatrix(string name, Matrix4x4 left, Matrix4x4 right)
+        private static void AddMatrix(string name, Matrix4x4 left, Matrix4x4 right, float tolerance = -1f)
         {
             for (int transposed = 0; transposed < 2; transposed++)
             {
@@ -357,7 +368,7 @@ namespace TarkovVR.Source.Graphics
                     }
                 }
                 lengths[patternCount] = 16;
-                tolerances[patternCount] = matrixTolerance;
+                tolerances[patternCount] = tolerance > 0f ? tolerance : matrixTolerance;
                 patternNames[patternCount] = transposed == 0 ? name : name + " (rows)";
                 patternCount++;
             }

@@ -16,6 +16,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <algorithm>
+#include <map>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -190,8 +193,38 @@ static inline bool Mirroring(Ctx* self)
     return !aborted;
 }
 
+// Eye diff capture (dev, C# Ctrl+F6, the replay off): one frame of Unity's own two-eye rendering of the headset camera; every constant
+// buffer upload and dynamic vertex write of the left pass is compared with the right pass's, the left ones first put through the value
+// patterns - what still differs is a per-eye value the replay doesn't swap yet
+enum CaptureState { CapIdle, CapArmed, CapLeft, CapBetween, CapRight };
+static int captureState = CapIdle;
+struct CapturedUpload { ID3D11Resource* buffer; UINT bytes; size_t data; UINT offset; int kind; int pass; int draw; UINT width, height; };
+static std::vector<CapturedUpload> capturedUploads;
+static std::vector<unsigned char> capturedData;
+static int captureDraw;
+static UINT captureWidth, captureHeight;
+static std::string captureReport;
+static volatile LONG captureReady;
+static const unsigned int kSentinel = 0x7FBADBADu;      // a NaN: never vertex data
+
+static inline bool Capturing(Ctx* self)
+{
+    return self == immediate && (captureState == CapLeft || captureState == CapRight);
+}
+
+static void CaptureUpload(ID3D11Resource* buffer, const void* data, UINT bytes, UINT offset, int kind)
+{
+    if (capturedData.size() > (size_t)256 * 1024 * 1024 || bytes == 0)
+        return;
+    CapturedUpload upload = { buffer, bytes, capturedData.size(), offset, kind, captureState == CapLeft ? 0 : 1, captureDraw, captureWidth, captureHeight };
+    capturedData.insert(capturedData.end(), (const unsigned char*)data, (const unsigned char*)data + bytes);
+    capturedUploads.push_back(upload);
+}
+
 static inline void CountImmediateDraw(Ctx* self)
 {
+    if (self == immediate && (captureState == CapLeft || captureState == CapRight))
+        captureDraw++;
     if (self == immediate && !recording)
     {
         InterlockedIncrement(&drawCounters[StImmediateDrawsOutside]);
@@ -414,7 +447,7 @@ static ID3D11View* SwapAnyView(ID3D11View* view, bool* skip)
 // Constant buffers: the replay gets each upload with the right eye's values; at END the left eye's last upload goes back on top, so
 // what Unity thinks a buffer holds after the replay is what it holds
 
-struct PendingMap { ID3D11Resource* resource; UINT subresource; void* driverPointer; UINT size; };
+struct PendingMap { ID3D11Resource* resource; UINT subresource; void* driverPointer; UINT size; int kind; bool capture; UINT writtenFirst; UINT writtenBytes; };
 static const int kPending = 16;
 static PendingMap pendingMaps[kPending];
 static std::vector<unsigned char> scratch[kPending];
@@ -787,6 +820,28 @@ static void NoteEyeTargets(Ctx* self, UINT count, ID3D11RenderTargetView* const*
     }
     eyeTargetBound = bound;
 }
+static void NoteCaptureTarget(Ctx* self, UINT count, ID3D11RenderTargetView* const* views)
+{
+    if (!Capturing(self) || count == D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL || count == 0 || !views || !views[0])
+        return;
+    ID3D11Resource* resource = nullptr;
+    views[0]->GetResource(&resource);
+    captureWidth = captureHeight = 0;
+    if (resource)
+    {
+        D3D11_RESOURCE_DIMENSION dimension;
+        resource->GetType(&dimension);
+        if (dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D)
+        {
+            D3D11_TEXTURE2D_DESC description;
+            ((ID3D11Texture2D*)resource)->GetDesc(&description);
+            captureWidth = description.Width;
+            captureHeight = description.Height;
+        }
+        resource->Release();
+    }
+}
+
 static inline void NoteEyeCopy(Ctx* self, ID3D11Resource* destination)
 {
     if (self == immediate && !recording && leftCount > 0 && destination && IsLeft(destination))
@@ -798,6 +853,7 @@ static void STDMETHODCALLTYPE OurOMSetRenderTargets(Ctx* self, UINT count, ID3D1
 {
     ORIGINAL(SOMSetRenderTargets, void (STDMETHODCALLTYPE*)(Ctx*, UINT, ID3D11RenderTargetView* const*, ID3D11DepthStencilView*))(self, count, views, depth);
     NoteEyeTargets(self, count, views);
+    NoteCaptureTarget(self, count, views);
     if (Mirroring(self))
     {
         stats[StMirrored] += 1;
@@ -812,6 +868,7 @@ static void STDMETHODCALLTYPE OurOMSetRenderTargetsAndUnorderedAccessViews(Ctx* 
     ORIGINAL(SOMSetRenderTargetsAndUnorderedAccessViews, void (STDMETHODCALLTYPE*)(Ctx*, UINT, ID3D11RenderTargetView* const*,
         ID3D11DepthStencilView*, UINT, UINT, ID3D11UnorderedAccessView* const*, const UINT*))(self, rtvCount, rtvs, depth, uavStart, uavCount, uavs, initialCounts);
     NoteEyeTargets(self, rtvCount, rtvs);
+    NoteCaptureTarget(self, rtvCount, rtvs);
     if (Mirroring(self))
     {
         stats[StMirrored] += 1;
@@ -1005,7 +1062,9 @@ static HRESULT STDMETHODCALLTYPE OurMap(Ctx* self, ID3D11Resource* resource, UIN
     }
     HRESULT result = ORIGINAL(SMap, HRESULT (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT, D3D11_MAP, UINT, D3D11_MAPPED_SUBRESOURCE*))(
         self, resource, subresource, type, flags, mapped);
-    if (!Mirroring(self) || FAILED(result) || !mapped || !resource)
+    bool mirror = Mirroring(self);
+    bool capture = Capturing(self);
+    if ((!mirror && !capture) || FAILED(result) || !mapped || !resource)
         return result;
     UINT size;
     bool dynamic;
@@ -1018,14 +1077,43 @@ static HRESULT STDMETHODCALLTYPE OurMap(Ctx* self, ID3D11Resource* resource, UIN
                 continue;
             if (scratch[index].size() < size)
                 scratch[index].resize(size);
-            pendingMaps[index] = { resource, subresource, mapped->pData, size };
+            pendingMaps[index] = { resource, subresource, mapped->pData, size, 0, capture, 0, 0 };
             mapped->pData = scratch[index].data();
-            stats[StCbMaps] += 1;
+            if (mirror)
+                stats[StCbMaps] += 1;
             return result;
         }
-        Abort(SMap);   // more open maps than we track: this frame can't be replayed
+        if (mirror)
+            Abort(SMap);   // more open maps than we track: this frame can't be replayed
     }
-    else if (type == D3D11_MAP_WRITE_NO_OVERWRITE && constant)
+    // capture: a dynamic vertex / index write goes into a sentinel-filled copy, the written span to the driver at Unmap
+    if (capture && !constant && (type == D3D11_MAP_WRITE_DISCARD || type == D3D11_MAP_WRITE_NO_OVERWRITE))
+    {
+        D3D11_RESOURCE_DIMENSION dimension;
+        resource->GetType(&dimension);
+        D3D11_BUFFER_DESC description = {};
+        if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER)
+            ((ID3D11Buffer*)resource)->GetDesc(&description);
+        if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER && description.Usage == D3D11_USAGE_DYNAMIC)
+        {
+            UINT words = (description.ByteWidth + 3) / 4;
+            for (int index = 0; index < kPending; index++)
+            {
+                if (pendingMaps[index].resource)
+                    continue;
+                scratch[index].resize((size_t)words * 4);
+                unsigned int* fill = (unsigned int*)scratch[index].data();
+                for (UINT word = 0; word < words; word++)
+                    fill[word] = kSentinel;
+                pendingMaps[index] = { resource, subresource, mapped->pData, description.ByteWidth, 1, true, 0, 0 };
+                mapped->pData = scratch[index].data();
+                return result;
+            }
+        }
+    }
+    if (!mirror)
+        return result;
+    if (type == D3D11_MAP_WRITE_NO_OVERWRITE && constant)
         stats[StCbNoOverwrite] += 1;
     else if (type == D3D11_MAP_WRITE_DISCARD)
         stats[StOtherDiscards] += 1;
@@ -1043,7 +1131,25 @@ static void STDMETHODCALLTYPE OurUnmap(Ctx* self, ID3D11Resource* resource, UINT
                 found = index;
         }
         if (found >= 0)
-            memcpy(pendingMaps[found].driverPointer, scratch[found].data(), pendingMaps[found].size);
+        {
+            PendingMap& pending = pendingMaps[found];
+            if (pending.kind == 0)
+                memcpy(pending.driverPointer, scratch[found].data(), pending.size);
+            else
+            {
+                // the span written: the first and last words that aren't the sentinel
+                const unsigned int* words = (const unsigned int*)scratch[found].data();
+                UINT count = (pending.size + 3) / 4, first = 0, last = count;
+                while (first < count && words[first] == kSentinel) first++;
+                while (last > first && words[last - 1] == kSentinel) last--;
+                pending.writtenFirst = first * 4;
+                pending.writtenBytes = (last - first) * 4;
+                if (pending.writtenFirst + pending.writtenBytes > pending.size)
+                    pending.writtenBytes = pending.size > pending.writtenFirst ? pending.size - pending.writtenFirst : 0;
+                if (pending.writtenBytes > 0)
+                    memcpy((unsigned char*)pending.driverPointer + pending.writtenFirst, scratch[found].data() + pending.writtenFirst, pending.writtenBytes);
+            }
+        }
     }
     ORIGINAL(SUnmap, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT))(self, resource, subresource);
     if (found < 0)
@@ -1054,7 +1160,14 @@ static void STDMETHODCALLTYPE OurUnmap(Ctx* self, ID3D11Resource* resource, UINT
     }
     PendingMap map = pendingMaps[found];
     pendingMaps[found].resource = nullptr;
-    if (!Mirroring(self))
+    if (map.capture && (captureState == CapLeft || captureState == CapRight))
+    {
+        if (map.kind == 0)
+            CaptureUpload(resource, scratch[found].data(), map.size, 0, 0);
+        else if (map.writtenBytes > 0)
+            CaptureUpload(resource, scratch[found].data() + map.writtenFirst, map.writtenBytes, map.writtenFirst, 1);
+    }
+    if (map.kind != 0 || !Mirroring(self))
         return;
     unsigned char* data = scratch[found].data();
     RememberUpload(resource, data, map.size, true);
@@ -1068,6 +1181,18 @@ static void STDMETHODCALLTYPE OurUnmap(Ctx* self, ID3D11Resource* resource, UINT
     }
     else
         Abort(SUnmap);
+}
+
+static void CaptureUpdate(Ctx* self, ID3D11Resource* resource, const D3D11_BOX* box, const void* data)
+{
+    UINT size;
+    bool dynamic;
+    if (!Capturing(self) || !data || !resource || !ConstantBufferSize(resource, &size, &dynamic))
+        return;
+    UINT offset = box ? box->left : 0;
+    UINT bytes = box ? box->right - box->left : size;
+    if (bytes > 0 && offset + bytes <= size)
+        CaptureUpload(resource, data, bytes, offset, 0);
 }
 
 // UpdateSubresource: constant buffers are replayed with the right eye's values; other resources keep what the left eye's pass wrote
@@ -1106,6 +1231,7 @@ static void STDMETHODCALLTYPE OurUpdateSubresource(Ctx* self, ID3D11Resource* re
 {
     ORIGINAL(SUpdateSubresource, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT, const D3D11_BOX*, const void*, UINT, UINT))(
         self, resource, subresource, box, data, rowPitch, depthPitch);
+    CaptureUpdate(self, resource, box, data);
     if (Mirroring(self))
         UpdateConstants(resource, subresource, box, data, rowPitch, depthPitch, 0, false);
 }
@@ -1114,6 +1240,7 @@ static void STDMETHODCALLTYPE OurUpdateSubresource1(Ctx* self, ID3D11Resource* r
 {
     ORIGINAL(SUpdateSubresource1, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT, const D3D11_BOX*, const void*, UINT, UINT, UINT))(
         self, resource, subresource, box, data, rowPitch, depthPitch, flags);
+    CaptureUpdate(self, resource, box, data);
     if (Mirroring(self))
         UpdateConstants(resource, subresource, box, data, rowPitch, depthPitch, flags, true);
 }
@@ -1685,11 +1812,166 @@ static void ReleaseHook(int view, void* texture)
     stats[StCopiedAtRelease] += 1;
 }
 
+static void Appendf(std::string& out, const char* format, ...)
+{
+    char line[1024];
+    va_list arguments;
+    va_start(arguments, format);
+    vsnprintf(line, sizeof(line), format, arguments);
+    va_end(arguments);
+    out += line;
+}
+
+static bool NearValue(float value, float wanted)
+{
+    float scale = fabsf(wanted);
+    return fabsf(value - wanted) <= 1e-3f * (scale > 1.0f ? scale : 1.0f);
+}
+
+struct DiffFinding { UINT bytes; UINT reg; int count; float left[4], right[4], replay[4]; int draw; UINT width, height; };
+
+static void AnalyseCapture()
+{
+    std::string& out = captureReport;
+    out.clear();
+    int uploads[2] = {}, writes[2] = {};
+    std::unordered_map<ID3D11Resource*, std::vector<int>> constants[2];
+    std::vector<int> vertices[2];
+    for (int index = 0; index < (int)capturedUploads.size(); index++)
+    {
+        const CapturedUpload& upload = capturedUploads[index];
+        if (upload.kind == 0) { constants[upload.pass][upload.buffer].push_back(index); uploads[upload.pass]++; }
+        else { vertices[upload.pass].push_back(index); writes[upload.pass]++; }
+    }
+    Appendf(out, "left pass: %d constant uploads, %d dynamic vertex writes; right pass: %d / %d\n", uploads[0], writes[0], uploads[1], writes[1]);
+
+    // constant buffers: per buffer, the n-th upload of the left pass against the n-th of the right
+    std::map<unsigned long long, DiffFinding> missed;
+    int buffers = 0, countMismatch = 0, compared = 0, eyeRegisters = 0, coveredRegisters = 0, missedRegisters = 0, onlyOneEye = 0;
+    std::vector<float> replay;
+    for (auto& entry : constants[0])
+    {
+        auto other = constants[1].find(entry.first);
+        if (other == constants[1].end()) { onlyOneEye++; continue; }
+        buffers++;
+        const std::vector<int>& left = entry.second;
+        const std::vector<int>& right = other->second;
+        if (left.size() != right.size()) countMismatch++;
+        size_t pairs = left.size() < right.size() ? left.size() : right.size();
+        for (size_t pair = 0; pair < pairs; pair++)
+        {
+            const CapturedUpload& a = capturedUploads[left[pair]];
+            const CapturedUpload& b = capturedUploads[right[pair]];
+            if (a.bytes != b.bytes || a.offset != b.offset) continue;
+            compared++;
+            const float* leftValues = (const float*)&capturedData[a.data];
+            const float* rightValues = (const float*)&capturedData[b.data];
+            replay.assign(leftValues, leftValues + a.bytes / 4);
+            PatchConstants(replay.data(), a.bytes);
+            for (UINT reg = 0; reg < a.bytes / 16; reg++)
+            {
+                if (memcmp(leftValues + reg * 4, rightValues + reg * 4, 16) == 0) continue;
+                eyeRegisters++;
+                bool covered = true;
+                for (int element = 0; element < 4; element++)
+                    covered &= NearValue(replay[reg * 4 + element], rightValues[reg * 4 + element]);
+                if (covered) { coveredRegisters++; continue; }
+                missedRegisters++;
+                unsigned long long key = ((unsigned long long)a.bytes << 32) | (a.offset / 16 + reg);
+                DiffFinding& finding = missed[key];
+                if (finding.count++ == 0)
+                {
+                    finding.bytes = a.bytes; finding.reg = a.offset / 16 + reg; finding.draw = a.draw; finding.width = a.width; finding.height = a.height;
+                    memcpy(finding.left, leftValues + reg * 4, 16); memcpy(finding.right, rightValues + reg * 4, 16); memcpy(finding.replay, &replay[reg * 4], 16);
+                }
+            }
+        }
+    }
+    Appendf(out, "constant buffers: %d in both passes (%d with another number of uploads, %d in one pass only), %d uploads compared; registers that differ "
+        "between the eyes %d: the replay gets %d right, MISSES %d (%d places)\n", buffers, countMismatch, onlyOneEye, compared, eyeRegisters,
+        coveredRegisters, missedRegisters, (int)missed.size());
+    std::vector<const DiffFinding*> ordered;
+    for (auto& entry : missed) ordered.push_back(&entry.second);
+    std::sort(ordered.begin(), ordered.end(), [](const DiffFinding* x, const DiffFinding* y) { return x->bytes != y->bytes ? x->bytes < y->bytes : x->reg < y->reg; });
+    int shown = 0;
+    for (const DiffFinding* finding : ordered)
+    {
+        if (shown++ >= 80) { Appendf(out, "  ... %d more\n", (int)ordered.size() - 80); break; }
+        Appendf(out, "  buffer %u B register %u x%d (target %ux%u, draw %d): left (%.6g %.6g %.6g %.6g) right (%.6g %.6g %.6g %.6g) replay (%.6g %.6g %.6g %.6g)\n",
+            finding->bytes, finding->reg, finding->count, finding->width, finding->height, finding->draw,
+            finding->left[0], finding->left[1], finding->left[2], finding->left[3], finding->right[0], finding->right[1], finding->right[2], finding->right[3],
+            finding->replay[0], finding->replay[1], finding->replay[2], finding->replay[3]);
+    }
+
+    // dynamic vertex writes: the n-th of the left pass against the n-th of the right
+    size_t pairs = vertices[0].size() < vertices[1].size() ? vertices[0].size() : vertices[1].size();
+    int lengthMismatch = 0, differing = 0;
+    std::string lines;
+    for (size_t pair = 0; pair < pairs; pair++)
+    {
+        const CapturedUpload& a = capturedUploads[vertices[0][pair]];
+        const CapturedUpload& b = capturedUploads[vertices[1][pair]];
+        if (a.bytes != b.bytes) { lengthMismatch++; continue; }
+        const float* leftValues = (const float*)&capturedData[a.data];
+        const float* rightValues = (const float*)&capturedData[b.data];
+        int floats = a.bytes / 4, differ = 0, first = -1;
+        for (int element = 0; element < floats; element++)
+        {
+            if (memcmp(leftValues + element, rightValues + element, 4) != 0) { differ++; if (first < 0) first = element; }
+        }
+        if (differ == 0) continue;
+        differing++;
+        if (differing <= 30)
+        {
+            Appendf(lines, "  write %d: %u B (target %ux%u, draw %d), %d of %d floats differ, from float %d: left", (int)pair, a.bytes, a.width, a.height, a.draw, differ, floats, first);
+            for (int element = first; element < first + 8 && element < floats; element++) Appendf(lines, " %.6g", leftValues[element]);
+            Appendf(lines, " right");
+            for (int element = first; element < first + 8 && element < floats; element++) Appendf(lines, " %.6g", rightValues[element]);
+            Appendf(lines, "\n");
+        }
+    }
+    Appendf(out, "dynamic vertex writes: %d pairs (%d of another length), %d differ between the eyes\n", (int)pairs, lengthMismatch, differing);
+    out += lines;
+    capturedUploads.clear();
+    capturedData.clear();
+    capturedData.shrink_to_fit();
+}
+
+static const int kCaptureArm = 3000, kCaptureLeft = 3100, kCaptureRight = 3101, kCapturePassEnd = 3102;
+
+static void CaptureEvent(int id)
+{
+    if (id >= kCaptureArm && id < kCaptureArm + kFrameSlots)
+    {
+        int slot = id - kCaptureArm;
+        activeCount = frameSlots[slot].count;
+        memcpy(active, frameSlots[slot].patterns, sizeof(Pattern) * activeCount);
+        capturedUploads.clear();
+        capturedData.clear();
+        captureReady = 0;
+        captureState = CapArmed;
+    }
+    else if (id == kCaptureLeft && captureState == CapArmed) { captureState = CapLeft; captureDraw = 0; }
+    else if (id == kCaptureRight && captureState == CapBetween) { captureState = CapRight; captureDraw = 0; }
+    else if (id == kCapturePassEnd)
+    {
+        if (captureState == CapLeft) captureState = CapBetween;
+        else if (captureState == CapRight)
+        {
+            captureState = CapIdle;
+            AnalyseCapture();
+            InterlockedExchange(&captureReady, 1);
+        }
+    }
+}
+
 static const int kStartEvent = 1000, kEndEvent = 2000, kEndEvents = 16;
 
 static void __stdcall OnRenderEvent(int id)
 {
-    if (id >= kStartEvent && id < kStartEvent + kFrameSlots)
+    if (id >= kCaptureArm && id <= kCapturePassEnd)
+        CaptureEvent(id);
+    else if (id >= kStartEvent && id < kStartEvent + kFrameSlots)
         BeginWindow(id - kStartEvent);
     else if (id >= kEndEvent && id < kEndEvent + kEndEvents && id == expectedEnd)
     {
@@ -1894,6 +2176,18 @@ SR_EXPORT int SR_HookReport(char* out, int max)
     memcpy(out, hookReport, length);
     out[length] = 0;
     hookReportLength = 0;
+    return length;
+}
+
+// The eye diff's report once it is done (then cleared): its length, 0 while not ready
+SR_EXPORT int SR_CaptureReport(char* out, int max)
+{
+    if (!out || max <= 0 || !captureReady)
+        return 0;
+    int length = (int)captureReport.size() < max - 1 ? (int)captureReport.size() : max - 1;
+    memcpy(out, captureReport.data(), length);
+    out[length] = 0;
+    InterlockedExchange(&captureReady, 0);
     return length;
 }
 
