@@ -1,15 +1,13 @@
 // SPTVRXrFrameWatch.dll: watches how Unity's OpenXR plugin hands frames to the runtime, for SPT-VR's cost probe (StereoCostProbe,
 // Ctrl+F10: how long xrWaitFrame holds the frame, and on which thread). It sits in front of the OpenXR frame functions through the
 // xrGetInstanceProcAddr chain
-// Unity lets every feature hook (Source/XR/OpenXRFrameWatch.cs) and only looks: every call goes to the runtime unchanged. It also
-// tells SPT-VR's stereo replay (native/StereoReplay) each view's D3D11 images and calls it before an image is released.
+// Unity lets every feature hook (Source/XR/OpenXRFrameWatch.cs) and only looks: every call goes to the runtime unchanged.
 //  - xrEndFrame: the layers submitted, each projection view's swapchain, image rect, array slice and pose
 //  - xrAcquire/Wait/ReleaseSwapchainImage: which swapchains were taken this frame, and how long the waits were
 //  - xrWaitFrame / xrBeginFrame: how long they held the caller
 // Native because xrEndFrame and the swapchain calls run on Unity's render thread. Struct layouts follow the OpenXR spec
 // (checked against openxr_reflection_full.h in the OpenXR package): x64, natural alignment.
 #include <windows.h>
-#include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -50,16 +48,8 @@ typedef XrResult (*PFN_BeginFrame)(XrSession session, const void* frameBeginInfo
 typedef XrResult (*PFN_AcquireImage)(XrSwapchain swapchain, const void* acquireInfo, uint32_t* index);
 typedef XrResult (*PFN_WaitImage)(XrSwapchain swapchain, const void* waitInfo);
 typedef XrResult (*PFN_ReleaseImage)(XrSwapchain swapchain, const void* releaseInfo);
-typedef XrResult (*PFN_EnumerateImages)(XrSwapchain swapchain, uint32_t capacity, uint32_t* count, void* images);
-typedef void (*PFN_ReleaseHook)(int view, void* texture);
-
-// XrSwapchainImageD3D11KHR: type, next, ID3D11Texture2D* (the stride of the image array)
-static const int32_t XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR = 1000027001;
-struct XrImageD3D11 { int32_t type; const void* next; void* texture; };
-static_assert(sizeof(XrImageD3D11) == 24, "XrSwapchainImageD3D11KHR layout");
 
 static PFN_GetInstanceProcAddr nextGetInstanceProcAddr;
-static PFN_EnumerateImages runtimeEnumerateImages;
 static PFN_EndFrame runtimeEndFrame;
 static PFN_WaitFrame runtimeWaitFrame;
 static PFN_BeginFrame runtimeBeginFrame;
@@ -92,25 +82,6 @@ enum Stat
 static double totals[StatCount];
 static XrPose lastPose[2];
 static bool havePose[2];
-
-// For SPT-VR's stereo replay (native/StereoReplay): each swapchain's D3D11 images, the swapchain each view was submitted from
-// (the last xrEndFrame), and a call before an image goes back to the runtime
-static const int MAX_IMAGES = 8;
-struct SwapchainImages { XrSwapchain swapchain; int count; void* textures[MAX_IMAGES]; };
-static SwapchainImages swapchainImages[MAX_SWAPCHAINS];
-static int swapchainImageCount;
-static XrSwapchain viewSwapchain[2];
-static PFN_ReleaseHook releaseHook;
-
-static SwapchainImages* ImagesOf(XrSwapchain swapchain)
-{
-    for (int index = 0; index < swapchainImageCount; index++)
-    {
-        if (swapchainImages[index].swapchain == swapchain)
-            return &swapchainImages[index];
-    }
-    return nullptr;
-}
 
 static char detail[4096];
 static int detailLength;
@@ -227,25 +198,6 @@ static XrResult OurWaitImage(XrSwapchain swapchain, const void* waitInfo)
 
 static XrResult OurReleaseImage(XrSwapchain swapchain, const void* releaseInfo)
 {
-    PFN_ReleaseHook hook = releaseHook;
-    if (hook)
-    {
-        void* texture = nullptr;
-        int view = -1;
-        Lock();
-        for (int candidate = 0; candidate < 2; candidate++)
-        {
-            if (viewSwapchain[candidate] != 0 && viewSwapchain[candidate] == swapchain)
-                view = candidate;
-        }
-        SwapchainTake* take = view >= 0 ? TakeOf(swapchain) : nullptr;
-        SwapchainImages* images = view >= 0 ? ImagesOf(swapchain) : nullptr;
-        if (take && take->acquired > 0 && images && take->lastIndex < (uint32_t)images->count)
-            texture = images->textures[take->lastIndex];
-        Unlock();
-        if (texture)
-            hook(view, texture);
-    }
     XrResult result = runtimeReleaseImage(swapchain, releaseInfo);
     Lock();
     totals[StatReleases] += 1;
@@ -256,93 +208,9 @@ static XrResult OurReleaseImage(XrSwapchain swapchain, const void* releaseInfo)
     return result;
 }
 
-//------------------------------------------------------------------------------------------------------------------------------------
-// The right eye's submitted pose, for SPT-VR's stereo replay: Unity then draws only the left eye, and the pose it submits for the right
-// view need not be the one the replay drew it from (the compositor turns the image by the difference). While on, view 1's pose = view
-// 0's + the eyes' offset, taken from the frames before (Unity drew both).
-
-static bool fixRightPose;
-static bool haveEyeOffset;
-static XrPose eyeOffset;                // the right eye in the left eye's frame
-static double poseStats[4];             // frames fixed, largest position / angle difference (cm / deg), frames off by > 0.5 cm or 0.5 deg
-static XrProjectionView fixedViews[2];
-static XrLayerProjection fixedLayer;
-static const XrLayerHeader* fixedLayers[16];
-static XrFrameEndInfo fixedInfo;
-
-static XrQuaternion QMul(const XrQuaternion& a, const XrQuaternion& b)
-{
-    return { a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z };
-}
-static XrQuaternion QConj(const XrQuaternion& q) { return { -q.x, -q.y, -q.z, q.w }; }
-static XrVector3 QRot(const XrQuaternion& q, const XrVector3& v)
-{
-    XrVector3 t = { 2.0f * (q.y * v.z - q.z * v.y), 2.0f * (q.z * v.x - q.x * v.z), 2.0f * (q.x * v.y - q.y * v.x) };
-    return { v.x + q.w * t.x + (q.y * t.z - q.z * t.y), v.y + q.w * t.y + (q.z * t.x - q.x * t.z), v.z + q.w * t.z + (q.x * t.y - q.y * t.x) };
-}
-static XrPose Relative(const XrPose& from, const XrPose& to)
-{
-    XrQuaternion inverse = QConj(from.orientation);
-    XrVector3 delta = { to.position.x - from.position.x, to.position.y - from.position.y, to.position.z - from.position.z };
-    return { QMul(inverse, to.orientation), QRot(inverse, delta) };
-}
-static XrPose Compose(const XrPose& base, const XrPose& offset)
-{
-    XrVector3 moved = QRot(base.orientation, offset.position);
-    return { QMul(base.orientation, offset.orientation), { base.position.x + moved.x, base.position.y + moved.y, base.position.z + moved.z } };
-}
-
-// The frame to submit: as Unity made it, or with view 1's pose fixed (under the stats lock)
-static const XrFrameEndInfo* RightPoseFixed(const XrFrameEndInfo* frameEndInfo)
-{
-    if (!frameEndInfo || !frameEndInfo->layers || frameEndInfo->layerCount > 16)
-        return frameEndInfo;
-    for (uint32_t layer = 0; layer < frameEndInfo->layerCount; layer++)
-    {
-        const XrLayerHeader* header = frameEndInfo->layers[layer];
-        if (!header || header->type != XR_TYPE_COMPOSITION_LAYER_PROJECTION)
-            continue;
-        const XrLayerProjection* projection = (const XrLayerProjection*)header;
-        if (projection->viewCount != 2 || !projection->views)
-            return frameEndInfo;
-        if (!fixRightPose)
-        {
-            eyeOffset = Relative(projection->views[0].pose, projection->views[1].pose);
-            haveEyeOffset = true;
-            return frameEndInfo;
-        }
-        if (!haveEyeOffset)
-            return frameEndInfo;
-        XrPose fixed = Compose(projection->views[0].pose, eyeOffset);
-        const XrPose& submitted = projection->views[1].pose;
-        float dx = fixed.position.x - submitted.position.x, dy = fixed.position.y - submitted.position.y, dz = fixed.position.z - submitted.position.z;
-        double centimetres = sqrt(dx * dx + dy * dy + dz * dz) * 100.0;
-        double dot = fabs(fixed.orientation.x * submitted.orientation.x + fixed.orientation.y * submitted.orientation.y
-            + fixed.orientation.z * submitted.orientation.z + fixed.orientation.w * submitted.orientation.w);
-        double degrees = 2.0 * acos(dot < 1.0 ? dot : 1.0) * 57.29577951;
-        poseStats[0] += 1;
-        if (centimetres > poseStats[1]) poseStats[1] = centimetres;
-        if (degrees > poseStats[2]) poseStats[2] = degrees;
-        if (centimetres > 0.5 || degrees > 0.5) poseStats[3] += 1;
-        fixedViews[0] = projection->views[0];
-        fixedViews[1] = projection->views[1];
-        fixedViews[1].pose = fixed;
-        fixedLayer = *projection;
-        fixedLayer.views = fixedViews;
-        for (uint32_t index = 0; index < frameEndInfo->layerCount; index++)
-            fixedLayers[index] = index == layer ? (const XrLayerHeader*)&fixedLayer : frameEndInfo->layers[index];
-        fixedInfo = *frameEndInfo;
-        fixedInfo.layers = fixedLayers;
-        return &fixedInfo;
-    }
-    return frameEndInfo;
-}
-
 static XrResult OurEndFrame(XrSession session, const XrFrameEndInfo* frameEndInfo)
 {
     endFrameThread = (LONG)GetCurrentThreadId();
-    const XrFrameEndInfo* submit = frameEndInfo;
     Lock();
     __try
     {
@@ -358,7 +226,6 @@ static XrResult OurEndFrame(XrSession session, const XrFrameEndInfo* frameEndInf
                     frameTakes[index].acquired, frameTakes[index].released, frameTakes[index].lastIndex);
             Detail("\n");
         }
-        bool firstProjection = true;
         if (frameEndInfo && frameEndInfo->layers)
         {
             for (uint32_t layer = 0; layer < frameEndInfo->layerCount; layer++)
@@ -381,8 +248,6 @@ static XrResult OurEndFrame(XrSession session, const XrFrameEndInfo* frameEndInf
                 for (uint32_t view = 0; view < projection->viewCount && view < 2 && projection->views; view++)
                 {
                     const XrProjectionView& projectionView = projection->views[view];
-                    if (firstProjection)
-                        viewSwapchain[view] = projectionView.subImage.swapchain;
                     SwapchainTake* take = nullptr;
                     for (int index = 0; index < frameTakeCount; index++)
                     {
@@ -407,53 +272,20 @@ static XrResult OurEndFrame(XrSession session, const XrFrameEndInfo* frameEndInf
                             projectionView.pose.position.z, projectionView.fov.angleLeft, projectionView.fov.angleRight,
                             projectionView.fov.angleUp, projectionView.fov.angleDown, projectionView.next);
                 }
-                firstProjection = false;
             }
         }
-        submit = RightPoseFixed(frameEndInfo);
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
-        submit = frameEndInfo;
     }
     frameTakeCount = 0;
     Unlock();
 
     double start = NowMs();
-    XrResult result = runtimeEndFrame(session, submit);
+    XrResult result = runtimeEndFrame(session, frameEndInfo);
     double took = NowMs() - start;
     Lock();
     AddTime(StatEndFrameMs, StatEndFrameMax, took);
-    Unlock();
-    return result;
-}
-
-static XrResult OurEnumerateImages(XrSwapchain swapchain, uint32_t capacity, uint32_t* count, void* images)
-{
-    XrResult result = runtimeEnumerateImages(swapchain, capacity, count, images);
-    if (result != 0 || capacity == 0 || !images || !count)
-        return result;
-    Lock();
-    __try
-    {
-        const XrImageD3D11* first = (const XrImageD3D11*)images;
-        if (first->type == XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR)
-        {
-            SwapchainImages* entry = ImagesOf(swapchain);
-            if (!entry && swapchainImageCount < MAX_SWAPCHAINS)
-                entry = &swapchainImages[swapchainImageCount++];
-            if (entry)
-            {
-                entry->swapchain = swapchain;
-                entry->count = 0;
-                for (uint32_t index = 0; index < *count && index < capacity && index < (uint32_t)MAX_IMAGES; index++)
-                    entry->textures[entry->count++] = first[index].texture;
-            }
-        }
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-    }
     Unlock();
     return result;
 }
@@ -488,8 +320,6 @@ static XrResult OurGetInstanceProcAddr(XrInstance instance, const char* name, PF
         Wrap(function, runtimeWaitImage, (PFN_WaitImage)OurWaitImage, 16);
     else if (strcmp(name, "xrReleaseSwapchainImage") == 0)
         Wrap(function, runtimeReleaseImage, (PFN_ReleaseImage)OurReleaseImage, 32);
-    else if (strcmp(name, "xrEnumerateSwapchainImages") == 0)
-        Wrap(function, runtimeEnumerateImages, (PFN_EnumerateImages)OurEnumerateImages, 64);
     return result;
 }
 
@@ -551,68 +381,6 @@ extern "C" __declspec(dllexport) void XrWatch_DescribeNext(int frames)
     Lock();
     detailFramesLeft = frames;
     Unlock();
-}
-
-// The D3D11 images (ID3D11Texture2D*) of the swapchain the view was last submitted from: how many, 0 = not known yet
-extern "C" __declspec(dllexport) int XrWatch_ViewImages(int view, void** out, int max)
-{
-    if (view < 0 || view > 1 || !out || max <= 0)
-        return 0;
-    Lock();
-    SwapchainImages* images = viewSwapchain[view] != 0 ? ImagesOf(viewSwapchain[view]) : nullptr;
-    int count = images ? (images->count < max ? images->count : max) : 0;
-    for (int index = 0; index < count; index++)
-        out[index] = images->textures[index];
-    Unlock();
-    return count;
-}
-
-// The view's image taken since the last xrEndFrame (the one this frame draws into), null if none yet
-extern "C" __declspec(dllexport) void* XrWatch_ViewAcquiredImage(int view)
-{
-    if (view < 0 || view > 1)
-        return nullptr;
-    void* texture = nullptr;
-    Lock();
-    XrSwapchain swapchain = viewSwapchain[view];
-    SwapchainImages* images = swapchain != 0 ? ImagesOf(swapchain) : nullptr;
-    for (int index = 0; images && index < frameTakeCount; index++)
-    {
-        const SwapchainTake& take = frameTakes[index];
-        if (take.swapchain == swapchain && take.acquired > take.released && take.lastIndex < (uint32_t)images->count)
-            texture = images->textures[take.lastIndex];
-    }
-    Unlock();
-    return texture;
-}
-
-// The right view's submitted pose from the left one + the eyes' offset (stereo replay), on / off
-extern "C" __declspec(dllexport) void XrWatch_SetFixRightPose(int on)
-{
-    Lock();
-    fixRightPose = on != 0;
-    Unlock();
-}
-
-// Since the last call (then zeroed): frames fixed, largest position / angle difference (cm / deg), frames off by > 0.5 cm or 0.5 deg
-extern "C" __declspec(dllexport) int XrWatch_PoseStats(double* out, int max)
-{
-    if (!out || max <= 0)
-        return 0;
-    Lock();
-    int count = max < 4 ? max : 4;
-    for (int index = 0; index < count; index++)
-        out[index] = poseStats[index];
-    for (int index = 0; index < 4; index++)
-        poseStats[index] = 0;
-    Unlock();
-    return count;
-}
-
-// Called (render thread) with a view's image just before it goes back to the runtime; null = none
-extern "C" __declspec(dllexport) void XrWatch_SetReleaseHook(void* hook)
-{
-    releaseHook = (PFN_ReleaseHook)hook;
 }
 
 // The OS threads xrWaitFrame, xrBeginFrame and xrEndFrame were last called on (0 = not yet)

@@ -13,7 +13,6 @@ call %VCVARS% >nul
 if errorlevel 1 ( popd & echo [build] failed to init MSVC env. & exit /b 1 )
 cl /nologo /LD /O2 /MT /EHa /W3 XrFrameWatch.cpp /Fobuild\XrFrameWatch.obj /Fe:build\SPTVRXrFrameWatch.dll
 if errorlevel 1 ( popd & echo [build] compile FAILED & exit /b 1 )
-if "%1"=="nodeploy" ( popd & exit /b 0 )
 if exist "F:\SPT4.1\BepInEx\plugins\sptvr" (
     if not exist "%DEPLOY%" mkdir "%DEPLOY%"
     copy /y build\SPTVRXrFrameWatch.dll "%DEPLOY%\SPTVRXrFrameWatch.dll" >nul && echo ==^> SPTVRXrFrameWatch.dll deployed to %DEPLOY%

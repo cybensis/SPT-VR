@@ -443,7 +443,7 @@ namespace TarkovVR.Patches.Upscalers
         private const int NUM_EYES = 2;
 
         // One FSR3Wrapper instance per eye
-        internal FSR3Wrapper[] _wrappers = new FSR3Wrapper[NUM_EYES];   // [eye]; the stereo replay pairs their textures
+        private FSR3Wrapper[] _wrappers = new FSR3Wrapper[NUM_EYES];
 
         public StereoFSR3Wrapper(
             ComputeShader autogenReactiveShader,

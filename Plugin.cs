@@ -79,9 +79,6 @@ namespace TarkovVR
             // for its OpenXR rows) and ShadowShareProbe (Ctrl+F8) - gameObject.AddComponent<TarkovVR.Source.Misc.StereoCostProbe>() etc.
             // The desktop window: one eye, cropped to the window and stabilised (for recording)
             gameObject.AddComponent<TarkovVR.Source.Graphics.DesktopMirror>();
-            // Dev: the headset camera drawn once for both eyes (Ctrl+F9), only with native/SPTVRStereoReplay.dll installed
-            if (TarkovVR.Source.Graphics.StereoReplay.Installed)
-                gameObject.AddComponent<TarkovVR.Source.Graphics.StereoReplay>();
             // VR Graphics "Disable Hideout Shadows"
             gameObject.AddComponent<TarkovVR.Source.Graphics.HideoutShadows>();
             // Software foveated rendering on the headset camera (BepInEx config "Foveated Masking")
@@ -117,8 +114,6 @@ namespace TarkovVR
         {
             try
             {
-                // dev: the stereo replay experiment (Ctrl+F9) takes the eye images from the frame watcher
-                OpenXRBootstrap.registerFrameWatch |= TarkovVR.Source.Graphics.StereoReplay.Installed;
                 return OpenXRBootstrap.Initialize();
             }
             catch (Exception exception)
