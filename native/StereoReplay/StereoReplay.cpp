@@ -53,7 +53,7 @@ enum Stat
     StCbNoOverwrite, StOtherDiscards, StViewsSwapped, StCopiesSwapped, StLeftUnswappable, StNestedLists, StPredication, StCopiedNow,
     StCopiedAtRelease, StWindowMs, StExecuteMs, StScanMs, StCaptureMs,
     // where the draws went: the immediate context outside the window, Unity's own deferred contexts (graphics jobs) in and out of it
-    StImmediateDrawsOutside, StImmediateListsOutside, StWorkTakenBack,
+    StImmediateDrawsOutside, StImmediateListsOutside, StWorkTakenBack, StRightTakenAtEnd, StSameImageTwice,
     StRehooked, StCount
 };
 static double stats[StCount];
@@ -1350,13 +1350,22 @@ static void EndWindow(bool drop)
     }
     else
         pendingCopy = true;
+    if (viewAcquiredImage && viewAcquiredImage(1))
+        stats[StRightTakenAtEnd] += 1;
     stats[StWindows] += 1;
     stats[StWindowMs] += NowMs() - windowStart;
 }
 
 // XrFrameWatch: an image going back to the runtime
+static void* lastCopiedImage;
 static void ReleaseHook(int view, void* texture)
 {
+    if (view == 1)
+    {
+        if (texture == lastCopiedImage)
+            stats[StSameImageTwice] += 1;
+        lastCopiedImage = texture;
+    }
     if (view != 1 || !pendingCopy || !rightTexture || !immediate1)
         return;
     pendingCopy = false;

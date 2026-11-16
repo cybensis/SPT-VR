@@ -30,13 +30,16 @@ namespace TarkovVR.Source.Graphics
             Windows, Dropped, Unpaired, NoImages, Aborted, FinishFailed, Mirrored, Draws, CbMaps, CbPatched, CbUpdates,
             CbNoOverwrite, OtherDiscards, ViewsSwapped, CopiesSwapped, LeftUnswappable, NestedLists, Predication, CopiedNow,
             CopiedAtRelease, WindowMs, ExecuteMs, ScanMs, CaptureMs,
-            ImmediateDrawsOutside, ImmediateListsOutside, WorkTakenBack, Rehooked, Count
+            ImmediateDrawsOutside, ImmediateListsOutside, WorkTakenBack, RightTakenAtEnd, SameImageTwice, Rehooked, Count
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
         public static float positionTolerance = 1e-4f;    // m (relative past 1 m): the eyes are 6 cm apart, the centre 3
         public static bool combinedCulling = true;        // the culling frustum covers both eyes (else the right eye's outer edge is culled)
         public static float cullingMarginDegrees = 5f;
+        // The right eye from the left eye's live view and the eyes' fixed offset (taken while both still rendered); false = Unity's
+        // right-eye matrix, which a camera drawing only the left eye may not keep up to date
+        public static bool rightFromLeft = true;
         public static float logInterval = 2f;            // s
 
         private const int StartEvent = 1000, EndEvent = 2000, FrameSlots = 8, MaxPatterns = 64;
@@ -56,6 +59,10 @@ namespace TarkovVR.Source.Graphics
         private static int frameSlot;
         private static Matrix4x4[] previousLeft = new Matrix4x4[2], previousRight = new Matrix4x4[2];
         private static bool havePrevious;
+        private static Matrix4x4 rightEyeFromLeftEye, projectionRightAtStart;
+        private static float unityRightDriftMax;
+        private static int unityRightStaleFrames, rightFrames;
+        private static Matrix4x4 lastUnityRight;
 
         // This frame's patterns
         private static readonly int[] lengths = new int[MaxPatterns];
@@ -152,6 +159,15 @@ namespace TarkovVR.Source.Graphics
             // both are drawn per eye from the eye's own shape, which the replay would copy from the left
             XRSettings.useOcclusionMesh = false;
             if (savedFoveated) FoveatedMask.SetEnabled(false);
+            // the eyes' offset and the right projection, while Unity still draws both
+            rightEyeFromLeftEye = headsetCamera.GetStereoViewMatrix(Camera.StereoscopicEye.Right)
+                * headsetCamera.GetStereoViewMatrix(Camera.StereoscopicEye.Left).inverse;
+            projectionRightAtStart = headsetCamera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
+            Vector3 offset = rightEyeFromLeftEye.inverse.GetColumn(3);
+            Plugin.MyLog.LogInfo($"[StereoReplay] the right eye sits {offset.magnitude * 100f:0.0} cm from the left ({offset.x * 100f:0.0} / {offset.y * 100f:0.0} / {offset.z * 100f:0.0})");
+            unityRightDriftMax = 0f;
+            unityRightStaleFrames = 0;
+            rightFrames = 0;
             headsetCamera.stereoTargetEye = StereoTargetEyeMask.Left;
             endBuffer = new CommandBuffer { name = "SPT-VR stereo replay end" };
             endBuffer.IssuePluginEvent(eventFunction, EndEvent);
@@ -193,9 +209,17 @@ namespace TarkovVR.Source.Graphics
         {
             if (!Active || culling != headsetCamera) return;
             Matrix4x4 viewLeft = culling.GetStereoViewMatrix(Camera.StereoscopicEye.Left);
-            Matrix4x4 viewRight = culling.GetStereoViewMatrix(Camera.StereoscopicEye.Right);
+            Matrix4x4 unityRight = culling.GetStereoViewMatrix(Camera.StereoscopicEye.Right);
+            Matrix4x4 derivedRight = rightEyeFromLeftEye * viewLeft;
+            Matrix4x4 viewRight = rightFromLeft ? derivedRight : unityRight;
             Matrix4x4 projectionLeft = culling.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
-            Matrix4x4 projectionRight = culling.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
+            Matrix4x4 projectionRight = rightFromLeft ? projectionRightAtStart : culling.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
+            // how far Unity's own right-eye view is from where the right eye is, and how often it didn't move at all
+            float drift = ((Vector3)unityRight.inverse.GetColumn(3) - (Vector3)derivedRight.inverse.GetColumn(3)).magnitude;
+            unityRightDriftMax = Mathf.Max(unityRightDriftMax, drift);
+            if (rightFrames > 0 && unityRight == lastUnityRight) unityRightStaleFrames++;
+            lastUnityRight = unityRight;
+            rightFrames++;
 
             patternCount = 0;
             AddMatrix("view", viewLeft, viewRight);
@@ -330,9 +354,12 @@ namespace TarkovVR.Source.Graphics
                 + $"{PerWindow(Stat.CbUpdates):0} updated, {PerWindow(Stat.CbPatched):0} with the right eye's values; mapped without discard {PerWindow(Stat.CbNoOverwrite):0}; other buffers discarded "
                 + $"{PerWindow(Stat.OtherDiscards):0}; left image views swapped {PerWindow(Stat.ViewsSwapped):0}, copies {PerWindow(Stat.CopiesSwapped):0}, unswappable {PerWindow(Stat.LeftUnswappable):0}; "
                 + $"nested command lists {PerWindow(Stat.NestedLists):0}, predication {PerWindow(Stat.Predication):0}; right eye copied at once {totals[(int)Stat.CopiedNow]:0} / at hand-back "
-                + $"{totals[(int)Stat.CopiedAtRelease]:0}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms, replay {PerWindow(Stat.ExecuteMs):0.00}, value search {PerWindow(Stat.ScanMs):0.00}, "
+                + $"{totals[(int)Stat.CopiedAtRelease]:0} (its image already taken at the end of the pass {totals[(int)Stat.RightTakenAtEnd]:0}, the same image twice in a row {totals[(int)Stat.SameImageTwice]:0}); Unity's own right-eye view: up to {unityRightDriftMax * 100f:0.0} cm off the right eye, unchanged frame to frame {unityRightStaleFrames} of {rightFrames}, used {(rightFromLeft ? "no" : "yes")}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms, replay {PerWindow(Stat.ExecuteMs):0.00}, value search {PerWindow(Stat.ScanMs):0.00}, "
                 + $"state copy {PerWindow(Stat.CaptureMs):0.00}; the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "
                 + $"{PerWindow(Stat.ImmediateDrawsOutside):0} draws, {PerWindow(Stat.ImmediateListsOutside):0} command lists run (ours). Values found a replay: {(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");
+            unityRightDriftMax = 0f;
+            unityRightStaleFrames = 0;
+            rightFrames = 0;
         }
     }
 }
