@@ -34,7 +34,8 @@ namespace TarkovVR.Source.Graphics
             CopiedAtRelease, WindowMs, ExecuteMs, ScanMs, CaptureMs,
             ImmediateDrawsOutside, ImmediateListsOutside, WorkTakenBack, RightTakenAtEnd, SameImageTwice,
             EyeDrawsOutside, EyeCopiesOutside, WindowsNoEyeWrite, EndedAtHandBack, EndedEarly,
-            DynamicBuffers, DynamicSegments, DynamicViews, OtherUpdates, Rehooked, MirrorMs, SwapMs, UploadMs, Count
+            DynamicBuffers, DynamicSegments, DynamicViews, OtherUpdates, Rehooked, MirrorMs, SwapMs, UploadMs,
+            GpuFrames, GpuLeftMs, GpuReplayMs, GpuCopyMs, GpuPeriods, GpuPeriodMs, Count
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
@@ -435,6 +436,7 @@ namespace TarkovVR.Source.Graphics
                 Plugin.MyLog.LogWarning($"[StereoReplay] hooks taken: {Encoding.ASCII.GetString(report, 0, reportLength).Trim()}");
             double windows = Math.Max(1.0, totals[(int)Stat.Windows]);
             double PerWindow(Stat stat) => totals[(int)stat] / windows;
+            double PerGpuFrame(Stat stat) => totals[(int)Stat.GpuFrames] > 0 ? totals[(int)stat] / totals[(int)Stat.GpuFrames] : 0;
             StringBuilder found = new StringBuilder();
             for (int index = 0; index < patternCount; index++)
             {
@@ -451,7 +453,10 @@ namespace TarkovVR.Source.Graphics
                 + $"nested command lists {PerWindow(Stat.NestedLists):0}, predication {PerWindow(Stat.Predication):0}; right eye copied at once {totals[(int)Stat.CopiedNow]:0} / at hand-back "
                 + $"{totals[(int)Stat.CopiedAtRelease]:0} (its image already taken at the end of the pass {totals[(int)Stat.RightTakenAtEnd]:0}, the same image twice in a row {totals[(int)Stat.SameImageTwice]:0}); Unity's own right-eye view: up to {unityRightDriftMax * 100f:0.0} cm off the right eye, unchanged frame to frame {unityRightStaleFrames} of {rightFrames}, used {(rightFromLeft ? "no" : "yes")}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms = copying calls for the right eye {PerWindow(Stat.MirrorMs):0.00} "
                 + $"(of it: constant uploads {PerWindow(Stat.UploadMs):0.00} incl. value search {PerWindow(Stat.ScanMs):0.00}, view checks {PerWindow(Stat.SwapMs):0.00}) + replay {PerWindow(Stat.ExecuteMs):0.00} "
-                + $"+ state copy {PerWindow(Stat.CaptureMs):0.00} + Unity's own work and its calls {PerWindow(Stat.WindowMs) - PerWindow(Stat.MirrorMs) - PerWindow(Stat.ExecuteMs) - PerWindow(Stat.CaptureMs):0.00}; the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "
+                + $"+ state copy {PerWindow(Stat.CaptureMs):0.00} + Unity's own work and its calls {PerWindow(Stat.WindowMs) - PerWindow(Stat.MirrorMs) - PerWindow(Stat.ExecuteMs) - PerWindow(Stat.CaptureMs):0.00}; "
+                + $"GPU a frame ({totals[(int)Stat.GpuFrames]:0} frames timed): the left eye's pass {PerGpuFrame(Stat.GpuLeftMs):0.00} ms (from its start: waiting on the render thread counts), "
+                + $"the right eye's replay {PerGpuFrame(Stat.GpuReplayMs):0.00}, copying it into the eye {PerGpuFrame(Stat.GpuCopyMs):0.00}; "
+                + $"GPU frame to frame {(totals[(int)Stat.GpuPeriods] > 0 ? totals[(int)Stat.GpuPeriodMs] / totals[(int)Stat.GpuPeriods] : 0):0.00}; the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "
                 + $"{PerWindow(Stat.ImmediateDrawsOutside):0} draws ({totals[(int)Stat.EyeDrawsOutside]:0} into the left eye, {totals[(int)Stat.EyeCopiesOutside]:0} copies into it), {PerWindow(Stat.ImmediateListsOutside):0} command lists run (ours); replays that never wrote the eye {totals[(int)Stat.WindowsNoEyeWrite]:0}, ended at the hand-back {totals[(int)Stat.EndedAtHandBack]:0}, ended early at an unrecordable call past the headset camera {totals[(int)Stat.EndedEarly]:0}. Values found a replay: {(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");
             unityRightDriftMax = 0f;
             unityRightStaleFrames = 0;
