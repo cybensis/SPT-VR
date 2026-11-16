@@ -17,6 +17,7 @@ namespace TarkovVR.Source.Graphics
         [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)] private static extern IntPtr LoadLibrary(string path);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Init(IntPtr anyD3D11Resource);
         [DllImport("SPTVRStereoReplay")] private static extern void SR_SetEnabled(int on);
+        [DllImport("SPTVRStereoReplay")] private static extern void SR_SetPrivateTable(int on);
         [DllImport("SPTVRStereoReplay")] private static extern IntPtr SR_GetRenderEventFunc();
         [DllImport("SPTVRStereoReplay")] private static extern void SR_SetFrame(int slot, int count, int endEvent, int[] lengths, float[] tolerances, float[] left, float[] right);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Stats(double[] totals, int max);
@@ -43,6 +44,9 @@ namespace TarkovVR.Source.Graphics
         // The right view handed to the headset with the pose it was drawn from (the left view's + the eyes' offset): the pose Unity submits
         // for a view no camera drew can be another, and the compositor turns the image by the difference
         public static bool fixRightPose = true;
+        // Before the first Ctrl+F9: the context gets our own copy of its function table (the runtime swaps the draw entries in its
+        // own as state changes - patching that one let draws slip past); false = patch the runtime's and take them back after every call
+        public static bool privateVtable = true;
         public static float logInterval = 2f;            // s
 
         private const int StartEvent = 1000, EndEvent = 2000, FrameSlots = 8, MaxPatterns = 64;
@@ -116,6 +120,7 @@ namespace TarkovVR.Source.Graphics
                 }
                 deviceProbe = new RenderTexture(4, 4, 0) { name = "SPT-VR StereoReplay device" };
                 deviceProbe.Create();
+                SR_SetPrivateTable(privateVtable ? 1 : 0);
                 nativeOk = SR_Init(deviceProbe.GetNativeTexturePtr()) == 1;
                 eventFunction = nativeOk ? SR_GetRenderEventFunc() : IntPtr.Zero;
                 byte[] text = new byte[2048];

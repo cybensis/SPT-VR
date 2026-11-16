@@ -77,8 +77,15 @@ static ID3D11Device1* device1;
 static Ctx* immediate;
 static ID3D11DeviceContext1* immediate1;
 static ID3D11DeviceContext1* deferred;
-static void** vtable;
+static void** vtable;                   // the table our hooks are in (the private one, or the runtime's when patching it)
 static void* original[VtableSize];
+// Private table (default): the context's vtable pointer goes to our copy of the runtime's table, with our hooks in it. The runtime keeps
+// swapping its work entries in ITS table, which our hooks call live - nothing can push our hooks out. If the runtime turns out to write
+// through the object's vtable pointer (into ours), we fall back to patching that table and taking our entries back after every call.
+static bool usePrivateTable = true;
+static bool privateMode;
+static void** runtimeTable;
+static void** privateTable;
 static bool hooked;
 static bool sharedVtable;            // the deferred context runs through the same (hooked) vtable
 static bool driverCommandLists;
@@ -126,8 +133,36 @@ static const int workSlots[] = { SDrawIndexed, SDraw, SDrawIndexedInstanced, SDr
 static void* workHooks[VtableSize];
 static uintptr_t runtimeStart, runtimeEnd;     // d3d11.dll's image: a variant from anywhere else is not taken as the original
 
+static void Report(const char* format, ...);
+
+// The runtime writes through the object's vtable pointer: our table is the one it updates now, so it is patched like the runtime's was
+static void LeavePrivateMode()
+{
+    for (int slot = 0; slot < VtableSize; slot++)
+    {
+        void* now = privateTable[slot];
+        original[slot] = workHooks[slot] && now == workHooks[slot] ? runtimeTable[slot] : now;
+    }
+    vtable = privateTable;
+    privateMode = false;
+    Report("the runtime writes its entries through the context's vtable pointer: back to taking our entries back after every call\n");
+}
+
 static inline void KeepWorkHooks()
 {
+    if (privateMode)
+    {
+        for (int slot : workSlots)
+        {
+            if (privateTable[slot] != workHooks[slot])
+            {
+                LeavePrivateMode();
+                break;
+            }
+        }
+        if (privateMode)
+            return;
+    }
     for (int slot : workSlots)
     {
         void* now = vtable[slot];
@@ -409,7 +444,7 @@ static void RestoreUploads()
 //------------------------------------------------------------------------------------------------------------------------------------
 // Hooks. Each calls the original, then (inside a window, on the immediate context) the same on the deferred context.
 
-#define ORIGINAL(slot, signature) ((signature)original[slot])
+#define ORIGINAL(slot, signature) ((signature)(privateMode ? runtimeTable[slot] : original[slot]))
 
 typedef void (STDMETHODCALLTYPE* PfnSetBuffers)(Ctx*, UINT, UINT, ID3D11Buffer* const*);
 typedef void (STDMETHODCALLTYPE* PfnSetSamplers)(Ctx*, UINT, UINT, ID3D11SamplerState* const*);
@@ -1041,6 +1076,18 @@ static int ReassertHooks()
 {
     char module[MAX_PATH];
     void** current = *(void***)immediate;
+    if (privateMode)
+    {
+        if (current != privateTable)
+        {
+            Report("the immediate context's vtable pointer was moved off ours to %p (%s); put back\n", (void*)current, ModuleOf(current, module, sizeof(module)));
+            InterlockedExchangePointer((void* volatile*)immediate, privateTable);
+        }
+        KeepWorkHooks();
+        if (privateMode)
+            return 0;
+        current = *(void***)immediate;
+    }
     if (current != vtable)
     {
         Report("the immediate context's vtable moved %p -> %p (%s); hooking the new one\n", (void*)vtable, (void*)current,
@@ -1437,13 +1484,39 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
         runtimeStart = (uintptr_t)runtime;
         runtimeEnd = runtimeStart + nt->OptionalHeader.SizeOfImage;
     }
-    if (!WriteVtable(true))
+    runtimeTable = vtable;
+    if (usePrivateTable)
     {
-        Info("vtable not writable\n");
-        return 0;
+        // as far as the runtime's table reaches past the public methods (it may call internal ones through it)
+        MEMORY_BASIC_INFORMATION region = {};
+        VirtualQuery(runtimeTable, &region, sizeof(region));
+        size_t available = ((uintptr_t)region.BaseAddress + region.RegionSize - (uintptr_t)runtimeTable) / sizeof(void*);
+        size_t entries = available < 512 ? available : 512;
+        if (entries >= (size_t)VtableSize)
+            privateTable = (void**)VirtualAlloc(nullptr, entries * sizeof(void*), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (privateTable)
+        {
+            memcpy(privateTable, runtimeTable, entries * sizeof(void*));
+            for (const HookEntry& hook : hooks)
+                privateTable[hook.slot] = hook.function;
+            privateMode = true;
+            vtable = privateTable;
+            InterlockedExchangePointer((void* volatile*)immediate, privateTable);
+            Info("private vtable: %u entries copied, the context points at it\n", (unsigned)entries);
+        }
+        else
+            Info("private vtable couldn't be made (%u entries readable): patching the runtime's\n", (unsigned)entries);
     }
-    DWORD previousProtection;
-    VirtualProtect(vtable, sizeof(void*) * VtableSize, PAGE_READWRITE, &previousProtection);
+    if (!privateMode)
+    {
+        if (!WriteVtable(true))
+        {
+            Info("vtable not writable\n");
+            return 0;
+        }
+        DWORD previousProtection;
+        VirtualProtect(vtable, sizeof(void*) * VtableSize, PAGE_READWRITE, &previousProtection);
+    }
     hooked = true;
     char drawModule[MAX_PATH], drawIndexedModule[MAX_PATH], mapModule[MAX_PATH], targetsModule[MAX_PATH];
     Info("the entries we took were in: Draw %s, DrawIndexed %s, Map %s, OMSetRenderTargets %s\n",
@@ -1471,6 +1544,13 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
         device->GetFeatureLevel(), driverCommandLists ? 1 : 0, uavSlots, sharedVtable ? 1 : 0,
         viewImages && viewAcquiredImage ? "found" : "MISSING (no eye images: nothing is replayed)");
     return 1;
+}
+
+// Before SR_Init: our own vtable for the context (default) or the runtime's patched
+SR_EXPORT void SR_SetPrivateTable(int on)
+{
+    if (!hooked)
+        usePrivateTable = on != 0;
 }
 
 SR_EXPORT void SR_SetEnabled(int on)
