@@ -28,6 +28,7 @@ namespace TarkovVR.Source.Graphics
         private static CommandBuffer capturePassEnd;
         private static Harmony captureHarmony;
         private static int captureEye = -1;          // 0 left, 1 right: the pass the headset camera is rendering
+        private static bool captureMaskOnly;         // the replay's start: only the right eye's occlusion mesh is wanted, then BeginReplay
 
         private struct SetValue { public int eye; public string target; public string property; public string value; }
         private static readonly List<SetValue> setValues = new List<SetValue>();
@@ -46,18 +47,41 @@ namespace TarkovVR.Source.Graphics
                 if (length > 0)
                 {
                     captureStage = CaptureStage.Idle;
-                    Plugin.MyLog.LogInfo("[StereoReplay] eye diff - what differs between the eyes and the replay doesn't swap yet:\n"
-                        + Encoding.ASCII.GetString(text, 0, length) + NamedDiff());
+                    if (captureMaskOnly)
+                        ContinueAfterMaskCapture();
+                    else
+                        Plugin.MyLog.LogInfo("[StereoReplay] eye diff - what differs between the eyes and the replay doesn't swap yet:\n"
+                            + Encoding.ASCII.GetString(text, 0, length) + NamedDiff());
                 }
                 else if (Time.unscaledTime > captureWaitUntil)
                 {
                     captureStage = CaptureStage.Idle;
+                    if (captureMaskOnly)
+                    {
+                        ContinueAfterMaskCapture();
+                        return;
+                    }
                     Plugin.MyLog.LogWarning($"[StereoReplay] eye diff: no report from the native layer (passes seen {capturePasses}) - is the headset camera drawing both eyes?");
                 }
             }
         }
 
-        public static void BeginEyeDiff()
+        private static void ContinueAfterMaskCapture()
+        {
+            captureMaskOnly = false;
+            Camera headset = HeadsetCamera();
+            if (headset == null)
+            {
+                Plugin.MyLog.LogWarning("[StereoReplay] the headset camera went away during the occlusion mesh capture: not started");
+                return;
+            }
+            int bytes = SR_OcclusionMaskBytes();
+            Plugin.MyLog.LogInfo(bytes > 0 ? $"[StereoReplay] the right eye's occlusion mesh captured ({bytes} B of vertex data)"
+                : "[StereoReplay] no occlusion mesh found in the capture: it's off while the replay runs");
+            BeginReplay(headset, bytes > 0);
+        }
+
+        public static void BeginEyeDiff(bool maskOnly = false)
         {
             if (Active)
             {
@@ -81,13 +105,16 @@ namespace TarkovVR.Source.Graphics
             capturePassEnd.IssuePluginEvent(eventFunction, CapturePassEndEvent);
             headset.AddCommandBuffer(CameraEvent.AfterEverything, capturePassEnd);
             setValues.Clear();
-            PatchSetters();
+            captureMaskOnly = maskOnly;
+            if (!maskOnly)
+                PatchSetters();
             capturePasses = 0;
             captureFrame = -1;
             captureEye = -1;
             Camera.onPreCull += CaptureOnPreCull;
             captureStage = CaptureStage.Armed;
-            Plugin.MyLog.LogInfo("[StereoReplay] eye diff: recording the next frame's two eye passes");
+            Plugin.MyLog.LogInfo(maskOnly ? "[StereoReplay] capturing the right eye's occlusion mesh from the next frame, then the replay starts"
+                : "[StereoReplay] eye diff: recording the next frame's two eye passes");
         }
 
         // The headset camera's passes of one frame: the first is the left eye (multipass draws left, then right)

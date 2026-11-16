@@ -133,22 +133,16 @@ namespace TarkovVR.Source.Graphics
                     Attach(camera);
 
                 Camera.StereoscopicEye eye = camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? Camera.StereoscopicEye.Right : Camera.StereoscopicEye.Left;
-                // The GPU projection (flipped for a render texture on D3D) maps the view's forward axis to (-m02, -m12) in its NDC,
-                // the same NDC the shader rebuilds from each pixel's position: the lens centre
                 Matrix4x4 gpuProjection = GL.GetGPUProjectionMatrix(camera.GetStereoProjectionMatrix(eye), true);
-                UpdateGaze();
-                Vector2 centre = new Vector2(-gpuProjection.m02, -gpuProjection.m12);
-                if (gazeWeight > 0f && DirectionToNdc(camera, eye, gpuProjection, gazeInHead, out Vector2 gazeCentre))
-                    centre = Vector2.Lerp(centre, gazeCentre, gazeWeight);
-                float radius = Mathf.Lerp(innerRadiusSetting.Value, gazeInnerRadiusSetting.Value, gazeWeight);
-                bool alternate = alternateSetting.Value || (alternateWithUpscaler && UpscalerJittering());
-                float parity = alternate ? (Time.frameCount & 1) : 0f;
-                if (alternate && !loggedAlternate)
+                if (alternateSetting.Value || (alternateWithUpscaler && UpscalerJittering()))
                 {
-                    loggedAlternate = true;
-                    Plugin.MyLog.LogInfo($"[Foveated] the masked blocks swap every frame ({(alternateSetting.Value ? "Alternate Pattern" : "the upscaler's jitter is on")})");
+                    if (!loggedAlternate)
+                    {
+                        loggedAlternate = true;
+                        Plugin.MyLog.LogInfo($"[Foveated] the masked blocks swap every frame ({(alternateSetting.Value ? "Alternate Pattern" : "the upscaler's jitter is on")})");
+                    }
                 }
-                Shader.SetGlobalVector(FoveaId, new Vector4(centre.x, centre.y, radius, parity));
+                Shader.SetGlobalVector(FoveaId, FoveaFor(camera, camera.GetStereoViewMatrix(eye), camera.GetStereoProjectionMatrix(eye)));
                 Shader.SetGlobalVector(FoveaSizeId, new Vector4(width, height, 0f, 0f));
                 Shader.SetGlobalVector(FoveaBandId, new Vector4(Mathf.Max(bandWidth, 0f), interpolatedFill ? 1f : 0f, 0f, 0f));
                 Shader.SetGlobalVector(FoveaTintId, tintSetting.Value ? new Vector4(1.6f, 0.35f, 0.35f, 1f) : Vector4.one);
@@ -168,6 +162,33 @@ namespace TarkovVR.Source.Graphics
                 faulted = true;
                 Detach();
             }
+        }
+
+        // One eye's circle (_SptvrFovea): its centre in the eye's GPU NDC, the radius, the checkerboard's parity
+        private static Vector4 FoveaFor(Camera camera, Matrix4x4 eyeView, Matrix4x4 eyeProjection)
+        {
+            // The GPU projection (flipped for a render texture on D3D) maps the view's forward axis to (-m02, -m12) in its NDC,
+            // the same NDC the shader rebuilds from each pixel's position: the lens centre
+            Matrix4x4 gpuProjection = GL.GetGPUProjectionMatrix(eyeProjection, true);
+            UpdateGaze();
+            Vector2 centre = new Vector2(-gpuProjection.m02, -gpuProjection.m12);
+            if (gazeWeight > 0f && DirectionToNdc(camera, eyeView, gpuProjection, gazeInHead, out Vector2 gazeCentre))
+                centre = Vector2.Lerp(centre, gazeCentre, gazeWeight);
+            float radius = Mathf.Lerp(innerRadiusSetting.Value, gazeInnerRadiusSetting.Value, gazeWeight);
+            bool alternate = alternateSetting.Value || (alternateWithUpscaler && UpscalerJittering());
+            return new Vector4(centre.x, centre.y, radius, alternate ? (Time.frameCount & 1) : 0f);
+        }
+
+        // For the stereo replay (Unity renders the left eye only): this frame's circle in the left eye, and in the right eye it replays
+        internal static bool ReplayPair(Camera camera, Matrix4x4 viewLeft, Matrix4x4 projectionLeft, Matrix4x4 viewRight, Matrix4x4 projectionRight,
+            out Vector4 left, out Vector4 right)
+        {
+            left = right = Vector4.zero;
+            if (faulted || enabledSetting == null || !enabledSetting.Value || camera == null || camera != VRGlobals.VRCam)
+                return false;
+            left = FoveaFor(camera, viewLeft, projectionLeft);
+            right = FoveaFor(camera, viewRight, projectionRight);
+            return true;
         }
 
         // Once: whether the depth texture still points at the filled copy when the eye has rendered (Unity could rebind it later)
@@ -265,10 +286,10 @@ namespace TarkovVR.Source.Graphics
 
         // A direction in the headset's frame, taken at infinity, in this eye's GPU NDC. Camera space is +z forward, Unity's view matrices
         // -z; the eye's own view turns it if its display is canted.
-        private static bool DirectionToNdc(Camera camera, Camera.StereoscopicEye eye, Matrix4x4 gpuProjection, Vector3 inHead, out Vector2 ndc)
+        private static bool DirectionToNdc(Camera camera, Matrix4x4 eyeViewMatrix, Matrix4x4 gpuProjection, Vector3 inHead, out Vector2 ndc)
         {
             Vector3 centreView = new Vector3(inHead.x, inHead.y, -inHead.z);
-            Vector3 eyeView = (camera.GetStereoViewMatrix(eye) * camera.worldToCameraMatrix.inverse).MultiplyVector(centreView);
+            Vector3 eyeView = (eyeViewMatrix * camera.worldToCameraMatrix.inverse).MultiplyVector(centreView);
             Vector4 clip = gpuProjection * new Vector4(eyeView.x, eyeView.y, eyeView.z, 0f);
             if (clip.w <= 1e-4f)
             {

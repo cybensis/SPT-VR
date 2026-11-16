@@ -61,7 +61,8 @@ enum Stat
     StEyeDrawsOutside, StEyeCopiesOutside, StWindowsNoEyeWrite, StEndedAtHandBack, StEndedEarly,
     StDynamicBuffers, StDynamicSegments, StDynamicViews, StOtherUpdates,
     StRehooked, StMirrorMs, StSwapMs, StUploadMs,
-    StGpuFrames, StGpuLeftMs, StGpuReplayMs, StGpuCopyMs, StGpuPeriods, StGpuPeriodMs, StCount
+    StGpuFrames, StGpuLeftMs, StGpuReplayMs, StGpuCopyMs, StGpuPeriods, StGpuPeriodMs,
+    StPairs, StPairSwaps, StPairFailed, StMaskPatched, StMaskMissed, StCount
 };
 static double stats[StCount];
 // written from Unity's job threads too
@@ -231,6 +232,31 @@ static void CaptureUpload(ID3D11Resource* buffer, const void* data, UINT bytes, 
     capturedUploads.push_back(upload);
 }
 
+// The right eye's occlusion mesh: Unity's own vertex data for it, from one frame of its two-eye rendering (the capture C# runs when
+// the replay starts: each pass's first dynamic vertex write, before its first draw). The replay puts it into the right eye's copy of
+// the mask draw, found as one of the window's first draws whose vertex range is that size.
+static std::vector<unsigned char> maskRight;
+static bool maskPatching;
+static bool maskDone;                  // this window's mask draw found
+static int windowDraws;
+static const int kMaskSearchDraws = 16;
+
+static void TakeOcclusionMask()
+{
+    const CapturedUpload* left = nullptr;
+    const CapturedUpload* right = nullptr;
+    for (const CapturedUpload& upload : capturedUploads)
+    {
+        if (upload.kind != 1 || upload.draw != 0)
+            continue;
+        if (upload.pass == 0 && !left) left = &upload;
+        if (upload.pass == 1 && !right) right = &upload;
+    }
+    maskRight.clear();
+    if (left && right && left->bytes == right->bytes && right->bytes > 0)
+        maskRight.assign(capturedData.begin() + right->data, capturedData.begin() + right->data + right->bytes);
+}
+
 static inline void CountImmediateDraw(Ctx* self)
 {
     if (self == immediate && (captureState == CapLeft || captureState == CapRight))
@@ -361,6 +387,43 @@ static inline bool IsLeft(ID3D11Resource* resource)
     return false;
 }
 
+// Resources the replay uses in place of the left eye's (C#: the right eye's own copies of per-eye history, FSR3's). Set from the main
+// thread (held there: the pointers are fresh), taken over at a window's start.
+typedef std::vector<std::pair<ID3D11Resource*, ID3D11Resource*>> PairList;
+static SRWLOCK pairLock = SRWLOCK_INIT;
+static PairList pendingPairs;
+static volatile LONG pairsChanged;
+static PairList pairs;
+static std::unordered_map<void*, ID3D11View*> pairViews;     // a view of a paired left resource -> its twin on the right one
+
+static inline ID3D11Resource* PairOf(ID3D11Resource* resource)
+{
+    for (const auto& pair : pairs)
+    {
+        if (pair.first == resource)
+            return pair.second;
+    }
+    return nullptr;
+}
+
+static void TakePairs()
+{
+    if (!InterlockedExchange(&pairsChanged, 0))
+        return;
+    AcquireSRWLockExclusive(&pairLock);
+    for (auto& pair : pairs)
+    {
+        pair.first->Release();
+        pair.second->Release();
+    }
+    pairs.swap(pendingPairs);
+    pendingPairs.clear();
+    ReleaseSRWLockExclusive(&pairLock);
+    for (auto& twin : pairViews)
+        if (twin.second) twin.second->Release();
+    pairViews.clear();
+}
+
 static inline ID3D11Resource* SwapResource(ID3D11Resource* resource)
 {
     if (resource && rightTexture && IsLeft(resource))
@@ -368,6 +431,12 @@ static inline ID3D11Resource* SwapResource(ID3D11Resource* resource)
         stats[StCopiesSwapped] += 1;
         windowEyeWrites++;
         return rightTexture;
+    }
+    ID3D11Resource* paired = resource && !pairs.empty() ? PairOf(resource) : nullptr;
+    if (paired)
+    {
+        stats[StPairSwaps] += 1;
+        return paired;
     }
     return resource;
 }
@@ -382,34 +451,55 @@ static std::unordered_map<void*, ID3D11View*> ourViews;      // a left-image vie
 
 static inline size_t Hash(void* pointer) { return (((uintptr_t)pointer >> 4) * 2654435761u) & (kCacheSize - 1); }
 
-static ID3D11View* OurView(ID3D11View* view, ViewKind kind)
+// The same view (its own description) on another resource; null if it can't be made
+static ID3D11View* TwinOn(ID3D11View* view, ViewKind kind, ID3D11Resource* target)
 {
-    auto found = ourViews.find(view);
-    if (found != ourViews.end())
-        return found->second;
     ID3D11View* made = nullptr;
     HRESULT result = E_FAIL;
     if (kind == KindRtv)
     {
         D3D11_RENDER_TARGET_VIEW_DESC description;
         ((ID3D11RenderTargetView*)view)->GetDesc(&description);
-        result = device->CreateRenderTargetView(rightTexture, &description, (ID3D11RenderTargetView**)&made);
+        result = device->CreateRenderTargetView(target, &description, (ID3D11RenderTargetView**)&made);
     }
     else if (kind == KindSrv)
     {
         D3D11_SHADER_RESOURCE_VIEW_DESC description;
         ((ID3D11ShaderResourceView*)view)->GetDesc(&description);
-        result = device->CreateShaderResourceView(rightTexture, &description, (ID3D11ShaderResourceView**)&made);
+        result = device->CreateShaderResourceView(target, &description, (ID3D11ShaderResourceView**)&made);
     }
     else if (kind == KindUav)
     {
         D3D11_UNORDERED_ACCESS_VIEW_DESC description;
         ((ID3D11UnorderedAccessView*)view)->GetDesc(&description);
-        result = device->CreateUnorderedAccessView(rightTexture, &description, (ID3D11UnorderedAccessView**)&made);
+        result = device->CreateUnorderedAccessView(target, &description, (ID3D11UnorderedAccessView**)&made);
     }
-    if (FAILED(result))
-        made = nullptr;
+    else if (kind == KindDsv)
+    {
+        D3D11_DEPTH_STENCIL_VIEW_DESC description;
+        ((ID3D11DepthStencilView*)view)->GetDesc(&description);
+        result = device->CreateDepthStencilView(target, &description, (ID3D11DepthStencilView**)&made);
+    }
+    return SUCCEEDED(result) ? made : nullptr;
+}
+
+static ID3D11View* OurView(ID3D11View* view, ViewKind kind)
+{
+    auto found = ourViews.find(view);
+    if (found != ourViews.end())
+        return found->second;
+    ID3D11View* made = TwinOn(view, kind, rightTexture);
     ourViews[view] = made;
+    return made;
+}
+
+static ID3D11View* PairView(ID3D11View* view, ViewKind kind, ID3D11Resource* paired)
+{
+    auto found = pairViews.find(view);
+    if (found != pairViews.end())
+        return found->second;
+    ID3D11View* made = TwinOn(view, kind, paired);
+    pairViews[view] = made;
     return made;
 }
 
@@ -424,6 +514,7 @@ static void* SwapView(void* view, ViewKind kind)
     ID3D11Resource* resource = nullptr;
     ((ID3D11View*)view)->GetResource(&resource);
     bool left = resource && IsLeft(resource);
+    ID3D11Resource* paired = !left && resource && !pairs.empty() ? PairOf(resource) : nullptr;
     if (resource && recording)
     {
         D3D11_RESOURCE_DIMENSION dimension;
@@ -444,6 +535,13 @@ static void* SwapView(void* view, ViewKind kind)
         value = kind == KindDsv ? nullptr : OurView((ID3D11View*)view, kind);
         stats[value ? StViewsSwapped : StLeftUnswappable] += 1;
         windowEyeWrites++;
+    }
+    else if (paired)
+    {
+        ID3D11View* twin = PairView((ID3D11View*)view, kind, paired);
+        if (twin)
+            value = twin;
+        stats[twin ? StPairSwaps : StPairFailed] += 1;
     }
     entry.key = view;
     entry.value = value;
@@ -1378,6 +1476,24 @@ static ID3D11Buffer* ReplayBuffer(ID3D11Buffer* buffer)
     return snapshot;
 }
 
+// Before a recorded non-indexed draw: the left eye's mask vertices in its snapshot become the right eye's
+static void MaybePatchMask(UINT vertices, UINT first)
+{
+    if (!maskPatching || maskDone || maskRight.empty() || windowDraws >= kMaskSearchDraws)
+        return;
+    UINT stride = replayStride[0];
+    if (!replayVertex[0] || stride == 0 || (size_t)vertices * stride != maskRight.size())
+        return;
+    DynamicTrack* track = TrackOf(replayVertex[0]);
+    if (!track)
+        return;
+    UINT offset = replayOffset[0] + first * stride;
+    D3D11_BOX box = { offset, 0, 0, offset + (UINT)maskRight.size(), 1, 1 };
+    rec->UpdateSubresource(track->snapshot, 0, &box, maskRight.data(), (UINT)maskRight.size(), 0, 0);
+    maskDone = true;
+    stats[StMaskPatched] += 1;
+}
+
 // Unity is about to discard it: its snapshot gets what the replay's draws so far read, the rest of the window draws from a fresh one
 static void BeforeDynamicDiscard(ID3D11Buffer* buffer)
 {
@@ -1469,55 +1585,55 @@ static void STDMETHODCALLTYPE OurDraw(Ctx* self, UINT vertices, UINT first)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDraw, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT))(self, vertices, first);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->Draw(vertices, first); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; MaybePatchMask(vertices, first); windowDraws++; rec->Draw(vertices, first); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexed(Ctx* self, UINT indices, UINT first, INT baseVertex)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawIndexed, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, INT))(self, indices, first, baseVertex);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->DrawIndexed(indices, first, baseVertex); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; windowDraws++; rec->DrawIndexed(indices, first, baseVertex); }
 }
 static void STDMETHODCALLTYPE OurDrawInstanced(Ctx* self, UINT vertices, UINT instances, UINT first, UINT firstInstance)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, UINT))(self, vertices, instances, first, firstInstance);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->DrawInstanced(vertices, instances, first, firstInstance); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; windowDraws++; rec->DrawInstanced(vertices, instances, first, firstInstance); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexedInstanced(Ctx* self, UINT indices, UINT instances, UINT first, INT baseVertex, UINT firstInstance)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawIndexedInstanced, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT, INT, UINT))(self, indices, instances, first, baseVertex, firstInstance);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->DrawIndexedInstanced(indices, instances, first, baseVertex, firstInstance); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; windowDraws++; rec->DrawIndexedInstanced(indices, instances, first, baseVertex, firstInstance); }
 }
 static void STDMETHODCALLTYPE OurDrawAuto(Ctx* self)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawAuto, void (STDMETHODCALLTYPE*)(Ctx*))(self);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->DrawAuto(); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; windowDraws++; rec->DrawAuto(); }
 }
 static void STDMETHODCALLTYPE OurDrawIndexedInstancedIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawIndexedInstancedIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->DrawIndexedInstancedIndirect(arguments, offset); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; windowDraws++; rec->DrawIndexedInstancedIndirect(arguments, offset); }
 }
 static void STDMETHODCALLTYPE OurDrawInstancedIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDrawInstancedIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->DrawInstancedIndirect(arguments, offset); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; windowDraws++; rec->DrawInstancedIndirect(arguments, offset); }
 }
 static void STDMETHODCALLTYPE OurDispatch(Ctx* self, UINT x, UINT y, UINT z)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDispatch, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, UINT))(self, x, y, z);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->Dispatch(x, y, z); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; windowDraws++; rec->Dispatch(x, y, z); }
 }
 static void STDMETHODCALLTYPE OurDispatchIndirect(Ctx* self, ID3D11Buffer* arguments, UINT offset)
 {
     CountImmediateDraw(self);
     ORIGINAL(SDispatchIndirect, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, UINT))(self, arguments, offset);
-    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; rec->DispatchIndirect(arguments, offset); }
+    if (Mirroring(self)) { TickTimer mirrorTimer(mirrorTicks); stats[StDraws] += 1; windowDraws++; rec->DispatchIndirect(arguments, offset); }
 }
 
 // Input assembler, rasterizer, stream out
@@ -2546,6 +2662,10 @@ static void BeginWindow(int slot)
     windowStartTicks = __rdtsc();
     mirrorTicks = swapTicks = uploadTicks = 0;
     windowSequence++;
+    TakePairs();
+    stats[StPairs] += (double)pairs.size();
+    windowDraws = 0;
+    maskDone = false;
     GpuBegin();
     recorder.Clear();
     rec = &recorder;
@@ -2568,6 +2688,8 @@ static void EndWindowInto(bool drop, void* rightImage)
     recording = false;
     if (windowEyeWrites == 0)
         stats[StWindowsNoEyeWrite] += 1;
+    if (maskPatching && !maskRight.empty() && !maskDone)
+        stats[StMaskMissed] += 1;
     GpuStamp(1);
     RestoreUploads();
     if (!drop && !aborted)
@@ -2794,6 +2916,7 @@ static void CaptureEvent(int id)
         else if (captureState == CapRight)
         {
             captureState = CapIdle;
+            TakeOcclusionMask();
             AnalyseCapture();
             InterlockedExchange(&captureReady, 1);
         }
@@ -2939,6 +3062,38 @@ SR_EXPORT void SR_SetPrivateTable(int on)
 {
     if (!hooked)
         usePrivateTable = on != 0;
+}
+
+// The right eye's own copies: left[i] is replaced by right[i] in the replay (count 0 = none)
+SR_EXPORT void SR_SetPairs(void** left, void** right, int count)
+{
+    AcquireSRWLockExclusive(&pairLock);
+    for (auto& pair : pendingPairs)
+    {
+        pair.first->Release();
+        pair.second->Release();
+    }
+    pendingPairs.clear();
+    for (int index = 0; index < count && left && right; index++)
+    {
+        if (!left[index] || !right[index] || left[index] == right[index])
+            continue;
+        ((ID3D11Resource*)left[index])->AddRef();
+        ((ID3D11Resource*)right[index])->AddRef();
+        pendingPairs.push_back({ (ID3D11Resource*)left[index], (ID3D11Resource*)right[index] });
+    }
+    InterlockedExchange(&pairsChanged, 1);
+    ReleaseSRWLockExclusive(&pairLock);
+}
+
+// The right eye's occlusion mesh from the last capture: its size in bytes (0 = none found); on = put it into the replay
+SR_EXPORT int SR_OcclusionMaskBytes()
+{
+    return (int)maskRight.size();
+}
+SR_EXPORT void SR_SetMaskPatch(int on)
+{
+    maskPatching = on != 0;
 }
 
 SR_EXPORT void SR_SetEnabled(int on)

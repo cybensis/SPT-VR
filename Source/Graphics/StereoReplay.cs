@@ -25,6 +25,9 @@ namespace TarkovVR.Source.Graphics
         [DllImport("SPTVRStereoReplay")] private static extern int SR_PatternHits(double[] hits, int max);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Info(byte[] text, int max);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_HookReport(byte[] text, int max);
+        [DllImport("SPTVRStereoReplay")] private static extern void SR_SetPairs(IntPtr[] left, IntPtr[] right, int count);
+        [DllImport("SPTVRStereoReplay")] private static extern int SR_OcclusionMaskBytes();
+        [DllImport("SPTVRStereoReplay")] private static extern void SR_SetMaskPatch(int on);
 
         // The native counters, in its order (StereoReplay.cpp, enum Stat)
         private enum Stat
@@ -35,7 +38,8 @@ namespace TarkovVR.Source.Graphics
             ImmediateDrawsOutside, ImmediateListsOutside, WorkTakenBack, RightTakenAtEnd, SameImageTwice,
             EyeDrawsOutside, EyeCopiesOutside, WindowsNoEyeWrite, EndedAtHandBack, EndedEarly,
             DynamicBuffers, DynamicSegments, DynamicViews, OtherUpdates, Rehooked, MirrorMs, SwapMs, UploadMs,
-            GpuFrames, GpuLeftMs, GpuReplayMs, GpuCopyMs, GpuPeriods, GpuPeriodMs, Count
+            GpuFrames, GpuLeftMs, GpuReplayMs, GpuCopyMs, GpuPeriods, GpuPeriodMs,
+            Pairs, PairSwaps, PairFailed, MaskPatched, MaskMissed, Count
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
@@ -70,7 +74,9 @@ namespace TarkovVR.Source.Graphics
         private static Camera headsetCamera;
         private static CommandBuffer endBuffer;
         private static StereoTargetEyeMask savedTargetEye;
-        private static bool savedOcclusionMesh, savedFoveated;
+        private static bool savedOcclusionMesh;
+        public static bool keepOcclusionMesh = true;     // the right eye gets its own (captured from one two-eye frame first); false = off while it runs
+        public static bool pairFsr3 = true;              // FSR3: the right eye draws into its own instance's history
         private static int frameSlot;
         private static Matrix4x4[] previousLeft = new Matrix4x4[2], previousRight = new Matrix4x4[2];
         private static bool havePrevious;
@@ -163,7 +169,7 @@ namespace TarkovVR.Source.Graphics
 
         public static void Begin()
         {
-            if (Active) return;
+            if (Active || captureStage != CaptureStage.Idle) return;
             if (!TarkovVR.Source.XR.OpenXRFrameWatch.Loaded)
             {
                 Plugin.MyLog.LogWarning("[StereoReplay] the OpenXR frame watcher isn't running (it gives the right eye's image): OpenXR only, and a restart after installing the DLL");
@@ -176,14 +182,25 @@ namespace TarkovVR.Source.Graphics
                 return;
             }
             if (!TryNative()) return;
+            // the right eye's occlusion mesh is Unity's own: one frame of its two-eye rendering is captured first (BeginReplay follows)
+            if (keepOcclusionMesh && XRSettings.useOcclusionMesh)
+            {
+                BeginEyeDiff(true);
+                return;
+            }
+            BeginReplay(headset, false);
+        }
 
+        private static void BeginReplay(Camera headset, bool withMask)
+        {
             headsetCamera = headset;
             savedTargetEye = headsetCamera.stereoTargetEye;
             savedOcclusionMesh = XRSettings.useOcclusionMesh;
-            savedFoveated = FoveatedMask.IsEnabled;
-            // both are drawn per eye from the eye's own shape, which the replay would copy from the left
-            XRSettings.useOcclusionMesh = false;
-            if (savedFoveated) FoveatedMask.SetEnabled(false);
+            if (!withMask)
+                XRSettings.useOcclusionMesh = false;
+            SR_SetMaskPatch(withMask ? 1 : 0);
+            fsr3PairedLeft = fsr3PairedRight = null;
+            fsr3Seen.Clear();
             // the eyes' offset and the right projection, while Unity still draws both
             rightEyeFromLeftEye = headsetCamera.GetStereoViewMatrix(Camera.StereoscopicEye.Right)
                 * headsetCamera.GetStereoViewMatrix(Camera.StereoscopicEye.Left).inverse;
@@ -208,7 +225,8 @@ namespace TarkovVR.Source.Graphics
             SR_PatternHits(new double[MaxPatterns], MaxPatterns);
             Active = true;
             Plugin.MyLog.LogInfo($"[StereoReplay] ON on '{headsetCamera.name}': the left eye is rendered, the right eye replayed. Both eyes before: {lastOffFrameMs:0.00} ms a frame. "
-                + "For the first test: Tarkov's upscaler / anti-aliasing off, the graphics mods off (occlusion mesh and foveated masking are off while it runs)");
+                + $"Occlusion mesh {(withMask ? "on (the right eye's own)" : "off")}, foveated masking {(FoveatedMask.IsEnabled ? "on (the right eye's own circle)" : "off")}; "
+                + "FSR3: the right eye in its own history; FSR4 can't be replayed yet (use FSR3 with FSR4 Bridge's Enable FSR4 off)");
         }
 
         public static void Stop(string reason)
@@ -227,7 +245,10 @@ namespace TarkovVR.Source.Graphics
             endBuffer?.Release();
             endBuffer = null;
             XRSettings.useOcclusionMesh = savedOcclusionMesh;
-            if (savedFoveated) FoveatedMask.SetEnabled(true);
+            SR_SetMaskPatch(0);
+            SR_SetPairs(null, null, 0);
+            fsr3PairedLeft = fsr3PairedRight = null;
+            fsr3Seen.Clear();
             headsetCamera = null;
             Plugin.MyLog.LogInfo($"[StereoReplay] OFF: {reason}");
         }
@@ -252,6 +273,9 @@ namespace TarkovVR.Source.Graphics
             rightFrames++;
 
             FillPatterns(viewLeft, viewRight, projectionLeft, projectionRight, true);
+            if (FoveatedMask.ReplayPair(culling, viewLeft, projectionLeft, viewRight, projectionRight, out Vector4 foveaLeft, out Vector4 foveaRight))
+                AddVector("foveated circle", foveaLeft, foveaRight, 4, matrixTolerance);
+            UpdateFsr3Pairs();
 
             SR_SetFrame(frameSlot, patternCount, EndEvent, lengths, tolerances, leftValues, rightValues);
             if (combinedCulling)
@@ -375,19 +399,74 @@ namespace TarkovVR.Source.Graphics
             }
         }
 
-        private static void AddVector(string name, Vector4 left, Vector4 right)
+        private static void AddVector(string name, Vector4 left, Vector4 right, int length = 3, float tolerance = -1f)
         {
             if (patternCount >= MaxPatterns) return;
             int at = patternCount * 16;
-            for (int index = 0; index < 3; index++)
+            for (int index = 0; index < length; index++)
             {
                 leftValues[at + index] = left[index];
                 rightValues[at + index] = right[index];
             }
-            lengths[patternCount] = 3;
-            tolerances[patternCount] = positionTolerance;
+            lengths[patternCount] = length;
+            tolerances[patternCount] = tolerance > 0f ? tolerance : positionTolerance;
             patternNames[patternCount] = name;
             patternCount++;
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------
+        // FSR3's per-eye history. Each eye has its own FSR3 instance (StereoFSR3Wrapper); with the left eye rendered alone only the left
+        // one runs, so the replay draws the right eye into the right instance's textures (each RenderTexture field into the same field).
+        // FSR3 makes a texture again as a new object: the pairs are sent again when any field's object changes.
+
+        private static System.Reflection.FieldInfo[] fsr3Textures;
+        private static FSR3Wrapper fsr3PairedLeft, fsr3PairedRight;
+        private static readonly System.Collections.Generic.List<RenderTexture> fsr3Seen = new System.Collections.Generic.List<RenderTexture>();
+
+        private static void UpdateFsr3Pairs()
+        {
+            TarkovVR.Patches.Upscalers.StereoFSR3Wrapper stereo = pairFsr3 ? TarkovVR.Patches.Upscalers.FSRPatches._stereoFSR3Wrapper : null;
+            FSR3Wrapper left = stereo?._wrappers[0], right = stereo?._wrappers[1];
+            if (left == null || right == null)
+                left = right = null;
+            if (fsr3Textures == null)
+                fsr3Textures = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Where(
+                    typeof(FSR3Wrapper).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic),
+                    field => field.FieldType == typeof(RenderTexture)));
+            bool changed = !ReferenceEquals(left, fsr3PairedLeft) || !ReferenceEquals(right, fsr3PairedRight);
+            for (int index = 0; !changed && left != null && index < fsr3Textures.Length; index++)
+                changed = !ReferenceEquals(fsr3Textures[index].GetValue(left), fsr3Seen[index * 2])
+                    || !ReferenceEquals(fsr3Textures[index].GetValue(right), fsr3Seen[index * 2 + 1]);
+            if (!changed)
+                return;
+            fsr3PairedLeft = left;
+            fsr3PairedRight = right;
+            fsr3Seen.Clear();
+            var lefts = new System.Collections.Generic.List<IntPtr>();
+            var rights = new System.Collections.Generic.List<IntPtr>();
+            int skipped = 0;
+            if (left != null)
+            {
+                foreach (System.Reflection.FieldInfo field in fsr3Textures)
+                {
+                    RenderTexture leftTexture = (RenderTexture)field.GetValue(left), rightTexture = (RenderTexture)field.GetValue(right);
+                    fsr3Seen.Add(leftTexture);
+                    fsr3Seen.Add(rightTexture);
+                    if (leftTexture == null || rightTexture == null || !leftTexture.IsCreated() || !rightTexture.IsCreated()
+                        || leftTexture.width != rightTexture.width || leftTexture.height != rightTexture.height
+                        || leftTexture.graphicsFormat != rightTexture.graphicsFormat || leftTexture.mipmapCount != rightTexture.mipmapCount)
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    lefts.Add(leftTexture.GetNativeTexturePtr());
+                    rights.Add(rightTexture.GetNativeTexturePtr());
+                }
+            }
+            SR_SetPairs(lefts.ToArray(), rights.ToArray(), lefts.Count);
+            Plugin.MyLog.LogInfo(left == null ? "[StereoReplay] FSR3 isn't running: no history to pair"
+                : $"[StereoReplay] FSR3: the right eye draws into its own history ({lefts.Count} textures paired"
+                  + (skipped > 0 ? $", {skipped} not: missing or another size - FSR3 has to run with both eyes before Ctrl+F9)" : ")"));
         }
 
         // One frustum holding both eyes': from between them, moved back until each eye is inside, as wide as the wider eye plus a margin
@@ -456,7 +535,10 @@ namespace TarkovVR.Source.Graphics
                 + $"+ state copy {PerWindow(Stat.CaptureMs):0.00} + Unity's own work and its calls {PerWindow(Stat.WindowMs) - PerWindow(Stat.MirrorMs) - PerWindow(Stat.ExecuteMs) - PerWindow(Stat.CaptureMs):0.00}; "
                 + $"GPU a frame ({totals[(int)Stat.GpuFrames]:0} frames timed): the left eye's pass {PerGpuFrame(Stat.GpuLeftMs):0.00} ms (from its start: waiting on the render thread counts), "
                 + $"the right eye's replay {PerGpuFrame(Stat.GpuReplayMs):0.00}, copying it into the eye {PerGpuFrame(Stat.GpuCopyMs):0.00}; "
-                + $"GPU frame to frame {(totals[(int)Stat.GpuPeriods] > 0 ? totals[(int)Stat.GpuPeriodMs] / totals[(int)Stat.GpuPeriods] : 0):0.00}; the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "
+                + $"GPU frame to frame {(totals[(int)Stat.GpuPeriods] > 0 ? totals[(int)Stat.GpuPeriodMs] / totals[(int)Stat.GpuPeriods] : 0):0.00}; "
+                + $"the right eye's own copies (FSR3 history): {PerWindow(Stat.Pairs):0} textures, views / copies swapped {PerWindow(Stat.PairSwaps):0} a replay (failed {PerWindow(Stat.PairFailed):0}); "
+                + $"occlusion mesh: the right eye's put in {totals[(int)Stat.MaskPatched]:0} replays, not found in {totals[(int)Stat.MaskMissed]:0}; "
+                + $"the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "
                 + $"{PerWindow(Stat.ImmediateDrawsOutside):0} draws ({totals[(int)Stat.EyeDrawsOutside]:0} into the left eye, {totals[(int)Stat.EyeCopiesOutside]:0} copies into it), {PerWindow(Stat.ImmediateListsOutside):0} command lists run (ours); replays that never wrote the eye {totals[(int)Stat.WindowsNoEyeWrite]:0}, ended at the hand-back {totals[(int)Stat.EndedAtHandBack]:0}, ended early at an unrecordable call past the headset camera {totals[(int)Stat.EndedEarly]:0}. Values found a replay: {(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");
             unityRightDriftMax = 0f;
             unityRightStaleFrames = 0;
