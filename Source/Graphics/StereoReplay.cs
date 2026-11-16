@@ -76,6 +76,10 @@ namespace TarkovVR.Source.Graphics
         private static float unityRightDriftMax;
         private static int unityRightStaleFrames, rightFrames;
         private static Matrix4x4 lastUnityRight;
+        // Cameras drawing into the eye after the headset camera (the UI camera): their own projection (the UI camera's far plane is
+        // Unity's 1000 m, the headset's 5000 m) means their matrices are other values, which the replay must swap too
+        private static readonly System.Collections.Generic.List<Camera> laterEyeCameras = new System.Collections.Generic.List<Camera>();
+        private static readonly System.Collections.Generic.HashSet<Camera> loggedLaterCameras = new System.Collections.Generic.HashSet<Camera>();
 
         // This frame's patterns
         private static readonly int[] lengths = new int[MaxPatterns];
@@ -105,7 +109,11 @@ namespace TarkovVR.Source.Graphics
             if (Time.unscaledTime - windowStart >= logInterval)
             {
                 float frameMs = windowFrames > 0 ? windowSeconds * 1000f / windowFrames : 0f;
-                if (Active) LogStats(frameMs);
+                if (Active)
+                {
+                    LogStats(frameMs);
+                    FindLaterEyeCameras();
+                }
                 else lastOffFrameMs = frameMs;
                 windowStart = Time.unscaledTime;
                 windowFrames = 0;
@@ -186,6 +194,7 @@ namespace TarkovVR.Source.Graphics
             endBuffer = new CommandBuffer { name = "SPT-VR stereo replay end" };
             endBuffer.IssuePluginEvent(eventFunction, EndEvent);
             headsetCamera.AddCommandBuffer(CameraEvent.AfterEverything, endBuffer);
+            FindLaterEyeCameras();
             Camera.onPreCull += OnPreCull;
             havePrevious = false;
             TarkovVR.Source.XR.OpenXRFrameWatch.TakePoseStats();
@@ -268,12 +277,67 @@ namespace TarkovVR.Source.Graphics
             AddMatrix("world to eye", worldToEyeLeft, worldToEyeRight);
             AddMatrix("eye to world", worldToEyeLeft.inverse, worldToEyeRight.inverse);
             AddVector("eye position", viewLeft.inverse.GetColumn(3), viewRight.inverse.GetColumn(3));
+            foreach (Camera later in laterEyeCameras)
+                AddLaterCamera(later, viewLeft, projectionLeft);
 
             SR_SetFrame(frameSlot, patternCount, EndEvent, lengths, tolerances, leftValues, rightValues);
             if (combinedCulling)
                 culling.cullingMatrix = CombinedCulling(culling, viewLeft, viewRight, projectionLeft, projectionRight);
             GL.IssuePluginEvent(eventFunction, StartEvent + frameSlot);
             frameSlot = (frameSlot + 1) % FrameSlots;
+        }
+
+        // Disabled ones too (the UI camera is switched off while no UI is in view); only those drawing straight into the eye
+        private static void FindLaterEyeCameras()
+        {
+            laterEyeCameras.Clear();
+            if (headsetCamera == null) return;
+            foreach (Camera candidate in UnityEngine.Object.FindObjectsOfType<Camera>(true))
+            {
+                if (candidate != headsetCamera && candidate.targetTexture == null && candidate.stereoTargetEye != StereoTargetEyeMask.None
+                    && candidate.depth > headsetCamera.depth)
+                    laterEyeCameras.Add(candidate);
+            }
+        }
+
+        // A later camera drawing this frame: its matrices (where they differ from the headset camera's) left -> right
+        private static void AddLaterCamera(Camera later, Matrix4x4 headsetViewLeft, Matrix4x4 headsetProjectionLeft)
+        {
+            if (later == null || !later.isActiveAndEnabled || patternCount + 20 > MaxPatterns) return;
+            Matrix4x4 viewLeft = later.GetStereoViewMatrix(Camera.StereoscopicEye.Left);
+            Matrix4x4 projectionLeft = later.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
+            bool sameView = Same(viewLeft, headsetViewLeft), sameProjection = Same(projectionLeft, headsetProjectionLeft);
+            if (sameView && sameProjection) return;
+            Matrix4x4 viewRight = rightFromLeft ? rightEyeFromLeftEye * viewLeft : later.GetStereoViewMatrix(Camera.StereoscopicEye.Right);
+            Matrix4x4 projectionRight = later.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right);
+            if (loggedLaterCameras.Add(later))
+                Plugin.MyLog.LogInfo($"[StereoReplay] '{later.name}' draws into the eye after the headset camera with its own {(sameView ? "" : "view and ")}"
+                    + $"projection (far {later.farClipPlane} vs {headsetCamera.farClipPlane}): its values are swapped too");
+            string tag = $" ({later.name})";
+            if (!sameView)
+            {
+                AddMatrix("view" + tag, viewLeft, viewRight);
+                AddMatrix("view inverse" + tag, viewLeft.inverse, viewRight.inverse);
+            }
+            AddMatrix("projection" + tag, projectionLeft, projectionRight);
+            AddMatrix("projection inverse" + tag, projectionLeft.inverse, projectionRight.inverse);
+            for (int flip = 0; flip < 2; flip++)
+            {
+                Matrix4x4 gpuLeft = GL.GetGPUProjectionMatrix(projectionLeft, flip == 0);
+                Matrix4x4 gpuRight = GL.GetGPUProjectionMatrix(projectionRight, flip == 0);
+                AddMatrix("GPU projection" + tag, gpuLeft, gpuRight);
+                AddMatrix("view-projection" + tag, gpuLeft * viewLeft, gpuRight * viewRight);
+            }
+        }
+
+        private static bool Same(Matrix4x4 first, Matrix4x4 second)
+        {
+            for (int index = 0; index < 16; index++)
+            {
+                if (Mathf.Abs(first[index] - second[index]) > 1e-6f * Mathf.Max(1f, Mathf.Abs(second[index])))
+                    return false;
+            }
+            return true;
         }
 
         // In Unity's memory order (columns) and transposed
