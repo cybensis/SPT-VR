@@ -40,6 +40,9 @@ namespace TarkovVR.Source.Graphics
         // The right eye from the left eye's live view and the eyes' fixed offset (taken while both still rendered); false = Unity's
         // right-eye matrix, which a camera drawing only the left eye may not keep up to date
         public static bool rightFromLeft = true;
+        // The right view handed to the headset with the pose it was drawn from (the left view's + the eyes' offset): the pose Unity submits
+        // for a view no camera drew can be another, and the compositor turns the image by the difference
+        public static bool fixRightPose = true;
         public static float logInterval = 2f;            // s
 
         private const int StartEvent = 1000, EndEvent = 2000, FrameSlots = 8, MaxPatterns = 64;
@@ -174,6 +177,8 @@ namespace TarkovVR.Source.Graphics
             headsetCamera.AddCommandBuffer(CameraEvent.AfterEverything, endBuffer);
             Camera.onPreCull += OnPreCull;
             havePrevious = false;
+            TarkovVR.Source.XR.OpenXRFrameWatch.TakePoseStats();
+            TarkovVR.Source.XR.OpenXRFrameWatch.SetFixRightPose(fixRightPose);
             SR_SetEnabled(1);
             SR_Stats(new double[(int)Stat.Count + 1], (int)Stat.Count + 1);
             SR_PatternHits(new double[MaxPatterns], MaxPatterns);
@@ -187,6 +192,7 @@ namespace TarkovVR.Source.Graphics
             if (!Active) return;
             Active = false;
             SR_SetEnabled(0);
+            TarkovVR.Source.XR.OpenXRFrameWatch.SetFixRightPose(false);
             Camera.onPreCull -= OnPreCull;
             if (headsetCamera != null)
             {
@@ -360,6 +366,9 @@ namespace TarkovVR.Source.Graphics
             unityRightDriftMax = 0f;
             unityRightStaleFrames = 0;
             rightFrames = 0;
+            double[] pose = TarkovVR.Source.XR.OpenXRFrameWatch.TakePoseStats();
+            Plugin.MyLog.LogInfo($"[StereoReplay] the right eye's submitted pose {(fixRightPose ? "set from the left eye's" : "left as Unity's")}: {pose[0]:0} frames; Unity's was up to "
+                + $"{pose[1]:0.0} cm / {pose[2]:0.0} deg off the one it was drawn from, {pose[3]:0} frames by more than 0.5 cm or 0.5 deg");
         }
     }
 }

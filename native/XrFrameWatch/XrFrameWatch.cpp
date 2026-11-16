@@ -9,6 +9,7 @@
 // Native because xrEndFrame and the swapchain calls run on Unity's render thread. Struct layouts follow the OpenXR spec
 // (checked against openxr_reflection_full.h in the OpenXR package): x64, natural alignment.
 #include <windows.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -255,9 +256,93 @@ static XrResult OurReleaseImage(XrSwapchain swapchain, const void* releaseInfo)
     return result;
 }
 
+//------------------------------------------------------------------------------------------------------------------------------------
+// The right eye's submitted pose, for SPT-VR's stereo replay: Unity then draws only the left eye, and the pose it submits for the right
+// view need not be the one the replay drew it from (the compositor turns the image by the difference). While on, view 1's pose = view
+// 0's + the eyes' offset, taken from the frames before (Unity drew both).
+
+static bool fixRightPose;
+static bool haveEyeOffset;
+static XrPose eyeOffset;                // the right eye in the left eye's frame
+static double poseStats[4];             // frames fixed, largest position / angle difference (cm / deg), frames off by > 0.5 cm or 0.5 deg
+static XrProjectionView fixedViews[2];
+static XrLayerProjection fixedLayer;
+static const XrLayerHeader* fixedLayers[16];
+static XrFrameEndInfo fixedInfo;
+
+static XrQuaternion QMul(const XrQuaternion& a, const XrQuaternion& b)
+{
+    return { a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z };
+}
+static XrQuaternion QConj(const XrQuaternion& q) { return { -q.x, -q.y, -q.z, q.w }; }
+static XrVector3 QRot(const XrQuaternion& q, const XrVector3& v)
+{
+    XrVector3 t = { 2.0f * (q.y * v.z - q.z * v.y), 2.0f * (q.z * v.x - q.x * v.z), 2.0f * (q.x * v.y - q.y * v.x) };
+    return { v.x + q.w * t.x + (q.y * t.z - q.z * t.y), v.y + q.w * t.y + (q.z * t.x - q.x * t.z), v.z + q.w * t.z + (q.x * t.y - q.y * t.x) };
+}
+static XrPose Relative(const XrPose& from, const XrPose& to)
+{
+    XrQuaternion inverse = QConj(from.orientation);
+    XrVector3 delta = { to.position.x - from.position.x, to.position.y - from.position.y, to.position.z - from.position.z };
+    return { QMul(inverse, to.orientation), QRot(inverse, delta) };
+}
+static XrPose Compose(const XrPose& base, const XrPose& offset)
+{
+    XrVector3 moved = QRot(base.orientation, offset.position);
+    return { QMul(base.orientation, offset.orientation), { base.position.x + moved.x, base.position.y + moved.y, base.position.z + moved.z } };
+}
+
+// The frame to submit: as Unity made it, or with view 1's pose fixed (under the stats lock)
+static const XrFrameEndInfo* RightPoseFixed(const XrFrameEndInfo* frameEndInfo)
+{
+    if (!frameEndInfo || !frameEndInfo->layers || frameEndInfo->layerCount > 16)
+        return frameEndInfo;
+    for (uint32_t layer = 0; layer < frameEndInfo->layerCount; layer++)
+    {
+        const XrLayerHeader* header = frameEndInfo->layers[layer];
+        if (!header || header->type != XR_TYPE_COMPOSITION_LAYER_PROJECTION)
+            continue;
+        const XrLayerProjection* projection = (const XrLayerProjection*)header;
+        if (projection->viewCount != 2 || !projection->views)
+            return frameEndInfo;
+        if (!fixRightPose)
+        {
+            eyeOffset = Relative(projection->views[0].pose, projection->views[1].pose);
+            haveEyeOffset = true;
+            return frameEndInfo;
+        }
+        if (!haveEyeOffset)
+            return frameEndInfo;
+        XrPose fixed = Compose(projection->views[0].pose, eyeOffset);
+        const XrPose& submitted = projection->views[1].pose;
+        float dx = fixed.position.x - submitted.position.x, dy = fixed.position.y - submitted.position.y, dz = fixed.position.z - submitted.position.z;
+        double centimetres = sqrt(dx * dx + dy * dy + dz * dz) * 100.0;
+        double dot = fabs(fixed.orientation.x * submitted.orientation.x + fixed.orientation.y * submitted.orientation.y
+            + fixed.orientation.z * submitted.orientation.z + fixed.orientation.w * submitted.orientation.w);
+        double degrees = 2.0 * acos(dot < 1.0 ? dot : 1.0) * 57.29577951;
+        poseStats[0] += 1;
+        if (centimetres > poseStats[1]) poseStats[1] = centimetres;
+        if (degrees > poseStats[2]) poseStats[2] = degrees;
+        if (centimetres > 0.5 || degrees > 0.5) poseStats[3] += 1;
+        fixedViews[0] = projection->views[0];
+        fixedViews[1] = projection->views[1];
+        fixedViews[1].pose = fixed;
+        fixedLayer = *projection;
+        fixedLayer.views = fixedViews;
+        for (uint32_t index = 0; index < frameEndInfo->layerCount; index++)
+            fixedLayers[index] = index == layer ? (const XrLayerHeader*)&fixedLayer : frameEndInfo->layers[index];
+        fixedInfo = *frameEndInfo;
+        fixedInfo.layers = fixedLayers;
+        return &fixedInfo;
+    }
+    return frameEndInfo;
+}
+
 static XrResult OurEndFrame(XrSession session, const XrFrameEndInfo* frameEndInfo)
 {
     endFrameThread = (LONG)GetCurrentThreadId();
+    const XrFrameEndInfo* submit = frameEndInfo;
     Lock();
     __try
     {
@@ -325,15 +410,17 @@ static XrResult OurEndFrame(XrSession session, const XrFrameEndInfo* frameEndInf
                 firstProjection = false;
             }
         }
+        submit = RightPoseFixed(frameEndInfo);
     }
     __except (EXCEPTION_EXECUTE_HANDLER)
     {
+        submit = frameEndInfo;
     }
     frameTakeCount = 0;
     Unlock();
 
     double start = NowMs();
-    XrResult result = runtimeEndFrame(session, frameEndInfo);
+    XrResult result = runtimeEndFrame(session, submit);
     double took = NowMs() - start;
     Lock();
     AddTime(StatEndFrameMs, StatEndFrameMax, took);
@@ -497,6 +584,29 @@ extern "C" __declspec(dllexport) void* XrWatch_ViewAcquiredImage(int view)
     }
     Unlock();
     return texture;
+}
+
+// The right view's submitted pose from the left one + the eyes' offset (stereo replay), on / off
+extern "C" __declspec(dllexport) void XrWatch_SetFixRightPose(int on)
+{
+    Lock();
+    fixRightPose = on != 0;
+    Unlock();
+}
+
+// Since the last call (then zeroed): frames fixed, largest position / angle difference (cm / deg), frames off by > 0.5 cm or 0.5 deg
+extern "C" __declspec(dllexport) int XrWatch_PoseStats(double* out, int max)
+{
+    if (!out || max <= 0)
+        return 0;
+    Lock();
+    int count = max < 4 ? max : 4;
+    for (int index = 0; index < count; index++)
+        out[index] = poseStats[index];
+    for (int index = 0; index < 4; index++)
+        poseStats[index] = 0;
+    Unlock();
+    return count;
 }
 
 // Called (render thread) with a view's image just before it goes back to the runtime; null = none

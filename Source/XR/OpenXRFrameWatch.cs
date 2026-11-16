@@ -19,6 +19,24 @@ namespace TarkovVR.Source.XR
         [DllImport("SPTVRXrFrameWatch")] private static extern int XrWatch_Detail(byte[] text, int max);
         [DllImport("SPTVRXrFrameWatch")] private static extern void XrWatch_DescribeNext(int frames);
         [DllImport("SPTVRXrFrameWatch")] private static extern int XrWatch_Threads(int[] threads, int max);
+        [DllImport("SPTVRXrFrameWatch")] private static extern void XrWatch_SetFixRightPose(int on);
+        [DllImport("SPTVRXrFrameWatch")] private static extern int XrWatch_PoseStats(double[] stats, int max);
+
+        // The stereo replay: the right view submitted with the left view's pose + the eyes' offset (the pose it was drawn from)
+        public static void SetFixRightPose(bool on)
+        {
+            if (Loaded)
+                XrWatch_SetFixRightPose(on ? 1 : 0);
+        }
+
+        // Since the last call: frames fixed, largest position / angle difference from Unity's pose (cm / deg), frames > 0.5 cm or 0.5 deg off
+        public static double[] TakePoseStats()
+        {
+            double[] stats = new double[4];
+            if (Loaded)
+                XrWatch_PoseStats(stats, stats.Length);
+            return stats;
+        }
 
         // The totals the watcher keeps, in its order (XrFrameWatch.cpp, enum Stat)
         public enum Stat
