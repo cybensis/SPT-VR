@@ -33,7 +33,8 @@ namespace TarkovVR.Source.Graphics
             CbNoOverwrite, OtherDiscards, ViewsSwapped, CopiesSwapped, LeftUnswappable, NestedLists, Predication, CopiedNow,
             CopiedAtRelease, WindowMs, ExecuteMs, ScanMs, CaptureMs,
             ImmediateDrawsOutside, ImmediateListsOutside, WorkTakenBack, RightTakenAtEnd, SameImageTwice,
-            EyeDrawsOutside, EyeCopiesOutside, WindowsNoEyeWrite, EndedAtHandBack, EndedEarly, Rehooked, Count
+            EyeDrawsOutside, EyeCopiesOutside, WindowsNoEyeWrite, EndedAtHandBack, EndedEarly,
+            DynamicBuffers, DynamicSegments, DynamicViews, OtherUpdates, Rehooked, Count
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
@@ -369,7 +370,9 @@ namespace TarkovVR.Source.Graphics
                 + $"(stopped by an unrecordable call {totals[(int)Stat.Aborted]:0}, last at vtable slot {totals[(int)Stat.Count]:0}; unpaired {totals[(int)Stat.Unpaired]:0}; finish failed {totals[(int)Stat.FinishFailed]:0}), "
                 + $"no eye images {totals[(int)Stat.NoImages]:0}. A replay: {PerWindow(Stat.Mirrored):0} state calls, {PerWindow(Stat.Draws):0} draws; constant uploads {PerWindow(Stat.CbMaps):0} mapped + "
                 + $"{PerWindow(Stat.CbUpdates):0} updated, {PerWindow(Stat.CbPatched):0} with the right eye's values; mapped without discard {PerWindow(Stat.CbNoOverwrite):0}; other buffers discarded "
-                + $"{PerWindow(Stat.OtherDiscards):0}; left image views swapped {PerWindow(Stat.ViewsSwapped):0}, copies {PerWindow(Stat.CopiesSwapped):0}, unswappable {PerWindow(Stat.LeftUnswappable):0}; "
+                + $"{totals[(int)Stat.OtherDiscards]:0} in all (dynamic vertex/index buffers drawn from snapshots: {PerWindow(Stat.DynamicBuffers):0.0} a replay, "
+                + $"split by a discard {totals[(int)Stat.DynamicSegments]:0} times in all; dynamic buffers read through views, not snapshotted, {totals[(int)Stat.DynamicViews]:0}; "
+                + $"other resources updated in the pass {totals[(int)Stat.OtherUpdates]:0}); left image views swapped {PerWindow(Stat.ViewsSwapped):0}, copies {PerWindow(Stat.CopiesSwapped):0}, unswappable {PerWindow(Stat.LeftUnswappable):0}; "
                 + $"nested command lists {PerWindow(Stat.NestedLists):0}, predication {PerWindow(Stat.Predication):0}; right eye copied at once {totals[(int)Stat.CopiedNow]:0} / at hand-back "
                 + $"{totals[(int)Stat.CopiedAtRelease]:0} (its image already taken at the end of the pass {totals[(int)Stat.RightTakenAtEnd]:0}, the same image twice in a row {totals[(int)Stat.SameImageTwice]:0}); Unity's own right-eye view: up to {unityRightDriftMax * 100f:0.0} cm off the right eye, unchanged frame to frame {unityRightStaleFrames} of {rightFrames}, used {(rightFromLeft ? "no" : "yes")}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms, replay {PerWindow(Stat.ExecuteMs):0.00}, value search {PerWindow(Stat.ScanMs):0.00}, "
                 + $"state copy {PerWindow(Stat.CaptureMs):0.00}; the runtime's draw/copy entries taken back {PerWindow(Stat.WorkTakenBack):0} times. Outside the pass: "

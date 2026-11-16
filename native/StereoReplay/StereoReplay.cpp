@@ -55,6 +55,7 @@ enum Stat
     // where the draws went: the immediate context outside the window, Unity's own deferred contexts (graphics jobs) in and out of it
     StImmediateDrawsOutside, StImmediateListsOutside, StWorkTakenBack, StRightTakenAtEnd, StSameImageTwice,
     StEyeDrawsOutside, StEyeCopiesOutside, StWindowsNoEyeWrite, StEndedAtHandBack, StEndedEarly,
+    StDynamicBuffers, StDynamicSegments, StDynamicViews, StOtherUpdates,
     StRehooked, StCount
 };
 static double stats[StCount];
@@ -345,6 +346,18 @@ static void* SwapView(void* view, ViewKind kind)
     ID3D11Resource* resource = nullptr;
     ((ID3D11View*)view)->GetResource(&resource);
     bool left = resource && IsLeft(resource);
+    if (resource && recording)
+    {
+        D3D11_RESOURCE_DIMENSION dimension;
+        resource->GetType(&dimension);
+        if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER)
+        {
+            D3D11_BUFFER_DESC description;
+            ((ID3D11Buffer*)resource)->GetDesc(&description);
+            if (description.Usage == D3D11_USAGE_DYNAMIC)
+                stats[StDynamicViews] += 1;
+        }
+    }
     if (resource)
         resource->Release();
     void* value = view;
@@ -469,6 +482,136 @@ static void RestoreUploads()
 
 #define ORIGINAL(slot, signature) ((signature)(privateMode ? runtimeTable[slot] : original[slot]))
 
+//------------------------------------------------------------------------------------------------------------------------------------
+// Dynamic vertex / index buffers. The replay runs after the pass and reads a dynamic buffer as it is THEN: a draw recorded before Unity
+// discarded it (its ring of quads filling up) would read the new contents - a full-screen pass drawn with other vertices. So the replay
+// draws from snapshots: each dynamic buffer bound in a window gets one, filled on the GPU with the buffer's contents right before Unity
+// discards it (a fresh one for what follows) and at the end of the window.
+
+static bool snapshotDynamicBuffers = true;
+struct DynamicTrack { ID3D11Buffer* buffer; ID3D11Buffer* snapshot; };
+struct PooledSnapshot { unsigned long long key; ID3D11Buffer* buffer; };
+static std::vector<DynamicTrack> dynamicTracks;
+static std::unordered_map<unsigned long long, std::vector<ID3D11Buffer*>> snapshotPool;
+static std::vector<PooledSnapshot> snapshotsInUse;
+// what the replay has bound (the app's buffers, not the snapshots), to rebind a fresh snapshot after a discard
+static ID3D11Buffer* replayVertex[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+static UINT replayStride[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+static UINT replayOffset[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+static ID3D11Buffer* replayIndex;
+static DXGI_FORMAT replayIndexFormat;
+static UINT replayIndexOffset;
+
+static ID3D11Buffer* NewSnapshot(const D3D11_BUFFER_DESC& source)
+{
+    unsigned long long key = ((unsigned long long)source.ByteWidth << 32) ^ ((unsigned long long)source.BindFlags << 8)
+        ^ ((unsigned long long)source.StructureByteStride << 20) ^ (unsigned long long)source.MiscFlags;
+    std::vector<ID3D11Buffer*>& available = snapshotPool[key];
+    ID3D11Buffer* snapshot = nullptr;
+    if (!available.empty())
+    {
+        snapshot = available.back();
+        available.pop_back();
+    }
+    else
+    {
+        D3D11_BUFFER_DESC description = source;
+        description.Usage = D3D11_USAGE_DEFAULT;
+        description.CPUAccessFlags = 0;
+        if (FAILED(device->CreateBuffer(&description, nullptr, &snapshot)))
+            snapshot = nullptr;
+    }
+    if (snapshot)
+        snapshotsInUse.push_back({ key, snapshot });
+    return snapshot;
+}
+
+static DynamicTrack* TrackOf(ID3D11Buffer* buffer)
+{
+    for (DynamicTrack& track : dynamicTracks)
+    {
+        if (track.buffer == buffer)
+            return &track;
+    }
+    return nullptr;
+}
+
+// What the replay binds for this buffer: itself, or (a dynamic one) its current snapshot
+static ID3D11Buffer* ReplayBuffer(ID3D11Buffer* buffer)
+{
+    if (!buffer || !snapshotDynamicBuffers)
+        return buffer;
+    DynamicTrack* track = TrackOf(buffer);
+    if (track)
+        return track->snapshot;
+    CacheEntry& entry = viewCache[Hash(buffer)];
+    if (entry.key == buffer)
+        return (ID3D11Buffer*)entry.value;
+    D3D11_BUFFER_DESC description;
+    buffer->GetDesc(&description);
+    if (description.Usage != D3D11_USAGE_DYNAMIC || (description.BindFlags & D3D11_BIND_CONSTANT_BUFFER))
+    {
+        entry.key = buffer;
+        entry.value = buffer;
+        return buffer;
+    }
+    ID3D11Buffer* snapshot = NewSnapshot(description);
+    if (!snapshot)
+        return buffer;
+    buffer->AddRef();
+    dynamicTracks.push_back({ buffer, snapshot });
+    stats[StDynamicBuffers] += 1;
+    return snapshot;
+}
+
+// Unity is about to discard it: its snapshot gets what the replay's draws so far read, the rest of the window draws from a fresh one
+static void BeforeDynamicDiscard(ID3D11Buffer* buffer)
+{
+    DynamicTrack* track = TrackOf(buffer);
+    if (!track)
+        return;
+    ORIGINAL(SCopyResource, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, ID3D11Resource*))(immediate, track->snapshot, buffer);
+    D3D11_BUFFER_DESC description;
+    buffer->GetDesc(&description);
+    ID3D11Buffer* next = NewSnapshot(description);
+    if (!next)
+    {
+        Abort(SMap);
+        return;
+    }
+    track->snapshot = next;
+    stats[StDynamicSegments] += 1;
+    for (UINT slot = 0; slot < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT; slot++)
+    {
+        if (replayVertex[slot] == buffer)
+            deferred->IASetVertexBuffers(slot, 1, &next, &replayStride[slot], &replayOffset[slot]);
+    }
+    if (replayIndex == buffer)
+        deferred->IASetIndexBuffer(next, replayIndexFormat, replayIndexOffset);
+}
+
+// The window's end: the last snapshots get the buffers' current contents (before the replay runs), the tracking goes
+static void FinishSnapshots(bool fill)
+{
+    for (DynamicTrack& track : dynamicTracks)
+    {
+        if (fill)
+            ORIGINAL(SCopyResource, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, ID3D11Resource*))(immediate, track.snapshot, track.buffer);
+        track.buffer->Release();
+    }
+    dynamicTracks.clear();
+    memset(replayVertex, 0, sizeof(replayVertex));
+    replayIndex = nullptr;
+}
+
+// After the replay is queued: the snapshots back in the pool (the next use is queued after this replay)
+static void RecycleSnapshots()
+{
+    for (const PooledSnapshot& pooled : snapshotsInUse)
+        snapshotPool[pooled.key].push_back(pooled.buffer);
+    snapshotsInUse.clear();
+}
+
 typedef void (STDMETHODCALLTYPE* PfnSetBuffers)(Ctx*, UINT, UINT, ID3D11Buffer* const*);
 typedef void (STDMETHODCALLTYPE* PfnSetSamplers)(Ctx*, UINT, UINT, ID3D11SamplerState* const*);
 typedef void (STDMETHODCALLTYPE* PfnSetViews)(Ctx*, UINT, UINT, ID3D11ShaderResourceView* const*);
@@ -572,12 +715,33 @@ static void STDMETHODCALLTYPE OurIASetInputLayout(Ctx* self, ID3D11InputLayout* 
 static void STDMETHODCALLTYPE OurIASetVertexBuffers(Ctx* self, UINT start, UINT count, ID3D11Buffer* const* buffers, const UINT* strides, const UINT* offsets)
 {
     ORIGINAL(SIASetVertexBuffers, void (STDMETHODCALLTYPE*)(Ctx*, UINT, UINT, ID3D11Buffer* const*, const UINT*, const UINT*))(self, start, count, buffers, strides, offsets);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->IASetVertexBuffers(start, count, buffers, strides, offsets); }
+    if (Mirroring(self))
+    {
+        stats[StMirrored] += 1;
+        ID3D11Buffer* replay[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+        bool fits = buffers && start + count <= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
+        for (UINT index = 0; fits && index < count; index++)
+        {
+            UINT slot = start + index;
+            replayVertex[slot] = buffers[index];
+            replayStride[slot] = strides ? strides[index] : 0;
+            replayOffset[slot] = offsets ? offsets[index] : 0;
+            replay[index] = ReplayBuffer(buffers[index]);
+        }
+        deferred->IASetVertexBuffers(start, count, fits ? replay : buffers, strides, offsets);
+    }
 }
 static void STDMETHODCALLTYPE OurIASetIndexBuffer(Ctx* self, ID3D11Buffer* buffer, DXGI_FORMAT format, UINT offset)
 {
     ORIGINAL(SIASetIndexBuffer, void (STDMETHODCALLTYPE*)(Ctx*, ID3D11Buffer*, DXGI_FORMAT, UINT))(self, buffer, format, offset);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->IASetIndexBuffer(buffer, format, offset); }
+    if (Mirroring(self))
+    {
+        stats[StMirrored] += 1;
+        replayIndex = buffer;
+        replayIndexFormat = format;
+        replayIndexOffset = offset;
+        deferred->IASetIndexBuffer(ReplayBuffer(buffer), format, offset);
+    }
 }
 static void STDMETHODCALLTYPE OurIASetPrimitiveTopology(Ctx* self, D3D11_PRIMITIVE_TOPOLOGY topology)
 {
@@ -778,7 +942,13 @@ static void STDMETHODCALLTYPE OurExecuteCommandList(Ctx* self, ID3D11CommandList
 static void STDMETHODCALLTYPE OurClearState(Ctx* self)
 {
     ORIGINAL(SClearState, void (STDMETHODCALLTYPE*)(Ctx*))(self);
-    if (Mirroring(self)) { stats[StMirrored] += 1; deferred->ClearState(); }
+    if (Mirroring(self))
+    {
+        stats[StMirrored] += 1;
+        memset(replayVertex, 0, sizeof(replayVertex));
+        replayIndex = nullptr;
+        deferred->ClearState();
+    }
 }
 static void STDMETHODCALLTYPE OurDiscardResource(Ctx* self, ID3D11Resource* resource)
 {
@@ -826,6 +996,13 @@ static void STDMETHODCALLTYPE OurClearView(Ctx* self, ID3D11View* view, const FL
 // slow), which goes to the driver at Unmap and, with the right eye's values, into the replay
 static HRESULT STDMETHODCALLTYPE OurMap(Ctx* self, ID3D11Resource* resource, UINT subresource, D3D11_MAP type, UINT flags, D3D11_MAPPED_SUBRESOURCE* mapped)
 {
+    if (type == D3D11_MAP_WRITE_DISCARD && self == immediate && recording && !aborted && resource && !dynamicTracks.empty())
+    {
+        D3D11_RESOURCE_DIMENSION dimension;
+        resource->GetType(&dimension);
+        if (dimension == D3D11_RESOURCE_DIMENSION_BUFFER)
+            BeforeDynamicDiscard((ID3D11Buffer*)resource);
+    }
     HRESULT result = ORIGINAL(SMap, HRESULT (STDMETHODCALLTYPE*)(Ctx*, ID3D11Resource*, UINT, D3D11_MAP, UINT, D3D11_MAPPED_SUBRESOURCE*))(
         self, resource, subresource, type, flags, mapped);
     if (!Mirroring(self) || FAILED(result) || !mapped || !resource)
@@ -901,7 +1078,11 @@ static void UpdateConstants(ID3D11Resource* resource, UINT subresource, const D3
     UINT size;
     bool dynamic;
     if (!data || !ConstantBufferSize(resource, &size, &dynamic))
+    {
+        if (data)
+            stats[StOtherUpdates] += 1;
         return;
+    }
     UINT bytes = box ? box->right - box->left : size;
     if (bytes == 0 || bytes > size)
         return;
@@ -1280,13 +1461,24 @@ static void CopyState()
     UINT strides[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = {};
     UINT offsets[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT] = {};
     immediate1->IAGetVertexBuffers(0, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT, vertexBuffers, strides, offsets);
-    deferred->IASetVertexBuffers(0, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT, vertexBuffers, strides, offsets);
+    ID3D11Buffer* replayBuffers[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+    for (UINT slot = 0; slot < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT; slot++)
+    {
+        replayVertex[slot] = vertexBuffers[slot];
+        replayStride[slot] = strides[slot];
+        replayOffset[slot] = offsets[slot];
+        replayBuffers[slot] = ReplayBuffer(vertexBuffers[slot]);
+    }
+    deferred->IASetVertexBuffers(0, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT, replayBuffers, strides, offsets);
     ReleaseAll(vertexBuffers, D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT);
     ID3D11Buffer* indexBuffer = nullptr;
     DXGI_FORMAT indexFormat = DXGI_FORMAT_UNKNOWN;
     UINT indexOffset = 0;
     immediate1->IAGetIndexBuffer(&indexBuffer, &indexFormat, &indexOffset);
-    deferred->IASetIndexBuffer(indexBuffer, indexFormat, indexOffset);
+    replayIndex = indexBuffer;
+    replayIndexFormat = indexFormat;
+    replayIndexOffset = indexOffset;
+    deferred->IASetIndexBuffer(ReplayBuffer(indexBuffer), indexFormat, indexOffset);
     if (indexBuffer) indexBuffer->Release();
     D3D11_PRIMITIVE_TOPOLOGY topology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
     immediate1->IAGetPrimitiveTopology(&topology);
@@ -1436,17 +1628,23 @@ static void EndWindowInto(bool drop, void* rightImage)
     HRESULT result = deferred->FinishCommandList(FALSE, &list);
     if (FAILED(result) || !list)
     {
+        FinishSnapshots(false);
+        RecycleSnapshots();
         stats[StFinishFailed] += 1;
         return;
     }
     if (drop || aborted)
     {
+        FinishSnapshots(false);
+        RecycleSnapshots();
         list->Release();
         stats[StDropped] += 1;
         return;
     }
+    FinishSnapshots(true);
     double start = NowMs();
     immediate1->ExecuteCommandList(list, TRUE);
+    RecycleSnapshots();
     stats[StExecuteMs] += NowMs() - start;
     list->Release();
     void* right = rightImage;
