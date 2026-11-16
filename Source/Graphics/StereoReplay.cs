@@ -18,10 +18,11 @@ namespace TarkovVR.Source.Graphics
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Init(IntPtr anyD3D11Resource);
         [DllImport("SPTVRStereoReplay")] private static extern void SR_SetEnabled(int on);
         [DllImport("SPTVRStereoReplay")] private static extern IntPtr SR_GetRenderEventFunc();
-        [DllImport("SPTVRStereoReplay")] private static extern void SR_SetFrame(int slot, int count, int[] lengths, float[] tolerances, float[] left, float[] right);
+        [DllImport("SPTVRStereoReplay")] private static extern void SR_SetFrame(int slot, int count, int endEvent, int[] lengths, float[] tolerances, float[] left, float[] right);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Stats(double[] totals, int max);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_PatternHits(double[] hits, int max);
         [DllImport("SPTVRStereoReplay")] private static extern int SR_Info(byte[] text, int max);
+        [DllImport("SPTVRStereoReplay")] private static extern int SR_HookReport(byte[] text, int max);
 
         // The native counters, in its order (StereoReplay.cpp, enum Stat)
         private enum Stat
@@ -29,7 +30,7 @@ namespace TarkovVR.Source.Graphics
             Windows, Dropped, Unpaired, NoImages, Aborted, FinishFailed, Mirrored, Draws, CbMaps, CbPatched, CbUpdates,
             CbNoOverwrite, OtherDiscards, ViewsSwapped, CopiesSwapped, LeftUnswappable, NestedLists, Predication, CopiedNow,
             CopiedAtRelease, WindowMs, ExecuteMs, ScanMs, CaptureMs,
-            ImmediateDrawsOutside, ImmediateListsOutside, DeferredDrawsInside, DeferredDrawsOutside, DeferredLists, Count
+            ImmediateDrawsOutside, ImmediateListsOutside, DeferredDrawsInside, DeferredDrawsOutside, DeferredLists, Rehooked, Count
         }
 
         public static float matrixTolerance = 2e-5f;      // relative (absolute below 1): Unity's own products round differently from ours
@@ -51,6 +52,11 @@ namespace TarkovVR.Source.Graphics
         private static Camera headsetCamera;
         private static CommandBuffer endBuffer;
         private static StereoTargetEyeMask savedTargetEye;
+        // The cameras that draw into the eye after the headset camera (the UI camera): left eye only too, else their right-eye pass
+        // copies in the headset camera's last (left) picture. The replay ends after the last of them that draws this frame.
+        private static readonly System.Collections.Generic.List<Camera> laterCameras = new System.Collections.Generic.List<Camera>();
+        private static readonly System.Collections.Generic.List<StereoTargetEyeMask> laterSavedEyes = new System.Collections.Generic.List<StereoTargetEyeMask>();
+        private static readonly System.Collections.Generic.List<CommandBuffer> laterEndBuffers = new System.Collections.Generic.List<CommandBuffer>();
         private static bool savedOcclusionMesh, savedFoveated;
         private static int frameSlot;
         private static Matrix4x4[] previousLeft = new Matrix4x4[2], previousRight = new Matrix4x4[2];
@@ -155,6 +161,7 @@ namespace TarkovVR.Source.Graphics
             endBuffer = new CommandBuffer { name = "SPT-VR stereo replay end" };
             endBuffer.IssuePluginEvent(eventFunction, EndEvent);
             headsetCamera.AddCommandBuffer(CameraEvent.AfterEverything, endBuffer);
+            FindLaterCameras();
             Camera.onPreCull += OnPreCull;
             havePrevious = false;
             SR_SetEnabled(1);
@@ -179,10 +186,56 @@ namespace TarkovVR.Source.Graphics
             }
             endBuffer?.Release();
             endBuffer = null;
+            for (int index = 0; index < laterCameras.Count; index++)
+            {
+                Camera later = laterCameras[index];
+                if (later == null) continue;
+                later.RemoveCommandBuffer(CameraEvent.AfterEverything, laterEndBuffers[index]);
+                later.stereoTargetEye = laterSavedEyes[index];
+            }
+            foreach (CommandBuffer buffer in laterEndBuffers) buffer.Release();
+            laterCameras.Clear();
+            laterSavedEyes.Clear();
+            laterEndBuffers.Clear();
             XRSettings.useOcclusionMesh = savedOcclusionMesh;
             if (savedFoveated) FoveatedMask.SetEnabled(true);
             headsetCamera = null;
             Plugin.MyLog.LogInfo($"[StereoReplay] OFF: {reason}");
+        }
+
+        // Disabled ones too (the UI camera is switched off while no UI is in view), highest depth last; each its own END event
+        private static void FindLaterCameras()
+        {
+            foreach (Camera candidate in UnityEngine.Object.FindObjectsOfType<Camera>(true))
+            {
+                if (candidate == headsetCamera || candidate.targetTexture != null || candidate.stereoTargetEye == StereoTargetEyeMask.None
+                    || candidate.depth <= headsetCamera.depth || laterCameras.Count >= 15)
+                    continue;
+                laterCameras.Add(candidate);
+            }
+            laterCameras.Sort((first, second) => first.depth.CompareTo(second.depth));
+            for (int index = 0; index < laterCameras.Count; index++)
+            {
+                Camera later = laterCameras[index];
+                laterSavedEyes.Add(later.stereoTargetEye);
+                later.stereoTargetEye = StereoTargetEyeMask.Left;
+                CommandBuffer buffer = new CommandBuffer { name = "SPT-VR stereo replay end" };
+                buffer.IssuePluginEvent(eventFunction, EndEvent + 1 + index);
+                later.AddCommandBuffer(CameraEvent.AfterEverything, buffer);
+                laterEndBuffers.Add(buffer);
+                Plugin.MyLog.LogInfo($"[StereoReplay] '{later.name}' (depth {later.depth}) draws after it: left eye only too, the replay waits for it when it draws");
+            }
+        }
+
+        // The END that closes this frame's recording: the last camera drawing into the eye this frame
+        private static int EndEventThisFrame()
+        {
+            for (int index = laterCameras.Count - 1; index >= 0; index--)
+            {
+                if (laterCameras[index] != null && laterCameras[index].isActiveAndEnabled)
+                    return EndEvent + 1 + index;
+            }
+            return EndEvent;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------
@@ -226,7 +279,7 @@ namespace TarkovVR.Source.Graphics
             AddMatrix("eye to world", worldToEyeLeft.inverse, worldToEyeRight.inverse);
             AddVector("eye position", viewLeft.inverse.GetColumn(3), viewRight.inverse.GetColumn(3));
 
-            SR_SetFrame(frameSlot, patternCount, lengths, tolerances, leftValues, rightValues);
+            SR_SetFrame(frameSlot, patternCount, EndEventThisFrame(), lengths, tolerances, leftValues, rightValues);
             if (combinedCulling)
                 culling.cullingMatrix = CombinedCulling(culling, viewLeft, viewRight, projectionLeft, projectionRight);
             GL.IssuePluginEvent(eventFunction, StartEvent + frameSlot);
@@ -311,6 +364,10 @@ namespace TarkovVR.Source.Graphics
             SR_Stats(totals, totals.Length);
             double[] hits = new double[MaxPatterns];
             SR_PatternHits(hits, MaxPatterns);
+            byte[] report = new byte[4096];
+            int reportLength = SR_HookReport(report, report.Length);
+            if (reportLength > 0)
+                Plugin.MyLog.LogWarning($"[StereoReplay] hooks taken: {Encoding.ASCII.GetString(report, 0, reportLength).Trim()}");
             double windows = Math.Max(1.0, totals[(int)Stat.Windows]);
             double PerWindow(Stat stat) => totals[(int)stat] / windows;
             StringBuilder found = new StringBuilder();
@@ -325,7 +382,7 @@ namespace TarkovVR.Source.Graphics
                 + $"{PerWindow(Stat.CbUpdates):0} updated, {PerWindow(Stat.CbPatched):0} with the right eye's values; mapped without discard {PerWindow(Stat.CbNoOverwrite):0}; other buffers discarded "
                 + $"{PerWindow(Stat.OtherDiscards):0}; left image views swapped {PerWindow(Stat.ViewsSwapped):0}, copies {PerWindow(Stat.CopiesSwapped):0}, unswappable {PerWindow(Stat.LeftUnswappable):0}; "
                 + $"nested command lists {PerWindow(Stat.NestedLists):0}, predication {PerWindow(Stat.Predication):0}; right eye copied at once {totals[(int)Stat.CopiedNow]:0} / at hand-back "
-                + $"{totals[(int)Stat.CopiedAtRelease]:0}. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms, replay {PerWindow(Stat.ExecuteMs):0.00}, value search {PerWindow(Stat.ScanMs):0.00}, "
+                + $"{totals[(int)Stat.CopiedAtRelease]:0}; our hooks put back {totals[(int)Stat.Rehooked]:0} times. Render thread a replay: pass {PerWindow(Stat.WindowMs):0.00} ms, replay {PerWindow(Stat.ExecuteMs):0.00}, value search {PerWindow(Stat.ScanMs):0.00}, "
                 + $"state copy {PerWindow(Stat.CaptureMs):0.00}. Draws a frame elsewhere: main context outside the pass {PerWindow(Stat.ImmediateDrawsOutside):0}, "
                 + $"Unity's job contexts inside the pass {PerWindow(Stat.DeferredDrawsInside):0} / outside {PerWindow(Stat.DeferredDrawsOutside):0}, job command lists "
                 + $"{PerWindow(Stat.DeferredLists):0} made, {PerWindow(Stat.ImmediateListsOutside):0} run outside the pass. Values found a replay:{(found.Length > 0 ? found.ToString() : "NONE (the right eye uses the left eye's camera)")}");

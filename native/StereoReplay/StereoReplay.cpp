@@ -52,7 +52,8 @@ enum Stat
     StCbNoOverwrite, StOtherDiscards, StViewsSwapped, StCopiesSwapped, StLeftUnswappable, StNestedLists, StPredication, StCopiedNow,
     StCopiedAtRelease, StWindowMs, StExecuteMs, StScanMs, StCaptureMs,
     // where the draws went: the immediate context outside the window, Unity's own deferred contexts (graphics jobs) in and out of it
-    StImmediateDrawsOutside, StImmediateListsOutside, StDeferredDrawsInside, StDeferredDrawsOutside, StDeferredLists, StCount
+    StImmediateDrawsOutside, StImmediateListsOutside, StDeferredDrawsInside, StDeferredDrawsOutside, StDeferredLists,
+    StRehooked, StCount
 };
 static double stats[StCount];
 // written from Unity's job threads too
@@ -140,7 +141,9 @@ static void Abort(int slot)
 struct Pattern { int length; float tolerance; float left[16]; float right[16]; };
 static const int kFrameSlots = 8;
 static const int kMaxPatterns = 64;
-struct FrameSlot { int count; Pattern patterns[kMaxPatterns]; };
+// endEvent: the END that closes this frame's window (the last camera drawing the eye this frame)
+struct FrameSlot { int count; int endEvent; Pattern patterns[kMaxPatterns]; };
+static int expectedEnd;
 static FrameSlot frameSlots[kFrameSlots];
 static Pattern active[kMaxPatterns];
 static int activeCount;
@@ -980,6 +983,95 @@ static bool WriteVtable(bool install)
     return true;
 }
 
+// Who a function pointer belongs to (the module's file name)
+static const char* ModuleOf(void* address, char* buffer, int size)
+{
+    HMODULE module = nullptr;
+    buffer[0] = 0;
+    if (address && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)address, &module) && module)
+    {
+        char path[MAX_PATH];
+        DWORD length = GetModuleFileNameA(module, path, MAX_PATH);
+        const char* name = path;
+        for (DWORD index = 0; index < length; index++)
+            if (path[index] == '\\' || path[index] == '/') name = path + index + 1;
+        snprintf(buffer, size, "%s", name);
+    }
+    else
+        snprintf(buffer, size, "no module (%p)", address);
+    return buffer;
+}
+
+static bool SameModule(void* first, void* second)
+{
+    HMODULE a = nullptr, b = nullptr;
+    const DWORD flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+    return GetModuleHandleExA(flags, (LPCSTR)first, &a) && GetModuleHandleExA(flags, (LPCSTR)second, &b) && a && a == b;
+}
+
+// What took our vtable entries / the context's vtable since the last report (each event once)
+static char hookReport[4096];
+static int hookReportLength;
+static int reportedSlots[VtableSize];
+static void Report(const char* format, ...)
+{
+    if (hookReportLength >= (int)sizeof(hookReport) - 1)
+        return;
+    va_list arguments;
+    va_start(arguments, format);
+    int written = vsnprintf(hookReport + hookReportLength, sizeof(hookReport) - hookReportLength, format, arguments);
+    va_end(arguments);
+    if (written > 0)
+        hookReportLength += written < (int)sizeof(hookReport) - hookReportLength ? written : (int)sizeof(hookReport) - hookReportLength - 1;
+}
+
+// Our entries back where something replaced them (what replaced them is called on, as the original), and the context's new vtable
+// hooked if its vtable pointer moved
+static int ReassertHooks()
+{
+    char module[MAX_PATH];
+    void** current = *(void***)immediate;
+    if (current != vtable)
+    {
+        Report("the immediate context's vtable moved %p -> %p (%s); hooking the new one\n", (void*)vtable, (void*)current,
+            ModuleOf(current, module, sizeof(module)));
+        vtable = current;
+        memcpy(original, vtable, sizeof(original));
+        WriteVtable(true);
+        return -1;
+    }
+    int replaced = 0;
+    for (const HookEntry& hook : hooks)
+    {
+        if (vtable[hook.slot] != hook.function)
+            replaced++;
+    }
+    if (replaced == 0)
+        return 0;
+    DWORD old;
+    if (!VirtualProtect(vtable, sizeof(void*) * VtableSize, PAGE_READWRITE, &old))
+        return 0;
+    for (const HookEntry& hook : hooks)
+    {
+        void* now = vtable[hook.slot];
+        if (now == hook.function)
+            continue;
+        if (reportedSlots[hook.slot] < 3)
+        {
+            reportedSlots[hook.slot]++;
+            char was[MAX_PATH];
+            Report("slot %d was replaced: now %s, our original was %s\n", hook.slot, ModuleOf(now, module, sizeof(module)),
+                ModuleOf(original[hook.slot], was, sizeof(was)));
+        }
+        // the runtime's own swap (same module) is what we call from now on; another hooker's is skipped, since it may call ours back
+        if (SameModule(now, original[hook.slot]))
+            original[hook.slot] = now;
+        vtable[hook.slot] = hook.function;
+    }
+    VirtualProtect(vtable, sizeof(void*) * VtableSize, old, &old);
+    return replaced;
+}
+
 //------------------------------------------------------------------------------------------------------------------------------------
 // Window start: the immediate context's whole state onto the deferred context (the pass's first calls lean on state set before it)
 
@@ -1203,7 +1295,11 @@ static void BeginWindow(int slot)
     leftCount = count;
     for (int index = 0; index < count; index++)
         leftImages[index] = (ID3D11Resource*)images[index];
+    int replaced = ReassertHooks();
+    if (replaced != 0)
+        stats[StRehooked] += replaced > 0 ? replaced : 1;
     activeCount = frameSlots[slot].count;
+    expectedEnd = frameSlots[slot].endEvent;
     memcpy(active, frameSlots[slot].patterns, sizeof(Pattern) * activeCount);
     memset(viewCache, 0, sizeof(viewCache));
     windowStart = NowMs();
@@ -1258,13 +1354,13 @@ static void ReleaseHook(int view, void* texture)
     stats[StCopiedAtRelease] += 1;
 }
 
-static const int kStartEvent = 1000, kEndEvent = 2000;
+static const int kStartEvent = 1000, kEndEvent = 2000, kEndEvents = 16;
 
 static void __stdcall OnRenderEvent(int id)
 {
     if (id >= kStartEvent && id < kStartEvent + kFrameSlots)
         BeginWindow(id - kStartEvent);
-    else if (id == kEndEvent)
+    else if (id >= kEndEvent && id < kEndEvent + kEndEvents && id == expectedEnd)
         EndWindow(false);
 }
 
@@ -1318,6 +1414,19 @@ SR_EXPORT int SR_Init(void* anyD3D11Resource)
         return 0;
     }
     hooked = true;
+    char drawModule[MAX_PATH], drawIndexedModule[MAX_PATH], mapModule[MAX_PATH], targetsModule[MAX_PATH];
+    Info("the entries we took were in: Draw %s, DrawIndexed %s, Map %s, OMSetRenderTargets %s\n",
+        ModuleOf(original[SDraw], drawModule, MAX_PATH), ModuleOf(original[SDrawIndexed], drawIndexedModule, MAX_PATH),
+        ModuleOf(original[SMap], mapModule, MAX_PATH), ModuleOf(original[SOMSetRenderTargets], targetsModule, MAX_PATH));
+    const int drawSlots[4] = { SDraw, SDrawIndexed, SDrawInstanced, SDrawIndexedInstanced };
+    for (int slot : drawSlots)
+    {
+        const unsigned char* code = (const unsigned char*)original[slot];
+        Info("slot %d starts:", slot);
+        for (int index = 0; index < 24; index++)
+            Info(" %02x", code[index]);
+        Info("\n");
+    }
     bool countingDeferred = false;
     if (!sharedVtable)
     {
@@ -1351,12 +1460,13 @@ SR_EXPORT void* SR_GetRenderEventFunc()
 }
 
 // The camera values for one frame: count patterns of lengths[i] floats, left / right 16 floats each (unused tail ignored)
-SR_EXPORT void SR_SetFrame(int slot, int count, const int* lengths, const float* tolerances, const float* left, const float* right)
+SR_EXPORT void SR_SetFrame(int slot, int count, int endEvent, const int* lengths, const float* tolerances, const float* left, const float* right)
 {
     if (slot < 0 || slot >= kFrameSlots || count < 0)
         return;
     FrameSlot& frame = frameSlots[slot];
     frame.count = count < kMaxPatterns ? count : kMaxPatterns;
+    frame.endEvent = endEvent;
     for (int index = 0; index < frame.count; index++)
     {
         Pattern& pattern = frame.patterns[index];
@@ -1393,6 +1503,18 @@ SR_EXPORT int SR_PatternHits(double* out, int max)
         out[index] = patternHits[index];
     memset(patternHits, 0, sizeof(patternHits));
     return count;
+}
+
+// What replaced our hooks since the last call (then cleared)
+SR_EXPORT int SR_HookReport(char* out, int max)
+{
+    if (!out || max <= 0)
+        return 0;
+    int length = hookReportLength < max - 1 ? hookReportLength : max - 1;
+    memcpy(out, hookReport, length);
+    out[length] = 0;
+    hookReportLength = 0;
+    return length;
 }
 
 SR_EXPORT int SR_Info(char* out, int max)
