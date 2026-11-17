@@ -43,6 +43,7 @@ namespace TarkovVR.Source.Player.Interactions
         public static float glassBreakMinSpeed = 2.0f;     // m/s approach needed to break
         public static float glassBreakDamage = 30f;        // melee damage carried by the synthetic hit (~knife slash)
         public static bool leftoverGlassAtTouch = true;    // what's left of a broken window breaks at any touch (false = it needs the whack too)
+        public static bool logContacts = false;            // a line per new contact: what the gun hit (path, layer, collider, bullet surface)
 
         public static int proxyLayerOverride = -1;         // force the proxy/sandbox layer (UnityExplorer) if the auto-pick misbehaves
 
@@ -313,6 +314,8 @@ namespace TarkovVR.Source.Player.Interactions
                 TryBreakGlass(col, point, normal, barrelDir);
             if (!fresh)
                 return;
+            if (logContacts)
+                LogContact(col);
 
             // How fast the hand brings that point of the gun into the surface. Not the contact's relative velocity: that is the
             // proxy's catch-up toward a hand already inside the wall, large whenever the gun is pressed in, however gently.
@@ -335,6 +338,23 @@ namespace TarkovVR.Source.Player.Interactions
             Door door = CollisionWorld.DoorOf(col);
             if (door != null)
                 PhysicalDoors.GunHit(door, point, normal, approach);
+        }
+
+        // Which world collider the gun hit (the real one its sandbox copy stands in for)
+        private static void LogContact(Collider col)
+        {
+            string path = col.name;
+            Transform parent = col.transform.parent;
+            for (int depth = 0; depth < 4 && parent != null; depth++, parent = parent.parent)
+                path = parent.name + "/" + path;
+            string shape = col is MeshCollider meshCollider
+                ? $"mesh '{(meshCollider.sharedMesh != null ? meshCollider.sharedMesh.name : "none")}'"
+                : col.GetType().Name;
+            BallisticCollider ballistic = col.GetComponent<BallisticCollider>();
+            Vector3 size = col.bounds.size;
+            Plugin.MyLog.LogInfo($"[WeaponCollision] hit {path} on {LayerMask.LayerToName(col.gameObject.layer)}: {shape}"
+                + $"{(col.isTrigger ? ", trigger" : "")}, {size.x:0.00} x {size.y:0.00} x {size.z:0.00} m"
+                + $"{(ballistic != null ? ", bullet surface " + ballistic.TypeOfMaterial : "")}");
         }
 
         // The gun's own surface-aware drop bank (what vanilla plays when a weapon hits the ground), played at the contact
