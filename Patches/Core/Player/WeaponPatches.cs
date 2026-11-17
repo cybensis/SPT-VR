@@ -806,8 +806,14 @@ namespace TarkovVR.Patches.Core.Player
         };
         private const string RIGHT_MARKER_OVERRIDE = "VR_RightHandMarker_Override";
 
-        // A gun's right-grip marker: its own, or for a gun above a stand-in child of its Weapon_root at the right spot. weaponPrefab is the
-        // gun in hands' (_weaponPrefab) or a model on the body's; null = its own marker.
+        // A right-grip marker further than this from the gun's right IK marker is off the gun, and the IK marker (_markers[1], where the
+        // gun in hands is anchored) is used instead. Of the game's and the Content Backport's guns: the Sako and the backport's P226R,
+        // QBZ-191 and MXLR 55-59 cm (the IK marker on the gun), every other gun under 22 (the M4's 21, both on the gun).
+        public static float offGunGripMarkerDistance = 0.45f;
+        private static readonly HashSet<string> offGunGripMarkersLogged = new HashSet<string>();
+
+        // A gun's right-grip marker: its own, or for a gun above a stand-in child of its Weapon_root at the right spot, or its right IK marker
+        // when its own is off the gun. weaponPrefab is the gun in hands' (_weaponPrefab) or a model on the body's; null = its own marker.
         internal static Transform RightGripMarker(WeaponPrefab weaponPrefab, TransformLinks links, Transform weaponRoot)
         {
             if (weaponPrefab != null && weaponRoot != null && RightHandMarkerOverrides.TryGetValue(weaponPrefab.name.Replace("(Clone)", ""), out Vector3 localPosition))
@@ -821,7 +827,20 @@ namespace TarkovVR.Patches.Core.Player
                 stand.localPosition = localPosition;
                 return stand;
             }
-            return links != null && links.Transforms != null && links.Transforms.Length > 8 ? links.Transforms[8] : null;
+            Transform handMarker = links?.GetTransformOutOfRangeSafe(ECharacterWeaponBones.weapon_R_hand_marker);
+            Transform ikMarker = links?.GetTransformOutOfRangeSafe(ECharacterWeaponBones.weapon_R_IK_marker);
+            if (handMarker != null && ikMarker != null)
+            {
+                float apart = Vector3.Distance(handMarker.position, ikMarker.position);
+                if (apart > offGunGripMarkerDistance)
+                {
+                    string gunName = weaponPrefab != null ? weaponPrefab.name.Replace("(Clone)", "") : links.name;
+                    if (offGunGripMarkersLogged.Add(gunName))
+                        Plugin.MyLog.LogInfo($"[GripMarker] {gunName}: its right-hand marker is {apart * 100f:0} cm off its right IK marker, the IK marker taken for its grip");
+                    return ikMarker;
+                }
+            }
+            return handMarker;
         }
 
         internal static Transform RightGripMarker(EFT.Player.FirearmController controller)
