@@ -189,7 +189,7 @@ namespace TarkovVR.Patches.UI
             if (controller._player)
             {
                 VRGlobals.player = controller._player;
-                VRPlayerManager.leftHandGunIK = controller.HandsHierarchy.Transforms[10];
+                VRPlayerManager.leftHandGunIK = TarkovVR.Patches.Core.Player.WeaponPatches.LeftGripMarker(controller);
                 VRGlobals.player._markers[0] = VRGlobals.vrPlayer.LeftHand.transform;
             }
         }

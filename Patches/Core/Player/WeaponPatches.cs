@@ -848,6 +848,39 @@ namespace TarkovVR.Patches.Core.Player
             return controller != null ? RightGripMarker(controller._weaponPrefab, controller.HandsHierarchy, controller.WeaponRoot) : null;
         }
 
+        // The support hand's grip point (VRPlayerManager.leftHandGunIK: the two-handed grab's reach and the left arm's target): a stand-in
+        // for a gun above, else weapon_L_hand_marker, or its left IK marker when the hand marker is off the gun (the backport's P226R: 55 cm)
+        internal static Transform LeftGripMarker(EFT.Player.FirearmController controller)
+        {
+            if (controller == null || controller.HandsHierarchy == null)
+                return null;
+            string prefabKey = controller._weaponPrefab != null ? controller._weaponPrefab.name.Replace("(Clone)", "") : "";
+            if (controller.WeaponRoot != null && LeftHandIKOverrides.TryGetValue(prefabKey, out Vector3 localOffset))
+            {
+                Transform stand = controller.WeaponRoot.Find("VR_LeftHandIK_Override");
+                if (stand == null)
+                {
+                    stand = new GameObject("VR_LeftHandIK_Override").transform;
+                    stand.SetParent(controller.WeaponRoot, false);
+                }
+                stand.localPosition = localOffset;
+                return stand;
+            }
+            Transform handMarker = controller.HandsHierarchy.GetTransformOutOfRangeSafe(ECharacterWeaponBones.weapon_L_hand_marker);
+            Transform ikMarker = controller.HandsHierarchy.GetTransformOutOfRangeSafe(ECharacterWeaponBones.weapon_L_IK_marker);
+            if (handMarker != null && ikMarker != null)
+            {
+                float apart = Vector3.Distance(handMarker.position, ikMarker.position);
+                if (apart > offGunGripMarkerDistance)
+                {
+                    if (offGunGripMarkersLogged.Add(prefabKey + " left"))
+                        Plugin.MyLog.LogInfo($"[GripMarker] {prefabKey}: its left-hand marker is {apart * 100f:0} cm off its left IK marker, the IK marker taken for its support grip");
+                    return ikMarker;
+                }
+            }
+            return handMarker;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), "InitBallisticCalculator")]
         private static void MoveWeaponToIKHands(EFT.Player.FirearmController __instance)
@@ -951,24 +984,7 @@ namespace TarkovVR.Patches.Core.Player
                 }
             }
 
-            Transform leftHandMarker = __instance.HandsHierarchy.Transforms[10];
-
-            // Setup custom left hand marker position for a few guns that are very misaligned
-            string prefabKey = __instance._weaponPrefab.name.Replace("(Clone)", "");
-            if (LeftHandIKOverrides.TryGetValue(prefabKey, out Vector3 localOffset))
-            {
-                Transform existing = __instance.WeaponRoot.Find("VR_LeftHandIK_Override");
-                if (existing == null)
-                {
-                    var go = new GameObject("VR_LeftHandIK_Override");
-                    go.transform.SetParent(__instance.WeaponRoot, false);
-                    existing = go.transform;
-                }
-                existing.localPosition = localOffset;
-                leftHandMarker = existing;
-            }
-
-            VRPlayerManager.leftHandGunIK = leftHandMarker;
+            VRPlayerManager.leftHandGunIK = LeftGripMarker(__instance);
 
 
             // after the leftHandGunIK assignment in MoveWeaponToIKHands
