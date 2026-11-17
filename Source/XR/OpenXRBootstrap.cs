@@ -145,6 +145,12 @@ namespace TarkovVR.Source.XR
             lateSpaceDestroy.enabled = true;
             features.Add(lateSpaceDestroy);
 
+            // SteamVR's resolution slider applied while the game runs (Unity's plugin reads the size only at the session's start)
+            OpenXRLiveResolution liveResolution = ScriptableObject.CreateInstance<OpenXRLiveResolution>();
+            nameField?.SetValue(liveResolution, "SPT-VR Live Resolution");
+            liveResolution.enabled = true;
+            features.Add(liveResolution);
+
             // The frame-call watcher (native, hooks xrWaitFrame and friends) only feeds the cost probe's OpenXR rows: not
             // registered in release builds
             if (registerFrameWatch)

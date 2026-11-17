@@ -116,12 +116,9 @@ namespace TarkovVR.Source.Graphics
         public static void UpdateGlobalShaderConstants(CommandBuffer cb, ref TargetDesc aTarget, Camera aCamera, bool isDownsample, bool isFilterDownsample)
         {
 
-            aTarget.fullWidth = (int)(UnityEngine.XR.XRSettings.eyeTextureDesc.width *
-                                      UnityEngine.XR.XRSettings.eyeTextureResolutionScale *
-                                      aCamera.rect.width);
-            aTarget.fullHeight = (int)(UnityEngine.XR.XRSettings.eyeTextureDesc.height *
-                                       UnityEngine.XR.XRSettings.eyeTextureResolutionScale *
-                                       aCamera.rect.height);
+            // eyeTextureDesc is the eye texture as made, its resolution scale already in it
+            aTarget.fullWidth = (int)(UnityEngine.XR.XRSettings.eyeTextureDesc.width * aCamera.rect.width);
+            aTarget.fullHeight = (int)(UnityEngine.XR.XRSettings.eyeTextureDesc.height * aCamera.rect.height);
 
             if (isFilterDownsample == true)
             {

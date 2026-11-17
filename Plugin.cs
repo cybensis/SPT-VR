@@ -89,6 +89,7 @@ namespace TarkovVR
                 gameObject.AddComponent<OpenXRProbe>();
                 gameObject.AddComponent<OpenXRFloorOrigin>();
                 gameObject.AddComponent<OpenXRInputDriver>();
+                gameObject.AddComponent<OpenXRLiveResolutionWatch>();
             }
 
         }

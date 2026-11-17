@@ -596,7 +596,8 @@ namespace TarkovVR.Patches.Visuals
             TemporalAntialiasing.JitterSamplesGeneratorRepeatCount = __instance.UnityTAAJitterSamplesRepeatCount;
             if (__instance._impl != null && (__instance._impl.EnableDLSS || __instance._impl.EnableFSR2 || __instance._impl.EnableFSR3))
             {
-                if (XRSettings.eyeTextureResolutionScale == 1)
+                // the live resolution's scale is SteamVR's slider, not supersampling
+                if (Mathf.Approximately(XRSettings.eyeTextureResolutionScale, TarkovVR.Source.XR.OpenXRLiveResolution.AppliedScale))
                     TemporalAntialiasing.k_SampleCount = 16;
                 else
                     TemporalAntialiasing.k_SampleCount = (int)((double)__instance.BasePhaseSamplesCount * (1.0 / (double)(__instance._currentSSRatio * __instance._currentSSRatio)) + 0.5);
