@@ -288,6 +288,10 @@ namespace TarkovVR.Source.Player.Interactions
             if (VRGlobals.inGame && pendingUseLoot != null)
                 UpdatePendingUseLoot();
 
+            // The interact presses (the trigger), before everything that can bail or take the trigger
+            if (VRGlobals.inGame && VRGlobals.vrPlayer != null)
+                UpdateInteractTriggers();
+
             // A mounted gun: a hand on its handle, or on the gun, owns the hands (MountedGun)
             if (VRGlobals.inGame && !VRGlobals.menuOpen && VRGlobals.vrPlayer != null && MountedGun.Tick(isDraggingBody))
             {
@@ -498,6 +502,10 @@ namespace TarkovVR.Source.Player.Interactions
                     selectWeaponHandler.TriggerSwapSidearm();
                 }
             }
+
+            // Loot in this hand let go of over the off-hand shoulder: into the inventory, like the off hand's (before the drop check)
+            if (rightHandState.inBackpack && HoldsLoot(true) && primaryHandGrip.stateUp)
+                StowHeldItemToInventory();
         }
 
         private void ProcessLeftHandInputs()
@@ -638,6 +646,13 @@ namespace TarkovVR.Source.Player.Interactions
                             VRInput.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, primaryInputSource);
                             hasEnteredSidearmHolster = true;
                         }
+                        break;
+
+                    // The backpack zone over the off-hand shoulder: loot this hand holds is stowed there too (ProcessRightHandInputs)
+                    case InteractableType.BackpackCollider:
+                        rightHandState.inBackpack = true;
+                        if (!previousState.inBackpack && HoldsLoot(true))
+                            VRInput.Haptic.Execute(0, INTERACT_HAPTIC_LENGTH, 1, INTERACT_HAPTIC_AMOUNT, primaryInputSource);
                         break;
 
                     // Point-blank world interactables for the dominant hand (mirrors the left): used by the right-hand
@@ -833,22 +848,31 @@ namespace TarkovVR.Source.Player.Interactions
                 ForceDropHeldItem();
             }
 
-            // Block all world interactions while holding an item
-            if (heldItem != null)
-                return;
-
             InteractionState state = dominant ? rightHandState : leftHandState;
+            bool atContainer = state.lootableContainer != null;
+            bool atDoor = state.door != null && !(PhysicalDoors.Active && PhysicalDoors.Supports(state.door));
+            if (!atContainer && !atDoor)
+                return;
 
-            // Only if that hand's grip was pressed; the dominant hand only interacts while it's free (off the gun,
-            // outside holster zones / the slung-gun regrab).
-            if (!(dominant ? primaryHandGrip : secondaryHandGrip).stateDown)
-                return;
-            if (dominant && !DominantHandFree())
-                return;
+            if (triggerInteract)
+            {
+                // That hand's trigger, the hand empty (HandsInteractionController.TriggerInteract)
+                if (!TakeInteractPress(dominant, atContainer ? "a container" : "a door"))
+                    return;
+            }
+            else
+            {
+                // That hand's grip, nothing held in either hand; the dominant hand only while it's free (off the gun, outside holster
+                // zones / the slung-gun regrab)
+                if (heldItem != null || !(dominant ? primaryHandGrip : secondaryHandGrip).stateDown)
+                    return;
+                if (dominant && !DominantHandFree())
+                    return;
+            }
 
             // Loose-item grabbing belongs to the palm-cone loot pointer (UpdateLootPointer/BeginSummon).
             // Containers/doors/corpses keep the reach-in interaction below.
-            if (state.lootableContainer != null)
+            if (atContainer)
             {
                 var container = state.lootableContainer;
                 VRGlobals.player.ExecuteInteraction(container, new InteractionResult(EInteractionType.Open));
@@ -862,8 +886,8 @@ namespace TarkovVR.Source.Player.Interactions
                     VRGlobals.player.TryInteractionCallback(container);
                 });
             }
-            // Doors by hand take their own grip (PhysicalDoors); the grip opens / closes the doors it doesn't move
-            else if (state.door != null && !(PhysicalDoors.Active && PhysicalDoors.Supports(state.door)))
+            // Doors by hand take their own grip (PhysicalDoors); the press opens / closes the doors it doesn't move
+            else
             {
                 var door = state.door;
                 InteractionContextHelper.CG_GetAvailableActions15 doorInteractionClass = new InteractionContextHelper.CG_GetAvailableActions15();

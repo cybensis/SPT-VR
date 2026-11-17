@@ -15,7 +15,8 @@ using Valve.VR;
 namespace TarkovVR.Source.Player.Interactions
 {
     // Physical grab-and-drag for dead bodies (ragdolls): a free hand's palm on a body part + grip (either hand, one body at a time).
-    // Hold = drag, quick tap = open the corpse loot grid. No pointer / white dot.
+    // Hold = drag; that hand's trigger opens the corpse loot grid (HandsInteractionController.TriggerInteract; triggerInteract off =
+    // a quick grip tap). No pointer / white dot.
     //
     // A dead body is an EFT `Corpse` whose ragdoll is a set of `RigidbodySpawner` bone rigidbodies. Once it settles, EFT
     // freezes every bone kinematic, and after it leaves the camera view tears the rigidbodies down (keepRigidbody:false).
@@ -182,9 +183,13 @@ namespace TarkovVR.Source.Player.Interactions
             return hand != null ? hand.transform : null;
         }
 
-        // Called from Update, before the loot pointer: either free hand's palm on a body part + grip, hold = drag, quick tap = loot
+        // Called from Update, before the loot pointer: either free hand's palm on a body part + grip = drag, its trigger = loot
+        // (triggerInteract; else a quick grip tap)
         private void UpdateBodyGrab()
         {
+            // (a hand dragging the body is busy for its trigger, the other one may loot it)
+            if (TryTriggerBodyLoot(false) || TryTriggerBodyLoot(true))
+                return;
             if (bodyInteractionArmed)
             {
                 TickArmedBodyInteraction();
@@ -209,9 +214,9 @@ namespace TarkovVR.Source.Player.Interactions
             {
                 float heldFor = Time.time - bodyInteractionStartTime;
                 float moved = (hand.position - bodyInteractionStartHandPos).magnitude;
-                bool wasTap = heldFor <= bodyTapMaxTime && moved <= bodyTapMaxMove;
+                bool wasTap = !triggerInteract && heldFor <= bodyTapMaxTime && moved <= bodyTapMaxMove;
                 Corpse tapCorpse = bodyInteractionCorpse;
-                if (!wasTap && logBodyGrips && heldFor < 0.6f)
+                if (!wasTap && !triggerInteract && logBodyGrips && heldFor < 0.6f)
                     Plugin.MyLog.LogInfo($"[BodyGrab] {(bodyGrabDominant ? "dominant" : "off")} hand's grip on a body wasn't a tap: held {heldFor:F2} s (a tap: {bodyTapMaxTime:F2}), moved {moved * 100f:F0} cm ({bodyTapMaxMove * 100f:F0})");
                 if (isDraggingBody) ReleaseBody();
                 ResetBodyInteraction();
