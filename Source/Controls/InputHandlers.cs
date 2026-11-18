@@ -324,8 +324,9 @@ namespace TarkovVR.Source.Controls
                     return;
                 }
 
-                // A pump gun the hands work: B is its slide release (VRReloadController.Shotgun), never Tarkov's reload
-                if (VRReloadController.GunHandButtonIsSlideRelease(VRGlobals.firearmController))
+                // A pump gun the hands work: B is its slide release (VRReloadController.Shotgun), never Tarkov's reload; a break-action's,
+                // its lever (VRReloadController.BreakAction)
+                if (VRReloadController.GunHandButtonIsSlideRelease(VRGlobals.firearmController) || VRReloadController.GunHandButtonIsBarrelLever(VRGlobals.firearmController))
                 {
                     waitingForSecondTap = false;
                     reloadTriggered = false;

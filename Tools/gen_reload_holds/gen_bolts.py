@@ -1,4 +1,5 @@
-# Bolt-action rifles' bolts, from each gun's own after-shot bolt clip (<family>_fire_chambering_0, the Sako's rechamber_0): the bone
+# Bolt-action rifles' bolts, from each gun's own after-shot bolt clip (<family>_fire_chambering_0, the Sako's rechamber_0, the TOZ-106's
+# fire_reload_0): the bone
 # that slides the bolt back and how far (in its parent's frame), the bone that turns the handle up and about which axis how far (in
 # its own rest frame; the DVL-10's is one bone that does both), and the dominant hand's hold on the knob (ridingHold on the turning
 # bone, the palm in its frame). The runtime turns then slides those bones by the hand, from their own rest pose at the grab.
@@ -12,7 +13,7 @@ CHARGES=GAME_BUNDLES+'assets/content/items/mods/charges/'
 GUNS=[('mosin','mosin_fire_chambering_0',None),('mosin','mosin_inf_fire_chambering_0',None),('sv98','sv98_fire_chambering_0',None),
       ('m700','m700_fire_chambering_0',None),('t5000','t5000_fire_chambering_0',None),('dvl-10','dvl_10_fire_chambering_0',None),
       ('axmc','axmc_fire_chambering_0','charge_ax_accuracy_internation_axmc_86x70'),('sako','sako_rechamber_0','charge_trg_sako_trg_m10_bolt_86x70'),
-      ('vpo215','vpo215_fire_chambering_0',None)]
+      ('vpo215','vpo215_fire_chambering_0',None),('toz106','toz106_fire_reload_0',None)]
 NOT_BOLT=re.compile(r'Human|marker|Bend_Goal|Camera|IK|patron|shellport|LOD|aim_camera|weapon_hammer|mod_charge_hammer',re.I)
 
 def withCharge(tree,charge):
@@ -96,7 +97,7 @@ for folder,clipName,charge in GUNS:
                 try: c=o.read(); clips[c.m_Name]=c
                 except Exception: pass
         folderClips[folder]=clips
-    clip=folderClips[folder][clipName]; family=re.sub(r'_(fire_chambering|rechamber)_0$','',clipName)
+    clip=folderClips[folder][clipName]; family=re.sub(r'_(fire_chambering|rechamber|fire_reload)_0$','',clipName)
     hashes=[b.path for b in clip.m_ClipBindingConstant.genericBindings]; best=None
     for c in sorted(os.listdir(ROOT+folder)):
         if c.endswith('_container.bundle') and c.startswith('weapon_'):

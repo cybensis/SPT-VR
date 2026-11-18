@@ -51,7 +51,8 @@ def fullBackTime(g,path,wp):
 # the receiver, so the grab zone is where the clip's fingers close on it, HANDLE_GRAB_AT_HOLD). AVT-40 / SVT-40 (2026-11-07, both rigs one
 # animation set avt40): the carrier itself, 10 cm straight back in avt40_charge_* (left hand over the top) and rechamber (right hand),
 # its knob part of the carrier mesh (HANDLE_KNOB_SIDE). Left out: the RPD (no clip moves its handle
-# bones), the M60 (no rack clip), the VSK-94 (no clips of its own), the AGS-30 and NSV (mounted).
+# bones), the M60 (no rack clip), the AGS-30 and NSV (mounted). The VSK-94 needs none of its own: it plays the 9A-91's clips on the same
+# bolt / handle bones and meshes, so the 9a91 family's data is its.
 # gen_holds' own left/right hold search on that bone, merged into its handles by gen_export; handleBones tells the runtime the bone.
 HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghing_handle','hk_ump':'weapon_charge','tdi_kriss_vector':'weapon_charge',
                   'zid_pkm':'weapon_charge','kel_tec_rfb':'weapon_charge','iwi_uzi_9x19':'weapon_charge','sword_int_mk_18':'weapon_charge','r11_rsass':'weapon_charghing_000',

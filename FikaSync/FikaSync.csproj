@@ -17,7 +17,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>SPT-VR-FikaSync</AssemblyName>
     <Description>FIKA co-op sync companion for the SPT-VR mod (arm + body-drag packets)</Description>
-    <Version>2.4.5</Version>
+    <Version>2.4.6</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RootNamespace>SptVrFikaSync</RootNamespace>

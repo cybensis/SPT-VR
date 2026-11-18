@@ -25,7 +25,9 @@ namespace SptVrFikaSync
     // shut sound is missing, and a VR player's gun breach can stay shut (the kick swing skipped or dropped).
     // 2.4.5 (HostHandsUnstick): no packet change, only the host needs it. An older host can leave a hands event open on its copy of a
     // client after a quick hands change, and refuse that item ("currently being modified") for the rest of the raid.
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.5")]
+    // 2.4.6 (BoltRoundSync): no packet change. On an older host, shells loaded into / taken out of a break-action by hand stay where they
+    // were (the host plays Tarkov's chamber clip on its copy instead).
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.6")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module; when present, a dragged corpse's loot waypoint is
     // relocated here (SPT-VR.dll doesn't run on a headless). The dep only guarantees ORBIT is in the registry checked below.

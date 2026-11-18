@@ -89,7 +89,7 @@ namespace TarkovVR.Source.Weapons
         // Holding a part of the gun, without the zones it's only reaching into (GunSpots: the chest pouch zone overlaps the chest sling)
         public static bool OffHandHolds => (HoldingMagazine && !magazineInGunHand) || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand)
             || HoldingSeatedMagazine || HoldingPalmedMagazine || (HoldingRound && !RoundInGunHand) || (HoldingJamCase && !jamCaseInGunHand) || (HoldingDeflector && !deflectorInGunHand)
-            || (HoldingHinge && !hingeInGunHand) || (HoldingBelt && !beltInGunHand);
+            || (HoldingHinge && !hingeInGunHand) || (HoldingBelt && !beltInGunHand) || HoldingBarrels || HoldingBreakCase;
         public static bool GunHandHolds => HandleInGunHand || BoltInGunHand || RoundInGunHand || JamCaseInGunHand || DeflectorInGunHand || HingeInGunHand || BeltInGunHand
             || (HoldingMagazine && magazineInGunHand);
         // A hand on one of the gun's own parts, for GunHaptics (what happens to the gun reaches it): the handle, the bolt, a
@@ -97,7 +97,7 @@ namespace TarkovVR.Source.Weapons
         // track isn't on the gun.
         internal static bool OffHandOnGunPart => (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand)
             || (HoldingMagazine && onRail && !magazineInGunHand) || HoldingSeatedMagazine || (HoldingJamCase && !jamCaseInGunHand && !jamCaseOut) || (HoldingDeflector && !deflectorInGunHand)
-            || (HoldingHinge && !hingeInGunHand) || (HoldingBelt && !beltInGunHand);
+            || (HoldingHinge && !hingeInGunHand) || (HoldingBelt && !beltInGunHand) || HoldingBarrels || (HoldingBreakCase && !caseFree);
         internal static bool GunHandOnGunPart => HandleInGunHand || BoltInGunHand || (JamCaseInGunHand && !jamCaseOut) || DeflectorInGunHand || HingeInGunHand || BeltInGunHand
             || (HoldingMagazine && onRail && magazineInGunHand);
         public static bool HoldingMagazine => heldSource != HeldMagazineSource.None;
@@ -107,7 +107,7 @@ namespace TarkovVR.Source.Weapons
         // is still in the magazine (Tarkov's insert chambers one at once; it has to be racked first). On a truly empty
         // chamber the trigger goes through: Tarkov dry-fires (the click, the finger) without looking at the bolt catch.
         public static bool BlocksFiring => HoldingGunMagazine || HoldingChargingHandle || RoundStillInMagazine || MagazinePartlyOut || BoltBlocksFiring || DeflectorBlocksFiring
-            || PressCheckBlocksFiring || ShotgunBlocksFiring || BeltGunBlocksFiring;
+            || PressCheckBlocksFiring || ShotgunBlocksFiring || BeltGunBlocksFiring || BreakActionBlocksFiring;
 
         private static bool ChamberLoaded => VRGlobals.firearmController != null && VRGlobals.firearmController.Item != null
             && VRGlobals.firearmController.Item.ChamberAmmoCount > 0;
@@ -440,6 +440,10 @@ namespace TarkovVR.Source.Weapons
                 handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine || HoldingRound || HoldingJamCase || HoldingDeflector);
             // A tube shotgun's pump, by the support hand (VRReloadController.Shotgun)
             TickShotgun();
+            // A break-action's lever, barrels and chambers (VRReloadController.BreakAction)
+            if (TickBreakAction(gripPressed, gripReleased, handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine
+                || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector || HoldingHinge || HoldingBelt))
+                gripPressed = false;
             // A single round in the fingers, for an open bolt-action (VRReloadController.Rounds)
             if (HoldingRound)
                 UpdateHeldRound(gripReleased, gunHandGripReleased);
@@ -450,10 +454,10 @@ namespace TarkovVR.Source.Weapons
 
             // (not the gun hand holding the gun by its charging handle: the off hand is free for the magazine then, ChestHang.HandleHeld)
             bool handBusy = HoldingMagazine || (HoldingChargingHandle && !(HandleInGunHand && ChestHang.HandleHeld)) || HoldingSeatedMagazine || HoldingPalmedMagazine
-                || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector || HoldingHinge || HoldingBelt;
+                || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector || HoldingHinge || HoldingBelt || HoldingBarrels || HoldingBreakCase;
             // On a gun that loads through its open bolt, the pouch grip is a round, not a magazine: the off hand's, or the gun hand's
             // while the off hand holds the gun up
-            if (!handBusy && gripPressed && (TryGrabShell(gunHand: false) || TryGrabRound(gunHand: false)))
+            if (!handBusy && gripPressed && (TryGrabShell(gunHand: false) || TryGrabRound(gunHand: false) || TryGrabBreakShell(gunHand: false)))
             {
                 gripPressed = false;
                 handBusy = true;
@@ -577,7 +581,7 @@ namespace TarkovVR.Source.Weapons
             if (OffHandAtBolt)
                 OffHandAtChargingHandle = true;
             OwnsOffHand = (HoldingJamCase && !jamCaseInGunHand) || (HoldingDeflector && !deflectorInGunHand) || (HoldingMagazine && !magazineInGunHand) || (HoldingChargingHandle && !HandleInGunHand) || (HoldingBolt && !BoltInGunHand) || HoldingSeatedMagazine || HoldingPalmedMagazine
-                || (HoldingRound && !RoundInGunHand) || (HoldingHinge && !hingeInGunHand) || (HoldingBelt && !beltInGunHand) || reaching;
+                || (HoldingRound && !RoundInGunHand) || (HoldingHinge && !hingeInGunHand) || (HoldingBelt && !beltInGunHand) || BreakActionOwnsOffHand || reaching;
 
             UpdateZoneViz();
             UpdateRoundViz();
@@ -2513,6 +2517,7 @@ namespace TarkovVR.Source.Weapons
                 // A round (or a stuck case) in this hand goes where the fingers now are
                 if (HoldingRound && !roundOnRightArm)
                     PlaceHeldRound();
+                PlaceBreakCaseInHand(rightArm: false);
                 if (HoldingJamCase && !jamCaseOnRightArm)
                 {
                     PlaceJamCase();
@@ -2545,6 +2550,13 @@ namespace TarkovVR.Source.Weapons
             // The MDR's deflector: the clip's fingers on it
             if (HoldingDeflector && !deflectorInGunHand)
                 return DeflectorFingers(rightArm);
+            // A break-action's barrels or a shell drawn out of its chamber: already the arm's own pose (the clips' left hand, mirrored on the right)
+            if (HoldingBarrels || HoldingBreakCase)
+            {
+                Vector3[] onBarrels = BreakHandFingers(rightArm);
+                if (onBarrels != null)
+                    return onBarrels;
+            }
             // A belt gun's cover, scope latch or belt: the clip's fingers on it (this arm's), else the magazine pull's pinch (the left
             // hand's; mirrored on the right arm)
             if ((HoldingHinge && !hingeInGunHand) || (HoldingBelt && !beltInGunHand))
@@ -2668,6 +2680,7 @@ namespace TarkovVR.Source.Weapons
                 // A round (or a stuck case) in this hand goes where the fingers now are
                 if (HoldingRound && roundOnRightArm)
                     PlaceHeldRound();
+                PlaceBreakCaseInHand(rightArm: true);
                 if (HoldingJamCase && jamCaseOnRightArm)
                 {
                     PlaceJamCase();

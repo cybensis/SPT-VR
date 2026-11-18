@@ -17,6 +17,8 @@ namespace TarkovVR.Patches.Core.Player
             VRReloadController.ApplyShotgunBeforeIk();
             // A belt gun's cover, scope latch and belt (VRReloadController.Belt): the same window, the hand on the cover rides it
             VRReloadController.ApplyBeltGunBeforeIk();
+            // A break-action's barrels and lever (VRReloadController.BreakAction): the hand on the fore-end rides them
+            VRReloadController.ApplyBreakActionBeforeIk();
         }
 
         // A dry fire drops the hammer: a pump gun's action lock lets go (VRReloadController.PumpDryFired)

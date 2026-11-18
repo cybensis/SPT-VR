@@ -113,8 +113,8 @@ namespace TarkovVR.Source.Weapons
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-        // The bolt clip's family: <family>_fire_chambering_0 (the Sako's <family>_rechamber_0). AnimationFamily reads the magazine clips,
-        // which an internal-magazine rifle (the Mosin) has none of.
+        // The bolt clip's family: <family>_fire_chambering_0 (the Sako's <family>_rechamber_0, the TOZ-106's <family>_fire_reload_0).
+        // AnimationFamily reads the magazine clips, which an internal-magazine rifle (the Mosin) has none of.
         private static string BoltFamily(FirearmController firearmController)
         {
             string templateId = firearmController.Item.TemplateId.ToString();
@@ -132,6 +132,8 @@ namespace TarkovVR.Source.Weapons
                     int end = clipName.IndexOf("_fire_chambering_0", System.StringComparison.OrdinalIgnoreCase);
                     if (end < 0)
                         end = clipName.IndexOf("_rechamber_0", System.StringComparison.OrdinalIgnoreCase);
+                    if (end < 0)
+                        end = clipName.IndexOf("_fire_reload_0", System.StringComparison.OrdinalIgnoreCase);
                     if (end > 0)
                     {
                         family = clipName.Substring(0, end).ToLowerInvariant();

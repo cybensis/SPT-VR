@@ -182,6 +182,9 @@ namespace TarkovVR.Source.Weapons
         // our client applies it.
         internal static bool LetsSingleRoundIn(FirearmController controller, IInventoryOperation operation)
         {
+            // A break-action's chamber by hand (VRReloadController.BreakAction): a shell in, a round out
+            if (LetsBreakMoveThrough(controller, operation))
+                return true;
             if (!singleRoundLoading || controller == null || controller._player == null || !controller._player.IsYourPlayer || !roundLoading || heldRoundFor != controller)
                 return false;
             Weapon weapon = controller.Item;
@@ -250,6 +253,12 @@ namespace TarkovVR.Source.Weapons
         // gripReleased / gunHandGripReleased: the two hands' grips let go this frame; the one holding the round counts
         private static void UpdateHeldRound(bool gripReleased, bool gunHandGripReleased)
         {
+            // A break-action's shell goes in along a chamber's bore (VRReloadController.BreakAction)
+            if (breakShellHeld)
+            {
+                UpdateHeldBreakShell(gripReleased);
+                return;
+            }
             // A tube shotgun's shell has its own ports and paths (VRReloadController.Shotgun)
             if (HoldingShell)
             {
@@ -342,6 +351,7 @@ namespace TarkovVR.Source.Weapons
 
         private static void EndRoundHold()
         {
+            ClearBreakShell();
             ReleaseShellHand();
             heldShell = null;
             shellPath = null;
@@ -354,7 +364,8 @@ namespace TarkovVR.Source.Weapons
 
         private static void DestroyRoundProp()
         {
-            // A shell on its way in rides the gun's bones: off them before it goes back to the pool
+            // A shell on its way in rides the gun's bones (and the hand rides it): off them before it goes back to the pool
+            ReleaseBreakShellHand();
             if (heldRoundProp != null && heldRoundProp.transform.parent != null)
                 heldRoundProp.transform.SetParent(null, worldPositionStays: true);
             ReturnPropToPool(heldRoundProp);
@@ -436,6 +447,11 @@ namespace TarkovVR.Source.Weapons
         {
             if (!HoldingRound || heldRoundProp == null || VRGlobals.handsInteractionController == null)
                 return;
+            if (breakShellHeld)
+            {
+                PlaceHeldBreakShell();
+                return;
+            }
             if (HoldingShell)
             {
                 PlaceHeldShell();
@@ -489,6 +505,8 @@ namespace TarkovVR.Source.Weapons
         // the magazine pull's on the left, mirrored on the right (falling back to the bolt clip's closed hand there).
         private static Vector3[] RoundFingers(bool rightArm)
         {
+            if (breakShellHeld)
+                return BreakShellFingers(rightArm);
             if (HoldingShell)
                 return ShellFingers(rightArm);
             if (!bakedRoundHold)

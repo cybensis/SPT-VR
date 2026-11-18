@@ -33,7 +33,7 @@ namespace SptVrFikaSync
             Player.FirearmController controller = __instance.Controller;
             if (controller == null || !(controller._player is ObservedPlayer observed) || !ArmSyncApply.IsVrPlayer(observed.NetId))
                 return true;
-            if (!IsSingleRoundIntoGun(controller.Item, operation))
+            if (!IsSingleRoundIntoGun(controller.Item, operation) && !IsBreakActionChamberMove(controller.Item, operation))
                 return true;
             callback?.Succeed();
             return false;
@@ -54,6 +54,38 @@ namespace SptVrFikaSync
             if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && IsRoundIntoGun(weapon, subOperation.BaseInventoryOperation))
                 return true;
             return IsRoundIntoGun(weapon, operation);
+        }
+
+        // A break-action's chamber by hand (SPT-VR's VRReloadController.BreakAction): one round into or out of one of its chambers, not
+        // Tarkov's own reload or discharge (both animate). The same rule as SPT-VR's LetsBreakMoveThrough.
+        internal static bool IsBreakActionChamberMove(Weapon weapon, IInventoryOperation operation)
+        {
+            if (weapon == null || weapon.ReloadMode != Weapon.EReloadMode.OnlyBarrel)
+                return false;
+            if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && TouchesChamber(weapon, subOperation.BaseInventoryOperation))
+                return true;
+            return TouchesChamber(weapon, operation);
+        }
+
+        private static bool TouchesChamber(Weapon weapon, IInventoryOperation operation)
+        {
+            if (!(operation is IOneItemOperation move) || !(move.Item1 is Ammo))
+                return false;
+            if (IsChamber(weapon, move.From1) || IsChamber(weapon, move.To1))
+                return true;
+            return operation is ITwoItemOperation twoItems && IsChamber(weapon, twoItems.To2);
+        }
+
+        private static bool IsChamber(Weapon weapon, ItemAddress address)
+        {
+            if (address == null)
+                return false;
+            foreach (Slot chamber in weapon.Chambers)
+            {
+                if (ReferenceEquals(address.Container, chamber))
+                    return true;
+            }
+            return false;
         }
 
         // The destination is To1 for a move / split, To2 for a transfer or merge onto the stack on top of the magazine (a transfer's To1

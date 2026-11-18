@@ -165,6 +165,7 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedReleasePress> releasePress;
             public Dictionary<string, SavedBolt> bolts;
             public Dictionary<string, SavedShotgun> shotguns;
+            public Dictionary<string, SavedBreakAction> breakActions;
             public Dictionary<string, SavedLmg> lmgs;
             public Dictionary<string, float> handleTravels;
             public Dictionary<string, float> magwellDepths;
@@ -852,6 +853,15 @@ namespace TarkovVR.Source.Weapons
                             handleGrabPoints[entry.Key] = new Vector3(handle.grabPoint[0], handle.grabPoint[1], handle.grabPoint[2]);
                         if (handle.gunHandHold != null && handle.gunHandHold.position != null && handle.gunHandHold.rotation != null)
                             gunHandHandleHolds[entry.Key] = HandleHoldFrom(handle.gunHandHold);
+                    }
+                }
+                if (generated.breakActions != null)
+                {
+                    foreach (KeyValuePair<string, SavedBreakAction> entry in generated.breakActions)
+                    {
+                        BreakData breakAction = BreakFrom(entry.Value);
+                        if (breakAction != null)
+                            breakGuns[entry.Key] = breakAction;
                     }
                 }
                 if (generated.lmgs != null)

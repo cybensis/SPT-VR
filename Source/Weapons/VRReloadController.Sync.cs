@@ -135,6 +135,8 @@ namespace TarkovVR.Source.Weapons
             // A pump gun's pump off its closed pose, a pistol's slide in a press check
             AddPumpParts(firearmController, weaponRoot);
             AddPressCheckParts(firearmController, weaponRoot);
+            // A break-action's barrels and lever off their rest pose
+            AddBreakActionParts(firearmController, weaponRoot);
 
             if (hiddenRenderersOf != null && hiddenRenderersOf.Item != null)
                 syncHiddenGroundItem = hiddenRenderersOf.Item.Id.ToString();
