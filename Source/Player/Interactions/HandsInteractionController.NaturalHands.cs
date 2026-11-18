@@ -14,8 +14,12 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool naturalHands = true;
         public static float naturalReadyCurl = 0.25f;       // share of the way to the fist the off hand closes while pointing at loot (no finger tracking)
         // The rest pose: this share of the way from Tarkov's relaxed hand to its fist (a hand ready to take something); the thumb its own
-        public static float naturalRestClose = 0.25f;
-        public static float naturalThumbRestClose = 0.15f;
+        public static float naturalRestClose = 0.35f;
+        public static float naturalThumbRestClose = 0.2f;
+        // deg the fingers fan apart at rest, between neighbours (index toward the thumb, ring and pinky away from the middle, the pinky
+        // twice): about the knuckle's spread axis (its parent's y, which Tarkov's own poses fan about - pinky side - on the left, + on
+        // the right). Gone by the fist.
+        public static float naturalRestSpread = 5f;
 
         // Thumb, index, middle, ring, pinky (Base HumanXDigit11..53), three joints each, local eulers
         private static readonly Vector3[] LEFT_OPEN =
@@ -142,6 +146,14 @@ namespace TarkovVR.Source.Player.Interactions
                     Quaternion target = curl <= rest
                         ? Quaternion.Slerp(pose.open[slot], resting, curl / rest)
                         : Quaternion.Slerp(resting, pose.fist[slot], (curl - rest) / (1f - rest));
+                    // The knuckle fanned apart (index +1, middle 0, ring -1, pinky -2 steps to the pinky side), fading out into the fist
+                    int digit = slot / 3;
+                    if (slot % 3 == 0 && digit >= 1)
+                    {
+                        float steps = digit == 1 ? 1f : 2f - digit;
+                        float open = curl <= rest ? 1f : 1f - (curl - rest) / (1f - rest);
+                        target = Quaternion.AngleAxis(naturalRestSpread * steps * open * (rightBones ? -1f : 1f), Vector3.up) * target;
+                    }
                     Quaternion animated = RecoverAnimated(joint);
                     Quaternion outRot = Quaternion.Slerp(animated, target, weight);
                     joint.localRotation = outRot;
