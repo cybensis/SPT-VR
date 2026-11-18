@@ -335,6 +335,8 @@ out['boltBones']=extras['boltBones']
 out['handleBones']=extras.get('handleBones',{})
 out['handleCarriers']=extras.get('handleCarriers',{})
 out['handleGrabPoints']=extras.get('handleGrabPoints',{})
+# The part the runtime moves for a handle on its own bone, and its local position at the rack's full back (the pull stops there)
+out['handleFullBacks']=extras.get('handleFullBacks',{})
 # Ambidextrous knobs (left, right), and the over-the-top hold for a palm above the handle: its travel the gun's own
 out['handleKnobs']=extras.get('handleKnobs',{})
 # Each knob's fold as it's taken (bone, local axis, degrees), same order as handleKnobs

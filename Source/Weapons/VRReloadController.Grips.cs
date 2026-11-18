@@ -104,6 +104,15 @@ namespace TarkovVR.Source.Weapons
         {
             public string bone;
             public float ratio;
+            public float[] closed;      // its local position where the rack starts, and at the rack's full back (gen_extras)
+            public float[] fullBack;
+        }
+
+        // The part a handle on its own bone moves (the carrier, else that bone) and its local position at the rack's full back
+        public sealed class SavedHandleFullBack
+        {
+            public string bone;
+            public float[] fullBack;
         }
 
         public sealed class SavedSideHandle : SavedHandleHold
@@ -148,6 +157,7 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, string> handleBones;
             public Dictionary<string, string> handleCarriers;
             public Dictionary<string, float[]> handleGrabPoints;
+            public Dictionary<string, SavedHandleFullBack> handleFullBacks;
             public Dictionary<string, float[][]> handleKnobs;
             public Dictionary<string, SavedHandleHold> handleOverTop;
             public Dictionary<string, List<SavedKnobFold>> handleKnobFolds;
@@ -752,6 +762,14 @@ namespace TarkovVR.Source.Weapons
                     {
                         if (entry.Value != null && entry.Value.Length >= 3)
                             handleGrabPoints[entry.Key] = new Vector3(entry.Value[0], entry.Value[1], entry.Value[2]);
+                    }
+                }
+                if (generated.handleFullBacks != null)
+                {
+                    foreach (KeyValuePair<string, SavedHandleFullBack> entry in generated.handleFullBacks)
+                    {
+                        if (entry.Value?.bone != null && entry.Value.fullBack != null && entry.Value.fullBack.Length >= 3)
+                            handleFullBacks[entry.Key] = entry.Value;
                     }
                 }
                 if (generated.handleKnobs != null)

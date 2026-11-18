@@ -228,7 +228,7 @@ for folder,v in census.items():
             family=m.group(1).lower()
             HANDLE_BONE_GUNS[family]=(folder,)+next(((c,b,k) for c,b,k in matching if family in c),matching[0])
 extraHandles={}; extraGunHandHandles={}; handleBones={}; handleCarriers={}; handleGrabPoints={}; extraMovesWithBolt=[]; namedTrees={}
-handleKnobs={}; handleOverTop={}; handleKnobFolds={}
+handleKnobs={}; handleOverTop={}; handleKnobFolds={}; handleFullBacks={}
 for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     _,clips=loadFolder(folder)
     tree=loadTree(ROOT+folder+'/'+container); P=tree[0]; J=fingerPaths(P)
@@ -296,6 +296,13 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     handleBones[family]=boneName
     if rig in HANDLE_CARRIERS: handleCarriers[family]=HANDLE_CARRIERS[rig]
     grabHold=extraHandles.get(family) or extraGunHandHandles.get(family)
+    # How far back the part the runtime moves (the carrier, else the handle bone) goes, as its local position at the rack's full back:
+    # the pull stops there from wherever it is at the grab. An open bolt sits cocked (the PPSh's bolt rests 6.3 cm back of where its
+    # rack starts, 2 cm short of full back), and the hold's travel from there pushed it out of the back of the gun.
+    if grabHold:
+        moving=bone(P,'/'+HANDLE_CARRIERS[rig]) if rig in HANDLE_CARRIERS else charge
+        held=setup(tree,clips[grabHold['clip']]); heldAt,_=fullBackTime(held,moving,wp)
+        handleFullBacks[family]=dict(bone=moving.split('/')[-1],fullBack=[round(float(x),4) for x in held['localAt'](moving,heldAt)[0]])
     # Where the clip's fingers close on the handle (their joints' centroid with it all the way back, in the handle bone's frame), on the
     # nearest point of the handle's own meshes. Not the hold's palm: that's the hand root, 10-18 cm off the handle when the clip racks
     # from below (the VPO-101's AK handle: 18 cm under the gun, out of reach)
@@ -368,7 +375,10 @@ for family in sorted(set(R['handles'])|set(R['gunHandHandles'])|set(extraHandles
     if parentOf[ch] in moved: continue
     top_most=[p for p in moved if parentOf[p] not in moved]
     if top_most:
-        boltBones[family]=[dict(bone=p.split('/')[-1],ratio=round(moved[p]/top,3)) for p in sorted(top_most)]
+        # Where each is at the rack's start and full back (local positions): an open bolt rests cocked (the Uzi's and AA-12's at full
+        # back), so it moves only once the handle comes back to it, never past full back
+        boltBones[family]=[dict(bone=p.split('/')[-1],ratio=round(moved[p]/top,3),closed=[round(float(x),4) for x in g['localAt'](p,0.0)[0]],
+                                fullBack=[round(float(x),4) for x in g['localAt'](p,t)[0]]) for p in sorted(top_most)]
         print(f'{family}: {hold["clip"]} handle back {top*100:.1f} cm ->',boltBones[family],flush=True)
 
 SIDE_HANDLE_GUNS={'spear':dict(receiver='recievers/reciever_mcx_sig_spear_upper',clip='spear_reload_charge_1',side='L',slider='weapon_charge',base='weapon_charge_base',knob='weapon_charge_handle')}
@@ -454,5 +464,5 @@ for family in LOW_ROCK_GUNS:
         rockIns[family]=dict(axis=rocks['axis'],angle=rocks['angle'],thumb=rocks['thumb'])
         print(f'{family} rock-in:',{k:v for k,v in rocks.items() if k!='thumb'},flush=True)
 json.dump(dict(boltBones=boltBones,sideHandles=sideHandles,rockIn=rockIns,handles=extraHandles,gunHandHandles=extraGunHandHandles,
-               handleBones=handleBones,handleCarriers=handleCarriers,handleGrabPoints=handleGrabPoints,handleMovesWithBolt=extraMovesWithBolt,
+               handleBones=handleBones,handleCarriers=handleCarriers,handleGrabPoints=handleGrabPoints,handleFullBacks=handleFullBacks,handleMovesWithBolt=extraMovesWithBolt,
                handleKnobs=handleKnobs,handleOverTop=handleOverTop,handleKnobFolds=handleKnobFolds,pressChecks=pressChecks),open('extras.json','w'))

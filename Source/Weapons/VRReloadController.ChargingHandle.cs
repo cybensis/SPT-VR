@@ -25,6 +25,7 @@ namespace TarkovVR.Source.Weapons
         public static float handleGrabRadius = 0.06f;      // m palm to the back of the charging handle to grab it
         public static float handleZoneBack = 0.05f;        // m the grab zone reaches on past that toward the stock (a capsule)
         public static float handleTravel = 0.08f;          // m the handle comes back
+        public static float minHandleTravel = 0.01f;       // m a handle already at (or past) its full back still gives, so a pull reads as one
         public static float handleFullPull = 0.9f;         // share of handleTravel that counts as all the way back
         public static float handleLockedBackTravel = 0.02f; // m a handle on the bolt has left to give, with the bolt already locked back
         public static float underGunPullGain = 1.6f;        // the off hand on a handle on the bolt: handle travel per controller travel (1 = one to one).
@@ -132,9 +133,12 @@ namespace TarkovVR.Source.Weapons
         // A handle with no slot whose rig bone isn't named mod_charge (MP7: weapon_charghing_handle, sic), by animation set
         private static readonly Dictionary<string, string> handleBoneNames = new Dictionary<string, string>();
         // Of those, a knob riding the bolt or carrier, which is what comes back (9A-91, G36), and a bolt that's the handle itself with
-        // no knob of its own, whose back end is inside the receiver: grabbed where its clip's hand is, in the bone's frame (PPSh, PP-91)
+        // no knob of its own, whose back end is inside the receiver: grabbed where its clip's fingers close on it, in the bone's frame (PPSh, PP-91)
         private static readonly Dictionary<string, string> handleCarrierNames = new Dictionary<string, string>();
         private static readonly Dictionary<string, Vector3> handleGrabPoints = new Dictionary<string, Vector3>();
+        // Where the carrier those handles move is at the rack's full back: the pull stops there from wherever it is at the grab (an open
+        // bolt rests cocked: the PPSh's 2 cm short of full back, and its whole travel from there went out of the back of the gun)
+        private static readonly Dictionary<string, SavedHandleFullBack> handleFullBacks = new Dictionary<string, SavedHandleFullBack>();
         // How far the handle comes back where no clip hand rides it to say (the RPD's, from its charge clip)
         private static readonly Dictionary<string, float> handleTravels = new Dictionary<string, float>();
         private static Vector3? foundHandleGrabLocal;
@@ -510,6 +514,14 @@ namespace TarkovVR.Source.Weapons
                 heldHandleTravel = otherHandHold.travel;
             if (handleCarrier != null && BoltLockedBack)
                 heldHandleTravel = Mathf.Min(heldHandleTravel, handleLockedBackTravel);
+            // What's left to its full back from where it is now (an open bolt cocked: the PPSh's 2 cm)
+            if (handleCarrier != null && handleCarrierAxis.sqrMagnitude > 1e-8f && handleFullBacks.TryGetValue(family, out SavedHandleFullBack carrierFullBack)
+                && carrierFullBack.bone == handleCarrier.name)
+            {
+                Vector3 fullBackLocal = new Vector3(carrierFullBack.fullBack[0], carrierFullBack.fullBack[1], carrierFullBack.fullBack[2]);
+                float room = Vector3.Dot(fullBackLocal - handleCarrierRestLocalPosition, handleCarrierAxis) / handleCarrierAxis.sqrMagnitude;
+                heldHandleTravel = Mathf.Min(heldHandleTravel, Mathf.Max(room, minHandleTravel));
+            }
             HandleHold grip = sideHandle ? handleHold : HandleGripFor(firearmController, rightArm, family, offHandHold, gunHandHold, backWorld);
             if (grip != null)
             {

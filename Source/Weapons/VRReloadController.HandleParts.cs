@@ -33,6 +33,8 @@ namespace TarkovVR.Source.Weapons
             public Vector3 restLocalPosition;
             public Vector3 axis;                            // one metre back, in the bone's parent's frame
             public float ratio;                             // m of bolt per m of handle
+            public float gap = 0f;                          // m it rests back of where the rack starts: the handle comes that far before it moves it
+            public float room = float.MaxValue;             // m from where it rests to its full back
         }
 
         private static readonly Dictionary<string, SideHandle> sideHandles = new Dictionary<string, SideHandle>();
@@ -130,7 +132,17 @@ namespace TarkovVR.Source.Weapons
                 Transform bone = FindRigBone(firearmController, saved.bone);
                 if (bone == null || bone.parent == null)
                     continue;
-                movedBolts.Add(new MovedBolt { bone = bone, restLocalPosition = bone.localPosition, axis = bone.parent.InverseTransformVector(backWorld), ratio = saved.ratio });
+                MovedBolt moved = new MovedBolt { bone = bone, restLocalPosition = bone.localPosition, axis = bone.parent.InverseTransformVector(backWorld), ratio = saved.ratio };
+                // An open bolt rests cocked (the Uzi's and AA-12's at full back): the handle meets it only once it's come back that far,
+                // and it stops at full back
+                if (saved.closed != null && saved.closed.Length >= 3 && saved.fullBack != null && saved.fullBack.Length >= 3 && moved.axis.sqrMagnitude > 1e-8f)
+                {
+                    Vector3 closed = new Vector3(saved.closed[0], saved.closed[1], saved.closed[2]);
+                    Vector3 fullBack = new Vector3(saved.fullBack[0], saved.fullBack[1], saved.fullBack[2]);
+                    moved.gap = Mathf.Max(0f, Vector3.Dot(moved.restLocalPosition - closed, moved.axis) / moved.axis.sqrMagnitude);
+                    moved.room = Mathf.Max(0f, Vector3.Dot(fullBack - moved.restLocalPosition, moved.axis) / moved.axis.sqrMagnitude);
+                }
+                movedBolts.Add(moved);
             }
         }
 
@@ -148,7 +160,7 @@ namespace TarkovVR.Source.Weapons
             foreach (MovedBolt bolt in movedBolts)
             {
                 if (bolt.bone != null)
-                    bolt.bone.localPosition = bolt.restLocalPosition + bolt.axis * (handlePull * bolt.ratio);
+                    bolt.bone.localPosition = bolt.restLocalPosition + bolt.axis * Mathf.Clamp(handlePull * bolt.ratio - bolt.gap, 0f, bolt.room);
             }
         }
 
