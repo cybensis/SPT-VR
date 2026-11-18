@@ -42,6 +42,9 @@ namespace TarkovVR.Source.Player.Interactions
         public static float holdGap = 0.02f;             // m a frame
         public static float holdTurnGap = 3f;            // deg a frame
         public static float holdFollow = 1.25f;
+        // A line each time the gun ends up inside something solid in the real world (a pass-through): what, how deep, whether the
+        // sandbox had it, how fast the gun was moving and turning, the substeps. Off once the pass-through is understood.
+        public static bool passThroughLog = true;
 
         public static float proxyMass = 10f;             // kg; only matters against a door body: heavier = the gun shoves doors more easily
         public static float doorMass = 1f;               // kg of a door in the sandbox
@@ -310,6 +313,9 @@ namespace TarkovVR.Source.Player.Interactions
                 rb.rotation = targetRot;
                 rb.velocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
+                // (0 substeps in its line: the snap put it there, the reach test missed what it went into)
+                if (passThroughLog)
+                    ProbePassThrough(dt, 0);
                 return;
             }
 
@@ -356,6 +362,64 @@ namespace TarkovVR.Source.Player.Interactions
                 KeepDoorsOnHinges();
             }
             ReportDoorMotion();
+            if (passThroughLog)
+                ProbePassThrough(dt, steps);
+        }
+
+        // Inside: the proxy's shapes at their resolved pose against the real world (a contact's skin isn't: a shape a few mm in is
+        // pressed against it). One line per pass-through, its deepest frame, when it ends.
+        private readonly Collider[] insideBuf = new Collider[32];
+        private int insideFrames;
+        private float insideDeepest;
+        private string insideReport;
+
+        private void ProbePassThrough(float dt, int steps)
+        {
+            float deepest = 0f;
+            Collider deepestCollider = null;
+            for (int part = 0; part < 2; part++)
+            {
+                CapsuleCollider shape = part == 0 ? bodyCol : barrelCol;
+                Vector3 center = rb.position + rb.rotation * shape.center;
+                Vector3 half = rb.rotation * Vector3.up * Mathf.Max(shape.height * 0.5f - shape.radius, 0f);
+                int found = Physics.OverlapCapsuleNonAlloc(center - half, center + half, shape.radius, insideBuf, queryMask, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < found; i++)
+                {
+                    Collider collider = insideBuf[i];
+                    if (collider == null || IsOwnCollider(collider) || UseOf(collider, out _) == ColliderUse.Ignore)
+                        continue;
+                    if (!Physics.ComputePenetration(shape, rb.position, rb.rotation, collider, collider.transform.position, collider.transform.rotation, out _, out float depth))
+                        continue;
+                    if (depth > deepest)
+                    {
+                        deepest = depth;
+                        deepestCollider = collider;
+                    }
+                }
+            }
+            if (deepest > 0.01f)
+            {
+                insideFrames++;
+                if (deepest > insideDeepest)
+                {
+                    insideDeepest = deepest;
+                    int id = deepestCollider.GetInstanceID();
+                    bool copied = colliderCopies.ContainsKey(id) || doorPartOwners.ContainsKey(id);
+                    string path = deepestCollider.name;
+                    Transform parent = deepestCollider.transform.parent;
+                    for (int depth = 0; depth < 3 && parent != null; depth++, parent = parent.parent)
+                        path = parent.name + "/" + path;
+                    insideReport = $"{path} ({LayerMask.LayerToName(deepestCollider.gameObject.layer)}, {deepestCollider.GetType().Name}), "
+                        + $"{(copied ? "in the sandbox" : "NOT in the sandbox")}, {deepest * 100f:0.0} cm in, moving {rb.velocity.magnitude:0.0} m/s "
+                        + $"turning {rb.angularVelocity.magnitude * Mathf.Rad2Deg:0} deg/s, {steps} substeps, dt {dt * 1000f:0.0} ms, "
+                        + $"the hand {(targetPos - rb.position).magnitude * 100f:0.0} cm / {Quaternion.Angle(rb.rotation, targetRot):0} deg off";
+                }
+                return;
+            }
+            if (insideFrames > 0)
+                Plugin.MyLog.LogInfo($"[WeaponCollision] inside something for {insideFrames} frames, deepest: {insideReport}");
+            insideFrames = 0;
+            insideDeepest = 0f;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
