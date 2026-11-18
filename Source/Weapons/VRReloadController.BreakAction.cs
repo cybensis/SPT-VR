@@ -39,6 +39,10 @@ namespace TarkovVR.Source.Weapons
         public static float breakShellFinishSpeed = 0.5f;   // m/s the rest of the way
         public static float caseIntoHandTime = 0.12f;       // s a drawn shell eases into the hand's hold
         public static float leverTime = 0.06f;              // s the lever takes to swing
+        // The gun hand presses the lever as Tarkov's open clip has it: the hand onto the clip's IK marker at the press (the MP-43's rides
+        // 4.4 cm up and rolls 36 deg to bring the thumb onto the top lever; the MP-18's stays), that finger's joints. false = no hand move.
+        public static bool leverHandPress = true;
+        public static float leverPressTime = 0.1f;          // s the hand takes onto the lever and back
         // The barrels on the hinge: a rod about its end (inertia 4/3 m r^2 at its centre of mass r), gravity and the hinge's own acceleration
         // (the gun's motion) as pseudo-forces, the gun's turn about the hinge axis left behind; hinge friction, a bounce off the stop
         public static float barrelGravity = 1f;
@@ -78,6 +82,23 @@ namespace TarkovVR.Source.Weapons
         {
             public float degrees;
             public List<SavedPumpBone> bones;
+            public SavedLeverPress press;       // the lever's: the gun hand on it
+        }
+
+        public sealed class SavedLeverPress
+        {
+            public int finger;                  // 0 thumb .. 4 pinky
+            public float[] joints;              // its three joints on the lever, local eulers
+            public float[] markerRest;          // the gun hand's IK marker at the clip's start and at the press, local to its parent
+            public float[] markerPressed;
+        }
+
+        private sealed class LeverPress
+        {
+            public int finger;
+            public Quaternion[] joints;
+            public Vector3 markerMove;          // the marker's move, in its parent's frame
+            public Quaternion markerTurn;       // and turn, in its parent's frame (applied on top of its own rotation)
         }
 
         public sealed class SavedBreakHold
@@ -111,6 +132,7 @@ namespace TarkovVR.Source.Weapons
             public int chamberCount;
             public KeyedBones open;
             public KeyedBones lever;
+            public LeverPress leverPress;
             public BreakHold foreEnd;
             public BreakHold loadHold;
             public BreakHold pluckHold;
@@ -131,6 +153,7 @@ namespace TarkovVR.Source.Weapons
                 chamberCount = saved.chambers?.Count ?? 1,
                 open = KeyedFrom(saved.open),
                 lever = KeyedFrom(saved.lever),
+                leverPress = LeverPressFrom(saved.lever?.press),
                 foreEnd = BreakHoldFrom(saved.foreEnd),
                 loadHold = BreakHoldFrom(saved.loadHold),
                 pluckHold = BreakHoldFrom(saved.pluckHold),
@@ -160,6 +183,21 @@ namespace TarkovVR.Source.Weapons
                 }
             }
             return keyed;
+        }
+
+        private static LeverPress LeverPressFrom(SavedLeverPress saved)
+        {
+            if (saved == null || saved.joints == null || saved.joints.Length < 9 || saved.markerRest == null || saved.markerPressed == null)
+                return null;
+            Vector3[] eulers = FingersFrom(saved.joints);
+            Quaternion rest = QuaternionFrom(saved.markerRest, 3);
+            return new LeverPress
+            {
+                finger = saved.finger,
+                joints = new[] { Quaternion.Euler(eulers[0]), Quaternion.Euler(eulers[1]), Quaternion.Euler(eulers[2]) },
+                markerMove = Vector3From(saved.markerPressed, 0) - Vector3From(saved.markerRest, 0),
+                markerTurn = QuaternionFrom(saved.markerPressed, 3) * Quaternion.Inverse(rest),
+            };
         }
 
         private static BreakHold BreakHoldFrom(SavedBreakHold saved)
@@ -382,6 +420,7 @@ namespace TarkovVR.Source.Weapons
                 return;
             PoseBreakAction(data, state);
             PlaceBreakProps(data);
+            ApplyBreakLeverHand(firearmController, data);
         }
 
         // Co-op (TryBuildSync): the barrels and the lever off their rest pose, as PoseBreakAction writes them this frame
@@ -426,6 +465,25 @@ namespace TarkovVR.Source.Weapons
         {
             tookTrigger = false;
             breakGunOpen = false;
+            bool pressing = false;
+            try
+            {
+                return TickBreakActionWith(gripPressed, gripReleased, triggerPressed, triggerReleased, handBusy, out tookTrigger, out pressing);
+            }
+            finally
+            {
+                // The gun hand onto the lever while B is held (ApplyBreakLeverHand, the finger: DriveBreakLeverFinger)
+                breakLeverPress = Mathf.MoveTowards(breakLeverPress, pressing ? 1f : 0f, Time.deltaTime / Mathf.Max(leverPressTime, 0.001f));
+                if (!pressing && breakLeverPress <= 0f)
+                    breakLeverPressFor = null;
+            }
+        }
+
+        private static bool TickBreakActionWith(bool gripPressed, bool gripReleased, bool triggerPressed, bool triggerReleased, bool handBusy, out bool tookTrigger,
+            out bool pressing)
+        {
+            tookTrigger = false;
+            pressing = false;
             FirearmController firearmController = VRGlobals.firearmController;
             if (!VRGlobals.inGame || VRGlobals.vrPlayer == null || VRGlobals.player == null || !ManualBreakOn(firearmController, out BreakData data)
                 || !EnsureBreakBones(firearmController, data))
@@ -459,6 +517,9 @@ namespace TarkovVR.Source.Weapons
                 && !VRGlobals.menuOpen && !ChestHang.Detached && weapon.MalfState.State == Weapon.EMalfunctionState.None;
             bool leverPressed = leverButton && !previousLeverButton;
             previousLeverButton = leverButton;
+            pressing = leverButton && leverHandPress && data.leverPress != null && !Handedness.GunInLeftHand;
+            if (pressing)
+                breakLeverPressFor = firearmController;
             if (leverPressed)
             {
                 PlayFirstGunSound(firearmController, SoundHand.GunHand, "BarrelLock", "Hammer");
@@ -1568,6 +1629,97 @@ namespace TarkovVR.Source.Weapons
                 text.Append(chamber > 0 ? ", " : "").Append(model == null ? "-" : (spent ? "case on " : "round on ") + (model.transform.parent != null ? model.transform.parent.name : "nothing"));
             }
             return text.ToString();
+        }
+
+        //------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // The gun hand on the lever
+
+        private static float breakLeverPress;               // 0 on the grip .. 1 on the lever
+        private static FirearmController breakLeverPressFor;
+        private static Transform leverHandMarker;           // ours: Tarkov's arm IK target for the gun hand while pressing
+        private static Transform leverSavedMarker;          // what _markers[1] / _ikTargets[1] were, put back after the arm IK
+        private static Transform leverSavedIkTarget;
+        private static bool leverMarkerSwapped;
+
+        public static bool BreakLeverPressing => breakLeverPress > 0f && breakLeverPressFor != null;
+
+        // Player.LateUpdate prefix, before the arm IK: Tarkov puts the gun hand on its IK marker, pulled onto the grip's pose near it
+        // (IkProcess: the grip reference within 10 cm); here on ours, from exactly that toward the clip's marker at the press. The gun
+        // itself was anchored on the gun's own marker in Update, so only the hand moves. Back after the IK (RestoreBreakLeverMarker).
+        private static void ApplyBreakLeverHand(FirearmController firearmController, BreakData data)
+        {
+            EFT.Player player = VRGlobals.player;
+            if (!BreakLeverPressing || breakLeverPressFor != firearmController || data.leverPress == null || player == null || player._markers == null
+                || player._markers.Length < 2 || ChestHang.Detached || Handedness.GunInLeftHand || firearmController.HandsHierarchy == null)
+                return;
+            Transform gunMarker = firearmController.HandsHierarchy.GetTransform(ECharacterWeaponBones.weapon_R_IK_marker);
+            if (gunMarker == null || gunMarker.parent == null || player._markers[1] != gunMarker)
+                return;
+            Vector3 restPosition = gunMarker.position;
+            Quaternion restRotation = gunMarker.rotation;
+            Transform ikTarget = player._ikTargets != null && player._ikTargets.Length > 1 ? player._ikTargets[1] : null;
+            Transform gripReference = player._gripReferences != null && player._gripReferences.Length > 1 ? player._gripReferences[1] : null;
+            if (ikTarget != null && gripReference != null)
+            {
+                float onGrip = Mathf.InverseLerp(0.1f, 0f, Vector3.Distance(gunMarker.position, gripReference.position));
+                restPosition = Vector3.Lerp(restPosition, ikTarget.position, onGrip);
+                restRotation = Quaternion.Lerp(restRotation, ikTarget.rotation, onGrip);
+            }
+            Transform parent = gunMarker.parent;
+            Vector3 pressedPosition = parent.TransformPoint(gunMarker.localPosition + data.leverPress.markerMove);
+            Quaternion pressedRotation = parent.rotation * data.leverPress.markerTurn * gunMarker.localRotation;
+            float press = Mathf.SmoothStep(0f, 1f, breakLeverPress);
+            if (leverHandMarker == null)
+                leverHandMarker = new GameObject("VRLeverHand").transform;
+            leverHandMarker.SetPositionAndRotation(Vector3.Lerp(restPosition, pressedPosition, press), Quaternion.Slerp(restRotation, pressedRotation, press));
+            leverSavedMarker = player._markers[1];
+            leverSavedIkTarget = ikTarget;
+            player._markers[1] = leverHandMarker;
+            if (ikTarget != null)
+                player._ikTargets[1] = null;
+            leverMarkerSwapped = true;
+        }
+
+        // Player.LateUpdate postfix (ShotgunPatches)
+        public static void RestoreBreakLeverMarker()
+        {
+            if (!leverMarkerSwapped)
+                return;
+            leverMarkerSwapped = false;
+            EFT.Player player = VRGlobals.player;
+            if (player == null || player._markers == null || player._markers.Length < 2)
+                return;
+            if (player._markers[1] == leverHandMarker)
+                player._markers[1] = leverSavedMarker;
+            if (leverSavedIkTarget != null && player._ikTargets != null && player._ikTargets.Length > 1 && player._ikTargets[1] == null)
+                player._ikTargets[1] = leverSavedIkTarget;
+            leverSavedMarker = null;
+            leverSavedIkTarget = null;
+        }
+
+        // UpdateMagazineReleaseButton (no magazine on these guns): the gun hand's finger on the lever, the clip's joints over the
+        // animator's (the magazine release's finger machinery), following the hand onto it. True = a break-action of ours.
+        private static bool DriveBreakLeverFinger()
+        {
+            FirearmController firearmController = VRGlobals.firearmController;
+            if (!ManualBreakOn(firearmController, out BreakData data))
+                return false;
+            LeverPress press = data.leverPress;
+            if (press == null || !releaseFinger)
+                return true;
+            if (releaseFingerFor != firearmController || releaseFingerJoints == null)
+            {
+                Transform[] joints = GunHandFinger(press.finger + 1);
+                if (joints == null || joints.Length != press.joints.Length)
+                    return true;
+                releaseFingerFor = firearmController;
+                releaseFingerJoints = joints;
+                releaseFingerPressed = press.joints;
+                releaseFingerAnimated = new Quaternion[joints.Length];
+                releaseFingerWritten = new Quaternion[joints.Length];
+            }
+            releaseFingerTarget = breakLeverPressFor == firearmController ? breakLeverPress : 0f;
+            return true;
         }
 
         // The gun went away, the hands changed, Tarkov took it: nothing held stays held

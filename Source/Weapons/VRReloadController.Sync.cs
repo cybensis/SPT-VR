@@ -75,7 +75,7 @@ namespace TarkovVR.Source.Weapons
             // (off the gun, on a part, holding the gun from the left) goes where it's drawn here
             // (the support hand riding an open pump and the gun hand in a press check are off those markers too)
             bool gunInLeftHand = Handedness.GunInLeftHand;
-            syncDriveRight = gunInLeftHand || ChestHang.Detached || PressCheckActive;
+            syncDriveRight = gunInLeftHand || ChestHang.Detached || PressCheckActive || BreakLeverPressing;
             syncDriveLeft = !(VRGlobals.vrPlayer.isSupporting && !gunInLeftHand) || pumpHandDriving;
             EnsureWristHooks();
             SyncWrist(0, VRGlobals.ikManager.leftArmIk, weaponRoot, out syncLeftPosition, out syncLeftRotation);

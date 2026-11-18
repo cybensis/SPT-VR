@@ -21,6 +21,16 @@ namespace TarkovVR.Patches.Core.Player
             VRReloadController.ApplyBreakActionBeforeIk();
         }
 
+        // A break-action's lever pressed: the gun hand's IK marker swapped for Tarkov's IK in this LateUpdate only, put back here
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(EFT.Player), "LateUpdate")]
+        private static void LeverHandAfterIk(EFT.Player __instance)
+        {
+            if (__instance == null || !__instance.IsYourPlayer)
+                return;
+            VRReloadController.RestoreBreakLeverMarker();
+        }
+
         // A dry fire drops the hammer: a pump gun's action lock lets go (VRReloadController.PumpDryFired)
         [HarmonyPostfix]
         [HarmonyPatch(typeof(EFT.Player.FirearmController), nameof(EFT.Player.FirearmController.DryShot))]

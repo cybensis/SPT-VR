@@ -103,6 +103,9 @@ namespace TarkovVR.Source.Weapons
                 ForgetReleaseParts();
             if (releaseFingerFor != VRGlobals.firearmController)
                 ForgetReleaseFinger();
+            // A break-action's lever (VRReloadController.BreakAction): its own finger
+            if (DriveBreakLeverFinger())
+                return;
             if (!magazineReleaseButton || !TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return;
             if (!(firearmController.CurrentOperation is FirearmController.Idling))
