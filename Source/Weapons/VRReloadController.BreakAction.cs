@@ -23,6 +23,8 @@ namespace TarkovVR.Source.Weapons
     //    shell physics); a live round goes to the rig at the chest pouch, into an empty chamber at its mouth, else to the ground.
     //  - The chest pouch's grip with a chamber empty takes a shell (the bolt-action rounds' hold machinery); lined up on an empty chamber it
     //    slides in along the bore, past breakShellCommit the inventory move into that chamber runs and Tarkov's round model is put in.
+    //  - Two barrels, as Tarkov's own reload does them: both fired = one draw takes both cases; both empty = the pouch gives two shells,
+    //    side by side as the chambers are, in together (one move per chamber).
     //  - Moves into / out of a chamber skip Tarkov's own chamber operations (LetsSingleRoundIn), like the bolt-action rounds.
     public static partial class VRReloadController
     {
@@ -792,6 +794,17 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion caseInPalmRotation;
         private static Transform caseRider;
         private static bool caseOnRightArm;
+        // The other barrel's fired case, drawn with it (both fired): on its own bore, then where it sat beside the first in the hand
+        private static GameObject case2Prop;
+        private static int case2Chamber = -1;
+        private static AmmoTemplate case2Template;
+        private static Transform case2RestParent;
+        private static Vector3 case2RestLocalPosition;
+        private static Quaternion case2RestLocalRotation;
+        private static Vector3 case2RestInBarrelPosition;
+        private static Quaternion case2RestInBarrelRotation;
+        private static Vector3 case2InFirstPosition;
+        private static Quaternion case2InFirstRotation;
 
         private static bool TryPluckCase(FirearmController firearmController, BreakData data, BreakState state)
         {
@@ -854,6 +867,30 @@ namespace TarkovVR.Source.Weapons
             Transform controller = HandRig(gunHand: false);
             caseHandAtGrab = barrelBone.InverseTransformPoint(controller.position);
             bestModel.transform.SetParent(barrelBone, worldPositionStays: true);
+            case2Prop = null;
+            case2Chamber = -1;
+            if (bestSpent)
+            {
+                for (int chamber = 0; chamber < weapon.Chambers.Length; chamber++)
+                {
+                    if (chamber == best)
+                        continue;
+                    GameObject other = ChamberModel(firearms, weapon, chamber, out bool otherSpent);
+                    if (other == null || !otherSpent)
+                        continue;
+                    case2Prop = other;
+                    case2Chamber = chamber;
+                    case2Template = weapon.ShellsInChambers != null && chamber < weapon.ShellsInChambers.Length ? weapon.ShellsInChambers[chamber] : null;
+                    firearms._shellsInShellPort[chamber] = null;
+                    case2RestParent = other.transform.parent;
+                    case2RestLocalPosition = other.transform.localPosition;
+                    case2RestLocalRotation = other.transform.localRotation;
+                    case2RestInBarrelPosition = barrelBone.InverseTransformPoint(other.transform.position);
+                    case2RestInBarrelRotation = Quaternion.Inverse(barrelBone.rotation) * other.transform.rotation;
+                    other.transform.SetParent(barrelBone, worldPositionStays: true);
+                    break;
+                }
+            }
             // The hand rides the shell along the bore from where it took it
             if (caseRider == null)
                 caseRider = new GameObject("VRCaseHand").transform;
@@ -862,10 +899,11 @@ namespace TarkovVR.Source.Weapons
             LatchHand(caseRider, gunHand: false);
             SetLatchPivot(bestModel.transform.position);
             HoldingBreakCase = true;
-            PlayFirstGunSound(firearmController, SoundHand.OffHand, "UnloadOne", "ShellOut");
+            if (case2Prop == null || !PlayFirstGunSound(firearmController, SoundHand.OffHand, "UnloadBooth"))
+                PlayFirstGunSound(firearmController, SoundHand.OffHand, "UnloadOne", "ShellOut");
             Pulse(SoundHand.OffHand, 0.3f, 0.03f);
             if (breakDebugLog)
-                Plugin.MyLog.LogInfo($"[VRBreak] took the {(bestSpent ? "fired case" : "live round")} in chamber {best} ({caseLength * 100f:0.#} cm long)");
+                Plugin.MyLog.LogInfo($"[VRBreak] took the {(bestSpent ? "fired case" : "live round")} in chamber {best}{(case2Prop != null ? " and the one in chamber " + case2Chamber : "")} ({caseLength * 100f:0.#} cm long)");
             return true;
         }
 
@@ -930,6 +968,13 @@ namespace TarkovVR.Source.Weapons
                     Transform palm = ArmPalm(caseOnRightArm);
                     if (palm != null)
                         GetPoseIn(palm, caseProp.transform, out caseInPalmPosition, out caseInPalmRotation);
+                    if (case2Prop != null)
+                    {
+                        Transform first = caseProp.transform;
+                        case2InFirstPosition = Quaternion.Inverse(first.rotation) * (case2Prop.transform.position - first.position);
+                        case2InFirstRotation = Quaternion.Inverse(first.rotation) * case2Prop.transform.rotation;
+                        case2Prop.transform.SetParent(null, worldPositionStays: true);
+                    }
                     Pulse(SoundHand.OffHand, 0.25f, 0.03f);
                     if (breakDebugLog)
                         Plugin.MyLog.LogInfo($"[VRBreak] {(caseSpent ? "fired case" : "live round")} out of chamber {caseChamber}");
@@ -941,11 +986,15 @@ namespace TarkovVR.Source.Weapons
             if (caseSpent)
             {
                 GameObject prop = caseProp;
+                GameObject second = case2Prop;
                 ClearCase();
                 PlayFirstGunSound(firearmController, SoundHand.OffHand, "ShellThrow");
-                ThrowJamCase(prop.GetComponent<AmmoPoolObject>(), firearmController.Firearms, HandWorldVelocity(gunHand: false));
+                Vector3 velocity = HandWorldVelocity(gunHand: false);
+                ThrowJamCase(prop.GetComponent<AmmoPoolObject>(), firearmController.Firearms, velocity);
+                if (second != null)
+                    ThrowJamCase(second.GetComponent<AmmoPoolObject>(), firearmController.Firearms, velocity + Random.insideUnitSphere * 0.2f);
                 if (breakDebugLog)
-                    Plugin.MyLog.LogInfo("[VRBreak] fired case thrown");
+                    Plugin.MyLog.LogInfo($"[VRBreak] fired case{(second != null ? "s" : "")} thrown");
                 return;
             }
             LetGoOfLiveRound(firearmController, state);
@@ -1084,10 +1133,31 @@ namespace TarkovVR.Source.Weapons
             Transform restParent = caseRestParent;
             Vector3 restPosition = caseRestLocalPosition;
             Quaternion restRotation = caseRestLocalRotation;
+            GameObject second = case2Prop;
+            int secondChamber = case2Chamber;
+            AmmoTemplate secondTemplate = case2Template;
+            Transform secondParent = case2RestParent;
+            Vector3 secondPosition = case2RestLocalPosition;
+            Quaternion secondRotation = case2RestLocalRotation;
             ClearCase();
+            Firearms firearms = firearmController != null ? firearmController.Firearms : null;
+            if (second != null)
+            {
+                if (putBack && firearms != null && secondParent != null && firearms._shellsInShellPort != null && secondChamber < firearms._shellsInShellPort.Length
+                    && firearms._shellsInShellPort[secondChamber] == null)
+                {
+                    second.transform.SetParent(secondParent, worldPositionStays: false);
+                    second.transform.SetLocalPositionAndRotation(secondPosition, secondRotation);
+                    firearms._shellsInShellPort[secondChamber] = second.GetComponent<AmmoPoolObject>();
+                    Weapon weapon = firearmController.Item;
+                    if (weapon != null && weapon.ShellsInChambers != null && secondChamber < weapon.ShellsInChambers.Length)
+                        weapon.ShellsInChambers[secondChamber] = secondTemplate;
+                }
+                else
+                    AssetPoolObject.ReturnToPool(second);
+            }
             if (prop == null)
                 return;
-            Firearms firearms = firearmController != null ? firearmController.Firearms : null;
             if (!putBack || firearms == null || restParent == null)
             {
                 AssetPoolObject.ReturnToPool(prop);
@@ -1125,10 +1195,15 @@ namespace TarkovVR.Source.Weapons
                 Weapon weapon = caseFor.Item;
                 if (weapon.ShellsInChambers != null && caseChamber < weapon.ShellsInChambers.Length)
                     weapon.ShellsInChambers[caseChamber] = null;
+                if (case2Prop != null && weapon.ShellsInChambers != null && case2Chamber >= 0 && case2Chamber < weapon.ShellsInChambers.Length)
+                    weapon.ShellsInChambers[case2Chamber] = null;
                 SetBreakAnimatorCounts(caseFor);
             }
             HoldingBreakCase = false;
             caseProp = null;
+            case2Prop = null;
+            case2Chamber = -1;
+            case2Template = null;
             caseFor = null;
             caseRound = null;
             caseTemplate = null;
@@ -1144,6 +1219,9 @@ namespace TarkovVR.Source.Weapons
             {
                 caseProp.transform.SetPositionAndRotation(barrelBone.TransformPoint(caseRestInBarrelPosition + caseBoreInBarrel * caseOut),
                     barrelBone.rotation * caseRestInBarrelRotation);
+                if (case2Prop != null)
+                    case2Prop.transform.SetPositionAndRotation(barrelBone.TransformPoint(case2RestInBarrelPosition + caseBoreInBarrel * caseOut),
+                        barrelBone.rotation * case2RestInBarrelRotation);
                 return;
             }
             Transform palm = ArmPalm(caseOnRightArm);
@@ -1158,6 +1236,11 @@ namespace TarkovVR.Source.Weapons
                 rotation = Quaternion.Slerp(caseInPalmRotation, holdRotation, ease);
             }
             SetPoseIn(palm, caseProp.transform, position, rotation);
+            if (case2Prop != null)
+            {
+                Transform first = caseProp.transform;
+                case2Prop.transform.SetPositionAndRotation(first.position + first.rotation * case2InFirstPosition, first.rotation * case2InFirstRotation);
+            }
         }
 
         // A shell held as a clip holds it: its model sits on the shell's bone turned 90 deg about x (Firearms.ParentShellToTransform); the
@@ -1204,6 +1287,17 @@ namespace TarkovVR.Source.Weapons
         private static float breakShellSnapStart;
         public static float breakShellSnapTime = 0.08f;     // s it eases from the hand onto the bore
         private static bool breakMoveInFlight;              // our move into / out of a chamber is running (LetsSingleRoundIn)
+        // Both barrels empty: a second shell from the same stack, held beside the first as the chambers sit (chamber 0 to 1), into the
+        // other chamber with it. Its own move runs once the first's is in.
+        private static GameObject breakShellSecond;
+        private static Vector3 breakShellPairPosition;      // the second in the first's frame
+        private static Quaternion breakShellPairRotation;
+        private static int breakShellSecondChamber = -1;
+        private static Vector3 breakShellSecondSeatInBarrel;
+        private static Quaternion breakShellSecondSeatRotationInBarrel;
+        private static Vector3 breakShellSecondSnapFrom;
+        private static Quaternion breakShellSecondSnapFromRotation;
+        private static int breakShellSecondLoaded;          // its move: 0 not back yet, 1 done, -1 refused
 
         // A grip at the chest (like TryGrabRound): true when it was this gun's (a shell taken, or none that fits: a double buzz)
         private static bool TryGrabBreakShell(bool gunHand)
@@ -1248,6 +1342,19 @@ namespace TarkovVR.Source.Weapons
             breakShellData = data;
             breakShellOnBore = false;
             breakShellCommitted = false;
+            breakShellSecond = null;
+            breakShellSecondChamber = -1;
+            // Both empty and two in the stack: both, chamber 0's beside chamber 1's as they sit in the gun
+            Transform first = ChamberBone(firearms, 0);
+            Transform second = ChamberBone(firearms, 1);
+            if (weapon.Chambers.Length == 2 && ChamberEmpty(firearms, weapon, 0) && ChamberEmpty(firearms, weapon, 1) && source.StackObjectsCount >= 2
+                && first != null && second != null)
+            {
+                Quaternion firstSeat = first.rotation * Quaternion.Euler(90f, 0f, 0f);
+                breakShellPairPosition = Quaternion.Inverse(firstSeat) * (second.position - first.position);
+                breakShellPairRotation = Quaternion.Inverse(firstSeat) * second.rotation * Quaternion.Euler(90f, 0f, 0f);
+                breakShellSecond = CreateProp(source);
+            }
             MeasureRound(prop);
             PointRoundAlongBore(firearmController);
             HoldingRound = true;
@@ -1255,7 +1362,7 @@ namespace TarkovVR.Source.Weapons
             PlayFirstGunSound(firearmController, SoundHand.OffHandAlone, "ShellOutRig", "AmmoCatch");
             PulseRoundHand(false, 0.25f, 0.03f);
             if (breakDebugLog)
-                Plugin.MyLog.LogInfo($"[VRBreak] took a shell of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack), chambers {ChambersText(firearmController, weapon)}");
+                Plugin.MyLog.LogInfo($"[VRBreak] took {(breakShellSecond != null ? "two shells" : "a shell")} of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack), chambers {ChambersText(firearmController, weapon)}");
             return true;
         }
 
@@ -1381,55 +1488,104 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
             breakShellOut = Mathf.Max(0f, Mathf.Min(breakShellOut - breakShellFinishSpeed * Time.deltaTime, Mathf.Max(wanted, 0f)));
-            if (breakShellOut <= 0f && breakShellLoaded != 0)
+            if (breakShellOut <= 0f && breakShellLoaded != 0 && (breakShellLoaded < 0 || breakShellSecondLoaded != 0))
                 FinishBreakShell(firearmController, weapon);
         }
 
-        // Lined up on an empty chamber's bore behind it: onto it
+        // Lined up on an empty chamber's bore behind it: onto it. A pair: either shell lined up on either chamber puts it there and the
+        // other one on the other chamber.
         private static void TryPutShellOnBore(Firearms firearms, Weapon weapon)
         {
-            Transform prop = heldRoundProp.transform;
-            Vector3 propAxis = prop.rotation * roundAxisInProp;
-            for (int chamber = 0; chamber < weapon.Chambers.Length; chamber++)
+            if (breakShellSecond != null)
             {
-                Transform bone = ChamberBone(firearms, chamber);
-                if (bone == null || !ChamberEmpty(firearms, weapon, chamber))
-                    continue;
-                // Seated: the model on the chamber bone as Tarkov puts it (Firearms.ParentShellToTransform)
-                Quaternion seatedRotation = bone.rotation * Quaternion.Euler(90f, 0f, 0f);
-                Vector3 seatedCenter = bone.position + seatedRotation * roundCenterInProp;
-                Vector3 bore = bone.up;
-                Vector3 off = prop.TransformPoint(roundCenterInProp) - seatedCenter;
-                float along = Vector3.Dot(off, bore);
-                float lateral = (off - bore * along).magnitude;
-                if (along < 0f || along > roundLength + breakShellReach || lateral > breakShellCaptureRadius
-                    || Vector3.Angle(propAxis, seatedRotation * roundAxisInProp) > breakShellCaptureAngle)
-                    continue;
-                breakShellOnBore = true;
-                breakShellChamber = chamber;
-                breakShellOut = along;
-                breakShellOutAtCapture = along;
-                breakShellHandAtCapture = barrelBone.InverseTransformPoint(HandRig(gunHand: false).position);
-                breakShellSeatInBarrel = barrelBone.InverseTransformPoint(bone.position);
-                breakShellSeatRotationInBarrel = Quaternion.Inverse(barrelBone.rotation) * seatedRotation;
-                breakShellBoreInBarrel = Quaternion.Inverse(barrelBone.rotation) * bore;
-                breakShellSnapFrom = barrelBone.InverseTransformPoint(prop.position);
-                breakShellSnapFromRotation = Quaternion.Inverse(barrelBone.rotation) * prop.rotation;
-                breakShellSnapStart = Time.time;
-                prop.SetParent(barrelBone, worldPositionStays: true);
-                PlaceBreakShellOnBore();
-                // The hand rides it in, from where it holds it
-                Transform controller = HandRig(gunHand: false);
-                if (breakShellRider == null)
-                    breakShellRider = new GameObject("VRBreakShellHand").transform;
-                breakShellRider.SetParent(prop, worldPositionStays: false);
-                breakShellRider.SetPositionAndRotation(controller.position, controller.rotation);
-                LatchHand(breakShellRider, gunHand: false);
-                PulseRoundHand(false, 0.25f, 0.03f);
-                if (breakDebugLog)
-                    Plugin.MyLog.LogInfo($"[VRBreak] shell onto chamber {chamber}'s bore, {along * 100f:0.#} cm out");
+                for (int shell = 0; shell < 2; shell++)
+                {
+                    for (int chamber = 0; chamber < 2; chamber++)
+                    {
+                        Transform held = (shell == 0 ? heldRoundProp : breakShellSecond).transform;
+                        if (!LinedUpOnBore(firearms, weapon, chamber, held, out float along))
+                            continue;
+                        // The first shell's chamber, as if the first were the one lined up
+                        int firstChamber = shell == 0 ? chamber : 1 - chamber;
+                        if (!ChamberEmpty(firearms, weapon, 1 - firstChamber))
+                            continue;
+                        PutShellOnBore(firearms, firstChamber, along);
+                        PutSecondShellOnBore(firearms, 1 - firstChamber);
+                        return;
+                    }
+                }
                 return;
             }
+            for (int chamber = 0; chamber < weapon.Chambers.Length; chamber++)
+            {
+                if (LinedUpOnBore(firearms, weapon, chamber, heldRoundProp.transform, out float along))
+                {
+                    PutShellOnBore(firearms, chamber, along);
+                    return;
+                }
+            }
+        }
+
+        // A held shell lined up behind an empty chamber, along its bore: how far out
+        private static bool LinedUpOnBore(Firearms firearms, Weapon weapon, int chamber, Transform prop, out float along)
+        {
+            along = 0f;
+            Transform bone = ChamberBone(firearms, chamber);
+            if (bone == null || !ChamberEmpty(firearms, weapon, chamber))
+                return false;
+            Quaternion seatedRotation = bone.rotation * Quaternion.Euler(90f, 0f, 0f);
+            Vector3 bore = bone.up;
+            Vector3 off = prop.TransformPoint(roundCenterInProp) - (bone.position + seatedRotation * roundCenterInProp);
+            along = Vector3.Dot(off, bore);
+            float lateral = (off - bore * along).magnitude;
+            return along >= 0f && along <= roundLength + breakShellReach && lateral <= breakShellCaptureRadius
+                && Vector3.Angle(prop.rotation * roundAxisInProp, seatedRotation * roundAxisInProp) <= breakShellCaptureAngle;
+        }
+
+        private static void PutSecondShellOnBore(Firearms firearms, int chamber)
+        {
+            Transform bone = ChamberBone(firearms, chamber);
+            if (bone == null || breakShellSecond == null)
+                return;
+            breakShellSecondChamber = chamber;
+            breakShellSecondSeatInBarrel = barrelBone.InverseTransformPoint(bone.position);
+            breakShellSecondSeatRotationInBarrel = Quaternion.Inverse(barrelBone.rotation) * bone.rotation * Quaternion.Euler(90f, 0f, 0f);
+            Transform prop = breakShellSecond.transform;
+            breakShellSecondSnapFrom = barrelBone.InverseTransformPoint(prop.position);
+            breakShellSecondSnapFromRotation = Quaternion.Inverse(barrelBone.rotation) * prop.rotation;
+            prop.SetParent(barrelBone, worldPositionStays: true);
+            PlaceBreakShellOnBore();
+        }
+
+        private static void PutShellOnBore(Firearms firearms, int chamber, float along)
+        {
+            Transform prop = heldRoundProp.transform;
+            Transform bone = ChamberBone(firearms, chamber);
+            Quaternion seatedRotation = bone.rotation * Quaternion.Euler(90f, 0f, 0f);
+            Vector3 bore = bone.up;
+            breakShellOnBore = true;
+            breakShellChamber = chamber;
+            breakShellOut = along;
+            breakShellOutAtCapture = along;
+            breakShellHandAtCapture = barrelBone.InverseTransformPoint(HandRig(gunHand: false).position);
+            breakShellSeatInBarrel = barrelBone.InverseTransformPoint(bone.position);
+            breakShellSeatRotationInBarrel = Quaternion.Inverse(barrelBone.rotation) * seatedRotation;
+            breakShellBoreInBarrel = Quaternion.Inverse(barrelBone.rotation) * bore;
+            breakShellSnapFrom = barrelBone.InverseTransformPoint(prop.position);
+            breakShellSnapFromRotation = Quaternion.Inverse(barrelBone.rotation) * prop.rotation;
+            breakShellSnapStart = Time.time;
+            prop.SetParent(barrelBone, worldPositionStays: true);
+            PlaceBreakShellOnBore();
+            // The hand rides it in, from where it holds it
+            Transform controller = HandRig(gunHand: false);
+            if (breakShellRider == null)
+                breakShellRider = new GameObject("VRBreakShellHand").transform;
+            breakShellRider.SetParent(prop, worldPositionStays: false);
+            breakShellRider.SetPositionAndRotation(controller.position, controller.rotation);
+            LatchHand(breakShellRider, gunHand: false);
+            PulseRoundHand(false, 0.25f, 0.03f);
+            if (breakDebugLog)
+                Plugin.MyLog.LogInfo($"[VRBreak] shell onto chamber {chamber}'s bore{(breakShellSecond != null ? " (the second onto the other's)" : "")}, {along * 100f:0.#} cm out");
         }
 
         private static void PlaceBreakShellOnBore()
@@ -1440,14 +1596,23 @@ namespace TarkovVR.Source.Weapons
             Vector3 position = Vector3.Lerp(breakShellSnapFrom, breakShellSeatInBarrel + breakShellBoreInBarrel * breakShellOut, snap);
             Quaternion rotation = Quaternion.Slerp(breakShellSnapFromRotation, breakShellSeatRotationInBarrel, snap);
             heldRoundProp.transform.SetPositionAndRotation(barrelBone.TransformPoint(position), barrelBone.rotation * rotation);
+            if (breakShellSecond != null && breakShellSecondChamber >= 0)
+            {
+                Vector3 secondPosition = Vector3.Lerp(breakShellSecondSnapFrom, breakShellSecondSeatInBarrel + breakShellBoreInBarrel * breakShellOut, snap);
+                Quaternion secondRotation = Quaternion.Slerp(breakShellSecondSnapFromRotation, breakShellSecondSeatRotationInBarrel, snap);
+                breakShellSecond.transform.SetPositionAndRotation(barrelBone.TransformPoint(secondPosition), barrelBone.rotation * secondRotation);
+            }
         }
 
         private static void TakeBreakShellOffBore()
         {
             breakShellOnBore = false;
+            breakShellSecondChamber = -1;
             ReleaseBreakShellHand();
             if (heldRoundProp != null)
                 heldRoundProp.transform.SetParent(null, worldPositionStays: true);
+            if (breakShellSecond != null)
+                breakShellSecond.transform.SetParent(null, worldPositionStays: true);
             PulseRoundHand(false, 0.12f, 0.02f);
             if (breakDebugLog)
                 Plugin.MyLog.LogInfo("[VRBreak] shell drawn back off the bore");
@@ -1469,14 +1634,30 @@ namespace TarkovVR.Source.Weapons
             roundLoading = true;
             Pulse(SoundHand.OffHand, 0.3f, 0.03f);
             int chamber = breakShellChamber;
-            RunBreakMove(firearmController, operation, "shell into chamber " + chamber, succeeded => breakShellLoaded = succeeded ? 1 : -1);
+            int secondChamber = breakShellSecond != null ? breakShellSecondChamber : -1;
+            breakShellSecondLoaded = secondChamber >= 0 ? 0 : 1;
+            Ammo source = heldRoundSource;
+            RunBreakMove(firearmController, operation, "shell into chamber " + chamber, succeeded =>
+            {
+                breakShellLoaded = succeeded ? 1 : -1;
+                if (secondChamber < 0)
+                    return;
+                if (!succeeded || source == null || source.StackObjectsCount <= 0 || !TryBuildLoadIntoChamber(source, weapon, secondChamber, out var secondMove))
+                {
+                    breakShellSecondLoaded = -1;
+                    return;
+                }
+                RunBreakMove(firearmController, secondMove, "second shell into chamber " + secondChamber, secondDone => breakShellSecondLoaded = secondDone ? 1 : -1);
+            });
         }
 
         // Home: Tarkov's round model in the chamber for ours
         private static void FinishBreakShell(FirearmController firearmController, Weapon weapon)
         {
             int chamber = breakShellChamber;
+            int secondChamber = breakShellSecond != null ? breakShellSecondChamber : -1;
             bool loaded = breakShellLoaded > 0;
+            bool secondLoaded = secondChamber >= 0 && breakShellSecondLoaded > 0;
             EndBreakShell();
             Firearms firearms = firearmController.Firearms;
             if (!loaded)
@@ -1488,8 +1669,15 @@ namespace TarkovVR.Source.Weapons
             ForgetFiredCase(weapon, chamber);
             if (firearms != null && weapon.Chambers[chamber].ContainedItem is Ammo round)
                 firearms.SetRoundIntoWeapon(round, chamber);
+            if (secondLoaded)
+            {
+                ForgetFiredCase(weapon, secondChamber);
+                if (firearms != null && weapon.Chambers[secondChamber].ContainedItem is Ammo secondRound)
+                    firearms.SetRoundIntoWeapon(secondRound, secondChamber);
+            }
             SetBreakAnimatorCounts(firearmController);
-            PlayFirstGunSound(firearmController, SoundHand.OffHand, "LoadOne", "ShellIn");
+            if (!secondLoaded || !PlayFirstGunSound(firearmController, SoundHand.OffHand, "LoadBooth"))
+                PlayFirstGunSound(firearmController, SoundHand.OffHand, "LoadOne", "ShellIn");
             Pulse(SoundHand.OffHand.Seating, 0.45f, 0.04f);
         }
 
@@ -1513,6 +1701,13 @@ namespace TarkovVR.Source.Weapons
         {
             if (breakShellHeld)
                 ReleaseBreakShellHand();
+            if (breakShellSecond != null)
+            {
+                breakShellSecond.transform.SetParent(null, worldPositionStays: true);
+                ReturnPropToPool(breakShellSecond);
+                breakShellSecond = null;
+            }
+            breakShellSecondChamber = -1;
             breakShellHeld = false;
             breakShellData = null;
             breakShellOnBore = false;
@@ -1529,6 +1724,11 @@ namespace TarkovVR.Source.Weapons
                 return;
             if (BreakShellHoldInPalm(breakShellData.loadHold, heldRoundProp.transform, roundOnRightArm, out Vector3 position, out Quaternion rotation))
                 SetPoseIn(palm, heldRoundProp.transform, position, rotation);
+            if (breakShellSecond != null)
+            {
+                Transform first = heldRoundProp.transform;
+                breakShellSecond.transform.SetPositionAndRotation(first.position + first.rotation * breakShellPairPosition, first.rotation * breakShellPairRotation);
+            }
         }
 
         // The fingers holding a break-action's shell / drawn case / the fore-end (pose order, palm first), mirrored on the right arm
