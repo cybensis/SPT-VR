@@ -31,6 +31,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static int maxSimSubsteps = 40;
 
         public static float contactLeadMargin = 0.03f;   // m; physics mode engages when geometry is within (gun radius + this-frame travel + this); bigger = earlier
+        // The contact solve's passes for the proxy (Tarkov's physics settings give every body 3 / 1, Unity's own 6 / 1): a gun resting on
+        // a ledge, pressed into a corner or pivoting on an edge holds steadier with more. One small body: the cost is nothing.
+        public static int solverIterations = 12;
+        public static int solverVelocityIterations = 4;
 
         public static float proxyMass = 10f;             // kg; only matters against a door body: heavier = the gun shoves doors more easily
         public static float doorMass = 1f;               // kg of a door in the sandbox
@@ -112,6 +116,7 @@ namespace TarkovVR.Source.Player.Interactions
         }
 
         public bool RecentlyContacted => active && Time.time - lastContactTime < contactMemory;
+        public int LastSubsteps { get; private set; }
         public bool Active => active;
         public Vector3 ResolvedPos => active ? rb.position : targetPos;
         public Quaternion ResolvedRot => active ? rb.rotation : targetRot;
@@ -133,6 +138,8 @@ namespace TarkovVR.Source.Player.Interactions
             proxy.rb.interpolation = RigidbodyInterpolation.None;
             proxy.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             proxy.rb.maxAngularVelocity = maxAngSpeed * Mathf.Deg2Rad;
+            proxy.rb.solverIterations = Mathf.Max(solverIterations, 1);
+            proxy.rb.solverVelocityIterations = Mathf.Max(solverVelocityIterations, 1);
 
             // Frictionless (Minimum combine -> every contact is frictionless whatever the wall's material) so the gun
             // slides / pivots along a surface instead of gripping it. Zero bounce so it doesn't spring off.
@@ -270,6 +277,7 @@ namespace TarkovVR.Source.Player.Interactions
             }
             if (!near)
             {
+                LastSubsteps = 0;
                 rb.position = targetPos;
                 rb.rotation = targetRot;
                 rb.velocity = Vector3.zero;
@@ -285,6 +293,8 @@ namespace TarkovVR.Source.Player.Interactions
 
             // Tarkov's default angular speed limit (7 rad/s) would brake a swing as it nears a wall, the moment this drive takes over
             rb.maxAngularVelocity = Mathf.Max(maxAngSpeed * Mathf.Deg2Rad, 7f);
+            rb.solverIterations = Mathf.Max(solverIterations, 1);
+            rb.solverVelocityIterations = Mathf.Max(solverVelocityIterations, 1);
             Quaternion rotationDelta = targetRot * Quaternion.Inverse(rb.rotation);
             rotationDelta.ToAngleAxis(out float angle, out Vector3 axis);
             if (angle > 180f)
@@ -306,6 +316,7 @@ namespace TarkovVR.Source.Player.Interactions
             // through a thin wall. Velocity is set once above; contact response carries between substeps.
             float muzzleSpeed = rb.velocity.magnitude + rb.angularVelocity.magnitude * builtLen;
             int steps = Mathf.Clamp(Mathf.CeilToInt(muzzleSpeed * dt / substepMuzzleDist), 1, maxSimSubsteps);
+            LastSubsteps = steps;
             float substep = dt / steps;
             PrepareDoorBodies();
             for (int i = 0; i < steps; i++)

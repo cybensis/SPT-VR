@@ -44,6 +44,10 @@ namespace TarkovVR.Source.Player.Interactions
         public static float glassBreakDamage = 30f;        // melee damage carried by the synthetic hit (~knife slash)
         public static bool leftoverGlassAtTouch = true;    // what's left of a broken window breaks at any touch (false = it needs the whack too)
         public static bool logContacts = false;            // a line per new contact: what the gun hit (path, layer, collider, bullet surface)
+        // A line a second while the gun touches something: how much the drawn muzzle shakes frame to frame (its second difference, in the
+        // rig's frame: walking and turning aren't shake) against the hand's own, how deep the hand is in, the substeps. The drawn gun
+        // shaking more than the hand = the contact solve; as much = the hand's own tremor carried along the surface.
+        public static bool contactJitterLog = true;
 
         public static int proxyLayerOverride = -1;         // force the proxy/sandbox layer (UnityExplorer) if the auto-pick misbehaves
 
@@ -179,6 +183,54 @@ namespace TarkovVR.Source.Player.Interactions
             // reaches the hand exactly and EnactHolderPose no-ops (its epsilon check); against a wall the visible gun
             // stops the same frame the proxy does. Feedback comes from the proxy's collision events -> OnProxyContact.
             EnactHolderPose(rawGrip, weaponRootRotation, proxy.ResolvedPos, proxy.ResolvedRot);
+            if (contactJitterLog)
+                TrackContactJitter(rawGrip, weaponRootRotation, proxy.ResolvedPos, proxy.ResolvedRot, weaponLn);
+        }
+
+        private static Vector3 drawnMuzzleBefore, drawnMuzzleBeforeThat, handMuzzleBefore, handMuzzleBeforeThat;
+        private static int jitterSamples, jitterLastFrame = -10, jitterFrames, jitterSubsteps;
+        private static float jitterDrawnSum, jitterHandSum, jitterDrawnMost, jitterHandMost, jitterInsideSum, jitterNextLog;
+
+        private static void TrackContactJitter(Vector3 handGrip, Quaternion handRotation, Vector3 drawnGrip, Quaternion drawnRotation, float length)
+        {
+            Transform rig = VRGlobals.camRoot != null ? VRGlobals.camRoot.transform : null;
+            bool touching = proxy.RecentlyContacted && rig != null;
+            if (!touching || Time.frameCount - jitterLastFrame != 1)
+                jitterSamples = 0;
+            jitterLastFrame = Time.frameCount;
+            if (touching)
+            {
+                Vector3 muzzle = new Vector3(0f, -length, 0f);
+                Vector3 drawn = rig.InverseTransformPoint(drawnGrip + drawnRotation * muzzle);
+                Vector3 hand = rig.InverseTransformPoint(handGrip + handRotation * muzzle);
+                if (jitterSamples >= 2)
+                {
+                    float drawnShake = (drawn - 2f * drawnMuzzleBefore + drawnMuzzleBeforeThat).magnitude;
+                    float handShake = (hand - 2f * handMuzzleBefore + handMuzzleBeforeThat).magnitude;
+                    jitterDrawnSum += drawnShake;
+                    jitterHandSum += handShake;
+                    jitterDrawnMost = Mathf.Max(jitterDrawnMost, drawnShake);
+                    jitterHandMost = Mathf.Max(jitterHandMost, handShake);
+                    jitterInsideSum += (hand - drawn).magnitude;
+                    jitterSubsteps += proxy.LastSubsteps;
+                    jitterFrames++;
+                }
+                drawnMuzzleBeforeThat = drawnMuzzleBefore;
+                drawnMuzzleBefore = drawn;
+                handMuzzleBeforeThat = handMuzzleBefore;
+                handMuzzleBefore = hand;
+                jitterSamples = Mathf.Min(jitterSamples + 1, 2);
+            }
+            if (jitterFrames > 0 && Time.time >= jitterNextLog)
+            {
+                jitterNextLog = Time.time + 1f;
+                Plugin.MyLog.LogInfo($"[WeaponCollision] touching {jitterFrames} frames: muzzle shake drawn {jitterDrawnSum / jitterFrames * 1000f:0.0} mm "
+                    + $"(most {jitterDrawnMost * 1000f:0.0}) vs hand {jitterHandSum / jitterFrames * 1000f:0.0} mm (most {jitterHandMost * 1000f:0.0}), "
+                    + $"hand {jitterInsideSum / jitterFrames * 100f:0.0} cm in, {jitterSubsteps / (float)jitterFrames:0.#} substeps, solver {WeaponPhysicsProxy.solverIterations}/{WeaponPhysicsProxy.solverVelocityIterations}");
+                jitterFrames = 0;
+                jitterSubsteps = 0;
+                jitterDrawnSum = jitterHandSum = jitterDrawnMost = jitterHandMost = jitterInsideSum = 0f;
+            }
         }
 
         // Moves weaponHolder so the gun's root goes from its current (un-collided) pose to the resolved pose: a rigid
