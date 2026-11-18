@@ -95,9 +95,29 @@ for k,v in sorted(R['grips'].items()):
 # magazine (2) plays sa58_mag_in_0 and its drum (3) _2, the G28's 10 / 20 round (0 / 1) _1 / _2. A set any of whose guns' animators say so
 # gets that half's holds from that, its numbered ones dropped; the pull from the magazine-out clip, the insert from the magazine-in.
 clipHolds={k:dict(v) for k,v in out['grips'].items()}
+def clipHoldSource(clip,direction):
+    m=re.match(r'(.+?)_mag_'+direction+r'(?:_(\d+))?$',magClipName('',clip))
+    return f'{m.group(1).lower()}|{gripType(m.group(1).lower(),int(m.group(2) or 0))}' if m else None
+# A way with no blend tree (gen_gun_families stateTypes): the clip its one state plays for every magazine (the VAL's val_mag_out_0 -
+# its val_mag_out_1 is in the bundle, nothing plays it), or the one the transitions pick by type (the PM's drum), for the types the
+# gun's magazines have; of a type's clips one that gave a hold first (the AA-12's inventory-to-reload one gave none)
+def playedByType(g):
+    entry=gunClips.get(g['name']) or {}
+    played=dict(entry.get('magazineTypes') or {})
+    gunTypes=sorted(magazinesByType(g))
+    for direction,byType in (entry.get('stateTypes') or {}).items():
+        if direction in played: continue
+        half='insert' if direction=='in' else 'pull'
+        expanded={}
+        for typ in gunTypes:
+            clipList=byType.get('*') or byType.get(str(typ))
+            if clipList:
+                expanded[str(typ)]=[c for c in clipList if clipHolds.get(clipHoldSource(c,direction),{}).get(half)] or clipList
+        if expanded: played[direction]=expanded
+    return played
 typedHolds={}; typedConflicts=[]
 for g in guns:
-    family=gunFamily.get(g['name']); played=(gunClips.get(g['name']) or {}).get('magazineTypes') or {}
+    family=gunFamily.get(g['name']); played=playedByType(g)
     if not family or g['mode']!='ExternalMagazine': continue
     for direction,half in (('in','insert'),('out','pull')):
         for typ,clipList in (played.get(direction) or {}).items():

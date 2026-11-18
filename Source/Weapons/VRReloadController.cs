@@ -1520,12 +1520,14 @@ namespace TarkovVR.Source.Weapons
             return axisInWell.sqrMagnitude > 1e-8f ? axisInWell.normalized : Vector3.down;
         }
 
-        // The longest side of the magazine body's mesh bounds (mags are modelled upright), in the prop's frame, pointing away from
-        // the well. The body is the biggest mesh; the rounds are separate small ones. Bounds are mesh metadata: fine on unreadable meshes.
-        // If the longest side is nowhere near the way the magazine hangs from the well (the Beta-C dual drum is wider than it is
-        // tall), the side closest to that direction is its length.
+        // The side of the magazine body's mesh bounds its rounds stack along (its top round to its last), in the prop's frame,
+        // pointing away from the well: not the longest one, on a short box deeper than tall (the T-5000's, G28's 10-round, VPO-101's,
+        // AK-50's: that one ran along the gun). Without rounds, the longest side (mags are modelled upright), or if that's nowhere
+        // near the way the magazine hangs from the well (the Beta-C dual drum is wider than it is tall), the side closest to it.
+        // The body is the biggest mesh; the rounds are separate small ones. Bounds are mesh metadata: fine on unreadable meshes.
         public static float minLengthAxisAlignment = 0.5f;   // cos of how far the longest side may be off the well to body direction
         public static float minBodyOffsetAlongLength = 0.005f; // m the body's middle must sit off the well point along its length to say which end is out
+        public static float minRoundStackLength = 0.01f;    // m from the top round to the last for their line to say which side is the length
         private static bool TryGetMagazineShape(GameObject prop, Vector3 wellPointInProp, out Vector3 axisInProp, out float length, out float thinnestSide)
         {
             axisInProp = Vector3.zero;
@@ -1565,28 +1567,29 @@ namespace TarkovVR.Source.Weapons
                 propTransform.InverseTransformDirection(body.transform.up),
                 propTransform.InverseTransformDirection(body.transform.forward),
             };
-            if (towardBody.sqrMagnitude > 1e-6f && Mathf.Abs(Vector3.Dot(sides[lengthSide].normalized, towardBody.normalized)) < minLengthAxisAlignment)
-            {
-                float closest = -1f;
-                for (int side = 0; side < sides.Length; side++)
-                {
-                    float alignment = Mathf.Abs(Vector3.Dot(sides[side].normalized, towardBody.normalized));
-                    if (alignment > closest)
-                    {
-                        closest = alignment;
-                        lengthSide = side;
-                    }
-                }
-            }
+            Vector3 roundStack = TryGetRoundStack(propTransform, out Transform topRound, out Transform lastRound)
+                ? propTransform.InverseTransformPoint(lastRound.position) - propTransform.InverseTransformPoint(topRound.position) : Vector3.zero;
+            if (roundStack.magnitude >= minRoundStackLength)
+                lengthSide = SideAlong(sides, roundStack);
+            else if (towardBody.sqrMagnitude > 1e-6f && Mathf.Abs(Vector3.Dot(sides[lengthSide].normalized, towardBody.normalized)) < minLengthAxisAlignment)
+                lengthSide = SideAlong(sides, towardBody);
 
             Vector3 axis = sides[lengthSide];
             if (axis.sqrMagnitude < 1e-8f)
                 return false;
-            // Which end hangs out of the well: the body's middle is well below the well point on almost every magazine. Not on one
-            // modelled centred on its own origin with no ModPlacer (the MP7's 20-round: its body's middle is the well point). Then
-            // out is the seated well bone's -z, as in every straight-out rifle's own clip (Tools/gen_reload_holds wellAxis).
+            // Which end hangs out of the well: the one away from the top round (at the feed lips). Else the body's middle below the
+            // well point - wrong on a magazine that sits mostly above it (the FAL 10-round: the origin of every FAL magazine is 7.6 cm
+            // under its top; the MP9's and Uzi's, up in the grip). Else, on one centred on its own origin with no ModPlacer (the MP7's
+            // 20-round), the seated well bone's -z, as in every straight-out rifle's own clip.
+            float topRoundAlong = topRound != null
+                ? Vector3.Dot(axis.normalized, propTransform.InverseTransformPoint(topRound.position) - (towardBody + wellPointInProp)) : 0f;
             float bodyAlong = Vector3.Dot(axis.normalized, towardBody);
-            if (Mathf.Abs(bodyAlong) >= minBodyOffsetAlongLength)
+            if (Mathf.Abs(topRoundAlong) >= minBodyOffsetAlongLength)
+            {
+                if (topRoundAlong > 0f)
+                    axis = -axis;
+            }
+            else if (Mathf.Abs(bodyAlong) >= minBodyOffsetAlongLength)
             {
                 if (bodyAlong < 0f)
                     axis = -axis;
@@ -1597,6 +1600,48 @@ namespace TarkovVR.Source.Weapons
             length = lengthSide == 0 ? bodySize.x : lengthSide == 1 ? bodySize.y : bodySize.z;
             thinnestSide = Mathf.Min(bodySize.x, Mathf.Min(bodySize.y, bodySize.z));
             return true;
+        }
+
+        private static int SideAlong(Vector3[] sides, Vector3 direction)
+        {
+            int best = 0;
+            float closest = -1f;
+            for (int side = 0; side < sides.Length; side++)
+            {
+                float alignment = Mathf.Abs(Vector3.Dot(sides[side].normalized, direction.normalized));
+                if (alignment > closest)
+                {
+                    closest = alignment;
+                    best = side;
+                }
+            }
+            return best;
+        }
+
+        // Tarkov's magazines carry a bone per round, patron_001 the top one, numbered down the stack (169 of 204 magazines; tubes
+        // and cylinders have none)
+        private static bool TryGetRoundStack(Transform magazine, out Transform topRound, out Transform lastRound)
+        {
+            topRound = null;
+            lastRound = null;
+            int topNumber = int.MaxValue;
+            int lastNumber = int.MinValue;
+            foreach (Transform part in magazine.GetComponentsInChildren<Transform>(true))
+            {
+                if (!part.name.StartsWith("patron_", System.StringComparison.Ordinal) || !int.TryParse(part.name.Substring(7), out int number))
+                    continue;
+                if (number < topNumber)
+                {
+                    topNumber = number;
+                    topRound = part;
+                }
+                if (number > lastNumber)
+                {
+                    lastNumber = number;
+                    lastRound = part;
+                }
+            }
+            return topRound != null && lastRound != topRound;
         }
 
         private static Vector3 MagazineCenterInProp(GameObject prop)
