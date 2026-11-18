@@ -82,7 +82,11 @@ namespace TarkovVR.Source.Player.Interactions
                 // open pose. Holding a loot item in this hand suppresses skeletal (the grip squeeze would clench the fist
                 // through the item).
                 bool holdingInThisHand = HoldsLoot(true) || PhysicalDoors.HoldsDoor(true);
-                if (!holdingInThisHand
+                // Empty: Tarkov's own relaxed / open / fist poses by the curls (HandsInteractionController.NaturalHands)
+                if (!holdingInThisHand && naturalHands && ApplyNaturalPose(true, rightFingerJoints, rightFingerIsThumb, rightHandWeightBlend, rightBones: true, ready: 0f))
+                {
+                }
+                else if (!holdingInThisHand
                     && SkeletalActive(true) && ApplySkeletalCurls(true, rightFingerJoints, rightFingerIsThumb, rightRestPoseEuler, rightCurlSign, rightHandWeightBlend, leftDeltas: false))
                 {
                     // driven by skeletal curls

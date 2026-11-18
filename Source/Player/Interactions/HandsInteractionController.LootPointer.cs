@@ -894,7 +894,11 @@ namespace TarkovVR.Source.Player.Interactions
                     // ReplayRestPose); everything else replays the baked pose. Holding a loot item in this hand suppresses
                     // the skeletal curls: the grip squeeze would clench the fist through the item.
                     bool holdingInThisHand = HoldsLoot(false) || PhysicalDoors.HoldsDoor(false);
-                    if (holdingInThisHand
+                    // Empty: Tarkov's own relaxed / open / fist poses by the curls (HandsInteractionController.NaturalHands)
+                    if (!holdingInThisHand && naturalHands && ApplyNaturalPose(false, leftFingerJoints, leftFingerIsThumb, handWeightBlend, rightBones: false, ready: flexProgress))
+                    {
+                    }
+                    else if (holdingInThisHand
                         || !(SkeletalActive(false) && ApplySkeletalCurls(false, leftFingerJoints, leftFingerIsThumb, basePose, leftCurlSign, handWeightBlend, leftDeltas: !mirrored)))
                         ReplayRestPose(basePose, staticDeltas: !mirrored);
                     // Closed on a held loot item (HandsInteractionController.Grasp), from the pose just written
