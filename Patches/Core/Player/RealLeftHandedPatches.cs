@@ -292,10 +292,16 @@ namespace TarkovVR.Patches.Core.Player
             planePoint = swayFrame.position;
             // Through the bore: on every gun but one that's Weapon_root_anim's own x = 0 plane, but the VPO-101's model sits 2.2 cm off it
             // (its bolt, stock, magazine and muzzle), which put the mirrored left hand 4.4 cm into the stock
-            Transform muzzle = VRGlobals.firearmController != null && VRGlobals.firearmController.WeaponRoot == weaponRoot
-                ? VRGlobals.firearmController.CurrentFireport?.Original : null;
+            EFT.Player.FirearmController firearmController = VRGlobals.firearmController;
+            Transform muzzle = firearmController != null && firearmController.WeaponRoot == weaponRoot ? firearmController.CurrentFireport?.Original : null;
             if (muzzle != null && muzzle.IsChildOf(swayFrame))
+            {
                 planePoint = muzzle.position;
+                // A side-by-side's current fireport is one barrel's (fireport_l / _r, 1.3 cm each side of the middle): between the two
+                var barrels = firearmController.Item != null && firearmController.Item.IsMultiBarrel ? firearmController.MultiBarrelsFireports : null;
+                if (barrels != null && barrels.Length == 2 && barrels[0]?.Original != null && barrels[1]?.Original != null)
+                    planePoint = (barrels[0].Original.position + barrels[1].Original.position) * 0.5f;
+            }
             // A grenade: through the grenade itself. Its Weapon_root_anim isn't on it (idle hold: the right grip 11-12 cm off that plane,
             // the grenade 2-3.5 cm), which would put the mirrored left hand ~6 cm off the grenade
             if (GrenadeCentre(weaponRoot, out Vector3 centre))

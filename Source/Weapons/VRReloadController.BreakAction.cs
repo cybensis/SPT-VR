@@ -19,7 +19,7 @@ namespace TarkovVR.Source.Weapons
     //    gun's own motion (a flick shuts them); fully home with the lever let go they latch.
     //  - The off hand's grip on the fore-end holds them: their turn follows the hand about the hinge, pushed home they latch and the hand
     //    stays on as the two-handed grip. Open, the off hand is never the support grip (the gun hand aims alone).
-    //  - Open, the off hand's grip at a chamber draws its shell out along the bore. A fired case let go flies off with the hand (Tarkov's own
+    //  - Open, the off hand's trigger at a chamber draws its shell out along the bore (held while the trigger is). A fired case let go flies off with the hand (Tarkov's own
     //    shell physics); a live round goes to the rig at the chest pouch, into an empty chamber at its mouth, else to the ground.
     //  - The chest pouch's grip with a chamber empty takes a shell (the bolt-action rounds' hold machinery); lined up on an empty chamber it
     //    slides in along the bore, past breakShellCommit the inventory move into that chamber runs and Tarkov's round model is put in.
@@ -420,9 +420,11 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion gunPreviousRotation;
         private static Vector3 gunPreviousTurnRate, gunTurnAcceleration;
 
-        // The off hand's grip pressed this frame: true when it was the break-action's (the barrels, a shell in a chamber)
-        private static bool TickBreakAction(bool gripPressed, bool gripReleased, bool handBusy)
+        // The off hand's grip pressed this frame: true when it was the break-action's (the fore-end); its trigger, tookTrigger (a shell in
+        // a chamber)
+        private static bool TickBreakAction(bool gripPressed, bool gripReleased, bool triggerPressed, bool triggerReleased, bool handBusy, out bool tookTrigger)
         {
+            tookTrigger = false;
             breakGunOpen = false;
             FirearmController firearmController = VRGlobals.firearmController;
             if (!VRGlobals.inGame || VRGlobals.vrPlayer == null || VRGlobals.player == null || !ManualBreakOn(firearmController, out BreakData data)
@@ -476,20 +478,18 @@ namespace TarkovVR.Source.Weapons
             else if (!state.latched)
                 SwingBarrels(firearmController, data, state, leverButton, deltaTime);
 
-            // The off hand's grabs: a shell in a chamber, else the fore-end
+            // The off hand's grabs: its trigger a shell in a chamber, its grip the fore-end
             bool taken = false;
-            if (gripPressed && !handBusy && !HoldingBarrels && !HoldingBreakCase && !ChestHang.Detached)
+            bool handFree = !handBusy && !HoldingBarrels && !HoldingBreakCase && !ChestHang.Detached;
+            if (triggerPressed && handFree && TryPluckCase(firearmController, data, state))
+                tookTrigger = true;
+            else if (gripPressed && handFree && (!state.latched || state.open > 0f) && OffHandAtForeEnd(data, state))
             {
-                if (TryPluckCase(firearmController, data, state))
-                    taken = true;
-                else if ((!state.latched || state.open > 0f) && OffHandAtForeEnd(data, state))
-                {
-                    BeginBarrelHold(firearmController, data, state);
-                    taken = true;
-                }
+                BeginBarrelHold(firearmController, data, state);
+                taken = true;
             }
             if (HoldingBreakCase)
-                UpdateCasePluck(firearmController, data, state, gripReleased);
+                UpdateCasePluck(firearmController, data, state, triggerReleased);
 
             breakGunOpen = !state.latched || state.open > 0f;
             PoseBreakAction(data, state);
@@ -843,7 +843,7 @@ namespace TarkovVR.Source.Weapons
                 weapon.ShellsInChambers[chamber] = null;
         }
 
-        private static void UpdateCasePluck(FirearmController firearmController, BreakData data, BreakState state, bool gripReleased)
+        private static void UpdateCasePluck(FirearmController firearmController, BreakData data, BreakState state, bool released)
         {
             if (caseProp == null || caseFor != firearmController || caseOnRightArm != OffHandOnRightArm || VRGlobals.menuOpen)
             {
@@ -854,7 +854,7 @@ namespace TarkovVR.Source.Weapons
             {
                 Vector3 moved = barrelBone.InverseTransformPoint(HandRig(gunHand: false).position) - caseHandAtGrab;
                 caseOut = Mathf.Clamp(Vector3.Dot(moved, caseBoreInBarrel), 0f, caseLength);
-                if (gripReleased)
+                if (released)
                 {
                     EndCasePluck(putBack: true);
                     return;
@@ -875,7 +875,7 @@ namespace TarkovVR.Source.Weapons
                 }
                 return;
             }
-            if (!gripReleased)
+            if (!released)
                 return;
             if (caseSpent)
             {

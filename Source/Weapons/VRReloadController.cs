@@ -441,9 +441,11 @@ namespace TarkovVR.Source.Weapons
             // A tube shotgun's pump, by the support hand (VRReloadController.Shotgun)
             TickShotgun();
             // A break-action's lever, barrels and chambers (VRReloadController.BreakAction)
-            if (TickBreakAction(gripPressed, gripReleased, handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine || HoldingPalmedMagazine
-                || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector || HoldingHinge || HoldingBelt))
+            if (TickBreakAction(gripPressed, gripReleased, triggerPressed, triggerReleased, handBusy: HoldingMagazine || HoldingChargingHandle || HoldingSeatedMagazine
+                || HoldingPalmedMagazine || HoldingBolt || HoldingRound || HoldingJamCase || HoldingDeflector || HoldingHinge || HoldingBelt, out bool breakTookTrigger))
                 gripPressed = false;
+            if (breakTookTrigger)
+                triggerPressed = false;
             // A single round in the fingers, for an open bolt-action (VRReloadController.Rounds)
             if (HoldingRound)
                 UpdateHeldRound(gripReleased, gunHandGripReleased);
