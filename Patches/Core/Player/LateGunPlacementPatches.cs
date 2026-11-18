@@ -12,8 +12,11 @@ namespace TarkovVR.Patches.Core.Player
         [HarmonyPatch(typeof(EFT.Player), "IkProcess")]
         private static void GunOnTheFinalHand(EFT.Player __instance)
         {
-            if (__instance.IsYourPlayer && !__instance.HandsIsEmpty)
-                LateGunPlacement.BeforeArmIk(__instance);
+            if (!__instance.IsYourPlayer || __instance.HandsIsEmpty)
+                return;
+            LateGunPlacement.BeforeArmIk(__instance);
+            // The gun's collision on that final pose, before the arm IK reaches for it
+            Source.Player.Interactions.WeaponCollision.ApplyAtFinalPlacement();
         }
     }
 }

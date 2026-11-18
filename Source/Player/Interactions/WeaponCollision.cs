@@ -50,6 +50,11 @@ namespace TarkovVR.Source.Player.Interactions
         public static bool contactJitterLog = true;
 
         public static int proxyLayerOverride = -1;         // force the proxy/sandbox layer (UnityExplorer) if the auto-pick misbehaves
+        // Solved on the gun's final pose of the frame (Player.IkProcess prefix, after LateGunPlacement), not in Update: the gun's parent
+        // is put on the hand again after Update (HandsPositioner.Update can run after GunInteractionController.Update, and the end-of-frame
+        // placement moves it once more), carrying an Update-time collision offset one frame of hand motion on - a hard swing drew the gun
+        // 20-30 cm into what had stopped it for a frame or two. false = solved in Update as before.
+        public static bool atFinalPlacement = true;
 
         private static WeaponPhysicsProxy proxy;
         private static Vector3 lastPlayerPos;              // rig root last frame (rig-motion delta for the proxy)
@@ -85,6 +90,7 @@ namespace TarkovVR.Source.Player.Interactions
 
         public static void Reset()
         {
+            hasResolvedOffset = false;
             StripEnacted();
             hasLastPlayerPos = false;
             hasLastTarget = false;
@@ -113,8 +119,46 @@ namespace TarkovVR.Source.Player.Interactions
                 holder.localPosition = preEnactLocalPos;
         }
 
-        // Runs right after UpdateWeaponPosition's marker-anchor assignment (the gun sits at the
-        // controller-desired pose), as the last write to weaponHolder this frame.
+        private static int deferredFrame = -1;              // a solve asked for in Update and not yet done at the final placement
+        private static Vector3 resolvedInTargetPosition;    // the last solve's resolved pose in its target's frame (the hand's gun pose)
+        private static Quaternion resolvedInTargetRotation = Quaternion.identity;
+        private static bool hasResolvedOffset;
+
+        // The gun's pose as drawn this frame, for the co-op arm sync (VRPlayerManager.LateUpdate, which Unity may run before or after
+        // Player.LateUpdate): with this frame's solve still to come, the gun where the hand has it carries the last solve's offset
+        public static void DrawnPose(Transform weaponRoot, out Vector3 position, out Quaternion rotation)
+        {
+            position = weaponRoot.position;
+            rotation = weaponRoot.rotation;
+            if (deferredFrame != Time.frameCount || !hasResolvedOffset || !enabled)
+                return;
+            position += rotation * resolvedInTargetPosition;
+            rotation *= resolvedInTargetRotation;
+        }
+
+        // UpdateWeaponPosition, after the marker anchor: the solve, at the final placement this frame (ApplyAtFinalPlacement), or now if
+        // the last one asked for there never came
+        public static void Request()
+        {
+            if (!atFinalPlacement || deferredFrame >= 0)
+            {
+                deferredFrame = -1;
+                Apply();
+                return;
+            }
+            deferredFrame = Time.frameCount;
+        }
+
+        // Player.IkProcess prefix (LateGunPlacementPatches), after the gun was put on the hand at the frame's final rig pose
+        public static void ApplyAtFinalPlacement()
+        {
+            if (deferredFrame != Time.frameCount)
+                return;
+            deferredFrame = -1;
+            Apply();
+        }
+
+        // On the gun at its controller-desired pose (the marker anchor's), as the last write to weaponHolder this frame
         public static void Apply()
         {
             if (!enabled || VRGlobals.firearmController == null ||
@@ -183,6 +227,10 @@ namespace TarkovVR.Source.Player.Interactions
             // reaches the hand exactly and EnactHolderPose no-ops (its epsilon check); against a wall the visible gun
             // stops the same frame the proxy does. Feedback comes from the proxy's collision events -> OnProxyContact.
             EnactHolderPose(rawGrip, weaponRootRotation, proxy.ResolvedPos, proxy.ResolvedRot);
+            Quaternion toTarget = Quaternion.Inverse(weaponRootRotation);
+            resolvedInTargetPosition = toTarget * (proxy.ResolvedPos - rawGrip);
+            resolvedInTargetRotation = toTarget * proxy.ResolvedRot;
+            hasResolvedOffset = true;
             if (contactJitterLog)
                 TrackContactJitter(rawGrip, weaponRootRotation, proxy.ResolvedPos, proxy.ResolvedRot, weaponLn);
         }

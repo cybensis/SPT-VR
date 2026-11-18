@@ -573,8 +573,9 @@ public class GunInteractionController : MonoBehaviour
         // the gun's physics has it
         TarkovVR.Source.Weapons.GunJolt.Apply(VRGlobals.weaponHolder.transform);
 
-        // Physical weapon collision, after the marker anchor: the last holder write of the frame, so the anchor math can't cancel it
-        TarkovVR.Source.Player.Interactions.WeaponCollision.Apply();
+        // Physical weapon collision, after the marker anchor: the last holder write of the frame, so the anchor math can't cancel it (done
+        // at the gun's final placement this frame, WeaponCollision.atFinalPlacement)
+        TarkovVR.Source.Player.Interactions.WeaponCollision.Request();
     }
 
     // Call this when mesh lists change to invalidate cache

@@ -190,8 +190,13 @@ namespace TarkovVR.ModSupport.FIKA
                     return;
                 lastSendTime = Time.time;
                 Transform weaponRoot = hc.WeaponRoot;
-                Vector3 wPos = frame.InverseTransformPoint(weaponRoot.position);
-                Quaternion wRot = Quaternion.Inverse(frame.rotation) * weaponRoot.rotation;
+                // As drawn: the gun's collision may still be to come this frame (it's solved before the arm IK)
+                Vector3 drawnPosition = weaponRoot.position;
+                Quaternion drawnRotation = weaponRoot.rotation;
+                if (isFirearm)
+                    TarkovVR.Source.Player.Interactions.WeaponCollision.DrawnPose(weaponRoot, out drawnPosition, out drawnRotation);
+                Vector3 wPos = frame.InverseTransformPoint(drawnPosition);
+                Quaternion wRot = Quaternion.Inverse(frame.rotation) * drawnRotation;
                 bool leftOnGrip = isFirearm && rig.isSupporting;
                 Vector3 lPos = Vector3.zero; Quaternion lRot = Quaternion.identity;
                 if (rig.LeftHand != null)
