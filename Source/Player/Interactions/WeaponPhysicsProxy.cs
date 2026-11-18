@@ -35,6 +35,13 @@ namespace TarkovVR.Source.Player.Interactions
         // a ledge, pressed into a corner or pivoting on an edge holds steadier with more. One small body: the cost is nothing.
         public static int solverIterations = 12;
         public static int solverVelocityIterations = 4;
+        // The hand's hold has a strength: the drive follows the hand's own move this frame in full (x holdFollow), but a gap already
+        // there - something stops the gun, the hand goes on in - closes by at most holdGap / holdTurnGap a frame. Pushed past
+        // something, the gun leans on it instead of being driven at it at gap / frame (a hand 40 cm past two contacts = ~36 m/s, the
+        // solve flipping between them = the shake); freed, it glides back to the hand. Big = the old weld, small = a weak hold.
+        public static float holdGap = 0.02f;             // m a frame
+        public static float holdTurnGap = 3f;            // deg a frame
+        public static float holdFollow = 1.25f;
 
         public static float proxyMass = 10f;             // kg; only matters against a door body: heavier = the gun shoves doors more easily
         public static float doorMass = 1f;               // kg of a door in the sandbox
@@ -47,6 +54,9 @@ namespace TarkovVR.Source.Player.Interactions
         private bool active;
         private Vector3 targetPos;
         private Quaternion targetRot = Quaternion.identity;
+        private Vector3 previousTargetPos;              // last frame's: the hand's own move this frame
+        private Quaternion previousTargetRot = Quaternion.identity;
+        private bool hasPreviousTarget;
         private float builtLen = -1f, builtBodyR = -1f, builtBarrelR = -1f;
         private float lastContactTime = -10f;
 
@@ -212,6 +222,18 @@ namespace TarkovVR.Source.Player.Interactions
                 rb.rotation = rot;
                 rb.velocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
+                hasPreviousTarget = false;
+            }
+            if (hasPreviousTarget)
+            {
+                previousTargetPos = targetPos;
+                previousTargetRot = targetRot;
+            }
+            else
+            {
+                previousTargetPos = pos;
+                previousTargetRot = rot;
+                hasPreviousTarget = true;
             }
             targetPos = pos;
             targetRot = rot;
@@ -236,6 +258,7 @@ namespace TarkovVR.Source.Player.Interactions
             rb.isKinematic = !on;
             bodyCol.enabled = on;
             barrelCol.enabled = on;
+            hasPreviousTarget = false;
             if (!on)
             {
                 rb.velocity = Vector3.zero;
@@ -275,7 +298,12 @@ namespace TarkovVR.Source.Player.Interactions
                 if (collider != null && !IsOwnCollider(collider) && UseOf(collider, out _) != ColliderUse.Ignore)
                     near = true;
             }
-            if (!near)
+            // How far the hold reaches this frame: the hand's own move, and a little of any gap left
+            float reach = holdGap + (targetPos - previousTargetPos).magnitude * holdFollow;
+            float turnReach = holdTurnGap + Quaternion.Angle(previousTargetRot, targetRot) * holdFollow;
+            bool caughtUp = (targetPos - rb.position).sqrMagnitude <= reach * reach && Quaternion.Angle(rb.rotation, targetRot) <= turnReach;
+            // (behind the hand in open space, freed from a wall: it glides back there under the drive instead of jumping)
+            if (!near && caughtUp)
             {
                 LastSubsteps = 0;
                 rb.position = targetPos;
@@ -285,7 +313,9 @@ namespace TarkovVR.Source.Player.Interactions
                 return;
             }
 
-            Vector3 driveVelocity = (targetPos - rb.position) / dt * driveGain;
+            Vector3 aimPos = rb.position + Vector3.ClampMagnitude(targetPos - rb.position, reach);
+            Quaternion aimRot = Quaternion.RotateTowards(rb.rotation, targetRot, turnReach);
+            Vector3 driveVelocity = (aimPos - rb.position) / dt * driveGain;
             float driveSpeed = driveVelocity.magnitude;
             if (driveSpeed > maxSpeed)
                 driveVelocity *= maxSpeed / driveSpeed;
@@ -295,7 +325,7 @@ namespace TarkovVR.Source.Player.Interactions
             rb.maxAngularVelocity = Mathf.Max(maxAngSpeed * Mathf.Deg2Rad, 7f);
             rb.solverIterations = Mathf.Max(solverIterations, 1);
             rb.solverVelocityIterations = Mathf.Max(solverVelocityIterations, 1);
-            Quaternion rotationDelta = targetRot * Quaternion.Inverse(rb.rotation);
+            Quaternion rotationDelta = aimRot * Quaternion.Inverse(rb.rotation);
             rotationDelta.ToAngleAxis(out float angle, out Vector3 axis);
             if (angle > 180f)
                 angle -= 360f;
