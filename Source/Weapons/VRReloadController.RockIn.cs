@@ -74,9 +74,10 @@ namespace TarkovVR.Source.Weapons
 
         // These guns' catch answers either hand's button: the gun hand's, as on an M4, or the off controller's with that hand on the
         // magazine, as on a thumb catch. Ahead of the rock-in's off-thumb-only rule (the Mk47, SA58 and the backport's NL545 rock their
-        // magazines in too).
+        // magazines in too). The PM's, PB's and APS's (APB too) heel catch: Tarkov's clips work it with the off thumb, but a pistol's
+        // off hand is on the grip, not the magazine, so their gun hand's button alone did nothing.
         public static bool eitherHandCatches = true;
-        private static readonly HashSet<string> eitherHandCatchGuns = new HashSet<string> { "mk47", "sa58", "nl545_di" };
+        private static readonly HashSet<string> eitherHandCatchGuns = new HashSet<string> { "mk47", "sa58", "nl545_di", "pm", "pb", "aps" };
 
         private static bool EitherHandWorksCatch(FirearmController firearmController)
         {

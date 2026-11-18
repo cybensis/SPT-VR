@@ -66,6 +66,23 @@ def meshKnob(folder,container,charge,turnerLeaf,axis):
 def g_rot(q,v):
     u=q[:3]; return v+2*np.cross(u,np.cross(u,v)+q[3]*v)
 
+# The dominant hand on the turning bone where the bolt first reaches full travel: the frame ridingHold takes, without its steadiness
+# test. The DVL-10's hand rolls about the knob as it pulls (its palm 6 cm along the bolt, the fingers 2-3 cm from the knob all the way).
+def holdAtFirstBack(g,turner,wp):
+    P=g['prefabLocal']; palm=bone(P,'/Base HumanRPalm'); J=fingerPaths(P,'R')
+    if palm is None or J is None: return None
+    stop=float(g['clip'].m_MuscleClip.m_StopTime); rows=[]; rest=None
+    for i in range(int(stop*30)+1):
+        t=i/30; c={}; tp,_,_=g['worldAt'](turner,t,c); wpp,wr,_=g['worldAt'](wp,t,c); inGun=g['rotate'](conj(wr),tp-wpp)
+        if rest is None: rest=inGun
+        rows.append((t,float(np.linalg.norm(inGun-rest))))
+    top=max(back for _,back in rows)
+    if top<0.03: return None
+    t=next(t for t,back in rows if back>=top-0.002); c={}
+    tp,tr,_=g['worldAt'](turner,t,c); pp,pr,_=g['worldAt'](palm,t,c)
+    qs=[np.array(g['localAt'](j,t)[1],float) for j in J]
+    return dict(position=[round(float(x),4) for x in g['rotate'](conj(tr),pp-tp)],rotation=toUnityEuler(qmul(conj(tr),pr)),fingers=eulerList(qs),t=t)
+
 def axisAngle(q):
     q=q if q[3]>=0 else -q; angle=2*math.degrees(math.acos(min(1.0,float(q[3])))); s=math.sqrt(max(1e-12,1-float(q[3])**2))
     return [float(x)/s for x in q[:3]],angle
@@ -115,10 +132,9 @@ for folder,clipName,charge in GUNS:
             if np.linalg.norm(np.array(g['localAt'](slider,t)[0],float)-p0)>0.005: tLift=t; break
     q0=np.array(g['localAt'](turner,0.0)[1],float); qUp=np.array(g['localAt'](turner,tLift)[1],float)
     axis,angle=axisAngle(qmul(conj(q0),qUp))
-    hold=ridingHold(g,turner,'R')
+    hold=ridingHold(g,turner,'R') or holdAtFirstBack(g,turner,wp)
     # Where the hand takes it, in the turning bone's frame: the handle's knob from its mesh (the grab zone's centre; the hold's palm
-    # is the hand ROOT, ~10 cm off the knob on the M700). Without a mesh: the hold's palm, else the palm with the bolt all the way
-    # back (the DVL-10's hold doesn't pass ridingHold's steadiness test).
+    # is the hand ROOT, ~10 cm off the knob on the M700). Without a mesh: the hold's palm.
     # Which mesh: the clip's closed right fingers (the 15 finger joints' centroid at the hold, in the turner's frame) wrap the knob,
     # so of the folder's guns (the Mosin folder has the sniper's bent handle and the infantry's straight one; the clip's bones match
     # both) the one whose knob is nearest them. They agree within 1.5-3.4 cm on every rifle.

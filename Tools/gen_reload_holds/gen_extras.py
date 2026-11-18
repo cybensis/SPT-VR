@@ -48,7 +48,7 @@ def fullBackTime(g,path,wp):
 # clip_names), AA-12 14.5, MDR 13.0, M1A 12.0 (the op rod's handle). Second scan (the first one's printout was cut off): knobs riding
 # the bolt or carrier that moves (9A-91 10.2, ASh-12 16.9, G36 10.9: HANDLE_CARRIERS, the part the runtime moves), and bolts that are
 # the handle themselves, with no knob of their own (PP-91 8.8, PPSh 8.3, Uzi Pro 5.3, VPO-101 12.1: the back of the bolt is inside
-# the receiver, so the grab zone is where the clip's hand is, HANDLE_GRAB_AT_HOLD). AVT-40 / SVT-40 (2026-11-07, both rigs one
+# the receiver, so the grab zone is where the clip's fingers close on it, HANDLE_GRAB_AT_HOLD). AVT-40 / SVT-40 (2026-11-07, both rigs one
 # animation set avt40): the carrier itself, 10 cm straight back in avt40_charge_* (left hand over the top) and rechamber (right hand),
 # its knob part of the carrier mesh (HANDLE_KNOB_SIDE). Left out: the RPD (no clip moves its handle
 # bones), the M60 (no rack clip), the VSK-94 (no clips of its own), the AGS-30 and NSV (mounted).
@@ -65,7 +65,7 @@ HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghin
                   'howa_type20':'mod_charge'}
 # (the SR-2M's knob bone rides weapon_bolt_carrier, 9.9 cm back with it: moving the knob alone left the carrier and bolt behind)
 HANDLE_CARRIERS={'kbp_9a91':'weapon_bolt','ckib_ash_12':'weapon_bolt','hk_g36':'weapon_bolt_carrier','tochmash_sr2m':'weapon_bolt_carrier'}
-# (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's hand is too)
+# (the 9A-91's and ASh-12's knob bones carry a mesh named bolt_rotation, not a handle's: their zone where the clip's fingers close too)
 HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101','kbp_9a91','ckib_ash_12')
 # Ambidextrous: a knob on each side (the MDR's: a rod running back into the gun, a folding paddle each side at its front, on bones of
 # their own). The zone on each paddle, the box centre of its mesh in the handle bone's frame, left first. Was the clip's palm bone
@@ -296,7 +296,19 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
     handleBones[family]=boneName
     if rig in HANDLE_CARRIERS: handleCarriers[family]=HANDLE_CARRIERS[rig]
     grabHold=extraHandles.get(family) or extraGunHandHandles.get(family)
-    if rig in HANDLE_GRAB_AT_HOLD and grabHold: handleGrabPoints[family]=grabHold['position']
+    # Where the clip's fingers close on the handle (their joints' centroid with it all the way back, in the handle bone's frame), on the
+    # nearest point of the handle's own meshes. Not the hold's palm: that's the hand root, 10-18 cm off the handle when the clip racks
+    # from below (the VPO-101's AK handle: 18 cm under the gun, out of reach)
+    if rig in HANDLE_GRAB_AT_HOLD and grabHold:
+        held=setup(tree,clips[grabHold['clip']]); heldAt,_=fullBackTime(held,charge,wp); c={}
+        handleAt,handleRotation,_=held['worldAt'](charge,heldAt,c)
+        side='L' if grabHold is extraHandles.get(family) else 'R'
+        closing=np.mean([held['rotate'](conj(handleRotation),held['worldAt'](j,heldAt,c)[0]-handleAt) for j in fingerPaths(P,side)[1:]],axis=0)
+        knobPoints=boneMeshPoints(folder,container,boneName)
+        point=closing if knobPoints is None else knobPoints[np.argmin(np.linalg.norm(knobPoints-closing,axis=1))]
+        handleGrabPoints[family]=[round(float(x),4) for x in point]
+        print(f'{family} grab point {np.round(point*100,1)} cm (fingers close {np.linalg.norm(point-closing)*100:.1f} cm off it; '
+              f'the hold\'s palm {np.linalg.norm(np.array(grabHold["position"])-point)*100:.1f} cm)',flush=True)
     if rig in HANDLE_KNOB_SIDE:
         knob=meshKnobPoint(folder,container,boneName,*HANDLE_KNOB_SIDE[rig])
         if knob: handleGrabPoints[family]=knob
