@@ -5,13 +5,17 @@ namespace TarkovVR.Source.Player.Interactions
 {
     // The free hands' fingers from Tarkov's own empty-hands poses (empty hands' empty_hands_look, the character looking at his hands:
     // relaxed t 0.75, fully open t 1.8, a fist t 0.25 left / 1.2 right; every joint's local rotation, each hand its own). A finger
-    // blends between them by its curl: resting = relaxed, squeezed = the fist, lifted = open. Index controllers give each finger's curl;
+    // blends between them by its curl: resting = relaxed closed a little toward the fist (naturalRestClose), squeezed = the fist,
+    // lifted = open. Index controllers give each finger's curl;
     // other controllers rest relaxed (the off hand curls a little toward the fist while the loot pointer has something).
     // Holding a loot item or a door keeps the old base (the grasp solves from it). false = the baked open pose + its curl.
     internal partial class HandsInteractionController
     {
         public static bool naturalHands = true;
         public static float naturalReadyCurl = 0.25f;       // share of the way to the fist the off hand closes while pointing at loot (no finger tracking)
+        // The rest pose: this share of the way from Tarkov's relaxed hand to its fist (a hand ready to take something); the thumb its own
+        public static float naturalRestClose = 0.25f;
+        public static float naturalThumbRestClose = 0.15f;
 
         // Thumb, index, middle, ring, pinky (Base HumanXDigit11..53), three joints each, local eulers
         private static readonly Vector3[] LEFT_OPEN =
@@ -134,9 +138,10 @@ namespace TarkovVR.Source.Player.Interactions
                     int slot = joint != null ? NaturalSlot(joint) : -1;
                     if (slot < 0)
                         continue;
+                    Quaternion resting = Quaternion.Slerp(pose.relaxed[slot], pose.fist[slot], Mathf.Clamp01(thumb ? naturalThumbRestClose : naturalRestClose));
                     Quaternion target = curl <= rest
-                        ? Quaternion.Slerp(pose.open[slot], pose.relaxed[slot], curl / rest)
-                        : Quaternion.Slerp(pose.relaxed[slot], pose.fist[slot], (curl - rest) / (1f - rest));
+                        ? Quaternion.Slerp(pose.open[slot], resting, curl / rest)
+                        : Quaternion.Slerp(resting, pose.fist[slot], (curl - rest) / (1f - rest));
                     Quaternion animated = RecoverAnimated(joint);
                     Quaternion outRot = Quaternion.Slerp(animated, target, weight);
                     joint.localRotation = outRot;
