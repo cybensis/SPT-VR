@@ -78,6 +78,8 @@ namespace TarkovVR.Source.Weapons
             public SavedBreakHold foreEnd;      // the left palm on the fore-end, in the barrel bone's frame; grabPoint where the fingers close
             public SavedBreakHold loadHold;     // a new shell's bone in the left palm's frame
             public SavedBreakHold pluckHold;    // a drawn one's
+            public SavedBreakHold loadPair;     // two at once (the both-barrels clips): the left chamber's, position2 / rotation2 the right's
+            public SavedBreakHold pluckPair;
         }
 
         public sealed class SavedBreakBones
@@ -109,6 +111,8 @@ namespace TarkovVR.Source.Weapons
             public float[] rotation;
             public float[] fingers;
             public float[] grabPoint;
+            public float[] position2;
+            public float[] rotation2;
         }
 
         private sealed class BreakHold
@@ -117,6 +121,7 @@ namespace TarkovVR.Source.Weapons
             public Quaternion rotation;
             public Vector3[] fingers;
             public Vector3 grabPoint;
+            public BreakHold second;            // a pair's other shell (the right chamber's)
         }
 
         private sealed class KeyedBones
@@ -138,6 +143,8 @@ namespace TarkovVR.Source.Weapons
             public BreakHold foreEnd;
             public BreakHold loadHold;
             public BreakHold pluckHold;
+            public BreakHold loadPair;
+            public BreakHold pluckPair;
         }
 
         private static readonly Dictionary<string, BreakData> breakGuns = new Dictionary<string, BreakData>();
@@ -159,6 +166,8 @@ namespace TarkovVR.Source.Weapons
                 foreEnd = BreakHoldFrom(saved.foreEnd),
                 loadHold = BreakHoldFrom(saved.loadHold),
                 pluckHold = BreakHoldFrom(saved.pluckHold),
+                loadPair = BreakHoldFrom(saved.loadPair),
+                pluckPair = BreakHoldFrom(saved.pluckPair),
             };
             return data.open != null && data.foreEnd != null && System.Array.IndexOf(data.open.paths, data.barrelPath) >= 0 ? data : null;
         }
@@ -212,6 +221,8 @@ namespace TarkovVR.Source.Weapons
                 rotation = QuaternionFrom(saved.rotation, 0),
                 fingers = FingersFrom(saved.fingers),
                 grabPoint = saved.grabPoint != null && saved.grabPoint.Length >= 3 ? Vector3From(saved.grabPoint, 0) : Vector3From(saved.position, 0),
+                second = saved.position2 != null && saved.rotation2 != null
+                    ? new BreakHold { position = Vector3From(saved.position2, 0), rotation = QuaternionFrom(saved.rotation2, 0) } : null,
             };
         }
 
@@ -1229,18 +1240,28 @@ namespace TarkovVR.Source.Weapons
                 return;
             Vector3 position = caseInPalmPosition;
             Quaternion rotation = caseInPalmRotation;
-            if (data.pluckHold != null && BreakShellHoldInPalm(data.pluckHold, caseProp.transform, caseOnRightArm, out Vector3 holdPosition, out Quaternion holdRotation))
+            float ease = Mathf.SmoothStep(0f, 1f, (Time.time - caseFreeTime) / Mathf.Max(caseIntoHandTime, 0.001f));
+            BreakHold hold = case2Prop != null ? data.pluckPair ?? data.pluckHold : data.pluckHold;
+            if (hold != null && BreakShellHoldInPalm(hold, caseProp.transform, caseOnRightArm, out Vector3 holdPosition, out Quaternion holdRotation))
             {
-                float ease = Mathf.SmoothStep(0f, 1f, (Time.time - caseFreeTime) / Mathf.Max(caseIntoHandTime, 0.001f));
                 position = Vector3.Lerp(caseInPalmPosition, holdPosition, ease);
                 rotation = Quaternion.Slerp(caseInPalmRotation, holdRotation, ease);
             }
             SetPoseIn(palm, caseProp.transform, position, rotation);
-            if (case2Prop != null)
+            if (case2Prop == null)
+                return;
+            // The other case: from beside the first as it came out onto the pair hold's second (the both-barrels clip's)
+            Transform first = caseProp.transform;
+            Vector3 besidePosition = first.position + first.rotation * case2InFirstPosition;
+            Quaternion besideRotation = first.rotation * case2InFirstRotation;
+            if (hold?.second != null && BreakShellHoldInPalm(hold.second, case2Prop.transform, caseOnRightArm, out Vector3 secondPosition, out Quaternion secondRotation))
             {
-                Transform first = caseProp.transform;
-                case2Prop.transform.SetPositionAndRotation(first.position + first.rotation * case2InFirstPosition, first.rotation * case2InFirstRotation);
+                Vector3 heldPosition = palm.position + palm.rotation * secondPosition;
+                Quaternion heldRotation = palm.rotation * secondRotation;
+                case2Prop.transform.SetPositionAndRotation(Vector3.Lerp(besidePosition, heldPosition, ease), Quaternion.Slerp(besideRotation, heldRotation, ease));
             }
+            else
+                case2Prop.transform.SetPositionAndRotation(besidePosition, besideRotation);
         }
 
         // A shell held as a clip holds it: its model sits on the shell's bone turned 90 deg about x (Firearms.ParentShellToTransform); the
@@ -1722,9 +1743,15 @@ namespace TarkovVR.Source.Weapons
             Transform palm = ArmPalm(roundOnRightArm);
             if (palm == null)
                 return;
-            if (BreakShellHoldInPalm(breakShellData.loadHold, heldRoundProp.transform, roundOnRightArm, out Vector3 position, out Quaternion rotation))
+            // Two: the both-barrels clip's hold on the pair, else the second beside the first as the chambers sit
+            BreakHold pair = breakShellSecond != null ? breakShellData.loadPair : null;
+            if (BreakShellHoldInPalm(pair ?? breakShellData.loadHold, heldRoundProp.transform, roundOnRightArm, out Vector3 position, out Quaternion rotation))
                 SetPoseIn(palm, heldRoundProp.transform, position, rotation);
-            if (breakShellSecond != null)
+            if (breakShellSecond == null)
+                return;
+            if (pair?.second != null && BreakShellHoldInPalm(pair.second, breakShellSecond.transform, roundOnRightArm, out Vector3 secondPosition, out Quaternion secondRotation))
+                SetPoseIn(palm, breakShellSecond.transform, secondPosition, secondRotation);
+            else
             {
                 Transform first = heldRoundProp.transform;
                 breakShellSecond.transform.SetPositionAndRotation(first.position + first.rotation * breakShellPairPosition, first.rotation * breakShellPairRotation);
@@ -1741,7 +1768,8 @@ namespace TarkovVR.Source.Weapons
             return rightArm ? MirroredPose(hold.fingers, rightToLeft: false, breakFingersMirrored) ?? hold.fingers : hold.fingers;
         }
 
-        private static Vector3[] BreakShellFingers(bool rightArm) => BreakFingers(breakShellData?.loadHold, rightArm) ?? MAGAZINE_PULL_FINGERS;
+        private static Vector3[] BreakShellFingers(bool rightArm) => BreakFingers(breakShellSecond != null ? breakShellData?.loadPair ?? breakShellData?.loadHold : breakShellData?.loadHold, rightArm)
+            ?? MAGAZINE_PULL_FINGERS;
 
         // OffHandPose: the barrels or a drawn case in the off hand
         private static Vector3[] BreakHandFingers(bool rightArm)
@@ -1749,7 +1777,7 @@ namespace TarkovVR.Source.Weapons
             if (!TryGetBreakAction(VRGlobals.firearmController, out BreakData data))
                 return null;
             if (HoldingBreakCase)
-                return BreakFingers(data.pluckHold, rightArm) ?? MAGAZINE_PULL_FINGERS;
+                return BreakFingers(case2Prop != null ? data.pluckPair ?? data.pluckHold : data.pluckHold, rightArm) ?? MAGAZINE_PULL_FINGERS;
             return BreakFingers(data.foreEnd, rightArm);
         }
 

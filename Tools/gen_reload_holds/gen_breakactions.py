@@ -78,9 +78,29 @@ def inFrame(g,frame,path,t,c):
     fp,fr,_=g['worldAt'](frame,t,c); pp,pr,_=g['worldAt'](path,t,c); fi=conj(fr)
     return g['rotate'](fi,pp-fp),qmul(fi,pr)
 
-def holdIn(g,palm,thing,t,J):
+def holdIn(g,palm,thing,t,J,second=None):
     c={}; pos,rot=inFrame(g,palm,thing,t,c)
-    return dict(position=r5(pos),rotation=r5(rot/np.linalg.norm(rot)),fingers=eulerList([np.array(g['localAt'](j,t)[1],float) for j in J]),t=round(float(t),3))
+    hold=dict(position=r5(pos),rotation=r5(rot/np.linalg.norm(rot)),fingers=eulerList([np.array(g['localAt'](j,t)[1],float) for j in J]),t=round(float(t),3))
+    if second:
+        pos2,rot2=inFrame(g,palm,second,t,c)
+        hold.update(position2=r5(pos2),rotation2=r5(rot2/np.linalg.norm(rot2)))
+    return hold
+
+# Two shells, as the both-barrels clips carry them (the left chamber's first): the load clip's pair lined up 5 cm out of the chambers,
+# the pull clip's 2 cm out - the single holds' moments
+def pairHolds(g_tree,clips,family,barrel,chambers,shellports,palm,J):
+    out={}
+    for key,clipName,bones,distance in (('loadPair',family+'_reload_ammo_booth',chambers,0.05),('pluckPair',family+'_reload_empty_shell_booth',shellports,0.02)):
+        if clipName not in clips or len(bones)<2: continue
+        g=setup(g_tree,clips[clipName]); ts=times(clips[clipName])
+        rest=inFrame(g,barrel,bones[0],ts[-1] if key=='loadPair' else ts[0],{})[0]
+        best=None
+        for t in ts:
+            s,_=inFrame(g,barrel,bones[0],t,{}); d=s-rest
+            along=float(d[1]); off=float(np.linalg.norm([d[0],d[2]]))
+            if off<=0.015 and (best is None or abs(along-distance)<best[0]): best=(abs(along-distance),t)
+        if best: out[key]=holdIn(g,palm,bones[0],best[1],J,second=bones[1])
+    return out
 
 # A bone's meshes (MeshFilters on it and under it, from the folder's client_assets.bundle), in its frame
 def boneMeshPoints(folder,container,boneLeaf):
@@ -212,10 +232,14 @@ for family,(folder,container,openClip,closeClip,loadClip,pluckClip,leverBone) in
     grab=np.mean([inFrame(gc,barrel,j,tHold,c)[0] for j in J[1:]],axis=0)
     foreEnd=dict(position=r5(palmIn),rotation=r5(palmQ/np.linalg.norm(palmQ)),fingers=holdIn(gc,palm,palm,tHold,J)['fingers'],grabPoint=r5(grab),t=round(float(tHold),3))
 
+    ports=[p for p in shellports if re.search(r'/shellport_\d+$',p)]
+    pairs=pairHolds(tree,clips,family,barrel,chambers,ports,palm,J) if len(chambers)>=2 else {}
     out[family]=dict(barrel=relPath(wp,barrel),hingeAxis=r5(hingeAxis),openDegrees=round(hingeDegrees,2),bore=r5(bore),
                      chambers=[relPath(wp,p) for p in chambers],shellports=[relPath(wp,p) for p in shellports],
                      open=dict(bones=openBones,clip=openClip,times=[round(keyTimes[0],3),round(keyTimes[-1],3)]),lever=leverData,
-                     foreEnd=foreEnd,loadHold=loadHold,pluckHold=pluckHold)
+                     foreEnd=foreEnd,loadHold=loadHold,pluckHold=pluckHold,**pairs)
+    for key,hold in pairs.items():
+        print(f'  {key} at {hold["t"]}s: shells {np.linalg.norm(np.array(hold["position"])-np.array(hold["position2"]))*100:.1f} cm apart in the palm')
     print(f'  open {openDegrees:.1f} deg ({hingeDegrees:.1f} about {np.round(hingeAxis,3)}) {keyTimes[0]:.3f}-{keyTimes[-1]:.3f}s, bones {[b["path"] for b in openBones]}')
     print(f'  lever {leverData["degrees"] if leverData else None}, bore {np.round(bore,3)}, chambers {len(chambers)}, shellports {len(shellports)}')
     print(f'  fore-end palm {np.round(palmIn*100,1)} cm (drift over the close {drift*100:.1f} cm), grab {np.round(grab*100,1)} at {tHold:.2f}s; '
