@@ -17,7 +17,7 @@ namespace TarkovVR.Source.Player.Interactions
     {
         public static float driveGain = 1f;
         public static float maxSpeed = 40f;         // m/s
-        public static float maxAngSpeed = 5000f;    // deg/s
+        public static float maxAngSpeed = 5000f;    // deg/s (also the body's own limit: Tarkov's physics settings clamp every body to 7 rad/s = 400 deg/s)
         public static float bodySplit = 0.5f;       // rod fraction where the fat body capsule ends and the thin barrel begins
         public static float resyncDistance = 3f;    // if the body is this far from the hand it's desynced (garbage frame) -> snap
         public static float contactMemory = 0.04f;  // s a contact is remembered after it ends (small = no "stick" on pull-off; bridges single-frame gaps)
@@ -132,6 +132,7 @@ namespace TarkovVR.Source.Player.Interactions
             proxy.rb.mass = proxyMass;
             proxy.rb.interpolation = RigidbodyInterpolation.None;
             proxy.rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            proxy.rb.maxAngularVelocity = maxAngSpeed * Mathf.Deg2Rad;
 
             // Frictionless (Minimum combine -> every contact is frictionless whatever the wall's material) so the gun
             // slides / pivots along a surface instead of gripping it. Zero bounce so it doesn't spring off.
@@ -282,6 +283,8 @@ namespace TarkovVR.Source.Player.Interactions
                 driveVelocity *= maxSpeed / driveSpeed;
             rb.velocity = driveVelocity;
 
+            // Tarkov's default angular speed limit (7 rad/s) would brake a swing as it nears a wall, the moment this drive takes over
+            rb.maxAngularVelocity = Mathf.Max(maxAngSpeed * Mathf.Deg2Rad, 7f);
             Quaternion rotationDelta = targetRot * Quaternion.Inverse(rb.rotation);
             rotationDelta.ToAngleAxis(out float angle, out Vector3 axis);
             if (angle > 180f)
