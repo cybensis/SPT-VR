@@ -57,6 +57,7 @@ namespace TarkovVR.Source.Weapons
         public static float barrelFriction = 3f;            // 1/s
         public static float barrelBounce = 0.15f;
         public static float barrelStopSound = 60f;          // deg/s into the open stop that sounds it
+        public static float openSoundRearm = 0.6f;          // share of the way open it has to come back down to before the stop sounds again
         // A revolver's crane + cylinder about the hinge: inertia (r^2 + R^2 / 2, the cylinder's own turn) as this x its centre of mass's
         // distance squared
         public static float cylinderInertia = 1.2f;
@@ -94,6 +95,7 @@ namespace TarkovVR.Source.Weapons
             public SavedBreakBones lever;       // the lever's swing
             public SavedBreakHold foreEnd;      // the left palm on the fore-end, in the barrel bone's frame; grabPoint where the fingers close
             public SavedBreakHold loadHold;     // a new shell's bone in the left palm's frame
+            public SavedBreakHold carryHold;    // a revolver's round as the hand brings it over (the load hold is the push behind it)
             public SavedBreakHold pluckHold;    // a drawn one's
             public SavedBreakHold loadPair;     // two at once (the both-barrels clips): the left chamber's, position2 / rotation2 the right's
             public SavedBreakHold pluckPair;
@@ -181,6 +183,7 @@ namespace TarkovVR.Source.Weapons
             public LeverPress leverPress;
             public BreakHold foreEnd;
             public BreakHold loadHold;
+            public BreakHold carryHold;
             public BreakHold pluckHold;
             public BreakHold loadPair;
             public BreakHold pluckPair;
@@ -207,6 +210,7 @@ namespace TarkovVR.Source.Weapons
                 leverPress = LeverPressFrom(saved.lever?.press),
                 foreEnd = BreakHoldFrom(saved.foreEnd),
                 loadHold = BreakHoldFrom(saved.loadHold),
+                carryHold = BreakHoldFrom(saved.carryHold),
                 pluckHold = BreakHoldFrom(saved.pluckHold),
                 loadPair = BreakHoldFrom(saved.loadPair),
                 pluckPair = BreakHoldFrom(saved.pluckPair),
@@ -357,6 +361,7 @@ namespace TarkovVR.Source.Weapons
             public bool latched = true;
             public float lever;             // 0 at rest .. 1 swung over
             public float ejector;           // a revolver's: 0 home .. 1 pushed out
+            public bool openSounded;        // the open stop's sound played this opening (bounces off it don't play it again)
             public int restFrames;          // frames the rest pose is still written after it got there (the animator may not write it)
         }
         private static readonly Dictionary<Weapon, BreakState> breakStates = new Dictionary<Weapon, BreakState>();
@@ -729,16 +734,15 @@ namespace TarkovVR.Source.Weapons
         private static void MoveBarrels(FirearmController firearmController, BreakData data, BreakState state, float open, bool leverHeld, SoundHand hand)
         {
             float before = state.open;
+            if (open < data.openDegrees * openSoundRearm)
+                state.openSounded = false;
             if (open >= data.openDegrees)
             {
                 open = data.openDegrees;
                 if (state.speed > 0f)
                 {
                     if (state.speed >= barrelStopSound && before < data.openDegrees)
-                    {
-                        PlayFirstGunSound(firearmController, hand, "BarrelOpen", "CylinderOpen", "PurgeDrumOpen");
-                        Pulse(hand.Seating, Mathf.Clamp01(state.speed / 600f) * 0.6f + 0.2f, 0.04f);
-                    }
+                        OpenStopHit(firearmController, state, hand, state.speed);
                     state.speed = -state.speed * barrelBounce;
                 }
             }
@@ -755,6 +759,16 @@ namespace TarkovVR.Source.Weapons
                 }
             }
             state.open = open;
+        }
+
+        // Into the open stop: its knock once an opening (a bounce off it and back is the same stop), the hand feels every hit
+        private static void OpenStopHit(FirearmController firearmController, BreakState state, SoundHand hand, float speed)
+        {
+            Pulse(hand.Seating, Mathf.Clamp01(speed / 600f) * 0.6f + 0.2f, 0.04f);
+            if (state.openSounded)
+                return;
+            state.openSounded = true;
+            PlayFirstGunSound(firearmController, hand, "BarrelOpen", "CylinderOpen", "PurgeDrumOpen");
         }
 
         private static void Latch(FirearmController firearmController, BreakState state, SoundHand hand)
@@ -926,8 +940,10 @@ namespace TarkovVR.Source.Weapons
                 return;
             }
             state.open = target;
+            if (state.open < data.openDegrees * openSoundRearm)
+                state.openSounded = false;
             if (state.open >= data.openDegrees && before < data.openDegrees && state.speed > barrelStopSound)
-                PlayFirstGunSound(firearmController, SoundHand.OffHand, "BarrelOpen", "CylinderOpen", "PurgeDrumOpen");
+                OpenStopHit(firearmController, state, SoundHand.OffHand, state.speed);
             if (letGo)
                 LetGoOfBarrels(keepSupport: false);
         }
@@ -1900,11 +1916,13 @@ namespace TarkovVR.Source.Weapons
                     return;
                 }
                 breakShellOut = Mathf.Clamp(wanted, 0f, roundLength + breakShellReach);
+                BlendBreakShellHand();
                 if (breakShellOut <= roundLength * (1f - breakShellCommit))
                     CommitBreakShell(firearmController, weapon);
                 return;
             }
             breakShellOut = Mathf.Max(0f, Mathf.Min(breakShellOut - breakShellFinishSpeed * Time.deltaTime, Mathf.Max(wanted, 0f)));
+            BlendBreakShellHand();
             if (breakShellOut <= 0f && breakShellLoaded != 0 && (breakShellLoaded < 0 || breakShellSecondLoaded != 0))
                 FinishBreakShell(firearmController, weapon);
         }
@@ -2157,9 +2175,10 @@ namespace TarkovVR.Source.Weapons
             Transform palm = ArmPalm(roundOnRightArm);
             if (palm == null)
                 return;
-            // Two: the both-barrels clip's hold on the pair, else the second beside the first as the chambers sit
+            // Two: the both-barrels clip's hold on the pair, else the second beside the first as the chambers sit. One: a revolver's carried
+            // as its clip brings it over (the push behind it comes as it goes in, BlendBreakShellHand)
             BreakHold pair = breakShellSecond != null ? breakShellData.loadPair : null;
-            if (BreakShellHoldInPalm(pair ?? breakShellData.loadHold, heldRoundProp.transform, roundOnRightArm, out Vector3 position, out Quaternion rotation))
+            if (BreakShellHoldInPalm(pair ?? breakShellData.carryHold ?? breakShellData.loadHold, heldRoundProp.transform, roundOnRightArm, out Vector3 position, out Quaternion rotation))
                 SetPoseIn(palm, heldRoundProp.transform, position, rotation);
             if (breakShellSecond == null)
                 return;
@@ -2182,8 +2201,50 @@ namespace TarkovVR.Source.Weapons
             return rightArm ? MirroredPose(hold.fingers, rightToLeft: false, breakFingersMirrored) ?? hold.fingers : hold.fingers;
         }
 
-        private static Vector3[] BreakShellFingers(bool rightArm) => BreakFingers(breakShellSecond != null ? breakShellData?.loadPair ?? breakShellData?.loadHold : breakShellData?.loadHold, rightArm)
-            ?? MAGAZINE_PULL_FINGERS;
+        private static Vector3[] BreakShellFingers(bool rightArm)
+        {
+            BreakData data = breakShellData;
+            if (breakShellSecond == null && data?.carryHold?.fingers != null && data.loadHold?.fingers != null
+                && data.carryHold.fingers.Length == data.loadHold.fingers.Length)
+            {
+                // The carry's fingers into the push's as it goes in
+                float push = breakShellOnBore ? BreakShellPushShare() : 0f;
+                Vector3[] from = data.carryHold.fingers, to = data.loadHold.fingers;
+                if (breakFingersBlend.Length != from.Length)
+                    breakFingersBlend = new Vector3[from.Length];
+                for (int joint = 0; joint < from.Length; joint++)
+                    breakFingersBlend[joint] = Quaternion.Slerp(Quaternion.Euler(from[joint]), Quaternion.Euler(to[joint]), push).eulerAngles;
+                return rightArm ? MirroredPose(breakFingersBlend, rightToLeft: false, breakFingersMirrored) ?? breakFingersBlend : breakFingersBlend;
+            }
+            return BreakFingers(breakShellSecond != null ? data?.loadPair ?? data?.loadHold : data?.loadHold, rightArm) ?? MAGAZINE_PULL_FINGERS;
+        }
+
+        private static Vector3[] breakFingersBlend = new Vector3[16];
+        private static readonly BreakHold breakShellBlendHold = new BreakHold();
+
+        // How far in a round on the bore is, from where it was caught (0) to seated (1)
+        private static float BreakShellPushShare()
+        {
+            return Mathf.SmoothStep(0f, 1f, 1f - Mathf.Clamp01(breakShellOut / Mathf.Max(breakShellOutAtCapture, 0.005f)));
+        }
+
+        // A revolver's round on its way in: the hand riding it, from the carry hold into the push behind it (the load clip's two
+        // moments) as it goes in
+        private static void BlendBreakShellHand()
+        {
+            BreakData data = breakShellData;
+            if (!breakShellOnBore || breakShellSecond != null || data?.carryHold == null || data.loadHold == null || heldRoundProp == null || breakShellRider == null
+                || !handLatched || latchHolder != breakShellRider)
+                return;
+            float push = BreakShellPushShare();
+            breakShellBlendHold.position = Vector3.Lerp(data.carryHold.position, data.loadHold.position, push);
+            breakShellBlendHold.rotation = Quaternion.Slerp(data.carryHold.rotation, data.loadHold.rotation, push);
+            Transform prop = heldRoundProp.transform;
+            if (!BreakShellHoldInPalm(breakShellBlendHold, prop, roundOnRightArm, out Vector3 inPalm, out Quaternion inPalmRotation))
+                return;
+            Quaternion palmRotation = prop.rotation * Quaternion.Inverse(inPalmRotation);
+            SnapHandTo(breakShellRider, prop.position - palmRotation * inPalm, palmRotation);
+        }
 
         // OffHandPose: the barrels or a drawn case in the off hand
         private static Vector3[] BreakHandFingers(bool rightArm)

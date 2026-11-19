@@ -130,6 +130,23 @@ for family,(folder,container,craneLeaf,cylinderLeaf,extractorLeaf,releaseLeaf,op
         d=inFrame(gl,cylinder,chamber,t,{})[0]-seat; along=float(np.dot(d,bore)); offBore=float(np.linalg.norm(d-along*bore))
         if offBore<=0.012 and 0.02<=along<=0.08 and (bestLoad is None or abs(along-0.04)<bestLoad[0]): bestLoad=(abs(along-0.04),t,along,offBore)
     loadHold=holdIn(gl,palm,chamber,bestLoad[1],J) if bestLoad else None
+    # The carry: the round in the fingers as the clip's hand brings it over, 15 cm or more from its chamber, where it sits stillest in
+    # the palm (the hold in the hand before it's lined up; the load hold is the push behind it)
+    def inPalm(t): return inFrame(gl,palm,chamber,t,{})
+    def tipOff(t):
+        c={}; rp,_,_=gl['worldAt'](chamber,t,c)
+        return min(float(np.linalg.norm(gl['worldAt'](J[3+3*f],t,c)[0]+gl['rotate'](gl['worldAt'](J[3+3*f],t,c)[1],TIP)-rp)) for f in range(5))
+    carry=None
+    for i in range(1,len(tl)-1,4):
+        t=tl[i]; d=inFrame(gl,cylinder,chamber,t,{})[0]-seat
+        if np.linalg.norm(d)<0.15 or tipOff(t)>0.025: continue
+        (p0,q0),(p1,q1)=inPalm(tl[max(i-8,0)]),inPalm(tl[min(i+8,len(tl)-1)])
+        still=float(np.linalg.norm(p1-p0))*100+ang(q0,q1)/5
+        if carry is None or still<carry[0]: carry=(still,t)
+    carryHold=holdIn(gl,palm,chamber,carry[1],J) if carry else None
+    if carryHold and loadHold:
+        print(f'  carry hold at {carry[1]:.2f}s, {np.linalg.norm(np.array(carryHold["position"])-np.array(loadHold["position"]))*100:.1f} cm / '
+              f'{ang(np.array(carryHold["rotation"]),np.array(loadHold["rotation"])):.0f} deg off the load hold')
 
     # The cylinder in the left palm as the close clip pushes it home
     gc=setup(tree,clips[closeClip]); tc=times(clips[closeClip])
@@ -145,7 +162,7 @@ for family,(folder,container,craneLeaf,cylinderLeaf,extractorLeaf,releaseLeaf,op
     out[family]=dict(revolver=True,barrel=relPath(wp,crane),cylinder=relPath(wp,cylinder),hingeAxis=r5(hingeAxis),openDegrees=round(hingeDegrees,2),bore=r5(bore),
                      chambers=[relPath(wp,p) for p in chambers],shellports=[relPath(wp,p) for p in shellports],
                      open=dict(bones=openBones,clip=openClip,times=[round(keyTimes[0],3),round(keyTimes[-1],3)]),lever=releaseData,
-                     foreEnd=cylinderHold,loadHold=loadHold,pluckHold=pluckHold,ejector=ejector)
+                     foreEnd=cylinderHold,loadHold=loadHold,carryHold=carryHold,pluckHold=pluckHold,ejector=ejector)
     c={}; fp,_,_=g['worldAt'](bone(P,'/fireport'),ts[0],c); wpp,wpr,_=g['worldAt'](wp,ts[0],c); cyp,_,_=g['worldAt'](cylinder,ts[0],c); kp,kr,_=g['worldAt'](crane,ts[0],c)
     print(f'  weapon frame: fireport {np.round(g["rotate"](conj(wpr),fp-wpp)*100,1)} cm, cylinder {np.round(g["rotate"](conj(wpr),cyp-wpp)*100,1)}, crane {np.round(g["rotate"](conj(wpr),kp-wpp)*100,1)}, '
           f'crane rotation in it {np.round(qmul(conj(wpr),kr),3)}')
