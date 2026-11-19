@@ -63,6 +63,12 @@ namespace TarkovVR.Source.Weapons
         public static float carryBlendFar = 0.15f;
         public static float carryBlendNear = 0.03f;
         public static float carryBlendApproach = 0.7f;
+        // The back of a revolver's cylinder (its chamber bones sit on the rear face, a ring round the axis): a sphere this far behind the
+        // face reaching this far past the ring. The trigger anywhere in it draws the fired case nearest the hand; a round brought into it
+        // goes onto the nearest empty chamber (pointing no more than cylinderBackAngle off it)
+        public static float cylinderBackBehind = 0.02f;
+        public static float cylinderBackReach = 0.045f;
+        public static float cylinderBackAngle = 75f;
         // A revolver's crane + cylinder about the hinge: inertia (r^2 + R^2 / 2, the cylinder's own turn) as this x its centre of mass's
         // distance squared
         public static float cylinderInertia = 1.2f;
@@ -1034,7 +1040,9 @@ namespace TarkovVR.Source.Weapons
                 return false;
             Vector3 palm = OffHandPalm();
             int best = -1;
-            float bestDistance = caseGrabRadius * caseGrabRadius;
+            // A revolver: anywhere round the back of its cylinder, the fired case nearest the hand
+            bool atBack = data.revolver && AtCylinderBack(firearms, weapon, palm, 0f);
+            float bestDistance = atBack ? float.MaxValue : caseGrabRadius * caseGrabRadius;
             bool bestSpent = false;
             GameObject bestModel = null;
             for (int chamber = 0; chamber < BreakSlots(weapon).Length; chamber++)
@@ -1562,9 +1570,12 @@ namespace TarkovVR.Source.Weapons
                 if (model != null && spent && (model.transform.position - palm).magnitude < Mathf.Min(distance, caseGrabRadius))
                     return false;
             }
-            // Live rounds in it come out one by one (Tarkov's rule: the ejector is an empty cylinder's)
+            // Live rounds in it come out one by one (Tarkov's rule: the ejector is an empty cylinder's): a fired case the trigger can draw
+            // from here is the draw's, else it's refused
             if (weapon.GetCurrentMagazine() is CylinderMagazine cylinder && cylinder.Count > 0)
             {
+                if (FiredCaseInReach(firearms, weapon, palm))
+                    return false;
                 Pulse(SoundHand.OffHand, 0.2f, 0.03f);
                 Pulse(SoundHand.OffHand, 0.2f, 0.03f, 0.08f);
                 if (breakDebugLog)
@@ -1801,6 +1812,7 @@ namespace TarkovVR.Source.Weapons
             breakShellOnBore = false;
             breakShellCommitted = false;
             breakShellBlend = 0f;
+            breakShellBackBlocked = false;
             breakShellSecond = null;
             breakShellSecondChamber = -1;
             // Both empty and two in the stack: both, chamber 0's beside chamber 1's as they sit in the gun
@@ -1962,6 +1974,8 @@ namespace TarkovVR.Source.Weapons
         // other one on the other chamber.
         private static void TryPutShellOnBore(Firearms firearms, Weapon weapon)
         {
+            if (breakShellData != null && breakShellData.revolver && breakShellSecond == null && TryPutShellAtCylinderBack(firearms, weapon))
+                return;
             if (breakShellSecond != null)
             {
                 for (int shell = 0; shell < 2; shell++)
@@ -1990,6 +2004,102 @@ namespace TarkovVR.Source.Weapons
                     return;
                 }
             }
+        }
+
+        // The back of a revolver's cylinder: the middle of its chamber bones (on the rear face), cylinderBackBehind out along the bore, and
+        // how far round it reaches
+        private static bool CylinderBack(Firearms firearms, Weapon weapon, out Vector3 centre, out float radius)
+        {
+            centre = Vector3.zero;
+            radius = 0f;
+            Slot[] slots = BreakSlots(weapon);
+            Vector3 sum = Vector3.zero, bore = Vector3.zero;
+            int count = 0;
+            for (int chamber = 0; chamber < slots.Length; chamber++)
+            {
+                Transform bone = ChamberBone(firearms, chamber);
+                if (bone == null)
+                    continue;
+                sum += bone.position;
+                bore += bone.up;
+                count++;
+            }
+            if (count < 2 || bore.sqrMagnitude < 1e-8f)
+                return false;
+            Vector3 face = sum / count;
+            float ring = 0f;
+            for (int chamber = 0; chamber < slots.Length; chamber++)
+            {
+                Transform bone = ChamberBone(firearms, chamber);
+                if (bone != null)
+                    ring = Mathf.Max(ring, (bone.position - face).magnitude);
+            }
+            centre = face + bore.normalized * cylinderBackBehind;
+            radius = ring + cylinderBackReach;
+            return true;
+        }
+
+        private static bool AtCylinderBack(Firearms firearms, Weapon weapon, Vector3 point, float extra)
+        {
+            return CylinderBack(firearms, weapon, out Vector3 centre, out float radius) && (point - centre).sqrMagnitude <= (radius + extra) * (radius + extra);
+        }
+
+        // A fired case the trigger would draw with the hand here
+        private static bool FiredCaseInReach(Firearms firearms, Weapon weapon, Vector3 palm)
+        {
+            bool atBack = AtCylinderBack(firearms, weapon, palm, 0f);
+            Slot[] slots = BreakSlots(weapon);
+            for (int chamber = 0; chamber < slots.Length; chamber++)
+            {
+                GameObject model = ChamberModel(firearms, weapon, chamber, out bool spent);
+                if (model != null && spent && (atBack || (model.transform.position - palm).sqrMagnitude <= caseGrabRadius * caseGrabRadius))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool breakShellBackBlocked;          // drawn back off a chamber: the back takes it again once it's been out of reach
+
+        // A revolver's round near the back of its cylinder: onto the empty chamber whose mouth is nearest it, just behind it
+        private static bool TryPutShellAtCylinderBack(Firearms firearms, Weapon weapon)
+        {
+            Transform prop = heldRoundProp.transform;
+            Vector3 middle = prop.TransformPoint(roundCenterInProp);
+            float reach = roundLength * 0.5f;
+            if (breakShellBackBlocked)
+            {
+                if (AtCylinderBack(firearms, weapon, middle, reach + 0.03f))
+                    return false;
+                breakShellBackBlocked = false;
+            }
+            if (!AtCylinderBack(firearms, weapon, middle, reach))
+                return false;
+            Slot[] slots = BreakSlots(weapon);
+            int best = -1;
+            float nearest = float.MaxValue;
+            for (int chamber = 0; chamber < slots.Length; chamber++)
+            {
+                Transform bone = ChamberBone(firearms, chamber);
+                if (bone == null || !ChamberEmpty(firearms, weapon, chamber))
+                    continue;
+                Quaternion seated = bone.rotation * Quaternion.Euler(90f, 0f, 0f);
+                if (Vector3.Angle(prop.rotation * roundAxisInProp, seated * roundAxisInProp) > cylinderBackAngle)
+                    continue;
+                Vector3 mouth = bone.position + seated * roundCenterInProp + bone.up * roundLength;
+                float distance = (middle - mouth).sqrMagnitude;
+                if (distance < nearest)
+                {
+                    nearest = distance;
+                    best = chamber;
+                }
+            }
+            if (best < 0)
+                return false;
+            Transform chamberBone = ChamberBone(firearms, best);
+            Vector3 seatMiddle = chamberBone.position + chamberBone.rotation * Quaternion.Euler(90f, 0f, 0f) * roundCenterInProp;
+            float along = Mathf.Clamp(Vector3.Dot(middle - seatMiddle, chamberBone.up), roundLength * 0.9f, roundLength + breakShellReach);
+            PutShellOnBore(firearms, best, along);
+            return true;
         }
 
         // A held shell lined up behind an empty chamber, along its bore: how far out
@@ -2101,6 +2211,7 @@ namespace TarkovVR.Source.Weapons
         private static void TakeBreakShellOffBore()
         {
             breakShellOnBore = false;
+            breakShellBackBlocked = true;
             breakShellSecondChamber = -1;
             ReleaseBreakShellHand();
             if (heldRoundProp != null)
@@ -2557,7 +2668,7 @@ namespace TarkovVR.Source.Weapons
         }
 
         // debugZones: the fore-end (orange, green in reach) and each reachable chamber (blue / green)
-        private static GameObject foreEndZoneViz, ejectorZoneViz;
+        private static GameObject foreEndZoneViz, ejectorZoneViz, cylinderBackZoneViz;
         private static readonly GameObject[] chamberZoneViz = new GameObject[6];
 
         private static void UpdateBreakZones(FirearmController firearmController, BreakData data, BreakState state)
@@ -2570,6 +2681,12 @@ namespace TarkovVR.Source.Weapons
             Vector3 ejectorAt = showEjector ? EjectorGrabWorld(data, OffHandOnRightArm) : Vector3.zero;
             bool atEjector = showEjector && (OffHandPalm() - ejectorAt).sqrMagnitude <= ejectorGrabRadius * ejectorGrabRadius;
             SetZoneViz(ref ejectorZoneViz, showEjector, ejectorAt, ejectorGrabRadius, atEjector ? new Color(0f, 1f, 0f, 0.3f) : new Color(1f, 0.2f, 0.8f, 0.3f));
+            Vector3 backCentre = Vector3.zero;
+            float backRadius = 0f;
+            bool showBack = debugZones && data.revolver && firearmController.Firearms != null && state.open >= data.openDegrees * barrelOpenEnough && !HoldingBreakCase
+                && CylinderBack(firearmController.Firearms, firearmController.Item, out backCentre, out backRadius);
+            bool atBackZone = showBack && (OffHandPalm() - backCentre).sqrMagnitude <= backRadius * backRadius;
+            SetZoneViz(ref cylinderBackZoneViz, showBack, backCentre, backRadius, atBackZone ? new Color(0f, 1f, 0f, 0.2f) : new Color(1f, 1f, 0.2f, 0.2f));
             Firearms firearms = firearmController.Firearms;
             Weapon weapon = firearmController.Item;
             for (int chamber = 0; chamber < chamberZoneViz.Length; chamber++)
