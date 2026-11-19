@@ -58,6 +58,11 @@ namespace TarkovVR.Source.Weapons
         public static float barrelBounce = 0.15f;
         public static float barrelStopSound = 60f;          // deg/s into the open stop that sounds it
         public static float openSoundRearm = 0.6f;          // share of the way open it has to come back down to before the stop sounds again
+        // A revolver's round: the hand turns from the carry toward the push behind it as the round nears an empty chamber's mouth (m from
+        // it, the round's middle), this share of the way by the time it's caught on the bore; pushing it in does the rest
+        public static float carryBlendFar = 0.15f;
+        public static float carryBlendNear = 0.03f;
+        public static float carryBlendApproach = 0.7f;
         // A revolver's crane + cylinder about the hinge: inertia (r^2 + R^2 / 2, the cylinder's own turn) as this x its centre of mass's
         // distance squared
         public static float cylinderInertia = 1.2f;
@@ -1013,7 +1018,8 @@ namespace TarkovVR.Source.Weapons
             for (int chamber = 0; chamber < BreakSlots(weapon).Length; chamber++)
             {
                 GameObject model = ChamberModel(firearms, weapon, chamber, out bool spent);
-                if (model == null)
+                // (a revolver's fired cases only: the chambers sit a finger apart, the live rounds stay put)
+                if (model == null || (data.revolver && !spent))
                     continue;
                 float distance = (model.transform.position - palm).sqrMagnitude;
                 if (distance <= bestDistance)
@@ -1530,8 +1536,8 @@ namespace TarkovVR.Source.Weapons
             Slot[] slots = BreakSlots(weapon);
             for (int chamber = 0; chamber < slots.Length; chamber++)
             {
-                GameObject model = ChamberModel(firearms, weapon, chamber, out _);
-                if (model != null && (model.transform.position - palm).magnitude < Mathf.Min(distance, caseGrabRadius))
+                GameObject model = ChamberModel(firearms, weapon, chamber, out bool spent);
+                if (model != null && spent && (model.transform.position - palm).magnitude < Mathf.Min(distance, caseGrabRadius))
                     return false;
             }
             // Live rounds in it come out one by one (Tarkov's rule: the ejector is an empty cylinder's)
@@ -1772,6 +1778,7 @@ namespace TarkovVR.Source.Weapons
             breakShellData = data;
             breakShellOnBore = false;
             breakShellCommitted = false;
+            breakShellBlend = 0f;
             breakShellSecond = null;
             breakShellSecondChamber = -1;
             // Both empty and two in the stack: both, chamber 0's beside chamber 1's as they sit in the gun
@@ -1895,7 +1902,9 @@ namespace TarkovVR.Source.Weapons
                     PulseRoundHand(false, 0.15f, 0.02f);
                     return;
                 }
-                if (state.open >= data.openDegrees * barrelOpenEnough && GunIdle(firearmController) && firearms != null)
+                bool openEnough = state.open >= data.openDegrees * barrelOpenEnough && GunIdle(firearmController) && firearms != null;
+                ApproachBreakShellHand(firearms, weapon, openEnough);
+                if (openEnough)
                     TryPutShellOnBore(firearms, weapon);
                 return;
             }
@@ -2033,7 +2042,19 @@ namespace TarkovVR.Source.Weapons
                 breakShellRider = new GameObject("VRBreakShellHand").transform;
             breakShellRider.SetParent(prop, worldPositionStays: false);
             breakShellRider.SetPositionAndRotation(controller.position, controller.rotation);
-            LatchHand(breakShellRider, gunHand: false);
+            breakShellBlendAtCapture = breakShellBlend;
+            if (breakShellApproachLatched && handLatched && !handLatchReleasing && handLatch != null)
+            {
+                // Already turned toward the push on the way in: the latch moves onto the round as the hand is
+                handLatch.SetParent(breakShellRider, worldPositionStays: true);
+                RebaseLatch();
+                breakShellApproachLatched = false;
+            }
+            else
+            {
+                ReleaseApproachLatch();
+                LatchHand(breakShellRider, gunHand: false);
+            }
             PulseRoundHand(false, 0.25f, 0.03f);
             if (breakDebugLog)
                 Plugin.MyLog.LogInfo($"[VRBreak] shell onto chamber {chamber}'s bore{(breakShellSecond != null ? " (the second onto the other's)" : "")}, {along * 100f:0.#} cm out");
@@ -2136,6 +2157,7 @@ namespace TarkovVR.Source.Weapons
 
         private static void ReleaseBreakShellHand()
         {
+            ReleaseApproachLatch();
             if (handLatched && handLatch != null && latchHolder == breakShellRider && breakShellRider != null)
                 ReleaseHandLatch();
             if (breakShellRider != null && heldRoundProp != null && breakShellRider.IsChildOf(heldRoundProp.transform))
@@ -2176,10 +2198,13 @@ namespace TarkovVR.Source.Weapons
             if (palm == null)
                 return;
             // Two: the both-barrels clip's hold on the pair, else the second beside the first as the chambers sit. One: a revolver's carried
-            // as its clip brings it over (the push behind it comes as it goes in, BlendBreakShellHand)
+            // as its clip brings it over, off the controller's hand (the rendered one turns round it toward the push near a chamber:
+            // ApproachBreakShellHand, BlendBreakShellHand)
             BreakHold pair = breakShellSecond != null ? breakShellData.loadPair : null;
-            if (BreakShellHoldInPalm(pair ?? breakShellData.carryHold ?? breakShellData.loadHold, heldRoundProp.transform, roundOnRightArm, out Vector3 position, out Quaternion rotation))
-                SetPoseIn(palm, heldRoundProp.transform, position, rotation);
+            bool carried = pair == null && breakShellData.carryHold != null;
+            Transform frame = carried ? HandRig(gunHand: false) : palm;
+            if (frame != null && BreakShellHoldInPalm(pair ?? breakShellData.carryHold ?? breakShellData.loadHold, heldRoundProp.transform, roundOnRightArm, out Vector3 position, out Quaternion rotation))
+                SetPoseIn(frame, heldRoundProp.transform, position, rotation);
             if (breakShellSecond == null)
                 return;
             if (pair?.second != null && BreakShellHoldInPalm(pair.second, breakShellSecond.transform, roundOnRightArm, out Vector3 secondPosition, out Quaternion secondRotation))
@@ -2207,8 +2232,8 @@ namespace TarkovVR.Source.Weapons
             if (breakShellSecond == null && data?.carryHold?.fingers != null && data.loadHold?.fingers != null
                 && data.carryHold.fingers.Length == data.loadHold.fingers.Length)
             {
-                // The carry's fingers into the push's as it goes in
-                float push = breakShellOnBore ? BreakShellPushShare() : 0f;
+                // The carry's fingers into the push's as it nears its chamber and goes in
+                float push = breakShellBlend;
                 Vector3[] from = data.carryHold.fingers, to = data.loadHold.fingers;
                 if (breakFingersBlend.Length != from.Length)
                     breakFingersBlend = new Vector3[from.Length];
@@ -2236,14 +2261,77 @@ namespace TarkovVR.Source.Weapons
             if (!breakShellOnBore || breakShellSecond != null || data?.carryHold == null || data.loadHold == null || heldRoundProp == null || breakShellRider == null
                 || !handLatched || latchHolder != breakShellRider)
                 return;
-            float push = BreakShellPushShare();
-            breakShellBlendHold.position = Vector3.Lerp(data.carryHold.position, data.loadHold.position, push);
-            breakShellBlendHold.rotation = Quaternion.Slerp(data.carryHold.rotation, data.loadHold.rotation, push);
+            breakShellBlend = Mathf.Lerp(breakShellBlendAtCapture, 1f, BreakShellPushShare());
             Transform prop = heldRoundProp.transform;
-            if (!BreakShellHoldInPalm(breakShellBlendHold, prop, roundOnRightArm, out Vector3 inPalm, out Quaternion inPalmRotation))
+            if (!BlendedShellHold(data, prop, breakShellBlend, out Vector3 inPalm, out Quaternion inPalmRotation))
                 return;
             Quaternion palmRotation = prop.rotation * Quaternion.Inverse(inPalmRotation);
             SnapHandTo(breakShellRider, prop.position - palmRotation * inPalm, palmRotation);
+        }
+
+        private static float breakShellBlend;               // 0 the carry .. 1 the push behind it
+        private static float breakShellBlendAtCapture;
+        private static bool breakShellApproachLatched;      // the hand latched on its own controller to turn round the round on the way in
+
+        // The round in the palm between the carry and the push
+        private static bool BlendedShellHold(BreakData data, Transform prop, float blend, out Vector3 position, out Quaternion rotation)
+        {
+            breakShellBlendHold.position = Vector3.Lerp(data.carryHold.position, data.loadHold.position, blend);
+            breakShellBlendHold.rotation = Quaternion.Slerp(data.carryHold.rotation, data.loadHold.rotation, blend);
+            return BreakShellHoldInPalm(breakShellBlendHold, prop, roundOnRightArm, out position, out rotation);
+        }
+
+        // Off the bore: the round stays where the controller carries it (PlaceHeldBreakShell, the carry hold off the controller's hand) and
+        // the hand turns round it toward the push as it nears an empty chamber's mouth, latched on its own controller
+        private static void ApproachBreakShellHand(Firearms firearms, Weapon weapon, bool openEnough)
+        {
+            BreakData data = breakShellData;
+            if (breakShellSecond != null || data?.carryHold == null || data.loadHold == null || heldRoundProp == null)
+                return;
+            Transform prop = heldRoundProp.transform;
+            Vector3 roundMiddle = prop.TransformPoint(roundCenterInProp);
+            float nearest = float.MaxValue;
+            if (openEnough)
+            {
+                Slot[] slots = BreakSlots(weapon);
+                for (int chamber = 0; chamber < slots.Length; chamber++)
+                {
+                    Transform bone = ChamberBone(firearms, chamber);
+                    if (bone == null || !ChamberEmpty(firearms, weapon, chamber))
+                        continue;
+                    Vector3 mouth = bone.position + bone.rotation * Quaternion.Euler(90f, 0f, 0f) * roundCenterInProp + bone.up * roundLength;
+                    nearest = Mathf.Min(nearest, (roundMiddle - mouth).magnitude);
+                }
+            }
+            breakShellBlend = carryBlendApproach * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(carryBlendFar, carryBlendNear, nearest));
+            Transform controller = HandRig(gunHand: false);
+            if (breakShellBlend <= 0.001f || controller == null)
+            {
+                ReleaseApproachLatch();
+                return;
+            }
+            if (!breakShellApproachLatched || !handLatched || handLatchReleasing || latchHolder != controller)
+            {
+                LatchHand(controller, gunHand: false);
+                breakShellApproachLatched = true;
+            }
+            // The palm round the round: the round's carry pose off the controller, the palm from it by the blended hold
+            if (!BreakShellHoldInPalm(data.carryHold, prop, roundOnRightArm, out Vector3 carryPosition, out Quaternion carryRotation)
+                || !BlendedShellHold(data, prop, breakShellBlend, out Vector3 inPalm, out Quaternion inPalmRotation))
+                return;
+            Quaternion roundRotation = controller.rotation * carryRotation;
+            Vector3 roundPosition = controller.position + controller.rotation * carryPosition;
+            Quaternion palmRotation = roundRotation * Quaternion.Inverse(inPalmRotation);
+            SnapHandTo(controller, roundPosition - palmRotation * inPalm, palmRotation);
+        }
+
+        private static void ReleaseApproachLatch()
+        {
+            if (!breakShellApproachLatched)
+                return;
+            breakShellApproachLatched = false;
+            if (handLatched && !handLatchReleasing && latchHolder == HandRig(gunHand: false))
+                ReleaseHandLatch();
         }
 
         // OffHandPose: the barrels or a drawn case in the off hand
@@ -2465,7 +2553,10 @@ namespace TarkovVR.Source.Weapons
             for (int chamber = 0; chamber < chamberZoneViz.Length; chamber++)
             {
                 bool show = debugZones && firearms != null && chamber < BreakSlots(weapon).Length && state.open >= data.openDegrees * barrelOpenEnough && !HoldingBreakCase;
-                GameObject model = show ? ChamberModel(firearms, weapon, chamber, out _) : null;
+                bool zoneSpent = false;
+                GameObject model = show ? ChamberModel(firearms, weapon, chamber, out zoneSpent) : null;
+                if (data.revolver && model != null && !zoneSpent)
+                    model = null;
                 Transform bone = show ? ChamberBone(firearms, chamber) : null;
                 Vector3 at = model != null ? model.transform.position : bone != null ? bone.position : Vector3.zero;
                 bool reach = model != null && (OffHandPalm() - at).sqrMagnitude <= caseGrabRadius * caseGrabRadius;
