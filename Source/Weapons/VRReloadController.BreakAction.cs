@@ -640,6 +640,11 @@ namespace TarkovVR.Source.Weapons
                     state.latched = false;
                     // A revolver's cylinder pops out on the release (the thumb pushes it), a break-action's barrels just come free
                     state.speed = data.revolver ? cylinderKickSpeed : 0f;
+                    if (data.revolver)
+                    {
+                        revolverOpenSoundFor = firearmController;
+                        revolverOpenSoundAt = Time.time + cylinderOpenSoundDelay;
+                    }
                     if (breakDebugLog)
                         Plugin.MyLog.LogInfo($"[VRBreak] unlatched, chambers {ChambersText(firearmController, weapon)}, models {ChamberModelsText(firearmController.Firearms, weapon)}");
                 }
@@ -647,6 +652,7 @@ namespace TarkovVR.Source.Weapons
             // A break-action's lever stays over while open; a revolver's release springs back as the thumb comes off it
             bool leverOver = leverButton || (!state.latched && !data.revolver);
             state.lever = Mathf.MoveTowards(state.lever, leverOver ? 1f : 0f, deltaTime / Mathf.Max(leverTime, 0.001f));
+            RevolverOpenSound(firearmController);
 
             if (HoldingBarrels)
                 UpdateBarrelHold(firearmController, data, state, gripPressed, gripReleased, leverButton, deltaTime);
@@ -747,7 +753,7 @@ namespace TarkovVR.Source.Weapons
                 if (state.speed > 0f)
                 {
                     if (state.speed >= barrelStopSound && before < data.openDegrees)
-                        OpenStopHit(firearmController, state, hand, state.speed);
+                        OpenStopHit(firearmController, data, state, hand, state.speed);
                     state.speed = -state.speed * barrelBounce;
                 }
             }
@@ -766,14 +772,30 @@ namespace TarkovVR.Source.Weapons
             state.open = open;
         }
 
-        // Into the open stop: its knock once an opening (a bounce off it and back is the same stop), the hand feels every hit
-        private static void OpenStopHit(FirearmController firearmController, BreakState state, SoundHand hand, float speed)
+        // Into the open stop: its knock once an opening (a bounce off it and back is the same stop), the hand feels every hit. A revolver's
+        // swing-out sound isn't the stop's: it plays as the cylinder starts out (RevolverOpenSound)
+        private static void OpenStopHit(FirearmController firearmController, BreakData data, BreakState state, SoundHand hand, float speed)
         {
             Pulse(hand.Seating, Mathf.Clamp01(speed / 600f) * 0.6f + 0.2f, 0.04f);
-            if (state.openSounded)
+            if (state.openSounded || data.revolver)
                 return;
             state.openSounded = true;
-            PlayFirstGunSound(firearmController, hand, "BarrelOpen", "CylinderOpen", "PurgeDrumOpen");
+            PlayFirstGunSound(firearmController, hand, "BarrelOpen");
+        }
+
+        // A revolver's swing-out, after the release (Tarkov's open clips: the Rhino's and MTs-255's CylinderOpen 0.1 s after CylinderBtn,
+        // as the cylinder starts out; the RSh-12 has none, its PurgeDrumOpen is switched off in every clip)
+        public static float cylinderOpenSoundDelay = 0.1f;  // s after the release
+        private static FirearmController revolverOpenSoundFor;
+        private static float revolverOpenSoundAt;
+
+        private static void RevolverOpenSound(FirearmController firearmController)
+        {
+            if (revolverOpenSoundFor == null || Time.time < revolverOpenSoundAt)
+                return;
+            if (revolverOpenSoundFor == firearmController)
+                PlayFirstGunSound(firearmController, SoundHand.GunBody, "CylinderOpen");
+            revolverOpenSoundFor = null;
         }
 
         private static void Latch(FirearmController firearmController, BreakState state, SoundHand hand)
@@ -948,7 +970,7 @@ namespace TarkovVR.Source.Weapons
             if (state.open < data.openDegrees * openSoundRearm)
                 state.openSounded = false;
             if (state.open >= data.openDegrees && before < data.openDegrees && state.speed > barrelStopSound)
-                OpenStopHit(firearmController, state, SoundHand.OffHand, state.speed);
+                OpenStopHit(firearmController, data, state, SoundHand.OffHand, state.speed);
             if (letGo)
                 LetGoOfBarrels(keepSupport: false);
         }
