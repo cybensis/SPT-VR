@@ -30,6 +30,11 @@ namespace TarkovVR.Source.Weapons
     // chambers the cylinder's camoras, the lever its release (B pops the cylinder out), the fore-end hold the off hand on the cylinder.
     // One round per pouch grab, one case per draw; with no live round left the off hand's trigger at the ejector takes it, and pushed
     // in it carries the fired cases out until they come free (Tarkov's own rule: an empty cylinder ejects all, else one by one).
+    // The SP-81 flare pistol is a break-action whose clip cocks its hammer once the barrel's shut: latched by hand, it's cocked the same way.
+    // The M32A1 is a revolver whose crane carries the barrel, the foregrip and the optic: B with the off hand on the foregrip swings it with
+    // that hand, a detent holds it at its open stop, an empty cylinder tipped back drops its fired cases (it has no ejector), and Tarkov's
+    // spring-driven cylinder (it fires upward from where it's wound, an empty chamber stops it) takes rounds next to the ones in it and is
+    // wound on the latch.
     public static partial class VRReloadController
     {
         public static bool breakActions = true;             // false = Tarkov's own break-action reloads only
@@ -74,13 +79,25 @@ namespace TarkovVR.Source.Weapons
         public static float cylinderInertia = 1.2f;
         public static float cylinderKickSpeed = 360f;       // deg/s the release pops the cylinder out with
         // Shut, the chamber that fires next turned to a live round, as Tarkov's own reload leaves it (it loads from there). false = it
-        // stays where it was: an empty chamber clicks.
+        // stays where it was: an empty chamber clicks. (A spring-driven cylinder is always wound: it can't turn past an empty one.)
         public static bool revolverIndexToLiveRound = true;
         public static float ejectorGrabRadius = 0.06f;      // m from the palm to where the clip's fingers press the ejector
         public static float ejectorMinPush = 0.015f;        // m the hand pushes for the ejector's whole travel, at least
         public static float ejectorEjectAt = 0.9f;          // share of its travel at which the fired cases come free
         public static float ejectorCaseSpeed = 1.5f;        // m/s at least, out of the back of the cylinder
         public static float ejectorReturnTime = 0.08f;      // s it springs home once let go
+        // The SP-81's hammer: cocked this long after the barrel latches, over this long
+        public static float hammerCockDelay = 0.1f;
+        public static float hammerCockTime = 0.12f;
+        // The M32A1's crane within craneDetentDegrees of its open stop: a detent pulls it in, as hard as craneDetent times its own weight
+        // can turn it at most (an easy turn of the gun doesn't shut it, a flick does)
+        public static float craneDetent = 1.5f;
+        public static float craneDetentDegrees = 6f;
+        public static float craneOpenSoundAt = 0.15f;       // share of the way open the hand has swung it when its swing sound plays
+        // No ejector (the M32A1): an empty cylinder drops its fired cases with the bore out of its back within this many degrees of straight
+        // down (Tarkov's clip tips it to ~73), this fast out of it on top of the gun's own motion (m/s)
+        public static float caseDumpAngle = 60f;
+        public static float caseDumpSpeed = 0.4f;
 
         public static bool HoldingBarrels { get; private set; }
         public static bool HoldingBreakCase { get; private set; }
@@ -113,6 +130,9 @@ namespace TarkovVR.Source.Weapons
             public bool revolver;               // (ReloadHolds "revolvers"): barrel = the crane, chambers = the camoras' round bones
             public string cylinder;
             public SavedEjector ejector;
+            public SavedPumpBone hammer;        // the SP-81's: its local pose down, then cocked
+            public bool holdsOpen;              // the M32A1's crane: a detent at its open stop
+            public bool supportOnCrane;         // its support grip (the foregrip) rides the crane: B with it held swings the crane with that hand
         }
 
         public sealed class SavedEjector
@@ -165,6 +185,7 @@ namespace TarkovVR.Source.Weapons
             public float[] grabPoint;
             public float[] position2;
             public float[] rotation2;
+            public bool right;                  // off the clip's right hand (the M32A1's gun hand loads in its clips): mirrored onto the left
         }
 
         private sealed class BreakHold
@@ -174,6 +195,7 @@ namespace TarkovVR.Source.Weapons
             public Vector3[] fingers;
             public Vector3 grabPoint;
             public BreakHold second;            // a pair's other shell (the right chamber's)
+            public bool rightHanded;
         }
 
         private sealed class KeyedBones
@@ -201,6 +223,9 @@ namespace TarkovVR.Source.Weapons
             public bool revolver;
             public string cylinderPath;
             public Ejector ejector;
+            public KeyedBones hammer;
+            public bool holdsOpen;
+            public bool supportOnCrane;
         }
 
         private static readonly Dictionary<string, BreakData> breakGuns = new Dictionary<string, BreakData>();
@@ -228,6 +253,9 @@ namespace TarkovVR.Source.Weapons
                 revolver = saved.revolver,
                 cylinderPath = saved.cylinder,
                 ejector = EjectorFrom(saved.ejector),
+                hammer = saved.hammer != null ? KeyedFrom(new SavedBreakBones { bones = new List<SavedPumpBone> { saved.hammer } }) : null,
+                holdsOpen = saved.holdsOpen,
+                supportOnCrane = saved.supportOnCrane,
             };
             return data.open != null && data.foreEnd != null && System.Array.IndexOf(data.open.paths, data.barrelPath) >= 0 ? data : null;
         }
@@ -294,6 +322,7 @@ namespace TarkovVR.Source.Weapons
                 grabPoint = saved.grabPoint != null && saved.grabPoint.Length >= 3 ? Vector3From(saved.grabPoint, 0) : Vector3From(saved.position, 0),
                 second = saved.position2 != null && saved.rotation2 != null
                     ? new BreakHold { position = Vector3From(saved.position2, 0), rotation = QuaternionFrom(saved.rotation2, 0) } : null,
+                rightHanded = saved.right,
             };
         }
 
@@ -391,6 +420,7 @@ namespace TarkovVR.Source.Weapons
         private static Transform breakFrame, barrelBone;
         private static Transform[] breakOpenBones, breakLeverBones, ejectorBones;
         private static Transform breakCylinder, ejectorPressBone;   // a revolver's
+        private static Transform breakHammerBone;           // the SP-81's
         private static Vector3 barrelCenterOfMass;          // in the barrel bone's frame
         private static Quaternion barrelClosedLocal;        // its closed local rotation (the keys' first)
 
@@ -408,13 +438,15 @@ namespace TarkovVR.Source.Weapons
             ejectorBones = data.ejector != null ? FindKeyedBones(breakFrame, data.ejector.bones) : null;
             ejectorPressBone = data.ejector != null ? breakFrame.Find(data.ejector.pressPath) : null;
             breakCylinder = !string.IsNullOrEmpty(data.cylinderPath) ? breakFrame.Find(data.cylinderPath) : null;
+            breakHammerBone = data.hammer != null ? breakFrame.Find(data.hammer.paths[0]) : null;
             barrelClosedLocal = data.open.rotations[System.Array.IndexOf(data.open.paths, data.barrelPath)][0];
             barrelCenterOfMass = MeshCenterIn(barrelBone);
             if (breakDebugLog)
                 Plugin.MyLog.LogInfo($"[VRBreak] {firearmController.Item.LocalizedShortName()}: {(data.revolver ? "crane" : "barrel")} '{barrelBone.name}', {data.openDegrees:0.#} deg about {data.hingeAxis.ToString("F2")}, "
                     + $"centre of mass {(barrelCenterOfMass * 100f).ToString("F1")} cm off the hinge, open bones {CountFound(breakOpenBones)}/{data.open.paths.Length}, "
                     + $"lever {(data.lever != null ? CountFound(breakLeverBones) + "/" + data.lever.paths.Length : "none")}, chambers {data.chamberCount}"
-                    + (data.revolver ? $", cylinder {(breakCylinder != null ? breakCylinder.name : "NOT FOUND")}, ejector {(data.ejector != null ? CountFound(ejectorBones) + "/" + data.ejector.bones.paths.Length + " pushed on " + (ejectorPressBone != null ? ejectorPressBone.name : "NOT FOUND") : "none")}" : ""));
+                    + (data.revolver ? $", cylinder {(breakCylinder != null ? breakCylinder.name : "NOT FOUND")}, ejector {(data.ejector != null ? CountFound(ejectorBones) + "/" + data.ejector.bones.paths.Length + " pushed on " + (ejectorPressBone != null ? ejectorPressBone.name : "NOT FOUND") : "none")}" : "")
+                    + (data.hammer != null ? $", hammer {(breakHammerBone != null ? breakHammerBone.name : "NOT FOUND")}" : ""));
             return true;
         }
 
@@ -525,8 +557,12 @@ namespace TarkovVR.Source.Weapons
                 || !breakStates.TryGetValue(firearmController.Item, out BreakState state))
                 return;
             if (!(firearmController.CurrentOperation is FirearmController.Idling))
+            {
+                hammerCockFor = null;
                 return;
+            }
             PoseBreakAction(data, state);
+            CockHammer(firearmController, data, state);
             PlaceBreakProps(data);
             ApplyBreakLeverHand(firearmController, data);
         }
@@ -624,6 +660,7 @@ namespace TarkovVR.Source.Weapons
             if (!(firearmController.CurrentOperation is FirearmController.Idling))
             {
                 breakGunOpen = !state.latched || state.open > 0f;
+                hammerCockFor = null;
                 return false;
             }
             float deltaTime = Mathf.Max(Time.deltaTime, 1e-4f);
@@ -639,7 +676,9 @@ namespace TarkovVR.Source.Weapons
                 breakLeverPressFor = firearmController;
             if (leverPressed)
             {
-                PlayFirstGunSound(firearmController, SoundHand.GunHand, "BarrelLock", "CylinderBtn", "Hammer");
+                // (the SP-81 has no lever of its own: its barrels just come free)
+                if (data.lever != null)
+                    PlayFirstGunSound(firearmController, SoundHand.GunHand, "BarrelLock", "CylinderBtn", "Hammer");
                 PulseGunHand(0.25f, 0.03f);
                 if (state.latched)
                 {
@@ -651,14 +690,19 @@ namespace TarkovVR.Source.Weapons
                         revolverOpenSoundFor = firearmController;
                         revolverOpenSoundAt = Time.time + cylinderOpenSoundDelay;
                     }
+                    // The M32A1's foregrip is on the crane: the support hand on it takes the crane from here and swings it (onto the clip's
+                    // hold on the foregrip)
+                    bool craneInHand = data.supportOnCrane && !handBusy && !HoldingBarrels && VRGlobals.vrPlayer.isSupporting;
+                    if (craneInHand)
+                        BeginBarrelHold(firearmController, data, state);
                     if (breakDebugLog)
-                        Plugin.MyLog.LogInfo($"[VRBreak] unlatched, chambers {ChambersText(firearmController, weapon)}, models {ChamberModelsText(firearmController.Firearms, weapon)}");
+                        Plugin.MyLog.LogInfo($"[VRBreak] unlatched{(craneInHand ? ", the crane in the support hand" : "")}, chambers {ChambersText(firearmController, weapon)}, models {ChamberModelsText(firearmController.Firearms, weapon)}");
                 }
             }
             // A break-action's lever stays over while open; a revolver's release springs back as the thumb comes off it
             bool leverOver = leverButton || (!state.latched && !data.revolver);
             state.lever = Mathf.MoveTowards(state.lever, leverOver ? 1f : 0f, deltaTime / Mathf.Max(leverTime, 0.001f));
-            RevolverOpenSound(firearmController);
+            RevolverOpenSound(firearmController, data, state);
 
             if (HoldingBarrels)
                 UpdateBarrelHold(firearmController, data, state, gripPressed, gripReleased, leverButton, deltaTime);
@@ -683,6 +727,8 @@ namespace TarkovVR.Source.Weapons
                 UpdateEjector(firearmController, data, state, triggerReleased, deltaTime);
             else if (state.ejector > 0f)
                 state.ejector = Mathf.MoveTowards(state.ejector, 0f, deltaTime / Mathf.Max(ejectorReturnTime, 0.001f));
+            if (data.revolver && data.ejector == null)
+                TryDumpCases(firearmController, data, state);
 
             breakGunOpen = !state.latched || state.open > 0f;
             PoseBreakAction(data, state);
@@ -740,6 +786,8 @@ namespace TarkovVR.Source.Weapons
             Quaternion fromRig = rig != null ? rig.rotation : Quaternion.identity;
             Vector3 pull = Physics.gravity * barrelGravity - fromRig * hingeAcceleration * barrelInertia;
             float acceleration = Vector3.Dot(Vector3.Cross(lever, pull), axis) / inertia - Vector3.Dot(fromRig * gunTurnAcceleration, axis) * barrelInertia;
+            if (data.holdsOpen && state.open >= data.openDegrees - craneDetentDegrees)
+                acceleration += craneDetent * Physics.gravity.magnitude * barrelGravity * across.magnitude / inertia;
             float speed = state.speed * Mathf.Deg2Rad;
             speed += acceleration * deltaTime;
             speed *= Mathf.Exp(-barrelFriction * deltaTime);
@@ -760,7 +808,7 @@ namespace TarkovVR.Source.Weapons
                 {
                     if (state.speed >= barrelStopSound && before < data.openDegrees)
                         OpenStopHit(firearmController, data, state, hand, state.speed);
-                    state.speed = -state.speed * barrelBounce;
+                    state.speed = data.holdsOpen ? 0f : -state.speed * barrelBounce;
                 }
             }
             if (open <= 0f)
@@ -795,9 +843,22 @@ namespace TarkovVR.Source.Weapons
         private static FirearmController revolverOpenSoundFor;
         private static float revolverOpenSoundAt;
 
-        private static void RevolverOpenSound(FirearmController firearmController)
+        private static void RevolverOpenSound(FirearmController firearmController, BreakData data, BreakState state)
         {
-            if (revolverOpenSoundFor == null || Time.time < revolverOpenSoundAt)
+            if (revolverOpenSoundFor == null)
+                return;
+            // (the M32A1's crane: as the hand swings it out, not on the release; none if it went back in)
+            if (revolverOpenSoundFor == firearmController && data.holdsOpen)
+            {
+                if (state.latched)
+                {
+                    revolverOpenSoundFor = null;
+                    return;
+                }
+                if (state.open < data.openDegrees * craneOpenSoundAt)
+                    return;
+            }
+            else if (Time.time < revolverOpenSoundAt)
                 return;
             if (revolverOpenSoundFor == firearmController)
                 PlayFirstGunSound(firearmController, SoundHand.GunBody, "CylinderOpen");
@@ -812,12 +873,53 @@ namespace TarkovVR.Source.Weapons
             Pulse(hand.Seating, 0.6f, 0.05f);
             if (IsRevolver(firearmController.Item))
             {
-                if (revolverIndexToLiveRound)
+                if (revolverIndexToLiveRound || firearmController.Item.GetCurrentMagazine() is SpringDrivenCylinder)
                     TurnCylinderToLiveRound(firearmController);
                 SetBreakAnimatorCounts(firearmController);
             }
+            // The SP-81's hammer, cocked as its clip cocks it once the barrel's shut
+            if (breakHammerBone != null && breakBonesFor == firearmController && !firearmController.Item.Armed)
+            {
+                hammerCockFor = firearmController;
+                hammerCockStart = Time.time + hammerCockDelay;
+                hammerCockSounded = false;
+            }
             if (breakDebugLog)
-                Plugin.MyLog.LogInfo($"[VRBreak] latched shut, chambers {ChambersText(firearmController, firearmController.Item)}");
+                Plugin.MyLog.LogInfo($"[VRBreak] latched shut, chambers {ChambersText(firearmController, firearmController.Item)}{(hammerCockFor == firearmController ? ", cocking the hammer" : "")}");
+        }
+
+        private static FirearmController hammerCockFor;
+        private static float hammerCockStart;
+        private static bool hammerCockSounded;
+
+        // From down to cocked after the latch (after the animator), then Tarkov's own: FirearmController.SetArm, the animator's armed pose
+        // and Weapon.Armed, as the clip's Arm event sets them. A shot or anything else of Tarkov's first: not cocked (it fires as it is).
+        private static void CockHammer(FirearmController firearmController, BreakData data, BreakState state)
+        {
+            if (hammerCockFor == null)
+                return;
+            if (hammerCockFor != firearmController || breakHammerBone == null || data.hammer == null || !state.latched || firearmController.Item.Armed)
+            {
+                hammerCockFor = null;
+                return;
+            }
+            float share = (Time.time - hammerCockStart) / Mathf.Max(hammerCockTime, 0.001f);
+            if (share < 0f)
+                return;
+            if (!hammerCockSounded)
+            {
+                hammerCockSounded = true;
+                PlayFirstGunSound(firearmController, SoundHand.GunHand, "Arm");
+                PulseGunHand(0.2f, 0.02f);
+            }
+            if (share >= 1f)
+            {
+                firearmController.SetArm(true);
+                hammerCockFor = null;
+                return;
+            }
+            KeyedPose(data.hammer, 0, Mathf.SmoothStep(0f, 1f, share), out Vector3 position, out Quaternion rotation);
+            breakHammerBone.SetLocalPositionAndRotation(position, rotation);
         }
 
         // Shut: the chamber that fires next (the current camora single action, the one after it double action, Tarkov's
@@ -829,19 +931,21 @@ namespace TarkovVR.Source.Weapons
                 return;
             bool singleAction = !weapon.CylinderHammerClosed;
             int count = cylinder.MaxCount;
-            int fires = cylinder.GetCamoraFireOrLoadStartIndex(singleAction);
+            // (a spring-driven one fires the current chamber either way and only counts up: wound back to its first live round)
+            bool spring = cylinder is SpringDrivenCylinder;
+            int fires = spring ? 0 : cylinder.GetCamoraFireOrLoadStartIndex(singleAction);
             for (int step = 0; step < count; step++)
             {
                 int camora = (fires + step) % count;
                 if (!(cylinder.Camoras[camora].ContainedItem is Ammo round) || round.IsUsed)
                     continue;
-                if (step == 0)
+                int current = singleAction || spring ? camora : (camora - 1 + count) % count;
+                if (current == cylinder.CurrentCamoraIndex)
                     return;
-                int current = singleAction ? camora : (camora - 1 + count) % count;
                 cylinder.SetCurrentCamoraIndex(current);
                 firearmController.FirearmsAnimator?.SetCamoraIndex(current);
                 if (breakDebugLog)
-                    Plugin.MyLog.LogInfo($"[VRBreak] cylinder turned: chamber {camora} fires next ({(singleAction ? "single" : "double")} action, current {current})");
+                    Plugin.MyLog.LogInfo($"[VRBreak] cylinder {(spring ? "wound" : "turned")}: chamber {camora} fires next ({(spring ? "spring" : singleAction ? "single action" : "double action")}, current {current})");
                 return;
             }
         }
@@ -1130,12 +1234,12 @@ namespace TarkovVR.Source.Weapons
             if (data.revolver)
             {
                 if (bestSpent)
-                    PlayFirstGunSound(firearmController, SoundHand.OffHand, "ShellOut", "CylinderPurgeOne", "ShellExtract");
+                    PlayFirstGunSound(firearmController, SoundHand.OffHand, "ShellRemove", "ShellOut", "CylinderPurgeOne", "ShellExtract");
                 else
                     PlayFirstGunSound(firearmController, SoundHand.OffHand, "AmmoOut", "ShellExtract", "ShellOut");
             }
             else if (case2Prop == null || !PlayFirstGunSound(firearmController, SoundHand.OffHand, "UnloadBooth"))
-                PlayFirstGunSound(firearmController, SoundHand.OffHand, "UnloadOne", "ShellOut");
+                PlayFirstGunSound(firearmController, SoundHand.OffHand, "UnloadOne", "ShellOut", "ShellUnload");
             Pulse(SoundHand.OffHand, 0.3f, 0.03f);
             if (breakDebugLog)
                 Plugin.MyLog.LogInfo($"[VRBreak] took the {(bestSpent ? "fired case" : "live round")} in chamber {best}{(case2Prop != null ? " and the one in chamber " + case2Chamber : "")} ({caseLength * 100f:0.#} cm long)");
@@ -1169,6 +1273,35 @@ namespace TarkovVR.Source.Weapons
             if (BreakSlots(weapon)[chamber].ContainedItem != null)
                 return false;
             return firearms._shellsInShellPort == null || chamber >= firearms._shellsInShellPort.Length || firearms._shellsInShellPort[chamber] == null;
+        }
+
+        // Empty, and in a spring-driven cylinder (the M32A1: it fires from where it's wound upward, an empty chamber stops it) next to the
+        // rounds in it, or with none in it the lowest empty one
+        private static bool ChamberTakesRound(Firearms firearms, Weapon weapon, int chamber)
+        {
+            if (!ChamberEmpty(firearms, weapon, chamber))
+                return false;
+            if (!(weapon.GetCurrentMagazine() is SpringDrivenCylinder cylinder))
+                return true;
+            Slot[] camoras = cylinder.Camoras;
+            int lowest = -1, highest = -1;
+            for (int camora = 0; camora < camoras.Length; camora++)
+            {
+                if (camoras[camora].ContainedItem is Ammo round && !round.IsUsed)
+                {
+                    if (lowest < 0)
+                        lowest = camora;
+                    highest = camora;
+                }
+            }
+            if (lowest >= 0)
+                return chamber == lowest - 1 || chamber == highest + 1;
+            for (int camora = 0; camora < camoras.Length; camora++)
+            {
+                if (ChamberEmpty(firearms, weapon, camora))
+                    return camora == chamber;
+            }
+            return false;
         }
 
         private static void ForgetFiredCase(Weapon weapon, int chamber)
@@ -1259,7 +1392,7 @@ namespace TarkovVR.Source.Weapons
                 {
                     Transform bone = ChamberBone(firearms, chamber);
                     float distance = bone != null ? (prop.transform.position - bone.position).sqrMagnitude : float.MaxValue;
-                    if ((chamber == from || ChamberEmpty(firearms, weapon, chamber)) && distance <= nearest)
+                    if ((chamber == from || ChamberTakesRound(firearms, weapon, chamber)) && distance <= nearest)
                     {
                         into = chamber;
                         nearest = distance;
@@ -1295,7 +1428,7 @@ namespace TarkovVR.Source.Weapons
                     if (IsRevolver(weapon))
                         PlayFirstGunSound(firearmController, hand, "ShellInsert", "AmmoIn");
                     else
-                        PlayFirstGunSound(firearmController, hand, "LoadOne");
+                        PlayFirstGunSound(firearmController, hand, "LoadOne", "ShellLoad");
                     return;
                 }
             }
@@ -1492,17 +1625,17 @@ namespace TarkovVR.Source.Weapons
         }
 
         // A shell held as a clip holds it: its model sits on the shell's bone turned 90 deg about x (Firearms.ParentShellToTransform); the
-        // right palm's is the mirror image through a plane along the shell
+        // other palm's is the mirror image through a plane along the shell (the M32A1's holds are its clips' right hand's)
         private static bool BreakShellHoldInPalm(BreakHold hold, Transform prop, bool rightArm, out Vector3 position, out Quaternion rotation)
         {
             position = hold.position;
             rotation = hold.rotation * Quaternion.Euler(90f, 0f, 0f);
-            if (!rightArm)
+            if (rightArm == hold.rightHanded)
                 return true;
             MeasureLongAxis(prop.gameObject, out Vector3 axisInProp, out Vector3 centerInProp, out _);
             Vector3 axis = axisInProp.sqrMagnitude > 1e-6f ? axisInProp.normalized : Vector3.forward;
             Vector3 normal = Vector3.Cross(axis, Mathf.Abs(axis.x) < 0.9f ? Vector3.right : Vector3.up).normalized;
-            return MirrorHold(normal, Vector3.Scale(centerInProp, prop.lossyScale), leftToRight: true, ref position, ref rotation);
+            return MirrorHold(normal, Vector3.Scale(centerInProp, prop.lossyScale), leftToRight: !hold.rightHanded, ref position, ref rotation);
         }
 
         // Each pass after the bones are posed: the drawn case, a new shell on the bore, the cases on a revolver's ejector
@@ -1735,6 +1868,46 @@ namespace TarkovVR.Source.Weapons
             ejectorCasesFor = null;
         }
 
+        // No ejector (the M32A1): an empty cylinder tipped back drops its fired cases (Tarkov's own rule: all of them out of an empty one,
+        // else one at a time by hand)
+        private static void TryDumpCases(FirearmController firearmController, BreakData data, BreakState state)
+        {
+            Weapon weapon = firearmController.Item;
+            Firearms firearms = firearmController.Firearms;
+            if (state.open < data.openDegrees * barrelOpenEnough || firearms == null || firearms._shellsInShellPort == null || HoldingBreakCase
+                || !(weapon.GetCurrentMagazine() is CylinderMagazine cylinder) || cylinder.Count > 0)
+                return;
+            Transform first = ChamberBone(firearms, 0);
+            Vector3 outOfBack = first != null ? first.up : breakCylinder != null ? breakCylinder.up : barrelBone.up;
+            if (Vector3.Angle(outOfBack, Vector3.down) > caseDumpAngle)
+                return;
+            Vector3 gunVelocity = HandWorldVelocity(gunHand: true);
+            Slot[] slots = BreakSlots(weapon);
+            int thrown = 0;
+            for (int chamber = 0; chamber < slots.Length && chamber < firearms._shellsInShellPort.Length; chamber++)
+            {
+                AmmoPoolObject fired = firearms._shellsInShellPort[chamber];
+                if (fired == null)
+                    continue;
+                firearms._shellsInShellPort[chamber] = null;
+                Transform bone = ChamberBone(firearms, chamber);
+                ThrowJamCase(fired, firearms, gunVelocity + (bone != null ? bone.up : outOfBack) * caseDumpSpeed + Random.insideUnitSphere * 0.1f);
+                thrown++;
+            }
+            if (thrown == 0)
+                return;
+            for (int chamber = 0; chamber < slots.Length; chamber++)
+            {
+                if (slots[chamber].ContainedItem == null)
+                    ForgetFiredCase(weapon, chamber);
+            }
+            PlayFirstGunSound(firearmController, SoundHand.GunBody, "CylinderPurgeAll", "PurgeShellsOut");
+            PulseGunHand(0.3f, 0.04f);
+            SetBreakAnimatorCounts(firearmController);
+            if (breakDebugLog)
+                Plugin.MyLog.LogInfo($"[VRBreak] {thrown} fired case(s) fell out of the tipped cylinder ({Vector3.Angle(outOfBack, Vector3.down):0} deg off straight down), chambers {ChambersText(firearmController, weapon)}");
+        }
+
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
         // A new shell from the chest pouch
 
@@ -1786,7 +1959,7 @@ namespace TarkovVR.Source.Weapons
             int empty = -1;
             for (int chamber = 0; chamber < BreakSlots(weapon).Length && empty < 0; chamber++)
             {
-                if (ChamberEmpty(firearms, weapon, chamber))
+                if (ChamberTakesRound(firearms, weapon, chamber))
                     empty = chamber;
             }
             if (empty < 0 || !InChestPouchZone(OffHandPalm()))
@@ -1833,7 +2006,7 @@ namespace TarkovVR.Source.Weapons
             if (data.revolver)
                 PlayFirstGunSound(firearmController, SoundHand.OffHandAlone, "ShellGrab", "AmmoGrab", "AmmoInHand");
             else
-                PlayFirstGunSound(firearmController, SoundHand.OffHandAlone, "ShellOutRig", "AmmoCatch");
+                PlayFirstGunSound(firearmController, SoundHand.OffHandAlone, "ShellOutRig", "AmmoCatch", "MagPullOut");
             PulseRoundHand(false, 0.25f, 0.03f);
             if (breakDebugLog)
                 Plugin.MyLog.LogInfo($"[VRBreak] took {(breakShellSecond != null ? "two shells" : "a shell")} of {source.LocalizedShortName()} ({source.StackObjectsCount} in that stack), chambers {ChambersText(firearmController, weapon)}");
@@ -2080,7 +2253,7 @@ namespace TarkovVR.Source.Weapons
             for (int chamber = 0; chamber < slots.Length; chamber++)
             {
                 Transform bone = ChamberBone(firearms, chamber);
-                if (bone == null || !ChamberEmpty(firearms, weapon, chamber))
+                if (bone == null || !ChamberTakesRound(firearms, weapon, chamber))
                     continue;
                 Quaternion seated = bone.rotation * Quaternion.Euler(90f, 0f, 0f);
                 if (Vector3.Angle(prop.rotation * roundAxisInProp, seated * roundAxisInProp) > cylinderBackAngle)
@@ -2284,7 +2457,7 @@ namespace TarkovVR.Source.Weapons
             if (IsRevolver(weapon))
                 PlayFirstGunSound(firearmController, SoundHand.OffHand, "ShellInsert", "AmmoIn");
             else if (!secondLoaded || !PlayFirstGunSound(firearmController, SoundHand.OffHand, "LoadBooth"))
-                PlayFirstGunSound(firearmController, SoundHand.OffHand, "LoadOne", "ShellIn");
+                PlayFirstGunSound(firearmController, SoundHand.OffHand, "LoadOne", "ShellIn", "ShellLoad");
             Pulse(SoundHand.OffHand.Seating, 0.45f, 0.04f);
         }
 
@@ -2356,7 +2529,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (hold == null || hold.fingers == null)
                 return null;
-            return rightArm ? MirroredPose(hold.fingers, rightToLeft: false, breakFingersMirrored) ?? hold.fingers : hold.fingers;
+            return rightArm != hold.rightHanded ? MirroredPose(hold.fingers, rightToLeft: hold.rightHanded, breakFingersMirrored) ?? hold.fingers : hold.fingers;
         }
 
         private static Vector3[] BreakShellFingers(bool rightArm)
@@ -2372,7 +2545,8 @@ namespace TarkovVR.Source.Weapons
                     breakFingersBlend = new Vector3[from.Length];
                 for (int joint = 0; joint < from.Length; joint++)
                     breakFingersBlend[joint] = Quaternion.Slerp(Quaternion.Euler(from[joint]), Quaternion.Euler(to[joint]), push).eulerAngles;
-                return rightArm ? MirroredPose(breakFingersBlend, rightToLeft: false, breakFingersMirrored) ?? breakFingersBlend : breakFingersBlend;
+                bool rightHanded = data.carryHold.rightHanded;
+                return rightArm != rightHanded ? MirroredPose(breakFingersBlend, rightToLeft: rightHanded, breakFingersMirrored) ?? breakFingersBlend : breakFingersBlend;
             }
             return BreakFingers(breakShellSecond != null ? data?.loadPair ?? data?.loadHold : data?.loadHold, rightArm) ?? MAGAZINE_PULL_FINGERS;
         }
@@ -2411,6 +2585,7 @@ namespace TarkovVR.Source.Weapons
         {
             breakShellBlendHold.position = Vector3.Lerp(data.carryHold.position, data.loadHold.position, blend);
             breakShellBlendHold.rotation = Quaternion.Slerp(data.carryHold.rotation, data.loadHold.rotation, blend);
+            breakShellBlendHold.rightHanded = data.carryHold.rightHanded;
             return BreakShellHoldInPalm(breakShellBlendHold, prop, roundOnRightArm, out position, out rotation);
         }
 
@@ -2430,7 +2605,7 @@ namespace TarkovVR.Source.Weapons
                 for (int chamber = 0; chamber < slots.Length; chamber++)
                 {
                     Transform bone = ChamberBone(firearms, chamber);
-                    if (bone == null || !ChamberEmpty(firearms, weapon, chamber))
+                    if (bone == null || !ChamberTakesRound(firearms, weapon, chamber))
                         continue;
                     Vector3 mouth = bone.position + bone.rotation * Quaternion.Euler(90f, 0f, 0f) * roundCenterInProp + bone.up * roundLength;
                     nearest = Mathf.Min(nearest, (roundMiddle - mouth).magnitude);

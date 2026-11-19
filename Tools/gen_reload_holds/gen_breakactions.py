@@ -1,4 +1,4 @@
-# Break-action guns (MP-43-1C, its sawed-off, MP-18), from each gun's own clips (VRReloadController.BreakAction):
+# Break-action guns (MP-43-1C, its sawed-off, MP-18, the SP-81 flare pistol), from each gun's own clips (VRReloadController.BreakAction):
 #  - open: every bone the open clip moves as the barrels drop (the barrel slot's bone turning on the hinge, the chamber and shell-port
 #    bones: on the MP-43 the extractor lifting the shells, on the MP-18 riding the barrel, which isn't their parent), their local
 #    poses at OPEN_KEYS evenly spaced points of the barrel's turn
@@ -9,16 +9,21 @@
 #  - holds (the left hand loads in these clips): the fore-end in the left palm as the close clip's hand pushes the barrels up
 #    (the palm in the barrel bone's frame, the fingers, and where the fingers close = the grab point); a new shell in the palm
 #    as the load clip lines it up behind the chamber; a fired one as the pluck clip draws it out
+#  - hammer (the SP-81's: its clip cocks it once the barrel's shut): its local pose down and cocked
 # Weapon frame = Weapon_root_anim/weapon. Writes breakactions.json; gen_export.py merges it. Run from this folder.
 import sys, os, re, json
 exec(open('gen_holds.py',encoding='utf-8').read().split("if __name__=='__main__':")[0])
 
-# family: folder, container, open clip, close clip, load clip, pluck clip, lever bone
+# family: folder, container, open clip, close clip, load clip, pluck clip, lever bone[, options: barrel = the hinge's bone (mod_barrel),
+# seatOpen = the load clip shuts the barrel at its end (the round's seat taken while it's still open), foreEndAtStart = the close clip's
+# hand slides on the barrel as it pushes (its hold where the push starts, not the clip's end), hammer = (bone, the clip that cocks it)]
 GUNS={
     'mr_43':('mr43','weapon_izhmeh_mr43e-1c_12g_container.bundle','mr_43_reload_start','mr_43_reload_end','mr_43_reload_ammo_left','mr_43_reload_empty_shell_left','weapon_switch'),
     'mr_43_sawed_off':('mr43','weapon_izhmeh_mr43_sawed_off_12g_container.bundle','mr_43_sawed_off_reload_start','mr_43_sawed_off_reload_end',
                        'mr_43_sawed_off_reload_ammo_left','mr_43_sawed_off_reload_empty_shell_left','weapon_switch'),
     'mp_18':('mp18','weapon_izhmash_mp18_multi_container.bundle','mp_18_reload_start','mp_18_reload_end','mp_18_reload_in','mp_18_reload_out_throw','mp18_locking_lever'),
+    'sp81':('sp81','weapon_zid_sp81_26x75_container.bundle','sp81_reload_start','sp81_reload_end','sp81_ammo_in','sp81_reload_out_throw','weapon_release',
+            dict(barrel='weapon_barrel',seatOpen=True,foreEndAtStart=True,hammer=('weapon_hammer','sp81_reload_end_arm_0'))),
 }
 OPEN_KEYS=8
 LEVER_KEYS=4
@@ -170,10 +175,11 @@ def leverPress(g,P,folder,container,lever,ts,tTop=None):
                 markerRest=r5(list(rest[0])+list(rest[1]/np.linalg.norm(rest[1]))),markerPressed=r5(list(pressed[0])+list(pressed[1]/np.linalg.norm(pressed[1]))))
 
 out={}
-for family,(folder,container,openClip,closeClip,loadClip,pluckClip,leverBone) in GUNS.items():
+for family,(folder,container,openClip,closeClip,loadClip,pluckClip,leverBone,*rest) in GUNS.items():
     print(family,flush=True)
+    opts=rest[0] if rest else {}
     tree=loadTree(ROOT+folder+'/'+container); P=tree[0]; clips=clipsOf(folder)
-    wp=bone(P,'Weapon_root_anim/weapon'); barrel=bone(P,'weapon/mod_barrel'); lever=bone(P,'weapon/'+leverBone)
+    wp=bone(P,'Weapon_root_anim/weapon'); barrel=bone(P,'weapon/'+opts.get('barrel','mod_barrel')); lever=bone(P,'weapon/'+leverBone)
     palm=bone(P,'/Base HumanLPalm'); J=fingerPaths(P,'L')
     chambers=sorted(p for p in P if p.startswith(wp+'/') and re.search(r'/patron_in_weapon(_\d+)?$',p))
     shellports=sorted(p for p in P if p.startswith(wp+'/') and re.search(r'/shellport(_\d+)?$',p))
@@ -213,10 +219,14 @@ for family,(folder,container,openClip,closeClip,loadClip,pluckClip,leverBone) in
 
     # The load hold: the shell lined up on the bore, 5 cm out of its chamber (the load clip's left chamber)
     gl=setup(tree,clips[loadClip]); tl=times(clips[loadClip]); chamber=chambers[0]
+    tSeat=tl[-1]
+    if opts.get('seatOpen'):
+        # (the last moment the barrel's still all the way open: the chamber bone isn't the barrel's child on the SP-81)
+        loadTurn=turnTrack(gl,barrel,tl); tSeat=tl[max(i for i,a in enumerate(loadTurn) if a>=max(loadTurn)-0.5)]
     best=None
     for t in tl:
         c={}; s,_=inFrame(gl,barrel,chamber,t,c)
-        seat=inFrame(gl,barrel,chamber,tl[-1],{})[0]
+        seat=inFrame(gl,barrel,chamber,tSeat,{})[0]
         d=s-seat; along=float(np.dot(d,bore)); off=float(np.linalg.norm(d-along*bore))
         if off<=0.012 and 0.02<=along<=0.08 and (best is None or abs(along-0.05)<best[0]): best=(abs(along-0.05),t,along,off)
     loadHold=holdIn(gl,palm,chamber,best[1],J) if best else None
@@ -230,10 +240,27 @@ for family,(folder,container,openClip,closeClip,loadClip,pluckClip,leverBone) in
     # left one comes onto the fore-end after - its hold there at the clip's end)
     kEnd=next((i for i in range(kStart,len(tc)) if abs(closeTurn[i]-max(closeTurn))<0.3),len(tc)-1)
     drift=max(float(np.linalg.norm(inFrame(gc,barrel,palm,tc[i],{})[0]-palmIn)) for i in range(kStart,kEnd+1))
-    if drift>0.01: tHold=tc[-1]
+    if drift>0.01 and not opts.get('foreEndAtStart'): tHold=tc[-1]
     c={}; palmIn,palmQ=inFrame(gc,barrel,palm,tHold,c)
     grab=np.mean([inFrame(gc,barrel,j,tHold,c)[0] for j in J[1:]],axis=0)
     foreEnd=dict(position=r5(palmIn),rotation=r5(palmQ/np.linalg.norm(palmQ)),fingers=holdIn(gc,palm,palm,tHold,J)['fingers'],grabPoint=r5(grab),t=round(float(tHold),3))
+
+    # The hammer: down where its clip starts, cocked at its furthest turn
+    hammerData=None
+    if opts.get('hammer'):
+        hammerLeaf,cockClip=opts['hammer']; hammer=bone(P,'weapon/'+hammerLeaf)
+        gh=setup(tree,clips[cockClip]); th=times(clips[cockClip]); hammerTurn=turnTrack(gh,hammer,th)
+        iCocked=int(np.argmax(hammerTurn)); iStart=max(i for i in range(iCocked) if hammerTurn[i]<=0.5)
+        hammerData=boneKeys(gh,[hammer],[th[0],th[iCocked]],wp)[0]
+        print(f'  hammer {hammerTurn[iCocked]:.1f} deg in {th[iCocked]-th[iStart]:.2f}s ({cockClip} {th[iStart]:.2f}-{th[iCocked]:.2f}s)')
+    # The fore-end hold's fingers off the barrel's meshes (are they on it?)
+    barrelMesh=boneMeshPoints(folder,container,barrel.split('/')[-1])
+    if barrelMesh is not None:
+        cm={}; tips=[]
+        for finger in range(5):
+            jp,jr,_=gc['worldAt'](J[3+3*finger],tHold,cm); tip=jp+gc['rotate'](jr,TIP); bp,br,_=gc['worldAt'](barrel,tHold,cm)
+            tips.append(float(np.min(np.linalg.norm(barrelMesh-gc['rotate'](conj(br),tip-bp),axis=1)))*100)
+        print(f'  fore-end fingertips off the barrel mesh {np.round(tips,1)} cm')
 
     ports=[p for p in shellports if re.search(r'/shellport_\d+$',p)]
     pairs=pairHolds(tree,clips,family,barrel,chambers,ports,palm,J) if len(chambers)>=2 else {}
@@ -241,6 +268,7 @@ for family,(folder,container,openClip,closeClip,loadClip,pluckClip,leverBone) in
                      chambers=[relPath(wp,p) for p in chambers],shellports=[relPath(wp,p) for p in shellports],
                      open=dict(bones=openBones,clip=openClip,times=[round(keyTimes[0],3),round(keyTimes[-1],3)]),lever=leverData,
                      foreEnd=foreEnd,loadHold=loadHold,pluckHold=pluckHold,**pairs)
+    if hammerData: out[family]['hammer']=hammerData
     for key,hold in pairs.items():
         print(f'  {key} at {hold["t"]}s: shells {np.linalg.norm(np.array(hold["position"])-np.array(hold["position2"]))*100:.1f} cm apart in the palm')
     print(f'  open {openDegrees:.1f} deg ({hingeDegrees:.1f} about {np.round(hingeAxis,3)}) {keyTimes[0]:.3f}-{keyTimes[-1]:.3f}s, bones {[b["path"] for b in openBones]}')
