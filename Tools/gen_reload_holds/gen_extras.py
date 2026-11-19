@@ -73,6 +73,12 @@ HANDLE_GRAB_AT_HOLD=('zmz_pp-9','zis_ppsh41','iwi_uzi_pro','vepr_hunter_vpo-101'
 # (HANDLE_GRAB_AT_HOLD), but Tarkov's MDR racks underhand: that's the wrist 10 cm below and 6 cm left of the knob (headset 2026-11-07,
 # a picture: the zone far off to the side, "should be on charging handle in middle of gun").
 HANDLE_KNOB_PAIRS={'dt_mdr':('weapon_charge_002','weapon_charge_012')}
+# One knob on a bone of its own under the handle that folds out as the hand takes it and back once let go (the Vector's: 83.5 deg
+# about its own -z in every rack clip, out before the handle moves, back as it comes home). Its turn at full pull in the hold's clip.
+HANDLE_KNOB_FOLDS={'tdi_kriss_vector':'weapon_charge_rotation'}
+def knobAxisAngle(q):
+    q=q if q[3]>=0 else -q; s=np.linalg.norm(q[:3])
+    return [round(float(x),4) for x in (q[:3]/s if s>1e-9 else np.array([1.0,0,0]))],round(2*math.degrees(math.atan2(s,q[3])),1)
 # Over the top, for a palm above the handle (his ask: "the m4 pose for grabbing the handle if your palm is above the handle"; every
 # MDR clip racks underhand, the left hand under the left paddle): the M4's hold (m4a1_reload_charge_0, the index curled over the T's
 # left wing, thumb behind it) moved onto the left paddle. The wing in the M4's mod_charge frame, from the Colt handle's mesh (its bar
@@ -344,12 +350,16 @@ for family,(folder,container,boneName,rig) in sorted(HANDLE_BONE_GUNS.items()):
                 foldCharge=qmul(qmul(leftInCharge,foldLocal),conj(leftInCharge))
                 mirrored=np.array([foldCharge[0],-foldCharge[1],-foldCharge[2],foldCharge[3]])
                 foldRight=qmul(qmul(conj(rightInCharge),mirrored),rightInCharge)
-                def axisAngle(q):
-                    q=q if q[3]>=0 else -q; s=np.linalg.norm(q[:3])
-                    return [round(float(x),4) for x in (q[:3]/s if s>1e-9 else np.array([1.0,0,0]))],round(2*math.degrees(math.atan2(s,q[3])),1)
-                handleKnobFolds[family]=[dict(bone=name,axis=axisAngle(q)[0],angle=axisAngle(q)[1]) for name,q in
+                handleKnobFolds[family]=[dict(bone=name,axis=knobAxisAngle(q)[0],angle=knobAxisAngle(q)[1]) for name,q in
                                          ((HANDLE_KNOB_PAIRS[rig][0],foldLocal),(HANDLE_KNOB_PAIRS[rig][1],foldRight))]
                 print(f'{family} paddle folds {handleKnobFolds[family]} (clip {hold["clip"]} t {t:.2f})',flush=True)
+    if rig in HANDLE_KNOB_FOLDS and family in extraHandles:
+        hold=extraHandles[family]; knob=bone(P,'/'+HANDLE_KNOB_FOLDS[rig])
+        g=setup(tree,clips[hold['clip']]); t,_=fullBackTime(g,charge,wp)
+        fold=qmul(conj(np.array(g['localAt'](knob,0.0)[1],float)),np.array(g['localAt'](knob,t)[1],float))
+        axis,angle=knobAxisAngle(fold)
+        handleKnobFolds[family]=[dict(bone=HANDLE_KNOB_FOLDS[rig],axis=axis,angle=angle)]
+        print(f'{family} knob fold {handleKnobFolds[family]} (clip {hold["clip"]} t {t:.2f})',flush=True)
     print(f'{family} handle bone {boneName}: left',{k:v for k,v in (extraHandles.get(family) or {}).items() if k!='fingers'},
           'right',{k:v for k,v in (extraGunHandHandles.get(family) or {}).items() if k!='fingers'},'moves with bolt',family in extraMovesWithBolt,flush=True)
 

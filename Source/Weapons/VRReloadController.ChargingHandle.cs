@@ -151,8 +151,8 @@ namespace TarkovVR.Source.Weapons
         private static readonly Dictionary<string, HandleHold> overTopHandleHolds = new Dictionary<string, HandleHold>();
         public static float handleMirrorPlaneTolerance = 0.015f;   // m a grab point can sit off the gun's centre plane and still take the left hand's hold mirrored (a T)
         private static GameObject otherKnobZoneViz;
-        // The knob the hand took folds out about its pin (the MDR's paddles, 45 deg in its clips; the right one's the left's mirrored),
-        // and back once let go
+        // The knob the hand took folds out about its pin (the MDR's paddles, 45 deg in its clips; the right one's the left's mirrored;
+        // a handle with one, the Vector's, 83.5 deg: grabbedKnob 0), and back once let go
         private sealed class KnobFold
         {
             public string bone;
@@ -498,7 +498,7 @@ namespace TarkovVR.Source.Weapons
             string family = AnimationFamily(firearmController);
             if (handleTravels.TryGetValue(family, out float familyTravel) && familyTravel > 0f)
                 heldHandleTravel = familyTravel;
-            if (foundHandleKnobs != null && !sideHandle)
+            if (!sideHandle)
                 StartKnobFold(firearmController, family);
             handleHolds.TryGetValue(family, out HandleHold offHandHold);
             gunHandHandleHolds.TryGetValue(family, out HandleHold gunHandHold);

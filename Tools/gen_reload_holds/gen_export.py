@@ -196,9 +196,10 @@ for f,h in sorted(R['palms'].items()):
     out['palms'][f]=dict(newMagazine=h['newMagazine'],oldMagazine=h['oldMagazine'],fingers=h['fingers'],thumb=h.get('thumb'))
 # Pistols only for now: other guns with no handle keep Tarkov's chambering
 pistolFolders={g['folder'] for g in guns if items[g['id']]['_props'].get('weapClass')=='pistol'}
-# The track out of the well from the gun's own mag_out clip: pistols (the raked grip), and rifles whose magazine's longest side runs
-# along the gun, where the runtime's mesh-length axis points at the stock (headset: SV-98's 10-round box)
-CLIP_WELL_AXIS_RIFLES={'sv98'}
+# The track out of the well from the gun's own mag_out clip: pistols (the raked grip), rifles whose magazine's longest side runs
+# along the gun, where the runtime's mesh-length axis points at the stock (headset: SV-98's 10-round box), and the Vector (pistol
+# magazines, modelled upright, in a well raked 18.5 deg: along the box they came out straight down)
+CLIP_WELL_AXIS_RIFLES={'sv98','vector'}
 for f,axis in sorted(R['wellAxes'].items()):
     if famFolder.get(f) in pistolFolders or f in CLIP_WELL_AXIS_RIFLES: out['wellAxes'][f]=axis
 # Rifles whose mag_out clip has no clean straight run (wellAxis None) though the magazine leaves down the well bone's own -z, as every
