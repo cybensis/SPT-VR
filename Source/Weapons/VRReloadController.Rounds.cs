@@ -5,6 +5,7 @@ using EFT.InventoryLogic;
 using EFT.InventoryLogic.Operations;
 using TarkovVR.Patches.Core.VR;
 using TarkovVR.Source.Player.Interactions;
+using TarkovVR.Source.Settings;
 using UnityEngine;
 using FirearmController = EFT.Player.FirearmController;
 
@@ -23,6 +24,9 @@ namespace TarkovVR.Source.Weapons
     //  - Into an empty chamber it waits for the bolt (WaitingForRack, like a round a magazine brought in): the chamber shows empty while
     //    open, closing the bolt chambers it (BoltClosed shows the round). Otherwise the top of the magazine.
     //  - Letting go anywhere before it's in puts it back (it never left the stack): no drop to the ground.
+    // The same for a self-loader loaded through its open action into a fixed magazine (the SKS's internal 10-round; its detachable boxes
+    // are swapped instead): with the carrier locked back on Tarkov's catch, every round goes on top of the magazine, and letting the
+    // carrier go chambers the top one (the charging handle's own release).
     public static partial class VRReloadController
     {
         public static bool singleRoundLoading = true;
@@ -73,7 +77,8 @@ namespace TarkovVR.Source.Weapons
             magazine = null;
             if (!enabled || !singleRoundLoading || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
                 return false;
-            if (!ManualBoltOn(firearmController) || firearmController.IsInLauncherMode() || HoldingBolt)
+            bool boltAction = ManualBoltOn(firearmController);
+            if ((!boltAction && !ManualTopLoader(firearmController)) || firearmController.IsInLauncherMode() || HoldingBolt)
                 return false;
             weapon = firearmController.Item;
             if (!weapon.SupportsInternalReload || !weapon.MustBoltBeOpennedForInternalReload || weapon.MalfState.State != Weapon.EMalfunctionState.None)
@@ -82,12 +87,27 @@ namespace TarkovVR.Source.Weapons
                 return false;
             if (HandsInteractionController.HoldingLoot)
                 return false;
-            if (!boltStates.TryGetValue(weapon, out BoltState state) || state.slide < boltFullBack)
+            // Open: a bolt-action's bolt all the way back, a self-loader's carrier on the catch
+            if (boltAction ? !boltStates.TryGetValue(weapon, out BoltState state) || state.slide < boltFullBack : !BoltLockedBack || HoldingChargingHandle)
                 return false;
             magazine = weapon.GetCurrentMagazine();
             if (magazine == null)
                 return false;
-            return magazine.Count < magazine.MaxCount || (weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0);
+            return magazine.Count < magazine.MaxCount || (boltAction && weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0);
+        }
+
+        // A self-loader Tarkov loads through its open action, with its fixed magazine in (the SKS's internal 10-round, not a detachable box)
+        private static bool LoadsFixedMagazineThroughAction(Weapon weapon)
+        {
+            return weapon != null && !weapon.BoltAction && weapon.SupportsInternalReload && weapon.MustBoltBeOpennedForInternalReload
+                && weapon.GetCurrentMagazine() is Magazine magazine && magazine.Template is MagazineTemplate template
+                && template.ReloadMagType == Weapon.EReloadMode.InternalMagazine;
+        }
+
+        private static bool ManualTopLoader(FirearmController firearmController)
+        {
+            return enabled && VRSettings.GetManualReloadOn() && firearmController != null && firearmController._player != null && firearmController._player.IsYourPlayer
+                && LoadsFixedMagazineThroughAction(firearmController.Item);
         }
 
         // What taking a round and taking a shell start with: this hand free for one and at the chest pouch, a round that fits found, its
@@ -230,7 +250,8 @@ namespace TarkovVR.Source.Weapons
         private static bool TryBuildLoadOne(Ammo source, Weapon weapon, Magazine magazine, out OperationResult<IItemOperationResult> operation, out bool intoChamber)
         {
             InventoryController inventoryController = VRGlobals.player.InventoryController;
-            intoChamber = weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0;
+            // (a self-loader's go on top of its magazine: the carrier chambers one as it goes home)
+            intoChamber = weapon.Chambers.Length > 0 && weapon.ChamberAmmoCount == 0 && !LoadsFixedMagazineThroughAction(weapon);
             ItemAddress to = intoChamber ? weapon.Chambers[0].CreateItemAddress() : magazine.Cartridges.CreateItemAddress();
             Item top = intoChamber ? null : magazine.Cartridges.Last;
             if (top != null && top.TemplateId == source.TemplateId)
