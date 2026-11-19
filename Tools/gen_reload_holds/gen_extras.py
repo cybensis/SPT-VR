@@ -60,6 +60,9 @@ HANDLE_BONE_RIGS={'hk_mp7':'weapon_charghing_handle','dsa_sa58':'weapon_charghin
                   'kbp_9a91':'weapon_bolt_charge','ckib_ash_12':'weapon_charging_handle','hk_g36':'weapon_charge_handle',
                   'zmz_pp-9':'weapon_bolt','zis_ppsh41':'weapon_bolt','iwi_uzi_pro':'weapon_bolt','vepr_hunter_vpo-101':'weapon_bolt',
                   'toz_avt_40':'weapon_bolt_carrier','toz_svt_40':'weapon_bolt_carrier',
+                  # the SKS's (TOZ and OP-SKS, one animation set): no mod_charge, the handle is the carrier's knob out its right side, 10.1 cm
+                  # back in its jam clears and its loading clips, racked with the right hand
+                  'toz_sks':'weapon_bolt_carrier','molot_op_sks':'weapon_bolt_carrier',
                   'nb_val_mod4':'weapon_charge','norinco_qbz191':'weapon_bolt_carrier',
                   # mod_charge, but every one of its racks is a two-frame yank gen_holds' riding test can't read: the fast-yank rule below
                   # (the left thumb and index stay 2 cm off the handle's knob through the pull)
@@ -125,7 +128,7 @@ def meshPartBox(folder,container,frameLeaf,partLeaf):
 # The RFB's forward handle is a rod running back into the gun with the knob out its -x (left) side, (-4.8,-2.9,0.8) cm: its furthest
 # point back (the runtime's default zone) is 14 cm behind the knob on the gun's centre line.
 # The backport's QBZ-191: its handle is the carrier's knob out the +x (right) side, (4.1,-4.0,-0.1) cm; its back end is 16 cm behind it.
-HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1),'kel_tec_rfb':(0,-1),'dsa_sa58':(0,-1),'norinco_qbz191':(0,1)}
+HANDLE_KNOB_SIDE={'toz_avt_40':(0,1),'toz_svt_40':(0,1),'kel_tec_rfb':(0,-1),'dsa_sa58':(0,-1),'norinco_qbz191':(0,1),'toz_sks':(0,1),'molot_op_sks':(0,1)}
 # The gun hand's hold from Tarkov's own right-hand rack where ridingHold turns it down: the AVT/SVT's charge_0/1 and rechamber rack with
 # the RIGHT hand (index 2-3 cm off the knob all the way back; charge_2 is the left-hand one), 10 cm in 4 frames with the palm pivoting
 # ~2 cm about the fingers - over the 1.5 cm limit, so it fell to jam_hardslide (8.1 cm, a stuck slide). Headset 2026-11-07, a picture of
