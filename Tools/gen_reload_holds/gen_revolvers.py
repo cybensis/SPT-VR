@@ -95,7 +95,9 @@ for family,(folder,container,craneLeaf,cylinderLeaf,extractorLeaf,releaseLeaf,op
             off=float(np.min(np.linalg.norm(meshes[p]-inBone,axis=1))) if meshes[p] is not None else float(np.linalg.norm(inBone))
             if best is None or off<best[0]: best=(off,finger,p,inBone)
     off,finger,pressBone,tipInBone=best
-    ejectHold=holdIn(ge,palm,pressBone,tStart,J)
+    # (the palm in the press bone's frame, as the cylinder hold: holdIn is the other way round, a held thing in the palm's frame)
+    palmOnPress,palmOnPressQ=inFrame(ge,pressBone,palm,tStart,c)
+    ejectHold=dict(position=r5(palmOnPress),rotation=r5(palmOnPressQ/np.linalg.norm(palmOnPressQ)),fingers=holdIn(ge,palm,palm,tStart,J)['fingers'],t=round(float(tStart),3))
     grabPoint=np.mean([inFrame(ge,pressBone,j,tStart,c)[0] for j in J[1:]],axis=0)
     def tipInCrane(t):
         cc={}; bp,br,_=ge['worldAt'](pressBone,t,cc); kp,kr,_=ge['worldAt'](crane,t,cc)

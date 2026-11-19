@@ -1959,14 +1959,30 @@ namespace TarkovVR.Source.Weapons
                 && Vector3.Angle(prop.rotation * roundAxisInProp, seatedRotation * roundAxisInProp) <= breakShellCaptureAngle;
         }
 
+        // Seated as Tarkov seats a round (ParentShellToTransform: on the chamber bone, turned 90 deg about x), but turned about the bore to
+        // the roll it's held at: a round looks the same either way, and a cylinder's chamber bones are each rolled their own way round it
+        // (the hand riding the round in turned with the chamber). The pivot moves so the round's own centre stays on the bore.
+        private static void SeatedKeepingRoll(Transform bone, Transform prop, out Vector3 seatPosition, out Quaternion seatRotation)
+        {
+            Quaternion seated = bone.rotation * Quaternion.Euler(90f, 0f, 0f);
+            Vector3 bore = bone.up;
+            Vector3 axis = roundAxisInProp.sqrMagnitude > 1e-8f ? roundAxisInProp.normalized : Vector3.forward;
+            Vector3 across = Vector3.Cross(axis, Mathf.Abs(axis.x) < 0.9f ? Vector3.right : Vector3.up);
+            Vector3 held = Vector3.ProjectOnPlane(prop.rotation * across, bore);
+            Vector3 seat = Vector3.ProjectOnPlane(seated * across, bore);
+            seatRotation = held.sqrMagnitude > 1e-8f && seat.sqrMagnitude > 1e-8f ? Quaternion.AngleAxis(Vector3.SignedAngle(seat, held, bore), bore) * seated : seated;
+            seatPosition = bone.position + seated * roundCenterInProp - seatRotation * roundCenterInProp;
+        }
+
         private static void PutSecondShellOnBore(Firearms firearms, int chamber)
         {
             Transform bone = ChamberBone(firearms, chamber);
             if (bone == null || breakShellSecond == null)
                 return;
             breakShellSecondChamber = chamber;
-            breakShellSecondSeatInBarrel = barrelBone.InverseTransformPoint(bone.position);
-            breakShellSecondSeatRotationInBarrel = Quaternion.Inverse(barrelBone.rotation) * bone.rotation * Quaternion.Euler(90f, 0f, 0f);
+            SeatedKeepingRoll(bone, breakShellSecond.transform, out Vector3 secondSeatPosition, out Quaternion secondSeatRotation);
+            breakShellSecondSeatInBarrel = barrelBone.InverseTransformPoint(secondSeatPosition);
+            breakShellSecondSeatRotationInBarrel = Quaternion.Inverse(barrelBone.rotation) * secondSeatRotation;
             Transform prop = breakShellSecond.transform;
             breakShellSecondSnapFrom = barrelBone.InverseTransformPoint(prop.position);
             breakShellSecondSnapFromRotation = Quaternion.Inverse(barrelBone.rotation) * prop.rotation;
@@ -1978,14 +1994,14 @@ namespace TarkovVR.Source.Weapons
         {
             Transform prop = heldRoundProp.transform;
             Transform bone = ChamberBone(firearms, chamber);
-            Quaternion seatedRotation = bone.rotation * Quaternion.Euler(90f, 0f, 0f);
+            SeatedKeepingRoll(bone, prop, out Vector3 seatPosition, out Quaternion seatedRotation);
             Vector3 bore = bone.up;
             breakShellOnBore = true;
             breakShellChamber = chamber;
             breakShellOut = along;
             breakShellOutAtCapture = along;
             breakShellHandAtCapture = barrelBone.InverseTransformPoint(HandRig(gunHand: false).position);
-            breakShellSeatInBarrel = barrelBone.InverseTransformPoint(bone.position);
+            breakShellSeatInBarrel = barrelBone.InverseTransformPoint(seatPosition);
             breakShellSeatRotationInBarrel = Quaternion.Inverse(barrelBone.rotation) * seatedRotation;
             breakShellBoreInBarrel = Quaternion.Inverse(barrelBone.rotation) * bore;
             breakShellSnapFrom = barrelBone.InverseTransformPoint(prop.position);
