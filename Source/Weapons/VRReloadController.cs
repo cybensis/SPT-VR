@@ -27,6 +27,7 @@ namespace TarkovVR.Source.Weapons
     {
         public static bool enabled = true;
         public static float magazineGrabRadius = 0.08f;     // m palm to the gun magazine to grab it: a capsule from the magazine's center down to its bottom
+        public static float magwellGripMargin = 0f;         // m above a held magwell's bottom (magwellGripBottoms) a palm still takes the magazine
         // The mag well track: a magazine in the well only slides along the well's axis, with the hand locked on it
         public static float railLength = 0.05f;             // m a magazine slides in the well before it comes free (pulling out) / from the top to seated (putting in)
         public static float magazineCatchDistance = 0.01f;  // m Manual Reload: past this the mag catch no longer holds it, B or not
@@ -721,8 +722,8 @@ namespace TarkovVR.Source.Weapons
             // Partly out: the magazine and below it, the hand can take it there
             if (MagazinePartlyOut)
                 return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
-            return TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
-                && DistanceToSegment(palm, magazineCenter, magazineBottom) <= magazineGrabRadius;
+            return TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 upTheWell)
+                && DistanceToMagazineZone(palm, magazineCenter, magazineBottom, upTheWell) <= magazineGrabRadius;
         }
 
         // Everything but where the hand is
@@ -748,12 +749,20 @@ namespace TarkovVR.Source.Weapons
                 return float.MaxValue;
             if (touchPoints == null || touchPoints.Count == 0 || !CanStartGrab(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot)
                 || !GunMagazineGrabbable(weapon) || MagazinePartlyOut || !BeltBoxHandMay(firearmController, gunHand: false)
-                || !TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
+                || !TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 upTheWell))
                 return float.MaxValue;
             float nearest = float.MaxValue;
             foreach (Vector3 point in touchPoints)
-                nearest = Mathf.Min(nearest, DistanceToSegment(point, magazineCenter, magazineBottom) / magazineGrabRadius);
+                nearest = Mathf.Min(nearest, DistanceToMagazineZone(point, magazineCenter, magazineBottom, upTheWell) / magazineGrabRadius);
             return nearest;
+        }
+
+        // To the grab capsule; float.MaxValue above a held magwell's bottom (upTheWell: zero where the support hand doesn't hold it)
+        private static float DistanceToMagazineZone(Vector3 point, Vector3 capsuleTop, Vector3 capsuleBottom, Vector3 upTheWell)
+        {
+            if (upTheWell != Vector3.zero && Vector3.Dot(point - capsuleTop, upTheWell) > magwellGripMargin)
+                return float.MaxValue;
+            return DistanceToSegment(point, capsuleTop, capsuleBottom);
         }
 
         private static float DistanceToSegment(Vector3 point, Vector3 segmentStart, Vector3 segmentEnd)
@@ -769,6 +778,36 @@ namespace TarkovVR.Source.Weapons
         private static Magazine magazineShapeFor;
         private static Vector3 magazineShapeAxis;
         private static float magazineShapeLength;
+
+        // A gun whose support hand holds the magwell itself (the Vector's): its magazine is taken below it. m down the magazine's track
+        // from the well point to the bottom of that magwell (its lower receiver's mesh around the magazine's line).
+        private static readonly Dictionary<string, float> magwellGripBottoms = new Dictionary<string, float>();
+
+        // The capsule from the magazine's center (or a held magwell's bottom, upTheWell = the track's direction into the gun there, else
+        // zero) down to its bottom
+        private static bool TryGetGunMagazineCapsule(FirearmController firearmController, Slot magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom,
+            out Vector3 upTheWell)
+        {
+            upTheWell = Vector3.zero;
+            if (!TryGetGunMagazineCapsule(firearmController, magazineSlot, out magazineCenter, out magazineBottom))
+                return false;
+            LoadRecordedGrips();
+            string family = AnimationFamily(firearmController);
+            if (!magwellGripBottoms.TryGetValue(family, out float magwellBottom))
+                return true;
+            Transform well = firearmController.Firearms.ContainerCollectionView.GetViewForSlot(magazineSlot)?.Bone;
+            if (well == null)
+                return true;
+            Vector3 outOfWell = wellAxes.TryGetValue(family, out Vector3 axisInWell) ? well.TransformDirection(axisInWell) : magazineBottom - magazineCenter;
+            if (outOfWell.sqrMagnitude < 1e-8f)
+                return true;
+            outOfWell.Normalize();
+            float bottomAlong = Mathf.Max(Vector3.Dot(magazineBottom - well.position, outOfWell), magwellBottom);
+            magazineCenter = well.position + outOfWell * magwellBottom;
+            magazineBottom = well.position + outOfWell * bottomAlong;
+            upTheWell = -outOfWell;
+            return true;
+        }
 
         private static bool TryGetGunMagazineCapsule(FirearmController firearmController, Slot magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
         {
@@ -2880,9 +2919,9 @@ namespace TarkovVR.Source.Weapons
             }
             // The magazine on the gun (the off hand's: the pull's pinch, the left hand's pose, mirrored for the right arm)
             if (!gunHand && !MagazinePartlyOut && BeltBoxHandMay(firearmController, gunHand: false) && CanStartGrab(out _, out Weapon magazineWeapon, out Slot magazineSlot) && GunMagazineGrabbable(magazineWeapon)
-                && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
+                && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 upTheWell))
             {
-                float outside = DistanceToSegment(OffHandPalm(), magazineCenter, magazineBottom) - magazineGrabRadius;
+                float outside = DistanceToMagazineZone(OffHandPalm(), magazineCenter, magazineBottom, upTheWell) - magazineGrabRadius;
                 if (outside < nearest)
                 {
                     nearest = outside;
@@ -3262,7 +3301,7 @@ namespace TarkovVR.Source.Weapons
             UpdateChargingHandleViz(firearmController, weapon, show);
             UpdateBelowWellViz(firearmController, magazineSlot);
             bool inGrabZone = InGunMagazineGrabZone(firearmController, weapon, magazineSlot, palm);
-            if (!HoldingMagazine && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom))
+            if (!HoldingMagazine && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out _))
                 SetCapsuleZoneViz(ref grabZoneViz, magazineCenter, magazineBottom, magazineGrabRadius, inGrabZone ? new Color(0f, 1f, 0f, 0.3f) : new Color(0f, 0.4f, 1f, 0.3f));
             else
                 SetZoneViz(ref grabZoneViz, false, Vector3.zero, 0f, Color.clear);

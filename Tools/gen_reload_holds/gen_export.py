@@ -381,6 +381,11 @@ for f,h in lmg.get('lmgHandles',{}).items():
 out['handleTravels']={f:h['travel'] for f,h in lmg.get('lmgHandles',{}).items() if h.get('travel')}
 # gen_magwells.py: how far below the seat each set's own mag-in clip starts its straight push up the well (the runtime's track length)
 out['magwellDepths']=json.load(open('magwells.json')) if os.path.exists('magwells.json') else {}
+# Guns whose support hand holds the magwell itself, so the magazine is taken below it: m down the magazine's track (wellAxes) from the
+# well point to that magwell's bottom. The Vector's: its lower receiver's mesh around the magazine's line ends 8.9 cm down (both
+# calibers); the magazine's own capsule, from its middle with the 8 cm reach, took the whole magwell (headset: "hard to grab the
+# foregrip because of how close the mag collision is").
+out['magwellGripBottoms']={'vector':0.089}
 print('lmgs:',{f:(g['cover']['bone'] if g.get('cover') else None,bool(g.get('latch')),g['belt']['anchor'] if g.get('belt') else None) for f,g in out['lmgs'].items()})
 # Guns in one folder share a rig and a handle: AK-101 and 103 have their magazine clips but rack with the AK-100's
 borrowed=[]

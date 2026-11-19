@@ -70,8 +70,8 @@ namespace TarkovVR.Source.Weapons
         {
             if (MagazinePartlyOut)
                 return OffHandUnderMagazine(firearmController, magazineSlot, onItToo: true);
-            return weapon.GetCurrentMagazine() != null && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom)
-                && DistanceToSegment(OffHandPalm(), magazineCenter, magazineBottom) <= palmGrabRadius;
+            return weapon.GetCurrentMagazine() != null && TryGetGunMagazineCapsule(firearmController, magazineSlot, out Vector3 magazineCenter, out Vector3 magazineBottom, out Vector3 upTheWell)
+                && DistanceToMagazineZone(OffHandPalm(), magazineCenter, magazineBottom, upTheWell) <= palmGrabRadius;
         }
 
         // A light buzz on coming into reach, so you know the trigger will take it
