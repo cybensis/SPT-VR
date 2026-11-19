@@ -166,6 +166,7 @@ namespace TarkovVR.Source.Weapons
             public Dictionary<string, SavedBolt> bolts;
             public Dictionary<string, SavedShotgun> shotguns;
             public Dictionary<string, SavedBreakAction> breakActions;
+            public Dictionary<string, SavedBreakAction> revolvers;
             public Dictionary<string, SavedLmg> lmgs;
             public Dictionary<string, float> handleTravels;
             public Dictionary<string, float> magwellDepths;
@@ -863,6 +864,15 @@ namespace TarkovVR.Source.Weapons
                         BreakData breakAction = BreakFrom(entry.Value);
                         if (breakAction != null)
                             breakGuns[entry.Key] = breakAction;
+                    }
+                }
+                if (generated.revolvers != null)
+                {
+                    foreach (KeyValuePair<string, SavedBreakAction> entry in generated.revolvers)
+                    {
+                        BreakData revolver = entry.Value != null && entry.Value.revolver ? BreakFrom(entry.Value) : null;
+                        if (revolver != null)
+                            breakGuns[entry.Key] = revolver;
                     }
                 }
                 if (generated.lmgs != null)

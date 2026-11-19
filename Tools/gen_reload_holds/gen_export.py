@@ -365,6 +365,9 @@ out['shotguns']=json.load(open('shotguns.json'))['shotguns'] if os.path.exists('
 print('shotguns:',{f:(bool(g['pump']),g['tube']['length'],g['port']['length']) for f,g in out['shotguns'].items()})
 # gen_breakactions.py: break-actions, by their clips' family (the open's bones keyed by the barrel's turn, the lever, the holds)
 out['breakActions']=json.load(open('breakactions.json'))['breakActions'] if os.path.exists('breakactions.json') else {}
+# gen_revolvers.py: swing-out cylinders, by their clips' family (the crane as a break-action's barrel, the release as its lever, the
+# ejector keyed by the extractor's push, the left hand's holds)
+out['revolvers']=json.load(open('revolvers.json'))['revolvers'] if os.path.exists('revolvers.json') else {}
 print('break-actions:',{f:(g['openDegrees'],len(g['chambers'])) for f,g in out['breakActions'].items()})
 # gen_lmgs.py: belt-fed machine guns (the feed cover and the scope mount's latch as hinges, the belt hanging out of a box not yet laid), and
 # the RPD's charging handle; per part the hand the clips work it with and its hold on it (hands / holds)

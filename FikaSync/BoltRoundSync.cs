@@ -56,11 +56,11 @@ namespace SptVrFikaSync
             return IsRoundIntoGun(weapon, operation);
         }
 
-        // A break-action's chamber by hand (SPT-VR's VRReloadController.BreakAction): one round into or out of one of its chambers, not
-        // Tarkov's own reload or discharge (both animate). The same rule as SPT-VR's LetsBreakMoveThrough.
+        // A break-action's chamber or a revolver's camora by hand (SPT-VR's VRReloadController.BreakAction): one round into or out of
+        // one of them, not Tarkov's own reload or discharge (both animate). The same rule as SPT-VR's LetsBreakMoveThrough.
         internal static bool IsBreakActionChamberMove(Weapon weapon, IInventoryOperation operation)
         {
-            if (weapon == null || weapon.ReloadMode != Weapon.EReloadMode.OnlyBarrel)
+            if (weapon == null || (weapon.ReloadMode != Weapon.EReloadMode.OnlyBarrel && !(weapon is Revolver && weapon.GetCurrentMagazine() is CylinderMagazine)))
                 return false;
             if (operation is ISubOperation subOperation && subOperation.BaseInventoryOperation != null && TouchesChamber(weapon, subOperation.BaseInventoryOperation))
                 return true;
@@ -80,7 +80,8 @@ namespace SptVrFikaSync
         {
             if (address == null)
                 return false;
-            foreach (Slot chamber in weapon.Chambers)
+            Slot[] chambers = weapon is Revolver && weapon.GetCurrentMagazine() is CylinderMagazine cylinder ? cylinder.Camoras : weapon.Chambers;
+            foreach (Slot chamber in chambers)
             {
                 if (ReferenceEquals(address.Container, chamber))
                     return true;

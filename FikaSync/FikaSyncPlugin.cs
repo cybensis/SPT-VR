@@ -27,7 +27,8 @@ namespace SptVrFikaSync
     // client after a quick hands change, and refuse that item ("currently being modified") for the rest of the raid.
     // 2.4.6 (BoltRoundSync): no packet change. On an older host, shells loaded into / taken out of a break-action by hand stay where they
     // were (the host plays Tarkov's chamber clip on its copy instead).
-    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.6")]
+    // 2.4.7 (BoltRoundSync): no packet change. The same for a revolver's cylinder by hand (rounds in, rounds and cases out).
+    [BepInPlugin("com.matsix.sptvr.fikasync", "SPT-VR FIKA Sync", "2.4.7")]
     [BepInDependency("com.fika.core", BepInDependency.DependencyFlags.HardDependency)]
     // Soft: ORBIT (bot-AI mod) runs on the host/headless alongside this module; when present, a dragged corpse's loot waypoint is
     // relocated here (SPT-VR.dll doesn't run on a headless). The dep only guarantees ORBIT is in the registry checked below.

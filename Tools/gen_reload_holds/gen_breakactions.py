@@ -137,9 +137,12 @@ def boneMeshPoints(folder,container,boneLeaf):
 # bone's frame (the runtime bends the finger onto it from wherever the hand holds the gun: the MP-43 clip's hand rides up 4.4 cm to
 # reach the top lever, a VR hand stays on the grip)
 TIP=np.array([-0.025,0.0,0.0])
-def leverPress(g,P,folder,container,lever,ts):
+# (tTop: the press's moment, else the lever's furthest turn)
+def leverPress(g,P,folder,container,lever,ts,tTop=None):
     J=fingerPaths(P,'R'); wp=bone(P,'Weapon_root_anim/weapon'); palm=bone(P,'/Base HumanRPalm')
-    turn=turnTrack(g,lever,ts); tTop=ts[int(np.argmax(turn))]; c={}
+    if tTop is None:
+        turn=turnTrack(g,lever,ts); tTop=ts[int(np.argmax(turn))]
+    c={}
     leverAt,leverRotation,_=g['worldAt'](lever,tTop,c)
     mesh=boneMeshPoints(folder,container,lever.split('/')[-1])
     best=None
