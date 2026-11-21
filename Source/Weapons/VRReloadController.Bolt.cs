@@ -21,12 +21,10 @@ namespace TarkovVR.Source.Weapons
     // latched hand reads them this frame) and again after the animator (LateUpdate), which may write them too.
     public static partial class VRReloadController
     {
-        public static bool boltAction = true;               // false = Tarkov cycles a bolt-action's bolt itself after every shot
         public static float boltGrabRadius = 0.07f;         // m any point of the hand to the knob (the knob's middle, from its mesh: gen_bolts.py)
         public static float boltFullBack = 0.92f;           // share of the slide that counts as all the way back
         public static float boltTurnedUp = 0.97f;           // share of the turn before it slides
         public static float boltClosedTurn = 0.03f;         // share of the turn left that counts as turned down
-        public static bool boltShowsChamberedRound = true;  // a live round in the chamber comes back on the bolt face as it opens
         public static float boltTurnSign = 1f;          // -1 if the handle turns the wrong way (the clip's turn read the other way round)
         public static bool boltDebugLog = false;            // the bolt's grabs, strokes and what came out of the chamber
 
@@ -159,7 +157,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool ManualBoltOn(FirearmController firearmController)
         {
-            return enabled && boltAction && VRSettings.GetManualReloadOn() && firearmController != null && firearmController._player != null
+            return enabled && VRSettings.GetManualReloadOn() && firearmController != null && firearmController._player != null
                 && firearmController._player.IsYourPlayer && TryGetBolt(firearmController, out _);
         }
 
@@ -167,7 +165,7 @@ namespace TarkovVR.Source.Weapons
         // the off hand's weapon-part menu isn't needed (GunInteractionController.ManualReloadReplacesMenu)
         public static bool HandsLoadBoltAction(FirearmController firearmController)
         {
-            if (!singleRoundLoading || !ManualBoltOn(firearmController))
+            if (!ManualBoltOn(firearmController))
                 return false;
             Weapon weapon = firearmController.Item;
             return weapon != null && weapon.SupportsInternalReload && weapon.MustBoltBeOpennedForInternalReload;
@@ -266,7 +264,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool BoltHoldIsStillValid()
         {
-            if (!enabled || !boltAction || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null)
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null)
                 return false;
             if (VRGlobals.firearmController == null || VRGlobals.firearmController != boltForFirearm || boltKnob == null || boltSlider == null)
                 return false;
@@ -618,11 +616,10 @@ namespace TarkovVR.Source.Weapons
         // closed, the bolt can stay drawn open while our state is closed (suspected: the rechamber skip sends only the arms layer back
         // to idle, and a layer left in Tarkov's rechamber clip holds it open). Tarkov's own operations (its reload, check chamber, a
         // malfunction) aren't idle: their bolt animations play.
-        public static bool keepBoltShut = true;
 
         private static void KeepBoltShut(FirearmController firearmController)
         {
-            if (!keepBoltShut || HoldingBolt || !boltClosedPoseRead || boltSlider == null || boltTurner == null || !ManualBoltOn(firearmController))
+            if (HoldingBolt || !boltClosedPoseRead || boltSlider == null || boltTurner == null || !ManualBoltOn(firearmController))
                 return;
             boltSlider.localPosition = sliderClosedLocalPosition;
             boltTurner.localRotation = turnerClosedLocalRotation;
@@ -637,7 +634,7 @@ namespace TarkovVR.Source.Weapons
         {
             EndBoltChamberView();
             Weapon weapon = firearmController.Item;
-            if (!boltShowsChamberedRound || state.spentCase || weapon.ChamberAmmoCount == 0)
+            if (state.spentCase || weapon.ChamberAmmoCount == 0)
                 return;
             Transform[] chamberBones = firearmController.Firearms._patronInWeaponTransforms;
             Transform chamberBone = chamberBones != null && chamberBones.Length > 0 ? chamberBones[0] : null;

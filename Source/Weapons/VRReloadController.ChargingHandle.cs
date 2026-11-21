@@ -20,8 +20,6 @@ namespace TarkovVR.Source.Weapons
     // back the handle is. Only the pose; the bolt-catch flag isn't touched.
     public static partial class VRReloadController
     {
-        public static bool chargingHandle = true;
-        public static bool rackByHandOnDraw = true;        // false = Tarkov racks a gun drawn with an empty chamber itself
         public static float handleGrabRadius = 0.06f;      // m palm to the back of the charging handle to grab it
         public static float handleZoneBack = 0.05f;        // m the grab zone reaches on past that toward the stock (a capsule)
         public static float handleTravel = 0.08f;          // m the handle comes back
@@ -30,8 +28,6 @@ namespace TarkovVR.Source.Weapons
         public static float handleLockedBackTravel = 0.02f; // m a handle on the bolt has left to give, with the bolt already locked back
         public static float underGunPullGain = 1.6f;        // the off hand on a handle on the bolt: handle travel per controller travel (1 = one to one).
                                                             // That hand reaches under the gun and would run into the other controller over a full pull.
-        public static bool boltFollowsHandle = true;       // false = only the handle model moves
-        public static bool showChamberedRound = true;      // the round in the chamber shows while the bolt is open, riding the bolt face
         public static float boltLockOnDistance = 0.003f;   // m a part has to come back before it's taken as the bolt the round follows
 
         public static bool HoldingChargingHandle { get; private set; }
@@ -197,7 +193,7 @@ namespace TarkovVR.Source.Weapons
             try
             {
                 FirearmController firearmController = spawnOperation.Controller;
-                if (!rackByHandOnDraw || !enabled || !chargingHandle || spawnOperation._ammoFromMagToChamber == null || firearmController == null
+                if (!enabled || spawnOperation._ammoFromMagToChamber == null || firearmController == null
                     || firearmController._player == null || !firearmController._player.IsYourPlayer || !VRSettings.GetManualReloadOn())
                     return;
                 Weapon weapon = firearmController.Item;
@@ -219,7 +215,7 @@ namespace TarkovVR.Source.Weapons
         {
             // A bolt-action's bolt (VRReloadController.Bolt): its draw on an empty chamber leaves the round for the hand too
             if (weapon.BoltAction)
-                return boltAction && TryGetBolt(firearmController, out _);
+                return TryGetBolt(firearmController, out _);
             if (weapon.ReloadMode != Weapon.EReloadMode.ExternalMagazine && weapon.ReloadMode != Weapon.EReloadMode.ExternalMagazineWithInternalReloadSupport)
                 return false;
             LoadRecordedGrips();
@@ -360,7 +356,7 @@ namespace TarkovVR.Source.Weapons
         // zone would keep from coming up
         private static bool InChargingHandleZone(FirearmController firearmController, Weapon weapon, bool gunHand = false)
         {
-            if (!chargingHandle || !HandsMayWorkAction(firearmController, weapon) || !TryGetChargingHandle(firearmController, weapon))
+            if (!HandsMayWorkAction(firearmController, weapon) || !TryGetChargingHandle(firearmController, weapon))
                 return false;
             Vector3 backWorld = firearmController.WeaponRoot.up;
             for (int zone = 0; zone < HandleZoneCount; zone++)
@@ -752,7 +748,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool ChargingHandleHoldIsStillValid()
         {
-            if (!enabled || !chargingHandle || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null)
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null)
                 return false;
             if (VRGlobals.firearmController == null || VRGlobals.firearmController != handleForFirearm)
                 return false;
@@ -796,12 +792,9 @@ namespace TarkovVR.Source.Weapons
             }
 
             // After the rechamber above: its skip puts the bolt pose back to the catch flag, this frame would flash it closed
-            if (boltFollowsHandle)
-            {
-                FirearmsAnimator firearmsAnimator = handleForFirearm.FirearmsAnimator;
-                float boltOpen = Mathf.Clamp01(handlePull / (heldHandleTravel * handleFullPull));
-                SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : boltOpen);
-            }
+            FirearmsAnimator firearmsAnimator = handleForFirearm.FirearmsAnimator;
+            float boltOpen = Mathf.Clamp01(handlePull / (heldHandleTravel * handleFullPull));
+            SetBoltOpen(firearmsAnimator, firearmsAnimator.GetBoltCatch() ? 1f : boltOpen);
 
             // Only letting go of the trigger lets go (no distance release). Once it has been all the way back, that slams
             // the bolt forward whatever the handle does after
@@ -971,7 +964,7 @@ namespace TarkovVR.Source.Weapons
             chamberShownEmpty = WaitingForRack(weapon);
             Transform[] chamberBones = firearmController.Firearms._patronInWeaponTransforms;
             chamberBone = chamberBones != null && chamberBones.Length > 0 ? chamberBones[0] : null;
-            showingChamber = showChamberedRound && boltFollowsHandle && chamberBone != null
+            showingChamber = chamberBone != null
                 && !firearmController.FirearmsAnimator.GetBoltCatch() && weapon.ChamberAmmoCount > 0;
             if (!showingChamber)
             {
@@ -1157,7 +1150,7 @@ namespace TarkovVR.Source.Weapons
         private static void UpdateChargingHandleViz(FirearmController firearmController, Weapon weapon, bool show)
         {
             UpdateSideHandleViz(firearmController, weapon, show);
-            bool hasHandle = show && chargingHandle && TryGetChargingHandle(firearmController, weapon);
+            bool hasHandle = show && TryGetChargingHandle(firearmController, weapon);
             if (!hasHandle || HoldingChargingHandle)
             {
                 SetZoneViz(ref handleZoneViz, false, Vector3.zero, 0f, Color.clear);

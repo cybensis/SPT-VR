@@ -13,7 +13,6 @@ namespace TarkovVR.Source.Weapons
     //    our own frame on the receiver, which none of those parts moves.
     public static partial class VRReloadController
     {
-        public static bool sideChargingHandles = true;
         public static float sideKnobFoldTime = 0.1f;        // s the knob takes to fold out as the hand takes it
 
         private sealed class SideHandle
@@ -58,7 +57,7 @@ namespace TarkovVR.Source.Weapons
 
         private static SideHandle SideHandleOf(FirearmController firearmController)
         {
-            if (!sideChargingHandles || firearmController == null)
+            if (firearmController == null)
                 return null;
             LoadRecordedGrips();
             sideHandles.TryGetValue(AnimationFamily(firearmController), out SideHandle sideHandle);
@@ -87,7 +86,7 @@ namespace TarkovVR.Source.Weapons
         // On a jammed gun only when the hands clear it, like the main handle
         private static bool InSideHandleZone(FirearmController firearmController, Weapon weapon)
         {
-            if (!chargingHandle || !HandsMayWorkAction(firearmController, weapon) || !TryGetSideKnobPoint(firearmController, out Vector3 point))
+            if (!HandsMayWorkAction(firearmController, weapon) || !TryGetSideKnobPoint(firearmController, out Vector3 point))
                 return false;
             return OffHandTouchesCapsule(point, point, handleGrabRadius);
         }
@@ -122,8 +121,6 @@ namespace TarkovVR.Source.Weapons
         private static void StartMovedBolts(FirearmController firearmController, Vector3 backWorld)
         {
             movedBolts.Clear();
-            if (!boltFollowsHandle)
-                return;
             LoadRecordedGrips();
             if (!boltBonesByFamily.TryGetValue(AnimationFamily(firearmController), out List<SavedBoltBone> bones))
                 return;

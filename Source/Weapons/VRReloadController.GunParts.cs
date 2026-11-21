@@ -21,17 +21,13 @@ namespace TarkovVR.Source.Weapons
     //    pose eased out, the bolt catch paddle is part of it)
     public static partial class VRReloadController
     {
-        public static bool magazineReleaseButton = true;
         public static float releaseButtonTime = 0.06f;      // s for the button to go all the way in or out (Tarkov's mag-out: ~0.1)
-        public static bool releaseFinger = true;            // the gun hand's index finger presses the button
-        public static bool holdSeatedMagazine = true;       // the hand stays on a magazine it seated while the grip is held
         // A pistol's magazine seated with the grip still held: the hand goes on into the two-handed grip, eased from the magazine
         // onto EFT's support pose, then handed to the two-handing as if the grip were pressed there (VRPlayerManager.TakeSupportGrip)
         public static bool pistolSupportAfterSeat = true;
         public static float pistolSupportDelay = 0.15f;     // s the grip stays held on the seated magazine before the hand moves on
         public static float pistolSupportMoveTime = 0.3f;   // s the move takes at most (it hands over as soon as it's there)
         public static float boltReleaseTime = 0.08f;        // s for the bolt to run forward (Tarkov: the paddle 0.07, then the bolt 0.13)
-        public static bool slapBoltRelease = true;
         public static float boltSlapRadius = 0.07f;         // m palm to the bolt catch that counts as hitting it
         public static float boltSlapSpeed = 1.0f;           // m/s the off hand comes in at, against the gun hand, to count as a slap
 
@@ -106,7 +102,7 @@ namespace TarkovVR.Source.Weapons
             // A break-action's lever (VRReloadController.BreakAction): its own finger
             if (DriveBreakLeverFinger())
                 return;
-            if (!magazineReleaseButton || !TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
+            if (!TryGetMagazineGun(out FirearmController firearmController, out Weapon weapon, out Slot magazineSlot))
                 return;
             if (!(firearmController.CurrentOperation is FirearmController.Idling))
                 return;
@@ -126,7 +122,7 @@ namespace TarkovVR.Source.Weapons
             }
             latchThumbTarget = pressedByFinger && thumbPresses ? 1f : 0f;
             // The magazine pushes it in on the way up, not the finger; a hand off the gun (slung, support-held) can't
-            bool fingerPresses = pressedByFinger && releaseFinger && !thumbPresses && !ChestHang.Detached;
+            bool fingerPresses = pressedByFinger && !thumbPresses && !ChestHang.Detached;
             if (fingerPresses && EnsureReleaseFinger(firearmController, clipOnly: true))
                 releaseFingerTarget = 1f;
             float target = pressedByFinger ? 1f : 0f;
@@ -592,8 +588,6 @@ namespace TarkovVR.Source.Weapons
         private static Quaternion[] MeasurePressFinger(RuntimeAnimatorController animatorController, GameObject sampler, List<Transform> sampledParts,
             Dictionary<Transform, Transform> copies, string gunName)
         {
-            if (!releaseFinger)
-                return null;
             try
             {
                 Transform[] fingerJoints = GunHandIndexFinger(out Transform armTop);
@@ -679,7 +673,7 @@ namespace TarkovVR.Source.Weapons
         // Just seated with the grip still held: the rendered hand stays where it holds the magazine, riding the gun
         private static void BeginSeatedHold(FirearmController firearmController, Transform well)
         {
-            if (!holdSeatedMagazine || firearmController == null || well == null || handLatch == null || !handLatched)
+            if (firearmController == null || well == null || handLatch == null || !handLatched)
                 return;
             seatedHoldFor = firearmController;
             seatedHoldWell = well;
@@ -794,7 +788,7 @@ namespace TarkovVR.Source.Weapons
         private static void UpdateBoltSlap(bool handFree)
         {
             FirearmController firearmController = null;
-            bool canSlap = slapBoltRelease && handFree && TryGetMagazineGun(out firearmController, out Weapon slappedWeapon, out _) && slappedWeapon.IsBoltCatch
+            bool canSlap = handFree && TryGetMagazineGun(out firearmController, out Weapon slappedWeapon, out _) && slappedWeapon.IsBoltCatch
                 && !VRGlobals.vrPlayer.isSupporting && !ChestHang.Detached
                 && !HandsInteractionController.HoldingLoot;
             bool atCatch = false;

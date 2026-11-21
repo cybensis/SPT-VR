@@ -8,7 +8,7 @@ namespace TarkovVR.Source.Weapons
     // shell port, and where it is half a second later, shown or not. Debug only (VRMagazinePatches.ProbeEjectedRound).
     internal sealed class EjectedRoundProbe : MonoBehaviour
     {
-        public static bool enabled = true;
+        public static bool enabled = false;
 
         private LootItem lootItem;
         private Vector3 spawnPosition;

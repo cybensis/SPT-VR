@@ -1947,7 +1947,7 @@ namespace TarkovVR.Source.Weapons
             if (gunHand || HoldingBarrels || HoldingBreakCase)
                 return false;
             FirearmController firearmController = VRGlobals.firearmController;
-            if (!enabled || !singleRoundLoading || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
                 return false;
             if (!ManualBreakOn(firearmController, out BreakData data) || !EnsureBreakBones(firearmController, data) || !GunIdle(firearmController)
                 || HandsInteractionController.HoldingLoot || ChestHang.Detached)
@@ -2813,7 +2813,7 @@ namespace TarkovVR.Source.Weapons
             if (!ManualBreakOn(firearmController, out BreakData data))
                 return false;
             LeverPress press = data.leverPress;
-            if (press == null || !releaseFinger)
+            if (press == null)
                 return true;
             if (releaseFingerFor != firearmController || releaseFingerJoints == null)
             {

@@ -19,8 +19,6 @@ namespace TarkovVR.Source.Weapons
     //    The inventory move is the bolt-action rounds' (TryBuildLoadOne, let through by LetsSingleRoundIn).
     public static partial class VRReloadController
     {
-        public static bool shotguns = true;                 // false = Tarkov's own shotgun reloads only
-        public static bool pumpByHand = true;               // false = the pump is Tarkov's alone (after every shot)
         public static float shellCaptureRadius = 0.06f;     // m from the held shell to where a path starts that puts it on that path
         public static float shellCommit = 0.45f;            // share of the path past which the shell is in and goes the rest on its own
         public static float shellLetGoDistance = 0.1f;      // m the hand can be off the path before a shell not yet in comes back out
@@ -32,10 +30,8 @@ namespace TarkovVR.Source.Weapons
         public static float pumpRestFollowTime = 0.4f;      // s the closed pump's rest follows a slow drift of the hands (no creeping open)
         // After a shot the pump is the hand's: Tarkov's pump is skipped (BoltActionPatches), the fired shell stays in and the trigger is
         // dead until the pump has been all the way back. false = Tarkov pumps after every shot.
-        public static bool pumpAfterShotByHand = true;
         // The support hand rides the pump: Tarkov's IK holds it on the foregrip's grip pose, which isn't one of the stroke's bones, so
         // while the pump is open the left arm aims at our point on the pump instead
-        public static bool pumpHandFollows = true;
         public static float pumpFullBack = 0.92f;           // share of the stroke that counts as all the way back
         // The action lock: closed on a cocked hammer the pump stays shut until a shot or a dry fire drops the hammer, or the slide release
         // (the mag release button, B on the gun hand) frees it - so a live shell isn't pumped out by accident. Shoot, pump, shoot needs no
@@ -251,7 +247,7 @@ namespace TarkovVR.Source.Weapons
         private static bool ManualShotgunOn(FirearmController firearmController, out ShotgunData data)
         {
             data = null;
-            return enabled && shotguns && VRSettings.GetManualReloadOn() && firearmController != null && firearmController._player != null
+            return enabled && VRSettings.GetManualReloadOn() && firearmController != null && firearmController._player != null
                 && firearmController._player.IsYourPlayer && TryGetShotgun(firearmController, out data);
         }
 
@@ -265,7 +261,7 @@ namespace TarkovVR.Source.Weapons
         // Worked as a pump gun now: the M3 switched to semi-auto is a semi-auto
         private static bool PumpMode(Weapon weapon, ShotgunData data)
         {
-            return pumpByHand && data != null && data.HasPump && weapon.SelectedFireMode != Weapon.EFireMode.semiauto;
+            return data != null && data.HasPump && weapon.SelectedFireMode != Weapon.EFireMode.semiauto;
         }
 
         // The gun's action is its pump right now, whoever works it (pumpByHand or not): the M3's bolt handle is the semi-auto mode's only
@@ -330,7 +326,7 @@ namespace TarkovVR.Source.Weapons
             weapon = null;
             magazine = null;
             data = null;
-            if (!enabled || !singleRoundLoading || !shotguns || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
                 return false;
             if (!ManualShotgunOn(firearmController, out data) || firearmController.IsInLauncherMode())
                 return false;
@@ -419,7 +415,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool ShellGunStillValid(FirearmController firearmController)
         {
-            if (!enabled || !shotguns || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
                 return false;
             if (heldRoundProp == null || firearmController == null || VRGlobals.firearmController != firearmController || firearmController.Item == null)
                 return false;
@@ -629,7 +625,7 @@ namespace TarkovVR.Source.Weapons
                 bool boltBack = firearmController.FirearmsAnimator != null && firearmController.FirearmsAnimator.GetBoltCatch();
                 if (boltBack)
                     ReleaseBolt(firearmController);
-                if (boltBack || !semiShellWaitsForHandle || !chargingHandle || !TryGetChargingHandle(firearmController, weapon))
+                if (boltBack || !semiShellWaitsForHandle || !TryGetChargingHandle(firearmController, weapon))
                 {
                     BoltStripsRound(weapon);
                     ShowChamberedRound(firearmController);
@@ -886,7 +882,7 @@ namespace TarkovVR.Source.Weapons
         {
             firearmController = VRGlobals.firearmController;
             weapon = null;
-            if (!enabled || !shotguns || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
                 return false;
             if (!ManualShotgunOn(firearmController, out _) || firearmController.IsInLauncherMode() || firearmController.WeaponRoot == null)
                 return false;
@@ -901,7 +897,7 @@ namespace TarkovVR.Source.Weapons
         // UpdateZoneViz (debugZones) on a gun with no detachable magazine: a semi-auto shotgun's handle zone; false = none to show
         private static bool ShowShotgunHandleZone()
         {
-            if (!debugZones || !CanWorkShotgun(out FirearmController firearmController, out Weapon weapon) || !chargingHandle
+            if (!debugZones || !CanWorkShotgun(out FirearmController firearmController, out Weapon weapon)
                 || !TryGetChargingHandle(firearmController, weapon))
                 return false;
             UpdateChargingHandleViz(firearmController, weapon, show: true);
@@ -1021,7 +1017,7 @@ namespace TarkovVR.Source.Weapons
         {
             if (firearmController.Item.MalfState.State == Weapon.EMalfunctionState.None)
                 return;
-            bool poseOff = malfunctionPoseOffWhileHeld && state.open > 0f;
+            bool poseOff = state.open > 0f;
             if (poseOff && malfunctionPoseOffFor != firearmController)
             {
                 SetMalfunctionPose(firearmController, 0f);
@@ -1168,7 +1164,7 @@ namespace TarkovVR.Source.Weapons
         // (its fire operation fast-forwarded to idle: no pump animation, no shell thrown, no round shown). Not on a malfunction.
         public static bool PumpShotFired(FirearmController firearmController)
         {
-            if (!pumpAfterShotByHand || !ManualShotgunOn(firearmController, out ShotgunData data) || !PumpMode(firearmController.Item, data)
+            if (!ManualShotgunOn(firearmController, out ShotgunData data) || !PumpMode(firearmController.Item, data)
                 || firearmController.Item.MalfState.State != Weapon.EMalfunctionState.None)
                 return false;
             PumpState state = PumpStateOf(firearmController.Item);
@@ -1250,7 +1246,7 @@ namespace TarkovVR.Source.Weapons
         // foregrip's grip pose); open, the arm aims there on the marker as the pump has it
         private static void DrivePumpHand(FirearmController firearmController, ShotgunData data, PumpState state)
         {
-            if (!pumpHandFollows || Handedness.GunInLeftHand || VRGlobals.ikManager == null || VRGlobals.ikManager.leftArmIk == null)
+            if (Handedness.GunInLeftHand || VRGlobals.ikManager == null || VRGlobals.ikManager.leftArmIk == null)
                 return;
             // The marker bone the stroke's keys move (the same one Tarkov's IK reads while two-handing), its keys local to its parent
             Transform frame = ShotgunFrame(firearmController);

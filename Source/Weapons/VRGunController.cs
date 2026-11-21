@@ -11,15 +11,13 @@ namespace TarkovVR.Source.Weapons
     //    left hand always follows the controller.
     public static class VRGunController
     {
-        public static bool enabled = true;    // false = Tarkov's animations move the gun and the left hand, to compare
         // The gun arm the same way: a weapon switch plays the body animator's draw, whose RIGHT_HAND_WEIGHT curve drops the right
         // arm's IK weight (1 - curve) and hands the arm, and with it the gun (PlayerBones.Kinematics below 1), to that take-out.
         // Only a switch plays it: a slung gun taken back never goes through Tarkov. false = Tarkov's weight, to compare.
-        public static bool keepGunArmOffAnimation = true;
 
         public static bool KeepGunArmOffAnimation(EFT.Player player)
         {
-            return enabled && keepGunArmOffAnimation && player != null && player.HandsController is EFT.Player.FirearmController;
+            return player != null && player.HandsController is EFT.Player.FirearmController;
         }
 
         private static Vector3 heldWeaponHolderPosition;
@@ -46,7 +44,7 @@ namespace TarkovVR.Source.Weapons
         // Called from GunInteractionController.UpdateWeaponPosition. Returns true when it placed the gun itself.
         public static bool TryHoldGunInHand(Transform weaponHolder)
         {
-            if (!enabled || weaponHolder == null)
+            if (weaponHolder == null)
                 return false;
 
             if (!IsTarkovAnimatingTheGun())
@@ -72,7 +70,7 @@ namespace TarkovVR.Source.Weapons
 
         public static bool KeepLeftHandOnController()
         {
-            return enabled && VRGlobals.firearmController != null;
+            return VRGlobals.firearmController != null;
         }
     }
 }

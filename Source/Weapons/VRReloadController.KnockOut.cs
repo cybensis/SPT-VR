@@ -14,7 +14,6 @@ namespace TarkovVR.Source.Weapons
     // placed the same way.
     public static partial class VRReloadController
     {
-        public static bool knockMagazineOut = true;
         public static float knockContactRadius = 0.03f;     // m from the catch to the held magazine's body that counts as touching it
         public static float knockSpeed = 0.35f;             // m/s the held magazine must move forward (toward the muzzle) against the gun
         public static float knockTransfer = 0.9f;           // share of that push the old magazine leaves with
@@ -22,7 +21,6 @@ namespace TarkovVR.Source.Weapons
         public static float knockDrop = 0.3f;               // m/s down on top (it falls out of the well as the catch lets go)
         public static float knockSpin = 1f;                 // its rock off the hinge = the push over the catch's lever to the hinge, times this
         public static float knockMaxSpin = 7f;              // rad/s cap (Unity's own default cap on a body's spin)
-        public static bool knockLog = true;                 // a line per knock, and per touch too slow to knock
 
         private static FirearmController knockCatchFor;
         private static Transform knockCatchPart;
@@ -42,7 +40,7 @@ namespace TarkovVR.Source.Weapons
             Vector3 zoneAt = Vector3.zero;
             try
             {
-                if (!knockMagazineOut || !HoldingMagazine || HoldingGunMagazine || magazineInGunHand || onRail || HoldingPalmedMagazine
+                if (!HoldingMagazine || HoldingGunMagazine || magazineInGunHand || onRail || HoldingPalmedMagazine
                     || HoldingSeatedMagazine || heldProp == null)
                 {
                     ForgetKnockTouch();
@@ -102,8 +100,6 @@ namespace TarkovVR.Source.Weapons
         // A touch that ended without a knock: how fast it got, to tune knockSpeed by
         private static void ForgetKnockTouch()
         {
-            if (knockTouching && knockLog)
-                Plugin.MyLog.LogInfo($"[VRReload] the held magazine touched the catch but didn't knock: {knockTouchFastest:0.00} m/s forward at most (needs {knockSpeed:0.00})");
             knockTouching = false;
             knockTouchFastest = 0f;
         }
@@ -132,17 +128,12 @@ namespace TarkovVR.Source.Weapons
                 float spin = Mathf.Min(given / lever * knockSpin, knockMaxSpin);
                 Vector3 angularVelocity = well.TransformDirection(rockIn.axis).normalized * spin;
                 RunDrop(magazine, firearmController, magazineView.ItemView.position, magazineView.ItemView.rotation, velocity, angularVelocity);
-                if (knockLog)
-                    Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} knocked out by the next one: pushed {push:0.00} m/s forward at "
-                        + $"{distance * 100f:0.0} cm from the catch -> leaves at {given:0.00} m/s forward + the gun's {gunVelocity.magnitude:0.00} m/s, rocking {spin:0.0} rad/s");
                 return;
             }
             // The hideout: into the rig, as B does there
             if (TryBuildMoveToRig(magazine, out OperationResult<MoveResult> rigMove))
             {
                 RunMoveToRig(magazine, firearmController, rigMove);
-                if (knockLog)
-                    Plugin.MyLog.LogInfo($"[VRReload] {magazine.LocalizedShortName()} knocked out by the next one (into the rig: no ground here)");
             }
         }
 
@@ -175,9 +166,6 @@ namespace TarkovVR.Source.Weapons
                         }
                     }
                 }
-                if (knockLog)
-                    Plugin.MyLog.LogInfo($"[VRReload] {firearmController.Item.LocalizedShortName()}: knock-out catch = {(knockCatchPart != null ? knockCatchPart.name : "none found")}"
-                        + (knockCatchRenderer != null ? $" (its mesh {knockCatchRenderer.name})" : ""));
             }
             if (knockCatchPart == null)
                 return false;

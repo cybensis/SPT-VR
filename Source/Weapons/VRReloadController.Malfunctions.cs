@@ -22,13 +22,11 @@ namespace TarkovVR.Source.Weapons
     // (ReloadSyncApply.SkipMalfunctionOperation), else that copy refuses the repair and stays jammed.
     public static partial class VRReloadController
     {
-        public static bool malfunctionsByHand = true;           // false = clearing one stays the interaction menu's
         public static int hardSlideStuckTugs = 2;               // tugs that don't move it; it breaks free on the next
         public static float hardSlideTugDistance = 0.025f;      // m the hand pulls on the stuck handle or bolt for a tug
         public static float hardSlideTugReset = 0.01f;          // m it has to come back toward rest before the next one counts
         public static float hardSlideGive = 0.004f;             // m a stuck handle still gives
         public static float jamPortRadius = 0.05f;              // m any point of the hand to the ejection port for its trigger to take a stuck case out
-        public static bool malfunctionPoseOffWhileHeld = true;  // Tarkov's malfunction pose off while the hand works the handle or bolt,
                                                                 // as its own repair does (it would hold the bolt where the jam left it)
         // TEST: your next shot fails with this type (UnityExplorer), then it goes back to None. Only where Tarkov itself could roll it
         // (ForcedMalfunction), so a gun never gets one it has no animations for.
@@ -49,7 +47,6 @@ namespace TarkovVR.Source.Weapons
         public static float jamCaseStrain = 1f;                 // the building buzz in that hand while it pulls (0 = none)
         // The thumb on the case: its tip bent onto the case's surface every frame, from the round hold's pose (ThumbOntoCase),
         // whatever the case's size and the hand's turn. A set bend along the curl axis doesn't fit every case.
-        public static bool jamCaseThumbReach = true;            // false = the round hold's thumb as it is
         public static float jamCaseThumbMaxBend = 45f;          // deg each thumb joint may turn off the hold's pose to get there
         public static float jamCaseThumbPad = 0.006f;           // m the tip point stays off the case's surface (the pad of the thumb)
         public static bool HoldingJamCase { get; private set; }
@@ -83,7 +80,7 @@ namespace TarkovVR.Source.Weapons
         // The malfunction is the hands' to clear: Manual Reload, and a handle, slide or bolt they work
         internal static bool MalfunctionClearsByHand(FirearmController firearmController)
         {
-            if (!enabled || !malfunctionsByHand || firearmController == null || firearmController.Item == null
+            if (!enabled || firearmController == null || firearmController.Item == null
                 || firearmController.Item.MalfState.State == Weapon.EMalfunctionState.None || !VRSettings.GetManualReloadOn())
                 return false;
             Weapon weapon = firearmController.Item;
@@ -92,7 +89,7 @@ namespace TarkovVR.Source.Weapons
             // A pump gun: a stroke of the pump (VRReloadController.Shotgun); a semi-auto shotgun has its handle, below
             if (ManualShotgunOn(firearmController, out ShotgunData shotgun) && PumpMode(weapon, shotgun))
                 return true;
-            return chargingHandle && (TryGetChargingHandle(firearmController, weapon) || TryGetSideKnobPoint(firearmController, out _));
+            return (TryGetChargingHandle(firearmController, weapon) || TryGetSideKnobPoint(firearmController, out _));
         }
 
         // The handle, side handle and bolt can be taken: no malfunction, or one the hands clear
@@ -117,11 +114,8 @@ namespace TarkovVR.Source.Weapons
                 return;
             if (debugLog)
                 LogAction($"[VRReload] took the action of a gun with a {malfunction}");
-            if (malfunctionPoseOffWhileHeld)
-            {
-                SetMalfunctionPose(firearmController, 0f);
-                malfunctionPoseOffFor = firearmController;
-            }
+            SetMalfunctionPose(firearmController, 0f);
+            malfunctionPoseOffFor = firearmController;
         }
 
         // Let go without clearing it: the gun shows its malfunction again
@@ -369,7 +363,7 @@ namespace TarkovVR.Source.Weapons
         // within jamCaseThumbMaxBend of the hold's pose. The tip: 2.5 cm out along the last joint (the rig has no tip bone; TryGetPinch's point).
         private static void ThumbOntoCase(bool rightArm)
         {
-            if (!jamCaseThumbReach || !HoldingJamCase || jamCase == null)
+            if (!HoldingJamCase || jamCase == null)
                 return;
             Transform palm = ArmPalm(rightArm);
             if (palm == null && !rightArm)
@@ -473,7 +467,7 @@ namespace TarkovVR.Source.Weapons
                 handLatch.SetPositionAndRotation(Vector3.Lerp(controller.position, handPosition, snap), handRotation);
             }
 
-            if (jamCaseStrain > 0f && pull.magnitude > 0.005f && haptics)
+            if (jamCaseStrain > 0f && pull.magnitude > 0.005f)
             {
                 SteamVR_Input_Sources source = jamCaseInGunHand ? Handedness.GunHandSource : Handedness.OffHandSource;
                 HapticMixer.Stream(source, jamCaseStrain * (0.06f + 0.45f * fraction * fraction), 60f + 70f * fraction, 0.05f);
@@ -605,12 +599,11 @@ namespace TarkovVR.Source.Weapons
         // A bolt-action's slide jam starts with a clip of the gun hand going to the bolt and bumping it (mosin_to_jam_slide 2.0 s,
         // sv98_idle_to_jam_slide 1.8 s); here the hand does that itself. Skipped the frame after it starts, BSG's own skip
         // (StartMalfunction.FastForward = its end: the malfunction pose on, idle). The other guns' and types' start clips play as they are.
-        public static bool skipBoltActionSlideJamClip = true;
 
         private static void SkipBoltActionSlideJamClip()
         {
             FirearmController firearmController = VRGlobals.firearmController;
-            if (!skipBoltActionSlideJamClip || firearmController == null || !(firearmController.CurrentOperation is FirearmController.StartMalfunction))
+            if (firearmController == null || !(firearmController.CurrentOperation is FirearmController.StartMalfunction))
                 return;
             Weapon weapon = firearmController.Item;
             Weapon.EMalfunctionState malfunction = weapon.MalfState.State;

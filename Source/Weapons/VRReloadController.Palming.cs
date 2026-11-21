@@ -172,8 +172,7 @@ namespace TarkovVR.Source.Weapons
             PoseForThisMagazine(palmHold.oldMagazine, heldProp, propWellPointLocal, out Vector3 oldPosition, out Quaternion oldRotation);
             heldReloadGrip = new ReloadGrip { pull = new MagazineHold { position = oldPosition, rotation = oldRotation.eulerAngles } };
             magazineHandFingers = palmHold.fingers;
-            if (snapHandToGrip)
-                SnapHandToGrip(oldPosition, oldRotation.eulerAngles);
+            SnapHandToGrip(oldPosition, oldRotation.eulerAngles);
             LogAction($"[VRReload] palming {palmedMagazine.LocalizedShortName()}, pulling {heldMagazine.LocalizedShortName()}");
             return true;
         }

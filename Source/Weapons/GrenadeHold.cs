@@ -22,7 +22,6 @@ namespace TarkovVR.Source.Weapons
     // after the animator wrote it, and put back when the grenade leaves the hands (its model goes back to Tarkov's pool).
     public static class GrenadeHold
     {
-        public static bool enabled = true;                  // false = the fallback flow: the trigger pulls the pin, letting go of it throws
         public static float ringReachRadius = 0.05f;        // m the off hand's index middle joint off where it hooks the ring
         public static float pinFreeDistance = 0.03f;        // m the pin slides along its pull before it's out (a real pin's prongs)
         public static float ringLateralEscape = 0.12f;      // m the off controller strays off the pull line before the finger slips out
@@ -35,13 +34,10 @@ namespace TarkovVR.Source.Weapons
         // toward the right hand that pulls them. The hand positioner it hangs from is scaled -1 on its x (the controller's left-right),
         // so hand, grenade and ring are the right hold's mirror.
         // false = the hand mirrored across the grenade's centre plane, the grenade as it is.
-        public static bool mirrorInLeftHand = true;
         public static float swapRadius = 0.08f;             // m any point of the other hand to the grenade's middle: its grip there takes the grenade over
         // The pin out (and while it goes back in): the hand keeps the turn it had when the pull began. The hand rides Tarkov's grip
         // marker, and the armed clip turns that marker.
         // false = the hand follows the clip, and four models get a fixed turn (PlaceArmed).
-        public static bool keepHandTurn = true;
-        public static bool debugLog = true;                 // one line per step
 
         private static GrenadeHandsController controller;
         private static Transform pin, ring;
@@ -125,11 +121,6 @@ namespace TarkovVR.Source.Weapons
                 Begin(grenade);
             if (controller == null)
                 return;
-            if (debugLog && !poseLogged && Time.time - begunAt > 0.3f)
-            {
-                poseLogged = true;
-                LogHoldPose();
-            }
             if (thrown || putBack)
                 return;
 
@@ -177,10 +168,6 @@ namespace TarkovVR.Source.Weapons
                 pinRestLocalScale = pin.localScale.sqrMagnitude > 1e-6f ? pin.localScale : Vector3.one;
                 pinWasActive = pin.gameObject.activeSelf;
             }
-            else if (debugLog)
-            {
-                Plugin.MyLog.LogInfo($"[GrenadeHold] {grenade.Item.LocalizedShortName()}: no ring to pull (model {grenade.HandsHierarchy?.name}, pin-like bones: {GrenadeRings.PinLikeNames(grenade.WeaponRoot)}) - ready when held");
-            }
             // As its spawn set it (VRGrenadeController.HandleGrenade): what an armed hold's turn is measured off
             holderRest = VRGlobals.weaponHolder != null ? VRGlobals.weaponHolder.transform.localRotation : Quaternion.identity;
             markerAtRestSeen = false;
@@ -189,8 +176,6 @@ namespace TarkovVR.Source.Weapons
             offGripDown = Handedness.OffHandGrip.state;
             if (Handedness.GunInLeftHand)
                 PlaceHolder(VRGlobals.weaponHolder.transform.localPosition);
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] {grenade.Item.LocalizedShortName()} in the {(Handedness.GunInLeftHand ? "LEFT" : "right")} hand, ring {(ring != null ? ring.name : "none")}, held {heldSeen}");
         }
 
         // The positioner scaled -1 on x for the left hand (mirrorInLeftHand), back to 1 for the right
@@ -202,7 +187,7 @@ namespace TarkovVR.Source.Weapons
             mirroredPositioner = null;
             if (positioner == null)
                 return;
-            if (leftHand && mirrorInLeftHand)
+            if (leftHand)
             {
                 mirroredPositioner = positioner;
                 positioner.localScale = new Vector3(-1f, 1f, 1f);
@@ -290,8 +275,6 @@ namespace TarkovVR.Source.Weapons
             ringInReach = false;
             ChestHang.PlayGripSound();
             Haptic(Handedness.GunHandSource, 0.45f, 0.05f);
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] {controller.Item.LocalizedShortName()} into the {(toLeft ? "LEFT" : "right")} hand{(pinInHand ? " (the ring stays on the other finger)" : "")}");
             return true;
         }
 
@@ -306,8 +289,6 @@ namespace TarkovVR.Source.Weapons
             armRequested = true;
             armRequestedAt = Time.time;
             armCommandSent = false;
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] arming ({why}){(CoopHost.StillAnswering ? ": waiting for the host to answer the take first" : "")}");
             SendArmCommandWhenHostReady();
         }
 
@@ -354,8 +335,6 @@ namespace TarkovVR.Source.Weapons
             armed = true;
             WeaponPatches.pinPulled = true;
             PlaceArmed();
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] armed after {Time.time - armRequestedAt:0.00} s");
         }
 
         // The arms animator run fast for a moment (a clip of something the hands already did), then back at normal speed
@@ -379,14 +358,6 @@ namespace TarkovVR.Source.Weapons
             Transform holder = VRGlobals.weaponHolder.transform;
             Vector3 position = new Vector3(-0.1f, -0.43f, -0.25f);
             string model = controller.HandsHierarchy != null ? controller.HandsHierarchy.name : "";
-            // keepHandTurn off: a fixed turn for four models
-            if (!keepHandTurn && (model == "weapon_grenade_m7920.generated(Clone)" || model == "weapon_grenade_rgo.generated(Clone)"
-                || model == "weapon_grenade_rgn.generated(Clone)" || model == "weapon_grenade_m18.generated(Clone)"))
-            {
-                holder.localRotation = Quaternion.Euler(30, 273, 116);
-                holderTurnedArmed = true;
-                position = new Vector3(0.05f, -0.43f, -0.15f);
-            }
             PlaceHolder(position);
             if (WeaponPatches.currentGunInteractController != null)
                 WeaponPatches.currentGunInteractController.framesAfterEnabled = 0;
@@ -398,7 +369,7 @@ namespace TarkovVR.Source.Weapons
         // above it), like VRReloadController.ApplyPressCheckGunTurn.
         internal static void KeepHandTurn(Transform holder)
         {
-            if (!keepHandTurn || controller == null || thrown || holder == null || VRGlobals.player == null
+            if (controller == null || thrown || holder == null || VRGlobals.player == null
                 || VRGlobals.player._markers == null || VRGlobals.player._markers.Length < 2)
                 return;
             if (!MarkerUnderHolder(VRGlobals.player._markers[1], holder, out Quaternion markerNow))
@@ -465,18 +436,12 @@ namespace TarkovVR.Source.Weapons
             {
                 Plugin.MyLog.LogError($"[GrenadeHold] noting the throw failed (thrown anyway): {exception}");
             }
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] thrown from the {(Handedness.GunInLeftHand ? "left" : "right")} hand"
-                    + (keepHandTurn ? (markerAtRestSeen ? $" (its hand kept its turn: the armed hold turned the grip up to {keptTurnMax:0} deg)" : " (no resting turn seen to keep)") : "")
-                    + (", over at the release"));
             controller.ThrowGrenadeInner(null, 0f, 1f, Vector3.zero, 1f, false, true);
         }
 
         private static void PutBack()
         {
             putBack = true;
-            if (debugLog)
-                Plugin.MyLog.LogInfo("[GrenadeHold] let go before the pin was out: back to the slot");
             GrenadeSlot.ReturnHands(controller);
         }
 
@@ -512,8 +477,6 @@ namespace TarkovVR.Source.Weapons
                 float lateral = (moved - pullWorld * along).magnitude;
                 if (!down || lateral > ringLateralEscape)
                 {
-                    if (debugLog)
-                        Plugin.MyLog.LogInfo($"[GrenadeHold] finger off the ring ({(down ? $"pulled {lateral * 100f:0} cm off the line" : "trigger let go")}) at {pull * 100f:0.0} cm");
                     Unlatch();
                     return;
                 }
@@ -566,8 +529,6 @@ namespace TarkovVR.Source.Weapons
             float lateral = (moved - pullWorld * along).magnitude;
             if (lateral > ringLateralEscape || along > repinBackOut)
             {
-                if (debugLog)
-                    Plugin.MyLog.LogInfo($"[GrenadeHold] pin not pushed in ({(lateral > ringLateralEscape ? $"{lateral * 100f:0} cm off the line" : "pulled back out")}) at {pull * 100f:0.0} cm");
                 Unlatch();
                 repinArmed = false;
                 return;
@@ -595,8 +556,6 @@ namespace TarkovVR.Source.Weapons
             holderTurnedArmed = false;
             Haptic(Handedness.OffHandSource, 0.6f, 0.06f);
             Haptic(Handedness.GunHandSource, 0.25f, 0.04f);
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] pin pushed back into {controller.Item.LocalizedShortName()}: safe again");
             controller.PutGrenadeBack();
         }
 
@@ -613,8 +572,6 @@ namespace TarkovVR.Source.Weapons
             ringLatched = true;
             PlaceLatch();
             Haptic(Handedness.OffHandSource, 0.4f, 0.04f);
-            if (debugLog)
-                Plugin.MyLog.LogInfo($"[GrenadeHold] {(pushing ? "pin back at the hole of" : "finger in the ring of")} {controller.Item.LocalizedShortName()} ({(latchedOnRightArm ? "right" : "left")} hand)");
         }
 
         // The arm's IK target on the ring where the clip's hand holds it, the ring where the pull has it; mirrored across the grenade for
@@ -822,19 +779,6 @@ namespace TarkovVR.Source.Weapons
         // that prefix calls itself)
         internal static void NoteSpawn(GrenadeHandsController grenade)
         {
-            if (!debugLog || grenade == null || grenade == notedSpawnFor)
-                return;
-            notedSpawnFor = grenade;
-            Transform weaponRoot = grenade.WeaponRoot;
-            Transform parent = weaponRoot != null ? weaponRoot.parent : null;
-            string setup = parent == null ? "no Weapon_root parent"
-                : parent.name == "weaponHolder" ? "its object still in a VR hold"
-                : parent.Find("RightHandPositioner") != null ? "its object in the VR hands before"
-                : "its object new to the VR hands";
-            if (GrenadeSlot.CameFromSlot(grenade.ControllerGameObject))
-                setup += ", copied for the slot before";
-            spawnSetup = $"{setup} (object {grenade.ControllerGameObject.GetInstanceID()})";
-            Plugin.MyLog.LogInfo($"[GrenadeHold] {grenade.Item.LocalizedShortName()} spawning: {spawnSetup}");
         }
 
         // Where it sits in the holding palm, and the hold's own transforms

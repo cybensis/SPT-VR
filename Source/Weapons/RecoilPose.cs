@@ -12,7 +12,6 @@ namespace TarkovVR.Source.Weapons
     internal static class RecoilPose
     {
         public static float kickShare = 1f;     // of Tarkov's recoil the gun shows against your hand: 1 = all of it, 0 = the grip pinned to the hand
-        public static bool keepInAir = true;    // the airborne / no-run-animation zeroing puts the recoil back on the bone
 
         private static Transform stepRoot;
         private static Matrix4x4 stepToFree = Matrix4x4.identity;  // the bone's recoiled frame -> its recoil-free one, in the bone's own frame
@@ -58,12 +57,6 @@ namespace TarkovVR.Source.Weapons
                 return;
             Vector3 freePosition = root.position;
             Quaternion freeRotation = root.rotation;
-            if (!keepInAir)
-            {
-                // No recoil on the zeroed bone: the step Capture kept would move the anchor off it
-                StoreStep(root, freePosition, freeRotation, freePosition, freeRotation);
-                return;
-            }
             Read(animation, out Vector3 positionRecoil, out Vector3 rotationRecoil, out Vector3 pivotInRoot);
             root.localPosition = positionRecoil;
             Vector3 kickedPosition = root.position;

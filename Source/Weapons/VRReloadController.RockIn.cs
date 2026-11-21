@@ -11,7 +11,6 @@ namespace TarkovVR.Source.Weapons
     // rocked, so the catch, the seat and the capture read the same.
     public static partial class VRReloadController
     {
-        public static bool rockInMagazines = true;          // false = these guns' magazines slide out like an M4's, with its mag release
         public static float rockInCatchStart = 0.35f;       // share of the rock left when a magazine going in starts pushing the catch
         public static float rockInCatchFull = 0.1f;         // and when it has it all the way in, just before it clicks past
         public static float rockInInsertEscape = 0.15f;     // m the controller moves off a magazine going in before the hand lets go of the track
@@ -37,7 +36,6 @@ namespace TarkovVR.Source.Weapons
         private static int latchFinger;                     // which of the off hand's fingers that pose is (0 thumb): an MDR's is the index
 
         // The off thumb works these guns' catch without the magazine rocking (an MP5's paddle): the thumb's joints on it, by animation set
-        public static bool offHandThumbCatches = true;      // false = the gun hand's finger and button, like an M4
         private static readonly Dictionary<string, Vector3[]> thumbCatches = new Dictionary<string, Vector3[]>();
 
         // The off hand works these guns' catch though their clips don't put the thumb on it (the AUG's release behind the magazine, the
@@ -53,11 +51,10 @@ namespace TarkovVR.Source.Weapons
             public Vector3[] joints;
         }
         private static readonly Dictionary<string, ReleasePress> releasePresses = new Dictionary<string, ReleasePress>();
-        public static bool releasePressFromClips = true;    // false = the hand-picked lists above only
 
         private static ReleasePress ReleasePressOf(FirearmController firearmController)
         {
-            if (!releasePressFromClips || firearmController == null)
+            if (firearmController == null)
                 return null;
             LoadRecordedGrips();
             releasePresses.TryGetValue(AnimationFamily(firearmController), out ReleasePress press);
@@ -68,25 +65,24 @@ namespace TarkovVR.Source.Weapons
         private static bool ThumbWorksCatch(FirearmController firearmController)
         {
             return RockInOf(firearmController) != null || ThumbCatchOf(firearmController) != null || BeltBoxReleasedByOffHand(firearmController)
-                || (offHandThumbCatches && firearmController != null && offHandCatchGuns.Contains(AnimationFamily(firearmController)))
-                || (offHandThumbCatches && ReleasePressOf(firearmController)?.offHand == true);
+                || (firearmController != null && offHandCatchGuns.Contains(AnimationFamily(firearmController)))
+                || (ReleasePressOf(firearmController)?.offHand == true);
         }
 
         // These guns' catch answers either hand's button: the gun hand's, as on an M4, or the off controller's with that hand on the
         // magazine, as on a thumb catch. Ahead of the rock-in's off-thumb-only rule (the Mk47, SA58 and the backport's NL545 rock their
         // magazines in too). The PM's, PB's and APS's (APB too) heel catch: Tarkov's clips work it with the off thumb, but a pistol's
         // off hand is on the grip, not the magazine, so their gun hand's button alone did nothing.
-        public static bool eitherHandCatches = true;
         private static readonly HashSet<string> eitherHandCatchGuns = new HashSet<string> { "mk47", "sa58", "nl545_di", "pm", "pb", "aps" };
 
         private static bool EitherHandWorksCatch(FirearmController firearmController)
         {
-            return eitherHandCatches && firearmController != null && eitherHandCatchGuns.Contains(AnimationFamily(firearmController));
+            return firearmController != null && eitherHandCatchGuns.Contains(AnimationFamily(firearmController));
         }
 
         private static Vector3[] ThumbCatchOf(FirearmController firearmController)
         {
-            if (!offHandThumbCatches || firearmController == null)
+            if (firearmController == null)
                 return null;
             LoadRecordedGrips();
             thumbCatches.TryGetValue(AnimationFamily(firearmController), out Vector3[] thumb);
@@ -95,7 +91,7 @@ namespace TarkovVR.Source.Weapons
 
         private static RockIn RockInOf(FirearmController firearmController)
         {
-            if (!rockInMagazines || firearmController == null)
+            if (firearmController == null)
                 return null;
             if (rockInFor != firearmController)
             {

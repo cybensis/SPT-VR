@@ -1055,11 +1055,8 @@ namespace TarkovVR.Source.Controls
                         return;
                     }
                     // Held by its button, the ring pulled by the other hand (GrenadeHold); below = the flow without it (trigger = pin, let go = throw)
-                    if (GrenadeHold.enabled)
-                    {
-                        GrenadeHold.UpdateCommand(grenadeController, ref command);
-                        return;
-                    }
+                    GrenadeHold.UpdateCommand(grenadeController, ref command);
+                    return;
                 }
 
                 float primaryTrigger = Handedness.GunHandTrigger.axis;

@@ -22,7 +22,6 @@ namespace TarkovVR.Source.Weapons
     // From the data (pressChecks in ReloadHolds.json) only the slide bone and the slide's travel in Tarkov's chamber check are used.
     public static partial class VRReloadController
     {
-        public static bool pressCheck = true;
         public static float pressCheckBlendTime = 0.3f;     // s the turn takes, both ways
         public static float pressCheckTurnAngle = 90f;      // deg the gun turns in the hand about the thumb's knuckle
         public static int pressCheckPivotJoint = 1;         // the thumb joint it turns about: 0 its base, 1 its big knuckle, 2 its middle
@@ -41,7 +40,6 @@ namespace TarkovVR.Source.Weapons
         // deg the thumb turned about its knuckle on the gun, in the gun's frame (x right, y back, z up): z swings it to the sides
         // (HandsInteractionController.pressCheckHookThumb only curls it in or out)
         public static Vector3 pressCheckThumbTurn = new Vector3(0f, 0f, -40f);
-        public static bool pressCheckRoundRides = true;     // the chambered round comes back with the slide (the extractor has it)
         public static bool pressCheckDebug = false;
 
         private sealed class PressCheckData
@@ -110,7 +108,7 @@ namespace TarkovVR.Source.Weapons
             {
                 // (the gun in the left hand works mirrored; left-handed mode, the whole body mirrored, isn't worked out)
                 // (the gesture is the grip let go: on "Toggle Gun Grip" the grip is up through every hold)
-                if (!pressCheck || !enabled || Handedness.LeftHanded || TarkovVR.Source.Settings.VRSettings.GetGunGripToggle())
+                if (!enabled || Handedness.LeftHanded || TarkovVR.Source.Settings.VRSettings.GetGunGripToggle())
                     return false;
                 if (!Handedness.TryGetGunHandThumbTouch(out bool thumbOn) || !thumbOn)
                     return false;
@@ -495,7 +493,7 @@ namespace TarkovVR.Source.Weapons
         private static bool PressCheckChamberShown => pressCheckPull > 0.002f || pressCheckChamberWasActive;
         private static bool RoundInPressCheckChamber => pressCheckChamber != null && pressCheckRound != null && pressCheckRound.parent == pressCheckChamber;
         private static Vector3 PressCheckRoundPosition => pressCheckRoundRest
-            + (pressCheckRoundRides ? pressCheckChamber.InverseTransformVector(pressCheckFor.WeaponRoot.up * pressCheckPull) : Vector3.zero);
+            + (pressCheckChamber.InverseTransformVector(pressCheckFor.WeaponRoot.up * pressCheckPull));
 
         // Co-op (TryBuildSync): the slide, chamber and round as ApplyPressCheck leaves them. It runs in HandsInteractionController.LateUpdate,
         // maybe after the sync is built: the values, not the bones.

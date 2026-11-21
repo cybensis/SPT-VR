@@ -29,7 +29,6 @@ namespace TarkovVR.Source.Weapons
     // carrier go chambers the top one (the charging handle's own release).
     public static partial class VRReloadController
     {
-        public static bool singleRoundLoading = true;
         public static float roundLoadRadius = 0.06f;        // m from the round's middle to the chamber that loads it
         public static float roundOutPastPinch = 0.25f;      // share of the round's length its middle sits past the pinch (the fingers hold its base)
         public static bool flipHeldRound = false;           // the round the other way round in the fingers, should a round model break PointRoundAlongBore's rule (pinch only)
@@ -37,7 +36,6 @@ namespace TarkovVR.Source.Weapons
         // The hold from Tarkov's own single-round load (mosin_reload_loop, t 0.5: the right hand carrying the round to the action, fingers
         // closed on it): the round (its patron_in_weapon bone) in the right palm's frame, and the fingers. The left hand holds its mirror
         // image. false = the magazine pull's thumb-and-index pinch (its fingertips a magazine's width apart: the round floats between them).
-        public static bool bakedRoundHold = true;
         public static Vector3 roundHoldPosition = new Vector3(-0.1188f, -0.0273f, -0.0473f);
         public static Quaternion roundHoldBoneRotation = new Quaternion(0.57807f, 0.67472f, 0.36482f, -0.27837f);
 
@@ -75,7 +73,7 @@ namespace TarkovVR.Source.Weapons
             firearmController = VRGlobals.firearmController;
             weapon = null;
             magazine = null;
-            if (!enabled || !singleRoundLoading || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
                 return false;
             bool boltAction = ManualBoltOn(firearmController);
             if ((!boltAction && !ManualTopLoader(firearmController)) || firearmController.IsInLauncherMode() || HoldingBolt)
@@ -205,7 +203,7 @@ namespace TarkovVR.Source.Weapons
             // A break-action's chamber by hand (VRReloadController.BreakAction): a shell in, a round out
             if (LetsBreakMoveThrough(controller, operation))
                 return true;
-            if (!singleRoundLoading || controller == null || controller._player == null || !controller._player.IsYourPlayer || !roundLoading || heldRoundFor != controller)
+            if (controller == null || controller._player == null || !controller._player.IsYourPlayer || !roundLoading || heldRoundFor != controller)
                 return false;
             Weapon weapon = controller.Item;
             // A tube shotgun's shell by hand too (VRReloadController.Shotgun): its chamber or its tube
@@ -306,7 +304,7 @@ namespace TarkovVR.Source.Weapons
 
         private static bool HeldRoundIsStillValid()
         {
-            if (!enabled || !singleRoundLoading || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
+            if (!enabled || !VRGlobals.inGame || VRGlobals.menuOpen || VRGlobals.vrPlayer == null || VRGlobals.player == null)
                 return false;
             if (heldRoundProp == null || heldRoundSource == null || VRGlobals.firearmController == null || VRGlobals.firearmController != heldRoundFor)
                 return false;
@@ -481,7 +479,7 @@ namespace TarkovVR.Source.Weapons
             Transform palm = ArmPalm(roundOnRightArm);
             if (palm == null && !roundOnRightArm)
                 palm = InitVRPatches.leftPalm;
-            if (bakedRoundHold && palm != null && RoundHoldInPalm(roundOnRightArm, out Vector3 holdPosition, out Quaternion holdRotation))
+            if (palm != null && RoundHoldInPalm(roundOnRightArm, out Vector3 holdPosition, out Quaternion holdRotation))
             {
                 SetPoseIn(palm, heldRoundProp.transform, holdPosition, holdRotation);
                 return;
@@ -530,8 +528,6 @@ namespace TarkovVR.Source.Weapons
                 return BreakShellFingers(rightArm);
             if (HoldingShell)
                 return ShellFingers(rightArm);
-            if (!bakedRoundHold)
-                return rightArm ? MirroredPose(MAGAZINE_PULL_FINGERS, rightToLeft: false, mirroredRoundPinch) ?? boltBonesData?.hold?.fingers ?? GUN_HAND_HANDLE_FINGERS : MAGAZINE_PULL_FINGERS;
             return rightArm ? ROUND_HOLD_FINGERS : MirroredPose(ROUND_HOLD_FINGERS, rightToLeft: true, mirroredRoundHold) ?? MAGAZINE_PULL_FINGERS;
         }
 

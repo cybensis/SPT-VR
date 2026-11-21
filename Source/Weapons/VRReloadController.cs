@@ -44,7 +44,6 @@ namespace TarkovVR.Source.Weapons
         public static float railLateralEscape = 0.10f;      // m the controller moves sideways off the track before the hand lets go of it
         // s the rendered hand takes to go from a part of the gun back to the controller, eased in and out
         public static float handReleaseTime = 0.16f;
-        public static bool snapHandToGrip = true;           // grabbing the gun's magazine moves the hand onto it where the animation holds it
         public static float handSnapTime = 0.12f;           // s a hand takes to move onto a part's grip, eased in and out
         // A hand locked on a part of the gun (the handle, a slide, the bolt, a magazine on the track, the MDR's deflector) starts on the
         // animation's pose and turns with the controller about the point it holds by a share of the controller's turn since the grab,
@@ -56,8 +55,6 @@ namespace TarkovVR.Source.Weapons
         public static float chestPouchRadius = 0.16f;       // m palm to the chest pouch center
         public static Vector3 newMagazineHoldPosition = new Vector3(-0.10f, 0.02f, 0.11f);    // off hand local, used until a magazine is pulled off a gun
         public static Vector3 newMagazineHoldRotation = new Vector3(320f, 250f, 265f);        // off hand local euler, same
-        public static bool reuseLastGrabPose = true;        // guns without a measured reload grip: new magazines sit in the hand the way the last one pulled off a gun did
-        public static bool magazineFingers = true;          // the animation's finger pose while holding a magazine
         public static float fingerBlendRate = 12f;          // 1/s ease of that finger pose in and out
         public static float fingerPoseSwitchRate = 14f;     // 1/s ease from one held finger pose to the next
         // Reaching for a part of the gun (a charging handle, a bolt, the magazine on the gun): the fingers shape toward its grip as the hand
@@ -65,9 +62,6 @@ namespace TarkovVR.Source.Weapons
         public static float preGrabShape = 0.6f;
         public static float preGrabReach = 0.12f;
         public static float dropAngularSpeed = 3f;          // rad/s tumble on a dropped magazine
-        public static bool sounds = true;                   // the gun's own reload sounds
-        public static bool haptics = true;
-        public static bool soundHaptics = true;             // the reload sounds also play on the controller doing the work, through the eating sounds' audio tap
         public static float soundHapticsStrength = 1f;
         public static float soundHapticsIdleStop = 0.5f;    // s after a sound ends that the tap comes off: the gun hands its source back to the pool 1 s after
         public static bool debugZones = false;             // spheres: grab zone (blue), chest pouch (yellow), mag well seat radius (green)
@@ -75,12 +69,10 @@ namespace TarkovVR.Source.Weapons
         private static void LogAction(string message) { if (debugLog) Plugin.MyLog.LogInfo(message); }
         // Co-op as a FIKA client (ModSupport/FikaHostWait): a move runs in this game only when the host answers, any time later.
         // Hosting (or single player) none of these apply.
-        public static bool forceAtOperationStart = true;    // Tarkov's operation is finished inside its own start (else at our next tick, as hosting)
         public static float hostWaitLimit = 10f;            // s a move may wait on the host's answer before it's given up (2 s otherwise)
         public static bool coopLog = true;                  // one line per move: sent, landed after N ms, finished / given up / Tarkov started another
         private static void CoopLog(string message) { if (coopLog) Plugin.MyLog.LogInfo("[VRReload] co-op: " + message); }
         private static bool CoopClient => ModSupport.CoopHost.IsClient;
-        public static bool pickUpGroundMagazines = true;    // a loose magazine that fits, picked up in the off hand, is held for the reload
 
         private enum HeldMagazineSource { None, FromGun, FromPouch, FromGround }
         private enum ExpectedOperation { None, PullOut, Insert, Rechamber }
@@ -918,7 +910,7 @@ namespace TarkovVR.Source.Weapons
             else
             {
                 magazineHandFingers = MagazineFingersFrom(heldReloadGrip?.pull, MAGAZINE_PULL_FINGERS);
-                if (snapHandToGrip && heldReloadGrip?.pull != null)
+                if (heldReloadGrip?.pull != null)
                     SnapHandToGrip(heldReloadGrip.pull.position, heldReloadGrip.pull.rotation, heldReloadGrip.pull.rightHand);
             }
 
@@ -957,7 +949,7 @@ namespace TarkovVR.Source.Weapons
         private static void TryTakeOverGroundMagazine()
         {
             HandsInteractionController hands = VRGlobals.handsInteractionController;
-            if (!pickUpGroundMagazines || hands == null || !hands.HoldsLootInOffHand(out LootItem lootItem))
+            if (hands == null || !hands.HoldsLootInOffHand(out LootItem lootItem))
             {
                 lastRefusedGroundItem = null;
                 return;
@@ -1093,7 +1085,7 @@ namespace TarkovVR.Source.Weapons
             }
             else
             {
-                bool useLastGrab = reuseLastGrabPose && hasLastGrabPose;
+                bool useLastGrab = hasLastGrabPose;
                 freeHoldPosition = useLastGrab ? lastGrabPosition : newMagazineHoldPosition;
                 freeHoldRotation = useLastGrab ? lastGrabRotation : Quaternion.Euler(newMagazineHoldRotation);
             }
@@ -2035,7 +2027,7 @@ namespace TarkovVR.Source.Weapons
             // Bolt forward on an empty chamber: the round the insert chambers waits for the handle (a locked-back bolt
             // already holds it off). Guns without a handle we can work keep Tarkov's chambering.
             insertNeedsRack = weapon.ChamberAmmoCount == 0 && !firearmController.FirearmsAnimator.GetBoltCatch()
-                && ((chargingHandle && TryGetChargingHandle(firearmController, weapon)) || (weapon.BoltAction && ManualBoltOn(firearmController)));
+                && (TryGetChargingHandle(firearmController, weapon) || (weapon.BoltAction && ManualBoltOn(firearmController)));
             if (heldSource == HeldMagazineSource.FromGround)
                 ExpectGroundMagazineGone();
             // A belt box: its belt hangs out of it until the hand lays it (VRReloadController.Belt), from where it hangs in the hand now
@@ -2354,8 +2346,6 @@ namespace TarkovVR.Source.Weapons
                     $"{(expectedOperation == ExpectedOperation.None ? "nothing" : MillisecondsSinceSent() + " ms after it was sent")}): its animation plays");
                 return;
             }
-            if (!forceAtOperationStart)
-                return;
             // Not the rechamber: its start runs inside the move's OutProcess, before the move takes the round out of the chamber, so the
             // skip's ThrowPatronAsLoot would fail (GameWorld.RegisterLoot: the round's owner is still our inventory controller) = no
             // round on our screen. Finished at our next tick, after the start has returned, like hosting.
@@ -2626,9 +2616,9 @@ namespace TarkovVR.Source.Weapons
         {
             latchThumbShown = Mathf.MoveTowards(latchThumbShown, latchThumbTarget, Time.deltaTime / Mathf.Max(releaseButtonTime, 0.001f));
             Vector3[] pose = OffHandPose(out bool rightHandPose);
-            float target = pose != null && magazineFingers ? 1f : 0f;
+            float target = pose != null ? 1f : 0f;
             // Nothing held: reaching for a part of the gun shapes the fingers part way toward its grip (UpdatePreGrab)
-            if (pose == null && magazineFingers && offHandPreGrabPose != null && offHandPreGrabWeight > 0f)
+            if (pose == null && offHandPreGrabPose != null && offHandPreGrabWeight > 0f)
             {
                 pose = offHandPreGrabPose;
                 rightHandPose = offHandPreGrabPoseIsRight;
@@ -2788,9 +2778,9 @@ namespace TarkovVR.Source.Weapons
                 pose = BeltGunFingers(rightArm);
             else if (pose == null && HoldingMagazine && magazineInGunHand)
                 pose = MagazineFingersFor(rightArm);
-            float target = pose != null && magazineFingers ? 1f : 0f;
+            float target = pose != null ? 1f : 0f;
             // Off the grip and reaching for the handle or the bolt: part way toward its grip (UpdatePreGrab)
-            if (pose == null && magazineFingers && gunHandPreGrabPose != null && gunHandPreGrabWeight > 0f)
+            if (pose == null && gunHandPreGrabPose != null && gunHandPreGrabWeight > 0f)
             {
                 pose = gunHandPreGrabPose;
                 target = gunHandPreGrabWeight;
@@ -2878,7 +2868,7 @@ namespace TarkovVR.Source.Weapons
             bool nearestIsRight = false;
 
             // The charging handle (or a pistol's slide): the hold this arm takes it with, its clip's fingers
-            if (chargingHandle && HandsMayWorkAction(firearmController, weapon) && TryGetChargingHandle(firearmController, weapon) && BeltChargeHandMay(firearmController, gunHand))
+            if (HandsMayWorkAction(firearmController, weapon) && TryGetChargingHandle(firearmController, weapon) && BeltChargeHandMay(firearmController, gunHand))
             {
                 Vector3 backWorld = firearmController.WeaponRoot.up;
                 string family = AnimationFamily(firearmController);
@@ -3094,8 +3084,7 @@ namespace TarkovVR.Source.Weapons
 
         private static void Pulse(SoundHand hand, float amplitude, float duration, float delay = 0f)
         {
-            if (haptics)
-                GunHaptics.Pulse(hand.gunHandActs, hand.feel, amplitude, duration, 120f, delay);
+            GunHaptics.Pulse(hand.gunHandActs, hand.feel, amplitude, duration, 120f, delay);
         }
 
         private static SoundHand HandleSoundHand => handleInGunHand ? SoundHand.GunHand : SoundHand.OffHand;
@@ -3225,7 +3214,7 @@ namespace TarkovVR.Source.Weapons
 
         private static BaseSoundPlayer GunSoundPlayerOf(FirearmController firearmController)
         {
-            if (!sounds || firearmController == null || firearmController._controllerObject == null)
+            if (firearmController == null || firearmController._controllerObject == null)
                 return null;
             if (gunSoundPlayerFor != firearmController)
             {
@@ -3262,7 +3251,7 @@ namespace TarkovVR.Source.Weapons
         // carries every clip still ringing on it.
         public static void OnGunClipPlayed(BaseSoundPlayer soundPlayer, AudioClip clip)
         {
-            if (!playingOwnSound || !haptics || !soundHaptics || soundPlayer == null || soundPlayer != gunSoundPlayer || clip == null)
+            if (!playingOwnSound || soundPlayer == null || soundPlayer != gunSoundPlayer || clip == null)
                 return;
             GunHaptics.Gains(playingSoundHand.gunHandActs, playingSoundHand.feel, out float gunGain, out float gunPitch, out float offGain, out float offPitch);
             bool offIsLeft = OffHandSource() == SteamVR_Input_Sources.LeftHand;

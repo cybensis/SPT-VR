@@ -21,7 +21,6 @@ namespace TarkovVR.Source.Weapons
     // Not synced to co-op observers (they see Tarkov's poses); the inventory moves are.
     public static partial class VRReloadController
     {
-        public static bool beltGunsByHand = true;
         public static float hingeGrabRadius = 0.05f;        // m any point of the hand to a cover's or latch's free end
         public static float hingeOpenEnough = 0.5f;         // share open past which a let go swings it fully open (else shut)
         public static float hingeSettleTime = 0.12f;        // s it takes to swing the rest of the way once let go
@@ -41,16 +40,13 @@ namespace TarkovVR.Source.Weapons
         public static float beltShapeHeld = 0.3f;
         public static float beltGravity = 0.3f;             // share of gravity on the free links (the shape spring carries the rest)
         public static float beltBoxMargin = 0.004f;         // m the free links stay off the box's body (kept out of it, not through it)
-        public static bool beltHidesSpentLinks = true;      // the fired side's empty links hidden while the belt is out of the tray (they'd hang off its end)
         public static int beltIterations = 10;
         public static float beltJumpDistance = 0.4f;        // m the box moves in a frame that's a jump (the rig recentred): the belt moves with it
         public static bool beltDebugLog = true;             // grabs, refusals, the belt's states
         // Each part only for the hand its clips work it with (gen_lmgs "hands": the PKM's right hand does it all, the RPD's and M60's left
         // all but the handle). false = either hand, any part.
-        public static bool beltGunHandsFromClips = true;
         // The hand onto the clip's hold as it takes a part (the cover, the latch; the box through the magazine holds), the belt's end into
         // the fingers as the clip pinches it. false = the hand stays where it took hold (the pinch fingers).
-        public static bool beltGunSnapHands = true;
         public static float partMirrorPlaneTolerance = 0.03f; // m a part's bone off the gun's centre plane its hold still mirrors across (the gun in the other hand)
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -262,7 +258,7 @@ namespace TarkovVR.Source.Weapons
         // Which hand may work a part: the one the clips work it with (beltGunHandsFromClips), else either
         private static bool HandWorksPart(LmgData data, bool partIsTheGunHands, bool gunHand)
         {
-            return !beltGunHandsFromClips || data == null || !data.hasHands || partIsTheGunHands == gunHand;
+            return data == null || !data.hasHands || partIsTheGunHands == gunHand;
         }
 
         // Not a belt gun: any hand
@@ -275,7 +271,7 @@ namespace TarkovVR.Source.Weapons
         // (ThumbWorksCatch, as an AK's paddle); the PKM's box is the gun hand's, on B
         private static bool BeltBoxReleasedByOffHand(FirearmController firearmController)
         {
-            return beltGunHandsFromClips && TryGetLmg(firearmController, out LmgData data) && data.hasHands && !data.boxByGunHand;
+            return TryGetLmg(firearmController, out LmgData data) && data.hasHands && !data.boxByGunHand;
         }
 
         private static bool BeltChargeHandMay(FirearmController firearmController, bool gunHand)
@@ -324,12 +320,11 @@ namespace TarkovVR.Source.Weapons
         // (VRReloadController.RockIn) with its hinge on the box's hooked top edge (gen_lmgs boxRock). Following the clip's own path
         // exactly is too hard to hit by hand: not used.
 
-        public static bool beltBoxRocks = true;             // false = the straight track (the well axis) like a magazine
 
         // GrabFromGun / ArmNewMagazine: this box's rock on this gun, if it's the belt box it was read on
         private static RockIn BeltBoxRockIn(FirearmController firearmController, Magazine magazine)
         {
-            return beltBoxRocks && TryGetLmg(firearmController, out LmgData data) && data.belt != null && BeltFits(magazine, data.belt) ? data.boxRock : null;
+            return TryGetLmg(firearmController, out LmgData data) && data.belt != null && BeltFits(magazine, data.belt) ? data.boxRock : null;
         }
 
         //------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -429,7 +424,7 @@ namespace TarkovVR.Source.Weapons
         private static bool TryGetLmg(FirearmController firearmController, out LmgData data)
         {
             data = null;
-            if (!enabled || !beltGunsByHand || firearmController == null || firearmController.Item == null || !firearmController.Item.IsBeltMachineGun
+            if (!enabled || firearmController == null || firearmController.Item == null || !firearmController.Item.IsBeltMachineGun
                 || firearmController._player == null || !firearmController._player.IsYourPlayer || !VRSettings.GetManualReloadOn())
                 return false;
             LoadRecordedGrips();
@@ -540,7 +535,7 @@ namespace TarkovVR.Source.Weapons
             // A box we have no belt shape for goes in laid, as Tarkov has it
             state.beltOut = BeltFits(heldMagazine, data.belt);
             Weapon weapon = firearmController.Item;
-            state.waitsForCharge = (weapon.Chambers == null || weapon.Chambers.Length == 0) && chargingHandle && TryGetChargingHandle(firearmController, weapon);
+            state.waitsForCharge = (weapon.Chambers == null || weapon.Chambers.Length == 0) && TryGetChargingHandle(firearmController, weapon);
             if (beltDebugLog)
                 Plugin.MyLog.LogInfo($"[VRBelt] box on {weapon.LocalizedShortName()}: belt out of the tray{(state.waitsForCharge ? ", waits for the handle" : "")}");
         }
@@ -748,7 +743,7 @@ namespace TarkovVR.Source.Weapons
             heldPartHold = kind == HingeKind.Cover ? data.coverHold : data.latchHold;
             Vector3 palmPosition = Vector3.zero;
             Quaternion palmRotation = Quaternion.identity;
-            bool snapped = beltGunSnapHands && PartHoldWorld(heldPartHold, rig.bone, hingeOnRightArm, out palmPosition, out palmRotation);
+            bool snapped = PartHoldWorld(heldPartHold, rig.bone, hingeOnRightArm, out palmPosition, out palmRotation);
             if (snapped)
                 SnapHandTo(hingeRider, palmPosition, palmRotation);
             if (kind == HingeKind.Latch)
@@ -996,7 +991,7 @@ namespace TarkovVR.Source.Weapons
         // Out of the tray: the fired side's empty links hidden (Tarkov's belt visual shows them per shot; no shot comes while it's out)
         private static void HideSpentCells(BeltRope rope)
         {
-            if (!beltHidesSpentLinks || rope.spentCells == null)
+            if (rope.spentCells == null)
                 return;
             foreach (Transform cell in rope.spentCells)
             {
@@ -1369,7 +1364,7 @@ namespace TarkovVR.Source.Weapons
             // The clip's pinch on its end (gen_lmgs), on the arm it was read on: a floppy belt isn't mirrored (its end isn't on the gun's plane)
             LmgData data = TryGetLmg(firearmController, out LmgData lmg) ? lmg : null;
             heldPartHold = data?.beltHold;
-            beltEndTurned = beltGunSnapHands && heldPartHold != null && heldPartHold.rightHand == beltOnRightArm;
+            beltEndTurned = heldPartHold != null && heldPartHold.rightHand == beltOnRightArm;
             beltEndTurnAtGrab = beltEndTurn = gunRope.links[count - 1].rotation;
             if (beltHandHolder == null)
                 beltHandHolder = new GameObject("VRBeltHand").transform;
@@ -1628,7 +1623,6 @@ namespace TarkovVR.Source.Weapons
         // it grabs (VRPlayerManager.SupportGripPoint) and keeps it: the marker is put back there every frame after the animator.
         // Manual Reload or not; not with the gun in the left hand (that arm swap mirrors the grip).
 
-        public static bool supportSpots = true;
         private static int supportSpot = -1;                // the spot the hand takes / has (index into LmgData.supportSpots)
         private static FirearmController supportSpotFor;
 
@@ -1636,7 +1630,7 @@ namespace TarkovVR.Source.Weapons
         {
             spots = null;
             weaponBone = null;
-            if (!enabled || !supportSpots || Handedness.GunInLeftHand || firearmController == null || firearmController.Item == null
+            if (!enabled || Handedness.GunInLeftHand || firearmController == null || firearmController.Item == null
                 || !firearmController.Item.IsBeltMachineGun || firearmController._player == null || !firearmController._player.IsYourPlayer
                 || firearmController.HandsHierarchy == null)
                 return false;
@@ -1961,14 +1955,13 @@ namespace TarkovVR.Source.Weapons
             public AnimatorControllerParameter[] parameters;
             public float[] parameterValues;
         }
-        public static bool rebindBeltGunAnimator = true;    // false = Tarkov's toggle as it is (the gun's bones unbound after a box swap)
 
         internal static AnimatorRebind BeforeAnimatorRebind(WeaponPrefab prefab)
         {
             try
             {
                 FirearmController firearmController = VRGlobals.firearmController;
-                if (!rebindBeltGunAnimator || prefab == null || firearmController == null || firearmController._weaponPrefab != prefab
+                if (prefab == null || firearmController == null || firearmController._weaponPrefab != prefab
                     || firearmController._player == null || !firearmController._player.IsYourPlayer)
                     return null;
                 Animator animator = prefab._formerAnimator;
