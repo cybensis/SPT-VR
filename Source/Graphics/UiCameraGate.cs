@@ -12,7 +12,6 @@ namespace TarkovVR.Source.Graphics
     // (fade-outs finish). On the raid / hideout uiCam (InitVRPatches.SetMainCamParent).
     public class UiCameraGate : MonoBehaviour
     {
-        public static bool skipWhenNoUiInView = true;  // false = uiCam every frame. (Skipping it flips the headset image unless Rendering.FlipForDestination corrects it)
         public static int checkEveryFrames = 3;
         public static float keepOnSeconds = 0.3f;      // after the last UI seen in view
         public static float marginMeters = 0.05f;      // grown around each graphic, plus...
@@ -53,7 +52,7 @@ namespace TarkovVR.Source.Graphics
         {
             if (uiCamera == null)
                 return;
-            if (!skipWhenNoUiInView || VRGlobals.menuOpen)
+            if (VRGlobals.menuOpen)
             {
                 SetCameraOn(true);
                 onUntil = Time.unscaledTime + keepOnSeconds;

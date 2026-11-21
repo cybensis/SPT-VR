@@ -105,8 +105,6 @@ namespace TarkovVR.Source.Controls
             float currentTime = UnityEngine.Time.time;
             // Every frame, menus included: B's wait after a menu closes has to see the menu open
             MenuExitButtonWait.Tick();
-            // The controllers' recent motion, for a throw (before the handlers: the grenade's throws in one)
-            ThrowVelocity.Tick();
 
             if (VRGlobals.inGame && !VRGlobals.menuOpen)
             {

@@ -15,7 +15,6 @@ namespace TarkovVR.Source.Controls
     // upright after a lean doesn't undo it. Held a while, a lean becomes where you stand.
     public static class StepSprint
     {
-        public static bool enabled = true;          // dev kill-switch; the menu toggle is VRSettings.GetStepToSprint
         public static float moveTime = 0.2f;        // s a quick move is measured over...
         public static float startDistance = 0.08f;  // ...m the neck has to go forward in that time to start the run (0.4 m/s)
         public static float stopDistance = 0.08f;   // ...and back to stop it
@@ -61,7 +60,7 @@ namespace TarkovVR.Source.Controls
             if (Time.frameCount == lastFrame)
                 return 0;
             lastFrame = Time.frameCount;
-            if (!enabled || !VRSettings.GetStepToSprint() || VRGlobals.player == null)
+            if (!VRSettings.GetStepToSprint() || VRGlobals.player == null)
             {
                 Clear();
                 return 0;

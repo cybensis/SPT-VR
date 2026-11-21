@@ -13,14 +13,13 @@ namespace TarkovVR.Source.Graphics
     // sptvr/Assets/fsrmask) and FSR reads the copies (Remap). Only while the occlusion mesh is on; no bundle = the originals.
     public static class FsrMaskClean
     {
-        public static bool enabled = true;
 
         // For FSR4 Bridge (typed, behind its SPT-VR check): the same masked copy straight into its depth / motion
         // textures, run now (FSR4 copes with the raw mask; this removes the bad data for two tiny passes). False = not
         // done (cleaner off, no mask, no bundle, sizes not matching) and the caller copies plainly.
         public static bool CopyClean(Texture depthSrc, Texture motionSrc, RenderTexture depthDst, RenderTexture motionDst)
         {
-            if (!enabled || passThrough || !XRSettings.enabled || !XRSettings.useOcclusionMesh
+            if (!XRSettings.enabled || !XRSettings.useOcclusionMesh
                 || depthSrc == null || motionSrc == null || depthDst == null || motionDst == null)
                 return false;
             if (depthSrc.width != depthDst.width || depthSrc.height != depthDst.height
@@ -62,7 +61,7 @@ namespace TarkovVR.Source.Graphics
         public static void Begin(CommandBuffer external, int width, int height)
         {
             active = false;
-            if (!enabled || !XRSettings.enabled || !XRSettings.useOcclusionMesh || width <= 0 || height <= 0 || !EnsureMaterial())
+            if (!XRSettings.enabled || !XRSettings.useOcclusionMesh || width <= 0 || height <= 0 || !EnsureMaterial())
                 return;
             Ensure(ref depthCopy, width, height, RenderTextureFormat.RFloat, "SPT-VR FSR depth (mask as sky)");
             Ensure(ref mvCopy, width, height, RenderTextureFormat.RGHalf, "SPT-VR FSR motion (mask still)");
@@ -89,93 +88,16 @@ namespace TarkovVR.Source.Graphics
                 ownCb.Clear();
                 commandBuffer = ownCb;
             }
-            if (passThrough)
-            {
-                // Test: plain copies through Unity's own blit (as FSR4 Bridge does), no masking.
-                commandBuffer.Blit(depthTexture, depthCopy);
-                commandBuffer.Blit(motionTexture, mvCopy);
-            }
-            else
-            {
-                // Inputs as explicit globals: the blit's own _MainTex binding doesn't reach the shader's Texture2D (the
-                // copies would read the camera's colour image).
-                commandBuffer.SetGlobalTexture(MaskDepthId, depthTexture);
-                commandBuffer.SetGlobalTexture(SrcId, depthTexture);
-                commandBuffer.Blit(depthTexture, depthCopy, mat, 0);
-                commandBuffer.SetGlobalTexture(SrcId, motionTexture);
-                commandBuffer.Blit(motionTexture, mvCopy, mat, 1);
-            }
-            if (diagPending)
-                RecordCheck(commandBuffer, depthTexture, motionTexture, width, height);
+            // Inputs as explicit globals: the blit's own _MainTex binding doesn't reach the shader's Texture2D (the
+            // copies would read the camera's colour image).
+            commandBuffer.SetGlobalTexture(MaskDepthId, depthTexture);
+            commandBuffer.SetGlobalTexture(SrcId, depthTexture);
+            commandBuffer.Blit(depthTexture, depthCopy, mat, 0);
+            commandBuffer.SetGlobalTexture(SrcId, motionTexture);
+            commandBuffer.Blit(motionTexture, mvCopy, mat, 1);
             if (external == null)
                 UnityEngine.Graphics.ExecuteCommandBuffer(ownCb);
             active = true;
-        }
-
-        //------------------------------------------------------------------------------------------------------------
-        // Check: one frame's originals (through Unity's own blit, as FSR4 Bridge copies) and copies are read back and
-        // compared pixel by pixel, one log line.
-        public static bool passThrough = false;
-        private static bool diagPending;
-        private static RenderTexture diagDepth, diagMv;
-        private static float[] rbOrigDepth, rbCopyDepth, rbOrigMv, rbCopyMv;
-        private static int rbParts, rbW, rbH;
-
-        public static void Diagnose()
-        {
-            diagPending = true;
-            Plugin.MyLog.LogWarning("[VR FSR] mask clean check queued for the next FSR2/3 frame (needs the cleaner on + the mask on)");
-        }
-
-        private static void RecordCheck(CommandBuffer commandBuffer, Texture depthTexture, Texture motionTexture, int width, int height)
-        {
-            diagPending = false;
-            Ensure(ref diagDepth, width, height, RenderTextureFormat.RFloat, "SPT-VR FSR check depth");
-            Ensure(ref diagMv, width, height, RenderTextureFormat.RGHalf, "SPT-VR FSR check motion");
-            commandBuffer.Blit(depthTexture, diagDepth);
-            commandBuffer.Blit(motionTexture, diagMv);
-            rbW = width; rbH = height; rbParts = 4;
-            rbOrigDepth = rbCopyDepth = rbOrigMv = rbCopyMv = null;
-            commandBuffer.RequestAsyncReadback(diagDepth, 0, TextureFormat.RFloat, request => { rbOrigDepth = Read(request); Part(); });
-            commandBuffer.RequestAsyncReadback(depthCopy, 0, TextureFormat.RFloat, r => { rbCopyDepth = Read(r); Part(); });
-            commandBuffer.RequestAsyncReadback(diagMv, 0, TextureFormat.RGFloat, r => { rbOrigMv = Read(r); Part(); });
-            commandBuffer.RequestAsyncReadback(mvCopy, 0, TextureFormat.RGFloat, r => { rbCopyMv = Read(r); Part(); });
-        }
-
-        private static float[] Read(AsyncGPUReadbackRequest request) => request.hasError ? null : request.GetData<float>().ToArray();
-
-        private static void Part()
-        {
-            if (--rbParts > 0) return;
-            if (rbOrigDepth == null || rbCopyDepth == null || rbOrigMv == null || rbCopyMv == null)
-            {
-                Plugin.MyLog.LogWarning("[VR FSR] mask clean check: a readback failed");
-                return;
-            }
-            int pixelCount = rbW * rbH, ok = 0, wrong = 0, flipOk = 0, masked = 0, maskWrong = 0, firstWrong = -1;
-            float oMin = float.MaxValue, oMax = float.MinValue, cMin = float.MaxValue, cMax = float.MinValue;
-            for (int i = 0; i < pixelCount; i++)
-            {
-                float original = rbOrigDepth[i], copy = rbCopyDepth[i];
-                oMin = Mathf.Min(oMin, original); oMax = Mathf.Max(oMax, original); cMin = Mathf.Min(cMin, copy); cMax = Mathf.Max(cMax, copy);
-                int x = i % rbW, y = i / rbW;
-                if (Mathf.Abs(rbCopyDepth[i] - rbOrigDepth[(rbH - 1 - y) * rbW + x]) < 1e-6f) flipOk++;
-                if (!passThrough && original >= 0.5f) { masked++; if (copy != 0f) maskWrong++; continue; }
-                if (Mathf.Abs(copy - original) < 1e-6f) ok++; else { wrong++; if (firstWrong < 0) firstWrong = i; }
-            }
-            int mOk = 0, mWrong = 0, mMasked = 0, mFirstWrong = -1;
-            float mMax = 0f, cmMax = 0f;
-            for (int i = 0; i < pixelCount; i++)
-            {
-                float originalX = rbOrigMv[2 * i], originalY = rbOrigMv[2 * i + 1], copyX = rbCopyMv[2 * i], copyY = rbCopyMv[2 * i + 1];
-                mMax = Mathf.Max(mMax, Mathf.Abs(originalX) + Mathf.Abs(originalY)); cmMax = Mathf.Max(cmMax, Mathf.Abs(copyX) + Mathf.Abs(copyY));
-                if (!passThrough && rbOrigDepth[i] >= 0.5f) { mMasked++; continue; }
-                if (Mathf.Abs(copyX - originalX) < 1e-3f && Mathf.Abs(copyY - originalY) < 1e-3f) mOk++; else { mWrong++; if (mFirstWrong < 0) mFirstWrong = i; }
-            }
-            string firstWrongText = firstWrong < 0 ? "" : $", first wrong at ({firstWrong % rbW},{firstWrong / rbW}) orig {rbOrigDepth[firstWrong]:0.#####} copy {rbCopyDepth[firstWrong]:0.#####}";
-            string motionFirstWrongText = mFirstWrong < 0 ? "" : $", first wrong at ({mFirstWrong % rbW},{mFirstWrong / rbW}) orig ({rbOrigMv[2 * mFirstWrong]:0.#####},{rbOrigMv[2 * mFirstWrong + 1]:0.#####}) copy ({rbCopyMv[2 * mFirstWrong]:0.#####},{rbCopyMv[2 * mFirstWrong + 1]:0.#####})";
-            Plugin.MyLog.LogWarning($"[VR FSR] mask clean check {rbW}x{rbH} {(passThrough ? "(pass-through)" : "")}: DEPTH same {ok}, different {wrong}, masked {masked} (not cleared {maskWrong}), matches upside-down {flipOk}; " +
-                                    $"orig {oMin:0.#####}..{oMax:0.#####}, copy {cMin:0.#####}..{cMax:0.#####}{firstWrongText} | MOTION same {mOk}, different {mWrong}, masked {mMasked}; largest orig {mMax:0.#####}, copy {cmMax:0.#####}{motionFirstWrongText}");
         }
 
         public static void End() { active = false; }

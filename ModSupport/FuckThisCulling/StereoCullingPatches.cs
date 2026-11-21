@@ -13,7 +13,6 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
     [HarmonyPatch]
     internal static class StereoCullingPatches
     {
-        public static bool enabled = true;               // false = the mod as it is (left eye only)
         public static int maxOtherEyeAgeFrames = 12;     // an older result from the other eye is not merged
         public static int minimumOccludedChecks = 2;     // successive occluded results before a hide
         public static float behindConeMargin = 1.05f;    // "slowly hide objects behind you": kept this much wider than both eyes' views
@@ -41,7 +40,7 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         }
         private static readonly EyeResult[] lastResult = { new EyeResult(), new EyeResult() };
 
-        private static bool Stereo(Camera camera) => enabled && camera != null && camera.stereoEnabled;
+        private static bool Stereo(Camera camera) => camera != null && camera.stereoEnabled;
         private static int EyeIndex(Camera camera) => camera.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
         private static Matrix4x4 ReferenceProjection(Camera camera) => camera.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left);
 
@@ -122,7 +121,7 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         [HarmonyPatch(typeof(QueryPipeline), "Read")]
         private static void MergeOtherEye(QueryPipeline __instance, QuerySlot slot)
         {
-            if (!enabled || slot == null || !slot.ready || slot.data == null || slot.index < 0 || slot.index >= eyeOfSlot.Length
+            if (slot == null || !slot.ready || slot.data == null || slot.index < 0 || slot.index >= eyeOfSlot.Length
                 || tokenOfSlot[slot.index] != slot.token)
                 return;   // not a test from an eye
             int eye = eyeOfSlot[slot.index];
@@ -202,8 +201,7 @@ namespace TarkovVR.ModSupport.FuckThisCullingSupport
         [HarmonyPatch(typeof(JitterConfirmation), "RequiredFor")]
         private static void AtLeastMinimumOccludedChecks(ref int __result)
         {
-            if (enabled)
-                __result = Math.Max(__result, minimumOccludedChecks);
+            __result = Math.Max(__result, minimumOccludedChecks);
         }
 
         // "Slowly hide objects behind you" keeps its cone off the projection it is given (with the camera's rotation): give it one

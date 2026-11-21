@@ -143,7 +143,6 @@ namespace TarkovVR.ModSupport.FIKA
 
         // Received held-item motion (~25 Hz) goes through a per-frame exponential interpolator (the same smoothing as the IK arm sync)
         // instead of FIKA's hard SetPositionAndRotation. Held items only; thrown/dropped/settling items keep FIKA's sync. false = snap.
-        public static bool lootSyncSmoothing = true;
         public static float lootSmoothRate = 18f;          // matches ArmSyncApply.smoothRate
         public static float lootSmoothStaleTimeout = 0.5f; // stop lerping if the holder goes quiet
 
@@ -207,7 +206,7 @@ namespace TarkovVR.ModSupport.FIKA
 
             // A held item goes through the per-frame smoother instead of FIKA's hard snap; motion/drop/Done packets remove the
             // smoother below so FIKA's physics sync resumes.
-            if (lootSyncSmoothing && incomingHeld)
+            if (incomingHeld)
             {
                 LootSyncSmoother sm = __instance.GetComponent<LootSyncSmoother>()
                                       ?? __instance.gameObject.AddComponent<LootSyncSmoother>();

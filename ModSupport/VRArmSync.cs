@@ -14,14 +14,8 @@ namespace TarkovVR.ModSupport.FIKA
     // FikaVrSync.enableArmSync is the master gate (send + apply).
     internal static class VRArmSync
     {
-        public static bool enableArmSync = true;     // send empty-hand arm poses
-        public static bool sendWeaponPose = true;     // send the held gun's pose while armed
-        public static bool sendEatingPose = true;     // send manual-eating wrist+prop poses
-        public static bool sendFingerPoses = true;    // send finger poses (authored open-hand / Index curls)
-        public static bool sendReloadState = true;    // send the manual reload (hands on parts, magazines, bolt / handle) with the weapon pose
         public static float sendInterval = 0.05f;     // ~20/s
         public static float fingerSendInterval = 0.05f; // finger cadence (own timer - the shared throttle belongs to the arm/weapon packets)
-        public static bool sendHeadPose = true;       // the headset in the body's frame: the observers' upper body and head follow it
 
         private static float lastSendTime;
         private static float lastHeadSend;
@@ -42,7 +36,7 @@ namespace TarkovVR.ModSupport.FIKA
             FikaPlayer local = VRGlobals.player as FikaPlayer;
 
             // Eating stop (once, before the throttle below) so observers restore the food model the moment the eat ends
-            bool eatingNow = sendEatingPose && Source.Player.Interactions.EatingInteractionController.ManualActive;
+            bool eatingNow = Source.Player.Interactions.EatingInteractionController.ManualActive;
             if (wasEating && !eatingNow)
             {
                 if (local != null) FikaVrSync.SendEatingStop(local.NetId);
@@ -53,7 +47,7 @@ namespace TarkovVR.ModSupport.FIKA
             // so observers put their copy of the gun back the moment it ends
             // On a mounted gun the observers' copy of you is Tarkov's own (FIKA syncs taking it and its aim): nothing of ours is sent
             bool onMountedGun = Source.Player.Interactions.MountedGun.Active;
-            bool reloadNow = sendReloadState && local != null && local.HandsController is Player.FirearmController && !local.IsSprintEnabled && !onMountedGun;
+            bool reloadNow = local != null && local.HandsController is Player.FirearmController && !local.IsSprintEnabled && !onMountedGun;
             if (wasSendingReload && !reloadNow)
             {
                 if (local != null) FikaVrSync.SendReloadStop(local.NetId);
@@ -63,7 +57,7 @@ namespace TarkovVR.ModSupport.FIKA
             // Finger poses: own cadence, sent while either hand's pose system is driving (buffered by
             // HandsInteractionController.SampleFingerSync at the end of its LateUpdate), plus one all-inactive packet on the
             // falling edge so observers release immediately (the receiver's staleTimeout is only the lost-packet fallback).
-            if (sendFingerPoses && local != null)
+            if (local != null)
             {
                 bool fingersActive = Source.Player.Interactions.HandsInteractionController.syncLeftFingersActive
                                   || Source.Player.Interactions.HandsInteractionController.syncRightFingersActive;
@@ -81,7 +75,7 @@ namespace TarkovVR.ModSupport.FIKA
 
             // The head: its own cadence, whatever the hands hold. Its own method: with an older module the missing method throws there,
             // not in this one (the arms would go with it).
-            if (sendHeadPose && !headSyncBroken && local != null && Time.time - lastHeadSend >= sendInterval)
+            if (!headSyncBroken && local != null && Time.time - lastHeadSend >= sendInterval)
             {
                 lastHeadSend = Time.time;
                 try
@@ -147,7 +141,7 @@ namespace TarkovVR.ModSupport.FIKA
         public static void SendReloadSound(string name)
         {
             FikaPlayer local = VRGlobals.player as FikaPlayer;
-            if (local != null && sendReloadState) FikaVrSync.SendReloadSound(local.NetId, name);
+            if (local != null) FikaVrSync.SendReloadSound(local.NetId, name);
         }
 
         // FIKA's own "cycle the bolt" packet for a bolt-action shot: the bolt is worked by hand (BoltActionPatches.BoltStaysShut), so
@@ -184,7 +178,7 @@ namespace TarkovVR.ModSupport.FIKA
             // Held items (gun/knife/grenade): stream the item's WeaponRoot pose (the module overrides the observed item to it, then
             // re-IKs the hands). WeaponRoot is on the base AbstractHandsController, so one path covers all three. The gun is
             // sprint-gated (a welded gun looks bad running); melee/grenade sync while running. leftOnGrip only applies to the gun.
-            if (sendWeaponPose && isHeldItem && hc.WeaponRoot != null)
+            if (isHeldItem && hc.WeaponRoot != null)
             {
                 if (isFirearm && local.IsSprintEnabled)
                     return;
@@ -208,7 +202,7 @@ namespace TarkovVR.ModSupport.FIKA
                 // The manual reload on top (the module draws it on the observed gun the pose above just placed). A bad frame is
                 // logged once and never breaks this LateUpdate.
                 bool reloadBuilt = false;
-                if (isFirearm && sendReloadState)
+                if (isFirearm)
                 {
                     try { reloadBuilt = VRReloadController.TryBuildSync((Player.FirearmController)hc); }
                     catch (System.Exception exception)
@@ -237,7 +231,7 @@ namespace TarkovVR.ModSupport.FIKA
             }
             // Empty hands: stream both controller hand poses (the module drives the arm IK). Everything else falls back to FIKA's
             // vanilla anim.
-            else if (enableArmSync && hc is Player.EmptyHandsController)
+            else if (hc is Player.EmptyHandsController)
             {
                 if (rig.LeftHand == null || rig.RightHand == null)
                     return;

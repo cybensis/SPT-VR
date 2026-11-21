@@ -26,11 +26,9 @@ namespace TarkovVR.Source.Controls
         public static float gripReleaseThreshold = 0.5f;    // wrap under which a held grip lets go (too low waits for a nearly open hand)
         // Index: a hand opening lets go at once, before the wrap gets under gripReleaseThreshold: the wrap falling gripFastOpenDrop
         // within gripFastOpenWindow, not squeezing, under gripFastOpenCeiling. A hand relaxing on the handle falls slowly and keeps holding.
-        public static bool gripFastOpen = true;
         public static float gripFastOpenDrop = 0.3f;
         public static float gripFastOpenWindow = 0.1f;      // s
         public static float gripFastOpenCeiling = 0.75f;    // wrap: a squeeze shifting at the top of its range isn't an opening
-        public static bool gripLog = true;                  // a [Grip] line per let-go: the wrap and force then, which rule, how long the wrap fell
 
         // Extra correction on top of the grip -> raw conversion, in the raw pose's own space
         public static Vector3 rawPosePositionOffset = Vector3.zero;
@@ -86,12 +84,10 @@ namespace TarkovVR.Source.Controls
             public bool squeezing;          // squeezing it, not just holding it
             public Vector2 stickAxis;
 
-            // The wrap while the grip's held: its recent values (the fast open), its highest and when it was last near that (the log)
+            // The wrap's recent values while the grip's held (the fast open)
             public readonly float[] recentWrap = new float[16];
             public readonly float[] recentWrapTime = new float[16];
             public int recentWrapNext;
-            public float heldPeakWrap;
-            public float heldPeakTime;
 
             public Vector3 rawPosition;
             public Quaternion rawRotation = Quaternion.identity;
@@ -266,19 +262,11 @@ namespace TarkovVR.Source.Controls
                 if (controller.previous.grip)
                 {
                     float wrap = controller.squeezeValue;
-                    bool fastOpen = gripFastOpen && controller.hasGripForce && !controller.squeezing && wrap < gripFastOpenCeiling
+                    bool fastOpen = controller.hasGripForce && !controller.squeezing && wrap < gripFastOpenCeiling
                         && RecentHighestWrap(controller) - wrap >= gripFastOpenDrop;
                     controller.current.grip = wrap > gripReleaseThreshold && !fastOpen;
                     if (controller.current.grip)
-                    {
                         RememberWrap(controller, wrap);
-                    }
-                    else if (gripLog)
-                    {
-                        Plugin.MyLog.LogInfo($"[Grip] {(controller.node == XRNode.LeftHand ? "left" : "right")} let go at wrap {wrap:0.00} "
-                            + $"(force {controller.gripForce:0.00}, {(fastOpen ? "opening fast" : $"under {gripReleaseThreshold:0.00}")}): "
-                            + $"the wrap fell from {controller.heldPeakWrap:0.00} over {(Time.unscaledTime - controller.heldPeakTime) * 1000f:0} ms");
-                    }
                 }
                 else
                 {
@@ -286,24 +274,18 @@ namespace TarkovVR.Source.Controls
                     if (controller.current.grip)
                     {
                         System.Array.Clear(controller.recentWrapTime, 0, controller.recentWrapTime.Length);
-                        controller.heldPeakWrap = 0f;
                         RememberWrap(controller, controller.squeezeValue);
                     }
                 }
             }
         }
 
-        // The wrap of a held grip, this frame: into the recent values, and the held peak (with the last time it was within 0.05 of it)
+        // The wrap of a held grip, this frame: into the recent values
         private static void RememberWrap(ControllerState controller, float wrap)
         {
-            float now = Time.unscaledTime;
             controller.recentWrap[controller.recentWrapNext] = wrap;
-            controller.recentWrapTime[controller.recentWrapNext] = now;
+            controller.recentWrapTime[controller.recentWrapNext] = Time.unscaledTime;
             controller.recentWrapNext = (controller.recentWrapNext + 1) % controller.recentWrap.Length;
-            if (wrap > controller.heldPeakWrap)
-                controller.heldPeakWrap = wrap;
-            if (wrap >= controller.heldPeakWrap - 0.05f)
-                controller.heldPeakTime = now;
         }
 
         // The highest wrap of the last gripFastOpenWindow

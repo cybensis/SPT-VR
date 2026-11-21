@@ -39,7 +39,6 @@ namespace TarkovVR.Source.UI
 
         // Drag an item off the inventory panel and release to drop it on the ground. Raid only (gated on RaidVRPlayerManager
         // in DropDraggedItemToGround): the hideout/stash/loadout have no world to drop into.
-        public static bool enableDragToDrop = true;
 
         // A release over dead space only drops once the aim has been dragged this far (world m, on the panel's plane) from the
         // item's origin slot; closer = cancel. A release over a grid/slot is always a move. The panel is ~1.5 m wide in world
@@ -129,7 +128,7 @@ namespace TarkovVR.Source.UI
             }
             // The ray has left every UI collider mid-drag (item pulled off the panel): the drag stays alive while the trigger
             // is held, a release drops the item to the ground (raid only). The rest of the drag pipeline only runs on a hit.
-            else if (enableDragToDrop && dragObject != null)
+            else if (dragObject != null)
             {
                 HandleOffPanelDrag();
             }
@@ -290,7 +289,7 @@ namespace TarkovVR.Source.UI
 
             if (overDropTarget)
                 DropItem();
-            else if (enableDragToDrop && DragAimDistanceFromStart() >= dropDistance)
+            else if (DragAimDistanceFromStart() >= dropDistance)
                 DropDraggedItemToGround();
             else
                 CancelDrag();

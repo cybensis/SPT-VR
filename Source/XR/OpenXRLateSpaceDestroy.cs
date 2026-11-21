@@ -12,7 +12,6 @@ namespace TarkovVR.Source.XR
     // headset). Hooked through the function lookup Unity lets every feature hook. Spaces still kept when the session ends go then.
     public class OpenXRLateSpaceDestroy : OpenXRFeature
     {
-        public static bool keepSpaces = true;           // false = destroyed when Unity asks
         public static double keepSeconds = 1.0;
 
         private const int XR_SUCCESS = 0;
@@ -87,7 +86,7 @@ namespace TarkovVR.Source.XR
         {
             try
             {
-                if (!keepSpaces || !sessionRunning || space == 0)
+                if (!sessionRunning || space == 0)
                     return runtimeDestroySpace(space);
                 lock (keptLock)
                     kept.Add(new KeptSpace { space = space, releasedAt = Stopwatch.GetTimestamp() });

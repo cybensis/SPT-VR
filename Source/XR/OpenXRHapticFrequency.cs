@@ -10,7 +10,6 @@ namespace TarkovVR.Source.XR
     // function lookup Unity lets every feature hook, and fills in the frequency OpenXRInput asked for on that hand.
     public class OpenXRHapticFrequency : OpenXRFeature
     {
-        public static bool passFrequency = true;           // false = the runtime's own frequency
 
         // ------------------------------------------------------------------------------------------------------------
         // OpenXR types and values, checked against openxr_reflection_full.h in the OpenXR package
@@ -115,7 +114,7 @@ namespace TarkovVR.Source.XR
 
         private static unsafe int ApplyWithOurFrequency(ulong session, IntPtr hapticActionInfo, IntPtr hapticFeedback)
         {
-            if (!passFrequency || hapticActionInfo == IntPtr.Zero || hapticFeedback == IntPtr.Zero
+            if (hapticActionInfo == IntPtr.Zero || hapticFeedback == IntPtr.Zero
                 || ((XrHapticVibration*)hapticFeedback)->type != XR_TYPE_HAPTIC_VIBRATION)
                 return runtimeApplyHapticFeedback(session, hapticActionInfo, hapticFeedback);
 
